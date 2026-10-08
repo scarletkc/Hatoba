@@ -32,7 +32,7 @@ Then:
 ```sh
 cargo test --workspace                # Rust unit tests
 pnpm typecheck && pnpm test           # Frontend type check and unit tests
-node --test "scripts/**/*.test.mjs"   # Release scripts
+node --test "scripts/**/*.test.mjs"   # Release and CI scripts
 ```
 
 [§12 of the architecture and requirements](hatoba-spec.md#12-testing) describes what each suite covers.
@@ -84,6 +84,17 @@ cargo test -p hatoba-desktop export_bindings
 ```
 
 `pnpm typecheck` compares the generated bindings with the contract the frontend uses, through `apps/desktop/src/ipc/contract.check.ts`. CI fails when the bindings are out of date.
+
+## Raise the Worker version
+
+The sync Worker has a version of its own, separate from the app version. A pull request that changes the Worker raises it ([Versions in §6.7](hatoba-spec.md#worker-bundle)), and `workerInputs` in [`scripts/ci/worker-version.mjs`](../scripts/ci/worker-version.mjs) lists the files and dependencies that count. From the repository root:
+
+```sh
+node scripts/release/bump.mjs --worker patch   # Or minor, major, or an explicit version
+node scripts/ci/worker-version.mjs             # Compare with where the branch left origin/main
+```
+
+The Sync Worker job in CI runs the same check against the base branch, and fails when the Worker changed but its version did not.
 
 ## Checks before committing
 

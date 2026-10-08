@@ -1,11 +1,12 @@
-// Sets a new release version in every version file and can start its release note.
-// Usage: node scripts/release/bump.mjs [patch|minor|major|VERSION] [--note TITLE] [--dry-run]
+// Sets a new release version in every version file and can start its release note. With --worker,
+// sets the sync Worker version instead, which a change to the Worker raises.
+// Usage: node scripts/release/bump.mjs [patch|minor|major|VERSION] [--note TITLE | --worker] [--dry-run]
 // patch is the default. docs/releasing.md describes the release steps.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { NOTES_DIR, ROOT, nextVersion, planBump, readVersion } from "./version.mjs";
+import { NOTES_DIR, ROOT, VERSION_FILES, WORKER_VERSION_FILES, nextVersion, planBump, readVersion } from "./version.mjs";
 
 /** Adds the release note for `version`, which starts with `## TITLE`, to the planned changes. */
 export function planNote(root, changes, version, title) {
@@ -20,12 +21,18 @@ export function planNote(root, changes, version, title) {
 function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { note: { type: "string" }, "dry-run": { type: "boolean", default: false } },
+    options: {
+      note: { type: "string" },
+      worker: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+    },
   });
   if (positionals.length > 1) throw new Error("Pass one version: patch, minor, major, or VERSION.");
-  const current = readVersion(ROOT);
+  if (values.worker && values.note !== undefined) throw new Error("--note starts a release note; a Worker version has none.");
+  const files = values.worker ? WORKER_VERSION_FILES : VERSION_FILES;
+  const current = readVersion(ROOT, files);
   const version = nextVersion(current, positionals[0] ?? "patch");
-  const changes = planBump(ROOT, version);
+  const changes = planBump(ROOT, version, files);
   const note = values.note === undefined ? null : planNote(ROOT, changes, version, values.note);
   const dryRun = values["dry-run"];
   for (const [path, contents] of changes) {

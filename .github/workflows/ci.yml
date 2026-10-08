@@ -45,11 +45,18 @@ jobs:
         working-directory: workers/sync
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The version check compares with the parent commit: the base branch of a pull
+          # request's merge commit, or the previous commit on main.
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: workers/sync/package-lock.json
+      - name: Worker version is raised when the Worker changes
+        working-directory: .
+        run: node scripts/ci/worker-version.mjs HEAD^1
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
