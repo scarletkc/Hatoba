@@ -45,6 +45,10 @@ futures.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
+[dev-dependencies]
+# `KdfParams::for_tests()`, so tests can create a vault without the production Argon2 cost.
+hatoba-core = { workspace = true, features = ["test-util"] }
+
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8"
 windows = { version = "0.62", features = [

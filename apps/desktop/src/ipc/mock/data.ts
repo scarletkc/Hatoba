@@ -195,7 +195,15 @@ export const FORWARDS: ForwardView[] = [
 ];
 
 export const SETTINGS: SettingsView = {
-  terminal: { font_family: "Cascadia Mono", font_size: 13, theme: "dark", cursor_style: "block", scrollback: 10000 },
+  terminal: {
+    font_family: "Cascadia Mono",
+    font_size: 13,
+    theme: "dark",
+    cursor_style: "block",
+    scrollback: 10000,
+    right_click: "copy_paste",
+    confirm_multiline_paste: true,
+  },
   auto_lock_minutes: 15,
   lock_disconnects_sessions: false,
 };
@@ -204,9 +212,7 @@ export const PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
   density: "regular",
-  right_click: "copy_paste",
   host_probe: true,
-  confirm_multiline_paste: true,
   auto_update_check: false,
 };
 

@@ -133,7 +133,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           <IconButton icon="x" label={t("btn.close")} className={s.close} onClick={() => closeRef.current()} />
         </div>
         <div id="settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`} className={s.content}>
-          {tab === "general" && <GeneralPane />}
+          {tab === "general" && <GeneralPane {...pane} />}
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "security" && <SecurityPane {...pane} />}

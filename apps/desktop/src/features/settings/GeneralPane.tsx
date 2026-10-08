@@ -5,12 +5,12 @@ import { Group } from "@/components/layout";
 import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { LocalPrefs } from "@/ipc/types";
+import type { TerminalSettings } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
-import { Pane, SettingRow, usePrefs } from "./shared";
+import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 
 /** Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), backup (VAULT-07). */
-export function GeneralPane() {
+export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
   const [exporting, setExporting] = useState(false);
@@ -36,22 +36,22 @@ export function GeneralPane() {
     <Pane>
       <Group>
         <SettingRow label={t("settings.rightClick")}>
-          <PopupSelect<LocalPrefs["right_click"]>
+          <PopupSelect<TerminalSettings["right_click"]>
             ariaLabel={t("settings.rightClick")}
-            value={prefs.right_click}
+            value={settings?.terminal.right_click ?? "copy_paste"}
             minWidth={230}
             options={[
               { value: "copy_paste", label: t("settings.rightClick.copyPaste") },
               { value: "menu", label: t("settings.rightClick.menu") },
             ]}
-            onChange={(right_click) => setPrefs({ right_click })}
+            onChange={(right_click) => updateTerminal({ right_click })}
           />
         </SettingRow>
         <SettingRow label={t("settings.confirmPaste")} hint={t("settings.confirmPaste.hint")}>
           <Switch
             label={t("settings.confirmPaste")}
-            checked={prefs.confirm_multiline_paste}
-            onChange={(confirm_multiline_paste) => setPrefs({ confirm_multiline_paste })}
+            checked={settings?.terminal.confirm_multiline_paste ?? true}
+            onChange={(confirm_multiline_paste) => updateTerminal({ confirm_multiline_paste })}
           />
         </SettingRow>
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
