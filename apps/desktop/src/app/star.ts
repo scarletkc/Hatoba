@@ -1,3 +1,4 @@
+import { useEffect, useReducer } from "react";
 import { create } from "zustand";
 import { api } from "@/ipc/api";
 import type { StarPrompt } from "@/ipc/types";
@@ -35,4 +36,18 @@ export const useStarPrompt = create<StarPromptState>((set, get) => ({
 /** A day after the first read of the state, once a session has connected in this launch. */
 export function starPromptDue(prompt: StarPrompt | null, connectedOnce: boolean, now: number): boolean {
   return prompt !== null && !prompt.done && connectedOnce && now - prompt.first_seen_at >= STAR_PROMPT_DELAY_MS;
+}
+
+/** {@link starPromptDue} now. A timer renders again when the day is up, since no state changes then. */
+export function useStarPromptDue(connectedOnce: boolean): boolean {
+  const prompt = useStarPrompt((s) => s.prompt);
+  const [, recheck] = useReducer((n: number) => n + 1, 0);
+  const dueAt = prompt && !prompt.done ? prompt.first_seen_at + STAR_PROMPT_DELAY_MS : null;
+  useEffect(() => {
+    const wait = dueAt === null ? 0 : dueAt - Date.now();
+    if (wait <= 0) return;
+    const timer = setTimeout(recheck, wait);
+    return () => clearTimeout(timer);
+  }, [dueAt]);
+  return starPromptDue(prompt, connectedOnce, Date.now());
 }

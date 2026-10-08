@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StarPrompt } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({ gets: 0, dones: 0, stored: null as StarPrompt | null }));
@@ -30,6 +30,10 @@ beforeEach(() => {
   backend.gets = 0;
   backend.dones = 0;
   backend.stored = waiting(0);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("starPromptDue", () => {
@@ -64,6 +68,31 @@ describe("star prompt store", () => {
     useStarPrompt.getState().finish();
     expect(starPromptDue(useStarPrompt.getState().prompt, true, NOW)).toBe(false);
     await vi.waitFor(() => expect(backend.dones).toBe(1));
+  });
+});
+
+describe("useStarPromptDue", () => {
+  it("renders again when the day is up", async () => {
+    vi.useFakeTimers({ now: NOW });
+    backend.stored = waiting(DAY - 60_000);
+    const { useStarPrompt, useStarPromptDue } = await load();
+    // React is loaded after resetModules too, so the hook and the renderer share one copy.
+    const { act, createElement } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    await useStarPrompt.getState().load();
+
+    const seen: boolean[] = [];
+    function Probe() {
+      seen.push(useStarPromptDue(true));
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+    act(() => root.render(createElement(Probe)));
+    expect(seen.at(-1)).toBe(false);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(seen.at(-1)).toBe(true);
+    act(() => root.unmount());
   });
 });
 
