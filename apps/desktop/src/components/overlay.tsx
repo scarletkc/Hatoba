@@ -233,27 +233,37 @@ export function Modal({
   closeOnBackdrop?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Captured while rendering: before the effect runs, React has already focused a control with
+  // autoFocus inside the dialog.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  // Callers often pass a new function on every render. Reading it through a ref keeps the effect
+  // from running again and pulling focus back to the first control.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    // Skips controls taken out of the tab order, such as the unselected tabs of a tablist.
-    const first = ref.current?.querySelector<HTMLElement>(
-      ["[autofocus]", "input:not([disabled])", "textarea", "button:not([disabled])"]
-        .map((sel) => `${sel}:not([tabindex="-1"])`)
-        .join(", "),
-    );
-    first?.focus();
+    const node = ref.current;
+    if (!node?.contains(document.activeElement)) {
+      // Skips controls taken out of the tab order, such as the unselected tabs of a tablist.
+      const first = node?.querySelector<HTMLElement>(
+        ["input:not([disabled])", "textarea", "button:not([disabled])"]
+          .map((sel) => `${sel}:not([tabindex="-1"])`)
+          .join(", "),
+      );
+      first?.focus();
+    }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && onClose) {
+      if (e.key === "Escape" && closeRef.current) {
         e.stopPropagation();
-        onClose();
+        closeRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
-      prev?.focus?.();
+      // Development mode also runs this while the dialog stays open, to run the effect twice.
+      if (!node?.isConnected) opener?.focus?.();
     };
-  }, [onClose]);
+  }, [opener]);
   return createPortal(
     <div
       ref={ref}

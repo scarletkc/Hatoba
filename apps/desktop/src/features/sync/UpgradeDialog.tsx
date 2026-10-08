@@ -22,6 +22,11 @@ const UPGRADE_GUIDE_URL = `${DEPLOY_GUIDE_URL}#upgrade`;
 /** Failures a retry cannot fix: the review shows what step 2 found instead. */
 const FIX_IN_REVIEW = ["worker_not_found", "worker_newer", "invalid_input"];
 
+/** What step 2 finds when the name is not the Worker's: the review then asks for it. */
+const WRONG_NAME: UpgradePlan["worker"][] = ["missing", "foreign", "no_vault"];
+
+const keyOf = (account: string, worker: string) => `${account}|${worker}`;
+
 type Run = "running" | "failed" | "waiting" | "ready";
 
 const stepLabel = (t: T) => (step: DeployStep) =>
@@ -46,8 +51,13 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
   const [start, setStart] = useState<DeployStart | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
-  const [plan, setPlan] = useState<UpgradePlan | null>(null);
+  /** Step 2's plan, with the account and name it checked. */
+  const [checked, setChecked] = useState<{ key: string; plan: UpgradePlan } | null>(null);
   const [inspecting, setInspecting] = useState(false);
+  /** Neither the deployment nor the token gave an account ID, so the review asks for it. */
+  const [enterAccount, setEnterAccount] = useState(false);
+  /** Step 2 found no Worker to update under the name, so the review asks for it. */
+  const [askName, setAskName] = useState(false);
   const [steps, setSteps] = useState<Partial<Record<DeployStep, StepState>>>({});
   const [run, setRun] = useState<Run>("running");
   const [runError, setRunError] = useState<AppError | null>(null);
@@ -55,6 +65,8 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
   const request = useRef(0);
   /** The account and name step 2 last looked at, so Enter and the blur after it ask once. */
   const inspected = useRef("");
+  /** The upgrade started, so the Worker may have changed by the time the dialog closes. */
+  const ran = useRef(false);
 
   useEffect(() => {
     api.deploy_upgrade_defaults().then(
@@ -67,24 +79,32 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
     );
     return () => {
       if (handle.current) void api.deploy_cancel(handle.current);
+      // After a close while waiting or after a failure, the sync status page would keep the
+      // notice for the old version.
+      if (ran.current) void api.sync_check_worker().catch(() => {});
     };
   }, []);
 
   const name = workerName.trim();
   const nameOk = LABEL.test(name);
   const target = () => ({ account_id: accountId.trim(), worker_name: name });
+  // Only a plan for the account and name in the form counts.
+  const plan = checked?.key === keyOf(accountId.trim(), name) ? checked.plan : null;
 
   const inspect = async (account = accountId.trim(), worker = name, again = false) => {
-    const key = `${account}|${worker}`;
+    const key = keyOf(account, worker);
     if (!handle.current || !account || !LABEL.test(worker) || (key === inspected.current && !again)) return;
     inspected.current = key;
     const n = ++request.current;
     setInspecting(true);
     setError(null);
-    setPlan(null);
+    setChecked(null);
     try {
       const found = await api.deploy_upgrade_inspect(handle.current, { account_id: account, worker_name: worker });
-      if (n === request.current) setPlan(found);
+      if (n === request.current) {
+        setChecked({ key, plan: found });
+        if (WRONG_NAME.includes(found.worker)) setAskName(true);
+      }
     } catch (e) {
       if (n === request.current) setError(toAppError(e));
     } finally {
@@ -104,6 +124,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
       setStart(started);
       const account = accountId.trim() || (started.accounts.length === 1 ? started.accounts[0].id : "");
       setAccountId(account);
+      setEnterAccount(!account);
       setPhase("review");
       void inspect(account);
     } catch (e) {
@@ -117,14 +138,18 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
     if (handle.current) void api.deploy_cancel(handle.current);
     handle.current = null;
     inspected.current = "";
+    // A check still running answers for the deployment that just ended.
+    request.current++;
+    setInspecting(false);
     setStart(null);
-    setPlan(null);
+    setChecked(null);
     setError(null);
     setPhase("token");
   };
 
   const upgrade = async () => {
     if (!handle.current) return;
+    ran.current = true;
     setPhase("run");
     setRun("running");
     setRunError(null);
@@ -232,7 +257,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
 
   if (phase === "review" && start) {
     const canUpgrade = plan?.worker === "upgrade" && !inspecting;
-    const wrongName = plan?.worker === "missing" || plan?.worker === "foreign" || plan?.worker === "no_vault";
+    const accountName = start.accounts.find((a) => a.id === accountId)?.name;
     return (
       <Dialog
         title={t("sync.up.review.title")}
@@ -262,12 +287,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
                   void inspect(id);
                 }}
               />
-            ) : accountId ? (
-              <div className={s.accountLine}>
-                {start.accounts[0]?.name && <span>{start.accounts[0].name}</span>}
-                <span className={cx(s.mono, s.dim)}>{accountId}</span>
-              </div>
-            ) : (
+            ) : enterAccount ? (
               <TextField
                 id={accountFieldId}
                 mono
@@ -277,10 +297,15 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
                 onBlur={() => void inspect()}
                 onKeyDown={(e) => e.key === "Enter" && void inspect()}
               />
+            ) : (
+              <div className={s.accountLine}>
+                {accountName && <span>{accountName}</span>}
+                <span className={cx(s.mono, s.dim)}>{accountId}</span>
+              </div>
             )}
           </Field>
           <UpgradeSummary t={t} name={name} plan={plan} inspecting={inspecting} error={error} onRetry={() => void inspect(accountId.trim(), name, true)} />
-          {(wrongName || !defaults?.worker_name) && (
+          {(askName || !defaults?.worker_name) && (
             <Field
               label={t("sync.dep.workerName")}
               htmlFor={workerId}
