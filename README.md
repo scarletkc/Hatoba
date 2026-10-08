@@ -13,9 +13,9 @@
 
 </div>
 
-Hatoba (波止場, "wharf") keeps your hosts, keys, and terminal sessions in one
-place and syncs them between your devices. The sync backend is a Worker and a
-D1 database that you deploy to your own Cloudflare account.
+Hatoba keeps your hosts, keys, and terminal sessions in one place and syncs
+them between your devices. The sync backend is a Worker and a D1 database that
+you deploy to your own Cloudflare account.
 
 - **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
   nobody else holds your data.
