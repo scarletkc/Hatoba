@@ -122,15 +122,21 @@ const workerConfig = {
 };
 
 /**
- * Every file that records the release version. The app, the crates, and the sync Worker share one
- * version. Tauri reads the app version from the workspace Cargo.toml, and the Worker reports
- * VERSION from its config.ts on /v1/health.
+ * Every file that records the release version, which the app and the crates share. Tauri reads the
+ * app version from the workspace Cargo.toml.
  */
 export const VERSION_FILES = [
   { path: "Cargo.toml", ...cargoManifest },
   { path: "Cargo.lock", ...cargoLock },
   { path: "package.json", ...packageJson },
   { path: "apps/desktop/package.json", ...packageJson },
+];
+
+/**
+ * Every file that records the sync Worker version, which /v1/health reports from config.ts. A change
+ * to the Worker raises it (docs/hatoba-spec.md §6.7, Versions), and a release leaves it alone.
+ */
+export const WORKER_VERSION_FILES = [
   { path: "workers/sync/package.json", ...packageJson },
   { path: "workers/sync/package-lock.json", ...packageLock },
   { path: "workers/sync/src/config.ts", ...workerConfig },
@@ -148,9 +154,9 @@ function versionsIn(file, text) {
   }
 }
 
-/** Returns the version that every file in VERSION_FILES records, or explains where they differ. */
-export function readVersion(root) {
-  const found = VERSION_FILES.map((file) => ({ path: file.path, versions: versionsIn(file, readFile(root, file.path)) }));
+/** Returns the version that every one of `files` records, or explains where they differ. */
+export function readVersion(root, files = VERSION_FILES) {
+  const found = files.map((file) => ({ path: file.path, versions: versionsIn(file, readFile(root, file.path)) }));
   const all = new Set(found.flatMap((f) => f.versions));
   if (all.size !== 1 || found.some((f) => f.versions.length === 0)) {
     const lines = found.map((f) => `  ${f.path}: ${f.versions.map((v) => v ?? "(no version)").join(", ") || "(no version)"}`);
@@ -161,11 +167,11 @@ export function readVersion(root) {
   return version;
 }
 
-/** Plans the new contents of every version file, so that a bump writes all of them or none. */
-export function planBump(root, to) {
+/** Plans the new contents of every one of `files`, so that a bump writes all of them or none. */
+export function planBump(root, to, files = VERSION_FILES) {
   parseVersion(to);
   const changes = new Map();
-  for (const file of VERSION_FILES) {
+  for (const file of files) {
     const updated = file.write(readFile(root, file.path), to);
     if (versionsIn(file, updated).some((v) => v !== to)) {
       throw new Error(`${file.path}: could not set the version to ${to}.`);

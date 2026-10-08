@@ -170,8 +170,11 @@ Before requesting review:
   and `workers/sync/migrations/` for D1. Vaults and Workers that already ran a
   migration do not run it again.
 - Update the branch with the latest `main`; only an up-to-date branch can merge.
-- Change only what the issue asks for, and leave version numbers unchanged.
-  Maintainers set them when [preparing a release](docs/releasing.md).
+- Change only what the issue asks for, and leave the app version unchanged.
+  Maintainers set it when [preparing a release](docs/releasing.md). The sync
+  Worker has a version of its own, which a change to the Worker raises in the
+  same pull request, as the
+  [development guide](docs/development.md#raise-the-worker-version) describes.
 
 Open the pull request as a draft while the work is in progress. Merging
 requires approval from a maintainer, and new commits dismiss an earlier
