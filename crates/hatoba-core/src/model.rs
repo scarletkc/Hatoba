@@ -326,6 +326,79 @@ impl AiAuthHeader {
     }
 }
 
+/// A thinking level (AI-05), lowest first. Where one is optional, `None` is Default: the request
+/// leaves the depth to the provider.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiEffort {
+    /// `low`.
+    Low,
+    /// `medium`.
+    Medium,
+    /// `high`.
+    High,
+    /// `xhigh` (Extra High).
+    Xhigh,
+    /// `max`.
+    Max,
+}
+
+impl AiEffort {
+    /// Every level, lowest first.
+    pub const ALL: [Self; 5] = [Self::Low, Self::Medium, Self::High, Self::Xhigh, Self::Max];
+
+    /// The string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+
+    fn parse(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.as_str() == text)
+    }
+}
+
+/// Lenient readers for thinking levels: a level a newer version added reads as unknown instead of
+/// making the whole item unreadable.
+mod effort_serde {
+    use serde::{Deserialize, Deserializer};
+    use serde_json::Value;
+
+    use super::AiEffort;
+
+    /// An optional level; anything that is not a known level reads as `None` (Default).
+    pub(super) fn level<'de, D: Deserializer<'de>>(d: D) -> Result<Option<AiEffort>, D::Error> {
+        let value = Option::<Value>::deserialize(d)?;
+        Ok(value
+            .as_ref()
+            .and_then(Value::as_str)
+            .and_then(AiEffort::parse))
+    }
+
+    /// A model's levels, lowest first, without the ones this version does not know; `None`
+    /// (unknown) when the value is not a list.
+    pub(super) fn levels<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Option<Vec<AiEffort>>, D::Error> {
+        let Some(Value::Array(items)) = Option::<Value>::deserialize(d)? else {
+            return Ok(None);
+        };
+        let mut levels: Vec<AiEffort> = items
+            .iter()
+            .filter_map(|v| v.as_str().and_then(AiEffort::parse))
+            .collect();
+        levels.sort_unstable();
+        levels.dedup();
+        Ok(Some(levels))
+    }
+}
+
 /// A model offered by an [`AiProvider`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
@@ -338,6 +411,19 @@ pub struct AiModel {
     pub context_window: Option<u64>,
     /// Output limit in tokens, `None` when unknown.
     pub max_output_tokens: Option<u64>,
+    /// The thinking levels the model accepts, lowest first (AI-05): from Anthropic's model list
+    /// or set by the user, empty when it accepts none, `None` (absent) when unknown.
+    #[zeroize(skip)]
+    #[serde(
+        deserialize_with = "effort_serde::levels",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub efforts: Option<Vec<AiEffort>>,
+    /// Whether the model supports adaptive thinking, from Anthropic's model list; `None`
+    /// (absent) when unknown.
+    #[zeroize(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adaptive_thinking: Option<bool>,
 }
 
 /// An AI model provider (P1, spec §13.2). The API key is wiped on drop and never printed.
@@ -443,6 +529,14 @@ pub struct AiConversation {
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
     pub context_start: Option<String>,
+    /// The thinking level its last message was sent with (AI-05); `None` (absent) is Default,
+    /// which is also what conversations from before the level existed read as.
+    #[zeroize(skip)]
+    #[serde(
+        deserialize_with = "effort_serde::level",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub effort: Option<AiEffort>,
     /// Creation time, Unix ms.
     pub created_at: i64,
     /// Last modification, Unix ms.
@@ -759,6 +853,13 @@ pub struct AiModelRef {
 pub struct AiSettings {
     /// The model new conversations start with.
     pub default_model: Option<AiModelRef>,
+    /// The thinking level new conversations start with (AI-05); `None` (absent) is Default.
+    #[zeroize(skip)]
+    #[serde(
+        deserialize_with = "effort_serde::level",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub default_effort: Option<AiEffort>,
     /// Id of the [`SearchProvider`] item behind `web_search`.
     pub search_provider_id: Option<String>,
     /// The built-in `hatoba` skill is offered (AI-34). On by default, also for settings written
@@ -770,6 +871,7 @@ impl Default for AiSettings {
     fn default() -> Self {
         Self {
             default_model: None,
+            default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
         }
@@ -1224,6 +1326,12 @@ mod tests {
                     name: "Claude X".into(),
                     context_window: Some(200_000),
                     max_output_tokens: None,
+                    efforts: Some(vec![AiEffort::Low, AiEffort::High, AiEffort::Max]),
+                    adaptive_thinking: Some(true),
+                },
+                AiModel {
+                    efforts: Some(vec![]),
+                    ..AiModel::default()
                 },
                 AiModel::default(),
             ],
@@ -1240,7 +1348,10 @@ mod tests {
                 "auth_header": "authorization",
                 "models": [
                     {"id": "claude-x", "name": "Claude X",
-                     "context_window": 200_000, "max_output_tokens": null},
+                     "context_window": 200_000, "max_output_tokens": null,
+                     "efforts": ["low", "high", "max"], "adaptive_thinking": true},
+                    {"id": "", "name": "", "context_window": null, "max_output_tokens": null,
+                     "efforts": []},
                     {"id": "", "name": "", "context_window": null, "max_output_tokens": null}
                 ],
                 "updated_at": 7
@@ -1282,6 +1393,7 @@ mod tests {
             host_id: Some("h1".into()),
             pinned: true,
             context_start: Some("e1".into()),
+            effort: Some(AiEffort::Xhigh),
             created_at: 5,
             updated_at: 9,
         });
@@ -1289,7 +1401,8 @@ mod tests {
             serde_json::to_value(&conversation).unwrap(),
             json!({
                 "type": "ai_conversation", "title": "Why is nginx down", "host_id": "h1",
-                "pinned": true, "context_start": "e1", "created_at": 5, "updated_at": 9
+                "pinned": true, "context_start": "e1", "effort": "xhigh", "created_at": 5,
+                "updated_at": 9
             })
         );
         assert_eq!(
@@ -1396,11 +1509,13 @@ mod tests {
             model_id: "m1".into(),
         });
         settings.ai.search_provider_id = Some("sp1".into());
+        settings.ai.default_effort = Some(AiEffort::Medium);
         let value = serde_json::to_value(Item::Settings(settings)).unwrap();
         assert_eq!(
             value["ai"],
             json!({
                 "default_model": {"provider_id": "p1", "model_id": "m1"},
+                "default_effort": "medium",
                 "search_provider_id": "sp1",
                 "builtin_skill_enabled": true
             })
@@ -1440,6 +1555,39 @@ mod tests {
         assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
         let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
         assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
+
+        // AI-05: settings, conversations and models from before thinking levels read as Default
+        // and unknown, and a level a newer version added does not make the item unreadable.
+        assert_eq!(ai.default_effort, None);
+        let newer = read(json!({"type": "settings", "ai": {"default_effort": "ultra"}}));
+        assert_eq!(newer.as_settings().unwrap().ai.default_effort, None);
+        let high = read(json!({"type": "settings", "ai": {"default_effort": "high"}}));
+        assert_eq!(
+            high.as_settings().unwrap().ai.default_effort,
+            Some(AiEffort::High)
+        );
+        let old = read(json!({"type": "ai_conversation", "title": "t", "pinned": true}));
+        assert_eq!(old.as_ai_conversation().unwrap().effort, None);
+        for effort in [json!("ultra"), json!(3), json!(null)] {
+            let c = read(json!({"type": "ai_conversation", "effort": effort}));
+            assert_eq!(c.as_ai_conversation().unwrap().effort, None, "{effort}");
+        }
+        let levels = read(json!({
+            "type": "ai_provider",
+            "models": [
+                {"id": "a", "efforts": ["max", "ultra", "low", "low"], "adaptive_thinking": false},
+                {"id": "b", "efforts": "all"},
+                {"id": "c"}
+            ]
+        }));
+        let models = &levels.as_ai_provider().unwrap().models;
+        assert_eq!(models[0].efforts, Some(vec![AiEffort::Low, AiEffort::Max]));
+        assert_eq!(models[0].adaptive_thinking, Some(false));
+        assert_eq!(models[1].efforts, None);
+        assert_eq!(
+            (models[2].efforts.clone(), models[2].adaptive_thinking),
+            (None, None)
+        );
 
         // A missing or unknown protocol / auth header reads as the default.
         let provider = read(json!({

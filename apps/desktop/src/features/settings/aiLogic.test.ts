@@ -3,6 +3,7 @@ import type { AiModel, AiProviderView, SearchProviderView } from "@/ipc/types";
 import {
   addModels,
   firstModelRef,
+  formatEfforts,
   formatTokenCount,
   keyForInput,
   matchesFilter,
@@ -14,11 +15,15 @@ import {
   parseToolLimit,
   removeModel,
   sanitizeSettings,
+  sameSettings,
   searchProviderFor,
   suggestProtocol,
   toDraft,
+  toggleEffort,
   toModels,
+  typedModel,
   validateModels,
+  withListedCapabilities,
   type ModelDraft,
 } from "./aiLogic";
 
@@ -27,6 +32,19 @@ const model = (id: string, extra: Partial<AiModel> = {}): AiModel => ({
   name: id,
   context_window: null,
   max_output_tokens: null,
+  efforts: null,
+  adaptive_thinking: null,
+  ...extra,
+});
+
+/** A row as the form holds it; nothing is known about its thinking levels unless given. */
+const draft = (id: string, name: string, context: string, output: string, extra: Partial<ModelDraft> = {}): ModelDraft => ({
+  id,
+  name,
+  context,
+  output,
+  efforts: null,
+  adaptive: null,
   ...extra,
 });
 
@@ -134,14 +152,49 @@ describe("model rows", () => {
 
   it("adds new models with their limits", () => {
     const next = addModels([], [model("gpt-5", { name: "GPT-5", context_window: 400_000, max_output_tokens: 128_000 })]);
-    expect(next).toEqual([{ id: "gpt-5", name: "GPT-5", context: "400K", output: "128K" }]);
+    expect(next).toEqual([draft("gpt-5", "GPT-5", "400K", "128K")]);
   });
 
   it("keeps what the user entered for a model that is already there", () => {
-    const current = [{ id: "m", name: "My Model", context: "64K", output: "" }];
-    const next = addModels(current, [model("m", { name: "Fetched", context_window: 200_000, max_output_tokens: 8_192 })]);
-    expect(next).toEqual([{ id: "m", name: "My Model", context: "64K", output: "8192" }]);
+    const current = [draft("m", "My Model", "64K", "", { efforts: ["low"] })];
+    const next = addModels(current, [model("m", { name: "Fetched", context_window: 200_000, max_output_tokens: 8_192, efforts: ["high"], adaptive_thinking: true })]);
+    // AI-05: levels the user set stay, and only unknown capabilities are filled in.
+    expect(next).toEqual([draft("m", "My Model", "64K", "8192", { efforts: ["low"], adaptive: true })]);
     expect(current[0].output).toBe("");
+  });
+
+  it("carries thinking levels from the list, lowest first (AI-05)", () => {
+    const listed = model("claude-opus-5-5", { efforts: ["max", "low", "high"], adaptive_thinking: true });
+    expect(toDraft(listed)).toMatchObject({ efforts: ["low", "high", "max"], adaptive: true });
+    expect(toModels([toDraft(listed)])[0]).toMatchObject({ efforts: ["low", "high", "max"], adaptive_thinking: true });
+    expect(toModels([toDraft(typedModel("gpt-5"))])[0]).toMatchObject({ efforts: null, adaptive_thinking: null });
+    expect(toModels([draft("none", "none", "", "", { efforts: [] })])[0].efforts).toEqual([]);
+  });
+
+  it("fills unknown levels of rows already in the form from a fetched list", () => {
+    const rows = [draft("claude-opus-5-5", "Opus", "", ""), draft("set", "Set", "", "", { efforts: ["low"] }), draft("gone", "Gone", "", "")];
+    const list = [model("claude-opus-5-5", { efforts: ["low", "medium"], adaptive_thinking: true }), model("set", { efforts: ["max"] })];
+    const next = withListedCapabilities(rows, list);
+    expect(next.map((d) => [d.id, d.efforts, d.adaptive])).toEqual([
+      ["claude-opus-5-5", ["low", "medium"], true],
+      ["set", ["low"], null],
+      ["gone", null, null],
+    ]);
+    expect(rows[0].efforts).toBeNull();
+    // Nothing to fill: the same rows come back, so the form does not change.
+    expect(withListedCapabilities(next, list)).toBe(next);
+  });
+
+  it("ticks levels and describes them", () => {
+    expect(toggleEffort(["low", "medium", "high"], "max", true)).toEqual(["low", "medium", "high", "max"]);
+    expect(toggleEffort(["low", "medium"], "low", false)).toEqual(["medium"]);
+    expect(toggleEffort(["high"], "high", true)).toEqual(["high"]);
+    const label = (e: string) => e.toUpperCase();
+    expect(formatEfforts(["low", "medium", "high"], label, "none")).toBe("LOW–HIGH");
+    expect(formatEfforts(["low", "medium", "high", "max"], label, "none")).toBe("LOW–HIGH · MAX");
+    expect(formatEfforts(["max", "low"], label, "none")).toBe("LOW · MAX");
+    expect(formatEfforts(["xhigh"], label, "none")).toBe("XHIGH");
+    expect(formatEfforts([], label, "none")).toBe("none");
   });
 
   it("names a typed ID after itself and skips blanks", () => {
@@ -157,23 +210,15 @@ describe("model rows", () => {
   });
 
   it("turns rows into models", () => {
-    const models = toModels([
-      { id: " claude-x ", name: "", context: "1M", output: "64k" },
-      { id: "", name: "ghost", context: "", output: "" },
-      { id: "local", name: "Local", context: "bogus", output: "" },
-    ]);
+    const models = toModels([draft(" claude-x ", "", "1M", "64k"), draft("", "ghost", "", ""), draft("local", "Local", "bogus", "")]);
     expect(models).toEqual([
-      { id: "claude-x", name: "claude-x", context_window: 1_000_000, max_output_tokens: 64_000 },
-      { id: "local", name: "Local", context_window: null, max_output_tokens: null },
+      model("claude-x", { context_window: 1_000_000, max_output_tokens: 64_000 }),
+      model("local", { name: "Local" }),
     ]);
   });
 
   it("finds empty and duplicate IDs and bad limits", () => {
-    const problems = validateModels([
-      { id: "a", name: "a", context: "", output: "" },
-      { id: "a ", name: "a", context: "x", output: "-1" },
-      { id: " ", name: "", context: "", output: "" },
-    ]);
+    const problems = validateModels([draft("a", "a", "", ""), draft("a ", "a", "x", "-1"), draft(" ", "", "", "")]);
     expect(problems).toEqual([null, { id: "duplicate", context: "invalid", output: "invalid" }, { id: "empty" }]);
   });
 
@@ -202,19 +247,29 @@ describe("default model", () => {
   const search: SearchProviderView[] = [{ id: "s1", kind: "brave", base_url: null, has_api_key: true, updated_at: 5 }];
 
   it("keeps a default that still exists", () => {
-    const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: "s1", builtin_skill_enabled: false };
+    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", builtin_skill_enabled: false };
     expect(sanitizeSettings(settings, providers, search)).toEqual(settings);
   });
 
   it("drops a default whose provider, model or search provider is gone", () => {
-    expect(sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, search_provider_id: "s9", builtin_skill_enabled: true }, providers, search)).toEqual({
+    expect(
+      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", builtin_skill_enabled: true }, providers, search),
+    ).toEqual({
       default_model: null,
+      default_effort: "low",
       search_provider_id: null,
       builtin_skill_enabled: true,
     });
     expect(
-      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, search_provider_id: null, builtin_skill_enabled: true }, providers, search).default_model,
+      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true }, providers, search)
+        .default_model,
     ).toBeNull();
+  });
+
+  it("tells a changed default thinking level apart (AI-05)", () => {
+    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true };
+    expect(sameSettings(base, { ...base })).toBe(true);
+    expect(sameSettings(base, { ...base, default_effort: "high" })).toBe(false);
   });
 });
 

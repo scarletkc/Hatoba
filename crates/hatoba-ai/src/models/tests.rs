@@ -58,18 +58,21 @@ async fn chat_completions_list_reads_ids_names_and_limits() {
                 name: "gpt-4.1".into(),
                 context_window: None,
                 max_output_tokens: None,
+                ..ModelInfo::default()
             },
             ModelInfo {
                 id: "anthropic/claude-sonnet-4.5".into(),
                 name: "Anthropic: Claude Sonnet 4.5".into(),
                 context_window: Some(1_000_000),
                 max_output_tokens: Some(64_000),
+                ..ModelInfo::default()
             },
             ModelInfo {
                 id: "llama-3.3-70b".into(),
                 name: "llama-3.3-70b".into(),
                 context_window: Some(131_072),
                 max_output_tokens: Some(32_768),
+                ..ModelInfo::default()
             },
         ]
     );
@@ -146,6 +149,73 @@ async fn anthropic_list_follows_pages() {
     assert_eq!(requests.len(), 2);
     assert!(requests[0].url.query().unwrap().contains("limit=1000"));
     assert!(!requests[0].url.query().unwrap().contains("after_id"));
+}
+
+#[tokio::test]
+async fn anthropic_list_reads_thinking_levels_and_adaptive_thinking() {
+    let level = |on: bool| json!({"supported": on});
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [
+                {"id": "claude-opus-5-5", "max_tokens": 128_000, "capabilities": {
+                    "image_input": {"supported": true},
+                    "thinking": {"supported": true, "types": {
+                        "enabled": level(false), "adaptive": level(true)}},
+                    "effort": {"supported": true, "low": level(true), "medium": level(true),
+                               "high": level(true), "xhigh": level(true), "max": level(true)}}},
+                // Opus 4.6: no `xhigh`.
+                {"id": "claude-opus-4-6", "capabilities": {
+                    "thinking": {"supported": true, "types": {"adaptive": level(true)}},
+                    "effort": {"supported": true, "low": level(true), "medium": level(true),
+                               "high": level(true), "xhigh": level(false), "max": level(true)}}},
+                // Haiku 4.5: budgeted thinking only, no effort.
+                {"id": "claude-haiku-4-5", "capabilities": {
+                    "thinking": {"supported": true, "types": {
+                        "enabled": level(true), "adaptive": level(false)}},
+                    "effort": {"supported": false, "low": level(false)}}},
+                {"id": "claude-3-haiku", "capabilities": {"thinking": level(false)}},
+                // An Anthropic-compatible vendor: no capabilities, or ones without these trees.
+                {"id": "vendor-model"},
+                {"id": "vendor-other", "capabilities": {"effort": {"supported": true}}}
+            ],
+            "has_more": false
+        })))
+        .mount(&server)
+        .await;
+    let models = list_models(
+        &http_client(),
+        &anthropic(&server),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    let summary: Vec<_> = models
+        .iter()
+        .map(|m| (m.id.as_str(), m.efforts.clone(), m.adaptive_thinking))
+        .collect();
+    use Effort::{High, Low, Max, Medium, Xhigh};
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "claude-opus-5-5",
+                Some(vec![Low, Medium, High, Xhigh, Max]),
+                Some(true)
+            ),
+            (
+                "claude-opus-4-6",
+                Some(vec![Low, Medium, High, Max]),
+                Some(true)
+            ),
+            ("claude-haiku-4-5", Some(vec![]), Some(false)),
+            ("claude-3-haiku", None, Some(false)),
+            ("vendor-model", None, None),
+            ("vendor-other", None, None),
+        ]
+    );
+    assert_eq!(models[0].max_output_tokens, Some(128_000));
 }
 
 #[tokio::test]

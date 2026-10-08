@@ -21,8 +21,8 @@ use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
 use crate::ai::{
-    AiEnv, EventSink, auth_header, conversation_view, conversation_view_at, find_conversation,
-    protocol, search_kind,
+    AiEnv, EventSink, auth_header, conversation_view, conversation_view_at, core_effort,
+    effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiModel, AiModelRef,
@@ -104,6 +104,11 @@ pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
                 name: m.name.clone(),
                 context_window: m.context_window,
                 max_output_tokens: m.max_output_tokens,
+                efforts: m
+                    .efforts
+                    .as_ref()
+                    .map(|levels| levels.iter().copied().map(effort_view).collect()),
+                adaptive_thinking: m.adaptive_thinking,
             })
             .collect(),
         updated_at: p.updated_at,
@@ -130,6 +135,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
             provider_id: m.provider_id.clone(),
             model_id: m.model_id.clone(),
         }),
+        default_effort: s.default_effort.map(effort_view),
         search_provider_id: s.search_provider_id.clone(),
         builtin_skill_enabled: s.builtin_skill_enabled,
     }
@@ -207,7 +213,8 @@ fn find_provider(v: &Vault, id: &str) -> AppResult<AiProvider> {
         .ok_or_else(|| AppError::not_found("provider"))
 }
 
-/// Validates the model list: unique, non-empty ids; a blank name shows the id.
+/// Validates the model list: unique, non-empty ids; a blank name shows the id. Thinking levels
+/// are stored lowest first, each once (AI-05).
 fn models_from(models: &[AiModel]) -> AppResult<Vec<CoreModel>> {
     let mut out: Vec<CoreModel> = Vec::with_capacity(models.len());
     for m in models {
@@ -222,11 +229,19 @@ fn models_from(models: &[AiModel]) -> AppResult<Vec<CoreModel>> {
             ));
         }
         let name = m.name.trim();
+        let efforts = m.efforts.as_ref().map(|levels| {
+            let mut levels: Vec<_> = levels.iter().copied().map(core_effort).collect();
+            levels.sort_unstable();
+            levels.dedup();
+            levels
+        });
         out.push(CoreModel {
             id: id.to_owned(),
             name: if name.is_empty() { id } else { name }.to_owned(),
             context_window: m.context_window.filter(|n| *n > 0),
             max_output_tokens: m.max_output_tokens.filter(|n| *n > 0),
+            efforts,
+            adaptive_thinking: m.adaptive_thinking,
         });
     }
     Ok(out)
@@ -358,6 +373,10 @@ pub async fn ai_provider_models(
             name: m.name,
             context_window: m.context_window,
             max_output_tokens: m.max_output_tokens,
+            efforts: m
+                .efforts
+                .map(|levels| levels.into_iter().map(listed_effort).collect()),
+            adaptive_thinking: m.adaptive_thinking,
         })
         .collect())
 }
@@ -571,6 +590,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
     };
     let ai = AiSettings {
         default_model,
+        default_effort: input.default_effort.map(core_effort),
         search_provider_id,
         builtin_skill_enabled: input.builtin_skill_enabled,
     };
@@ -868,8 +888,10 @@ pub async fn ai_read_dropped_files(
 #[cfg(test)]
 mod tests {
     use hatoba_core::KdfParams;
+    use hatoba_core::model::AiEffort as CoreEffort;
 
     use super::*;
+    use crate::dto::AiEffort;
 
     const KEY: &str = "sk-test-NEVER-SHOWN-4242";
 
@@ -894,6 +916,8 @@ mod tests {
                 name: String::new(),
                 context_window: Some(200_000),
                 max_output_tokens: Some(0),
+                efforts: Some(vec![AiEffort::Max, AiEffort::Low, AiEffort::Max]),
+                adaptive_thinking: Some(true),
             }],
         }
     }
@@ -909,6 +933,12 @@ mod tests {
         assert_eq!(view.models[0].id, "m1");
         assert_eq!(view.models[0].name, "m1");
         assert_eq!(view.models[0].max_output_tokens, None);
+        // AI-05: levels are kept lowest first, each once, with the adaptive thinking flag.
+        assert_eq!(
+            view.models[0].efforts,
+            Some(vec![AiEffort::Low, AiEffort::Max])
+        );
+        assert_eq!(view.models[0].adaptive_thinking, Some(true));
         assert!(!serde_json::to_string(&view).unwrap().contains(KEY));
 
         // `None` keeps the saved key, and tests with it.
@@ -940,6 +970,8 @@ mod tests {
             name: "again".into(),
             context_window: None,
             max_output_tokens: None,
+            efforts: None,
+            adaptive_thinking: None,
         });
         let err = save_provider(&mut v, &input, input.base_url.clone()).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("models"));
@@ -948,6 +980,8 @@ mod tests {
             name: String::new(),
             context_window: None,
             max_output_tokens: None,
+            efforts: None,
+            adaptive_thinking: None,
         }];
         let err = save_provider(&mut v, &input, input.base_url.clone()).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("models"));
@@ -1023,6 +1057,7 @@ mod tests {
                     provider_id: provider.id.clone(),
                     model_id: "m1".into(),
                 }),
+                default_effort: None,
                 search_provider_id: Some(search.id.clone()),
                 builtin_skill_enabled: true,
             },
@@ -1046,6 +1081,24 @@ mod tests {
         assert!(!v.settings().ai.builtin_skill_enabled);
         assert!(v.settings().ai.default_model.is_some());
 
+        // AI-05: the default thinking level is stored with them, and Default is `None`.
+        let level = AiSettingsView {
+            default_effort: Some(AiEffort::Xhigh),
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &level).unwrap();
+        assert_eq!(v.settings().ai.default_effort, Some(CoreEffort::Xhigh));
+        assert_eq!(
+            ai_settings_view(&v.settings().ai).default_effort,
+            Some(AiEffort::Xhigh)
+        );
+        let default = AiSettingsView {
+            default_effort: None,
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &default).unwrap();
+        assert_eq!(v.settings().ai.default_effort, None);
+
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);
         assert!(v.settings().ai.default_model.is_some());
@@ -1063,6 +1116,7 @@ mod tests {
                     provider_id: "0190a0a0-0000-7000-8000-000000000000".into(),
                     model_id: "m1".into(),
                 }),
+                default_effort: None,
                 search_provider_id: None,
                 builtin_skill_enabled: true,
             },
@@ -1076,6 +1130,7 @@ mod tests {
                 provider_id: provider.id.clone(),
                 model_id: "m2".into(),
             }),
+            default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
         };
@@ -1084,6 +1139,7 @@ mod tests {
             &mut v,
             &AiSettingsView {
                 default_model: None,
+                default_effort: None,
                 search_provider_id: Some("nope".into()),
                 builtin_skill_enabled: true,
             },
@@ -1103,6 +1159,7 @@ mod tests {
                 provider_id: "elsewhere".into(),
                 model_id: "m9".into(),
             }),
+            default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
         };

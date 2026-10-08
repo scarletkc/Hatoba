@@ -41,6 +41,8 @@ export interface TurnSnapshot {
   outcome: TurnOutcome | null;
   /** The conversation's `context_start` (AI-21). */
   contextStart: string | null;
+  /** The provider refused the thinking level, and the turn went on without it (AI-05). */
+  effortIgnored?: boolean;
 }
 
 export function newTurn(): TurnState {
@@ -113,6 +115,8 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
     case "done":
       if (!turn) return s;
       return { ...s, turn: { ...turn, live: null, phase: ev.finish === "tool_calls" ? "tools" : turn.phase } };
+    case "effort_ignored":
+      return { ...s, effortIgnored: true };
     case "error":
       if (!turn) return { ...s, outcome: { reason: "error", status: ev.status, message: ev.message } };
       return { ...s, turn: { ...turn, error: { status: ev.status, message: ev.message } } };

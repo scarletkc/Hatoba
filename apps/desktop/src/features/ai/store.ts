@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
 import type { DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionState } from "./attachments";
+import type { EffortPick } from "./effort";
 import type { TurnOutcome, TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
@@ -21,6 +22,10 @@ export interface Slot {
   compacting: boolean;
   /** The model the user picked in the selector; null follows the conversation (AI-05). */
   model: AiModelRef | null;
+  /** The thinking level the user picked in the selector; null follows the conversation (AI-05). */
+  effort: EffortPick;
+  /** The provider refused the thinking level of this turn, which went on without it (AI-05). */
+  effortIgnored: boolean;
   /** AI-16: this conversation's permission mode on this device. */
   mode: AiPermissionMode;
   turn: TurnState | null;
@@ -107,6 +112,8 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", ex
     loadFailed: false,
     compacting: false,
     model: null,
+    effort: null,
+    effortIgnored: false,
     mode,
     turn: null,
     outcome: null,

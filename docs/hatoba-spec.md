@@ -295,6 +295,8 @@ interface AiProvider {           // P1, §13.2
     name: string;               // Display name
     context_window: number | null;     // Tokens, null when unknown
     max_output_tokens: number | null;  // Tokens, null when unknown
+    efforts?: ("low" | "medium" | "high" | "xhigh" | "max")[];  // AI-05, lowest first; absent when unknown
+    adaptive_thinking?: boolean;       // From Anthropic's model list (AI-05); absent when unknown
   }[];
   updated_at: number;
 }
@@ -313,6 +315,7 @@ interface AiConversation {       // P1, §13.7
   host_id: string | null;       // The host the conversation last worked on
   pinned: boolean;
   context_start: string | null; // entry_id where the context sent to the model starts (AI-21)
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";  // AI-05, the level of its last message; Default while absent
   created_at: number;
   updated_at: number;
 }
@@ -369,6 +372,7 @@ interface Settings {             // Fixed ID "settings", a single item
   lock_disconnects_sessions: boolean;
   ai: {                         // P1, §13
     default_model: { provider_id: string; model_id: string } | null;
+    default_effort?: "low" | "medium" | "high" | "xhigh" | "max";  // AI-05, Default while absent
     search_provider_id: string | null;
     builtin_skill_enabled: boolean;     // AI-34, true while absent
   };
@@ -1005,11 +1009,18 @@ Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoi
 | ID | Requirement | Priority |
 |---|---|---|
 | AI-01 | Providers in **Settings → AI**: add, edit, and delete providers, each with a name, a protocol, a base URL, an API key, and models. The form preselects `anthropic` for `api.anthropic.com` and for base URLs whose path ends in `/anthropic`. The key behaves like a host password (HOST-08): once saved it shows only **Saved** and can be replaced but not viewed. It can be empty for local servers that need none | P1 |
-| AI-02 | Requests stream and carry `tools`, so a model must support tool calls. Anthropic requests send `max_tokens` from the model's output limit, or 16,000 when it is unknown, and set top-level `cache_control` so the provider caches the conversation prefix. The base URL must use HTTPS unless it points at a loopback or private network address, as self-hosted servers such as Ollama and LM Studio usually do. The same rule holds for a SearXNG URL (AI-14) and an MCP server's `http` URL (AI-29). An `http` URL with a host name is checked again when connecting: the request goes through a client that resolves the name itself, refuses it unless every address is local, connects only to the addresses it checked, and does not use the system proxy, so a name that comes to resolve to a public address never receives the key or the headers in clear text | P1 |
-| AI-03 | Models: type the model IDs, or fetch the provider's model list (`GET {base_url}/models`, or `GET {base_url}/v1/models` for `anthropic`) and pick from it. Each model has a display name, and an optional context window and output limit in tokens, which are filled in when the list includes them (Anthropic's list has `max_input_tokens` and `max_tokens`) and can be edited | P1 |
+| AI-02 | Requests stream and carry `tools`, so a model must support tool calls. Anthropic requests send `max_tokens` from the model's output limit, at most 128,000, or 16,000 when it is unknown, and set top-level `cache_control` so the provider caches the conversation prefix. The base URL must use HTTPS unless it points at a loopback or private network address, as self-hosted servers such as Ollama and LM Studio usually do. The same rule holds for a SearXNG URL (AI-14) and an MCP server's `http` URL (AI-29). An `http` URL with a host name is checked again when connecting: the request goes through a client that resolves the name itself, refuses it unless every address is local, connects only to the addresses it checked, and does not use the system proxy, so a name that comes to resolve to a public address never receives the key or the headers in clear text | P1 |
+| AI-03 | Models: type the model IDs, or fetch the provider's model list (`GET {base_url}/models`, or `GET {base_url}/v1/models` for `anthropic`) and pick from it. Each model has a display name, and an optional context window and output limit in tokens, which are filled in when the list includes them (Anthropic's list has `max_input_tokens` and `max_tokens`) and can be edited. Each model also has the thinking levels it accepts (AI-05), which Anthropic's list gives in `capabilities.effort`, along with whether the model supports adaptive thinking (`capabilities.thinking`). The levels can be set for each model, none included; a model whose levels are unknown offers Low, Medium, and High. Fetching the list again fills in the levels of models already in the form that have none yet | P1 |
 | AI-04 | **Test Connection** sends a minimal request to the first model, or fetches the model list when no model is entered yet, and tells authentication failures, network failures, and unknown models apart | P1 |
-| AI-05 | The model selector in the panel's input area lists the models of every provider, grouped by provider. A new conversation uses the default model from **Settings → AI**, and a conversation keeps the model it used last. Switching models keeps the whole conversation | P1 |
-| AI-06 | Reasoning that the response carries shows above the answer, collapsed by default: `reasoning_content` or `reasoning` in Chat Completions deltas, and `thinking` blocks in Anthropic responses. It goes back to the model only inside the raw message (§13.7) | P1 |
+| AI-05 | The model selector in the panel's input area lists the models of every provider, grouped by provider. A new conversation uses the default model from **Settings → AI**, and a conversation keeps the model it used last. Switching models keeps the whole conversation. Under the current model the selector offers the thinking levels it accepts: **Default**, which leaves the depth to the provider, then Low, Medium, High, Extra High, and Max. A new conversation starts at the default level from **Settings → AI** (Default unless changed), and a conversation keeps the level of its last message, stored on its `ai_conversation` item; one without a stored level is at Default. A level the model does not offer is sent as the highest lower level it does, or as Default when there is none, and the selector shows the level that is sent. What each protocol sends is described below the table | P1 |
+| AI-06 | Reasoning that the response carries shows above the answer, collapsed by default: `reasoning_content` or `reasoning` in Chat Completions deltas, and `thinking` blocks in Anthropic responses. Anthropic requests that ask for thinking ask for it summarized (below), since newer Claude models otherwise return thinking blocks without text. It goes back to the model only inside the raw message (§13.7) | P1 |
+
+**Thinking level (AI-05).** Default sends no thinking or effort fields, except as noted for Anthropic, so every vendor accepts it.
+
+- Chat Completions: a level is sent as `reasoning_effort`: `low`, `medium`, or `high`, and `xhigh` or `max` only for a model whose levels include them. A model whose levels are unknown offers Low to High, so higher levels are sent as `high`.
+- Anthropic Messages: a level is sent as `output_config: {effort}`, together with `thinking: {type: "adaptive", display: "summarized"}` when the model supports adaptive thinking, which turns thinking on for models that otherwise answer without it, such as Claude Opus 4.8 and 4.7. At Default, only a model that thinks without being asked, a Claude model of the 5 generation or later (its ID names the generation, as in `claude-opus-5-5`), gets that `thinking`. It changes nothing but the display, so the panel can show the reasoning. Other models get no `thinking` at Default, which leaves whether they think to the provider. Whether a model supports adaptive thinking comes from the model list, and a model without that information supports it when it is a Claude model of the 5 generation or later. `budget_tokens` and `thinking: {type: "disabled"}` are never sent.
+- `max_tokens` does not change with the level: thinking counts against the model's output limit when it is known, and a larger guess when it is unknown could exceed what an Anthropic-compatible vendor allows.
+- When the provider answers 4xx with a message that names these fields (`reasoning_effort`, `effort`, `output_config`, adaptive thinking, or `display`), the request is sent once more without any of them, and the panel says that the message went at the model's default level.
 
 ### 13.3 Conversations and tabs
 
@@ -1083,7 +1094,7 @@ In manual approval mode, `read_terminal` and `web_search` run without asking, an
 | AI-25 | Export a conversation as Markdown | P2 |
 | AI-26 | Edit an earlier message of the user and send it again, which deletes the entries after it | P2 |
 
-A conversation is an `ai_conversation` item and its entries, which are stored in `ai_message` items (§5.1). Only the conversation item changes (title, pin, host, `context_start`), and it follows §6.4. Entries are written once and never change, so they never conflict. They are ordered by `entry_id`, a UUIDv7 that each device generates in increasing order, so entries that two devices add to one conversation merge on sync.
+A conversation is an `ai_conversation` item and its entries, which are stored in `ai_message` items (§5.1). Only the conversation item changes (title, pin, host, `context_start`, thinking level), and it follows §6.4. Entries are written once and never change, so they never conflict. They are ordered by `entry_id`, a UUIDv7 that each device generates in increasing order, so entries that two devices add to one conversation merge on sync.
 
 An entry's JSON is one of:
 

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Icon, IconButton, Segmented, Spinner, TextField, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
-import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
+import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import {
   TOOL_LIMIT_DEFAULT,
@@ -171,6 +172,15 @@ export function AiPane() {
                   providers={providers}
                   value={data.settings.default_model}
                   onChange={(default_model) => void saveSettings({ ...data.settings, default_model })}
+                />
+              </SettingRow>
+              <SettingRow label={t("aiSettings.default.effort")} hint={t("aiSettings.default.effortHint")}>
+                <PopupSelect<AiEffort | null>
+                  ariaLabel={t("aiSettings.default.effort")}
+                  value={data.settings.default_effort}
+                  options={[null, ...EFFORTS].map((e) => ({ value: e, label: t(effortKey(e)) }))}
+                  onChange={(default_effort) => void saveSettings({ ...data.settings, default_effort })}
+                  minWidth={160}
                 />
               </SettingRow>
             </Group>

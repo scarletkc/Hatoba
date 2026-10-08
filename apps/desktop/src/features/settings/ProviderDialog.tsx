@@ -1,13 +1,15 @@
 import { useId, useRef, useState } from "react";
 import { Button, Icon, IconButton, Segmented, TextField, controlStyles } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
+import { FooterSpacer, Menu, Sheet, SheetHeader, useMenu } from "@/components/overlay";
+import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AiAuthHeader, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
+import type { AiAuthHeader, AiEffort, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import {
   addModels,
+  formatEfforts,
   formatTokenCount,
   keyForInput,
   matchesFilter,
@@ -17,8 +19,11 @@ import {
   removeModel,
   suggestProtocol,
   toDraft,
+  toggleEffort,
   toModels,
+  typedModel,
   validateModels,
+  withListedCapabilities,
   type KeyDraft,
   type ModelDraft,
 } from "./aiLogic";
@@ -106,7 +111,7 @@ export function ProviderDialog({
   /** Models typed into the add field but not added yet still count when the user moves on. */
   const withPending = (rows: ModelDraft[]): ModelDraft[] => {
     const typed = parseModelIds(adding);
-    return typed.length ? addModels(rows, typed.map((id) => ({ id, name: id, context_window: null, max_output_tokens: null }))) : rows;
+    return typed.length ? addModels(rows, typed.map(typedModel)) : rows;
   };
   const commitPending = (): ModelDraft[] => {
     const rows = withPending(form.models);
@@ -168,7 +173,13 @@ export function ProviderDialog({
     setFetched({ state: "loading" });
     try {
       const list = await api.ai_provider_models(toInput(form.models));
-      if (mine === generation.current) setFetched({ state: "ok", list, filter: "" });
+      if (mine !== generation.current) return;
+      setFetched({ state: "ok", list, filter: "" });
+      // AI-05: models already in the form learn their thinking levels from the list.
+      setForm((f) => {
+        const models = withListedCapabilities(f.models, list);
+        return models === f.models ? f : { ...f, models };
+      });
     } catch (err) {
       if (mine !== generation.current) return;
       const { status, message } = aiErrorDetail(t, err);
@@ -226,7 +237,7 @@ export function ProviderDialog({
 
   return (
     <Sheet
-      width={660}
+      width={720}
       onClose={saving ? undefined : onClose}
       closeOnBackdrop={false}
       footer={
@@ -349,6 +360,7 @@ export function ProviderDialog({
                   <span>{t("aiSettings.models.col.name")}</span>
                   <span>{t("aiSettings.models.col.context")}</span>
                   <span>{t("aiSettings.models.col.output")}</span>
+                  <span>{t("aiSettings.models.col.effort")}</span>
                   <span />
                 </div>
                 {form.models.map((d, i) => (
@@ -381,6 +393,7 @@ export function ProviderDialog({
                       placeholder={t("aiSettings.models.unknown")}
                       onChange={(e) => setRow(i, { output: e.target.value })}
                     />
+                    <EffortCell id={d.id.trim() || d.name} efforts={d.efforts} onChange={(efforts) => setRow(i, { efforts })} />
                     <IconButton
                       icon="x"
                       size={13}
@@ -427,6 +440,50 @@ export function ProviderDialog({
         )}
       </form>
     </Sheet>
+  );
+}
+
+/**
+ * AI-05: the thinking levels a model accepts, ticked in a menu. Unknown levels show as what the panel
+ * offers for them (Low to High); unticking them all leaves the model with Default only.
+ */
+function EffortCell({ id, efforts, onChange }: { id: string; efforts: AiEffort[] | null; onChange: (efforts: AiEffort[]) => void }) {
+  const t = useT();
+  const menu = useMenu();
+  const ref = useRef<HTMLButtonElement>(null);
+  const levels = efforts ?? UNKNOWN_EFFORTS;
+  const text = formatEfforts(levels, (e) => t(effortKey(e)), t("aiSettings.models.effort.none"));
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className={cx(controlStyles.popup, s.effort)}
+        aria-label={t("aiSettings.models.effort.label", { id })}
+        aria-haspopup="menu"
+        title={text}
+        onClick={() => ref.current && menu.openBelow(ref.current, true)}
+      >
+        <span className={controlStyles.popupLabel}>{text}</span>
+        <Icon name="caret-up-down" className={controlStyles.popupCaret} />
+      </button>
+      {menu.anchor && (
+        <Menu
+          anchor={menu.anchor}
+          onClose={menu.close}
+          minWidth={180}
+          entries={[
+            { kind: "header", label: t("aiSettings.models.effort.menu") },
+            ...EFFORTS.map((e) => ({
+              label: t(effortKey(e)),
+              checked: levels.includes(e),
+              keepOpen: true,
+              onSelect: () => onChange(toggleEffort(levels, e, !levels.includes(e))),
+            })),
+          ]}
+        />
+      )}
+    </>
   );
 }
 

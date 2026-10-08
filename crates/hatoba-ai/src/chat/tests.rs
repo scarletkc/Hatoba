@@ -68,6 +68,7 @@ fn request<'a>(
         system: "SYS",
         tools,
         entries,
+        effort: None,
     }
 }
 
@@ -692,6 +693,7 @@ async fn anthropic_bearer_auth_and_model_output_limit() {
         id: "deepseek-chat".into(),
         context_window: Some(128_000),
         max_output_tokens: Some(8_192),
+        ..ModelSpec::default()
     };
     let entries = vec![AiEntry::user(1, "hi")];
     let entry = run(&p, &request(&model, &entries, &[])).await.0.unwrap();
@@ -1147,7 +1149,7 @@ fn consecutive_results_share_one_user_message_with_status_wording() {
     ];
     let model = ModelSpec::new("claude-x");
     let tools = terminal_tools();
-    let body = request::anthropic(&request(&model, &entries, &tools), true).body;
+    let body = request::anthropic(&request(&model, &entries, &tools), true, true).body;
     assert_eq!(
         body["messages"],
         json!([
@@ -1166,7 +1168,7 @@ fn consecutive_results_share_one_user_message_with_status_wording() {
             ]}
         ])
     );
-    let cc = request::chat_completions(&request(&model, &entries, &tools), true).body;
+    let cc = request::chat_completions(&request(&model, &entries, &tools), true, true).body;
     assert_eq!(
         cc["messages"][2]["tool_calls"][0]["function"]["arguments"], "{\"command\":\"rm x\"}",
         "Chat Completions sends the arguments of a call as stored when they are a JSON object"
@@ -1200,7 +1202,7 @@ fn missing_late_orphaned_and_reused_results_still_make_a_valid_request() {
     assert_eq!(request::orphan_results(&entries), vec![0]);
     let model = ModelSpec::new("claude-x");
     let tools = terminal_tools();
-    let body = request::anthropic(&request(&model, &entries, &tools), true).body;
+    let body = request::anthropic(&request(&model, &entries, &tools), true, true).body;
     let roles: Vec<&str> = body["messages"]
         .as_array()
         .unwrap()
@@ -1226,7 +1228,7 @@ fn missing_late_orphaned_and_reused_results_still_make_a_valid_request() {
         ])
     );
 
-    let cc = request::chat_completions(&request(&model, &entries, &tools), false).body;
+    let cc = request::chat_completions(&request(&model, &entries, &tools), false, true).body;
     let roles: Vec<&str> = cc["messages"]
         .as_array()
         .unwrap()
@@ -1266,12 +1268,12 @@ fn request_bodies_are_deterministic() {
         read_skill: true,
     });
     let req = request(&model, &entries, &tools);
-    let a = serde_json::to_string(&request::anthropic(&req, true).body).unwrap();
-    let b = serde_json::to_string(&request::anthropic(&req, true).body).unwrap();
+    let a = serde_json::to_string(&request::anthropic(&req, true, true).body).unwrap();
+    let b = serde_json::to_string(&request::anthropic(&req, true, true).body).unwrap();
     assert_eq!(a, b);
-    let built = request::anthropic(&req, true);
+    let built = request::anthropic(&req, true, true);
     assert!(built.used_raw);
-    assert!(!request::anthropic(&req, false).used_raw);
+    assert!(!request::anthropic(&req, false, true).used_raw);
     let EntryBody::Assistant(ref replayed) = entries[1].body else {
         unreachable!()
     };
@@ -1515,7 +1517,7 @@ fn flattened_texts_name_the_call_and_keep_the_result_wording() {
 fn anthropic_without_tools_sends_calls_and_results_as_text() {
     let model = ModelSpec::new("claude-opus-4-8");
     let entries = tool_history(Protocol::Anthropic, &model.id);
-    let built = request::anthropic(&request(&model, &entries, &[]), true);
+    let built = request::anthropic(&request(&model, &entries, &[]), true, true);
     let body = &built.body;
     let text = |s: &str| json!({"type": "text", "text": s});
     assert_eq!(
@@ -1543,9 +1545,9 @@ fn anthropic_without_tools_sends_calls_and_results_as_text() {
     assert_eq!(body["system"], "SYS");
 
     // Deterministic, and the thinking-binding retry (no raw at all) keeps the same text.
-    let again = request::anthropic(&request(&model, &entries, &[]), true);
+    let again = request::anthropic(&request(&model, &entries, &[]), true, true);
     assert_eq!(body.to_string(), again.body.to_string());
-    let rebuilt = request::anthropic(&request(&model, &entries, &[]), false);
+    let rebuilt = request::anthropic(&request(&model, &entries, &[]), false, true);
     assert!(!rebuilt.used_raw);
     assert_eq!(
         rebuilt.body["messages"][5],
@@ -1563,7 +1565,7 @@ fn anthropic_without_tools_sends_calls_and_results_as_text() {
 fn chat_completions_without_tools_sends_calls_and_results_as_text() {
     let model = ModelSpec::new("deepseek-reasoner");
     let entries = tool_history(Protocol::ChatCompletions, &model.id);
-    let built = request::chat_completions(&request(&model, &entries, &[]), true);
+    let built = request::chat_completions(&request(&model, &entries, &[]), true, true);
     let body = &built.body;
     assert_eq!(
         body["messages"],
@@ -1589,7 +1591,7 @@ fn chat_completions_without_tools_sends_calls_and_results_as_text() {
     assert_eq!(body["stream_options"], json!({"include_usage": true}));
 
     // The retry without `stream_options` builds the same messages.
-    let retry = request::chat_completions(&request(&model, &entries, &[]), false);
+    let retry = request::chat_completions(&request(&model, &entries, &[]), false, true);
     assert!(retry.body.get("stream_options").is_none());
     assert_eq!(retry.body["messages"], body["messages"]);
 }
@@ -1599,7 +1601,7 @@ fn requests_with_tools_keep_structured_tool_blocks() {
     let tools = terminal_tools();
     let model = ModelSpec::new("claude-opus-4-8");
     let entries = tool_history(Protocol::Anthropic, &model.id);
-    let built = request::anthropic(&request(&model, &entries, &tools), true);
+    let built = request::anthropic(&request(&model, &entries, &tools), true, true);
     assert_eq!(
         built.body["messages"],
         json!([
@@ -1629,7 +1631,7 @@ fn requests_with_tools_keep_structured_tool_blocks() {
     assert!(built.used_raw);
     // Rebuilt from fields (another model, or the retry): `tool_use` blocks, not text.
     let other = ModelSpec::new("claude-sonnet-4-6");
-    let rebuilt = request::anthropic(&request(&other, &entries, &tools), true);
+    let rebuilt = request::anthropic(&request(&other, &entries, &tools), true, true);
     assert!(!rebuilt.used_raw);
     assert_eq!(
         rebuilt.body["messages"][1],
@@ -1648,7 +1650,7 @@ fn requests_with_tools_keep_structured_tool_blocks() {
 
     let model = ModelSpec::new("deepseek-reasoner");
     let entries = tool_history(Protocol::ChatCompletions, &model.id);
-    let built = request::chat_completions(&request(&model, &entries, &tools), true);
+    let built = request::chat_completions(&request(&model, &entries, &tools), true, true);
     assert_eq!(
         built.body["messages"],
         json!([
@@ -1682,7 +1684,7 @@ fn requests_with_tools_keep_structured_tool_blocks() {
         "the other assistant entries still replay raw"
     );
     let other = ModelSpec::new("gpt-4.1");
-    let rebuilt = request::chat_completions(&request(&other, &entries, &tools), true);
+    let rebuilt = request::chat_completions(&request(&other, &entries, &tools), true, true);
     assert_eq!(
         rebuilt.body["messages"][2]["tool_calls"][2],
         json!({"id": "c3", "type": "function",
@@ -1741,7 +1743,7 @@ fn cut_off_chat_completions_arguments_are_never_sent() {
     // The raw path: same provider and model, but `raw` holds the cut-off text.
     let raw = chat_message(&[("c1", "run_command", json!(cut))]);
     let entries = entries_with(raw.clone(), vec![call("c1", "run_command", cut)]);
-    let built = request::chat_completions(&request(&model, &entries, &tools), true);
+    let built = request::chat_completions(&request(&model, &entries, &tools), true, true);
     assert!(
         !built.used_raw,
         "a raw message with cut-off arguments is not replayed"
@@ -1758,7 +1760,7 @@ fn cut_off_chat_completions_arguments_are_never_sent() {
     let valid_raw = chat_message(&[("c1", "run_command", json!("{}"))]);
     for raw in [valid_raw, raw] {
         let entries = entries_with(raw, vec![call("c1", "run_command", cut)]);
-        let built = request::chat_completions(&request(&other, &entries, &tools), true);
+        let built = request::chat_completions(&request(&other, &entries, &tools), true, true);
         assert!(!built.used_raw);
         assert_eq!(sent_arguments(&built.body, 2), ["{}"]);
     }
@@ -1787,7 +1789,7 @@ fn cut_off_chat_completions_arguments_are_never_sent() {
         AiEntry::user(1, "go"),
         assistant_entry(&other.id, "", calls, json!(null)),
     ];
-    let built = request::chat_completions(&request(&other, &entries, &tools), true);
+    let built = request::chat_completions(&request(&other, &entries, &tools), true, true);
     let expected: Vec<&str> = stored.iter().map(|(_, _, sent)| *sent).collect();
     assert_eq!(sent_arguments(&built.body, 2), expected);
 }
@@ -1801,7 +1803,7 @@ fn chat_completions_raw_is_replayed_only_with_object_arguments() {
             AiEntry::user(1, "go"),
             assistant_entry(&model.id, "Listing.", vec![call("c1", "f", "{}")], raw),
         ];
-        request::chat_completions(&request(&model, &entries, &tools), true).used_raw
+        request::chat_completions(&request(&model, &entries, &tools), true, true).used_raw
     };
     let one = |arguments: Value| chat_message(&[("c1", "f", arguments)]);
 
@@ -1870,7 +1872,7 @@ fn raw_holding_tool_blocks_is_not_replayed_without_tools() {
             assistant_entry(&anthropic.id, "Searched.", vec![], raw.clone()),
             AiEntry::user(2, "and?"),
         ];
-        let built = request::anthropic(&request(&anthropic, &entries, &[]), true);
+        let built = request::anthropic(&request(&anthropic, &entries, &[]), true, true);
         assert!(!built.used_raw, "{kind}");
         assert_eq!(
             built.body["messages"][1],
@@ -1879,7 +1881,7 @@ fn raw_holding_tool_blocks_is_not_replayed_without_tools() {
         );
         assert_no_anthropic_tool_blocks(&built.body);
         // With tools offered nothing changes: raw goes back as it is.
-        let built = request::anthropic(&request(&anthropic, &entries, &tools), true);
+        let built = request::anthropic(&request(&anthropic, &entries, &tools), true, true);
         assert!(built.used_raw, "{kind}");
         assert_eq!(built.body["messages"][1]["content"], raw, "{kind}");
     }
@@ -1893,7 +1895,7 @@ fn raw_holding_tool_blocks_is_not_replayed_without_tools() {
         AiEntry::user(1, "hi"),
         assistant_entry(&anthropic.id, "Hi.", vec![], raw.clone()),
     ];
-    let built = request::anthropic(&request(&anthropic, &entries, &[]), true);
+    let built = request::anthropic(&request(&anthropic, &entries, &[]), true, true);
     assert!(built.used_raw);
     assert_eq!(built.body["messages"][1]["content"], raw);
 
@@ -1910,14 +1912,14 @@ fn raw_holding_tool_blocks_is_not_replayed_without_tools() {
             assistant_entry(&chat.id, "Searched.", vec![], raw.clone()),
             AiEntry::user(2, "and?"),
         ];
-        let built = request::chat_completions(&request(&chat, &entries, &[]), true);
+        let built = request::chat_completions(&request(&chat, &entries, &[]), true, true);
         assert!(!built.used_raw);
         assert_eq!(
             built.body["messages"][2],
             json!({"role": "assistant", "content": "Searched."})
         );
         assert_no_chat_tool_messages(&built.body);
-        let built = request::chat_completions(&request(&chat, &entries, &tools), true);
+        let built = request::chat_completions(&request(&chat, &entries, &tools), true, true);
         assert!(built.used_raw);
         assert_eq!(built.body["messages"][2], raw);
     }
@@ -1927,7 +1929,7 @@ fn raw_holding_tool_blocks_is_not_replayed_without_tools() {
         AiEntry::user(1, "hi"),
         assistant_entry(&chat.id, "Hi.", vec![], raw.clone()),
     ];
-    let built = request::chat_completions(&request(&chat, &entries, &[]), true);
+    let built = request::chat_completions(&request(&chat, &entries, &[]), true, true);
     assert!(built.used_raw);
     assert_eq!(built.body["messages"][2], raw);
 }
@@ -2159,4 +2161,356 @@ async fn chat_completions_stream_options_retry_still_works_without_tools() {
     for body in &bodies {
         assert_no_chat_tool_messages(body);
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Thinking level (AI-05)
+// ---------------------------------------------------------------------------------------------
+
+use crate::provider::Effort::{self, High, Low, Max, Medium, Xhigh};
+
+/// A model with what Anthropic's model list says about it.
+fn listed(id: &str, efforts: &[Effort], adaptive: bool, output: Option<u64>) -> ModelSpec {
+    ModelSpec {
+        id: id.into(),
+        max_output_tokens: output,
+        efforts: Some(efforts.to_vec()),
+        adaptive_thinking: Some(adaptive),
+        ..ModelSpec::default()
+    }
+}
+
+fn with_effort(req: ChatRequest<'_>, effort: Option<Effort>) -> ChatRequest<'_> {
+    ChatRequest { effort, ..req }
+}
+
+#[test]
+fn claude_generations_and_who_thinks_by_default() {
+    for (id, generation) in [
+        ("claude-opus-5-5", Some(5)),
+        ("claude-sonnet-5", Some(5)),
+        ("claude-fable-5-1", Some(5)),
+        ("us.anthropic.claude-haiku-5-5-v1:0", Some(5)),
+        ("claude-opus-5-5@20260801", Some(5)),
+        ("Claude-Opus-6", Some(6)),
+        ("claude-opus-4-8", Some(4)),
+        ("claude-haiku-4-5-20251001", Some(4)),
+        ("claude-3-5-sonnet-20241022", Some(3)),
+        ("claude-x", None),
+        ("deepseek-chat", None),
+        ("gpt-5", None),
+    ] {
+        assert_eq!(request::claude_generation(id), generation, "{id}");
+        assert_eq!(
+            request::thinks_by_default(&ModelSpec::new(id)),
+            generation.is_some_and(|g| g >= 5),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn chat_completions_sends_reasoning_effort_within_the_models_levels() {
+    let entries = vec![AiEntry::user(1, "hi")];
+    let sent = |model: &ModelSpec, effort: Option<Effort>, with: bool| {
+        let req = with_effort(request(model, &entries, &[]), effort);
+        let built = request::chat_completions(&req, true, with);
+        assert_eq!(
+            built.sent_effort,
+            built.body.get("reasoning_effort").is_some()
+        );
+        built.body.get("reasoning_effort").cloned()
+    };
+    // Without information a model offers Low to High, and higher levels become High.
+    let unknown = ModelSpec::new("gpt-5");
+    assert_eq!(sent(&unknown, None, true), None, "Default sends nothing");
+    for (level, value) in [
+        (Low, "low"),
+        (Medium, "medium"),
+        (High, "high"),
+        (Xhigh, "high"),
+        (Max, "high"),
+    ] {
+        assert_eq!(
+            sent(&unknown, Some(level), true),
+            Some(json!(value)),
+            "{level:?}"
+        );
+    }
+    // Levels the user set: `xhigh` and `max` go out as they are.
+    let set = ModelSpec {
+        efforts: Some(vec![Low, Medium, High, Xhigh]),
+        ..ModelSpec::new("gpt-5.2")
+    };
+    assert_eq!(sent(&set, Some(Xhigh), true), Some(json!("xhigh")));
+    assert_eq!(sent(&set, Some(Max), true), Some(json!("xhigh")));
+    let all = ModelSpec {
+        efforts: Some(Effort::ALL.to_vec()),
+        ..ModelSpec::new("some-model")
+    };
+    assert_eq!(sent(&all, Some(Max), true), Some(json!("max")));
+    // A model that offers no level, and the retry without the field.
+    let none = ModelSpec {
+        efforts: Some(vec![]),
+        ..ModelSpec::new("llama")
+    };
+    assert_eq!(sent(&none, Some(High), true), None);
+    assert_eq!(sent(&unknown, Some(High), false), None);
+}
+
+#[test]
+fn anthropic_request_shapes_per_model_and_level() {
+    let entries = vec![AiEntry::user(1, "hi")];
+    let adaptive = json!({"type": "adaptive", "display": "summarized"});
+    let opus_5_5 = listed("claude-opus-5-5", &Effort::ALL, true, Some(128_000));
+    let opus_4_8 = listed("claude-opus-4-8", &Effort::ALL, true, Some(128_000));
+    let opus_4_6 = listed("claude-opus-4-6", &[Low, Medium, High, Max], true, None);
+    let haiku_4_5 = listed("claude-haiku-4-5", &[], false, Some(64_000));
+    let typed_sonnet = ModelSpec::new("claude-sonnet-5-5");
+    let typed_opus = ModelSpec::new("claude-opus-4-8");
+    let vendor = ModelSpec::new("deepseek-chat");
+    // (model, chosen level, `thinking`, effort sent)
+    let cases = [
+        // Thinks by default: Default only asks for the summarized display.
+        (&opus_5_5, None, Some(&adaptive), None),
+        (&opus_5_5, Some(Low), Some(&adaptive), Some("low")),
+        (&opus_5_5, Some(Max), Some(&adaptive), Some("max")),
+        // Opus 4.8 does not think unless asked: unchanged at Default, thinking at a level.
+        (&opus_4_8, None, None, None),
+        (&opus_4_8, Some(Medium), Some(&adaptive), Some("medium")),
+        // Opus 4.6 has no `xhigh`.
+        (&opus_4_6, Some(Xhigh), Some(&adaptive), Some("high")),
+        // Haiku 4.5: no effort and no adaptive thinking, so every level is Default.
+        (&haiku_4_5, None, None, None),
+        (&haiku_4_5, Some(High), None, None),
+        // Typed in without capabilities: a 5-generation id still gets adaptive thinking.
+        (&typed_sonnet, None, Some(&adaptive), None),
+        (&typed_sonnet, Some(Max), Some(&adaptive), Some("high")),
+        // An older or unknown model gets the effort alone.
+        (&typed_opus, None, None, None),
+        (&typed_opus, Some(Low), None, Some("low")),
+        (&vendor, None, None, None),
+        (&vendor, Some(High), None, Some("high")),
+    ];
+    for (model, effort, thinking, sent) in cases {
+        let req = with_effort(request(model, &entries, &[]), effort);
+        let built = request::anthropic(&req, true, true);
+        let body = &built.body;
+        let label = format!("{} at {effort:?}", model.id);
+        assert_eq!(body.get("thinking"), thinking, "{label}");
+        assert_eq!(
+            body.pointer("/output_config/effort")
+                .and_then(Value::as_str),
+            sent,
+            "{label}"
+        );
+        assert_eq!(
+            built.sent_effort,
+            thinking.is_some() || sent.is_some(),
+            "{label}"
+        );
+        assert_eq!(built.effort.map(Effort::as_str), sent, "{label}");
+        let text = body.to_string();
+        assert!(
+            !text.contains("budget_tokens") && !text.contains("disabled"),
+            "{label}"
+        );
+
+        // The retry without these fields.
+        let plain = request::anthropic(&req, true, false);
+        assert!(plain.body.get("thinking").is_none(), "{label}");
+        assert!(plain.body.get("output_config").is_none(), "{label}");
+        assert!(!plain.sent_effort && plain.effort.is_none(), "{label}");
+    }
+}
+
+#[test]
+fn anthropic_max_tokens_is_the_output_limit_up_to_a_cap() {
+    let entries = vec![AiEntry::user(1, "hi")];
+    for (limit, effort, expected) in [
+        (Some(128_000), None, 128_000),
+        (Some(64_000), Some(Max), 64_000),
+        (Some(8_192), Some(High), 8_192),
+        // More than any current model streams (a typo, or a context window in a vendor's list).
+        (Some(1_000_000), Some(Max), 128_000),
+        // Unknown: the same 16,000 at every level.
+        (None, None, 16_000),
+        (None, Some(Max), 16_000),
+    ] {
+        let model = ModelSpec {
+            max_output_tokens: limit,
+            ..ModelSpec::new("claude-opus-5-5")
+        };
+        let req = with_effort(request(&model, &entries, &[]), effort);
+        let built = request::anthropic(&req, true, true);
+        assert_eq!(
+            built.body["max_tokens"], expected,
+            "{limit:?} at {effort:?}"
+        );
+    }
+}
+
+#[test]
+fn effort_retry_conditions() {
+    let http = |status, message: &str| AiError::Http {
+        status,
+        message: message.into(),
+    };
+    for message in [
+        "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
+        "Unrecognized request argument supplied: reasoning_effort",
+        "This model does not support the effort parameter.",
+        "output_config: Extra inputs are not permitted",
+        "thinking.type: adaptive thinking is not supported on this model",
+        "thinking.display: Extra inputs are not permitted",
+    ] {
+        assert!(rejects_effort(&http(400, message)), "{message}");
+    }
+    assert!(rejects_effort(&http(
+        422,
+        "body.reasoning_effort: extra field"
+    )));
+    assert!(!rejects_effort(&http(500, "reasoning_effort")));
+    assert!(!rejects_effort(&http(
+        400,
+        "messages.1.content.0: Invalid `signature` in `thinking` block"
+    )));
+    assert!(!rejects_effort(&http(400, "max_tokens too large")));
+    assert!(!rejects_effort(&AiError::Network("effort".into())));
+}
+
+async fn only_body(server: &MockServer) -> Value {
+    let mut all = bodies(server).await;
+    assert_eq!(all.len(), 1);
+    all.remove(0)
+}
+
+#[tokio::test]
+async fn chat_completions_retries_without_reasoning_effort_and_says_so() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"reasoning_effort": "high"})))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": {"message": "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
+                      "type": "invalid_request_error", "param": "reasoning_effort"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(OPENAI_TEXT))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::ChatCompletions);
+    let model = ModelSpec::new("gpt-4.1");
+    let entries = vec![AiEntry::user(1, "How full is the disk?")];
+    let req = with_effort(request(&model, &entries, &[]), Some(Max));
+    let (result, events) = run(&p, &req).await;
+    assert_eq!(result.unwrap().text, "Disk usage is 42%.");
+    assert_eq!(events[0], StreamEvent::EffortIgnored);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| **e == StreamEvent::EffortIgnored)
+            .count(),
+        1
+    );
+    let bodies = bodies(&server).await;
+    assert_eq!(bodies.len(), 2);
+    assert_eq!(
+        bodies[0]["reasoning_effort"], "high",
+        "Max is High on a model without levels"
+    );
+    assert!(bodies[1].get("reasoning_effort").is_none());
+    assert_eq!(bodies[1]["stream_options"], json!({"include_usage": true}));
+    assert_eq!(bodies[0]["messages"], bodies[1]["messages"]);
+
+    // At Default nothing is sent, so there is nothing to retry.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(sse(OPENAI_TEXT))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::ChatCompletions);
+    let (result, events) = run(&p, &request(&model, &entries, &[])).await;
+    result.unwrap();
+    assert!(!events.contains(&StreamEvent::EffortIgnored));
+    assert!(only_body(&server).await.get("reasoning_effort").is_none());
+}
+
+#[tokio::test]
+async fn anthropic_retries_without_thinking_fields_and_says_so() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            json!({"output_config": {"effort": "low"}}),
+        ))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "This model does not support the effort parameter."}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_REFUSAL))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let model = ModelSpec::new("claude-sonnet-5-5");
+    let entries = vec![AiEntry::user(1, "hi")];
+    let req = with_effort(request(&model, &entries, &[]), Some(Low));
+    let (result, events) = run(&p, &req).await;
+    result.unwrap();
+    assert_eq!(events[0], StreamEvent::EffortIgnored);
+    let bodies = bodies(&server).await;
+    assert_eq!(bodies.len(), 2);
+    assert_eq!(
+        bodies[0]["thinking"],
+        json!({"type": "adaptive", "display": "summarized"})
+    );
+    for absent in ["thinking", "output_config"] {
+        assert!(
+            bodies[1].get(absent).is_none(),
+            "{absent} is left out of the retry"
+        );
+    }
+
+    // At Default only the display was asked for: retried without it, and no level was dropped.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"thinking": {"type": "adaptive"}})))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error",
+                      "message": "thinking.display: Extra inputs are not permitted"}
+        })))
+        .with_priority(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .respond_with(sse(ANTHROPIC_REFUSAL))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let (result, events) = run(&p, &request(&model, &entries, &[])).await;
+    result.unwrap();
+    assert!(!events.contains(&StreamEvent::EffortIgnored));
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
+
+    // A second refusal is not retried again.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "effort: unknown field"}
+        })))
+        .mount(&server)
+        .await;
+    let p = provider(&server, Protocol::Anthropic);
+    let req = with_effort(request(&model, &entries, &[]), Some(High));
+    let (result, _) = run(&p, &req).await;
+    assert_eq!(result.unwrap_err().status(), Some(400));
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }

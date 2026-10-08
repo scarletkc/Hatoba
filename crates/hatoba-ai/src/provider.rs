@@ -102,6 +102,44 @@ impl ProviderConfig {
     }
 }
 
+/// A thinking level (AI-05), lowest first. A request without one uses the provider's default
+/// depth, which the panel calls Default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Effort {
+    /// `low`.
+    Low,
+    /// `medium`.
+    Medium,
+    /// `high`.
+    High,
+    /// `xhigh` (Extra High).
+    Xhigh,
+    /// `max`.
+    Max,
+}
+
+impl Effort {
+    /// Every level, lowest first.
+    pub const ALL: [Self; 5] = [Self::Low, Self::Medium, Self::High, Self::Xhigh, Self::Max];
+
+    /// The levels a model offers while what it supports is unknown.
+    pub const UNKNOWN_MODEL: [Self; 3] = [Self::Low, Self::Medium, Self::High];
+
+    /// The value of Anthropic's `output_config.effort` and of Chat Completions'
+    /// `reasoning_effort`.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+}
+
 /// A model as a request needs it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -111,8 +149,14 @@ pub struct ModelSpec {
     /// Context window in tokens, when known.
     pub context_window: Option<u64>,
     /// Output limit in tokens, when known. Anthropic requests send it as `max_tokens`
-    /// (16,000 when unknown).
+    /// (16,000 when unknown, at most 128,000).
     pub max_output_tokens: Option<u64>,
+    /// The thinking levels the model accepts, lowest first, when known (from Anthropic's model
+    /// list, or set by the user); empty when it accepts none. Unknown means
+    /// [`Effort::UNKNOWN_MODEL`].
+    pub efforts: Option<Vec<Effort>>,
+    /// Whether the model supports adaptive thinking (Anthropic's model list), when known.
+    pub adaptive_thinking: Option<bool>,
 }
 
 impl ModelSpec {
@@ -123,6 +167,26 @@ impl ModelSpec {
             id: id.into(),
             ..Self::default()
         }
+    }
+
+    /// The thinking levels the model offers: the known ones, or [`Effort::UNKNOWN_MODEL`].
+    #[must_use]
+    pub fn efforts(&self) -> &[Effort] {
+        self.efforts.as_deref().unwrap_or(&Effort::UNKNOWN_MODEL)
+    }
+
+    /// The level a request sends for `chosen`: the highest level the model offers that is not
+    /// above it, or `None` (Default) when there is none or nothing was chosen. So Max becomes
+    /// High on a model that offers Low to High, and any level becomes Default on a model that
+    /// offers none.
+    #[must_use]
+    pub fn effort_for(&self, chosen: Option<Effort>) -> Option<Effort> {
+        let chosen = chosen?;
+        self.efforts()
+            .iter()
+            .copied()
+            .filter(|e| *e <= chosen)
+            .max()
     }
 }
 
@@ -331,6 +395,33 @@ mod tests {
             .headers()
             .unwrap_err();
         assert!(!err.to_string().contains("bad"));
+    }
+
+    #[test]
+    fn a_chosen_level_becomes_the_nearest_lower_one_the_model_offers() {
+        use Effort::{High, Low, Max, Medium, Xhigh};
+        let with = |efforts: Option<Vec<Effort>>| ModelSpec {
+            efforts,
+            ..ModelSpec::new("m")
+        };
+        // Unknown: Low to High.
+        let unknown = with(None);
+        assert_eq!(unknown.efforts(), &[Low, Medium, High]);
+        assert_eq!(unknown.effort_for(None), None);
+        assert_eq!(unknown.effort_for(Some(Medium)), Some(Medium));
+        assert_eq!(unknown.effort_for(Some(Max)), Some(High));
+        // Opus 4.6 has Max but no Extra High.
+        let opus_4_6 = with(Some(vec![Low, Medium, High, Max]));
+        assert_eq!(opus_4_6.effort_for(Some(Xhigh)), Some(High));
+        assert_eq!(opus_4_6.effort_for(Some(Max)), Some(Max));
+        // None offered, or none at or below the choice: Default.
+        assert_eq!(with(Some(vec![])).effort_for(Some(High)), None);
+        assert_eq!(with(Some(vec![High, Max])).effort_for(Some(Low)), None);
+        assert_eq!(
+            Effort::ALL.map(Effort::as_str),
+            ["low", "medium", "high", "xhigh", "max"]
+        );
+        assert_eq!(serde_json::to_string(&Xhigh).unwrap(), "\"xhigh\"");
     }
 
     #[test]

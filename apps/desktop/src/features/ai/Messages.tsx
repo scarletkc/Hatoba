@@ -189,6 +189,12 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       })}
       {turn?.live && <LiveMessage slotId={slotId} live={turn.live} host={host} />}
       <TurnStatus slotId={slotId} slot={slot} />
+      {slot.effortIgnored && (
+        <div className={s.status} role="status">
+          <Icon name="info" size={13} />
+          {t("ai.effortIgnored")}
+        </div>
+      )}
     </div>
   );
 }

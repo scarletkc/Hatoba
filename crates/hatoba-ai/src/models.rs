@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{Protocol, ProviderConfig, client_for, validate_base_url};
+use crate::provider::{Effort, Protocol, ProviderConfig, client_for, validate_base_url};
 
 /// A model from the provider's list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +22,50 @@ pub struct ModelInfo {
     pub context_window: Option<u64>,
     /// Output limit in tokens, when the list says.
     pub max_output_tokens: Option<u64>,
+    /// The thinking levels the model accepts, lowest first, when the list says (Anthropic's
+    /// `capabilities.effort`); empty when it accepts none.
+    pub efforts: Option<Vec<Effort>>,
+    /// Whether the model supports adaptive thinking, when the list says (Anthropic's
+    /// `capabilities.thinking`).
+    pub adaptive_thinking: Option<bool>,
+}
+
+/// `{"supported": bool}` at `value`.
+fn supported(value: Option<&Value>) -> Option<bool> {
+    value?.get("supported")?.as_bool()
+}
+
+/// The thinking levels in an Anthropic model's `capabilities`: `effort.supported` false is none,
+/// otherwise every level whose `supported` is true. `None` when the list does not say (no
+/// `capabilities.effort`, or no level in it).
+fn capability_efforts(capabilities: &Value) -> Option<Vec<Effort>> {
+    let effort = capabilities.get("effort")?;
+    if supported(Some(effort)) == Some(false) {
+        return Some(Vec::new());
+    }
+    let mut known = false;
+    let mut levels = Vec::new();
+    for level in Effort::ALL {
+        match supported(effort.get(level.as_str())) {
+            Some(true) => {
+                known = true;
+                levels.push(level);
+            }
+            Some(false) => known = true,
+            None => {}
+        }
+    }
+    known.then_some(levels)
+}
+
+/// Whether an Anthropic model's `capabilities` say it supports adaptive thinking: `false` when
+/// `thinking.supported` is false, else `thinking.types.adaptive.supported`.
+fn capability_adaptive(capabilities: &Value) -> Option<bool> {
+    let thinking = capabilities.get("thinking")?;
+    if supported(Some(thinking)) == Some(false) {
+        return Some(false);
+    }
+    supported(thinking.pointer("/types/adaptive"))
 }
 
 /// Overall limit of a model list request and of Test Connection.
@@ -72,6 +116,28 @@ fn chat_completions_model(item: &Value) -> Option<ModelInfo> {
             item.get("top_provider")
                 .and_then(|p| first_u64(p, &["max_completion_tokens"]))
         }),
+        efforts: None,
+        adaptive_thinking: None,
+    })
+}
+
+/// One entry of Anthropic's `/v1/models` list, with the thinking levels and adaptive thinking
+/// from its `capabilities` when it has them (Anthropic-compatible vendors often do not).
+fn anthropic_model(item: &Value) -> Option<ModelInfo> {
+    let id = item.get("id").and_then(Value::as_str)?;
+    let name = item
+        .get("display_name")
+        .and_then(Value::as_str)
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or(id);
+    let capabilities = item.get("capabilities").filter(|c| c.is_object());
+    Some(ModelInfo {
+        id: id.to_owned(),
+        name: name.trim().to_owned(),
+        context_window: first_u64(item, &["max_input_tokens"]),
+        max_output_tokens: first_u64(item, &["max_tokens"]),
+        efforts: capabilities.and_then(capability_efforts),
+        adaptive_thinking: capabilities.and_then(capability_adaptive),
     })
 }
 
@@ -151,24 +217,8 @@ async fn list_models_inner(
                 let items = body.get("data").and_then(Value::as_array).ok_or_else(|| {
                     AiError::Protocol("the model list has no `data` array".into())
                 })?;
-                for item in items {
-                    let Some(id) = item.get("id").and_then(Value::as_str) else {
-                        continue;
-                    };
-                    let name = item
-                        .get("display_name")
-                        .and_then(Value::as_str)
-                        .filter(|n| !n.trim().is_empty())
-                        .unwrap_or(id);
-                    push(
-                        ModelInfo {
-                            id: id.to_owned(),
-                            name: name.trim().to_owned(),
-                            context_window: first_u64(item, &["max_input_tokens"]),
-                            max_output_tokens: first_u64(item, &["max_tokens"]),
-                        },
-                        &mut models,
-                    );
+                for model in items.iter().filter_map(anthropic_model) {
+                    push(model, &mut models);
                 }
                 let has_more = body.get("has_more").and_then(Value::as_bool) == Some(true);
                 let last = body

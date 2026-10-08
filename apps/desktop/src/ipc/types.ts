@@ -614,12 +614,19 @@ export interface UpdateCheck {
 export type AiProtocol = "chat_completions" | "anthropic";
 export type AiAuthHeader = "x-api-key" | "authorization";
 
+/** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
+export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 /** A model of a provider (AI-03). Token limits are null when unknown. */
 export interface AiModel {
   id: string;
   name: string;
   context_window: number | null;
   max_output_tokens: number | null;
+  /** The thinking levels the model accepts, lowest first (AI-05): [] for none, null when unknown (Low to High are offered). */
+  efforts: AiEffort[] | null;
+  /** Whether the model supports adaptive thinking (Anthropic's model list), null when unknown. */
+  adaptive_thinking: boolean | null;
 }
 
 /** AI-01. The API key never reaches the WebView: only whether one is saved. */
@@ -686,6 +693,8 @@ export interface AiModelRef {
 /** The synced `Settings.ai` (§5.1). */
 export interface AiSettingsView {
   default_model: AiModelRef | null;
+  /** The thinking level new conversations start with (AI-05); null is Default. */
+  default_effort: AiEffort | null;
   search_provider_id: string | null;
   /** The built-in `hatoba` skill is offered (AI-34). */
   builtin_skill_enabled: boolean;
@@ -701,6 +710,8 @@ export interface AiConversationView {
   pinned: boolean;
   /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
   context_start: string | null;
+  /** The thinking level its last message was sent with (AI-05); null is Default. */
+  effort: AiEffort | null;
   created_at: number;
   updated_at: number;
   /** The newest entry or conversation change, for sorting history (AI-23). */
@@ -752,6 +763,8 @@ export interface AiConversationDetail {
 export interface AiTurnContext {
   provider_id: string;
   model_id: string;
+  /** The thinking level (AI-05); null is Default. Rust sends the highest level the model offers that is not above it. */
+  effort: AiEffort | null;
   /** The tab's host; the next message moves the conversation to it (AI-09). */
   host_id: string | null;
   /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
@@ -787,6 +800,8 @@ export type AiTurnEvent =
    * entry means `context_start` moved to it (AI-21, or automatic compaction before a request, AI-22). */
   | { kind: "done"; finish: AiFinish }
   | { kind: "error"; status: number | null; message: string }
+  /** The provider refused the thinking level: the request went again without it, at the model's default depth (AI-05). */
+  | { kind: "effort_ignored" }
   | { kind: "turn_ended"; reason: AiTurnEndReason };
 
 /** A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17). */

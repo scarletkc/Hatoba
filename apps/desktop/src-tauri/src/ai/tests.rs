@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 
 use hatoba_ai::entry::{AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus};
 use hatoba_core::model::{
-    AiConversation, AiModel, AiProtocol, AiProvider, Item, SETTINGS_ID, SearchKind, SearchProvider,
-    Skill, SkillFile,
+    AiConversation, AiEffort as CoreEffort, AiModel, AiProtocol, AiProvider, Item, SETTINGS_ID,
+    SearchKind, SearchProvider, Skill, SkillFile,
 };
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{KdfParams, Vault};
@@ -23,8 +23,8 @@ use zeroize::Zeroizing;
 use super::{AiEnv, AiManager, COMPACT_INSTRUCTION, DISCONNECTED, EDIT_NOTE, Entries, EventSink};
 use super::{append, lock, title_of};
 use crate::dto::{
-    AiConversationDetail, AiEntryView, AiFinish, AiSendInput, AiSendStarted, AiToolResultInput,
-    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
+    AiConversationDetail, AiEffort, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
+    AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -113,6 +113,7 @@ fn kind(e: &AiTurnEvent) -> &'static str {
         AiTurnEvent::Entry { .. } => "entry",
         AiTurnEvent::Done { .. } => "done",
         AiTurnEvent::Error { .. } => "error",
+        AiTurnEvent::EffortIgnored => "effort_ignored",
         AiTurnEvent::TurnEnded { .. } => "turn_ended",
     }
 }
@@ -268,6 +269,7 @@ impl Fixture {
         AiTurnContext {
             provider_id: self.provider_id.clone(),
             model_id: "m1".into(),
+            effort: None,
             host_id: None,
             tab: true,
             disabled_mcp_servers: Vec::new(),
@@ -905,6 +907,108 @@ async fn a_provider_error_ends_the_turn_and_retry_goes_on() {
     let refused = f.retry(&conv, f.context()).unwrap_err();
     assert_eq!(refused.code, ErrorCode::InvalidInput);
     assert_eq!(f.requests().await.len(), 2);
+}
+
+/// The level the stored conversation keeps (AI-05).
+fn stored_effort(f: &Fixture, conversation_id: &str) -> Option<CoreEffort> {
+    lock(&f.vault)
+        .get(conversation_id)
+        .and_then(Item::as_ai_conversation)
+        .unwrap()
+        .effort
+}
+
+#[tokio::test]
+async fn the_thinking_level_goes_with_every_request_and_stays_with_the_conversation() {
+    let f = Fixture::new(vec![
+        calls(&[("call_1", "web_search", json!({"query": "x"}))]),
+        answer("Done."),
+        ResponseTemplate::new(400).set_body_json(json!({"error": {
+            "message": "Unsupported parameter: 'reasoning_effort' is not supported with this model."
+        }})),
+        answer("Without the level."),
+        answer("At Default."),
+    ])
+    .await;
+    let at = |effort| AiTurnContext {
+        effort,
+        ..f.context()
+    };
+
+    // A new conversation stores the level, and each request of the turn carries it. The model
+    // offers Low to High (nothing is known about it), so Max is sent as High.
+    let (started, sink) = f.send_with(None, "hi", at(Some(AiEffort::Max))).await;
+    let conv = started.conversation.id;
+    assert_eq!(started.conversation.effort, Some(AiEffort::Max));
+    assert_eq!(stored_effort(&f, &conv), Some(CoreEffort::Max));
+    sink.done_with(AiFinish::ToolCalls).await;
+    f.result(&conv, "call_1", AiToolStatus::Ok, "found", None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    // A refused level: the request goes again without it, and the panel hears about it.
+    let (_, sink) = f
+        .send_with(Some(&conv), "again", at(Some(AiEffort::Low)))
+        .await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(
+        kinds(&sink.events())
+            .iter()
+            .filter(|k| **k == "effort_ignored")
+            .count(),
+        1
+    );
+    assert_eq!(stored_effort(&f, &conv), Some(CoreEffort::Low));
+
+    // Default sends nothing and is stored as no level.
+    let (started, sink) = f.send_with(Some(&conv), "plain", at(None)).await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(started.conversation.effort, None);
+    assert_eq!(stored_effort(&f, &conv), None);
+    assert!(!kinds(&sink.events()).contains(&"effort_ignored"));
+
+    let requests = f.requests().await;
+    let efforts: Vec<Option<&str>> = requests
+        .iter()
+        .map(|body| body.get("reasoning_effort").and_then(Value::as_str))
+        .collect();
+    assert_eq!(
+        efforts,
+        [Some("high"), Some("high"), Some("low"), None, None]
+    );
+
+    // A retry at another level is the one the conversation keeps.
+    let retry = f.retry(&conv, at(Some(AiEffort::Medium))).unwrap_err();
+    assert_eq!(retry.code, ErrorCode::InvalidInput, "nothing to retry");
+    assert_eq!(stored_effort(&f, &conv), None);
+}
+
+#[tokio::test]
+async fn a_retry_keeps_the_level_it_was_sent_with() {
+    let f = Fixture::new(vec![
+        ResponseTemplate::new(503).set_body_json(json!({"error": {"message": "busy"}})),
+        answer("Recovered."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "hi").await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Error);
+    f.idle(&conv).await;
+    assert_eq!(stored_effort(&f, &conv), None);
+
+    let context = AiTurnContext {
+        effort: Some(AiEffort::Medium),
+        ..f.context()
+    };
+    let retry = f.retry(&conv, context).unwrap();
+    assert_eq!(retry.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(stored_effort(&f, &conv), Some(CoreEffort::Medium));
+    assert_eq!(f.requests().await[1]["reasoning_effort"], "medium");
+    assert_eq!(f.detail(&conv).conversation.effort, Some(AiEffort::Medium));
 }
 
 #[tokio::test]

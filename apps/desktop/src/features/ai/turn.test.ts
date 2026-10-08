@@ -76,6 +76,13 @@ describe("reduceTurnEvent (§13.1)", () => {
     expect(s.turn?.phase).toBe("waiting");
   });
 
+  it("notes a thinking level the provider refused, for the rest of the turn (AI-05)", () => {
+    const s = run([{ kind: "request_started" }, { kind: "effort_ignored" }, { kind: "text", delta: "Hi" }, { kind: "turn_ended", reason: "completed" }]);
+    expect(s.effortIgnored).toBe(true);
+    expect(s.turn).toBeNull();
+    expect(run([{ kind: "request_started" }]).effortIgnored).toBeUndefined();
+  });
+
   it("ignores deltas when no turn is tracked but keeps entries", () => {
     const idle: TurnSnapshot = { entries: [], turn: null, outcome: null, contextStart: null };
     expect(run([{ kind: "text", delta: "x" }], idle)).toEqual(idle);

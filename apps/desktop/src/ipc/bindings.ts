@@ -303,11 +303,16 @@ export type AiConversationView = {
 	pinned: boolean,
 	/**  `entry_id` where the context sent to the model starts (AI-21). */
 	context_start: string | null,
+	/**  The thinking level its last message was sent with (AI-05); `None` is Default. */
+	effort: AiEffort | null,
 	created_at: number,
 	updated_at: number,
 	/**  The newest entry or conversation change, for sorting history (AI-23). */
 	last_activity: number,
 };
+
+/**  A thinking level (AI-05), lowest first. Where one is optional, `None` is Default. */
+export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /**  A stored conversation entry (§13.7), without the provider's raw message. */
 export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
@@ -320,6 +325,13 @@ export type AiModel = {
 	name: string,
 	context_window: number | null,
 	max_output_tokens: number | null,
+	/**
+	 *  The thinking levels the model accepts, lowest first (AI-05); empty for none, `None` when
+	 *  unknown (the panel then offers Low to High).
+	 */
+	efforts: AiEffort[] | null,
+	/**  Whether the model supports adaptive thinking (Anthropic's model list), `None` when unknown. */
+	adaptive_thinking: boolean | null,
 };
 
 export type AiModelRef = {
@@ -379,6 +391,8 @@ export type AiSendStarted = {
 /**  The synced `Settings.ai` (§5.1). */
 export type AiSettingsView = {
 	default_model: AiModelRef | null,
+	/**  The thinking level new conversations start with (AI-05); `None` is Default. */
+	default_effort: AiEffort | null,
 	search_provider_id: string | null,
 	/**  The built-in `hatoba` skill is offered (AI-34). */
 	builtin_skill_enabled: boolean,
@@ -416,6 +430,11 @@ export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";
 export type AiTurnContext = {
 	provider_id: string,
 	model_id: string,
+	/**
+	 *  The thinking level (AI-05); `None` is Default. Requests send the highest level the model
+	 *  offers that is not above it, and the conversation keeps it for its next message.
+	 */
+	effort: AiEffort | null,
 	/**  The tab's host; the next message moves the conversation to it (AI-09). */
 	host_id: string | null,
 	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
@@ -431,7 +450,12 @@ export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: s
 /**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
 { kind: "entry"; entry: AiEntryView } | 
 /**  One response finished. With `tool_calls`, Rust waits for every call's result. */
-{ kind: "done"; finish: AiFinish } | { kind: "error"; status: number | null; message: string } | { kind: "turn_ended"; reason: AiTurnEndReason };
+{ kind: "done"; finish: AiFinish } | { kind: "error"; status: number | null; message: string } | 
+/**
+ *  The provider refused the thinking level, so the request was sent again without it and the
+ *  model answers at its default depth (AI-05).
+ */
+{ kind: "effort_ignored" } | { kind: "turn_ended"; reason: AiTurnEndReason };
 
 export type AiUsage = {
 	input_tokens: number,

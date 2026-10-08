@@ -1,8 +1,10 @@
 import { parseMessage } from "@/features/ai/attachments";
+import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
   AiConversationView,
+  AiEffort,
   AiEntryView,
   AiFinish,
   AiSearchHit,
@@ -101,6 +103,8 @@ const DAY = 24 * HOUR;
  *   length     every response is cut off at the output limit
  *   limit      the model keeps calling read_terminal, so the turn pauses at the tool call limit
  *   autocompact every turn of a conversation that has an answer compacts it first (AI-22)
+ *   effortfail every request that carries a thinking level is refused for it and goes again
+ *              without it, so the panel says the level was not used (AI-05)
  *   noprovider (Settings → AI mock) no provider is configured
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
  * Nothing here is secure; it never runs inside the Tauri app.
@@ -397,6 +401,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return Math.ceil(JSON.stringify(ctx).length / 4);
   }
 
+  /** AI-05: the level a request of the turn carries: the chosen one, fitted to the levels the model offers. */
+  async function sentEffort(turn: Turn): Promise<AiEffort | null> {
+    const providers = await deps.providers();
+    const model = providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id);
+    return effectiveEffort(turn.context.effort, modelEfforts(model));
+  }
+
   /** AI-22: whether the context, with `extra` tokens of a new message, would pass 90% of the context window. */
   async function compactionDue(c: Conv, turn: Turn, extra = 0): Promise<boolean> {
     if (turn.compacted) return false;
@@ -447,6 +458,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (!(await autoCompact(c, turn))) return;
     turn.emit({ kind: "request_started" });
     if (!(await sleep(turn, 450))) return;
+    if (flags.has("effortfail") && (await sentEffort(turn))) turn.emit({ kind: "effort_ignored" });
     if (flags.has("error") && !errorShown) {
       errorShown = true;
       turn.emit({ kind: "error", status: 529, message: "Overloaded: the service is temporarily overloaded, please try again later." });
@@ -626,7 +638,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const created = now - ago;
       const at = (offset: number) => created + offset;
       const c: Conv = {
-        view: { id, title, host_id: host, pinned, context_start: null, created_at: created, updated_at: created },
+        // The pinned one was last sent at High (AI-05).
+        view: { id, title, host_id: host, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
         entries: build(at),
         runningUntil: 0,
       };
@@ -782,7 +795,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       } else {
         const id = newId();
         c = {
-          view: { id, title: titleOf(input.text), host_id: input.context.host_id, pinned: false, context_start: null, created_at: Date.now(), updated_at: Date.now() },
+          view: {
+            id,
+            title: titleOf(input.text),
+            host_id: input.context.host_id,
+            pinned: false,
+            context_start: null,
+            effort: input.context.effort,
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          },
           entries: [],
           runningUntil: 0,
         };
@@ -790,6 +812,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const turn = startTurn(c, input.context, onEvent, false);
       convs.set(c.view.id, c);
       if (input.context.host_id && input.context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
+      // Like Rust: the conversation keeps the level of its last message.
+      if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
       const user_entry = await storeMessage(c, turn, input.text);
       return { conversation: view(c), user_entry };
     },
@@ -800,6 +824,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: a conversation that ends with the model's answer has nothing to retry.
       const last = [...contextOf(c)].reverse().find((e) => e.role !== "tool");
       if (!last || (last.role === "assistant" && last.tool_calls.length === 0)) fail("invalid_input", "nothing to retry: the conversation ends with the model's answer", { field: "conversation_id" });
+      if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
       startTurn(c, context, onEvent);
     },
     ai_tool_result: async (id, callId, result: AiToolResultInput) => {
@@ -869,6 +894,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       c.view = { ...c.view, updated_at: Date.now() };
       const turn = startTurn(c, context, onEvent, false);
       if (context.host_id && context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: context.host_id };
+      c.view = { ...c.view, effort: context.effort };
       const user_entry = await storeMessage(c, turn, text);
       return { conversation: view(c), user_entry };
     },

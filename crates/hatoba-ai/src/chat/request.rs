@@ -31,6 +31,26 @@
 //!   and variants such as `server_tool_use` for Anthropic; `tool_calls` or `function_call` for
 //!   Chat Completions), in which case they are rebuilt from `text`. With tools offered nothing
 //!   changes.
+//!
+//! **Thinking level (AI-05).** [`ChatRequest::effort`] is clamped to the levels the model offers
+//! ([`ModelSpec::effort_for`]); with `with_effort` false (the retry after a 400 that named these
+//! fields) neither protocol sends any of them.
+//!
+//! - Chat Completions: a level is `reasoning_effort` (`low`, `medium`, `high`, and `xhigh` or
+//!   `max` only for a model whose levels include them); Default sends nothing.
+//! - Anthropic: a level is `output_config: {effort}`, and on a model with adaptive thinking also
+//!   `thinking: {type: "adaptive", display: "summarized"}`, which turns thinking on for models
+//!   that otherwise answer without it (Opus 4.8 and 4.7). At Default only a model that thinks
+//!   anyway (a Claude model of the 5 generation or later, [`thinks_by_default`]) gets that
+//!   `thinking`, which changes nothing but the display: its thinking comes back summarized
+//!   instead of empty, so the panel can show it (AI-06). Other models get no `thinking` at
+//!   Default, so they behave as before. Adaptive thinking is what the model list said, or, for a
+//!   model without that information, whether it thinks by default. `budget_tokens` and
+//!   `thinking: {type: "disabled"}` are never sent: current models refuse both.
+//! - Anthropic `max_tokens` is the model's output limit, at most 128,000, or 16,000 when the limit
+//!   is unknown. Thinking counts against it, but a larger guess could exceed what an
+//!   Anthropic-compatible vendor allows and fail every request, so an unknown limit stays 16,000
+//!   at every level.
 
 use std::borrow::Cow;
 
@@ -38,15 +58,51 @@ use serde_json::{Map, Value, json};
 
 use super::ChatRequest;
 use crate::entry::{AiEntry, AssistantEntry, EntryBody, ToolCall, ToolStatus, pair_results};
-use crate::provider::Protocol;
+use crate::provider::{Effort, ModelSpec, Protocol};
 
 /// `max_tokens` of an Anthropic request when the model's output limit is unknown (AI-02).
 pub(crate) const DEFAULT_MAX_TOKENS: u64 = 16_000;
 
-/// A request body and whether any assistant entry was replayed from `raw`.
+/// The most `max_tokens` an Anthropic request asks for: the longest output current Claude models
+/// stream. A larger limit from a model list or typed in is sent as this.
+pub(crate) const MAX_TOKENS_CAP: u64 = 128_000;
+
+/// A request body, whether any assistant entry was replayed from `raw`, and the thinking level
+/// it carries.
 pub(crate) struct Built {
     pub body: Value,
     pub used_raw: bool,
+    /// The body has thinking or effort fields (`reasoning_effort`, `thinking`, `output_config`),
+    /// so a 400 that names them can be retried without.
+    pub sent_effort: bool,
+    /// The level the body asks for; `None` at Default.
+    pub effort: Option<Effort>,
+}
+
+/// The Claude generation a model id names: `claude-opus-5-5` and `us.anthropic.claude-fable-5-1`
+/// are 5, `claude-opus-4-8` is 4, `claude-3-5-sonnet-20241022` is 3. `None` for other ids.
+pub(crate) fn claude_generation(id: &str) -> Option<u32> {
+    let id = id.to_ascii_lowercase();
+    let rest = &id[id.find("claude-")? + "claude-".len()..];
+    let part = rest
+        .split('-')
+        .find(|part| part.starts_with(|c: char| c.is_ascii_digit()))?;
+    let digits: String = part.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// Whether the model thinks when a request leaves `thinking` out: Claude models of the 5
+/// generation and later. Opus 4.8 and 4.7 do not.
+pub(crate) fn thinks_by_default(model: &ModelSpec) -> bool {
+    claude_generation(&model.id).is_some_and(|generation| generation >= 5)
+}
+
+/// Whether an Anthropic request may send `thinking: {type: "adaptive"}`: what the model list
+/// said, or, without that, whether the model thinks by default (all of those support it).
+fn adaptive_thinking(model: &ModelSpec) -> bool {
+    model
+        .adaptive_thinking
+        .unwrap_or_else(|| thinks_by_default(model))
 }
 
 enum Turn<'a> {
@@ -271,8 +327,13 @@ fn chat_arguments(arguments: &str) -> Cow<'_, str> {
 }
 
 /// `POST {base}/chat/completions` body. When the request offers no tools there are no `tool_calls`
-/// and no `tool` messages in it: calls and results are sent as text (see the module docs).
-pub(crate) fn chat_completions(req: &ChatRequest<'_>, stream_options: bool) -> Built {
+/// and no `tool` messages in it: calls and results are sent as text (see the module docs). With
+/// `with_effort` false there is no `reasoning_effort`.
+pub(crate) fn chat_completions(
+    req: &ChatRequest<'_>,
+    stream_options: bool,
+    with_effort: bool,
+) -> Built {
     let (turns, used_raw) = plan(req, Protocol::ChatCompletions, true);
     let mut messages = Vec::with_capacity(turns.len() + 1);
     if !req.system.is_empty() {
@@ -352,6 +413,14 @@ pub(crate) fn chat_completions(req: &ChatRequest<'_>, stream_options: bool) -> B
             .collect();
         body.insert("tools".into(), Value::Array(tools));
     }
+    let effort = if with_effort {
+        req.model.effort_for(req.effort)
+    } else {
+        None
+    };
+    if let Some(effort) = effort {
+        body.insert("reasoning_effort".into(), json!(effort.as_str()));
+    }
     body.insert("stream".into(), json!(true));
     if stream_options {
         body.insert("stream_options".into(), json!({"include_usage": true}));
@@ -359,6 +428,8 @@ pub(crate) fn chat_completions(req: &ChatRequest<'_>, stream_options: bool) -> B
     Built {
         body: Value::Object(body),
         used_raw,
+        sent_effort: effort.is_some(),
+        effort,
     }
 }
 
@@ -383,8 +454,9 @@ fn push_blocks(messages: &mut Vec<(Role, Vec<Value>)>, role: Role, blocks: Vec<V
 /// `POST {base}/v1/messages` body. With `allow_raw` false every assistant entry is rebuilt (the
 /// thinking-binding retry). When the request offers no tools there are no `tool_use` and
 /// `tool_result` blocks in it, which Anthropic refuses without `tools`: calls and results are sent
-/// as text and merge with the neighbouring messages of their role (see the module docs).
-pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool) -> Built {
+/// as text and merge with the neighbouring messages of their role (see the module docs). With
+/// `with_effort` false there is no `thinking` and no `output_config`.
+pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: bool) -> Built {
     let (turns, used_raw) = plan(req, Protocol::Anthropic, allow_raw);
     let mut messages: Vec<(Role, Vec<Value>)> = Vec::new();
     for turn in turns {
@@ -458,12 +530,34 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool) -> Built {
         })
         .collect();
 
+    let effort = if with_effort {
+        req.model.effort_for(req.effort)
+    } else {
+        None
+    };
+    let thinking = with_effort
+        && adaptive_thinking(req.model)
+        && (effort.is_some() || thinks_by_default(req.model));
+
     let mut body = Map::new();
     body.insert("model".into(), json!(req.model.id));
     body.insert(
         "max_tokens".into(),
-        json!(req.model.max_output_tokens.unwrap_or(DEFAULT_MAX_TOKENS)),
+        json!(
+            req.model
+                .max_output_tokens
+                .map_or(DEFAULT_MAX_TOKENS, |limit| limit.min(MAX_TOKENS_CAP))
+        ),
     );
+    if thinking {
+        body.insert(
+            "thinking".into(),
+            json!({"type": "adaptive", "display": "summarized"}),
+        );
+    }
+    if let Some(effort) = effort {
+        body.insert("output_config".into(), json!({"effort": effort.as_str()}));
+    }
     body.insert("cache_control".into(), json!({"type": "ephemeral"}));
     if !req.system.is_empty() {
         body.insert("system".into(), json!(req.system));
@@ -487,6 +581,8 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool) -> Built {
     Built {
         body: Value::Object(body),
         used_raw,
+        sent_effort: thinking || effort.is_some(),
+        effort,
     }
 }
 

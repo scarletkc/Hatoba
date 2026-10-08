@@ -46,9 +46,17 @@
 
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 82px 82px 28px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) 76px 76px 104px 28px;
   align-items: center;
   gap: 8px;
+}
+
+/* A row's thinking levels (AI-05): as tall as the fields beside it. */
+.effort {
+  width: 100%;
+  padding: 0 6px 0 8px;
+  gap: 4px;
+  font-size: var(--text-sm);
 }
 
 .head {

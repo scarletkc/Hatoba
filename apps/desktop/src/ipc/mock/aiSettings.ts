@@ -1,5 +1,6 @@
 import type { HatobaApi } from "../api";
 import type {
+  AiEffort,
   AiModel,
   AiProviderInput,
   AiProviderView,
@@ -9,6 +10,8 @@ import type {
   SearchProviderInput,
   SearchProviderView,
 } from "../types";
+
+const ALL_LEVELS: readonly AiEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 type AiSettingsApi = Pick<
   HatobaApi,
@@ -56,8 +59,9 @@ export function createAiSettingsMock(): AiSettingsApi {
           has_api_key: true,
           auth_header: "x-api-key",
           models: [
-            { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", context_window: 1_000_000, max_output_tokens: 128_000 },
-            { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: 1_000_000, max_output_tokens: 128_000 },
+            { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", context_window: 1_000_000, max_output_tokens: 128_000, efforts: [...ALL_LEVELS], adaptive_thinking: true },
+            { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: 1_000_000, max_output_tokens: 128_000, efforts: [...ALL_LEVELS], adaptive_thinking: true },
+            { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", context_window: 200_000, max_output_tokens: 64_000, efforts: [], adaptive_thinking: false },
           ],
           updated_at: Date.now() - 86_400_000,
         },
@@ -69,8 +73,8 @@ export function createAiSettingsMock(): AiSettingsApi {
           has_api_key: false,
           auth_header: "x-api-key",
           models: [
-            { id: "qwen3:8b", name: "qwen3:8b", context_window: 40_960, max_output_tokens: null },
-            { id: "gpt-oss:20b", name: "gpt-oss:20b", context_window: null, max_output_tokens: null },
+            { id: "qwen3:8b", name: "qwen3:8b", context_window: 40_960, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+            { id: "gpt-oss:20b", name: "gpt-oss:20b", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
           ],
           updated_at: Date.now() - 3_600_000,
         },
@@ -80,13 +84,15 @@ export function createAiSettingsMock(): AiSettingsApi {
     : [];
   let settings: AiSettingsView = {
     default_model: providers.length ? { provider_id: "p-anthropic", model_id: "claude-sonnet-5-5" } : null,
+    default_effort: null,
     search_provider_id: flags.has("search") ? "s-brave" : null,
     builtin_skill_enabled: true,
   };
 
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const clone = (p: AiProviderView): AiProviderView => ({ ...p, models: p.models.map((m) => ({ ...m })) });
+  const copyModel = (m: AiModel): AiModel => ({ ...m, efforts: m.efforts ? [...m.efforts] : null });
+  const clone = (p: AiProviderView): AiProviderView => ({ ...p, models: p.models.map(copyModel) });
 
   const hostOf = (url: string): string | null => {
     try {
@@ -112,14 +118,24 @@ export function createAiSettingsMock(): AiSettingsApi {
   const savedKey = (input: { id: string | null; api_key: string | null }, list: { id: string; has_api_key: boolean }[]) =>
     input.api_key === null ? (list.find((p) => p.id === input.id)?.has_api_key ?? false) : input.api_key !== "";
 
+  // Anthropic's list carries each model's thinking levels and adaptive thinking (AI-05).
+  const claude = (id: string, name: string, context: number, output: number, efforts: AiEffort[], adaptive: boolean): AiModel => ({
+    id,
+    name,
+    context_window: context,
+    max_output_tokens: output,
+    efforts,
+    adaptive_thinking: adaptive,
+  });
   const claudeModels: AiModel[] = [
-    { id: "claude-opus-5-1", name: "Claude Opus 5.1", context_window: 1_000_000, max_output_tokens: 128_000 },
-    { id: "claude-sonnet-5-5", name: "Claude Sonnet 5.5", context_window: 1_000_000, max_output_tokens: 128_000 },
-    { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: 1_000_000, max_output_tokens: 128_000 },
-    { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", context_window: 200_000, max_output_tokens: 64_000 },
-    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", context_window: 200_000, max_output_tokens: 64_000 },
+    claude("claude-opus-5-5", "Claude Opus 5.5", 1_000_000, 128_000, [...ALL_LEVELS], true),
+    claude("claude-sonnet-5-5", "Claude Sonnet 5.5", 1_000_000, 128_000, [...ALL_LEVELS], true),
+    claude("claude-haiku-5-5", "Claude Haiku 5.5", 1_000_000, 128_000, [...ALL_LEVELS], true),
+    claude("claude-opus-4-6", "Claude Opus 4.6", 1_000_000, 128_000, ["low", "medium", "high", "max"], true),
+    claude("claude-haiku-4-5-20251001", "Claude Haiku 4.5", 200_000, 64_000, [], false),
   ];
-  const plain = (ids: string[]): AiModel[] => ids.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null }));
+  const plain = (ids: string[]): AiModel[] =>
+    ids.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }));
 
   const modelsFor = (input: AiProviderInput): AiModel[] => {
     const host = hostOf(input.base_url) ?? "";
@@ -132,6 +148,8 @@ export function createAiSettingsMock(): AiSettingsApi {
           name: `${vendor} model ${i + 1}`,
           context_window: [8_192, 32_768, 131_072, 200_000, 1_000_000][i % 5],
           max_output_tokens: null,
+          efforts: null,
+          adaptive_thinking: null,
         };
       });
     }
@@ -165,7 +183,7 @@ export function createAiSettingsMock(): AiSettingsApi {
         base_url: input.base_url,
         has_api_key: savedKey(input, providers),
         auth_header: input.auth_header,
-        models: input.models.map((m) => ({ ...m })),
+        models: input.models.map(copyModel),
         updated_at: Date.now(),
       };
       providers = old ? providers.map((p) => (p.id === old.id ? view : p)) : [...providers, view];
@@ -181,7 +199,7 @@ export function createAiSettingsMock(): AiSettingsApi {
         const err: AppError = { code: "ai", detail: "404 page not found", http_status: 404 };
         throw err;
       }
-      return modelsFor(input).map((m) => ({ ...m }));
+      return modelsFor(input).map(copyModel);
     },
     ai_provider_test: async (input) => {
       await wait(700);

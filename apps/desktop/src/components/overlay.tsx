@@ -15,19 +15,34 @@ import o from "./overlay.module.css";
 
 // ───────────────────────── Menu ─────────────────────────
 
-export type MenuEntry =
-  | {
-      kind?: "item";
-      label: string;
-      icon?: string;
-      checked?: boolean;
-      hint?: string;
-      danger?: boolean;
-      disabled?: boolean;
-      onSelect: () => void;
-    }
-  | { kind: "separator" }
-  | { kind: "header"; label: string };
+type MenuItem = {
+  kind?: "item";
+  label: string;
+  icon?: string;
+  checked?: boolean;
+  hint?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  /** Choosing it leaves the menu open, as ticking a box in a list does. */
+  keepOpen?: boolean;
+  onSelect: () => void;
+};
+
+/**
+ * A row of options under a label, like a segmented control: picking one keeps the menu open. With the
+ * keyboard, ←/→ pick the previous or next option while the row has the focus.
+ */
+export type MenuChoice = {
+  kind: "choice";
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+};
+
+export type MenuEntry = MenuItem | MenuChoice | { kind: "separator" } | { kind: "header"; label: string };
+
+const isItem = (e: MenuEntry): e is MenuItem => e.kind === undefined || e.kind === "item";
 
 export interface MenuAnchor {
   x: number;
@@ -52,6 +67,7 @@ export function Menu({
   const [pos, setPos] = useState({ left: anchor.x, top: anchor.y });
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
+  const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -70,7 +86,9 @@ export function Menu({
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Only the menu closes: not the sheet it opened in, which would drop the form's edits.
         e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -79,11 +97,18 @@ export function Menu({
           const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
           return items[(next + items.length) % items.length] ?? -1;
         });
+      } else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && entries[focus]?.kind === "choice") {
+        e.preventDefault();
+        const choice = entries[focus] as MenuChoice;
+        const at = choice.options.findIndex((o) => o.value === choice.value);
+        const next = choice.options[at + (e.key === "ArrowRight" ? 1 : -1)];
+        if (next) choice.onChange(next.value);
       } else if (e.key === "Enter" && focus >= 0) {
         e.preventDefault();
         const entry = entries[focus];
-        if (entry && entry.kind !== "separator" && entry.kind !== "header" && !entry.disabled) {
-          onClose();
+        if (entry?.kind === "choice") onClose();
+        else if (entry && isItem(entry) && !entry.disabled) {
+          if (!entry.keepOpen) onClose();
           entry.onSelect();
         }
       }
@@ -108,18 +133,43 @@ export function Menu({
               {e.label}
             </div>
           );
-        const hasCheck = entries.some((x) => x.kind !== "separator" && x.kind !== "header" && x.checked !== undefined);
+        if (e.kind === "choice")
+          return (
+            <div
+              key={i}
+              role="group"
+              aria-label={e.label}
+              className={cx(o.menuChoice, focus === i && o.menuChoiceFocused)}
+              onMouseEnter={() => setFocus(i)}
+            >
+              <div className={o.menuChoiceLabel}>{e.label}</div>
+              <div className={o.menuChoiceOptions}>
+                {e.options.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={opt.value === e.value}
+                    className={cx(o.menuChoiceOption, opt.value === e.value && o.menuChoiceOn)}
+                    onClick={() => e.onChange(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
         return (
           <button
             key={i}
             type="button"
-            role={e.checked !== undefined ? "menuitemradio" : "menuitem"}
+            role={e.checked === undefined ? "menuitem" : e.keepOpen ? "menuitemcheckbox" : "menuitemradio"}
             aria-checked={e.checked}
             disabled={e.disabled}
             className={cx(o.menuItem, focus === i && o.menuItemFocused, e.danger && o.menuItemDanger)}
             onMouseEnter={() => setFocus(i)}
             onClick={() => {
-              onClose();
+              if (!e.keepOpen) onClose();
               e.onSelect();
             }}
           >

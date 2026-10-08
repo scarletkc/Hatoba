@@ -45,6 +45,7 @@
   gap: 6px;
   padding: 4px 6px 6px 6px;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .grow {
@@ -85,6 +86,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The thinking level next to the model, when it is not Default (AI-05). In a narrow panel the model
+ * name needs the room, and the level stays in the button's tooltip and the menu. */
+.modelEffort {
+  flex: none;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+@container (max-width: 330px) {
+  .modelEffort {
+    display: none;
+  }
 }
 
 .meter {

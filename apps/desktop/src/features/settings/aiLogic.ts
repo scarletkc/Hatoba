@@ -1,4 +1,6 @@
+import { EFFORTS, sortEfforts } from "@/features/ai/effort";
 import type {
+  AiEffort,
   AiModel,
   AiModelRef,
   AiProtocol,
@@ -80,6 +82,10 @@ export interface ModelDraft {
   name: string;
   context: string;
   output: string;
+  /** The thinking levels it accepts (AI-05), null when unknown. */
+  efforts: AiEffort[] | null;
+  /** Adaptive thinking, from the provider's list; the form does not edit it. */
+  adaptive: boolean | null;
 }
 
 export type TokenCount = { ok: true; value: number | null } | { ok: false };
@@ -112,7 +118,19 @@ export function formatTokenCount(n: number | null): string {
 }
 
 export function toDraft(m: AiModel): ModelDraft {
-  return { id: m.id, name: m.name, context: formatTokenCount(m.context_window), output: formatTokenCount(m.max_output_tokens) };
+  return {
+    id: m.id,
+    name: m.name,
+    context: formatTokenCount(m.context_window),
+    output: formatTokenCount(m.max_output_tokens),
+    efforts: m.efforts ? sortEfforts(m.efforts) : null,
+    adaptive: m.adaptive_thinking,
+  };
+}
+
+/** A model typed in by its id: nothing else is known about it. */
+export function typedModel(id: string): AiModel {
+  return { id, name: id, context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null };
 }
 
 /**
@@ -132,6 +150,8 @@ export function toModels(drafts: readonly ModelDraft[]): AiModel[] {
         name: d.name.trim() || id,
         context_window: ctx.ok ? ctx.value : null,
         max_output_tokens: out.ok ? out.value : null,
+        efforts: d.efforts ? sortEfforts(d.efforts) : null,
+        adaptive_thinking: d.adaptive,
       };
     });
 }
@@ -159,7 +179,8 @@ export function validateModels(drafts: readonly ModelDraft[]): (ModelProblem | n
 
 /**
  * Adds models (typed IDs, or picked from the provider's list) to the rows. A model that is already
- * there keeps what the user entered; only a limit that is still empty is filled in.
+ * there keeps what the user entered; only a limit that is still empty, and thinking levels or adaptive
+ * thinking that are still unknown, are filled in.
  */
 export function addModels(drafts: readonly ModelDraft[], incoming: readonly AiModel[]): ModelDraft[] {
   const rows = drafts.map((d) => ({ ...d }));
@@ -170,11 +191,59 @@ export function addModels(drafts: readonly ModelDraft[], incoming: readonly AiMo
     if (existing) {
       if (existing.context.trim() === "") existing.context = formatTokenCount(m.context_window);
       if (existing.output.trim() === "") existing.output = formatTokenCount(m.max_output_tokens);
+      fillCapabilities(existing, m);
     } else {
       rows.push(toDraft({ ...m, id, name: m.name.trim() || id }));
     }
   }
   return rows;
+}
+
+function fillCapabilities(row: ModelDraft, m: AiModel): boolean {
+  const efforts = row.efforts === null && m.efforts !== null;
+  const adaptive = row.adaptive === null && m.adaptive_thinking !== null;
+  if (efforts) row.efforts = sortEfforts(m.efforts ?? []);
+  if (adaptive) row.adaptive = m.adaptive_thinking;
+  return efforts || adaptive;
+}
+
+/**
+ * AI-05: after the provider's list was fetched, the rows already in the form whose thinking levels or
+ * adaptive thinking are unknown (typed in, or saved before the list had them) take them from the list.
+ * Returns the same array when nothing changed.
+ */
+export function withListedCapabilities(drafts: ModelDraft[], list: readonly AiModel[]): ModelDraft[] {
+  let changed = false;
+  const rows = drafts.map((d) => {
+    const listed = list.find((m) => m.id === d.id.trim());
+    if (!listed) return d;
+    const row = { ...d };
+    if (!fillCapabilities(row, listed)) return d;
+    changed = true;
+    return row;
+  });
+  return changed ? rows : drafts;
+}
+
+/** Ticks or unticks one thinking level of a row; an unknown row starts from what it offers (Low to High). */
+export function toggleEffort(current: readonly AiEffort[], effort: AiEffort, on: boolean): AiEffort[] {
+  return sortEfforts(on ? [...current, effort] : current.filter((e) => e !== effort));
+}
+
+/**
+ * A row's levels in a few words: runs of neighbouring levels as `first–last`, separate runs joined by
+ * ` · ` ("Low–High · Max"), or `none` when it has none.
+ */
+export function formatEfforts(levels: readonly AiEffort[], label: (e: AiEffort) => string, none: string): string {
+  const sorted = sortEfforts(levels);
+  if (sorted.length === 0) return none;
+  const runs: AiEffort[][] = [];
+  for (const e of sorted) {
+    const run = runs[runs.length - 1];
+    if (run && EFFORTS.indexOf(e) === EFFORTS.indexOf(run[run.length - 1]) + 1) run.push(e);
+    else runs.push([e]);
+  }
+  return runs.map((r) => (r.length === 1 ? label(r[0]) : `${label(r[0])}–${label(r[r.length - 1])}`)).join(" · ");
 }
 
 export function removeModel(drafts: readonly ModelDraft[], id: string): ModelDraft[] {
@@ -222,7 +291,12 @@ export function sanitizeSettings(
   const known = modelChoices(providers);
   const defaultModel = settings.default_model && known.some((c) => sameRef(c.ref, settings.default_model)) ? settings.default_model : null;
   const searchId = settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id) ? settings.search_provider_id : null;
-  return { default_model: defaultModel, search_provider_id: searchId, builtin_skill_enabled: settings.builtin_skill_enabled };
+  return {
+    default_model: defaultModel,
+    default_effort: settings.default_effort,
+    search_provider_id: searchId,
+    builtin_skill_enabled: settings.builtin_skill_enabled,
+  };
 }
 
 /** The first model of the first provider, as the default when none is chosen yet. */
@@ -244,7 +318,12 @@ export function resolveSettings(
 }
 
 export function sameSettings(a: AiSettingsView, b: AiSettingsView): boolean {
-  return sameRef(a.default_model, b.default_model) && a.search_provider_id === b.search_provider_id && a.builtin_skill_enabled === b.builtin_skill_enabled;
+  return (
+    sameRef(a.default_model, b.default_model) &&
+    a.default_effort === b.default_effort &&
+    a.search_provider_id === b.search_provider_id &&
+    a.builtin_skill_enabled === b.builtin_skill_enabled
+  );
 }
 
 export const SEARCH_KINDS: readonly SearchKind[] = ["brave", "tavily", "searxng"];

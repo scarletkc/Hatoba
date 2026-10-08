@@ -11,7 +11,8 @@ use super::*;
 use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
 use crate::model::{
-    AiConversation, AiMessage, Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey, new_id,
+    AiConversation, AiEffort, AiMessage, Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey,
+    new_id,
 };
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
@@ -1649,6 +1650,43 @@ async fn entries_that_two_devices_append_merge_in_entry_id_order() {
     converge(&a, &b).await;
     assert_eq!(entries(&a, &conv).last().unwrap().0, next);
     assert_eq!(entries(&a, &conv), entries(&b, &conv));
+}
+
+#[tokio::test]
+async fn a_conversations_thinking_level_syncs_with_it() {
+    let (_server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("levels"));
+    converge(&a, &b).await;
+    let effort = |dev: &Dev| {
+        dev.v()
+            .get(&conv)
+            .unwrap()
+            .as_ai_conversation()
+            .unwrap()
+            .effort
+    };
+    // AI-05: a conversation without a stored level is Default.
+    assert_eq!(effort(&b), None);
+
+    clock.advance(1_000);
+    a.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.effort = Some(AiEffort::Max);
+        }
+    });
+    converge(&a, &b).await;
+    assert_eq!(effort(&b), Some(AiEffort::Max));
+
+    // The newer change wins (§6.4), back to Default included.
+    clock.advance(1_000);
+    b.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.effort = None;
+        }
+    });
+    converge(&a, &b).await;
+    assert_eq!(effort(&a), None);
+    assert_eq!(effort(&b), None);
 }
 
 #[tokio::test]

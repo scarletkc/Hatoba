@@ -3,11 +3,12 @@ import { Icon, LinkButton } from "@/components/controls";
 import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { readClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
-import type { AiModelRef } from "@/ipc/types";
+import type { AiEffort, AiModelRef } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { addPaste, attachFiles, compactConversation, removeExtra, sendMessage, setSlotModel, stopTurn } from "./actions";
+import { addPaste, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
+import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
 import { getSlot, patchSlot, useAi, type Slot } from "./store";
@@ -147,7 +148,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           onPaste={onPaste}
         />
         <div className={s.bar}>
-          <ModelPicker slotId={slotId} value={model} />
+          <ModelPicker slotId={slotId} slot={slot} value={model} />
           <ToolsButton slotId={slotId} off={slot.mcpOff} />
           <button
             type="button"
@@ -194,13 +195,19 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
 }
 
 
-/** AI-05: every provider's models, grouped by provider. */
-function ModelPicker({ slotId, value }: { slotId: string; value: AiModelRef | null }) {
+/**
+ * AI-05: every provider's models, grouped by provider, and under the current model the thinking
+ * levels it offers. The selector shows the level the next message is sent at.
+ */
+function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; value: AiModelRef | null }) {
   const t = useT();
   const providers = useAi((st) => st.catalog.providers);
+  const settings = useAi((st) => st.catalog.settings);
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
   const current = findModel(providers, value);
+  const offered = modelEfforts(current?.model);
+  const effort = current ? effectiveEffort(chosenEffort(slot.effort, slot.conversationId, slot.conversation, settings), offered) : null;
 
   const entries = useMemo(() => {
     const list: MenuEntry[] = [];
@@ -210,17 +217,28 @@ function ModelPicker({ slotId, value }: { slotId: string; value: AiModelRef | nu
       list.push({ kind: "header", label: p.name });
       for (const m of p.models) {
         const ref: AiModelRef = { provider_id: p.id, model_id: m.id };
+        const checked = sameModel(ref, value);
         list.push({
           label: m.name || m.id,
           hint: m.context_window ? formatTokens(m.context_window) : undefined,
-          checked: sameModel(ref, value),
+          checked,
           onSelect: () => setSlotModel(slotId, ref),
         });
+        if (checked)
+          list.push({
+            kind: "choice",
+            label: t("ai.effort"),
+            options: [null, ...offered].map((e) => ({ value: e ?? "default", label: t(effortKey(e)) })),
+            value: effort ?? "default",
+            onChange: (v) => setSlotEffort(slotId, v as AiEffort | "default"),
+          });
       }
     }
     return list;
-  }, [providers, value, slotId]);
+  }, [providers, value, slotId, offered, effort, t]);
 
+  const modelName = current ? current.model.name || current.model.id : null;
+  const title = current ? [current.provider.name, modelName, ...(effort ? [`${t("ai.effort")}: ${t(effortKey(effort))}`] : [])].join(" · ") : t("ai.model");
   return (
     <>
       <button
@@ -229,12 +247,13 @@ function ModelPicker({ slotId, value }: { slotId: string; value: AiModelRef | nu
         className={s.model}
         aria-haspopup="menu"
         aria-label={t("ai.model")}
-        title={current ? `${current.provider.name} · ${current.model.name || current.model.id}` : t("ai.model")}
+        title={title}
         disabled={entries.length === 0}
         onClick={() => ref.current && menu.openBelow(ref.current)}
       >
         <Icon name="cube" size={13} className={s.modelIcon} />
-        <span className={s.modelName}>{current ? current.model.name || current.model.id : (value?.model_id ?? t("ai.model.none"))}</span>
+        <span className={s.modelName}>{modelName ?? value?.model_id ?? t("ai.model.none")}</span>
+        {effort && <span className={s.modelEffort}>{t(effortKey(effort))}</span>}
         <Icon name="caret-up-down" size={11} className={s.modelIcon} />
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={220} />}

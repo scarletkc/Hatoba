@@ -58,6 +58,13 @@ export default defineMessages({
     "ai.stopHint": "停止（Esc）",
     "ai.model": "模型",
     "ai.model.none": "未选择模型",
+    "ai.effort": "思考程度",
+    "ai.effort.default": "默认",
+    "ai.effort.low": "低",
+    "ai.effort.medium": "中",
+    "ai.effort.high": "高",
+    "ai.effort.xhigh": "超高",
+    "ai.effort.max": "最高",
     "ai.err.noModel": "请先在设置 → AI 中添加模型。",
 
     // terminal selection (AI-10)
@@ -178,6 +185,7 @@ export default defineMessages({
     "ai.outcome.refused": "模型拒绝了这次请求。",
     "ai.outcome.error": "请求失败",
     "ai.outcome.errorStatus": "服务商返回了错误（HTTP {status}）",
+    "ai.effortIgnored": "模型不接受所选的思考程度，这条消息以模型的默认程度发送。",
 
     // history (AI-23)
     "ai.history.open": "打开",
@@ -304,6 +312,13 @@ export default defineMessages({
     "ai.stopHint": "Stop (Esc)",
     "ai.model": "Model",
     "ai.model.none": "No model",
+    "ai.effort": "Thinking Level",
+    "ai.effort.default": "Default",
+    "ai.effort.low": "Low",
+    "ai.effort.medium": "Medium",
+    "ai.effort.high": "High",
+    "ai.effort.xhigh": "Extra High",
+    "ai.effort.max": "Max",
     "ai.err.noModel": "Add a model in Settings → AI first.",
 
     "ai.selection": "Selection · {n} lines",
@@ -418,6 +433,7 @@ export default defineMessages({
     "ai.outcome.refused": "The model declined to respond.",
     "ai.outcome.error": "The request failed",
     "ai.outcome.errorStatus": "The provider returned an error (HTTP {status})",
+    "ai.effortIgnored": "The model doesn’t accept the chosen thinking level, so this message was sent at its default level.",
 
     "ai.history.open": "Open",
     "ai.history.pin": "Pin",
@@ -540,6 +556,13 @@ export default defineMessages({
     "ai.stopHint": "停止（Esc）",
     "ai.model": "モデル",
     "ai.model.none": "モデル未選択",
+    "ai.effort": "思考レベル",
+    "ai.effort.default": "既定",
+    "ai.effort.low": "低",
+    "ai.effort.medium": "中",
+    "ai.effort.high": "高",
+    "ai.effort.xhigh": "超高",
+    "ai.effort.max": "最大",
     "ai.err.noModel": "先に設定 → AI でモデルを追加してください。",
 
     "ai.selection": "選択範囲 · {n} 行",
@@ -649,6 +672,7 @@ export default defineMessages({
     "ai.outcome.refused": "モデルが応答を断りました。",
     "ai.outcome.error": "リクエストに失敗しました",
     "ai.outcome.errorStatus": "プロバイダーがエラーを返しました（HTTP {status}）",
+    "ai.effortIgnored": "モデルが選んだ思考レベルを受け付けないため、このメッセージはモデルの既定のレベルで送信しました。",
 
     "ai.history.open": "開く",
     "ai.history.pin": "ピン留め",

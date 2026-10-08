@@ -2,15 +2,21 @@
 //! responses turned into the same [`StreamEvent`]s and the same [`AssistantEntry`].
 //!
 //! - Chat Completions: `POST {base_url}/chat/completions` with `Authorization: Bearer` (none when
-//!   the key is empty), `stream: true` and `stream_options.include_usage`. A server that rejects
-//!   `stream_options` gets the request again without it, and usage is then estimated.
+//!   the key is empty), `stream: true` and `stream_options.include_usage`, and `reasoning_effort`
+//!   at a chosen thinking level (AI-05). A server that rejects `stream_options` gets the request
+//!   again without it, and usage is then estimated.
 //! - Anthropic Messages: `POST {base_url}/v1/messages` with `anthropic-version: 2023-06-01`, the
 //!   key in `x-api-key` or `Authorization: Bearer`, `max_tokens` from the model (16,000 when
-//!   unknown) and top-level `cache_control`. No `thinking`, `temperature`, beta headers or
+//!   unknown, at most 128,000) and top-level `cache_control`. A chosen thinking level adds
+//!   `output_config.effort` and, where the model supports it, adaptive thinking with summarized
+//!   display (see `request` for the rule at Default). No `temperature`, beta headers or
 //!   `eager_input_streaming`, so any Anthropic-compatible vendor accepts the request. When a
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
 //!   every assistant entry rebuilt from its fields.
+//! - A request refused with a 4xx that names its thinking or effort fields (`reasoning_effort`,
+//!   `output_config`, `effort`, adaptive thinking, `display`) is sent once more without any of
+//!   them, and when it carried a level, [`StreamEvent::EffortIgnored`] says so.
 //! - A request that offers no tools (such as Compact, AI-21) contains no
 //!   `tool_use` / `tool_result` blocks, `tool_calls` or `tool` messages, whatever the history
 //!   holds: calls and results are sent as text, an assistant entry's calls after its text and
@@ -38,7 +44,7 @@ use self::sse::{SseEvent, SseParser};
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{ModelSpec, Protocol, ProviderConfig, client_for, validate_base_url};
+use crate::provider::{Effort, ModelSpec, Protocol, ProviderConfig, client_for, validate_base_url};
 
 /// A tool offered to the model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -69,6 +75,9 @@ pub struct ChatRequest<'a> {
     /// The conversation from `context_start` on. Calls without a result get a cancelled one in
     /// the request.
     pub entries: &'a [AiEntry],
+    /// The thinking level the user chose (AI-05); `None` is Default. The request sends the
+    /// highest level the model offers that is not above it ([`ModelSpec::effort_for`]).
+    pub effort: Option<Effort>,
 }
 
 impl std::fmt::Debug for ChatRequest<'_> {
@@ -79,6 +88,7 @@ impl std::fmt::Debug for ChatRequest<'_> {
             .field("system_chars", &self.system.chars().count())
             .field("tools", &self.tools.len())
             .field("entries", &self.entries.len())
+            .field("effort", &self.effort)
             .finish()
     }
 }
@@ -94,6 +104,9 @@ pub enum StreamEvent {
     ToolCall(ToolCall),
     /// The response's token usage, sent once at the end.
     Usage(Usage),
+    /// The provider refused the thinking level's fields, so the request went again without them
+    /// and the model answers at its default depth (AI-05). Sent before the response streams.
+    EffortIgnored,
 }
 
 /// What a protocol assembler hands back at the end of a response.
@@ -153,11 +166,19 @@ pub async fn stream_chat(
         Protocol::ChatCompletions => {
             let url = net::endpoint(&base, "/chat/completions");
             let mut stream_options = true;
+            let mut with_effort = true;
             loop {
-                let built = request::chat_completions(req, stream_options);
+                let built = request::chat_completions(req, stream_options, with_effort);
                 let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
                 if !response.status().is_success() {
                     let err = net::http_error(response, cancel).await;
+                    if built.sent_effort && rejects_effort(&err) {
+                        with_effort = false;
+                        if built.effort.is_some() {
+                            on_event(StreamEvent::EffortIgnored);
+                        }
+                        continue;
+                    }
                     if stream_options && rejects_stream_options(&err) {
                         stream_options = false;
                         continue;
@@ -172,11 +193,19 @@ pub async fn stream_chat(
         Protocol::Anthropic => {
             let url = net::endpoint(&base, "/v1/messages");
             let mut allow_raw = true;
+            let mut with_effort = true;
             loop {
-                let built = request::anthropic(req, allow_raw);
+                let built = request::anthropic(req, allow_raw, with_effort);
                 let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
                 if !response.status().is_success() {
                     let err = net::http_error(response, cancel).await;
+                    if built.sent_effort && rejects_effort(&err) {
+                        with_effort = false;
+                        if built.effort.is_some() {
+                            on_event(StreamEvent::EffortIgnored);
+                        }
+                        continue;
+                    }
                     if built.used_raw && rejects_replayed_raw(&err) {
                         allow_raw = false;
                         continue;
@@ -209,6 +238,23 @@ pub(crate) fn rejects_stream_options(err: &AiError) -> bool {
             message.contains("stream_options")
                 || message.contains("include_usage")
                 || message.contains("stream options")
+        }
+        _ => false,
+    }
+}
+
+/// Whether an error is a 4xx that names a request's thinking or effort fields: Chat Completions'
+/// `reasoning_effort` (refused by servers and models without reasoning), or Anthropic's
+/// `output_config.effort`, adaptive thinking or `thinking.display` (refused by models without
+/// effort and by vendors that do not know them). The request is then retried once without any of
+/// them. A replayed-thinking 400 (signatures, blocks) names none of these words.
+pub(crate) fn rejects_effort(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            let message = message.to_ascii_lowercase();
+            ["effort", "output_config", "adaptive", "display"]
+                .iter()
+                .any(|word| message.contains(word))
         }
         _ => false,
     }

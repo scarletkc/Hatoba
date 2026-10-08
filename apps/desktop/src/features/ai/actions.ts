@@ -9,6 +9,7 @@ import { getLocale, t, type MessageKey, type Params } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type {
   AiConversationView,
+  AiEffort,
   AiEntryView,
   AiModelRef,
   AiPermissionMode,
@@ -42,6 +43,7 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
+import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
 import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type PendingAttachment, type Slot, type TabSelection } from "./store";
@@ -80,6 +82,12 @@ export function slotModel(slotId: string): AiModelRef | null {
   return conversationModel(slot.entries, providers, settings, slot.model);
 }
 
+/** The thinking level the next request of a slot is made with (AI-05); null is Default. Rust fits it to the model. */
+export function slotEffort(slotId: string): AiEffort | null {
+  const slot = getSlot(slotId);
+  return chosenEffort(slot.effort, slot.conversationId, slot.conversation, useAi.getState().catalog.settings);
+}
+
 /** What a request may act on: the tab's host and, when connected, its terminal tools (AI-08, AI-09). */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
@@ -88,6 +96,7 @@ export function turnContext(slotId: string): AiTurnContext | null {
   return {
     provider_id: model.provider_id,
     model_id: model.model_id,
+    effort: slotEffort(slotId),
     host_id: target ? target.tab.hostId : (getSlot(slotId).conversation?.host_id ?? null),
     tab: !!target && target.tab.status === "connected",
     disabled_mcp_servers: getSlot(slotId).mcpOff,
@@ -98,11 +107,12 @@ export function turnContext(slotId: string): AiTurnContext | null {
 function applyEvent(slotId: string, ev: AiTurnEvent) {
   patchSlot(slotId, (s) => {
     const before = s.conversation?.context_start ?? null;
-    const next = reduceTurnEvent({ entries: s.entries, turn: s.turn, outcome: s.outcome, contextStart: before }, ev);
+    const next = reduceTurnEvent({ entries: s.entries, turn: s.turn, outcome: s.outcome, contextStart: before, effortIgnored: s.effortIgnored }, ev);
     return {
       entries: next.entries,
       turn: next.turn,
       outcome: next.outcome,
+      effortIgnored: next.effortIgnored ?? s.effortIgnored,
       conversation: s.conversation && next.contextStart !== before ? { ...s.conversation, context_start: next.contextStart } : s.conversation,
     };
   });
@@ -436,6 +446,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     entries: [...s.entries.filter((e) => e.entry_id !== LOCAL_ENTRY), local],
     turn: newTurn(),
     outcome: null,
+    effortIgnored: false,
     remoteRunning: false,
     draft: "",
     extras: [],
@@ -480,7 +491,7 @@ export async function retryTurn(slotId: string) {
   }
   const runner = new TurnRunner(slotId, id);
   runners.set(slotId, runner);
-  patchSlot(slotId, { turn: newTurn(), outcome: null });
+  patchSlot(slotId, { turn: newTurn(), outcome: null, effortIgnored: false });
   try {
     await api.ai_retry(id, context, runner.onEvent);
   } catch (e) {
@@ -530,7 +541,7 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const runner = new TurnRunner(slotId, id);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
-  patchSlot(slotId, (s) => ({ entries: [...entriesBefore(s.entries, entryId), local], turn: newTurn(), outcome: null }));
+  patchSlot(slotId, (s) => ({ entries: [...entriesBefore(s.entries, entryId), local], turn: newTurn(), outcome: null, effortIgnored: false }));
   try {
     const started = await api.ai_edit_resend(id, entryId, text, context, runner.onEvent);
     if (useAi.getState().history) void loadHistory();
@@ -709,7 +720,7 @@ export function resetForLock() {
     slots: Object.fromEntries(
       Object.entries(st.slots).map(([id, s]) => [
         id,
-        { ...s, conversation: null, entries: [], turn: null, outcome: null, remoteRunning: false, compacting: false, loading: !!s.conversationId },
+        { ...s, conversation: null, entries: [], turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, loading: !!s.conversationId },
       ]),
     ),
   }));
@@ -736,7 +747,12 @@ export function setSlotMode(slotId: string, mode: AiPermissionMode) {
 }
 
 export function setSlotModel(slotId: string, model: AiModelRef) {
-  patchSlot(slotId, { model });
+  patchSlot(slotId, { model, effortIgnored: false });
+}
+
+/** AI-05: the thinking level of the slot's next messages; the conversation keeps it once one is sent. */
+export function setSlotEffort(slotId: string, effort: AiEffort | "default") {
+  patchSlot(slotId, { effort, effortIgnored: false });
 }
 
 /** AI-30: switches an MCP server off (or back on) for the slot's conversation until the app quits. */

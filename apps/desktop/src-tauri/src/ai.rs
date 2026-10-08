@@ -36,7 +36,7 @@ use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
     AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, fix_up_missing_results,
 };
-use hatoba_ai::provider::{AuthHeader, ModelSpec, Protocol, ProviderConfig};
+use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
     self, FetchUrlArgs, PromptContext, PromptTools, ReadSkillArgs, RunCommandArgs, ToolSet,
@@ -45,8 +45,8 @@ use hatoba_ai::tools::{
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
 use hatoba_core::model::{
-    AiAuthHeader, AiConversation, AiProtocol as CoreProtocol, AiProvider, Item,
-    SearchKind as CoreSearchKind, SearchProvider,
+    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
+    Item, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use serde::de::DeserializeOwned;
@@ -56,9 +56,9 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEntryView, AiFinish, AiSearchHit, AiSendInput,
-    AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
-    AiTurnEvent, AiUsage,
+    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFinish, AiSearchHit,
+    AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext,
+    AiTurnEndReason, AiTurnEvent, AiUsage,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -216,6 +216,8 @@ struct Request {
     provider_id: String,
     provider: ProviderConfig,
     model: ModelSpec,
+    /// The turn's thinking level (AI-05); `None` is Default.
+    effort: Option<Effort>,
     system: String,
     tools: Vec<ToolDef>,
     entries: Vec<AiEntry>,
@@ -229,6 +231,7 @@ impl Request {
             system: &self.system,
             tools: &self.tools,
             entries: &self.entries,
+            effort: self.effort,
         }
     }
 }
@@ -625,6 +628,8 @@ impl AiManager {
                 {
                     conversation.host_id = Some(host_id.clone());
                 }
+                // AI-05: the conversation keeps the level of its last message.
+                conversation.effort = context.effort.map(core_effort);
                 if conversation != before {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
@@ -640,6 +645,7 @@ impl AiManager {
                         host_id: context.host_id.clone(),
                         pinned: false,
                         context_start: None,
+                        effort: context.effort.map(core_effort),
                         created_at: now_ms(),
                         updated_at: 0,
                     }),
@@ -678,7 +684,7 @@ impl AiManager {
         let mut stored = false;
         let registered = (|| {
             let mut v = unlocked(vault)?;
-            let conversation = find_conversation(&v, &conversation_id)?;
+            let mut conversation = find_conversation(&v, &conversation_id)?;
             let cancelled = self.stop_locked(&mut v, &conversation_id);
             stored = !cancelled.is_empty();
             let entries = Entries::load(&v, &conversation_id)?;
@@ -688,6 +694,17 @@ impl AiManager {
                     "conversation_id",
                     "nothing to retry: the conversation ends with the model's answer",
                 ));
+            }
+            // AI-05: a retry at another level is the one the conversation used last, as for a
+            // new message.
+            let effort = context.effort.map(core_effort);
+            if conversation.effort != effort {
+                conversation.effort = effort;
+                v.put(
+                    Some(&conversation_id),
+                    Item::AiConversation(conversation.clone()),
+                )?;
+                stored = true;
             }
             let compact = compaction_before(&v, &conversation_id, &conversation, &context, "")?;
             let turn = self.register(&conversation_id, context, sink);
@@ -1178,6 +1195,7 @@ fn compact_request(
         provider_id: context.provider_id.clone(),
         provider,
         model,
+        effort: context.effort.map(request_effort),
         system,
         tools: Vec::new(),
         entries,
@@ -1304,6 +1322,7 @@ fn prepare_locked(
         provider_id: turn.context.provider_id.clone(),
         provider,
         model,
+        effort: turn.context.effort.map(request_effort),
         system,
         tools,
         entries: context,
@@ -1572,6 +1591,11 @@ fn resolve_model(
             id: model.id.clone(),
             context_window: model.context_window,
             max_output_tokens: model.max_output_tokens,
+            efforts: model
+                .efforts
+                .as_ref()
+                .map(|levels| levels.iter().copied().map(model_effort).collect()),
+            adaptive_thinking: model.adaptive_thinking,
         },
     ))
 }
@@ -1597,6 +1621,55 @@ pub fn auth_header(h: AiAuthHeader) -> AuthHeader {
     match h {
         AiAuthHeader::XApiKey => AuthHeader::XApiKey,
         AiAuthHeader::Authorization => AuthHeader::Authorization,
+    }
+}
+
+/// A thinking level from the panel, as stored (AI-05).
+pub fn core_effort(e: AiEffort) -> CoreEffort {
+    match e {
+        AiEffort::Low => CoreEffort::Low,
+        AiEffort::Medium => CoreEffort::Medium,
+        AiEffort::High => CoreEffort::High,
+        AiEffort::Xhigh => CoreEffort::Xhigh,
+        AiEffort::Max => CoreEffort::Max,
+    }
+}
+
+/// A stored thinking level, for the panel.
+pub fn effort_view(e: CoreEffort) -> AiEffort {
+    match e {
+        CoreEffort::Low => AiEffort::Low,
+        CoreEffort::Medium => AiEffort::Medium,
+        CoreEffort::High => AiEffort::High,
+        CoreEffort::Xhigh => AiEffort::Xhigh,
+        CoreEffort::Max => AiEffort::Max,
+    }
+}
+
+/// A thinking level from the panel, as a request takes it.
+fn request_effort(e: AiEffort) -> Effort {
+    model_effort(core_effort(e))
+}
+
+/// A level a stored model offers, as a request takes it.
+fn model_effort(e: CoreEffort) -> Effort {
+    match e {
+        CoreEffort::Low => Effort::Low,
+        CoreEffort::Medium => Effort::Medium,
+        CoreEffort::High => Effort::High,
+        CoreEffort::Xhigh => Effort::Xhigh,
+        CoreEffort::Max => Effort::Max,
+    }
+}
+
+/// A level from a provider's model list (AI-03), for the panel.
+pub fn listed_effort(e: Effort) -> AiEffort {
+    match e {
+        Effort::Low => AiEffort::Low,
+        Effort::Medium => AiEffort::Medium,
+        Effort::High => AiEffort::High,
+        Effort::Xhigh => AiEffort::Xhigh,
+        Effort::Max => AiEffort::Max,
     }
 }
 
@@ -2170,6 +2243,7 @@ pub fn conversation_view_at(
         host_id: c.host_id.clone(),
         pinned: c.pinned,
         context_start: c.context_start.clone(),
+        effort: c.effort.map(effort_view),
         created_at: c.created_at,
         updated_at: c.updated_at,
         last_activity,
@@ -2269,6 +2343,7 @@ fn stream_event(event: StreamEvent) -> AiTurnEvent {
             output_tokens: usage.output_tokens,
             estimated: usage.estimated,
         },
+        StreamEvent::EffortIgnored => AiTurnEvent::EffortIgnored,
     }
 }
 

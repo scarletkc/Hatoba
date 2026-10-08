@@ -9,7 +9,7 @@ const provider = (id: string, models: string[]): AiProviderView => ({
   base_url: "https://example.com/v1",
   has_api_key: true,
   auth_header: "authorization",
-  models: models.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null })),
+  models: models.map((m) => ({ id: m, name: m, context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null })),
   updated_at: 0,
 });
 
@@ -28,7 +28,7 @@ const reply = (provider_id: string, model_id: string): AiEntryView => ({
 
 describe("conversationModel (AI-05)", () => {
   const providers = [provider("a", []), provider("b", ["b1", "b2"]), provider("c", ["c1"])];
-  const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: null, builtin_skill_enabled: true };
+  const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true };
 
   it("uses the default model for a new conversation", () => {
     expect(conversationModel([], providers, settings)).toEqual({ provider_id: "c", model_id: "c1" });
@@ -58,6 +58,7 @@ describe("sortConversations (AI-23)", () => {
     host_id: null,
     pinned,
     context_start: null,
+    effort: null,
     created_at: 0,
     updated_at: 0,
     last_activity,

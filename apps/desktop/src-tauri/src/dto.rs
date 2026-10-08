@@ -854,6 +854,17 @@ pub enum AiAuthHeader {
     Authorization,
 }
 
+/// A thinking level (AI-05), lowest first. Where one is optional, `None` is Default.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum AiEffort {
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+}
+
 /// A model of a provider (AI-03). Token limits are `None` when unknown.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct AiModel {
@@ -861,6 +872,11 @@ pub struct AiModel {
     pub name: String,
     pub context_window: Option<u64>,
     pub max_output_tokens: Option<u64>,
+    /// The thinking levels the model accepts, lowest first (AI-05); empty for none, `None` when
+    /// unknown (the panel then offers Low to High).
+    pub efforts: Option<Vec<AiEffort>>,
+    /// Whether the model supports adaptive thinking (Anthropic's model list), `None` when unknown.
+    pub adaptive_thinking: Option<bool>,
 }
 
 /// AI-01. The API key never reaches the WebView: only whether one is saved.
@@ -994,6 +1010,8 @@ pub struct AiModelRef {
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct AiSettingsView {
     pub default_model: Option<AiModelRef>,
+    /// The thinking level new conversations start with (AI-05); `None` is Default.
+    pub default_effort: Option<AiEffort>,
     pub search_provider_id: Option<String>,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
@@ -1015,6 +1033,8 @@ pub struct AiConversationView {
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
     pub context_start: Option<String>,
+    /// The thinking level its last message was sent with (AI-05); `None` is Default.
+    pub effort: Option<AiEffort>,
     pub created_at: i64,
     pub updated_at: i64,
     /// The newest entry or conversation change, for sorting history (AI-23).
@@ -1101,6 +1121,9 @@ pub struct AiConversationDetail {
 pub struct AiTurnContext {
     pub provider_id: String,
     pub model_id: String,
+    /// The thinking level (AI-05); `None` is Default. Requests send the highest level the model
+    /// offers that is not above it, and the conversation keeps it for its next message.
+    pub effort: Option<AiEffort>,
     /// The tab's host; the next message moves the conversation to it (AI-09).
     pub host_id: Option<String>,
     /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
@@ -1179,6 +1202,9 @@ pub enum AiTurnEvent {
         status: Option<u16>,
         message: String,
     },
+    /// The provider refused the thinking level, so the request was sent again without it and the
+    /// model answers at its default depth (AI-05).
+    EffortIgnored,
     TurnEnded {
         reason: AiTurnEndReason,
     },
