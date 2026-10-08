@@ -4,7 +4,7 @@
 
 # Hatoba
 
-**An open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account.**
+**Open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/scarletkc/Hatoba/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/scarletkc/Hatoba/actions/workflows/ci.yml)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)

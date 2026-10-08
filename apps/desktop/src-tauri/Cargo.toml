@@ -1,6 +1,6 @@
 [package]
 name = "hatoba-desktop"
-description = "Hatoba desktop app (Tauri shell)"
+description = "Tauri shell for the Hatoba desktop app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
