@@ -477,9 +477,7 @@ export type LocalPrefs = {
 	language: Language,
 	appearance: Appearance,
 	density: Density,
-	right_click: RightClick,
 	host_probe: boolean,
-	confirm_multiline_paste: boolean,
 	/**
 	 *  Check GitHub for a newer release once after unlock. Off by default: no request leaves
 	 *  the device unless the user asks for it (spec §11, no telemetry).
@@ -579,6 +577,8 @@ export type TerminalSettings = {
 	theme: ThemeChoice,
 	cursor_style: CursorChoice,
 	scrollback: number,
+	right_click: RightClick,
+	confirm_multiline_paste: boolean,
 };
 
 export type TestResult = {

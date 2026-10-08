@@ -6,6 +6,7 @@ use hatoba_core::sync::{SyncConfig, flows, save_session};
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
+use crate::commands::settings::adopt_legacy_prefs_after_unlock;
 use crate::commands::sync::{backend_from_input, persist};
 use crate::dto::{LockReason, SyncConfigInput, SyncKind, VaultState, VaultStatus};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -15,6 +16,13 @@ use crate::{lock, sync};
 
 /// Common work after any successful unlock (password, recovery code, biometrics, restore).
 fn after_unlock(app: &AppHandle, state: &AppState) {
+    // Only when sync is off; otherwise `sync::run_round` does it after pulling.
+    if let Err(e) = state.with_unlocked(adopt_legacy_prefs_after_unlock) {
+        tracing::warn!(
+            "could not move the terminal prefs into the synced settings: {}",
+            e.detail
+        );
+    }
     lock::refresh_policy(state);
     state.touch_activity();
     sync::on_unlock(app);

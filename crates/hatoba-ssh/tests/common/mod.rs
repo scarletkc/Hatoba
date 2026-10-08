@@ -7,9 +7,9 @@
 
 use std::fs;
 use std::io::Write;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -244,56 +244,52 @@ impl SshdServer {
         fs::write(dir.path().join("authorized_keys"), authorized).unwrap();
 
         let password_user = ensure_password_user().then_some((TEST_USER, TEST_PASSWORD));
-        let port = free_port();
-        let config = format!(
-            "Port {port}\n\
-             ListenAddress 127.0.0.1\n\
-             HostKey {dir}/host_key\n\
-             PidFile {dir}/sshd.pid\n\
-             AuthorizedKeysFile {dir}/authorized_keys\n\
-             StrictModes no\n\
-             UsePAM no\n\
-             PasswordAuthentication yes\n\
-             KbdInteractiveAuthentication no\n\
-             PubkeyAuthentication yes\n\
-             PermitRootLogin yes\n\
-             AllowTcpForwarding yes\n\
-             AcceptEnv LANG\n\
-             Subsystem sftp internal-sftp\n\
-             MaxAuthTries 10\n\
-             MaxSessions 100\n\
-             LoginGraceTime 30\n\
-             UseDNS no\n\
-             PrintMotd no\n\
-             LogLevel ERROR\n",
-            dir = dir.path().display()
-        );
         let config_path = dir.path().join("sshd_config");
-        fs::write(&config_path, config).unwrap();
+        // `free_port` releases the port before sshd binds it, so a parallel test can take it in
+        // between. sshd then exits with "Cannot bind any address" and another port is tried.
+        let mut attempt = 0;
+        let (child, port) = loop {
+            attempt += 1;
+            let port = free_port();
+            let config = format!(
+                "Port {port}\n\
+                 ListenAddress 127.0.0.1\n\
+                 HostKey {dir}/host_key\n\
+                 PidFile {dir}/sshd.pid\n\
+                 AuthorizedKeysFile {dir}/authorized_keys\n\
+                 StrictModes no\n\
+                 UsePAM no\n\
+                 PasswordAuthentication yes\n\
+                 KbdInteractiveAuthentication no\n\
+                 PubkeyAuthentication yes\n\
+                 PermitRootLogin yes\n\
+                 AllowTcpForwarding yes\n\
+                 AcceptEnv LANG\n\
+                 Subsystem sftp internal-sftp\n\
+                 MaxAuthTries 10\n\
+                 MaxSessions 100\n\
+                 LoginGraceTime 30\n\
+                 UseDNS no\n\
+                 PrintMotd no\n\
+                 LogLevel ERROR\n",
+                dir = dir.path().display()
+            );
+            fs::write(&config_path, config).unwrap();
 
-        let log = fs::File::create(dir.path().join("sshd.log")).unwrap();
-        let mut child = Command::new(&sshd)
-            .args(["-D", "-e", "-f"])
-            .arg(&config_path)
-            .stdout(Stdio::null())
-            .stderr(log)
-            .spawn()
-            .expect("failed to spawn sshd");
-
-        // Wait until it accepts TCP connections.
-        let addr: SocketAddr = ([127, 0, 0, 1], port).into();
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
-                break;
+            let log = fs::File::create(dir.path().join("sshd.log")).unwrap();
+            let mut child = Command::new(&sshd)
+                .args(["-D", "-e", "-f"])
+                .arg(&config_path)
+                .stdout(Stdio::null())
+                .stderr(log)
+                .spawn()
+                .expect("failed to spawn sshd");
+            match wait_for_listen(&mut child, dir.path()) {
+                Ok(()) => break (child, port),
+                Err((_, log)) if attempt < 5 && log.contains("Cannot bind any address") => {}
+                Err((status, log)) => panic!("sshd exited early ({status}): {log}"),
             }
-            if let Ok(Some(status)) = child.try_wait() {
-                let log = fs::read_to_string(dir.path().join("sshd.log")).unwrap_or_default();
-                panic!("sshd exited early ({status}): {log}");
-            }
-            assert!(Instant::now() < deadline, "sshd did not start in time");
-            std::thread::sleep(Duration::from_millis(50));
-        }
+        };
 
         Some(Self {
             child,
@@ -338,6 +334,26 @@ impl SshdServer {
         let p = self.dir.path().join(name);
         fs::create_dir_all(&p).unwrap();
         p
+    }
+}
+
+/// Waits until the sshd in `child` has bound its listen socket, or returns its exit status and
+/// log if it exits first. sshd writes its pid file only once the socket is bound (`sshd.c`, after
+/// `server_listen`). A TCP probe cannot tell: it can reach another socket that holds the port for
+/// a moment, or connect to itself while nothing listens there.
+fn wait_for_listen(child: &mut Child, dir: &Path) -> Result<(), (ExitStatus, String)> {
+    let pid = child.id().to_string();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if fs::read_to_string(dir.join("sshd.pid")).is_ok_and(|p| p.trim() == pid) {
+            return Ok(());
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            let log = fs::read_to_string(dir.join("sshd.log")).unwrap_or_default();
+            return Err((status, log));
+        }
+        assert!(Instant::now() < deadline, "sshd did not start in time");
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 

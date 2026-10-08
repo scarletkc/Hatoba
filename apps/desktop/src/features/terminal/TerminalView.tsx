@@ -16,7 +16,7 @@ import { patchInfo, useSessionInfo } from "./info";
 import { ConnectingOverlay, DisconnectedBanner, ErrorCard } from "./Overlays";
 import { ensureSession, type LiveSession } from "./session";
 import { StatusBar } from "./StatusBar";
-import { useTerminalChrome } from "./theme";
+import { useTermSettings, useTerminalChrome } from "./theme";
 import s from "./TerminalView.module.css";
 
 /** One terminal session (design §03 / §03b). Inactive tabs stay mounted so their sessions keep running. */
@@ -129,7 +129,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
     if (session.remoteTracksMouse && !e.shiftKey) return;
-    if (useApp.getState().prefs.right_click === "copy_paste") {
+    if (useTermSettings.getState().settings.right_click === "copy_paste") {
       if (session.term.hasSelection()) void session.copySelection(true);
       else void session.pasteFromClipboard();
       return;

@@ -11,6 +11,8 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   theme: "dark",
   cursor_style: "block",
   scrollback: 10_000,
+  right_click: "copy_paste",
+  confirm_multiline_paste: true,
 };
 
 interface TermSettingsState {
@@ -20,7 +22,7 @@ interface TermSettingsState {
   reload(): Promise<void>;
 }
 
-/** Synced terminal settings (TERM-05/06), cached for every terminal. Re-read when the settings window closes. */
+/** Synced terminal settings (TERM-04/05/06, WIN-05), cached for every terminal. Re-read when the settings window closes. */
 export const useTermSettings = create<TermSettingsState>((set) => ({
   settings: DEFAULT_TERMINAL_SETTINGS,
   appearanceTick: 0,

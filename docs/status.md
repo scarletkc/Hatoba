@@ -101,6 +101,8 @@ This page tracks implementation progress, items awaiting verification, and follo
 | AI-22 | Automatic compaction | ⬜ | P2 |
 | AI-23 | Conversation history | ⬜ | P1 |
 | AI-24…26 | History search, Markdown export, edit and resend | ⬜ | P2 |
+| AI-27, 28 | Skills: management, import and export, `read_skill` | ⬜ | P2 |
+| AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | ⬜ | P2 |
 
 ## MVP scope
 
@@ -125,3 +127,5 @@ Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the a
 4. The merge details and UI for Flow C (connecting an existing local vault to an initialized cloud vault).
 5. Whether the in-app deployment (§6.7) offers a data location for the new D1 database. D1 accepts a jurisdiction (`eu`, `fedramp`, or `us`) or a location hint only when a database is created, and §6.7 sets neither.
 6. How a breaking Worker change (a new `api` number) rolls out while devices on older apps still sync, for example whether one Worker serves both `api` numbers for a while.
+7. Whether MCP servers that sign in with OAuth (§13.9) are supported, and where each device keeps their tokens. They cannot sync, because many services rotate the refresh token on each use. Windows Credential Manager holds at most 2,560 bytes per credential, which OAuth tokens often exceed, so a device-local table encrypted with vault_key is the likely place.
+8. Whether MCP servers can run on the remote host over the tab's SSH connection, speaking `stdio` over an exec channel. It would reach data where it lives without opening ports, but `run_command` already covers much of the same ground.

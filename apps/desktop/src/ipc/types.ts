@@ -478,6 +478,10 @@ export interface TerminalSettings {
   theme: "system" | "light" | "dark";
   cursor_style: "block" | "bar" | "underline";
   scrollback: number;
+  /** WIN-05: PuTTY-style right click, or a context menu. */
+  right_click: "copy_paste" | "menu";
+  /** TERM-04: ask before pasting text with line breaks. */
+  confirm_multiline_paste: boolean;
 }
 
 /** Synced settings item (spec §5.1 `Settings`). */
@@ -494,11 +498,8 @@ export interface LocalPrefs {
   language: Language;
   appearance: "system" | "light" | "dark";
   density: "regular" | "compact";
-  /** WIN-05: PuTTY-style right click, or a context menu. */
-  right_click: "copy_paste" | "menu";
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
-  confirm_multiline_paste: boolean;
   /** Check GitHub Releases once after unlock. Off by default (no telemetry, spec §11). */
   auto_update_check: boolean;
 }
