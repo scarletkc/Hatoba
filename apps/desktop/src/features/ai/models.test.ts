@@ -28,7 +28,7 @@ const reply = (provider_id: string, model_id: string): AiEntryView => ({
 
 describe("conversationModel (AI-05)", () => {
   const providers = [provider("a", []), provider("b", ["b1", "b2"]), provider("c", ["c1"])];
-  const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: null };
+  const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: null, builtin_skill_enabled: true };
 
   it("uses the default model for a new conversation", () => {
     expect(conversationModel([], providers, settings)).toEqual({ provider_id: "c", model_id: "c1" });

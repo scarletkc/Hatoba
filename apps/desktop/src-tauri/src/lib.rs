@@ -145,6 +145,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_edit_resend,
             skills::skills_list,
             skills::skill_get,
+            skills::skill_builtin_get,
             skills::skill_save,
             skills::skill_delete,
             skills::skill_set_enabled,

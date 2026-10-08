@@ -52,6 +52,10 @@ impl AiEnv for AppEnv {
             .ok()
             .map(|live| live.session.clone())
     }
+
+    fn app_version(&self) -> String {
+        self.0.package_info().version.to_string()
+    }
 }
 
 // ───────────────────────── conversions ─────────────────────────
@@ -127,6 +131,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
             model_id: m.model_id.clone(),
         }),
         search_provider_id: s.search_provider_id.clone(),
+        builtin_skill_enabled: s.builtin_skill_enabled,
     }
 }
 
@@ -567,6 +572,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
     let ai = AiSettings {
         default_model,
         search_provider_id,
+        builtin_skill_enabled: input.builtin_skill_enabled,
     };
     if ai == settings.ai {
         return Ok(());
@@ -997,6 +1003,7 @@ mod tests {
                     model_id: "m1".into(),
                 }),
                 search_provider_id: Some(search.id.clone()),
+                builtin_skill_enabled: true,
             },
         )
         .unwrap();
@@ -1007,6 +1014,16 @@ mod tests {
                 model_id: "m1".into()
             })
         );
+
+        // AI-34: the built-in skill's switch is stored with them.
+        assert!(ai_settings_view(&v.settings().ai).builtin_skill_enabled);
+        let off = AiSettingsView {
+            builtin_skill_enabled: false,
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &off).unwrap();
+        assert!(!v.settings().ai.builtin_skill_enabled);
+        assert!(v.settings().ai.default_model.is_some());
 
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);
@@ -1026,6 +1043,7 @@ mod tests {
                     model_id: "m1".into(),
                 }),
                 search_provider_id: None,
+                builtin_skill_enabled: true,
             },
         )
         .unwrap_err();
@@ -1038,6 +1056,7 @@ mod tests {
                 model_id: "m2".into(),
             }),
             search_provider_id: None,
+            builtin_skill_enabled: true,
         };
         assert!(save_ai_settings(&mut v, &wrong_model).is_err());
         let err = save_ai_settings(
@@ -1045,6 +1064,7 @@ mod tests {
             &AiSettingsView {
                 default_model: None,
                 search_provider_id: Some("nope".into()),
+                builtin_skill_enabled: true,
             },
         )
         .unwrap_err();
@@ -1063,6 +1083,7 @@ mod tests {
                 model_id: "m9".into(),
             }),
             search_provider_id: None,
+            builtin_skill_enabled: true,
         };
         save_ai_settings(&mut v, &dangling).unwrap();
     }

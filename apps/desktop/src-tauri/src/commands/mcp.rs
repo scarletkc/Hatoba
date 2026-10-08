@@ -558,7 +558,8 @@ pub async fn mcp_set_always_allow(
     Ok(())
 }
 
-/// The MCP tool behind a name the model called, or null when no server offers it.
+/// The MCP tool behind a name the model called: from the newest offer a request made with it,
+/// else from the running servers. Null when neither has it, or its server was deleted.
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_tool_info(

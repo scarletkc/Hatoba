@@ -199,7 +199,16 @@ export function AiPane() {
         </>
       )}
 
-      <SkillsSection />
+      <SkillsSection
+        builtin={
+          data
+            ? {
+                enabled: data.settings.builtin_skill_enabled,
+                onChange: (enabled) => void saveSettings({ ...(dataRef.current?.settings ?? data.settings), builtin_skill_enabled: enabled }),
+              }
+            : null
+        }
+      />
       <McpSection />
       <DeviceSection />
 

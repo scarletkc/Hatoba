@@ -687,6 +687,8 @@ export interface AiModelRef {
 export interface AiSettingsView {
   default_model: AiModelRef | null;
   search_provider_id: string | null;
+  /** The built-in `hatoba` skill is offered (AI-34). */
+  builtin_skill_enabled: boolean;
 }
 
 export type AiPermissionMode = "manual" | "bypass";
@@ -752,7 +754,7 @@ export interface AiTurnContext {
   model_id: string;
   /** The tab's host; the next message moves the conversation to it (AI-09). */
   host_id: string | null;
-  /** A connected terminal tab is attached; false offers no tools (AI-09). */
+  /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
   tab: boolean;
   /** MCP servers switched off for this conversation in the tools menu (AI-30, P2). */
   disabled_mcp_servers: string[];
@@ -822,6 +824,18 @@ export interface SkillDetail {
   frontmatter_keys: string[];
 }
 
+/** The built-in `hatoba` skill (AI-34), read-only. */
+export interface BuiltinSkillView {
+  name: string;
+  description: string;
+  /** `Settings.ai.builtin_skill_enabled`. */
+  enabled: boolean;
+  /** SKILL.md without its frontmatter, with the app's version filled in. */
+  body: string;
+  /** The files besides SKILL.md, sorted by path. */
+  files: SkillFileView[];
+}
+
 export interface SkillInput {
   /** null creates a skill. */
   id: string | null;
@@ -859,6 +873,8 @@ export interface SkillImportPreview {
   issues: SkillIssue[];
   /** A saved skill with the same name, which the user may replace (or rename the new one). */
   existing_id: string | null;
+  /** The name is the built-in skill's (AI-34): the skill can be imported only under another. */
+  reserved_name: boolean;
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────

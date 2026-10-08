@@ -11,6 +11,7 @@ import {
   SKILL_FILE_MAX_BYTES,
   byteLength,
   describeIssue,
+  nameProblemKey,
   skillNameProblem,
   sourceName,
   suggestSkillName,
@@ -26,7 +27,8 @@ const OPEN_ALL_UP_TO = 6;
 /**
  * What importing a folder or `.zip` would save (AI-27), shown in full before anything is saved: every file with its
  * text, the frontmatter fields kept for export, the files skipped for not being text, and every issue, which keeps the
- * import button off. When the name is taken, the user replaces the saved skill or imports under a new name.
+ * import button off. When the name is taken, the user replaces the saved skill or imports under a new name; the
+ * built-in skill's name (AI-34) is never replaced, so the skill is imported under a new name.
  */
 export function SkillImportDialog({
   path,
@@ -73,9 +75,10 @@ export function SkillImportDialog({
     };
   }, [path]);
 
-  const clash = !!preview && preview.existing_id !== null && preview.issues.length === 0;
+  const reserved = !!preview && preview.reserved_name && preview.issues.length === 0;
+  const clash = !!preview && !reserved && preview.existing_id !== null && preview.issues.length === 0;
   const renameProblem = skillNameProblem(newName.trim(), takenNames);
-  const renaming = clash && choice === "rename";
+  const renaming = reserved || (clash && choice === "rename");
   const canImport = !!preview && preview.issues.length === 0 && !importing && (!renaming || !renameProblem);
 
   const allPaths = preview ? [SKILL_MD, ...preview.files.map((f) => f.path)] : [];
@@ -113,15 +116,26 @@ export function SkillImportDialog({
     return t(`aiSettings.skills.issue.${kind}` as MessageKey, shown);
   };
 
-  const renameError = renaming
-    ? renameProblem === "empty"
-      ? t("aiSettings.skills.err.nameRequired")
-      : renameProblem === "invalid"
-        ? t("aiSettings.skills.err.nameInvalid")
-        : renameProblem === "taken"
-          ? t("aiSettings.skills.err.nameTaken")
-          : null
-    : null;
+  const renameError = renaming && renameProblem ? t(`aiSettings.skills.err.${nameProblemKey(renameProblem)}`) : null;
+  const renameField = (
+    <div className={cx(s.stack, s.rename)}>
+      <TextField
+        id={ids.rename}
+        mono
+        autoFocus
+        aria-label={t("aiSettings.skills.imp.newName")}
+        value={newName}
+        invalid={!!renameError}
+        onChange={(e) => setNewName(e.target.value)}
+      />
+      {renameProblem !== "invalid" && <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>}
+      {renameError && (
+        <div className={s.problem} role="alert">
+          {renameError}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <Sheet
@@ -192,6 +206,15 @@ export function SkillImportDialog({
             </Group>
           )}
 
+          {reserved && preview.name && (
+            <Group>
+              <div className={s.clash}>
+                <div className={s.clashTitle}>{t("aiSettings.skills.imp.reservedTitle", { name: preview.name })}</div>
+                {renameField}
+              </div>
+            </Group>
+          )}
+
           {clash && preview.name && (
             <Group>
               <div className={s.clash} role="radiogroup" aria-label={t("aiSettings.skills.imp.clashTitle", { name: preview.name })}>
@@ -199,25 +222,7 @@ export function SkillImportDialog({
                 <Radio checked={choice === "rename"} onSelect={() => setChoice("rename")}>
                   <span className={s.choiceLabel}>{t("aiSettings.skills.imp.rename")}</span>
                 </Radio>
-                {choice === "rename" && (
-                  <div className={cx(s.stack, s.rename)}>
-                    <TextField
-                      id={ids.rename}
-                      mono
-                      autoFocus
-                      aria-label={t("aiSettings.skills.imp.newName")}
-                      value={newName}
-                      invalid={!!renameError}
-                      onChange={(e) => setNewName(e.target.value)}
-                    />
-                    {renameProblem !== "invalid" && <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>}
-                    {renameError && (
-                      <div className={s.problem} role="alert">
-                        {renameError}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {choice === "rename" && renameField}
                 <Radio checked={choice === "replace"} onSelect={() => setChoice("replace")}>
                   <span className={s.choice}>
                     <span className={s.choiceLabel}>{t("aiSettings.skills.imp.replace")}</span>
@@ -274,8 +279,8 @@ export function SkillImportDialog({
   );
 }
 
-/** One file of the import: a row with its path and size, and its whole text when open. */
-function ContentBlock({ path, content, open, onToggle }: { path: string; content: string; open: boolean; onToggle: () => void }) {
+/** One file of a skill shown read-only: a row with its path and size, and its whole text when open. */
+export function ContentBlock({ path, content, open, onToggle }: { path: string; content: string; open: boolean; onToggle: () => void }) {
   const t = useT();
   const bytes = byteLength(content);
   return (

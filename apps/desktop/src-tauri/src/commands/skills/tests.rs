@@ -346,6 +346,90 @@ fn an_edit_keeps_the_imported_frontmatter() {
 }
 
 #[test]
+fn the_built_in_skills_name_is_reserved() {
+    let mut v = vault();
+    // AI-34: saving, importing and renaming to `hatoba` are refused.
+    let err = save_skill(&mut v, &input("hatoba")).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidInput);
+    assert_eq!(err.field.as_deref(), Some("name"));
+    assert!(err.detail.contains("reserved"), "{}", err.detail);
+
+    let dir = TempDir::new("reserved");
+    dir.write(
+        "SKILL.md",
+        b"---\nname: hatoba\ndescription: Mine\n---\nBody\n",
+    );
+    let import = read_source(&dir.0).unwrap();
+    let shown = preview(&v, &import);
+    assert!(shown.reserved_name);
+    assert!(shown.issues.is_empty());
+    let err = import_skill(&mut v, import.clone(), None, None).unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("name"));
+    let mine = import_skill(&mut v, import.clone(), None, Some("hatoba-notes")).unwrap();
+    assert_eq!(mine.name, "hatoba-notes");
+    assert!(!preview(&v, &read_source(&skill_folder("free").0).unwrap()).reserved_name);
+    let other = read_source(&skill_folder("other").0).unwrap();
+    let err = import_skill(&mut v, other, None, Some("hatoba")).unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("rename"));
+
+    // One from an older build stays listed and can be renamed, not saved under the name.
+    let old = v
+        .put(
+            None,
+            Item::Skill(Skill {
+                name: "hatoba".into(),
+                description: "Old".into(),
+                enabled: true,
+                ..Skill::default()
+            }),
+        )
+        .unwrap();
+    assert_eq!(
+        preview(&v, &import).existing_id.as_deref(),
+        Some(old.as_str())
+    );
+    let err = import_skill(&mut v, import, Some(&old), None).unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("name"));
+    let edit = SkillInput {
+        id: Some(old.clone()),
+        ..input("hatoba")
+    };
+    assert_eq!(
+        save_skill(&mut v, &edit).unwrap_err().field.as_deref(),
+        Some("name")
+    );
+    let renamed = save_skill(
+        &mut v,
+        &SkillInput {
+            name: "hatoba-old".into(),
+            ..edit
+        },
+    )
+    .unwrap();
+    assert_eq!(renamed.id, old);
+}
+
+#[test]
+fn the_built_in_skill_shows_with_its_switch_and_the_version() {
+    let mut v = vault();
+    let view = builtin_view(&v, "4.5.6");
+    assert_eq!(view.name, "hatoba");
+    assert!(view.enabled);
+    assert!(!view.description.is_empty());
+    assert!(view.body.contains("4.5.6"));
+    assert!(!view.body.contains("{{HATOBA_VERSION}}"));
+    assert!(view.files.iter().all(|f| f.path.starts_with("references/")));
+    let mut settings = v.settings();
+    settings.ai.builtin_skill_enabled = false;
+    v.put(
+        Some(hatoba_core::model::SETTINGS_ID),
+        Item::Settings(settings),
+    )
+    .unwrap();
+    assert!(!builtin_view(&v, "4.5.6").enabled);
+}
+
+#[test]
 fn skill_text_never_reaches_debug_output() {
     let mut i = input("ok");
     i.body = "SECRET-BODY".into();

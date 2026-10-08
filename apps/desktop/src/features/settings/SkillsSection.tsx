@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
+import { Badge, Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
 import { layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
-import type { SkillView } from "@/ipc/types";
+import type { BuiltinSkillView, SkillView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { pickSavePath } from "@/lib/native";
 import { aiErrorMessage } from "./aiShared";
+import { BuiltinSkillDialog } from "./BuiltinSkillDialog";
 import { SkillDialog } from "./SkillDialog";
 import { SkillImportDialog } from "./SkillImportDialog";
 import { EmptyBlock, StatusRow } from "./sectionParts";
-import { sortSkills, upsertSkill } from "./skillsLogic";
+import { BUILTIN_SKILL_NAME, sortSkills, upsertSkill } from "./skillsLogic";
 import a from "./AiPane.module.css";
 import s from "./SkillsSection.module.css";
 
@@ -30,13 +31,22 @@ async function pickSource(kind: "folder" | "zip", title: string): Promise<string
   return typeof picked === "string" ? picked : null;
 }
 
+/** The switch of the built-in skill, which is `Settings.ai.builtin_skill_enabled` (AI-34); the AI pane owns those settings. */
+export interface BuiltinSwitch {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}
+
 /**
- * Settings → AI → Skills (spec §13.8, AI-27): the list with an enable switch, create and edit in a dialog, import a
- * folder or `.zip` after a preview, export as `.zip`, and delete.
+ * Settings → AI → Skills (spec §13.8, AI-27): the built-in skill first (AI-34), with its switch and a read-only view,
+ * then the user's skills with an enable switch, create and edit in a dialog, import a folder or `.zip` after a
+ * preview, export as `.zip`, and delete. `builtin` is null until the AI settings are loaded.
  */
-export function SkillsSection() {
+export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
   const t = useT();
   const [skills, setSkills] = useState<SkillView[] | null>(null);
+  const [builtinSkill, setBuiltinSkill] = useState<BuiltinSkillView | null>(null);
+  const [viewing, setViewing] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [editing, setEditing] = useState<{ id: string | null } | null>(null);
   const [importPath, setImportPath] = useState<string | null>(null);
@@ -47,8 +57,10 @@ export function SkillsSection() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const list = await api.skills_list();
-      if (live.current) setSkills(sortSkills(list));
+      const [list, built] = await Promise.all([api.skills_list(), api.skill_builtin_get()]);
+      if (!live.current) return;
+      setBuiltinSkill(built);
+      setSkills(sortSkills(list));
     } catch (e) {
       if (live.current) setLoadError(e);
     }
@@ -162,6 +174,15 @@ export function SkillsSection() {
             {t("aiSettings.skills.loadFailed")} {aiErrorMessage(t, loadError)}
           </StatusRow>
         )}
+        {loaded && builtinSkill && (
+          <BuiltinRow
+            skill={builtinSkill}
+            enabled={builtin?.enabled ?? builtinSkill.enabled}
+            disabled={!builtin}
+            onToggle={(on) => builtin?.onChange(on)}
+            onView={() => setViewing(true)}
+          />
+        )}
         {loaded && list.length === 0 && (
           <EmptyBlock icon="book-open-text" title={t("aiSettings.skills.empty.title")} body={t("aiSettings.skills.empty.body")}>
             <Button variant="primary" icon="plus" onClick={() => setEditing({ id: null })}>
@@ -190,6 +211,7 @@ export function SkillsSection() {
           onSaved={save}
         />
       )}
+      {viewing && builtinSkill && <BuiltinSkillDialog skill={builtinSkill} onClose={() => setViewing(false)} />}
       {importPath && (
         <SkillImportDialog
           path={importPath}
@@ -202,6 +224,45 @@ export function SkillsSection() {
         />
       )}
     </section>
+  );
+}
+
+/** AI-34: the built-in skill's row. It has a switch and a view, and no edit, export or delete. */
+function BuiltinRow({
+  skill,
+  enabled,
+  disabled,
+  onToggle,
+  onView,
+}: {
+  skill: BuiltinSkillView;
+  enabled: boolean;
+  disabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  onView: () => void;
+}) {
+  const t = useT();
+  const view = t("aiSettings.skills.builtin.view", { name: skill.name });
+  return (
+    <div className={cx(s.row, !enabled && s.off)}>
+      <button type="button" className={s.main} title={view} onClick={onView}>
+        <span className={s.icon} aria-hidden>
+          <Icon name="book-open-text" />
+        </span>
+        <span className={s.text}>
+          <span className={s.nameLine}>
+            <span className={s.name}>{skill.name}</span>
+            <Badge>{t("aiSettings.skills.builtin")}</Badge>
+          </span>
+          <span className={s.description}>{skill.description}</span>
+          <span className={s.meta}>{t("aiSettings.skills.fileCount", { n: skill.files.length + 1 })}</span>
+        </span>
+      </button>
+      <div className={s.actions}>
+        <Switch checked={enabled} disabled={disabled} label={t("aiSettings.skills.builtin.enable", { name: skill.name })} onChange={onToggle} />
+        <IconButton icon="eye" label={view} onClick={onView} />
+      </div>
+    </div>
   );
 }
 
@@ -231,6 +292,8 @@ function SkillRow({
           <span className={s.meta}>
             {skill.files.length === 0 ? t("aiSettings.skills.noFiles") : t("aiSettings.skills.fileCount", { n: skill.files.length })}
           </span>
+          {/* A skill from a build before the name was reserved: kept, but the name means the built-in skill (AI-34). */}
+          {skill.name === BUILTIN_SKILL_NAME && <span className={s.reservedNote}>{t("aiSettings.skills.reservedNote")}</span>}
         </span>
       </button>
       <div className={s.actions}>

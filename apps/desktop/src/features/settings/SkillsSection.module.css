@@ -50,6 +50,13 @@
   gap: 2px;
 }
 
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .name {
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -73,6 +80,12 @@
 .meta {
   font-size: var(--text-xs);
   color: var(--fg3);
+}
+
+.reservedNote {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--orange);
 }
 
 /* A skill that is off keeps its row, but reads as inactive. */

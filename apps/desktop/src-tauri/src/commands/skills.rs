@@ -3,6 +3,9 @@
 //! of `SKILL.md` in the file whose path is `SKILL.md` (§5.1). Edits and imports are checked
 //! against the same rules (`hatoba_ai::skills::validate`); file IO runs off the async runtime.
 //!
+//! The built-in `hatoba` skill (AI-34) is not an item: `skill_builtin_get` shows it, its switch is
+//! `Settings.ai.builtin_skill_enabled`, and no user skill may take its name.
+//!
 //! Skill text reaches the model as instructions, so it is never logged (SEC-04).
 
 use std::collections::BTreeMap;
@@ -10,7 +13,7 @@ use std::collections::btree_map::Entry;
 use std::path::Path;
 
 use hatoba_ai::skills::{
-    self, MAX_DESCRIPTION_CHARS, MAX_FILES, SkillError, SkillFileData, SkillImport,
+    self, BUILTIN_NAME, MAX_DESCRIPTION_CHARS, MAX_FILES, SkillError, SkillFileData, SkillImport,
     SkillIssue as Issue, SkillPackage,
 };
 use hatoba_core::Vault;
@@ -19,7 +22,8 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, State};
 
 use crate::dto::{
-    SkillDetail, SkillFileView, SkillImportPreview, SkillInput, SkillIssue, SkillView,
+    BuiltinSkillView, SkillDetail, SkillFileView, SkillImportPreview, SkillInput, SkillIssue,
+    SkillView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking};
@@ -209,6 +213,33 @@ fn taken(field: &str, name: &str) -> AppError {
     AppError::invalid(field, format!("A skill named \"{name}\" already exists."))
 }
 
+/// AI-34: the built-in skill's name is not for user skills.
+fn reserved(field: &str) -> AppError {
+    AppError::invalid(
+        field,
+        format!("The name {BUILTIN_NAME} is reserved for the built-in skill."),
+    )
+}
+
+/// The built-in skill as the Settings viewer shows it, with `version` filled in (AI-34).
+pub(crate) fn builtin_view(v: &Vault, version: &str) -> BuiltinSkillView {
+    let skill = skills::builtin_skill(version);
+    BuiltinSkillView {
+        name: skill.name,
+        description: skill.description,
+        enabled: v.settings().ai.builtin_skill_enabled,
+        body: skill.body,
+        files: skill
+            .files
+            .into_iter()
+            .map(|f| SkillFileView {
+                path: f.path,
+                content: f.content,
+            })
+            .collect(),
+    }
+}
+
 /// Stores a package as a skill and its files: under `id` (its fields and files replaced) or as a
 /// new skill. A file left out is deleted; an unchanged one is not written again.
 fn store_skill(
@@ -284,6 +315,9 @@ pub(crate) fn save_skill(v: &mut Vault, input: &SkillInput) -> AppResult<SkillVi
     if let Some(issue) = skills::validate(&pkg).first() {
         return Err(AppError::invalid(issue_field(issue), issue_text(issue)));
     }
+    if pkg.name == BUILTIN_NAME {
+        return Err(reserved("name"));
+    }
     if named(v, &pkg.name, input.id.as_deref()).is_some() {
         return Err(taken("name", &pkg.name));
     }
@@ -356,6 +390,7 @@ pub(crate) fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
         skipped: import.skipped.iter().map(|s| s.path.clone()).collect(),
         issues: import.issues.iter().map(issue_view).collect(),
         existing_id: package.and_then(|p| named(v, &p.name, None)),
+        reserved_name: package.is_some_and(|p| p.name == BUILTIN_NAME),
     }
 }
 
@@ -387,6 +422,9 @@ pub(crate) fn import_skill(
     } else {
         "name"
     };
+    if pkg.name == BUILTIN_NAME {
+        return Err(reserved(field));
+    }
     let enabled = match replace_id {
         Some(id) => find_skill(v, id)?.enabled,
         None => true,
@@ -418,6 +456,17 @@ pub async fn skills_list(state: State<'_, AppState>) -> AppResult<Vec<SkillView>
 #[specta::specta]
 pub async fn skill_get(state: State<'_, AppState>, id: String) -> AppResult<SkillDetail> {
     state.with_unlocked(|v| skill_detail(v, &id))
+}
+
+/// The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings.
+#[tauri::command]
+#[specta::specta]
+pub async fn skill_builtin_get(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<BuiltinSkillView> {
+    let version = app.package_info().version.to_string();
+    state.with_unlocked(|v| Ok(builtin_view(v, &version)))
 }
 
 /// Validates like an import (AI-27); rejects with `invalid_input` naming the field.

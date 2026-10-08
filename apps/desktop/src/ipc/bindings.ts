@@ -216,6 +216,8 @@ export const commands = {
 	aiEditResend: (conversationId: string, entryId: string, text: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_edit_resend", { conversationId, entryId, text, context, channel }),
 	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
 	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
+	/**  The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
+	skillBuiltinGet: () => __TAURI_INVOKE<BuiltinSkillView>("skill_builtin_get"),
 	/**  Validates like an import (AI-27); rejects with `invalid_input` naming the field. */
 	skillSave: (input: SkillInput) => __TAURI_INVOKE<SkillView>("skill_save", { input }),
 	skillDelete: (id: string) => __TAURI_INVOKE<null>("skill_delete", { id }),
@@ -244,7 +246,10 @@ export const commands = {
 	 *  null.
 	 */
 	mcpSetAlwaysAllow: (serverId: string, tool: string | null, allow: boolean) => __TAURI_INVOKE<null>("mcp_set_always_allow", { serverId, tool, allow }),
-	/**  The MCP tool behind a name the model called, or null when no server offers it. */
+	/**
+	 *  The MCP tool behind a name the model called: from the newest offer a request made with it,
+	 *  else from the running servers. Null when neither has it, or its server was deleted.
+	 */
 	mcpToolInfo: (name: string) => __TAURI_INVOKE<{
 	server_id: string,
 	server_name: string,
@@ -366,6 +371,8 @@ export type AiSendStarted = {
 export type AiSettingsView = {
 	default_model: AiModelRef | null,
 	search_provider_id: string | null,
+	/**  The built-in `hatoba` skill is offered (AI-34). */
+	builtin_skill_enabled: boolean,
 };
 
 /**  AI-04 Test Connection, also used for the search provider test. */
@@ -402,7 +409,7 @@ export type AiTurnContext = {
 	model_id: string,
 	/**  The tab's host; the next message moves the conversation to it (AI-09). */
 	host_id: string | null,
-	/**  A connected terminal tab is attached; `false` offers no tools (AI-09). */
+	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
 	tab: boolean,
 	/**  MCP servers switched off for this conversation (AI-30, P2). */
 	disabled_mcp_servers: string[],
@@ -457,6 +464,18 @@ export type AuthPrompt = {
 export type AuthPromptField = {
 	prompt: string,
 	echo: boolean,
+};
+
+/**  The built-in `hatoba` skill (AI-34), read-only. */
+export type BuiltinSkillView = {
+	name: string,
+	description: string,
+	/**  `Settings.ai.builtin_skill_enabled`. */
+	enabled: boolean,
+	/**  `SKILL.md` without its frontmatter, with the app's version filled in. */
+	body: string,
+	/**  The files besides `SKILL.md`, sorted by path. */
+	files: SkillFileView[],
 };
 
 export type CloudflareAccount = {
@@ -938,6 +957,8 @@ export type SkillImportPreview = {
 	issues: SkillIssue[],
 	/**  A saved skill with the same name, which the user may replace (or rename the new one). */
 	existing_id: string | null,
+	/**  The name is the built-in skill's (AI-34): the skill can be imported only under another. */
+	reserved_name: boolean,
 };
 
 export type SkillInput = {

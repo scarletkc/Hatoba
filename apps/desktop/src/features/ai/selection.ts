@@ -1,12 +1,15 @@
 /**
  * AI-10: the terminal selection that goes with a message. It is stored in the user's entry as a
- * leading block, so neither the entry format nor the IPC contract changes:
+ * leading attachment block, so neither the entry format nor the IPC contract changes:
  *
  *   <terminal_selection host="prod-api" lines="3">
  *   …the selected text…
  *   </terminal_selection>
  *
  *   the typed text
+ *
+ * The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3 ("Attachment
+ * blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a conversation.
  */
 
 /** As for tool results (§13.4): over this many characters, the first 4,000 and the last 12,000 are kept. */
@@ -60,22 +63,23 @@ const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").rep
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
 /**
- * A closing tag inside the text gets a backslash after its `<` (and one more on each that already has
- * some), so the text can never end the block early, and `unescapeBody` undoes it exactly.
+ * A closing tag of the block's kind inside the text gets a backslash after its `<` (and one more on
+ * each that already has some), so the text can never end the block early, and `unescapeBody` undoes
+ * it exactly. `tag` is a fixed tag name, never user text.
  */
-function escapeBody(text: string): string {
-  return text.replace(/<(\\*)\/terminal_selection/gi, (m) => `<\\${m.slice(1)}`);
+function escapeBody(text: string, tag: string): string {
+  return text.replace(new RegExp(`<(\\\\*)/${tag}`, "gi"), (m) => `<\\${m.slice(1)}`);
 }
 
-function unescapeBody(text: string): string {
-  return text.replace(/<\\(\\*\/terminal_selection)/gi, "<$1");
+function unescapeBody(text: string, tag: string): string {
+  return text.replace(new RegExp(`<\\\\(\\\\*/${tag})`, "gi"), "<$1");
 }
 
 /** The user entry's text: the selection block, then the typed text. */
 export function composeMessage(typed: string, attachment: SelectionAttachment | null): string {
   if (!attachment) return typed;
   const truncated = attachment.truncated ? ' truncated="true"' : "";
-  return `<${TAG} host="${attr(attachment.host)}" lines="${attachment.lines}"${truncated}>\n${escapeBody(attachment.text)}\n</${TAG}>\n\n${typed}`;
+  return `<${TAG} host="${attr(attachment.host)}" lines="${attachment.lines}"${truncated}>\n${escapeBody(attachment.text, TAG)}\n</${TAG}>\n\n${typed}`;
 }
 
 const BLOCK = /^<terminal_selection host="([^"]*)" lines="(\d+)"( truncated="true")?>\n([\s\S]*?)\n<\/terminal_selection>(?:\n\n|\n|$)/;
@@ -85,15 +89,9 @@ export function parseMessage(text: string): { attachment: SelectionAttachment | 
   const m = BLOCK.exec(text);
   if (!m) return { attachment: null, typed: text };
   return {
-    attachment: { host: unattr(m[1]), lines: Number(m[2]), truncated: !!m[3], text: unescapeBody(m[4]) },
+    attachment: { host: unattr(m[1]), lines: Number(m[2]), truncated: !!m[3], text: unescapeBody(m[4], TAG) },
     typed: text.slice(m[0].length),
   };
-}
-
-/** A conversation title from the typed text, as Rust makes one from the first message (AI-23). */
-export function titleOf(typed: string): string {
-  const first = typed.split(/\r?\n/).find((line) => line.trim()) ?? "";
-  return [...first.trim()].slice(0, 60).join("");
 }
 
 // ───────────── the chip ─────────────

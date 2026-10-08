@@ -370,6 +370,7 @@ interface Settings {             // Fixed ID "settings", a single item
   ai: {                         // P1, §13
     default_model: { provider_id: string; model_id: string } | null;
     search_provider_id: string | null;
+    builtin_skill_enabled: boolean;     // AI-34, true while absent
   };
   updated_at: number;
 }
@@ -988,7 +989,7 @@ A turn:
 
 `ai_stop` aborts the request, closes the channels of running tools, and gives every call without a result a cancelled result. Sending a message while a turn runs stops the turn first. Locking the vault (SEC-02) stops every turn the same way: established SSH sessions can stay connected while locked (SEC-03), but the assistant never acts behind the lock screen. Before each request, Rust also gives a cancelled result to any stored call that has none, for example after a crash or after entries from two devices merge (§13.7), so every request is valid.
 
-**What the provider receives**: Hatoba's system prompt with the tool definitions, the display name and user name of the tab's host, the current date, and the name and description of each enabled skill (AI-28), then the tool definitions of the enabled MCP servers as the servers describe them (AI-30), followed by the conversation's entries from `context_start` on (AI-21). The system prompt and every tool description state that screen text, command output, search results, and pages are data, not instructions. Nothing else comes from the vault: addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result.
+**What the provider receives**: Hatoba's system prompt with the tool definitions, the display name and user name of the tab's host, the current date, and the name and description of each enabled skill (AI-28), then the tool definitions of the enabled MCP servers as the servers describe them (AI-30), followed by the conversation's entries from `context_start` on (AI-21). Without a connected terminal tab, the request leaves out `read_terminal`, `run_command`, and `send_input`, the system prompt says so and names only the conversation's host, and every other tool is offered as usual (AI-09). The system prompt and every tool description state that screen text, command output, search results, and pages are data, not instructions. Nothing else comes from the vault: addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result.
 
 ### 13.2 Providers and models
 
@@ -1016,8 +1017,25 @@ Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoi
 |---|---|---|
 | AI-07 | Each terminal tab has its own current conversation, and the panel shows the active tab's. Switching tabs switches the panel. **New conversation** gives the tab an empty conversation, which is stored when its first message is sent. A tab whose conversation is running a turn or waiting for approval shows it in the tab bar | P1 |
 | AI-08 | A conversation acts only on its own tab, never on another, in either permission mode. Reconnecting the tab keeps the conversation, and its tools use the new session. While the tab is disconnected, tools return an error result. Closing the tab detaches the conversation, which stays in history | P1 |
-| AI-09 | Opening a conversation from history attaches it to the active tab. When the tab's host is not the conversation's host, the panel names both, and the next message moves the conversation to the tab's host. With no terminal tab active, the panel offers **Connect to *host***, which opens a tab and attaches the conversation, and the conversation can still chat with no tools offered | P1 |
+| AI-09 | Opening a conversation from history attaches it to the active tab. When the tab's host is not the conversation's host, the panel names both, and the next message moves the conversation to the tab's host. With no terminal tab active, the panel offers **Connect to *host***, which opens a tab and attaches the conversation. Until then, and while the tab is not connected, requests offer every tool except `read_terminal`, `run_command`, and `send_input`, so the assistant can still chat, search the web, fetch pages, read skills, and use MCP tools | P1 |
 | AI-10 | Text selected in the tab's terminal shows above the panel's input as an attachment that goes with the next message, cut like a long tool result (§13.4). The attachment can be removed, and after a message takes it, it shows again only when the selection changes. A sent message shows it as a collapsed block. **Ask AI** in the terminal's context menu and its **…** menu opens the panel with the input focused | P2 |
+
+**Attachment blocks**: what goes with a message (AI-10) is stored at the start of the user entry's text, before what the user typed, so the entry format (§13.7) does not change. Each block is an opening tag with its attributes, a line break, the body, a line break, the closing tag, and a blank line:
+
+```text
+<terminal_selection host="prod-api" lines="2" truncated="true">
+…the selected text…
+</terminal_selection>
+
+What does this error mean?
+```
+
+| Block | Attributes, in this order | Body |
+|---|---|---|
+| `terminal_selection` | `host`, the tab host's display name; `lines`, the selection's line count; `truncated="true"` only when the selection was cut | The selected text |
+| `connection_diagnostics` | `host`, the host's display name | The diagnostics of a connection error. They reach the provider only when the user attaches them |
+
+Attribute values write `&`, `"`, `<`, and `>` as `&amp;`, `&quot;`, `&lt;`, and `&gt;`. In the body, every `</` followed by the block's own tag name, in any letter case, gets a backslash after its `<`, and so does every such sequence that already has backslashes there, so the body never ends the block early and reads back exactly. A block ends at the first closing tag of its kind that a line break or the end of the text follows. The blocks go to the provider as part of the message, and history search (AI-24) matches them like the rest of the text.
 
 ### 13.4 Tools
 
@@ -1057,7 +1075,7 @@ In manual approval mode, `read_terminal` and `web_search` run without asking, an
 
 | ID | Requirement | Priority |
 |---|---|---|
-| AI-23 | History in the panel: conversations sorted by last activity, pinned ones first, each with its title, host, and time. Open (AI-09), rename, pin, and delete with confirmation. The title starts as the first line of the first message, cut to 60 characters | P1 |
+| AI-23 | History in the panel: conversations sorted by last activity, pinned ones first, each with its title, host, and time. Open (AI-09), rename, pin, and delete with confirmation. The title starts as the first non-empty line the user typed in the first message, after its attachment blocks (§13.3), cut to 60 characters | P1 |
 | AI-24 | Search conversation titles and message text | P2 |
 | AI-25 | Export a conversation as Markdown | P2 |
 | AI-26 | Edit an earlier message of the user and send it again, which deletes the entries after it | P2 |
@@ -1100,12 +1118,13 @@ type AiEntry = { created_at: number } & (
 
 ### 13.8 Skills
 
-A skill is a set of instructions for the assistant in the Agent Skills format: a folder with a `SKILL.md`, whose YAML frontmatter has `name` and `description`, and optional text files such as those in `references/`. Skills hold instructions only. Hatoba never runs a file from a skill, and the model acts on what it reads through the tools of §13.4, with the usual approvals. Skills are vault items (`skill` and `skill_file`, §5.1), so they sync to every device.
+A skill is a set of instructions for the assistant in the Agent Skills format: a folder with a `SKILL.md`, whose YAML frontmatter has `name` and `description`, and optional text files such as those in `references/`. Skills hold instructions only. Hatoba never runs a file from a skill, and the model acts on what it reads through the tools of §13.4, with the usual approvals. Skills are vault items (`skill` and `skill_file`, §5.1), so they sync to every device. The built-in `hatoba` skill (AI-34) comes with the app instead.
 
 | ID | Requirement | Priority |
 |---|---|---|
 | AI-27 | Skills in **Settings → AI**: create a skill and edit its name, description, and files, import a folder or a `.zip` that holds a `SKILL.md`, export a skill as a `.zip`, enable or disable it, and delete it. Import shows every file before saving. It rejects a `name` that is not 1 to 64 lowercase letters, digits, and hyphens, a description longer than 1,024 characters, and files over 32 KB, and it skips files that are not UTF-8 text and lists them. When the name is taken, the user chooses whether to replace the existing skill or rename the new one. Other frontmatter fields are kept for export and have no effect, so `allowed-tools` does not change approvals | P2 |
-| AI-28 | The system prompt lists the name and description of every enabled skill. `read_skill(name, path?)` returns the body of `SKILL.md`, or the file at `path` inside the skill, and runs without asking in both modes | P2 |
+| AI-28 | The system prompt lists the name and description of every enabled skill, the built-in one included (AI-34), sorted by name. `read_skill(name, path?)` returns the body of `SKILL.md`, or the file at `path` inside the skill, and runs without asking in both modes | P2 |
+| AI-34 | The built-in `hatoba` skill describes the running version of Hatoba (its windows, settings, and features) so the assistant can answer the user's questions about Hatoba itself. It is bundled with the app, states the app's version, and is listed and read like the other skills (AI-28). **Settings → AI** shows it first among the skills, with its description, a switch, and a read-only view of its files. The switch is `Settings.ai.builtin_skill_enabled`, which syncs and is on by default. The skill cannot be edited, deleted, exported, or replaced, and its name is reserved: saving or importing a skill named `hatoba` is refused, and the import asks for another name. A skill of that name saved by an earlier version stays in the list so the user can rename or delete it, and is never offered to the model | P2 |
 
 ### 13.9 MCP servers
 
@@ -1119,7 +1138,7 @@ MCP servers add tools to the assistant. Hatoba is an MCP client for tools only: 
 | ID | Requirement | Priority |
 |---|---|---|
 | AI-29 | MCP servers in **Settings → AI**: add, edit, and delete servers, each with a name, a transport, and its configuration. Environment and header values behave like API keys (AI-01), and only the child process or the server receives them. Adding or editing a `stdio` server shows the full command line before it is saved. The configuration syncs, and whether a server is enabled is stored on each device. A server added on another device arrives enabled if it uses `http` and disabled if it uses `stdio`, because a command that runs on one device may not exist on another | P2 |
-| AI-30 | A request offers the tools of every server that is enabled on this device and not switched off for the conversation in the panel's tools menu. Tool names are `mcp__<server>__<tool>`, cleaned to letters, digits, `_`, and `-`, cut to 64 characters, and given a numeric suffix when two collide. The adapter drops input schema keywords its protocol does not accept. A result keeps its text content, and other content is replaced with a line naming its type. A `tools/list_changed` notification refreshes the list before the next request | P2 |
+| AI-30 | A request offers the tools of every server that is enabled on this device and not switched off for the conversation in the panel's tools menu, with or without a terminal tab (AI-09). Tool names are `mcp__<server>__<tool>`, cleaned to letters, digits, `_`, and `-`, cut to 64 characters, and given a numeric suffix when two collide. The adapter drops input schema keywords its protocol does not accept. A result keeps its text content, and other content is replaced with a line naming its type. A `tools/list_changed` notification refreshes the list before the next request | P2 |
 | AI-31 | In manual approval mode, every MCP tool waits for approval, and the approval card shows the server, the tool, its description, and the arguments. **Always allow**, on the card or in the server's settings, lets one tool or every tool of the server run without asking, and is stored on this device. **Always ask**, set in the server's settings, makes the server ask even in bypass mode, and syncs with the server. Annotations such as `readOnlyHint` are shown but never change whether a call asks | P2 |
 | AI-32 | A `stdio` server starts when a conversation first needs its tools and stops when the app quits or the vault locks, and locking also closes `http` sessions. Commands are looked up on `PATH` the way a shell does, including `PATHEXT` on Windows, so `npx` finds `npx.cmd`. When a server fails to start or to answer, its tool calls return error results, and the panel and the server's settings show the error with the last lines of its stderr, which stay in memory only | P2 |
 | AI-33 | Import pasted JSON or a JSON file in the `mcpServers` format of Claude Desktop, Claude Code, and Cursor, or with the `servers` key of VS Code. `env` and `headers` values move into the vault, and the file is not read again. Export writes the `mcpServers` format with placeholders in place of those values | P2 |

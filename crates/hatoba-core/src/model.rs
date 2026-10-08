@@ -754,13 +754,26 @@ pub struct AiModelRef {
 }
 
 /// AI assistant settings that sync (spec §5.1).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct AiSettings {
     /// The model new conversations start with.
     pub default_model: Option<AiModelRef>,
     /// Id of the [`SearchProvider`] item behind `web_search`.
     pub search_provider_id: Option<String>,
+    /// The built-in `hatoba` skill is offered (AI-34). On by default, also for settings written
+    /// before it existed.
+    pub builtin_skill_enabled: bool,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            default_model: None,
+            search_provider_id: None,
+            builtin_skill_enabled: true,
+        }
+    }
 }
 
 /// The user's synced settings. There is exactly one, with the fixed id [`SETTINGS_ID`].
@@ -1388,12 +1401,13 @@ mod tests {
             value["ai"],
             json!({
                 "default_model": {"provider_id": "p1", "model_id": "m1"},
-                "search_provider_id": "sp1"
+                "search_provider_id": "sp1",
+                "builtin_skill_enabled": true
             })
         );
         assert_eq!(
             serde_json::to_value(Item::Settings(Settings::default())).unwrap()["ai"],
-            json!({"default_model": null, "search_provider_id": null})
+            json!({"default_model": null, "search_provider_id": null, "builtin_skill_enabled": true})
         );
 
         // Every shape reads back as written.
@@ -1419,6 +1433,13 @@ mod tests {
         // Settings written before the AI assistant existed have no `ai`.
         let old = read(json!({"type": "settings", "auto_lock_minutes": 5}));
         assert_eq!(old.as_settings().unwrap().ai, AiSettings::default());
+        // Those written before the built-in skill (AI-34) have it on.
+        let before = read(json!({"type": "settings", "ai": {"search_provider_id": "s"}}));
+        let ai = &before.as_settings().unwrap().ai;
+        assert!(ai.builtin_skill_enabled);
+        assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
+        let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
+        assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
 
         // A missing or unknown protocol / auth header reads as the default.
         let provider = read(json!({

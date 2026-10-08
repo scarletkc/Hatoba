@@ -4,7 +4,7 @@ import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiP
 import type { SelectionState } from "./selection";
 import type { TurnOutcome, TurnState } from "./turn";
 
-/** The slot of the home tab: a conversation with no terminal, which can chat without tools (AI-09). */
+/** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
 export const HOME_SLOT = "home";
 
 /**

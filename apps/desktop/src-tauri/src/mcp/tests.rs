@@ -415,8 +415,8 @@ async fn requests_start_servers_lazily_and_offer_their_tools() {
     set_enabled(&vault, &files, true);
     let cancel = CancellationToken::new();
 
-    // No tab: nothing is offered and nothing starts (AI-09).
-    let none = mcp
+    // With or without a terminal tab (AI-09).
+    let offer = mcp
         .offer(
             &vault,
             &AiTurnContext {
@@ -426,10 +426,6 @@ async fn requests_start_servers_lazily_and_offer_their_tools() {
             &cancel,
         )
         .await;
-    assert!(none.tools.is_empty());
-    assert!(events.all().is_empty());
-
-    let offer = mcp.offer(&vault, &context(&[]), &cancel).await;
     // Sorted by server name, then the server's own order; cleaned names (AI-30).
     assert_eq!(
         names(&offer.tools),

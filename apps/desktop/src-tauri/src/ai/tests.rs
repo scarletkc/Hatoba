@@ -8,17 +8,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use hatoba_ai::entry::{AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus};
-use hatoba_core::model::{AiConversation, AiModel, AiProtocol, AiProvider, Item, Skill, SkillFile};
+use hatoba_core::model::{
+    AiConversation, AiModel, AiProtocol, AiProvider, Item, SETTINGS_ID, SearchKind, SearchProvider,
+    Skill, SkillFile,
+};
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{KdfParams, Vault};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use zeroize::Zeroizing;
 
 use super::{AiEnv, AiManager, COMPACT_INSTRUCTION, DISCONNECTED, EDIT_NOTE, Entries, EventSink};
-use super::{append, lock};
+use super::{append, lock, title_of};
 use crate::dto::{
     AiConversationDetail, AiEntryView, AiFinish, AiSendInput, AiSendStarted, AiToolResultInput,
     AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
@@ -28,6 +31,8 @@ use crate::mcp::McpManager;
 use crate::mcp::tests::Events as McpEvents;
 
 const PW: &str = "correct horse battery staple";
+/// The app version the test environment reports (AI-34).
+const VERSION: &str = "9.8.7-test";
 const KEY: &str = "sk-test-turns-NEVER-SHOWN";
 
 /// Collects a turn's events.
@@ -128,6 +133,10 @@ impl AiEnv for Env {
 
     fn session(&self, _session_id: &str) -> Option<hatoba_ssh::SshSession> {
         None
+    }
+
+    fn app_version(&self) -> String {
+        VERSION.to_owned()
     }
 }
 
@@ -269,7 +278,45 @@ impl Fixture {
         self.env.clone()
     }
 
+    /// Stores an enabled skill with its files (`SKILL.md` among them).
+    fn add_skill(&self, name: &str, description: &str, files: &[(&str, &str)]) -> String {
+        let mut v = lock(&self.vault);
+        let skill = v
+            .put(
+                None,
+                Item::Skill(Skill {
+                    name: name.into(),
+                    description: description.into(),
+                    enabled: true,
+                    ..Skill::default()
+                }),
+            )
+            .unwrap();
+        for (path, content) in files {
+            v.put(
+                None,
+                Item::SkillFile(SkillFile {
+                    skill_id: skill.clone(),
+                    path: (*path).into(),
+                    content: (*content).into(),
+                    updated_at: 0,
+                }),
+            )
+            .unwrap();
+        }
+        skill
+    }
+
     async fn send(&self, conversation_id: Option<&str>, text: &str) -> (AiSendStarted, Arc<Sink>) {
+        self.send_with(conversation_id, text, self.context()).await
+    }
+
+    async fn send_with(
+        &self,
+        conversation_id: Option<&str>,
+        text: &str,
+        context: AiTurnContext,
+    ) -> (AiSendStarted, Arc<Sink>) {
         let sink = Arc::new(Sink::default());
         let (started, task) = self
             .manager
@@ -279,7 +326,7 @@ impl Fixture {
                 AiSendInput {
                     conversation_id: conversation_id.map(str::to_owned),
                     text: text.into(),
-                    context: self.context(),
+                    context,
                 },
                 sink.clone(),
             )
@@ -498,10 +545,17 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
             .unwrap()
             .contains("Hatoba")
     );
-    // No search provider and no skill: neither web_search nor read_skill is offered.
+    // No search provider: no web_search. No skill of the user's, but the built-in one is on
+    // (AI-34), so read_skill is offered.
     assert_eq!(
         tool_names(first),
-        ["read_terminal", "run_command", "send_input", "fetch_url"]
+        [
+            "read_terminal",
+            "run_command",
+            "send_input",
+            "fetch_url",
+            "read_skill"
+        ]
     );
     assert_eq!(
         tool_message(&requests[1], "call_1")["content"],
@@ -754,7 +808,7 @@ async fn a_call_left_without_a_result_is_cancelled_before_the_next_request() {
         conv
     };
 
-    // No tab now: the request offers no tools (AI-09).
+    // No tab now: the request offers no terminal tools (AI-09).
     let context = AiTurnContext {
         tab: false,
         ..f.context()
@@ -769,20 +823,15 @@ async fn a_call_left_without_a_result_is_cancelled_before_the_next_request() {
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 1);
-    assert!(requests[0].get("tools").is_none());
+    // The built-in skill is on by default (AI-34), so read_skill is offered too.
+    assert_eq!(tool_names(&requests[0]), ["fetch_url", "read_skill"]);
     let system = messages(&requests[0])[0]["content"].as_str().unwrap();
     assert!(system.contains("No terminal is attached"), "{system}");
-    // A request without tools carries the call and its result as text.
-    let cancelled = messages(&requests[0])
-        .iter()
-        .filter(|m| m["role"] == "user")
-        .filter_map(|m| m["content"].as_str())
-        .find(|text| text.contains("(id: call_9)"))
-        .expect("the cancelled result as text");
-    assert!(
-        cancelled.contains("[Tool result: run_command (id: call_9), status: cancelled]"),
-        "{cancelled}"
-    );
+    // The call of a tool this request does not offer still goes with its cancelled result.
+    let cancelled = tool_message(&requests[0], "call_9")["content"]
+        .as_str()
+        .unwrap();
+    assert!(cancelled.contains("cancelled"), "{cancelled}");
 
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 4);
@@ -981,35 +1030,14 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
         answer("All done."),
     ])
     .await;
-    {
-        let mut v = lock(&f.vault);
-        let skill = v
-            .put(
-                None,
-                Item::Skill(Skill {
-                    name: "nginx".into(),
-                    description: "Debug nginx".into(),
-                    enabled: true,
-                    ..Skill::default()
-                }),
-            )
-            .unwrap();
-        for (path, content) in [
+    f.add_skill(
+        "nginx",
+        "Debug nginx",
+        &[
             ("SKILL.md", "Run nginx -t first."),
             ("references/tls.md", "TLS notes"),
-        ] {
-            v.put(
-                None,
-                Item::SkillFile(SkillFile {
-                    skill_id: skill.clone(),
-                    path: path.into(),
-                    content: content.into(),
-                    updated_at: 0,
-                }),
-            )
-            .unwrap();
-        }
-    }
+        ],
+    );
     let (started, sink) = f.send(None, "help").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
@@ -1057,7 +1085,11 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
     assert_eq!(view_content(&c5), ("c5", AiToolStatus::Ok, "TLS notes"));
     let c6 = f.run(&conv, "c6", None, None).await.unwrap();
     assert_eq!(view_content(&c6).1, AiToolStatus::Error);
-    assert!(view_content(&c6).2.contains("Enabled skills: nginx"));
+    assert!(
+        view_content(&c6)
+            .2
+            .contains("Enabled skills: hatoba, nginx.")
+    );
     assert_eq!(
         f.run(&conv, "missing", None, None).await.unwrap_err().code,
         ErrorCode::NotFound
@@ -1097,6 +1129,122 @@ async fn deleting_a_conversation_stops_its_turn() {
         ErrorCode::NotFound
     );
     assert!(lock(&f.vault).ai_entries(&conv).unwrap().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
+    use crate::mcp::tests::{put_server, set_enabled, stdio_server};
+
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "web_search", json!({"query": "zfs"})),
+            (
+                "c2",
+                "fetch_url",
+                json!({"url": "http://127.0.0.1:9/private"}),
+            ),
+            ("c3", "read_skill", json!({"name": "nginx"})),
+            ("c4", "mcp__files__echo", json!({"text": "hi"})),
+            ("c5", "run_command", json!({"command": "ls"})),
+            ("c6", "read_terminal", json!({})),
+            ("c7", "read_skill", json!({"name": "hatoba"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let search = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/search"))
+        .and(query_param("q", "zfs"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"title": "ZFS", "url": "https://openzfs.org", "content": "File system"}]
+        })))
+        .mount(&search)
+        .await;
+    {
+        let mut v = lock(&f.vault);
+        let provider = v
+            .put(
+                None,
+                Item::SearchProvider(SearchProvider {
+                    kind: SearchKind::Searxng,
+                    base_url: Some(search.uri()),
+                    ..SearchProvider::default()
+                }),
+            )
+            .unwrap();
+        let mut settings = v.settings();
+        settings.ai.search_provider_id = Some(provider);
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+    f.add_skill(
+        "nginx",
+        "Debug nginx",
+        &[("SKILL.md", "Run nginx -t first.")],
+    );
+    let files = put_server(&f.vault, stdio_server("files"));
+    set_enabled(&f.vault, &files, true);
+
+    let context = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+    let (started, sink) = f.send_with(None, "look it up", context).await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    // AI-09: web_search, fetch_url, read_skill and MCP tools; no terminal tools.
+    let requests = f.requests().await;
+    assert_eq!(
+        tool_names(&requests[0]),
+        [
+            "web_search",
+            "fetch_url",
+            "read_skill",
+            "mcp__files__echo",
+            "mcp__files__fail",
+            "mcp__files__notify",
+            "mcp__files__pid",
+            "mcp__files__env"
+        ]
+    );
+    let system = messages(&requests[0])[0]["content"].as_str().unwrap();
+    assert!(system.contains("No terminal is attached"), "{system}");
+    assert!(system.contains("- nginx: Debug nginx"), "{system}");
+    assert!(system.contains("- hatoba: "), "{system}");
+    assert!(!system.contains("run_command runs"), "{system}");
+
+    // They run without a session.
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(view_content(&c1).1, AiToolStatus::Ok);
+    assert!(view_content(&c1).2.contains("https://openzfs.org"));
+    // fetch_url runs too; this address is refused like any private one (AI-15).
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(view_content(&c2).1, AiToolStatus::Error);
+    assert!(view_content(&c2).2.contains("could not be fetched"));
+    let c3 = f.run(&conv, "c3", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c3),
+        ("c3", AiToolStatus::Ok, "Run nginx -t first.")
+    );
+    let c4 = f.run(&conv, "c4", None, None).await.unwrap();
+    assert_eq!(view_content(&c4), ("c4", AiToolStatus::Ok, "hi"));
+    // A terminal tool without a session is an error result, not a failed command.
+    let c5 = f.run(&conv, "c5", None, None).await.unwrap();
+    assert_eq!(view_content(&c5), ("c5", AiToolStatus::Error, DISCONNECTED));
+    let c6 = f.run(&conv, "c6", None, None).await.unwrap();
+    assert_eq!(view_content(&c6).1, AiToolStatus::Error);
+    assert!(view_content(&c6).2.contains("runs in the terminal tab"));
+    // AI-34: the built-in skill, with the app's version.
+    let c7 = f.run(&conv, "c7", None, None).await.unwrap();
+    assert_eq!(view_content(&c7).1, AiToolStatus::Ok);
+    assert!(view_content(&c7).2.contains(VERSION));
+
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(tool_message(&requests[1], "c4")["content"], "hi");
+    f.mcp.shutdown().await;
 }
 
 // ───────────────────────── phase 2: MCP, AI-22, AI-26, AI-24 ─────────────────────────
@@ -1196,6 +1344,7 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
             "run_command",
             "send_input",
             "fetch_url",
+            "read_skill",
             "mcp__files__echo",
             "mcp__files__fail",
             "mcp__files__notify",
@@ -1516,6 +1665,79 @@ async fn editing_while_a_turn_runs_stops_it_first() {
 }
 
 #[test]
+fn titles_skip_the_attachment_blocks_a_message_starts_with() {
+    // AI-23: the first line of the first message, cut to 60 characters.
+    assert_eq!(title_of("  check the disk\nplease"), "check the disk");
+    assert_eq!(title_of(&"长".repeat(80)).chars().count(), 60);
+
+    // AI-10: the title comes from the typed text, not from the block (spec §13.3).
+    let selection = "<terminal_selection host=\"prod-api\" lines=\"2\">\n$ make\nerror: boom\n\
+                     </terminal_selection>\n\n  \nWhy does make fail?\nmore";
+    assert_eq!(title_of(selection), "Why does make fail?");
+    // Escaped attribute values, a truncated selection, and closing tags escaped in the body.
+    let escaped = "<terminal_selection host=\"web &quot;a&quot; &lt;b&gt;\" lines=\"3\" truncated=\"true\">\n\
+                   echo \"<\\/terminal_selection>\"\n<\\\\/terminal_selection> and <\\/TERMINAL_SELECTION>\n\
+                   </terminal_selection>\n\nexplain this";
+    assert_eq!(title_of(escaped), "explain this");
+    // A closing tag that other text follows on its line does not end the block.
+    let inner = "<terminal_selection host=\"x\" lines=\"3\">\na\n</terminal_selection> tail\nb\n\
+                 </terminal_selection>\nwhat now";
+    assert_eq!(title_of(inner), "what now");
+    let diagnostics = "<connection_diagnostics host=\"db-1\">\nConnection refused (os error 111)\n\
+                       </connection_diagnostics>\n\nWhy can't I connect?";
+    assert_eq!(title_of(diagnostics), "Why can't I connect?");
+    // Both kinds, one after the other.
+    let both = "<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\n\
+                <terminal_selection host=\"db-1\" lines=\"1\">\n$ ssh db-1\n</terminal_selection>\n\nhelp";
+    assert_eq!(title_of(both), "help");
+
+    // Nothing typed: the block's name.
+    assert_eq!(
+        title_of("<terminal_selection host=\"x\" lines=\"1\">\nls\n</terminal_selection>"),
+        "Terminal selection"
+    );
+    assert_eq!(
+        title_of("<connection_diagnostics host=\"x\">\nboom\n</connection_diagnostics>\n\n \n"),
+        "Connection diagnostics"
+    );
+
+    // Anything else is typed text.
+    for text in [
+        "see <terminal_selection host=\"x\" lines=\"1\">\nx\n</terminal_selection>",
+        "<terminal_selection host=\"x\" lines=\"1\">\nno end",
+        "<terminal_selection host=\"x\">\nno lines\n</terminal_selection>\n\nq",
+        "<terminal_selection host=\"x\" lines=\"one\">\nx\n</terminal_selection>\n\nq",
+        "<terminal_selection host=\"x\" lines=\"1\" truncated=\"yes\">\nx\n</terminal_selection>\n\nq",
+        "<connection_diagnostics host=\"x\" lines=\"1\">\nx\n</connection_diagnostics>\n\nq",
+        "<other_block host=\"x\">\nx\n</other_block>\n\nq",
+        "<terminal_selection host=\"x\" lines=\"1\">x\n</terminal_selection>\n\nq",
+    ] {
+        assert_eq!(
+            title_of(text),
+            text.lines().next().unwrap().trim(),
+            "{text:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_message_with_a_selection_keeps_the_block_and_is_titled_after_the_typed_text() {
+    let f = Fixture::new(vec![answer("It failed to compile.")]).await;
+    let text = "<terminal_selection host=\"prod-api\" lines=\"1\">\nerror: boom\n\
+                </terminal_selection>\n\nWhy?";
+    let (started, sink) = f.send(None, text).await;
+    assert_eq!(started.conversation.title, "Why?");
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    // The block is meant for the model: the request carries the message as stored.
+    let requests = f.requests().await;
+    let user = messages(&requests[0])
+        .iter()
+        .find(|m| m["role"] == "user")
+        .unwrap();
+    assert_eq!(user["content"], text);
+}
+
+#[test]
 fn search_finds_titles_and_message_text_once_per_conversation() {
     let vault: SharedVault = {
         let mut vault = Vault::open_in_memory().unwrap();
@@ -1647,23 +1869,83 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     assert!(!system.contains("apache"), "{system}");
     assert!(tools.iter().any(|t| t.name == "read_skill"));
 
-    let read = |name: &str, path: Option<&str>| match super::read_skill(
-        &v,
+    let read = |v: &Vault, name: &str, path: Option<&str>| match super::read_skill(
+        v,
         &ReadSkillArgs {
             name: name.into(),
             path: path.map(str::to_owned),
         },
+        VERSION,
     ) {
         super::Job::Ready(status, content) => (status, content),
         _ => panic!("read_skill reads the vault"),
     };
     assert_eq!(
-        read("nginx", None),
+        read(&v, "nginx", None),
         (ToolStatus::Ok, "Body of nginx".into())
     );
     assert_eq!(
-        read("nginx", Some("./references\\tls.md")),
+        read(&v, "nginx", Some("./references\\tls.md")),
         (ToolStatus::Ok, "TLS of nginx".into())
     );
-    assert_eq!(read("apache", None).0, ToolStatus::Error);
+    assert_eq!(read(&v, "apache", None).0, ToolStatus::Error);
+
+    // AI-34: the built-in skill is listed with them, sorted by name, and read with the version.
+    // A user skill from an older build that took its name is shadowed.
+    v.put(
+        None,
+        Item::Skill(Skill {
+            name: "hatoba".into(),
+            description: "Legacy notes".into(),
+            enabled: true,
+            ..Skill::default()
+        }),
+    )
+    .unwrap();
+    let builtin = hatoba_ai::skills::builtin_skill(VERSION);
+    let (system, _) = super::prompt(&v, &f.context(), true);
+    assert!(
+        system.contains(&format!(
+            "- hatoba: {}\n- nginx: About nginx\n",
+            builtin.description
+        )),
+        "{system}"
+    );
+    assert!(!system.contains("Legacy notes"), "{system}");
+    let (status, body) = read(&v, "hatoba", None);
+    assert_eq!(
+        (status, body.as_str()),
+        (ToolStatus::Ok, builtin.body.as_str())
+    );
+    assert!(body.contains(VERSION));
+    let file = &builtin.files[0];
+    assert_eq!(
+        read(&v, "hatoba", Some(&file.path)),
+        (ToolStatus::Ok, file.content.clone())
+    );
+    let (status, missing) = read(&v, "hatoba", Some("nope.md"));
+    assert_eq!(status, ToolStatus::Error);
+    assert!(missing.contains("references/"), "{missing}");
+
+    // Switched off in Settings → AI: neither listed nor read; the old skill stays shadowed.
+    let mut settings = v.settings();
+    settings.ai.builtin_skill_enabled = false;
+    v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    let (system, tools) = super::prompt(&v, &f.context(), true);
+    assert!(!system.contains("- hatoba:"), "{system}");
+    assert!(tools.iter().any(|t| t.name == "read_skill"));
+    let (status, refused) = read(&v, "hatoba", None);
+    assert_eq!(status, ToolStatus::Error);
+    assert!(refused.contains("Enabled skills: nginx."), "{refused}");
+
+    // With no enabled skill at all, read_skill is not offered.
+    let nginx = v
+        .skills()
+        .into_iter()
+        .find(|(_, s)| s.name == "nginx")
+        .unwrap()
+        .0;
+    crate::commands::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
+    let (_, tools) = super::prompt(&v, &f.context(), true);
+    assert!(!tools.iter().any(|t| t.name == "read_skill"));
 }

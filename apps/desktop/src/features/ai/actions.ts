@@ -22,7 +22,7 @@ import type {
 import { pickSavePath } from "@/lib/native";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
-import { chipShown, composeMessage, makeAttachment, nextSelection, titleOf, type SelectionAttachment } from "./selection";
+import { chipShown, composeMessage, makeAttachment, nextSelection, type SelectionAttachment } from "./selection";
 import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot, type TabSelection } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
@@ -60,7 +60,7 @@ export function slotModel(slotId: string): AiModelRef | null {
   return conversationModel(slot.entries, providers, settings, slot.model);
 }
 
-/** What a request may act on: the tab's host and, when connected, its tools (AI-08, AI-09). */
+/** What a request may act on: the tab's host and, when connected, its terminal tools (AI-08, AI-09). */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
   if (!model) return null;
@@ -264,6 +264,13 @@ class TurnRunner {
     }
 
     const kind = toolKind(call.name);
+    // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
+    if (needsSession(kind) && !attachedTab(this.slotId)) {
+      this.setCall({ id: call.id, state: "running" });
+      await this.report(convId, call.id, { status: "error", content: NO_TAB, edited_arguments: null });
+      this.countCall();
+      return;
+    }
     const allowedHere = allowedInConversation(convId, call.name);
     // AI-31: whether an MCP call asks depends on its tool's Always allow and its server's Always ask.
     let mcp: McpToolInfo | null = null;
@@ -395,8 +402,6 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     const conv = started.conversation;
     runner.started(conv.id);
     if (useAi.getState().history) void loadHistory();
-    // Rust titles a new conversation after the first line of its message, which here is the selection's tag.
-    if (!slot.conversationId && attachment) void api.ai_conversation_rename(conv.id, titleOf(typed)).then(updateConversation, () => {});
     if (runner.gone) return true; // the slot moved on (or the vault locked) meanwhile
     const target = runner.slotId;
     rememberChoices(target, conv.id);

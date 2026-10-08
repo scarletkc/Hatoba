@@ -1,5 +1,6 @@
 //! Skills in the Agent Skills format (spec §13.8): `SKILL.md` parsing and rendering, folder and
-//! `.zip` import, `.zip` export, and the rules both imports and edits are checked against.
+//! `.zip` import, `.zip` export, the rules both imports and edits are checked against, and the
+//! built-in `hatoba` skill (AI-34).
 //!
 //! A skill is a folder with a `SKILL.md` (YAML frontmatter with `name` and `description`, then a
 //! Markdown body) and optional UTF-8 text files such as `references/*.md`. Hatoba never runs a
@@ -17,6 +18,7 @@
 //! content (SEC-04).
 
 mod archive;
+mod builtin;
 mod folder;
 mod frontmatter;
 mod import;
@@ -29,6 +31,7 @@ use serde_json::{Map, Value};
 use self::import::{normalize_path, trimmed_description_issue};
 
 pub use self::archive::{read_zip, write_zip};
+pub use self::builtin::{BUILTIN_NAME, VERSION_PLACEHOLDER, builtin_description, builtin_skill};
 pub use self::folder::read_folder;
 pub use self::frontmatter::{parse_skill_md, render_skill_md};
 

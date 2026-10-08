@@ -202,16 +202,19 @@ describe("default model", () => {
   const search: SearchProviderView[] = [{ id: "s1", kind: "brave", base_url: null, has_api_key: true, updated_at: 5 }];
 
   it("keeps a default that still exists", () => {
-    const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: "s1" };
+    const settings = { default_model: { provider_id: "c", model_id: "c1" }, search_provider_id: "s1", builtin_skill_enabled: false };
     expect(sanitizeSettings(settings, providers, search)).toEqual(settings);
   });
 
   it("drops a default whose provider, model or search provider is gone", () => {
-    expect(sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, search_provider_id: "s9" }, providers, search)).toEqual({
+    expect(sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, search_provider_id: "s9", builtin_skill_enabled: true }, providers, search)).toEqual({
       default_model: null,
       search_provider_id: null,
+      builtin_skill_enabled: true,
     });
-    expect(sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, search_provider_id: null }, providers, search).default_model).toBeNull();
+    expect(
+      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, search_provider_id: null, builtin_skill_enabled: true }, providers, search).default_model,
+    ).toBeNull();
   });
 });
 

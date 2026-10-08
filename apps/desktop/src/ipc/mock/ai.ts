@@ -73,7 +73,7 @@ const DAY = 24 * HOUR;
 /**
  * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
  * reasoning and then Markdown with timers, and calls tools by keyword in the user's message (English,
- * Chinese or Japanese) when a connected terminal tab is attached:
+ * Chinese or Japanese). Without a connected terminal tab it calls only the tools that need none (AI-09):
  *   "disk"            run_command `df -h /`          "fail"     run_command that exits with 5
  *   "screen"          read_terminal                  "type" / "send"   send_input `uptime` + Enter
  *   "search"          web_search                     "fetch" / "url"   fetch_url
@@ -247,7 +247,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const { attachment, typed } = parseMessage(user.text);
     const words = typed.toLowerCase();
     const want = (...w: string[]) => w.some((x) => words.includes(x));
-    const tools = turn.context.tab;
+    const terminal = turn.context.tab;
 
     if (flags.has("refused")) return { reasoning: "", text: zh ? "抱歉，我不能帮助完成这个请求。" : "I can’t help with that request.", calls: [], finish: "refused" };
     if (flags.has("length")) {
@@ -256,7 +256,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         : "This host runs several services; here is each one with its configuration, log location and the usual ways to debug it. ";
       return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
     }
-    if (flags.has("limit") && tools && callsSoFar < 40) {
+    if (flags.has("limit") && terminal && callsSoFar < 40) {
       return {
         reasoning: zh ? "再看一次屏幕，确认部署进度。" : "Check the screen again to follow the deploy.",
         text: callsSoFar === 0 ? (zh ? "我会持续观察屏幕上的部署进度。" : "I’ll keep watching the deploy on the screen.") : "",
@@ -267,16 +267,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (results.length === 0 && callsSoFar === 0) {
       const calls: AiToolCall[] = [];
-      if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
-      if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
-      if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
-      if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
-      if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
+      // Terminal tools only with a connected tab; a request without one does not offer them.
+      const wantsTerminal = want("disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "screen", "屏幕", "画面", "type", "send", "输入", "入力");
+      if (terminal) {
+        if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
+        if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
+        if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
+        if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
+        if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
+      }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
-      if (want("mcp") && tools) calls.push(await mcpCall(turn, words));
+      if (want("mcp")) calls.push(await mcpCall(turn, words));
       if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
-      if (calls.length > 0 && tools)
+      if (calls.length > 0)
         return {
           reasoning: zh
             ? "用户想了解主机的状态。先用工具收集信息，再根据结果回答。"
@@ -285,7 +289,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           calls,
           finish: "tool_calls",
         };
-      if (calls.length > 0)
+      if (wantsTerminal)
         return {
           reasoning: "",
           text: zh
@@ -693,9 +697,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         c = need(input.conversation_id);
       } else {
         const id = newId();
-        const first = input.text.split(/\r?\n/)[0].trim();
         c = {
-          view: { id, title: [...first].slice(0, 60).join(""), host_id: input.context.host_id, pinned: false, context_start: null, created_at: Date.now(), updated_at: Date.now() },
+          view: { id, title: titleOf(input.text), host_id: input.context.host_id, pinned: false, context_start: null, created_at: Date.now(), updated_at: Date.now() },
           entries: [],
           runningUntil: 0,
         };
@@ -788,6 +791,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return { conversation: view(c), user_entry };
     },
   };
+}
+
+/** Like Rust's `title_of` (AI-23): the first non-empty line typed after the selection block (AI-10), cut to 60 characters. */
+function titleOf(text: string): string {
+  const { attachment, typed } = parseMessage(text);
+  const first = typed.split(/\r?\n/).find((line) => line.trim())?.trim() ?? (attachment ? "Terminal selection" : "");
+  return [...first].slice(0, 60).join("");
 }
 
 /** About 40 characters before the first match of `q` (lowercase) in `text` and 100 after, on one line. */

@@ -509,18 +509,15 @@ impl McpManager {
     // ---- requests (AI-30) ----
 
     /// The MCP tools a request offers: those of every server enabled on this device and not
-    /// switched off for the conversation, when a terminal tab is attached. Starts the servers
-    /// that are stopped and waits for them (until `cancel`), and relists a server's tools after
-    /// `tools/list_changed`. A server that cannot start offers nothing; its status says why.
+    /// switched off for the conversation, with or without a terminal tab (AI-09). Starts the
+    /// servers that are stopped and waits for them (until `cancel`), and relists a server's tools
+    /// after `tools/list_changed`. A server that cannot start offers nothing; its status says why.
     pub async fn offer(
         &self,
         vault: &SharedVault,
         context: &AiTurnContext,
         cancel: &CancellationToken,
     ) -> Offer {
-        if !context.tab {
-            return Offer::default();
-        }
         let (wanted, live) = {
             let v = guard(vault);
             if !v.is_unlocked() {

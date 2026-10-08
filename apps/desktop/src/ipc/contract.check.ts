@@ -60,6 +60,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.SkillFileView, Ui.SkillFileView>>,
   Check<Assignable<Rust.SkillIssue, Ui.SkillIssue>>,
   Check<Assignable<Rust.SkillImportPreview, Ui.SkillImportPreview>>,
+  Check<Assignable<Rust.BuiltinSkillView, Ui.BuiltinSkillView>>,
   Check<Assignable<Rust.McpTransportView, Ui.McpTransportView>>,
   Check<Assignable<Rust.McpServerView, Ui.McpServerView>>,
   Check<Assignable<Rust.McpServerState, Ui.McpServerState>>,

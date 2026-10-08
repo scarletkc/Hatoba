@@ -18,15 +18,33 @@ const MAX_PATH_BYTES = 256;
 
 const NAME_RULE = /^[a-z0-9-]{1,64}$/;
 
+/** The built-in skill's name (AI-34), which no skill of the user's may take. */
+export const BUILTIN_SKILL_NAME = "hatoba";
+
 export const isValidSkillName = (name: string): boolean => NAME_RULE.test(name);
 
-export type NameProblem = "empty" | "invalid" | "taken";
+export type NameProblem = "empty" | "invalid" | "reserved" | "taken";
 
 /** Why `name` can't be used for a skill, or null. `taken` lists the names of the other saved skills. */
 export function skillNameProblem(name: string, taken: readonly string[] = []): NameProblem | null {
   if (name === "") return "empty";
   if (!isValidSkillName(name)) return "invalid";
+  if (name === BUILTIN_SKILL_NAME) return "reserved";
   return taken.includes(name) ? "taken" : null;
+}
+
+/** The message key suffix of a name problem: `aiSettings.skills.err.<suffix>`. */
+export function nameProblemKey(problem: NameProblem): "nameRequired" | "nameInvalid" | "nameReserved" | "nameTaken" {
+  switch (problem) {
+    case "empty":
+      return "nameRequired";
+    case "invalid":
+      return "nameInvalid";
+    case "reserved":
+      return "nameReserved";
+    case "taken":
+      return "nameTaken";
+  }
 }
 
 /** The first unused name built from `name`: `nginx-ops` becomes `nginx-ops-2`, then `-3`. Valid names only. */

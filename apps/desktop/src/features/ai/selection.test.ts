@@ -8,7 +8,6 @@ import {
   nextSelection,
   parseMessage,
   SELECTION_MAX_CHARS,
-  titleOf,
   type SelectionAttachment,
 } from "./selection";
 
@@ -81,9 +80,12 @@ describe("the stored block", () => {
     expect(parseMessage('<terminal_selection host="x" lines="1">\nno end').attachment).toBeNull();
   });
 
-  it("titles a new conversation after the typed text", () => {
-    expect(titleOf("\n  Why does nginx fail?  \nmore")).toBe("Why does nginx fail?");
-    expect([...titleOf("长".repeat(80))]).toHaveLength(60);
+  it("ends the block only at a closing tag that a line break or the end follows, as Rust's title_of does", () => {
+    const stored = '<terminal_selection host="x" lines="3">\na\n</terminal_selection> tail\nb\n</terminal_selection>\nwhat now';
+    expect(parseMessage(stored)).toEqual({
+      attachment: { host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" },
+      typed: "what now",
+    });
   });
 });
 

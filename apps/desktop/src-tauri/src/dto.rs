@@ -995,6 +995,8 @@ pub struct AiModelRef {
 pub struct AiSettingsView {
     pub default_model: Option<AiModelRef>,
     pub search_provider_id: Option<String>,
+    /// The built-in `hatoba` skill is offered (AI-34).
+    pub builtin_skill_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1101,7 +1103,7 @@ pub struct AiTurnContext {
     pub model_id: String,
     /// The tab's host; the next message moves the conversation to it (AI-09).
     pub host_id: Option<String>,
-    /// A connected terminal tab is attached; `false` offers no tools (AI-09).
+    /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
     pub tab: bool,
     /// MCP servers switched off for this conversation (AI-30, P2).
     pub disabled_mcp_servers: Vec<String>,
@@ -1246,6 +1248,19 @@ pub struct SkillDetail {
     pub frontmatter_keys: Vec<String>,
 }
 
+/// The built-in `hatoba` skill (AI-34), read-only.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct BuiltinSkillView {
+    pub name: String,
+    pub description: String,
+    /// `Settings.ai.builtin_skill_enabled`.
+    pub enabled: bool,
+    /// `SKILL.md` without its frontmatter, with the app's version filled in.
+    pub body: String,
+    /// The files besides `SKILL.md`, sorted by path.
+    pub files: Vec<SkillFileView>,
+}
+
 #[derive(Clone, Deserialize, Type)]
 pub struct SkillInput {
     /// `None` creates a skill.
@@ -1315,6 +1330,8 @@ pub struct SkillImportPreview {
     pub issues: Vec<SkillIssue>,
     /// A saved skill with the same name, which the user may replace (or rename the new one).
     pub existing_id: Option<String>,
+    /// The name is the built-in skill's (AI-34): the skill can be imported only under another.
+    pub reserved_name: bool,
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────

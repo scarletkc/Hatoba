@@ -160,6 +160,7 @@ export function createTauriApi(): HatobaApi {
 
     skills_list: () => call("skills_list"),
     skill_get: (id) => call("skill_get", { id }),
+    skill_builtin_get: () => call("skill_builtin_get"),
     skill_save: (input) => call("skill_save", { input }),
     skill_delete: (id) => call("skill_delete", { id }),
     skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),

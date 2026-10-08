@@ -146,7 +146,10 @@ export function createMockApi(): HatobaApi {
   const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
 
   const aiSettings = createAiSettingsMock();
-  const aiExtensions = createAiExtensionsMock((event, payload) => emit(event, payload));
+  const aiExtensions = createAiExtensionsMock((event, payload) => emit(event, payload), {
+    version,
+    builtinEnabled: async () => (await aiSettings.ai_settings_get()).builtin_skill_enabled,
+  });
   return {
     ...aiSettings,
     ...aiExtensions,

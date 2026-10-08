@@ -16,6 +16,7 @@ import {
   draftFromDetail,
   emptyDraft,
   hasProblems,
+  nameProblemKey,
   newUid,
   sameDraft,
   toSkillInput,
@@ -146,9 +147,7 @@ export function SkillDialog({
 
   // An empty field is only a problem once the user tried to save; everything else shows as it is typed.
   const nameProblem = problems.name && (submitted || problems.name !== "empty") ? problems.name : null;
-  const nameError = nameProblem
-    ? t(`aiSettings.skills.err.${nameProblem === "empty" ? "nameRequired" : nameProblem === "invalid" ? "nameInvalid" : "nameTaken"}` as MessageKey)
-    : null;
+  const nameError = nameProblem ? t(`aiSettings.skills.err.${nameProblemKey(nameProblem)}`) : null;
   const descProblem = problems.description && (submitted || problems.description !== "empty") ? problems.description : null;
   const descLength = descriptionLength(draft.description);
   const bodyBytes = byteLength(draft.body);

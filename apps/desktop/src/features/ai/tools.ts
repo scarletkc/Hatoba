@@ -44,15 +44,15 @@ export interface AskInput {
   mode: AiPermissionMode;
   /** AI-19: the user chose Allow for this conversation on an earlier call of this tool. */
   allowedHere: boolean;
-  /** An MCP call's tool, or null when no running server offers it. */
+  /** An MCP call's tool (`mcp_tool_info`), or null when no offer or running server has it. */
   mcp?: McpToolInfo | null;
 }
 
 /**
  * §13.5 with AI-19 and AI-31. Allow for this conversation wins, since the user chose it on a card of
  * this very tool. An MCP tool asks in manual mode unless it is set to Always allow on this device, and
- * in bypass mode only when its server is set to Always ask. An MCP name that no running server offers
- * never asks: Rust answers it with an error result.
+ * in bypass mode only when its server is set to Always ask. An MCP name that `mcp_tool_info` does not
+ * know never asks: Rust answers it with an error result.
  */
 export function mustAsk({ kind, mode, allowedHere, mcp }: AskInput): boolean {
   if (allowedHere) return false;

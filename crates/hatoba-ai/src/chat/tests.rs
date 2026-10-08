@@ -1289,7 +1289,7 @@ fn request_debug_shows_no_conversation_content() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Requests without tools: the history is sent as text (no terminal tab, Compact)
+// Requests without tools: the history is sent as text (Compact)
 // ---------------------------------------------------------------------------------------------
 
 // What the history below becomes as text, for both protocols.
@@ -1866,7 +1866,7 @@ async fn chat_completions_without_tools_after_tool_calls_is_accepted() {
     let model = ModelSpec::new("deepseek-reasoner");
     let entries = tool_history(Protocol::ChatCompletions, &model.id);
 
-    // No terminal tab: chat only.
+    // No tools offered: the history goes as text.
     let entry = run(&p, &request(&model, &entries, &[])).await.0.unwrap();
     assert_eq!(entry.text, "Disk usage is 42%.");
     let tools = terminal_tools();

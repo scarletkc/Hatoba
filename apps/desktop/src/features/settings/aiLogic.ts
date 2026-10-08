@@ -222,7 +222,7 @@ export function sanitizeSettings(
   const known = modelChoices(providers);
   const defaultModel = settings.default_model && known.some((c) => sameRef(c.ref, settings.default_model)) ? settings.default_model : null;
   const searchId = settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id) ? settings.search_provider_id : null;
-  return { default_model: defaultModel, search_provider_id: searchId };
+  return { default_model: defaultModel, search_provider_id: searchId, builtin_skill_enabled: settings.builtin_skill_enabled };
 }
 
 /** The first model of the first provider, as the default when none is chosen yet. */
@@ -244,7 +244,7 @@ export function resolveSettings(
 }
 
 export function sameSettings(a: AiSettingsView, b: AiSettingsView): boolean {
-  return sameRef(a.default_model, b.default_model) && a.search_provider_id === b.search_provider_id;
+  return sameRef(a.default_model, b.default_model) && a.search_provider_id === b.search_provider_id && a.builtin_skill_enabled === b.builtin_skill_enabled;
 }
 
 export const SEARCH_KINDS: readonly SearchKind[] = ["brave", "tavily", "searxng"];

@@ -37,8 +37,10 @@ use hatoba_ai::entry::{
     AiEntry, AssistantEntry, EntryBody, Finish, ToolStatus, fix_up_missing_results,
 };
 use hatoba_ai::provider::{AuthHeader, ModelSpec, Protocol, ProviderConfig};
+use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, FetchUrlArgs, PromptContext, ReadSkillArgs, RunCommandArgs, ToolSet, WebSearchArgs,
+    self, FetchUrlArgs, PromptContext, PromptTools, ReadSkillArgs, RunCommandArgs, ToolSet,
+    WebSearchArgs,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
@@ -113,6 +115,8 @@ pub trait AiEnv: Send + Sync + 'static {
     fn changed(&self);
     /// The SSH connection of a terminal tab's session, while it is open (AI-08).
     fn session(&self, session_id: &str) -> Option<hatoba_ssh::SshSession>;
+    /// The running app's version, which the built-in skill states (AI-34).
+    fn app_version(&self) -> String;
 }
 
 /// A turn's task, spawned by the caller (`tauri::async_runtime::spawn` in the app).
@@ -840,7 +844,7 @@ impl AiManager {
                     arguments,
                 )
             } else {
-                Job::new(&v, &call.name, arguments)
+                Job::new(&v, &call.name, arguments, &env.app_version())
             };
             (job, self.start_op(conversation_id))
         };
@@ -1024,7 +1028,8 @@ impl AiManager {
             );
             return Err(CompactFailure::Failed {
                 status: None,
-                message: "The context is nearly full, and the model returned an empty summary                           when asked to compact it."
+                message: "The context is nearly full, and the model returned an empty summary \
+                          when asked to compact it."
                     .into(),
             });
         };
@@ -1237,10 +1242,8 @@ fn prepare_locked(
     let (provider, model) = resolve_model(v, &turn.context.provider_id, &turn.context.model_id)
         .map_err(Halt::Failed)?;
     let (system, mut tools) = prompt(v, &turn.context, true);
-    // AI-30: after the built-in tools, those of the MCP servers (only with a tab, like them).
-    if turn.context.tab {
-        tools.extend(offer.tool_defs(provider.protocol));
-    }
+    // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09).
+    tools.extend(offer.tool_defs(provider.protocol));
     Ok(Request {
         provider_id: turn.context.provider_id.clone(),
         provider,
@@ -1413,33 +1416,39 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
     }
 }
 
-/// The system prompt and tools of a request (§13.1). Tools are offered only with a connected tab
-/// (AI-09): the built-in set, `web_search` when a search provider is chosen, `read_skill` when
-/// an enabled skill exists.
+/// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
+/// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
+/// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `offer_tools`
+/// is false for Compact (AI-21).
 fn prompt(v: &Vault, context: &AiTurnContext, offer_tools: bool) -> (String, Vec<ToolDef>) {
     let host = context
         .host_id
         .as_deref()
         .and_then(|id| v.get(id))
         .and_then(Item::as_host);
-    let skills: Vec<(String, String)> = v
-        .skills()
+    let mut skills: Vec<(String, String)> = enabled_skills(v)
         .into_iter()
-        .filter(|(_, s)| s.enabled)
         .map(|(_, s)| (s.name, s.description))
         .collect();
+    if v.settings().ai.builtin_skill_enabled {
+        skills.push((BUILTIN_NAME.to_owned(), builtin_description()));
+    }
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let with_tools = offer_tools && context.tab;
+    let offered = match (offer_tools, context.tab) {
+        (false, _) => PromptTools::None,
+        (true, false) => PromptTools::NoTerminal,
+        (true, true) => PromptTools::Terminal,
+    };
     let system = tools::system_prompt(&PromptContext {
         host_name: host.map(|h| h.name.as_str()),
         host_user: host.map(|h| h.username.as_str()),
         date: &date,
         skills: &skills,
-        tools: with_tools,
+        tools: offered,
     });
-    let defs = if with_tools {
+    let defs = if offer_tools {
         tools::builtin_tools(&ToolSet {
-            terminal: true,
+            terminal: context.tab,
             web_search: chosen_search(v).is_some(),
             read_skill: !skills.is_empty(),
         })
@@ -1555,7 +1564,8 @@ impl Job {
         }
     }
 
-    fn new(v: &Vault, name: &str, arguments: &str) -> Self {
+    /// `version`: the app's, for the built-in skill (AI-34).
+    fn new(v: &Vault, name: &str, arguments: &str, version: &str) -> Self {
         match name {
             tools::RUN_COMMAND => match parse::<RunCommandArgs>(arguments) {
                 Ok(args) if args.command.trim().is_empty() => Self::error("The command is empty."),
@@ -1576,7 +1586,7 @@ impl Job {
                 Err(message) => Self::error(message),
             },
             tools::READ_SKILL => match parse::<ReadSkillArgs>(arguments) {
-                Ok(args) => read_skill(v, &args),
+                Ok(args) => read_skill(v, &args, version),
                 Err(message) => Self::error(message),
             },
             tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
@@ -1671,13 +1681,37 @@ async fn run_command(
     }
 }
 
-/// AI-28: the `SKILL.md` body of an enabled skill, or the file at `path` inside it.
-fn read_skill(v: &Vault, args: &ReadSkillArgs) -> Job {
+/// The enabled skills the user saved. One named like the built-in skill (from a build before
+/// the name was reserved) is left out: the name means the built-in skill (AI-34).
+fn enabled_skills(v: &Vault) -> Vec<(String, hatoba_core::model::Skill)> {
+    v.skills()
+        .into_iter()
+        .filter(|(_, s)| s.enabled && s.name != BUILTIN_NAME)
+        .collect()
+}
+
+/// AI-28: the `SKILL.md` body of an enabled skill, or the file at `path` inside it. `hatoba` is
+/// the built-in skill while it is switched on, with `version` filled in (AI-34).
+fn read_skill(v: &Vault, args: &ReadSkillArgs, version: &str) -> Job {
     let name = args.name.trim();
-    let enabled: Vec<(String, hatoba_core::model::Skill)> =
-        v.skills().into_iter().filter(|(_, s)| s.enabled).collect();
-    let Some((skill_id, skill)) = enabled.iter().find(|(_, s)| s.name == name) else {
+    let builtin = v.settings().ai.builtin_skill_enabled;
+    let enabled = enabled_skills(v);
+    // `(path, content)` of every file of the skill, SKILL.md included.
+    let files: Vec<(String, String)> = if builtin && name == BUILTIN_NAME {
+        let skill = builtin_skill(version);
+        std::iter::once((SKILL_MD.to_owned(), skill.body))
+            .chain(skill.files.into_iter().map(|f| (f.path, f.content)))
+            .collect()
+    } else if let Some((skill_id, _)) = enabled.iter().find(|(_, s)| s.name == name) {
+        v.skill_files(skill_id)
+            .into_iter()
+            .map(|(_, f)| (f.path, f.content))
+            .collect()
+    } else {
         let mut names: Vec<&str> = enabled.iter().map(|(_, s)| s.name.as_str()).collect();
+        if builtin {
+            names.push(BUILTIN_NAME);
+        }
         names.sort_unstable();
         let list = if names.is_empty() {
             "none".to_owned()
@@ -1694,15 +1728,13 @@ fn read_skill(v: &Vault, args: &ReadSkillArgs) -> Job {
         .map(skill_path)
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| SKILL_MD.to_owned());
-    let files = v.skill_files(skill_id);
-    match files.iter().find(|(_, f)| f.path == path) {
-        Some((_, file)) => Job::Ready(ToolStatus::Ok, tools::truncate_result(&file.content)),
+    match files.iter().find(|(p, _)| *p == path) {
+        Some((_, content)) => Job::Ready(ToolStatus::Ok, tools::truncate_result(content)),
         None => {
-            let mut paths: Vec<&str> = files.iter().map(|(_, f)| f.path.as_str()).collect();
+            let mut paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
             paths.sort_unstable();
             Job::error(format!(
-                "The skill \"{}\" has no file \"{path}\". Its files: {}.",
-                skill.name,
+                "The skill \"{name}\" has no file \"{path}\". Its files: {}.",
                 if paths.is_empty() {
                     "none".to_owned()
                 } else {
@@ -1803,16 +1835,98 @@ pub fn find_conversation(v: &Vault, id: &str) -> AppResult<AiConversation> {
         .ok_or_else(|| AppError::not_found("conversation"))
 }
 
-/// AI-23: the title starts as the first line of the first message, cut to 60 characters.
+/// AI-23: the title starts as the first line of the first message, cut to 60 characters. The
+/// attachment blocks the message starts with (AI-10) are skipped, so the title is the first
+/// non-empty line the user typed, or the first block's name when nothing was typed (the panel
+/// sends nothing without typed text, so that is only a fallback).
 fn title_of(text: &str) -> String {
-    text.trim()
+    let mut typed = text;
+    let mut first_block = None;
+    while let Some((kind, rest)) = leading_attachment(typed) {
+        first_block = first_block.or(Some(kind.title));
+        typed = rest;
+    }
+    let line = typed
         .lines()
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .chars()
-        .take(60)
-        .collect()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .or(first_block)
+        .unwrap_or_default();
+    line.chars().take(60).collect()
+}
+
+/// A kind of attachment block (spec §13.3, "Attachment blocks").
+struct AttachmentKind {
+    tag: &'static str,
+    /// The title of a conversation whose first message has only this block.
+    title: &'static str,
+    /// Whether the opening tag's attributes, in order, are the ones this kind writes.
+    attributes: fn(&[(&str, &str)]) -> bool,
+}
+
+/// The attachment blocks a user entry may start with. The panel writes them
+/// (`features/ai/selection.ts`), and this parser follows the same rules.
+const ATTACHMENTS: &[AttachmentKind] = &[
+    AttachmentKind {
+        tag: "terminal_selection",
+        title: "Terminal selection",
+        attributes: |attrs| match attrs {
+            [("host", _), ("lines", lines)]
+            | [("host", _), ("lines", lines), ("truncated", "true")] => {
+                !lines.is_empty() && lines.bytes().all(|b| b.is_ascii_digit())
+            }
+            _ => false,
+        },
+    },
+    AttachmentKind {
+        tag: "connection_diagnostics",
+        title: "Connection diagnostics",
+        attributes: |attrs| matches!(attrs, [("host", _)]),
+    },
+];
+
+/// The attachment block `text` starts with (spec §13.3) and the text after it: the opening tag
+/// with its attributes (`name="value"`, values without `"`), a line break, the body, a line
+/// break and the closing tag, then one blank line, one line break or the end. The body ends at
+/// the first closing tag that such a break or the end follows; the panel escapes closing tags
+/// inside it.
+fn leading_attachment(text: &str) -> Option<(&'static AttachmentKind, &str)> {
+    let rest = text.strip_prefix('<')?;
+    let kind = ATTACHMENTS.iter().find(|k| {
+        rest.strip_prefix(k.tag)
+            .is_some_and(|after| after.starts_with([' ', '>']))
+    })?;
+    let mut rest = &rest[kind.tag.len()..];
+    let mut attrs = Vec::new();
+    while let Some(after) = rest.strip_prefix(' ') {
+        let (name, after) = after.split_once("=\"")?;
+        if name.is_empty() || !name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+            return None;
+        }
+        let (value, after) = after.split_once('"')?;
+        attrs.push((name, value));
+        rest = after;
+    }
+    if !(kind.attributes)(&attrs) {
+        return None;
+    }
+    let body = rest.strip_prefix(">\n")?;
+    let close = format!("\n</{}>", kind.tag);
+    let mut from = 0;
+    while let Some(at) = body[from..].find(&close) {
+        let after = &body[from + at + close.len()..];
+        if let Some(typed) = after
+            .strip_prefix("\n\n")
+            .or_else(|| after.strip_prefix('\n'))
+        {
+            return Some((kind, typed));
+        }
+        if after.is_empty() {
+            return Some((kind, after));
+        }
+        from += at + 1;
+    }
+    None
 }
 
 // ---- history search (AI-24) ----

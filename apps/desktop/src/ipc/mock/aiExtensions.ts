@@ -1,4 +1,5 @@
 import type { HatobaApi } from "../api";
+import { builtinSkill } from "./builtinSkill";
 import type {
   AppError,
   EventMap,
@@ -22,6 +23,7 @@ type AiExtensionsApi = Pick<
   HatobaApi,
   | "skills_list"
   | "skill_get"
+  | "skill_builtin_get"
   | "skill_save"
   | "skill_delete"
   | "skill_set_enabled"
@@ -47,6 +49,8 @@ type Emit = <K extends keyof EventMap>(event: K, payload: EventMap[K]) => void;
 // ───────────────────────── Skills ─────────────────────────
 
 const NAME_RULE = /^[a-z0-9-]{1,64}$/;
+/** The built-in skill's name (AI-34), which no skill of the user's may take. */
+const RESERVED = "hatoba";
 const FILE_LIMIT = 32 * 1024;
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
@@ -116,8 +120,17 @@ const demoSkills = (): { detail: SkillDetail; files: SkillFileView[] }[] => {
 };
 
 /** What a stand-in path imports. A browser has no folder picker, so the UI hands these paths to the mock. */
-const importPackage = (path: string) => {
+const importPackage = (path: string, reservedName: boolean) => {
   const zip = path.toLowerCase().endsWith(".zip");
+  if (reservedName && !zip)
+    return {
+      name: RESERVED,
+      description: "My notes on running Hatoba at work: which hosts to keep in which group, and how we set up sync.",
+      body: "# Hatoba at work\n\nKeep production hosts in the group `prod` and tag them `oncall`.\n",
+      files: [],
+      frontmatter_keys: [],
+      skipped: [],
+    };
   return zip
     ? {
         name: "nginx-ops",
@@ -237,6 +250,9 @@ const stderrFor = (view: McpServerView): string[] =>
  *   ?skills=demo        three skills: nginx-ops and postgres-backup (with files, and frontmatter fields kept for
  *                       export) and release-notes (disabled)
  *   ?skills=badimport   importing a folder returns a preview with issues (the import button stays disabled)
+ *   ?skills=reserved    importing a folder gives a skill named hatoba, the built-in skill's reserved name (AI-34), so
+ *                       the dialog asks for another; the list also has a skill named hatoba from an older build
+ * The built-in skill (AI-34) always shows first, with the real files of the crate.
  *   ?mcp=demo           five servers: github (http, running, Always allow on list_issues), filesystem (stdio, running,
  *                       Always ask), postgres (stdio, starting, running after 2.5 s), a failed one (its command
  *                       contains `fail`, with stderr lines) and notes (stdio, off on this device)
@@ -251,7 +267,13 @@ const stderrFor = (view: McpServerView): string[] =>
  * `mcp__github__create_issue`, `mcp__filesystem__write_file`, …) and `ai://mcp-status` is emitted on every change.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
-export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
+/** What the skills mock reads elsewhere: the app version and the built-in skill's switch in the AI settings mock. */
+export interface AiExtensionsDeps {
+  version: string;
+  builtinEnabled: () => Promise<boolean>;
+}
+
+export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiExtensionsApi {
   const params = new URLSearchParams(location.search);
   const flags = (key: string) => new Set((params.get(key) ?? "").split(",").map((x) => x.trim()));
   const skillFlags = flags("skills");
@@ -267,6 +289,13 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
 
   // ── skills ──
   const skills = new Map<string, SkillDetail>(skillFlags.has("demo") ? demoSkills().map((s) => [s.detail.skill.id, s.detail]) : []);
+  if (skillFlags.has("reserved"))
+    skills.set("sk-legacy", {
+      skill: { id: "sk-legacy", name: RESERVED, description: "Notes on Hatoba, saved before the name was reserved.", enabled: true, files: [], updated_at: Date.now() - 86_400_000 },
+      body: "# Hatoba notes\n",
+      files: [],
+      frontmatter_keys: [],
+    });
   const skillView = (d: SkillDetail): SkillView => ({ ...d.skill, files: d.files.map((f) => f.path) });
 
   const nameTaken = (name: string, except: string | null) => [...skills.values()].some((d) => d.skill.name === name && d.skill.id !== except);
@@ -307,7 +336,7 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
   const previewFor = (path: string): SkillImportPreview => {
     const lower = path.toLowerCase();
     if (lower.includes("empty")) {
-      return { name: null, description: null, body: null, files: [], frontmatter_keys: [], skipped: [], issues: [{ kind: "missing_skill_md" }], existing_id: null };
+      return { name: null, description: null, body: null, files: [], frontmatter_keys: [], skipped: [], issues: [{ kind: "missing_skill_md" }], existing_id: null, reserved_name: false };
     }
     if (lower.includes("broken") || (skillFlags.has("badimport") && !lower.endsWith(".zip"))) {
       return {
@@ -327,11 +356,12 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
           { kind: "unsafe_path", path: "../outside.sh" },
         ],
         existing_id: null,
+        reserved_name: false,
       };
     }
-    const pkg = importPackage(path);
+    const pkg = importPackage(path, skillFlags.has("reserved"));
     const existing = [...skills.values()].find((d) => d.skill.name === pkg.name);
-    return { ...pkg, issues: [], existing_id: existing?.skill.id ?? null };
+    return { ...pkg, issues: [], existing_id: existing?.skill.id ?? null, reserved_name: pkg.name === RESERVED };
   };
 
   // ── MCP servers ──
@@ -530,10 +560,12 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
   return {
     skills_list: async () => [...skills.values()].map(skillView),
     skill_get: async (sid) => structuredClone(skills.get(sid) ?? fail("not_found", "no such skill")),
+    skill_builtin_get: async () => builtinSkill(deps.version, await deps.builtinEnabled()),
     skill_save: async (input) => {
       await wait(200);
       const issues = skillIssues(input.name, input.description, input.body, input.files);
       if (issues.length) fail("invalid_input", `the skill is not valid: ${issues[0].kind}`, issueField(issues[0]));
+      if (input.name === RESERVED) fail("invalid_input", "The name hatoba is reserved for the built-in skill.", "name");
       if (nameTaken(input.name, input.id)) fail("invalid_input", "another skill has this name", "name");
       const old = input.id ? skills.get(input.id) : undefined;
       if (input.id && !old) fail("not_found", "no such skill");
@@ -564,6 +596,7 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
       if (p.issues.length || p.name === null || p.description === null || p.body === null) fail("invalid_input", "the import has issues", "path");
       const name = rename ?? p.name;
       if (!NAME_RULE.test(name)) fail("invalid_input", "the new name is not valid", "rename");
+      if (name === RESERVED) fail("invalid_input", "The name hatoba is reserved for the built-in skill.", rename ? "rename" : "name");
       if (replaceId && !skills.has(replaceId)) fail("not_found", "no such skill");
       if (nameTaken(name, replaceId)) fail("invalid_input", "another skill has this name", "name");
       const skillId = replaceId ?? id("sk");

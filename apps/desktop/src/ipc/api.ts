@@ -15,6 +15,7 @@ import type {
   AiSearchHit,
   AppError,
   AppInfo,
+  BuiltinSkillView,
   ConflictView,
   ConnectOptions,
   DeployOutcome,
@@ -251,7 +252,9 @@ export interface HatobaApi {
   // AI skills (§13.8)
   skills_list(): Promise<SkillView[]>;
   skill_get(id: string): Promise<SkillDetail>;
-  /** Validates like an import (AI-27); rejects with `invalid_input` naming the field. */
+  /** The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
+  skill_builtin_get(): Promise<BuiltinSkillView>;
+  /** Validates like an import (AI-27); rejects with `invalid_input` naming the field, also for the reserved name `hatoba`. */
   skill_save(input: SkillInput): Promise<SkillView>;
   skill_delete(id: string): Promise<void>;
   skill_set_enabled(id: string, enabled: boolean): Promise<void>;
@@ -274,7 +277,11 @@ export interface HatobaApi {
   mcp_server_stop(id: string): Promise<void>;
   /** AI-31 Always allow on this device: one tool (the server's own name), or every tool with `tool` null. */
   mcp_set_always_allow(server_id: string, tool: string | null, allow: boolean): Promise<void>;
-  /** The MCP tool behind a name the model called, or null when no running server offers it. */
+  /**
+   * The MCP tool behind a name the model called: from the newest offer a request of this run of the app
+   * made with it (so it still answers after the server stopped), else from the running servers. Null
+   * when neither has it, or its server was deleted.
+   */
   mcp_tool_info(name: string): Promise<McpToolInfo | null>;
   /** AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
   mcp_import_preview(json: string): Promise<McpImportPreview>;

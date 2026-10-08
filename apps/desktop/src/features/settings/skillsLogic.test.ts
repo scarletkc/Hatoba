@@ -8,6 +8,7 @@ import {
   draftFromDetail,
   hasProblems,
   isValidSkillName,
+  nameProblemKey,
   normalizeSkillPath,
   sameDraft,
   skillNameProblem,
@@ -47,6 +48,14 @@ describe("skill names", () => {
     expect(skillNameProblem("Bad Name")).toBe("invalid");
     expect(skillNameProblem("nginx-ops", ["nginx-ops"])).toBe("taken");
     expect(skillNameProblem("nginx-ops", ["other"])).toBeNull();
+  });
+
+  it("keeps the built-in skill's name for it (AI-34), even when no saved skill has it", () => {
+    expect(skillNameProblem("hatoba")).toBe("reserved");
+    expect(skillNameProblem("hatoba", ["hatoba"])).toBe("reserved");
+    expect(skillNameProblem("hatoba-notes")).toBeNull();
+    expect(suggestSkillName("hatoba", [])).toBe("hatoba-2");
+    expect(nameProblemKey("reserved")).toBe("nameReserved");
   });
 
   it("suggests the first free numbered name", () => {

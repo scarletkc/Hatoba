@@ -81,6 +81,7 @@ export function createAiSettingsMock(): AiSettingsApi {
   let settings: AiSettingsView = {
     default_model: providers.length ? { provider_id: "p-anthropic", model_id: "claude-sonnet-5-5" } : null,
     search_provider_id: flags.has("search") ? "s-brave" : null,
+    builtin_skill_enabled: true,
   };
 
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
