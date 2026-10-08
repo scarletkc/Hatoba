@@ -44,6 +44,12 @@
   color: var(--fg);
 }
 
+.chipText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chipIcon {
   flex: none;
   color: var(--accent);
@@ -115,6 +121,14 @@
   white-space: pre;
   overflow: hidden;
   color: var(--fg);
+}
+
+/* Diagnostics show in full: long lines wrap. */
+.previewWrap {
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .previewMore {

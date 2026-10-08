@@ -7,7 +7,7 @@ import { cx } from "@/lib/cx";
 import { compactConversation, sendMessage, setSlotModel, stopTurn } from "./actions";
 import { contextUsage, formatTokens, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
-import { ComposerSelection, useTerminalSelection } from "./SelectionChip";
+import { ComposerAttachments, useTerminalSelection } from "./SelectionChip";
 import { patchSlot, useAi, type Slot } from "./store";
 import { ToolsButton } from "./ToolsMenu";
 import s from "./Composer.module.css";
@@ -20,12 +20,14 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   const busy = !!slot.turn || slot.remoteRunning;
   useTerminalSelection(slotId);
 
-  // Focus requests (New conversation, Ask AI, …) put the caret after the draft.
+  // Focus requests (New conversation, Ask AI, …) put the caret after the draft, or select a
+  // suggested question so typing replaces it.
   useEffect(() => {
     const el = ref.current;
     if (focusTick === 0 || !el) return;
     el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
+    if (useAi.getState().focusSelectAll) el.select();
+    else el.setSelectionRange(el.value.length, el.value.length);
     el.scrollTop = el.scrollHeight;
   }, [focusTick]);
 
@@ -53,7 +55,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   return (
     <div className={s.composer}>
       <div className={s.box}>
-        <ComposerSelection slotId={slotId} />
+        <ComposerAttachments slotId={slotId} />
         <textarea
           ref={ref}
           className={s.input}

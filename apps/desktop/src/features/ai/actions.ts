@@ -22,7 +22,7 @@ import type {
 import { pickSavePath } from "@/lib/native";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
-import { chipShown, composeMessage, makeAttachment, nextSelection, type SelectionAttachment } from "./selection";
+import { chipShown, composeMessage, makeAttachment, makeDiagnostics, nextSelection, type SelectionAttachment } from "./selection";
 import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot, type TabSelection } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
@@ -386,7 +386,9 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   const attachment = selectionAttachment(slotId);
   const hiddenBefore = tabSelection(slotId).hidden;
   if (attachment) hideSelection(slotId);
-  const text = composeMessage(typed, attachment);
+  const diagnostics = slotId === HOME_SLOT ? null : (useAi.getState().diagnostics[slotId] ?? null);
+  if (diagnostics) removeDiagnostics(slotId);
+  const text = composeMessage(typed, { diagnostics, selection: attachment });
   const runner = new TurnRunner(slotId, slot.conversationId);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
@@ -415,6 +417,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       draft: s.draft || raw,
     }));
     if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
+    if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
     toast(aiErrorMessage(e), "error");
     return false;
   }
@@ -601,10 +604,12 @@ export function detachSlot(slotId: string) {
   release(slotId);
   setSlot(slotId, null);
   useAi.setState((st) => {
-    if (!st.selections[slotId]) return {};
+    if (!st.selections[slotId] && !st.diagnostics[slotId]) return {};
     const selections = { ...st.selections };
+    const diagnostics = { ...st.diagnostics };
     delete selections[slotId];
-    return { selections };
+    delete diagnostics[slotId];
+    return { selections, diagnostics };
   });
 }
 
@@ -702,6 +707,31 @@ export function askAi(slotId: string, selection: string) {
   noteSelection(slotId, selection);
   setTabSelection(slotId, (sel) => (sel.hidden === null ? sel : { ...sel, hidden: null }));
   toggleAiPanel(true);
+}
+
+/**
+ * Ask AI on the terminal's connection error card: attaches the connection's diagnostics to the
+ * tab's next message, suggests a question when the input is empty (selected, so typing replaces
+ * it), and opens the panel on the tab. Nothing is sent until the user sends it.
+ */
+export function askAiAboutConnection(tabId: string, host: string, text: string) {
+  const diagnostics = makeDiagnostics(host, text);
+  if (!diagnostics) return;
+  useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [tabId]: diagnostics } }));
+  const suggest = !getSlot(tabId).draft.trim();
+  if (suggest) patchSlot(tabId, { draft: t("ai.connection.question") });
+  toggleAiPanel(true);
+  focusInput(suggest);
+}
+
+/** × on the diagnostics chip, or the diagnostics were sent. */
+export function removeDiagnostics(tabId: string) {
+  useAi.setState((st) => {
+    if (!st.diagnostics[tabId]) return {};
+    const diagnostics = { ...st.diagnostics };
+    delete diagnostics[tabId];
+    return { diagnostics };
+  });
 }
 
 /** AI-21 Compact: the summary becomes the start of the context. */
@@ -806,8 +836,9 @@ export async function deleteConversation(id: string) {
 
 // ───────────────────────── the panel ─────────────────────────
 
-export function focusInput() {
-  useAi.setState((st) => ({ focusTick: st.focusTick + 1 }));
+/** `selectAll`: select the draft, so typing replaces a suggested question. */
+export function focusInput(selectAll = false) {
+  useAi.setState((st) => ({ focusTick: st.focusTick + 1, focusSelectAll: selectAll }));
 }
 
 /** Shows or hides the panel (Ctrl+Shift+A / ⌘⇧A); the open state is a device preference (§9). */

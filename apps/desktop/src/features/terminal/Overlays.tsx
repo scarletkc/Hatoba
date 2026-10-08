@@ -29,6 +29,7 @@ export function ErrorCard({
   attempts,
   onRetry,
   onEdit,
+  onAskAi,
 }: {
   name: string;
   host: HostView | undefined;
@@ -37,6 +38,8 @@ export function ErrorCard({
   attempts: number;
   onRetry(): void;
   onEdit(): void;
+  /** Hands the diagnostics to the AI panel for this tab (AI-10). */
+  onAskAi(diagnostics: string): void;
 }) {
   const t = useT();
   const err: AppError = error ?? { code: "internal", detail: "" };
@@ -73,6 +76,10 @@ export function ErrorCard({
             {t("terminal.err.copyDiag")}
           </button>
           <div className={s.grow} />
+          <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host, name, err, at ?? Date.now(), attempts))}>
+            <Icon name="sparkle" size={13} />
+            {t("terminal.err.askAi")}
+          </button>
           {host && (
             <button type="button" className={s.darkButton} onClick={onEdit}>
               {t("terminal.err.editHost")}

@@ -68,6 +68,13 @@ export default defineMessages({
     "ai.selection.from": "来自 {host}",
     "ai.selection.more": "…另外 {n} 行",
 
+    // connection diagnostics from the terminal's error card (AI-10)
+    "ai.diagnostics": "连接诊断 · {host}",
+    "ai.diagnostics.preview": "预览将要发送的诊断信息",
+    "ai.diagnostics.remove": "不附带连接诊断",
+    "ai.diagnostics.sent": "随下一条消息发送：",
+    "ai.connection.question": "这台主机连不上，帮我看看原因。",
+
     // context meter (AI-20, AI-21)
     "ai.meter": "上下文用量",
     "ai.meter.detail": "已用 {used} / {total} tokens",
@@ -284,6 +291,11 @@ export default defineMessages({
     "ai.selection.from": "From {host}",
     "ai.selection.more": "… {n} more lines",
     "ai.selection.more_one": "… 1 more line",
+    "ai.diagnostics": "Connection diagnostics · {host}",
+    "ai.diagnostics.preview": "Preview the diagnostics that will be sent",
+    "ai.diagnostics.remove": "Don’t Attach the Diagnostics",
+    "ai.diagnostics.sent": "Sent with your next message:",
+    "ai.connection.question": "I can’t connect to this host. Can you help me find out why?",
 
     "ai.meter": "Context usage",
     "ai.meter.detail": "{used} of {total} tokens used",
@@ -490,6 +502,11 @@ export default defineMessages({
     "ai.selection.preview": "選択範囲をプレビュー",
     "ai.selection.from": "{host} から",
     "ai.selection.more": "…ほか {n} 行",
+    "ai.diagnostics": "接続の診断 · {host}",
+    "ai.diagnostics.preview": "送信する診断情報をプレビュー",
+    "ai.diagnostics.remove": "接続の診断を添付しない",
+    "ai.diagnostics.sent": "次のメッセージと一緒に送信します：",
+    "ai.connection.question": "このホストに接続できません。原因を調べてください。",
 
     "ai.meter": "コンテキストの使用量",
     "ai.meter.detail": "{total} トークン中 {used} を使用",

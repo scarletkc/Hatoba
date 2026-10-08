@@ -8,6 +8,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  SshErrorKind,
   StarPrompt,
   SyncStatus,
   VaultStatus,
@@ -19,6 +20,16 @@ import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
 import { FakeShell } from "./shell";
 
+/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
+const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> & Record<"timeout", (address: string, port: number) => string> = {
+  timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,
+  refused: (a, p) => `connect to ${a}:${p}: connection refused`,
+  dns: (a) => `failed to lookup address information: ${a}: nodename nor servname provided, or not known`,
+  unreachable: (a, p) => `connect to ${a}:${p}: network is unreachable`,
+  auth_failed: () => "authentication failed: no method succeeded (tried publickey, password)",
+  disconnected: () => "the server closed the connection during the handshake",
+};
+
 /**
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
  * design's sample data (`pnpm dev`). URL parameters select demo states:
@@ -27,6 +38,9 @@ import { FakeShell } from "./shell";
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
+ *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected
+ * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
+ * SSH error kind (`?ssh=fail` or another value: a timeout), so the error card shows (SSH-05).
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * The in-app deployment accepts any API token of 20 or more characters.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
@@ -43,6 +57,7 @@ export function createMockApi(): HatobaApi {
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
   const deployDemo = q.get("deploy");
+  const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
@@ -389,14 +404,16 @@ export function createMockApi(): HatobaApi {
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", { session_id: sid, host_id: hostId, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
       setTimeout(() => state("connecting"), 0);
-      if (D.FAILING_HOSTS.has(hostId)) {
+      if (D.FAILING_HOSTS.has(hostId) || sshDemo) {
         const enc = new TextEncoder();
         for (let i = 1; i <= 3; i++) {
           await delay(350);
           onFrame(frame(FRAME_DATA, enc.encode(`\x1b[90mConnecting to ${h.address}:${h.port} (attempt ${i})…\x1b[0m\r\n`)));
         }
         await delay(400);
-        const error: AppError = { code: "ssh", detail: `connect to ${h.address}:${h.port}: operation timed out`, ssh_kind: "timeout" };
+        const kind = sshDemo && sshDemo in SSH_DEMO_DETAIL ? (sshDemo as SshErrorKind) : "timeout";
+        const detail = (SSH_DEMO_DETAIL[kind] ?? SSH_DEMO_DETAIL.timeout)(h.address, h.port);
+        const error: AppError = { code: "ssh", detail, ssh_kind: kind };
         setTimeout(() => state("failed", { error }), 0);
         throw error;
       }

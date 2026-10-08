@@ -243,8 +243,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const since = c.entries.slice(user.index + 1);
     const results = since.filter((e): e is ToolEntry => e.role === "tool");
     const callsSoFar = since.reduce((n, e) => n + (e.role === "assistant" ? e.tool_calls.length : 0), 0);
-    // AI-10: a terminal selection sent with the message is a block before the typed text; keywords come from the typed text.
-    const { attachment, typed } = parseMessage(user.text);
+    // AI-10: what is attached to the message is in blocks before the typed text; keywords come from the typed text.
+    const { diagnostics, selection: attachment, typed } = parseMessage(user.text);
+    const errorLine = diagnostics?.text.split("\n").find((line) => line.startsWith("Error:")) ?? "";
     const words = typed.toLowerCase();
     const want = (...w: string[]) => w.some((x) => words.includes(x));
     const terminal = turn.context.tab;
@@ -280,6 +281,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
       if (want("mcp")) calls.push(await mcpCall(turn, words));
       if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
+      // Connection diagnostics: read the built-in skill's troubleshooting reference first.
+      if (diagnostics && calls.length === 0) calls.push(call("read_skill", { name: "hatoba", path: "references/troubleshooting-connections.md" }));
       if (calls.length > 0)
         return {
           reasoning: zh
@@ -298,6 +301,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           calls: [],
           finish: "stop",
         };
+    }
+
+    if (results.length > 0 && diagnostics) {
+      return {
+        reasoning: zh ? "根据诊断信息和故障排查参考给出原因和下一步。" : "Use the diagnostics and the troubleshooting reference to explain the cause and the next steps.",
+        text: zh
+          ? `诊断信息显示：\`${errorLine}\`。\n\n可能的原因：\n\n1. 主机没有开机，或者 SSH 服务没有运行\n2. 防火墙或安全组挡住了端口\n3. 地址或端口填错了\n\n先确认能 ping 通主机，再检查 **编辑主机** 里的地址和端口。改好之后点 **重试**。`
+          : `The diagnostics say \`${errorLine}\`.\n\nLikely causes:\n\n1. The host is down, or its SSH server is not running\n2. A firewall or security group blocks the port\n3. The address or port is wrong\n\nCheck that the host answers at all, then the address and port in **Edit Host**, and choose **Retry** after fixing them.`,
+        calls: [],
+        finish: "stop",
+      };
     }
 
     if (results.length > 0) {
@@ -520,6 +534,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         };
       case "read_skill":
         await wait(200);
+        if (args.name === "hatoba")
+          return {
+            status: "ok",
+            content: "# Troubleshooting connections (demo excerpt)\n\n## ETIMEDOUT (timeout)\n\nThe host did not answer within 15 seconds: it is off, a firewall drops the packets, or the address or port is wrong.\n\n## ECONNREFUSED (refused)\n\nThe host answered but nothing listens on the port: the SSH server is stopped or listens elsewhere.",
+          };
         return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
       default: {
         // An MCP tool (AI-30): the server's text content, or an error result when no running server offers it.
@@ -793,10 +812,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   };
 }
 
-/** Like Rust's `title_of` (AI-23): the first non-empty line typed after the selection block (AI-10), cut to 60 characters. */
+/**
+ * Like Rust's `title_of` (AI-23): the first non-empty line typed after the attachment blocks
+ * (AI-10), or the first block's kind when nothing was typed, cut to 60 characters.
+ */
 function titleOf(text: string): string {
-  const { attachment, typed } = parseMessage(text);
-  const first = typed.split(/\r?\n/).find((line) => line.trim())?.trim() ?? (attachment ? "Terminal selection" : "");
+  const { diagnostics, selection, typed } = parseMessage(text);
+  const fallback = diagnostics ? "Connection diagnostics" : selection ? "Terminal selection" : "";
+  const first = typed.split(/\r?\n/).find((line) => line.trim())?.trim() ?? fallback;
   return [...first].slice(0, 60).join("");
 }
 

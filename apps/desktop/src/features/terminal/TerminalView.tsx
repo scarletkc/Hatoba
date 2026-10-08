@@ -4,7 +4,7 @@ import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import type { SessionTab } from "@/app/tabs";
 import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
-import { askAi as askAiAbout } from "@/features/ai/actions";
+import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { shortcutLabel } from "@/lib/platform";
@@ -186,6 +186,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
               attempts={info.attempts}
               onRetry={() => void reconnectSession(tab.id)}
               onEdit={() => editSessionHost(tab.hostId)}
+              onAskAi={(diagnostics) => askAiAboutConnection(tab.id, host?.name ?? tab.title, diagnostics)}
             />
           )}
           {tab.status === "disconnected" && (

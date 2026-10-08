@@ -1,6 +1,7 @@
 /**
- * AI-10: the terminal selection that goes with a message. It is stored in the user's entry as a
- * leading attachment block, so neither the entry format nor the IPC contract changes:
+ * AI-10: what goes with a message, the terminal selection or the diagnostics of a failed
+ * connection. Each is stored in the user's entry as a leading attachment block, so neither the
+ * entry format nor the IPC contract changes:
  *
  *   <terminal_selection host="prod-api" lines="3">
  *   …the selected text…
@@ -16,8 +17,6 @@
 export const SELECTION_MAX_CHARS = 16_000;
 const HEAD_CHARS = 4_000;
 const TAIL_CHARS = 12_000;
-
-const TAG = "terminal_selection";
 
 export interface SelectionAttachment {
   /** The tab host's display name. */
@@ -75,23 +74,98 @@ function unescapeBody(text: string, tag: string): string {
   return text.replace(new RegExp(`<\\\\(\\\\*/${tag})`, "gi"), "<$1");
 }
 
-/** The user entry's text: the selection block, then the typed text. */
-export function composeMessage(typed: string, attachment: SelectionAttachment | null): string {
-  if (!attachment) return typed;
-  const truncated = attachment.truncated ? ' truncated="true"' : "";
-  return `<${TAG} host="${attr(attachment.host)}" lines="${attachment.lines}"${truncated}>\n${escapeBody(attachment.text, TAG)}\n</${TAG}>\n\n${typed}`;
+/**
+ * The diagnostics of a failed connection, attached from the terminal's error card. They are already
+ * free of secrets (`diagnosticsText` in features/terminal/diagnostics.ts) and hold the host's
+ * address and user name, so they reach the provider only when the user attaches them.
+ */
+export interface DiagnosticsAttachment {
+  /** The host's display name. */
+  host: string;
+  text: string;
 }
 
-const BLOCK = /^<terminal_selection host="([^"]*)" lines="(\d+)"( truncated="true")?>\n([\s\S]*?)\n<\/terminal_selection>(?:\n\n|\n|$)/;
+/** What diagnostics attach, clipped like a selection, or null when there is no text. */
+export function makeDiagnostics(host: string, text: string): DiagnosticsAttachment | null {
+  const clean = text.replace(/\r\n?/g, "\n").trim();
+  return clean ? { host, text: clipText(clean).text } : null;
+}
 
-/** A user entry's text split into its selection block, when it starts with one, and the typed text. */
-export function parseMessage(text: string): { attachment: SelectionAttachment | null; typed: string } {
-  const m = BLOCK.exec(text);
-  if (!m) return { attachment: null, typed: text };
-  return {
-    attachment: { host: unattr(m[1]), lines: Number(m[2]), truncated: !!m[3], text: unescapeBody(m[4], TAG) },
-    typed: text.slice(m[0].length),
-  };
+/** A user entry's text split into its attachment blocks and what the user typed. */
+export interface MessageParts {
+  diagnostics: DiagnosticsAttachment | null;
+  selection: SelectionAttachment | null;
+  typed: string;
+}
+
+const SELECTION_TAG = "terminal_selection";
+const DIAGNOSTICS_TAG = "connection_diagnostics";
+
+function block(tag: string, attrs: [string, string][], body: string): string {
+  const list = attrs.map(([name, value]) => ` ${name}="${attr(value)}"`).join("");
+  return `<${tag}${list}>\n${escapeBody(body, tag)}\n</${tag}>`;
+}
+
+/**
+ * The user entry's text: the attachment blocks, then the typed text. A message carries at most one
+ * block of each kind, the diagnostics before the selection, so the reason for asking comes first.
+ */
+export function composeMessage(typed: string, { diagnostics = null, selection = null }: Partial<Omit<MessageParts, "typed">>): string {
+  const blocks: string[] = [];
+  if (diagnostics) blocks.push(block(DIAGNOSTICS_TAG, [["host", diagnostics.host]], diagnostics.text));
+  if (selection) {
+    const attrs: [string, string][] = [["host", selection.host], ["lines", String(selection.lines)]];
+    if (selection.truncated) attrs.push(["truncated", "true"]);
+    blocks.push(block(SELECTION_TAG, attrs, selection.text));
+  }
+  return [...blocks, typed].join("\n\n");
+}
+
+const OPEN = /^<(terminal_selection|connection_diagnostics)((?: [a-z_]+="[^"]*")*)>\n/;
+
+/**
+ * The attachment block `text` starts with, as Rust's `leading_attachment` reads it: the opening tag
+ * with its attributes in the kind's order, a line break, the body, a line break and the closing tag,
+ * then a blank line, a line break or the end. The body ends at the first closing tag that such a
+ * break or the end follows.
+ */
+function leadingBlock(text: string): { tag: string; attrs: [string, string][]; body: string; rest: string } | null {
+  const m = OPEN.exec(text);
+  if (!m) return null;
+  const tag = m[1];
+  const attrs = [...m[2].matchAll(/ ([a-z_]+)="([^"]*)"/g)].map((a): [string, string] => [a[1], unattr(a[2])]);
+  const names = attrs.map(([name]) => name).join(",");
+  const valid =
+    tag === SELECTION_TAG
+      ? (names === "host,lines" || (names === "host,lines,truncated" && attrs[2][1] === "true")) && /^\d+$/.test(attrs[1][1])
+      : names === "host";
+  if (!valid) return null;
+  const close = `\n</${tag}>`;
+  for (let from = m[0].length; ; ) {
+    const at = text.indexOf(close, from);
+    if (at < 0) return null;
+    const after = text.slice(at + close.length);
+    const rest = after.startsWith("\n\n") ? after.slice(2) : after.startsWith("\n") ? after.slice(1) : after === "" ? "" : null;
+    if (rest !== null) return { tag, attrs, body: unescapeBody(text.slice(m[0].length, at), tag), rest };
+    from = at + 1;
+  }
+}
+
+/** A user entry's text split into its leading attachment blocks, at most one of each kind, and the typed text. */
+export function parseMessage(text: string): MessageParts {
+  const parts: MessageParts = { diagnostics: null, selection: null, typed: text };
+  for (;;) {
+    const b = leadingBlock(parts.typed);
+    if (!b) return parts;
+    if (b.tag === SELECTION_TAG) {
+      if (parts.selection) return parts;
+      parts.selection = { host: b.attrs[0][1], lines: Number(b.attrs[1][1]), truncated: b.attrs.length === 3, text: b.body };
+    } else {
+      if (parts.diagnostics) return parts;
+      parts.diagnostics = { host: b.attrs[0][1], text: b.body };
+    }
+    parts.typed = b.rest;
+  }
 }
 
 // ───────────── the chip ─────────────

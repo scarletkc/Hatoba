@@ -5,9 +5,11 @@ import {
   clipText,
   composeMessage,
   makeAttachment,
+  makeDiagnostics,
   nextSelection,
   parseMessage,
   SELECTION_MAX_CHARS,
+  type DiagnosticsAttachment,
   type SelectionAttachment,
 } from "./selection";
 
@@ -39,55 +41,110 @@ describe("the terminal selection (AI-10)", () => {
   });
 });
 
-describe("the stored block", () => {
+const DIAG = "Hatoba connection diagnostics\nHost: staging-web-02 (172.31.40.8:22)\nUser: ubuntu\nError: ETIMEDOUT (ssh/timeout)";
+const diag = (text = DIAG, host = "staging-web-02"): DiagnosticsAttachment => makeDiagnostics(host, text)!;
+
+describe("the stored blocks", () => {
   it("puts the selection before the typed text", () => {
-    expect(composeMessage("Why?", att("error: boom"))).toBe('<terminal_selection host="prod-api" lines="1">\nerror: boom\n</terminal_selection>\n\nWhy?');
-    expect(composeMessage("Why?", null)).toBe("Why?");
+    expect(composeMessage("Why?", { selection: att("error: boom") })).toBe('<terminal_selection host="prod-api" lines="1">\nerror: boom\n</terminal_selection>\n\nWhy?');
+    expect(composeMessage("Why?", {})).toBe("Why?");
   });
 
   it("reads back what it wrote", () => {
     const a = att("$ make\ncc -o app main.c\nmain.c:3: error: expected ';'");
-    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", a))).toEqual({ attachment: a, typed: "What is wrong?\nAnd how do I fix it?" });
+    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", { selection: a }))).toEqual({
+      diagnostics: null,
+      selection: a,
+      typed: "What is wrong?\nAnd how do I fix it?",
+    });
   });
 
   it("keeps a selection that contains the closing tag inside the block, and restores it exactly", () => {
     const tricky = 'echo "</terminal_selection>"\n</terminal_selection>\n<\\/terminal_selection> and </TERMINAL_SELECTION>\n<\\\\/terminal_selection>';
-    const a = att(tricky);
-    const stored = composeMessage("explain", a);
+    const stored = composeMessage("explain", { selection: att(tricky) });
     expect(stored.match(/<\/terminal_selection>/g)).toHaveLength(1);
     expect(stored.toLowerCase().match(/<\/terminal_selection>/g)).toHaveLength(1);
     const parsed = parseMessage(stored);
-    expect(parsed.attachment?.text).toBe(tricky);
+    expect(parsed.selection?.text).toBe(tricky);
     expect(parsed.typed).toBe("explain");
   });
 
   it("escapes the host name in its attribute", () => {
     const a = att("x", 'web "a" <b> & c');
-    expect(composeMessage("q", a).split("\n")[0]).toBe('<terminal_selection host="web &quot;a&quot; &lt;b&gt; &amp; c" lines="1">');
-    expect(parseMessage(composeMessage("q", a)).attachment?.host).toBe('web "a" <b> & c');
+    expect(composeMessage("q", { selection: a }).split("\n")[0]).toBe('<terminal_selection host="web &quot;a&quot; &lt;b&gt; &amp; c" lines="1">');
+    expect(parseMessage(composeMessage("q", { selection: a })).selection?.host).toBe('web "a" <b> & c');
   });
 
   it("marks a truncated selection", () => {
-    const a = att("y".repeat(20_000));
-    const stored = composeMessage("q", a);
+    const stored = composeMessage("q", { selection: att("y".repeat(20_000)) });
     expect(stored.startsWith('<terminal_selection host="prod-api" lines="1" truncated="true">\n')).toBe(true);
-    expect(parseMessage(stored).attachment?.truncated).toBe(true);
+    expect(parseMessage(stored).selection?.truncated).toBe(true);
   });
 
-  it("leaves a message without the block as typed text", () => {
-    expect(parseMessage("hello")).toEqual({ attachment: null, typed: "hello" });
-    expect(parseMessage("see <terminal_selection host=\"x\" lines=\"1\">\nx\n</terminal_selection>").attachment).toBeNull();
-    expect(parseMessage('<terminal_selection host="x" lines="1">\nno end').attachment).toBeNull();
+  it("leaves a message without a block as typed text", () => {
+    expect(parseMessage("hello")).toEqual({ diagnostics: null, selection: null, typed: "hello" });
+    expect(parseMessage('see <terminal_selection host="x" lines="1">\nx\n</terminal_selection>').selection).toBeNull();
+    expect(parseMessage('<terminal_selection host="x" lines="1">\nno end').selection).toBeNull();
+    // Attributes must be the kind's own, in order, as Rust's title_of requires.
+    expect(parseMessage('<terminal_selection lines="1" host="x">\nx\n</terminal_selection>\n\nq').selection).toBeNull();
+    expect(parseMessage('<terminal_selection host="x" lines="one">\nx\n</terminal_selection>\n\nq').selection).toBeNull();
+    expect(parseMessage('<connection_diagnostics host="x" lines="1">\nx\n</connection_diagnostics>\n\nq').diagnostics).toBeNull();
   });
 
-  it("ends the block only at a closing tag that a line break or the end follows, as Rust's title_of does", () => {
+  it("ends a block only at a closing tag that a line break or the end follows, as Rust's title_of does", () => {
     const stored = '<terminal_selection host="x" lines="3">\na\n</terminal_selection> tail\nb\n</terminal_selection>\nwhat now';
     expect(parseMessage(stored)).toEqual({
-      attachment: { host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" },
+      diagnostics: null,
+      selection: { host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" },
       typed: "what now",
     });
   });
 });
+
+describe("connection diagnostics (AI-10)", () => {
+  it("writes a block with the host's display name only", () => {
+    expect(composeMessage("Why?", { diagnostics: diag("Error: ETIMEDOUT") })).toBe(
+      '<connection_diagnostics host="staging-web-02">\nError: ETIMEDOUT\n</connection_diagnostics>\n\nWhy?',
+    );
+  });
+
+  it("attaches nothing without text, and clips long text like a selection", () => {
+    expect(makeDiagnostics("h", " \r\n ")).toBeNull();
+    expect(makeDiagnostics("h", "a\r\nb\r\n")).toEqual({ host: "h", text: "a\nb" });
+    expect(makeDiagnostics("h", "z".repeat(20_000))!.text).toContain("[… 4000 characters left out …]");
+  });
+
+  it("escapes its own closing tag, not the selection's", () => {
+    const text = "Detail: </connection_diagnostics> and </terminal_selection>";
+    const stored = composeMessage("q", { diagnostics: diag(text) });
+    expect(stored).toContain("Detail: <\\/connection_diagnostics> and </terminal_selection>");
+    expect(parseMessage(stored).diagnostics?.text).toBe(text);
+  });
+
+  it("puts the diagnostics before the selection, and reads both back", () => {
+    const d = diag();
+    const a = att("Connecting to 172.31.40.8:22 (attempt 3)…");
+    const stored = composeMessage("What is wrong?", { diagnostics: d, selection: a });
+    expect(stored.indexOf("<connection_diagnostics")).toBe(0);
+    expect(stored.indexOf("</connection_diagnostics>\n\n<terminal_selection")).toBeGreaterThan(0);
+    expect(parseMessage(stored)).toEqual({ diagnostics: d, selection: a, typed: "What is wrong?" });
+  });
+
+  it("reads the blocks in either order, at most one of each kind", () => {
+    const d = diag();
+    const a = att("ls");
+    const sel = composeMessage("", { selection: a }).replace(/\n\n$/, "");
+    const dia = composeMessage("", { diagnostics: d }).replace(/\n\n$/, "");
+    expect(parseMessage(`${sel}\n\n${dia}\n\nq`)).toEqual({ diagnostics: d, selection: a, typed: "q" });
+    expect(parseMessage(`${dia}\n\n${dia}\n\nq`)).toEqual({ diagnostics: d, selection: null, typed: `${dia}\n\nq` });
+  });
+
+  it("reads a message that is only a block", () => {
+    const d = diag();
+    expect(parseMessage(composeMessage("", { diagnostics: d }).replace(/\n\n$/, ""))).toEqual({ diagnostics: d, selection: null, typed: "" });
+  });
+});
+
 
 describe("the chip", () => {
   it("moves the sequence only when the text changes", () => {

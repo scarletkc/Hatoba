@@ -69,12 +69,13 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
     if (i === contextAt && i > 0) blocks.push("---", `*${t("ai.outsideContext")}*`);
     switch (entry.role) {
       case "user": {
-        const { attachment, typed } = parseMessage(entry.text);
+        const { diagnostics, selection, typed } = parseMessage(entry.text);
         blocks.push(`## ${t("ai.export.you")}`);
-        // AI-10: the terminal selection sent with the message.
-        if (attachment) {
-          const label = [`**${t("ai.selection", { n: attachment.lines })}**`, attachment.host && `\`${attachment.host}\``, attachment.truncated && t("ai.selection.truncated")];
-          blocks.push(label.filter(Boolean).join(" · "), fenced(attachment.text));
+        // AI-10: what was attached to the message, each as a labelled fenced block.
+        if (diagnostics) blocks.push(`**${t("ai.diagnostics", { host: diagnostics.host })}**`, fenced(diagnostics.text));
+        if (selection) {
+          const label = [`**${t("ai.selection", { n: selection.lines })}**`, selection.host && `\`${selection.host}\``, selection.truncated && t("ai.selection.truncated")];
+          blocks.push(label.filter(Boolean).join(" · "), fenced(selection.text));
         }
         blocks.push(typed);
         break;

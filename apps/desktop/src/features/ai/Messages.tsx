@@ -7,8 +7,8 @@ import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo
 import { cx } from "@/lib/cx";
 import { decideCall, editAndResend, retryTurn, stopTurn, type Decision } from "./actions";
 import { Markdown } from "./Markdown";
-import { composeMessage, parseMessage, type SelectionAttachment } from "./selection";
-import { SelectionCard, SelectionChip } from "./SelectionChip";
+import { composeMessage, parseMessage, type MessageParts } from "./selection";
+import { DiagnosticsCard, DiagnosticsChip, SelectionCard, SelectionChip } from "./SelectionChip";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -197,39 +197,38 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
-  // AI-10: a terminal selection sent with the message is a block at its start.
-  const { attachment, typed } = useMemo(() => parseMessage(text), [text]);
-  if (editing && onResend)
-    return <EditMessage initial={typed} attachment={attachment} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
+  // AI-10: what was attached to the message (connection diagnostics, a terminal selection) is in blocks at its start.
+  const parts = useMemo(() => parseMessage(text), [text]);
+  if (editing && onResend) return <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
   return (
     <div className={s.userRow}>
       {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
       <div className={s.userStack}>
-        {attachment && <SelectionCard attachment={attachment} />}
-        <div className={cx(s.user, pending && s.userPending, "selectable")}>{typed}</div>
+        {parts.diagnostics && <DiagnosticsCard attachment={parts.diagnostics} />}
+        {parts.selection && <SelectionCard attachment={parts.selection} />}
+        <div className={cx(s.user, pending && s.userPending, "selectable")}>{parts.typed}</div>
       </div>
     </div>
   );
 }
 
-/** AI-26: edits the typed text; a selection sent with it stays unless its chip is removed. */
+/** AI-26: edits the typed text; what was attached to it stays unless its chip is removed. */
 function EditMessage({
-  initial,
-  attachment,
+  parts,
   onCancel,
   onSend,
   onSent,
 }: {
-  initial: string;
-  attachment: SelectionAttachment | null;
+  parts: MessageParts;
   onCancel: () => void;
   onSend: (text: string) => Promise<boolean>;
   onSent: () => void;
 }) {
   const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
-  const [value, setValue] = useState(initial);
-  const [keep, setKeep] = useState(true);
+  const [value, setValue] = useState(parts.typed);
+  const [diagnostics, setDiagnostics] = useState(parts.diagnostics);
+  const [selection, setSelection] = useState(parts.selection);
   const [busy, setBusy] = useState(false);
 
   useLayoutEffect(() => {
@@ -247,16 +246,17 @@ function EditMessage({
   const send = async () => {
     if (!value.trim() || busy) return;
     setBusy(true);
-    const ok = await onSend(composeMessage(value.trim(), keep ? attachment : null));
+    const ok = await onSend(composeMessage(value.trim(), { diagnostics, selection }));
     setBusy(false);
     if (ok) onSent();
   };
 
   return (
     <div className={s.editMessage}>
-      {attachment && keep && (
+      {(diagnostics || selection) && (
         <div className={s.editAttachment}>
-          <SelectionChip attachment={attachment} onRemove={() => setKeep(false)} />
+          {diagnostics && <DiagnosticsChip attachment={diagnostics} onRemove={() => setDiagnostics(null)} />}
+          {selection && <SelectionChip attachment={selection} onRemove={() => setSelection(null)} />}
         </div>
       )}
       <textarea

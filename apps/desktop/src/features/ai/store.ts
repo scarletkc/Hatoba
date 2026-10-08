@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
-import type { SelectionState } from "./selection";
+import type { DiagnosticsAttachment, SelectionState } from "./selection";
 import type { TurnOutcome, TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
@@ -59,11 +59,15 @@ interface AiState {
   allowed: Record<string, string[]>;
   /** AI-10: per terminal tab, its selection as the panel last saw it and the chip it shows. */
   selections: Record<string, TabSelection>;
+  /** Per terminal tab, connection diagnostics attached from its error card, until sent or removed. */
+  diagnostics: Record<string, DiagnosticsAttachment>;
   /** The history list, once the panel has asked for it (AI-23). */
   history: AiConversationView[] | null;
   historyFailed: boolean;
   /** Bumped to move focus to the input box. */
   focusTick: number;
+  /** The focus request selects the whole draft, so typing replaces a suggested question. */
+  focusSelectAll: boolean;
 }
 
 export const useAi = create<AiState>(() => ({
@@ -73,9 +77,11 @@ export const useAi = create<AiState>(() => ({
   mcpOff: {},
   allowed: {},
   selections: {},
+  diagnostics: {},
   history: null,
   historyFailed: false,
   focusTick: 0,
+  focusSelectAll: false,
 }));
 
 /** New conversations start in the device's default mode (AI-16). */
