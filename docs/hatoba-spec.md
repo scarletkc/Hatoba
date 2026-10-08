@@ -1,226 +1,226 @@
-# Hatoba 架构与需求文档
+# Hatoba architecture and requirements
 
-## 0. 范围与约定
+## 0. Scope and conventions
 
-本文件定义 Hatoba 的功能范围、架构、数据格式、同步协议和安全模型，是实现的行为依据。各需求的实现进度见[实现状态](status.md)。
+This document defines Hatoba's feature scope, architecture, data formats, sync protocol, and security model, and the implementation follows it. Progress on each requirement is tracked in [Implementation status](status.md).
 
-视觉与交互以 Claude Design 设计稿为准，设计稿文件和移植约定见[设计稿说明](design/README.md)。当设计稿和本文件冲突时：视觉、布局、文案以设计稿为准；行为、数据、安全以本文件为准。设计稿中缺少本文件要求的元素（例如 Setup Token 输入框、同步冲突状态、设置页）时，按设计稿的视觉风格补齐。
+Visuals and interaction follow the Claude Design files, which the [design notes](design/README.md) describe along with the porting conventions. When the design and this document disagree, the design wins on visuals, layout, and copy, and this document wins on behavior, data, and security. When the design lacks an element this document requires (for example the setup token field, the sync conflict states, or the settings pages), add it in the design's visual style.
 
-**首发平台是 Windows。** 设计稿是 macOS 外观，Windows 版按 §9.1 做平台适配（标题栏、字体、快捷键等），整体风格保持一致。macOS 版本（P1）沿用设计稿原样。
+**Windows is the first platform.** The design has a macOS look. The Windows version adapts it as described in §9.1 (title bar, fonts, shortcuts, and so on) and keeps the overall style. The macOS version (P1) follows the design as is.
 
-优先级定义：**P0** 为 MVP 必须；**P1** 为首个公开版本；**P2** 为之后版本。
-
----
-
-## 1. 产品概述
-
-Hatoba（波止場，码头）是一款开源桌面 SSH 客户端，定位接近 Termius：集中管理主机、密钥和终端会话。和同类产品的区别在于：
-
-1. **同步后端由用户自己的 Cloudflare 账号提供**（Worker + D1），不依赖任何 Hatoba 官方服务器。
-2. **端到端加密**：所有数据在客户端加密后才离开本机。Worker、D1 乃至整个 Cloudflare 账号泄露，都不会暴露明文。
-3. **苹果式极简界面**，同时面向每天高强度使用的开发者，信息密度中等偏高。
-
-### 1.1 目标用户
-
-个人开发者、独立开发者、管理多台 VPS 的运维人员。
+Priorities: **P0** is required for the MVP, **P1** for the first public release, and **P2** for later releases.
 
 ---
 
-## 2. 技术栈
+## 1. Product overview
 
-| 层 | 选型 | 说明 |
+Hatoba (波止場, "wharf") is an open-source desktop SSH client, similar in scope to Termius: it keeps hosts, keys, and terminal sessions in one place. It differs from similar products in three ways:
+
+1. **The sync backend runs in the user's own Cloudflare account** (Worker + D1), with no dependency on any official Hatoba server.
+2. **End-to-end encryption.** All data is encrypted on the client before it leaves the device. A leak of the Worker, the D1 database, or even the whole Cloudflare account exposes no plaintext.
+3. **A minimal, Apple-style interface** built for developers who use it heavily every day, with medium-to-high information density.
+
+### 1.1 Target users
+
+Individual developers, indie developers, and operators who manage several VPSs.
+
+---
+
+## 2. Tech stack
+
+| Layer | Choice | Notes |
 |---|---|---|
-| 桌面壳 | Tauri 2 | **Windows 优先**（WebView2），之后是 macOS / Linux |
-| 前端 | React + TypeScript + Vite | 状态管理用 Zustand |
-| 终端渲染 | `@xterm/xterm` | 插件：`addon-fit`、`addon-webgl`、`addon-search`、`addon-web-links` |
-| IPC 类型 | tauri-specta | 从 Rust 生成 TypeScript 绑定，避免手写类型 |
-| 后端运行时 | Rust stable + tokio | |
-| SSH | `russh` | 连接、认证、PTY、direct-tcpip（跳板机与端口转发） |
+| Desktop shell | Tauri 2 | **Windows first** (WebView2), then macOS and Linux |
+| Frontend | React + TypeScript + Vite | Zustand for state management |
+| Terminal rendering | `@xterm/xterm` | Addons: `addon-fit`, `addon-webgl`, `addon-search`, `addon-web-links` |
+| IPC types | tauri-specta | Generates TypeScript bindings from Rust instead of hand-written types |
+| Backend runtime | Rust stable + tokio | |
+| SSH | `russh` | Connections, authentication, PTY, direct-tcpip (jump hosts and port forwarding) |
 | SFTP | `russh-sftp` | |
-| 密钥解析与生成 | russh 的 `keys` 模块（`ssh-key`） | 支持 OpenSSH / PEM 格式和带口令的私钥；PuTTY `.ppk` 由 `crates/hatoba-ssh/src/ppk.rs` 解析 |
-| 加密 | `argon2`、`hkdf`、`sha2`、`aes-gcm`、`rand`、`zeroize` | 全部在 Rust 端完成 |
-| 本地存储 | `rusqlite`（bundled） | |
-| 系统凭据存储 | `keyring`（Windows 凭据管理器 / macOS 钥匙串） | Windows Hello 用 `windows` crate；之后 macOS Touch ID 用 `security-framework` |
-| Windows 窗口效果 | `window-vibrancy` | Windows 11 上实现 Mica 背景材质 |
-| HTTP | `reqwest`（rustls） | |
-| 日志 | `tracing` | |
-| 同步服务 | Cloudflare Workers（TypeScript）+ D1 | 路由用 Hono，部署用 wrangler |
+| Key parsing and generation | russh's `keys` module (`ssh-key`) | OpenSSH and PEM formats, including passphrase-protected keys. `crates/hatoba-ssh/src/ppk.rs` parses PuTTY `.ppk` |
+| Cryptography | `argon2`, `hkdf`, `sha2`, `aes-gcm`, `rand`, `zeroize` | All in Rust |
+| Local storage | `rusqlite` (bundled) | |
+| System credential store | `keyring` (Windows Credential Manager, macOS Keychain) | Windows Hello uses the `windows` crate. Touch ID on macOS will use `security-framework` |
+| Windows window effects | `window-vibrancy` | Mica backdrop on Windows 11 |
+| HTTP | `reqwest` (rustls) | |
+| Logging | `tracing` | |
+| Sync service | Cloudflare Workers (TypeScript) + D1 | Hono for routing, wrangler for deployment |
 
 ---
 
-## 3. 架构
+## 3. Architecture
 
-### 3.1 总览
+### 3.1 Overview
 
 ```mermaid
 flowchart LR
-  subgraph Desktop["Hatoba 桌面端 (Tauri)"]
-    UI["前端 WebView<br/>React + xterm.js"]
-    subgraph Rust["Rust 后端"]
+  subgraph Desktop["Hatoba desktop (Tauri)"]
+    UI["Frontend WebView<br/>React + xterm.js"]
+    subgraph Rust["Rust backend"]
       CMD["Tauri commands / channels"]
       CORE["hatoba-core<br/>crypto · vault · models · sync"]
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
-      DB[("本地 SQLite<br/>只存密文")]
-      KC["系统凭据存储"]
+      DB[("Local SQLite<br/>ciphertext only")]
+      KC["System credential store"]
     end
   end
-  subgraph CF["用户自己的 Cloudflare 账号"]
+  subgraph CF["User's own Cloudflare account"]
     W["Hatoba Sync Worker"]
-    D1[("D1<br/>只存密文")]
+    D1[("D1<br/>ciphertext only")]
   end
   UI <--> CMD
   CMD --> CORE
   CMD --> SSH
   CORE --> DB
   CORE --> KC
-  SSH -->|SSH| Servers["远程服务器"]
-  CORE -->|HTTPS，只传密文| W
+  SSH -->|SSH| Servers["Remote servers"]
+  CORE -->|HTTPS, ciphertext only| W
   W --> D1
-  CORE -.->|直连模式：D1 REST API| D1
+  CORE -.->|Direct mode: D1 REST API| D1
 ```
 
-### 3.2 核心原则
+### 3.2 Core principles
 
-1. **秘密只存在于 Rust 进程内。** WebView 永远拿不到 vault key、私钥或主机密码的明文。前端只接收展示所需的元数据（主机名、地址、标签、指纹、`has_password` 这类布尔值）。用户在表单里输入的密码只单向发给 Rust，之后不再回传给前端。
-2. **本地优先。** 所有读写先落本地 SQLite，同步在后台进行。没有网络、没有配置同步时，功能完整可用。
-3. **本地与云端使用同一种密文格式。** 本地库同样只存密文，解锁后在内存中解密。
-4. **`hatoba-core` 不依赖 Tauri**，为后续移动端复用做准备。
+1. **Secrets exist only inside the Rust process.** The WebView never receives the vault key, private keys, or host passwords in plaintext. The frontend receives only the metadata it displays (host names, addresses, tags, fingerprints, and booleans such as `has_password`). A password typed into a form goes one way to Rust and is never sent back to the frontend.
+2. **Local first.** Every read and write goes to the local SQLite database first, and sync runs in the background. Without a network, or without sync configured, every feature works.
+3. **Local and cloud data use the same ciphertext format.** The local database also stores only ciphertext, which is decrypted in memory after unlock.
+4. **`hatoba-core` does not depend on Tauri**, so a future mobile app can reuse it.
 
-### 3.3 仓库结构
+### 3.3 Repository layout
 
 ```
 hatoba/
 ├── apps/desktop/
-│   ├── src/                  # 前端
-│   │   ├── app/              # 布局、路由
+│   ├── src/                  # Frontend
+│   │   ├── app/              # Layout, routing
 │   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings
-│   │   ├── components/       # 从设计稿移植的通用组件
-│   │   ├── styles/           # 设计 token（CSS 变量，浅色 / 深色两套）
-│   │   ├── i18n/             # 文案资源
-│   │   └── ipc/              # tauri-specta 生成的绑定、前端契约、浏览器模拟后端
-│   ├── src-tauri/            # Tauri 壳：commands、channels、capabilities
-│   └── e2e/                  # WebDriver 端到端冒烟测试
+│   │   ├── components/       # Shared components ported from the design
+│   │   ├── styles/           # Design tokens (CSS variables, light and dark)
+│   │   ├── i18n/             # Message tables
+│   │   └── ipc/              # tauri-specta bindings, frontend contract, browser mock backend
+│   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
+│   └── e2e/                  # WebDriver end-to-end smoke test
 ├── crates/
-│   ├── hatoba-core/          # crypto、vault、数据模型、本地存储、同步引擎
-│   └── hatoba-ssh/           # SSH 会话、PTY、SFTP、端口转发、known_hosts
-├── workers/sync/             # Cloudflare Worker 源码 + D1 migrations + 部署说明
+│   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
+│   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
+├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
 └── docs/
 ```
 
-### 3.4 移动端预留
+### 3.4 Mobile readiness
 
-移动端暂不实现。之后可以用 Tauri 2 mobile，或用 Flutter 通过 flutter_rust_bridge 调用 `hatoba-core`。因此 `hatoba-core` 中不得引入桌面专属依赖，平台相关能力（钥匙串、生物识别）通过 trait 注入。
+There is no mobile app yet. A later one could use Tauri 2 mobile, or Flutter calling `hatoba-core` through flutter_rust_bridge. `hatoba-core` must therefore not take on desktop-only dependencies, and platform capabilities (keychain, biometrics) are injected through traits.
 
 ---
 
-## 4. 安全模型与加密设计
+## 4. Security model and encryption
 
-### 4.1 密钥层级
+### 4.1 Key hierarchy
 
 ```
-主密码
+master password
  └─ Argon2id(kdf_salt, m=64 MiB, t=3, p=4) → master_key (32B)
-     ├─ HKDF-SHA256(info="hatoba/enc/v1")  → enc_key  (32B)  只在客户端使用
-     └─ HKDF-SHA256(info="hatoba/auth/v1") → auth_key (32B)  发给 Worker 用于登录
+     ├─ HKDF-SHA256(info="hatoba/enc/v1")  → enc_key  (32B)  used only on the client
+     └─ HKDF-SHA256(info="hatoba/auth/v1") → auth_key (32B)  sent to the Worker to sign in
 
-vault_key (32B 随机生成)
- ├─ AES-256-GCM(enc_key)      → protected_vault_key   存本地和云端
- └─ AES-256-GCM(recovery_key) → recovery_vault_key    存本地和云端
+vault_key (32B, random)
+ ├─ AES-256-GCM(enc_key)      → protected_vault_key   stored locally and in the cloud
+ └─ AES-256-GCM(recovery_key) → recovery_vault_key    stored locally and in the cloud
 
-recovery_code（128 bit 随机，只给用户看一次）
+recovery_code (128 random bits, shown to the user once)
  ├─ HKDF-SHA256(info="hatoba/recovery/v1")      → recovery_key
  └─ HKDF-SHA256(info="hatoba/recovery-auth/v1") → recovery_auth
 
-每条数据 → AES-256-GCM(vault_key)
+each item → AES-256-GCM(vault_key)
 ```
 
-- KDF 参数以 JSON 形式存在 `kdf_params` 中（含算法名和版本），以后调整参数时不会被老数据卡住。
-- 客户端对 KDF 参数设有下限，低于下限的参数（无论来自 Worker 还是本地数据库）一律拒绝。下限由 `crates/hatoba-core/src/crypto.rs` 的 `KdfFloor::PRODUCTION` 定义。
-- 恢复码附加 32 bit 校验后显示为 8 组 × 4 位 Crockford Base32，便于抄写和校验输入，格式由 `crates/hatoba-core/src/recovery.rs` 实现。
-- 修改主密码只需重新生成 salt、重新加密 `protected_vault_key`，**不需要重新加密任何数据条目**。
-- 服务端只保存 `SHA-256(auth_key)` 和 `SHA-256(recovery_auth)`。两者都是高熵值，SHA-256 足够；想通过它们反推主密码，仍然要逐个尝试 Argon2id。
+- KDF parameters are stored as JSON in `kdf_params` (including the algorithm name and version), so the parameters can change later without old data getting stuck.
+- The client enforces minimum KDF parameters and rejects anything below them, whether it comes from the Worker or the local database. `KdfFloor::PRODUCTION` in `crates/hatoba-core/src/crypto.rs` defines the minimums.
+- The recovery code gets a 32-bit checksum and is shown as 8 groups of 4 Crockford Base32 characters, which is easy to write down and lets the app check what the user types. `crates/hatoba-core/src/recovery.rs` implements the format.
+- Changing the master password only generates a new salt and re-encrypts `protected_vault_key`. **No data item is re-encrypted.**
+- The server stores only `SHA-256(auth_key)` and `SHA-256(recovery_auth)`. Both inputs have high entropy, so SHA-256 is enough. Getting the master password back from them still means trying candidates through Argon2id one by one.
 
-### 4.2 数据加密格式（信封）
+### 4.2 Encryption format (envelope)
 
 ```json
-{ "v": 1, "n": "<base64，12 字节随机 nonce>", "c": "<base64，密文 + GCM tag>" }
+{ "v": 1, "n": "<base64, 12-byte random nonce>", "c": "<base64, ciphertext + GCM tag>" }
 ```
 
-- 每次加密都生成新的随机 nonce。
-- AAD 为 UTF-8 字符串 `hatoba/item/v1/{item_id}`，防止密文被挪到其他条目上还能解密成功。
-- 明文是条目的 JSON（见 §5.1），其中包含 `type` 字段。**条目类型不以明文形式出现在任何存储中。**
+- Every encryption generates a new random nonce.
+- The AAD is the UTF-8 string `hatoba/item/v1/{item_id}`, so ciphertext moved onto a different item fails to decrypt.
+- The plaintext is the item's JSON (see §5.1), which includes the `type` field. **The item type never appears in plaintext in any storage.**
 
-### 4.3 运行时安全
+### 4.3 Runtime security
 
-| 编号 | 要求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| SEC-01 | 解锁后 vault_key 和解密后的条目只保存在 Rust 内存中，锁定时用 zeroize 清除 | P0 |
-| SEC-02 | 自动锁定：闲置超时（默认 15 分钟，可配置）、系统睡眠、手动锁定（Ctrl+Shift+L） | P0 |
-| SEC-03 | 锁定时已建立的 SSH 会话默认保持连接，但界面被遮罩；设置中可改为锁定即断开 | P0 |
-| SEC-04 | 日志中不得出现密码、私钥、vault key、会话 token 或终端内容 | P0 |
-| SEC-05 | Tauri 加固：CSP `default-src 'self'`，不加载任何远程内容，capabilities 按最小权限配置，release 版禁用 devtools，不启用 shell 插件 | P0 |
-| SEC-06 | 本地连续解锁失败时递增延迟：前 3 次不延迟，之后逐次翻倍，最长 5 分钟（`crates/hatoba-core/src/vault.rs` 的 `unlock_delay_ms`）；失败次数持久化，重启应用不清零；延迟期间不运行 Argon2id | P0 |
-| SEC-07 | Windows Hello 解锁：用 `KeyCredentialManager` 创建 Hello 凭据，对固定挑战值签名，由签名经 HKDF 派生包装密钥来加密 vault_key，密文存入凭据管理器。只调用 `UserConsentVerifier` 弹出确认框不满足要求，因为它与 vault_key 没有密码学绑定 | P1 |
-| SEC-08 | 复制密码到剪贴板后 30 秒自动清空 | P1 |
-| SEC-09 | 设置主密码时提示强度（zxcvbn） | P1 |
-| SEC-10 | Touch ID 解锁（随 macOS 版本）：vault_key 存入 macOS 钥匙串，并加生物识别访问控制 | P2 |
+| SEC-01 | After unlock, vault_key and decrypted items live only in Rust memory and are cleared with zeroize on lock | P0 |
+| SEC-02 | Auto-lock: idle timeout (15 minutes by default, configurable), system sleep, and manual lock (Ctrl+Shift+L) | P0 |
+| SEC-03 | By default, established SSH sessions stay connected while locked, and the UI is covered. A setting disconnects them on lock instead | P0 |
+| SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, or terminal content | P0 |
+| SEC-05 | Tauri hardening: CSP `default-src 'self'`, no remote content, least-privilege capabilities, devtools disabled in release builds, and no shell plugin | P0 |
+| SEC-06 | Increasing delay after repeated local unlock failures: no delay for the first 3, then doubling each time up to 5 minutes (`unlock_delay_ms` in `crates/hatoba-core/src/vault.rs`). The failure count is persisted and survives an app restart. Argon2id does not run during the delay | P0 |
+| SEC-07 | Windows Hello unlock: create a Hello credential with `KeyCredentialManager`, sign a fixed challenge, derive a wrapping key from the signature with HKDF, encrypt vault_key with it, and store the ciphertext in Credential Manager. A `UserConsentVerifier` prompt alone does not meet the requirement, because it has no cryptographic binding to vault_key | P1 |
+| SEC-08 | Clear the clipboard 30 seconds after a password is copied | P1 |
+| SEC-09 | Show password strength (zxcvbn) when setting the master password | P1 |
+| SEC-10 | Touch ID unlock (with the macOS version): store vault_key in the macOS Keychain with biometric access control | P2 |
 
-### 4.4 威胁模型
+### 4.4 Threat model
 
-| 场景 | 结果 |
+| Scenario | Outcome |
 |---|---|
-| Cloudflare 账号、Worker 或 D1 被盗、被导出 | 攻击者只能拿到密文和 KDF 参数，必须对主密码做 Argon2id 暴力破解 |
-| 网络中间人 | 传输走 HTTPS；即使被解开，内容也只是密文 |
-| Worker 代码被恶意修改 | 无法解密数据，但可以删除数据、回滚到旧版本、拒绝服务。本地副本不受影响；回滚检测列为 P2 |
-| 恶意 Worker 在登录时读取 `auth_key` | `enc_key` 与 `vault_key` 无法从 `auth_key` 推出（§4.1 的单向派生） |
-| 恶意 Worker 在 `/v1/prelogin` 返回被削弱的 KDF 参数 | 客户端按 §4.1 的下限拒绝登录 |
-| 持有有效的完整会话 token | 可以修改主密码（`PUT /v1/vault/password` 不要求旧密码）。设备丢失后应从另一台设备吊销它，并考虑修改主密码 |
-| 持有恢复码 | 等于持有整个保险库：既能解出 `vault_key`，也能通过 `/v1/recover` 重设主密码 |
-| 本机在解锁状态下被控制 | 不在防护范围内 |
-| 忘记主密码且丢失恢复码 | 数据无法恢复。这是设计使然，需在 UI 中明确告知 |
+| The Cloudflare account, Worker, or D1 is stolen or exported | The attacker gets only ciphertext and KDF parameters and has to brute-force the master password through Argon2id |
+| Network man-in-the-middle | Traffic uses HTTPS. Even if that is broken, the content is ciphertext |
+| Maliciously modified Worker code | It cannot decrypt data, but it can delete data, roll it back to an older version, or deny service. Local copies are unaffected. Rollback detection is P2 |
+| A malicious Worker reads `auth_key` during sign-in | `enc_key` and `vault_key` cannot be derived from `auth_key` (the one-way derivation in §4.1) |
+| A malicious Worker returns weakened KDF parameters from `/v1/prelogin` | The client refuses to sign in, per the minimums in §4.1 |
+| Someone holds a valid full session token | They can change the master password (`PUT /v1/vault/password` does not ask for the old one). After losing a device, revoke it from another device and consider changing the master password |
+| Someone holds the recovery code | That equals holding the whole vault: the code decrypts `vault_key` and can reset the master password through `/v1/recover` |
+| The device is compromised while unlocked | Out of scope |
+| The master password is forgotten and the recovery code is lost | The data cannot be recovered. This is by design, and the UI must say so clearly |
 
-### 4.5 服务端可见的数据
+### 4.5 Data visible to the server
 
-服务端保存的列由 §5.3 的迁移定义，其中条目和设备名都是 §4.2 的信封。
+The columns the server stores are defined by the migrations in §5.3, where items and device names are §4.2 envelopes.
 
-**服务端看不到**：主密码、`master_key`、`enc_key`、`vault_key`、恢复码、任何条目明文，以及条目的类型（类型在加密后的明文里）。
+**The server cannot see**: the master password, `master_key`, `enc_key`, `vault_key`, the recovery code, any item plaintext, or item types (the type is inside the encrypted plaintext).
 
-**服务端能看到的元数据**：条目数量、ID、密文大小、修改时间、设备数量、登录和同步的时间，以及 Cloudflare 本来就能看到的 IP 地址。
+**Metadata the server can see**: the number of items, their IDs, ciphertext sizes, modification times, the number of devices, sign-in and sync times, and the IP addresses Cloudflare sees anyway.
 
 ---
 
-## 5. 数据模型
+## 5. Data model
 
-### 5.1 条目类型（加密前的明文结构）
+### 5.1 Item types (plaintext before encryption)
 
-所有条目 ID 使用 UUIDv7。读取明文时容忍未知字段和缺失字段，使不同版本的应用能读取彼此的数据。Rust 端的实现是 `crates/hatoba-core/src/model.rs` 的 `Item`。
+All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields, so different app versions can read each other's data. The Rust implementation is `Item` in `crates/hatoba-core/src/model.rs`.
 
 ```ts
 type Item = Host | Group | SshKey | KnownHost | PortForward | Snippet | Settings;
 
 interface Host {
   type: "host";
-  name: string;                 // 显示名，如 prod-api-tokyo
-  address: string;              // 域名或 IP
-  port: number;                 // 默认 22
+  name: string;                 // Display name, such as prod-api-tokyo
+  address: string;              // Domain name or IP
+  port: number;                 // 22 by default
   username: string;
   auth:
     | { kind: "password"; password: string }
     | { kind: "key"; key_id: string }
     | { kind: "agent" }         // P1
-    | { kind: "ask" };          // 每次连接时询问
+    | { kind: "ask" };          // Ask on every connection
   group_id: string | null;
-  tags: string[];               // 如 ["production", "tokyo"]
+  tags: string[];               // Such as ["production", "tokyo"]
   favorite: boolean;
-  jump_host_id: string | null;  // P1，ProxyJump
+  jump_host_id: string | null;  // P1, ProxyJump
   note: string;
-  updated_at: number;           // 毫秒时间戳，用于冲突解决
+  updated_at: number;           // Milliseconds since the epoch, used for conflict resolution
 }
 
 interface Group {
   type: "group";
   name: string;
-  parent_id: string | null;     // MVP 只支持一层嵌套
+  parent_id: string | null;     // The MVP supports one level of nesting
   sort: number;
   updated_at: number;
 }
@@ -229,8 +229,8 @@ interface SshKey {
   type: "key";
   name: string;
   algorithm: "ed25519" | "ecdsa" | "rsa";
-  private_key: string;          // OpenSSH 格式
-  passphrase: string | null;    // 私钥口令（如有）
+  private_key: string;          // OpenSSH format
+  passphrase: string | null;    // Key passphrase, if any
   public_key: string;
   fingerprint: string;          // SHA256:...
   comment: string;
@@ -255,7 +255,7 @@ interface PortForward {          // P1
   kind: "local" | "remote" | "dynamic";
   bind_address: string;
   bind_port: number;
-  dest_host: string | null;     // dynamic 时为 null
+  dest_host: string | null;     // null for dynamic
   dest_port: number | null;
   auto_start: boolean;
   updated_at: number;
@@ -269,14 +269,14 @@ interface Snippet {              // P2
   updated_at: number;
 }
 
-interface Settings {             // 固定 ID "settings"，只有一条
+interface Settings {             // Fixed ID "settings", a single item
   type: "settings";
   terminal: {
     font_family: string;
     font_size: number;
     theme: "system" | "light" | "dark";
     cursor_style: "block" | "bar" | "underline";
-    scrollback: number;         // 默认 10000
+    scrollback: number;         // 10000 by default
   };
   auto_lock_minutes: number;
   lock_disconnects_sessions: boolean;
@@ -284,34 +284,34 @@ interface Settings {             // 固定 ID "settings"，只有一条
 }
 ```
 
-"最近连接时间"、窗口尺寸这类设备本地数据**不进入同步**，否则每次连接都会产生一次写入和潜在冲突。
+Device-local data such as the last connection time and the window size is **not synced**. Otherwise every connection would cause a write and a potential conflict.
 
-### 5.2 本地 SQLite
+### 5.2 Local SQLite
 
-表结构由 `crates/hatoba-core/src/store.rs` 的 `MIGRATIONS` 定义，`meta` 表的键由同文件的 `meta` 模块列出。表的职责如下：
+`MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
 
-- `meta`：键值对，保存 KDF 参数、被包装的 vault key、设备 ID、同步游标等。
-- `items`：每个条目一行，`envelope` 只保存 §4.2 的信封，删除后为 NULL（墓碑）。`revision` 是服务器确认过的版本，从未同步的条目为 0；`dirty` 标记尚未推送的本地修改。
-- `local_state`：不同步的设备本地数据，例如最近连接时间。
-- `conflict_log`：§6.4 自动解决的冲突，供逐条查看和恢复。
+- `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on.
+- `items`: one row per item. `envelope` holds only the §4.2 envelope and becomes NULL after deletion (a tombstone). `revision` is the version the server has confirmed, 0 for items that were never synced. `dirty` marks local changes that have not been pushed yet.
+- `local_state`: device-local data that is not synced, such as the last connection time.
+- `conflict_log`: conflicts resolved automatically under §6.4, kept for item-by-item review and restore.
 
-同步会话 token 和 D1 直连模式的 Cloudflare API token 存在系统凭据存储里（Windows 凭据管理器），不写入 SQLite，也不进入同步。
+The sync session token and the Cloudflare API token of D1 direct mode live in the system credential store (Windows Credential Manager). They are never written to SQLite and never synced.
 
-### 5.3 D1 表结构
+### 5.3 D1 schema
 
-一个 Worker 部署只服务一个用户（单保险库）。表结构由 `workers/sync/migrations/` 中的迁移按文件名编号顺序定义（`0001_init.sql` 起），Worker 和 D1 直连模式共用：
+One Worker deployment serves one user (a single vault). The migrations in `workers/sync/migrations/`, applied in file-name order starting with `0001_init.sql`, define the schema, which the Worker and D1 direct mode share:
 
-- `meta`：只有一行（`id = 1`），保存 KDF 参数、`SHA-256(auth_key)`、`SHA-256(recovery_auth)`、两个被包装的 vault key 和全局 `seq`。
-- `items`：条目信封、`revision`、`seq`、删除标记和更新时间。`seq` 全局递增，用于增量拉取。
-- `sessions`：只在 Worker 模式使用，保存 `SHA-256(session_token)`、设备 ID、用 vault_key 加密的设备名和会话的 `scope`（完整会话或恢复会话）。
+- `meta`: a single row (`id = 1`) with the KDF parameters, `SHA-256(auth_key)`, `SHA-256(recovery_auth)`, the two wrapped vault keys, and the global `seq`.
+- `items`: item envelopes, `revision`, `seq`, the deletion flag, and the update time. `seq` increases globally and drives incremental pulls.
+- `sessions`: used only in Worker mode. It stores `SHA-256(session_token)`, the device ID, the device name encrypted with vault_key, and the session `scope` (full session or recovery session).
 
 ---
 
-## 6. 同步
+## 6. Sync
 
-### 6.1 两种同步后端
+### 6.1 Two sync backends
 
-客户端通过 `SyncBackend` trait 抽象同步后端，同步引擎不关心底层是哪种实现。
+The client abstracts the sync backend behind the `SyncBackend` trait, so the sync engine does not care which implementation it talks to.
 
 ```rust
 #[async_trait]
@@ -327,49 +327,49 @@ pub trait SyncBackend {
 }
 ```
 
-**Worker 模式（P0，推荐）**：用户把 `workers/sync` 部署到自己的 Cloudflare 账号，客户端通过 HTTPS 调用 §6.2 的 API。
+**Worker mode (P0, recommended)**: the user deploys `workers/sync` to their own Cloudflare account, and the client calls the §6.2 API over HTTPS.
 
-**D1 直连模式（P1）**：用户填写 Account ID 和 API Token，再从账号下的 D1 数据库中选择一个，客户端直接调用 `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/d1/database/{database_id}/query` 执行 SQL。表结构与 Worker 模式相同（不使用 `sessions` 表），并发冲突靠 `UPDATE ... WHERE revision = ?` 后检查受影响行数判断。该模式下 API Token 通常对整个账号的 D1 都有编辑权限，界面上要说明这个风险，token 只存本机凭据存储。
+**D1 direct mode (P1)**: the user enters an Account ID and an API token and picks one of the account's D1 databases. The client runs SQL directly through `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/d1/database/{database_id}/query`. The schema is the same as in Worker mode (without the `sessions` table), and concurrent writes are detected by running `UPDATE ... WHERE revision = ?` and checking the affected row count. In this mode the API token usually has edit access to every D1 database in the account. The UI must explain this risk, and the token is stored only in the device's credential store.
 
 ### 6.2 Worker API
 
-所有接口都在 `/v1` 下，请求和响应都是 JSON（`Content-Type: application/json`，其他类型返回 `415`）。需要会话的接口使用 `Authorization: Bearer <session_token>`。
+All endpoints live under `/v1`. Requests and responses are JSON (`Content-Type: application/json`, anything else gets `415`). Endpoints that need a session take `Authorization: Bearer <session_token>`.
 
-#### 约定
+#### Conventions
 
-- 时间戳一律是 Unix 毫秒（与条目明文里的 `updated_at` 一致），包括 `created_at`、`last_seen`、`expires_at`。
-- `auth_key`、`recovery_auth`：32 字节，**标准 base64（带 `=` 填充）**，由客户端发送原始值，服务端存 `SHA-256`（十六进制）。
-- `kdf_params`：**JSON 字符串**（客户端把参数对象序列化成字符串发送），服务端原样存储、原样返回，不解释其内容。必须是 JSON 对象，最大 1 KB。
-- `kdf_salt`：16–256 个字符的不透明字符串（`A-Za-z0-9+/_=-`），服务端不解码。
-- `protected_vault_key`、`recovery_vault_key`、`device_name`、条目 `envelope`：不透明字符串，原样存储。分别最大 4 KB、4 KB、4 KB、64 KB（按 UTF-8 字节计）。
-- `device_id`、条目 `id`：`[A-Za-z0-9_-]`，1–64 个字符（UUID 和字面量 `settings` 都符合）。
-- 错误响应：`{ "error": "<code>", "message": "..." }`，`message` 可能省略，且永远不会回显提交的值。
+- All timestamps are Unix milliseconds (matching `updated_at` in item plaintext), including `created_at`, `last_seen`, and `expires_at`.
+- `auth_key`, `recovery_auth`: 32 bytes in **standard base64 (with `=` padding)**. The client sends the raw value, and the server stores its `SHA-256` (hex).
+- `kdf_params`: a **JSON string** (the client serializes the parameter object to a string). The server stores and returns it unchanged without interpreting it. It must be a JSON object of at most 1 KB.
+- `kdf_salt`: an opaque string of 16 to 256 characters (`A-Za-z0-9+/_=-`). The server does not decode it.
+- `protected_vault_key`, `recovery_vault_key`, `device_name`, and item `envelope`: opaque strings stored as is, at most 4 KB, 4 KB, 4 KB, and 64 KB respectively (in UTF-8 bytes).
+- `device_id` and item `id`: `[A-Za-z0-9_-]`, 1 to 64 characters (UUIDs and the literal `settings` both qualify).
+- Error responses: `{ "error": "<code>", "message": "..." }`. `message` may be omitted and never echoes submitted values.
 
-#### 接口
+#### Endpoints
 
-| 方法 | 路径 | 认证 | 说明 |
+| Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/v1/health` | 无 | `{ service: "hatoba-sync", version, api: 1, initialized }`，用于向导中的"测试连接"；D1 不可用或未迁移时 `503 database_unavailable` |
-| GET | `/v1/prelogin` | 无 | `{ kdf_salt, kdf_params }`；未初始化 `404 not_initialized` |
-| POST | `/v1/setup` | Setup Token | 首次初始化 meta；成功 `201 { initialized: true }`，已初始化 `409 already_initialized`，令牌错误 `401 invalid_setup_token`，未配置 `503 setup_token_not_configured` |
-| POST | `/v1/login` | 无 | `{ auth_key, device_id, device_name }` → `{ session_token, expires_at }` |
-| POST | `/v1/recover` | 无 | `{ recovery_auth, device_id, device_name }` → `{ recovery_vault_key, kdf_salt, kdf_params, session_token, expires_at }`（恢复会话） |
-| GET | `/v1/vault` | 完整会话 | `{ schema_version, kdf_salt, kdf_params, protected_vault_key, recovery_vault_key, seq }` |
-| GET | `/v1/items?since=&limit=` | 完整会话 | 增量拉取：`{ items, next_since, has_more }` |
-| POST | `/v1/items` | 完整会话 | 批量推送：`{ changes: [...] }` → `{ results: [...] }` |
-| PUT | `/v1/vault/password` | 完整或恢复会话 | 修改主密码：原子更新 meta 并吊销会话，成功 `200 { ok, relogin_required }` |
-| GET | `/v1/devices` | 完整会话 | `{ devices: [{ device_id, device_name, created_at, last_seen, expires_at, current }] }` |
-| DELETE | `/v1/devices/:device_id` | 完整会话 | 吊销该设备的会话，`204`；可以吊销自己；设备不存在时同样返回 `204` |
+| GET | `/v1/health` | None | `{ service: "hatoba-sync", version, api: 1, initialized }`, used by **Test Connection** in the wizard. `503 database_unavailable` when D1 is unavailable or not migrated |
+| GET | `/v1/prelogin` | None | `{ kdf_salt, kdf_params }`. `404 not_initialized` before setup |
+| POST | `/v1/setup` | Setup token | Initializes meta for the first time. `201 { initialized: true }` on success, `409 already_initialized` if already set up, `401 invalid_setup_token` for a wrong token, `503 setup_token_not_configured` when none is configured |
+| POST | `/v1/login` | None | `{ auth_key, device_id, device_name }` → `{ session_token, expires_at }` |
+| POST | `/v1/recover` | None | `{ recovery_auth, device_id, device_name }` → `{ recovery_vault_key, kdf_salt, kdf_params, session_token, expires_at }` (recovery session) |
+| GET | `/v1/vault` | Full session | `{ schema_version, kdf_salt, kdf_params, protected_vault_key, recovery_vault_key, seq }` |
+| GET | `/v1/items?since=&limit=` | Full session | Incremental pull: `{ items, next_since, has_more }` |
+| POST | `/v1/items` | Full session | Batch push: `{ changes: [...] }` → `{ results: [...] }` |
+| PUT | `/v1/vault/password` | Full or recovery session | Changes the master password: atomically updates meta and revokes sessions. `200 { ok, relogin_required }` on success |
+| GET | `/v1/devices` | Full session | `{ devices: [{ device_id, device_name, created_at, last_seen, expires_at, current }] }` |
+| DELETE | `/v1/devices/:device_id` | Full session | Revokes that device's session with `204`. A device can revoke itself, and an unknown device also gets `204` |
 
-#### 服务端要求
+#### Server requirements
 
-- **Setup Token**：部署时用 `wrangler secret put SETUP_TOKEN` 设置，防止别人抢先初始化一个刚部署、还没配置的 Worker。没有它，`/v1/setup` 一律拒绝（`401`）；没有配置该 secret 时返回 `503`。初始化完成后可以删除该 secret。比较使用常量时间，`auth_hash` 的比较同理。
-- **会话**：token 为 32 字节随机值（base64url），D1 中只存其 SHA-256；有效期 30 天，使用时滑动续期（续期写入每分钟最多一次）。每台设备（`device_id`）同一种会话只保留一个。
-- **恢复会话**：`/v1/recover` 签发的会话 15 分钟有效，只能调用 `PUT /v1/vault/password`，调用其他接口返回 `403`。
-- **限流**：`/v1/setup`、`/v1/login`、`/v1/recover` 按来源 IP 和接口分别限制为每分钟 10 次，使用 Workers Rate Limiting binding，超出返回 `429`。计数按 Cloudflare 数据中心独立统计。
-- **大小限制**：单次推送最多 100 条变更，单个信封最大 64 KB。
-- **不返回 CORS 头**：客户端请求都来自 Rust 而不是浏览器，浏览器里的第三方网页因此无法跨域调用 Worker。
-- **不记录秘密**：不把 token、`auth_key`、信封或请求体写入日志；所有响应带 `Cache-Control: no-store`。
+- **Setup token**: set at deployment with `wrangler secret put SETUP_TOKEN`. It stops someone else from initializing a freshly deployed, unconfigured Worker before you do. Without the token, `/v1/setup` always refuses (`401`), and it returns `503` when the secret is not configured. The secret can be deleted after initialization. The comparison runs in constant time, and so does the `auth_hash` comparison.
+- **Sessions**: a token is 32 random bytes (base64url), and D1 stores only its SHA-256. It is valid for 30 days and slides forward on use (the renewal is written at most once a minute). Each device (`device_id`) keeps only one session of each kind.
+- **Recovery sessions**: a session issued by `/v1/recover` is valid for 15 minutes and can call only `PUT /v1/vault/password`. Other endpoints return `403`.
+- **Rate limits**: `/v1/setup`, `/v1/login`, and `/v1/recover` allow 10 requests per minute for each source IP and endpoint, through the Workers Rate Limiting binding, and return `429` beyond that. Each Cloudflare data center counts separately.
+- **Size limits**: at most 100 changes per push, and at most 64 KB per envelope.
+- **No CORS headers**: client requests come from Rust, not a browser, so third-party web pages in a browser cannot call the Worker cross-origin.
+- **No secrets in logs**: tokens, `auth_key`, envelopes, and request bodies are never logged. Every response carries `Cache-Control: no-store`.
 
 #### POST /v1/setup
 
@@ -391,7 +391,7 @@ Content-Type: application/json
 
 #### GET /v1/items
 
-按 `seq` 增量拉取：`SELECT * FROM items WHERE seq > :since ORDER BY seq LIMIT :limit`。`since` 默认 0；`limit` 默认 500，最大 1000（更大的值会被截为 1000）；非法值返回 `400`。
+Incremental pull by `seq`: `SELECT * FROM items WHERE seq > :since ORDER BY seq LIMIT :limit`. `since` defaults to 0. `limit` defaults to 500 with a maximum of 1000 (larger values are capped at 1000). Invalid values return `400`.
 
 ```json
 {
@@ -403,7 +403,7 @@ Content-Type: application/json
 }
 ```
 
-`next_since` 是本页最后一条的 `seq`（空页时等于传入的 `since`）。已删除条目是墓碑：`deleted: true, envelope: null`。
+`next_since` is the `seq` of the last item on the page (the given `since` for an empty page). Deleted items are tombstones: `deleted: true, envelope: null`.
 
 #### POST /v1/items
 
@@ -413,18 +413,18 @@ Content-Type: application/json
 ]}
 ```
 
-- `base_revision = 0` 表示新建；否则必须等于服务端该条目的 revision（乐观并发）。
-- 删除：`deleted: true` 且 `envelope` 为 `null`（或省略）。非删除项的 `envelope` 必须是非空字符串。
-- `updated_at` 可选；省略时使用服务器时间。
-- 每次请求最多 100 条变更，超出返回 `413 too_many_changes`。同一请求里不能重复出现同一个 `id`。
+- `base_revision = 0` means create. Otherwise it must equal the item's revision on the server (optimistic concurrency).
+- Delete: `deleted: true` with `envelope` set to `null` (or omitted). A change that is not a deletion needs a non-empty `envelope` string.
+- `updated_at` is optional. The server time is used when it is omitted.
+- At most 100 changes per request, and more return `413 too_many_changes`. The same `id` cannot appear twice in one request.
 
-服务端对每条变更执行一个 D1 batch（batch 在 D1 中以事务方式执行）：
+The server runs one D1 batch per change (D1 executes a batch as a transaction):
 
 1. `UPDATE meta SET seq = seq + 1 WHERE id = 1`
-2. 如果 `base_revision = 0`，执行 `INSERT ... ON CONFLICT(id) DO NOTHING`，新条目的 `revision = 1`；否则执行 `UPDATE items SET envelope = ?, deleted = ?, revision = revision + 1, seq = (SELECT seq FROM meta WHERE id = 1), updated_at = ? WHERE id = ? AND revision = ?`
-3. 受影响行数为 0 即为冲突，读取该条目的行返回给客户端。
+2. If `base_revision = 0`, run `INSERT ... ON CONFLICT(id) DO NOTHING`, and the new item gets `revision = 1`. Otherwise run `UPDATE items SET envelope = ?, deleted = ?, revision = revision + 1, seq = (SELECT seq FROM meta WHERE id = 1), updated_at = ? WHERE id = ? AND revision = ?`
+3. Zero affected rows means a conflict, and the server reads the item's row and returns it to the client.
 
-`results` 与请求顺序一致：
+`results` follow the request order:
 
 ```json
 { "results": [
@@ -436,16 +436,16 @@ Content-Type: application/json
 ]}
 ```
 
-| status | 含义 |
+| status | Meaning |
 |---|---|
-| `ok` | 已写入，返回新的 `revision` 和 `seq` |
-| `conflict` | `base_revision` 与服务端不一致（含"新建但 ID 已存在"）。`server` 是服务端上该条目的状态（墓碑的 `envelope` 为 `null`），由客户端按 §6.4 解决后重试 |
-| `error` / `too_large` | 单个信封超过 64 KB。**只影响这一条**，其余变更照常处理，一个超大条目不会卡住整个推送队列 |
-| `error` / `not_found` | `base_revision > 0` 但服务端没有这个条目（例如数据库被重置）。客户端可把该条目当作新条目（`base_revision = 0`）重新上传 |
+| `ok` | Written. Returns the new `revision` and `seq` |
+| `conflict` | `base_revision` does not match the server (including a create whose ID already exists). `server` is the item's state on the server (`envelope` is `null` for a tombstone). The client resolves it per §6.4 and retries |
+| `error` / `too_large` | A single envelope exceeds 64 KB. **Only this change is affected.** The other changes are processed as usual, so one oversized item does not block the whole push queue |
+| `error` / `not_found` | `base_revision > 0`, but the server has no such item (for example after a database reset). The client can upload it again as a new item (`base_revision = 0`) |
 
-`seq` 全局单调递增但允许出现空洞（冲突的尝试也会消耗一个 seq），客户端只依赖它的单调递增性。
+`seq` increases monotonically across the vault but may have gaps (a conflicting attempt also uses up a seq). The client relies only on it increasing.
 
-结构性错误（缺字段、类型错误、非法 ID、`deleted` 与 `envelope` 不一致、重复 ID）会让**整个请求**返回 `400`，且不写入任何数据。
+Structural errors (missing fields, wrong types, invalid IDs, `deleted` inconsistent with `envelope`, duplicate IDs) make the **whole request** return `400`, and nothing is written.
 
 #### PUT /v1/vault/password
 
@@ -458,267 +458,267 @@ Content-Type: application/json
 }
 ```
 
-`recovery_vault_key` 和 `recovery_auth` 要么同时提供（轮换恢复码），要么都不提供。更新 `meta` 与吊销会话在同一个事务里完成：
+`recovery_vault_key` and `recovery_auth` are either both present (rotating the recovery code) or both absent. Updating `meta` and revoking sessions happen in one transaction:
 
-- 完整会话：吊销**其他所有**会话，调用者保持登录（`relogin_required: false`）。
-- 恢复会话：吊销**所有**会话包括调用者自己（`relogin_required: true`），客户端需要用新密码重新登录。
+- Full session: revokes **all other** sessions, and the caller stays signed in (`relogin_required: false`).
+- Recovery session: revokes **all** sessions, including the caller's (`relogin_required: true`), and the client must sign in again with the new password.
 
-#### 错误码
+#### Error codes
 
-| HTTP | `error` | 场景 |
+| HTTP | `error` | When |
 |---|---|---|
-| 400 | `invalid_request` / `invalid_json` | 字段缺失、类型或格式错误；JSON 无法解析 |
-| 401 | `unauthorized` / `invalid_session` | 缺少 token / token 未知或已过期 |
-| 401 | `invalid_credentials` | `auth_key` 或 `recovery_auth` 错误 |
-| 401 | `invalid_setup_token` | Setup Token 缺失或错误 |
-| 403 | `insufficient_scope` | 恢复会话调用了 `PUT /v1/vault/password` 以外的接口 |
-| 404 | `not_initialized` / `not_found` | 尚未 setup / 路径不存在 |
-| 409 | `already_initialized` | 重复 setup |
-| 413 | `too_many_changes` / `payload_too_large` | 超过 100 条变更 / 请求体过大 |
-| 415 | `unsupported_media_type` | 请求体不是 JSON |
-| 429 | `rate_limited` | 触发限流（带 `Retry-After: 60`） |
-| 500 | `internal_error` | 未预期的错误（细节不会返回给客户端） |
-| 503 | `setup_token_not_configured` / `database_unavailable` | 未设置 secret / D1 不可用或未迁移 |
+| 400 | `invalid_request` / `invalid_json` | Missing field, wrong type or format / JSON that cannot be parsed |
+| 401 | `unauthorized` / `invalid_session` | No token / unknown or expired token |
+| 401 | `invalid_credentials` | Wrong `auth_key` or `recovery_auth` |
+| 401 | `invalid_setup_token` | Missing or wrong setup token |
+| 403 | `insufficient_scope` | A recovery session called an endpoint other than `PUT /v1/vault/password` |
+| 404 | `not_initialized` / `not_found` | Not set up yet / unknown path |
+| 409 | `already_initialized` | Setup called again |
+| 413 | `too_many_changes` / `payload_too_large` | More than 100 changes / request body too large |
+| 415 | `unsupported_media_type` | The request body is not JSON |
+| 429 | `rate_limited` | Rate limit hit (with `Retry-After: 60`) |
+| 500 | `internal_error` | Unexpected error (details are not returned to the client) |
+| 503 | `setup_token_not_configured` / `database_unavailable` | Secret not set / D1 unavailable or not migrated |
 
-### 6.3 客户端同步流程
+### 6.3 Client sync flow
 
-**触发时机**：解锁后、本地修改后（2 秒防抖）、每 60 秒、窗口重新获得焦点时，以及用户手动触发。
+**When sync runs**: after unlock, after a local change (2-second debounce), every 60 seconds, when the window regains focus, and when the user starts it manually.
 
-**单轮同步**：
+**One sync round**:
 
-1. 从 `sync_cursor` 开始分页拉取，直到 `has_more = false`。对每条远端条目：如果本地对应条目不是 dirty，直接覆盖；如果是 dirty，按 §6.4 解决冲突。
-2. 推送所有 dirty 条目。成功的条目清除 dirty 并更新 revision；冲突的条目按 §6.4 处理后最多重试一次。
-3. 更新 `sync_cursor`，并向前端广播同步状态。
+1. Pull pages starting at `sync_cursor` until `has_more = false`. For each remote item, overwrite the local item if it is not dirty, and resolve the conflict per §6.4 if it is.
+2. Push all dirty items. Successful items have dirty cleared and their revision updated. Conflicting items are handled per §6.4 and retried at most once.
+3. Update `sync_cursor` and broadcast the sync status to the frontend.
 
-同步失败不影响本地使用，界面显示为"离线"或"认证失效"，下次触发时自动重试，重试采用指数退避。
+A failed sync does not affect local use. The UI shows **Offline** or **Signed out**, and the next trigger retries automatically with exponential backoff.
 
-### 6.4 冲突解决
+### 6.4 Conflict resolution
 
-1. 默认规则：解密双方版本，按明文中的 `updated_at` 取较新者（last writer wins）。
-2. **密钥条目（`type = "key"`）永不静默丢弃**：落败的一方另存为新条目，名称后加"（冲突副本）"。
-3. 一方删除、另一方修改时，修改方胜出（条目恢复），避免误删。
-4. 每次自动解决冲突都写入本地冲突日志，同步状态页显示冲突数量，P1 版本支持逐条查看：可保留自动解决的结果，或恢复另一方的版本。
+1. Default rule: decrypt both versions and keep the one with the newer `updated_at` in the plaintext (last writer wins).
+2. **Key items (`type = "key"`) are never dropped silently.** The losing version is saved as a new item, with a localized conflict-copy suffix added to its name.
+3. When one side deletes an item and the other modifies it, the modification wins (the item comes back), to avoid accidental deletion.
+4. Every automatic resolution is written to the local conflict log, and the sync status page shows the number of conflicts. P1 adds item-by-item review: keep the automatic result, or restore the other version.
 
-### 6.5 墓碑
+### 6.5 Tombstones
 
-删除的条目在 MVP 中永久保留墓碑（`envelope = NULL, deleted = 1`），数据量很小。P2 再考虑清理超过 180 天的墓碑，届时离线超过该时长的设备需要做全量重新同步。
+In the MVP, deleted items keep their tombstones forever (`envelope = NULL, deleted = 1`), which costs little space. P2 may purge tombstones older than 180 days, and a device offline for longer than that would then need a full resync.
 
-### 6.6 关键流程
+### 6.6 Key flows
 
-**流程 A：首台设备启用同步**
+**Flow A: enable sync on the first device**
 
-1. 首次启动时创建本地保险库：设置主密码，生成恢复码，用户确认已保存。此后可以完全离线使用。
-2. 在侧边栏进入"云同步"，选择 Worker 模式，填写 Worker URL 和 Setup Token，点击"测试连接"（调用 `/v1/health`）。
-3. 调用 `/v1/setup` 上传 meta，然后登录并推送全部条目。
+1. On first launch, create the local vault: set the master password, generate the recovery code, and have the user confirm it is saved. From here on the app works fully offline.
+2. Open **Cloud Sync** in the sidebar, choose Worker mode, enter the Worker URL and the setup token, and select **Test Connection** (which calls `/v1/health`).
+3. Call `/v1/setup` to upload meta, then sign in and push all items.
 
-**流程 B：新设备加入**
+**Flow B: add a new device**
 
-1. 首次启动时选择"从云端恢复"，填写 Worker URL。
-2. 调用 `/v1/prelogin` 拿到 salt 和参数，用户输入主密码后派生密钥并登录。
-3. 拉取 vault meta，解密 vault_key，然后全量拉取所有条目。
+1. On first launch, choose **Restore from Cloud** and enter the Worker URL.
+2. Call `/v1/prelogin` for the salt and parameters. The user enters the master password, and the client derives the keys and signs in.
+3. Pull the vault meta, decrypt vault_key, and then pull every item.
 
-**流程 C：已有本地保险库，连接到已初始化的云端（P1）**
+**Flow C: connect an existing local vault to an initialized cloud vault (P1)**
 
-两边的 vault_key 不同，需要合并：用本地 vault_key 解密本地全部条目，用云端 vault_key 重新加密后作为新条目推送，然后把本地 meta 替换为云端的版本，主密码也随之变为云端的主密码。执行前必须让用户明确确认。MVP 阶段遇到这种情况时直接提示用户"云端已有保险库，请在新设备上选择'从云端恢复'"。
+The two sides have different vault_keys and need a merge: decrypt every local item with the local vault_key, re-encrypt it with the cloud vault_key, push it as a new item, and then replace the local meta with the cloud's. The master password becomes the cloud's master password as well. The user must confirm explicitly before this runs. In the MVP, this case only shows the message "The cloud already has a vault. On a new device, choose Restore from Cloud."
 
-**Worker 部署**：步骤见[部署同步 Worker](../workers/sync/README.md)，应用内的同步向导链接到这份说明。另提供 Deploy to Cloudflare 按钮（P1）；通过 Cloudflare API 在应用内一键部署列为 P2。
+**Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. A Deploy to Cloudflare button is P1, and one-click deployment inside the app through the Cloudflare API is P2.
 
 ---
 
-## 7. SSH 功能需求
+## 7. SSH requirements
 
-### 7.1 连接与认证
+### 7.1 Connection and authentication
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| SSH-01 | 密码认证 | P0 |
-| SSH-02 | 私钥认证，支持 ed25519、ecdsa、rsa，以及带口令的私钥 | P0 |
-| SSH-03 | "每次询问"模式：连接时弹窗输入密码，不保存 | P0 |
-| SSH-04 | 主机指纹校验：首次连接时弹出指纹确认（TOFU），确认后保存为 `known_host` 条目并参与同步；指纹变化时**阻断连接**并显示明显警告，用户必须显式选择"更新指纹"才能继续 | P0 |
-| SSH-05 | 连接超时（默认 15 秒），并针对 DNS 解析失败、连接被拒、认证失败、超时分别给出可读的错误信息 | P0 |
-| SSH-06 | Keepalive（默认 30 秒）与断线检测 | P0 |
-| SSH-07 | 断线后在标签页内显示"重新连接"按钮，不自动无限重连 | P0 |
-| SSH-08 | keyboard-interactive 认证（含 2FA / OTP） | P1 |
-| SSH-09 | ssh-agent：Windows 使用 OpenSSH agent 命名管道 `\\.\pipe\openssh-ssh-agent`；macOS / Linux 使用 `SSH_AUTH_SOCK`；兼容 Pageant 为 P2 | P1 |
-| SSH-10 | ProxyJump 跳板机，支持多级：在上一跳连接上打开 direct-tcpip 通道，再在通道上建立下一跳会话 | P1 |
-| SSH-11 | 导入 `%USERPROFILE%\.ssh\config`（macOS / Linux 为 `~/.ssh/config`），支持 Host、HostName、User、Port、IdentityFile、ProxyJump | P1 |
-| SSH-12 | 导入 PuTTY 已保存的会话（读取注册表 `HKCU\Software\SimonTatham\PuTTY\Sessions`） | P2 |
+| SSH-01 | Password authentication | P0 |
+| SSH-02 | Private key authentication with ed25519, ecdsa, and rsa keys, including passphrase-protected keys | P0 |
+| SSH-03 | Ask-every-time mode: prompt for the password when connecting, without saving it | P0 |
+| SSH-04 | Host key verification: on first connect, show the fingerprint for confirmation (TOFU), then save it as a `known_host` item that syncs. When the fingerprint changes, **block the connection** with a prominent warning, and continue only when the user explicitly chooses to update the fingerprint | P0 |
+| SSH-05 | Connection timeout (15 seconds by default), with readable error messages that tell DNS failure, refused connection, authentication failure, and timeout apart | P0 |
+| SSH-06 | Keepalive (30 seconds by default) and disconnect detection | P0 |
+| SSH-07 | After a disconnect, show a **Reconnect** button in the tab instead of reconnecting on its own forever | P0 |
+| SSH-08 | keyboard-interactive authentication (including 2FA and OTP) | P1 |
+| SSH-09 | ssh-agent: the OpenSSH agent named pipe `\\.\pipe\openssh-ssh-agent` on Windows and `SSH_AUTH_SOCK` on macOS and Linux. Pageant compatibility is P2 | P1 |
+| SSH-10 | Multi-hop ProxyJump: open a direct-tcpip channel over the previous hop's connection and start the next hop's session over that channel | P1 |
+| SSH-11 | Import `%USERPROFILE%\.ssh\config` (`~/.ssh/config` on macOS and Linux) with Host, HostName, User, Port, IdentityFile, and ProxyJump | P1 |
+| SSH-12 | Import saved PuTTY sessions (from the registry key `HKCU\Software\SimonTatham\PuTTY\Sessions`) | P2 |
 
-### 7.2 终端
+### 7.2 Terminal
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| TERM-01 | 多标签页，每个标签对应一个会话，同一主机可以同时打开多个 | P0 |
-| TERM-02 | `xterm-256color` 与 truecolor，UTF-8；**中文、日文宽字符显示必须正常，微软拼音、微软日文输入法等 Windows 输入法的候选框位置和上屏必须正常** | P0 |
-| TERM-03 | 窗口或面板尺寸变化时同步 PTY 尺寸 | P0 |
-| TERM-04 | 复制粘贴；粘贴多行内容时弹出确认 | P0 |
-| TERM-05 | 回滚缓冲默认 10,000 行，可配置 | P0 |
-| TERM-06 | 字体、字号、主题（浅色 / 深色 / 跟随系统） | P0 |
-| TERM-07 | 终端内搜索 | P1 |
-| TERM-08 | 链接可点击 | P1 |
-| TERM-09 | 分屏 | P2 |
-| TERM-10 | 会话日志保存到本地文件 | P2 |
-| TERM-11 | Snippets（常用命令片段） | P2 |
+| TERM-01 | Multiple tabs, one session per tab, and several tabs for the same host at once | P0 |
+| TERM-02 | `xterm-256color` and truecolor, UTF-8. **Chinese and Japanese wide characters must render correctly, and Windows input methods such as Microsoft Pinyin and the Microsoft Japanese IME must place the candidate window and commit text correctly** | P0 |
+| TERM-03 | Sync the PTY size when the window or a panel resizes | P0 |
+| TERM-04 | Copy and paste, with a confirmation before pasting multiple lines | P0 |
+| TERM-05 | Scrollback of 10,000 lines by default, configurable | P0 |
+| TERM-06 | Font, font size, and theme (light, dark, or system) | P0 |
+| TERM-07 | Search in the terminal | P1 |
+| TERM-08 | Clickable links | P1 |
+| TERM-09 | Split panes | P2 |
+| TERM-10 | Save session logs to local files | P2 |
+| TERM-11 | Snippets (saved commands) | P2 |
 
 ### 7.3 SFTP
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| SFTP-01 | 终端右侧可展开文件面板，浏览远程目录，默认进入用户 home 目录 | P0 |
-| SFTP-02 | 上传（支持拖拽）与下载，显示进度，可取消 | P0 |
-| SFTP-03 | 重命名、删除（需确认）、新建目录 | P1 |
-| SFTP-04 | 显示权限、大小、修改时间 | P1 |
-| SFTP-05 | 直接编辑远程文件 | P2 |
+| SFTP-01 | A file panel that expands to the right of the terminal, browses remote directories, and opens in the user's home directory | P0 |
+| SFTP-02 | Upload (including drag and drop) and download, with progress and cancel | P0 |
+| SFTP-03 | Rename, delete (with confirmation), and create folders | P1 |
+| SFTP-04 | Show permissions, size, and modification time | P1 |
+| SFTP-05 | Edit remote files directly | P2 |
 
-### 7.4 端口转发
+### 7.4 Port forwarding
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| FWD-01 | 本地转发（`-L`） | P1 |
-| FWD-02 | 转发规则随连接自动启动 | P1 |
-| FWD-03 | 远程转发（`-R`） | P2 |
-| FWD-04 | 动态 SOCKS 转发（`-D`） | P2 |
+| FWD-01 | Local forwarding (`-L`) | P1 |
+| FWD-02 | Forwarding rules start automatically with the connection | P1 |
+| FWD-03 | Remote forwarding (`-R`) | P2 |
+| FWD-04 | Dynamic SOCKS forwarding (`-D`) | P2 |
 
 ---
 
-## 8. 保险库、主机与密钥管理需求
+## 8. Vault, host, and key management requirements
 
-### 8.1 保险库
+### 8.1 Vault
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| VAULT-01 | 首次启动时创建主密码 | P0 |
-| VAULT-02 | 生成恢复码，要求用户确认已保存（例如重新输入恢复码的最后一组）后才能继续 | P0 |
-| VAULT-03 | 解锁界面；连续输错时递增延迟 | P0 |
-| VAULT-04 | 自动锁定（见 SEC-02） | P0 |
-| VAULT-05 | 修改主密码 | P1 |
-| VAULT-06 | 用恢复码重置主密码 | P1 |
-| VAULT-07 | 导出加密备份：单个文件，内容使用同一种信封格式 | P1 |
-| VAULT-08 | 明文导出（需重新验证主密码，并显示警告） | P2 |
+| VAULT-01 | Create the master password on first launch | P0 |
+| VAULT-02 | Generate a recovery code, and continue only after the user confirms it is saved (for example by re-entering its last group) | P0 |
+| VAULT-03 | Unlock screen, with an increasing delay after repeated wrong passwords | P0 |
+| VAULT-04 | Auto-lock (see SEC-02) | P0 |
+| VAULT-05 | Change the master password | P1 |
+| VAULT-06 | Reset the master password with the recovery code | P1 |
+| VAULT-07 | Export an encrypted backup: a single file that uses the same envelope format | P1 |
+| VAULT-08 | Plaintext export (asks for the master password again and shows a warning) | P2 |
 
-### 8.2 主机
+### 8.2 Hosts
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| HOST-01 | 新建、编辑、删除主机。必填项为名称和地址，端口默认 22 | P0 |
-| HOST-02 | 分组（MVP 支持一层嵌套） | P0 |
-| HOST-03 | 标签，侧边栏支持按标签筛选 | P0 |
-| HOST-04 | 收藏 | P0 |
-| HOST-05 | 搜索：模糊匹配名称、地址、用户名和标签；快捷键见 WIN-04 | P0 |
-| HOST-06 | 显示最近连接时间（设备本地数据） | P0 |
-| HOST-07 | 双击或按回车直接连接 | P0 |
-| HOST-08 | 主机编辑页中，已保存的密码只显示"已保存"，只能替换，不能查看 | P0 |
-| HOST-09 | 复制主机 | P1 |
-| HOST-10 | 在线状态点：对列表中可见的主机做 TCP 端口探测（只建立 TCP 连接，不做认证），超时 3 秒，每 60 秒一次；可在设置中关闭 | P1 |
+| HOST-01 | Create, edit, and delete hosts. Name and address are required, and the port defaults to 22 | P0 |
+| HOST-02 | Groups (one level of nesting in the MVP) | P0 |
+| HOST-03 | Tags, with filtering by tag in the sidebar | P0 |
+| HOST-04 | Favorites | P0 |
+| HOST-05 | Search: fuzzy matching on name, address, user name, and tags. See WIN-04 for the shortcut | P0 |
+| HOST-06 | Show the last connection time (device-local data) | P0 |
+| HOST-07 | Connect with a double-click or Enter | P0 |
+| HOST-08 | On the host edit page, a saved password shows only **Saved** and can be replaced but not viewed | P0 |
+| HOST-09 | Duplicate a host | P1 |
+| HOST-10 | Online status dots: probe the TCP port of the hosts visible in the list (TCP connect only, no authentication), with a 3-second timeout, once every 60 seconds. A setting turns it off | P1 |
 
-### 8.3 密钥
+### 8.3 Keys
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| KEY-01 | 导入私钥（选择文件或粘贴文本），解析失败时给出明确原因（格式不支持、口令错误等） | P0 |
-| KEY-02 | 生成 ed25519 密钥，可选 RSA 4096 | P0 |
-| KEY-03 | 列表显示名称、类型、SHA256 指纹、创建时间和使用该密钥的主机 | P0 |
-| KEY-04 | 一键复制公钥 | P0 |
-| KEY-05 | 删除前提示哪些主机在使用该密钥 | P0 |
-| KEY-06 | 把公钥部署到指定主机（相当于 `ssh-copy-id`） | P1 |
-| KEY-07 | 查看私钥内容（需重新验证主密码） | P2 |
+| KEY-01 | Import a private key (pick a file or paste text). When parsing fails, give a clear reason (unsupported format, wrong passphrase, and so on) | P0 |
+| KEY-02 | Generate ed25519 keys, with RSA 4096 as an option | P0 |
+| KEY-03 | The list shows the name, type, SHA256 fingerprint, creation time, and the hosts that use the key | P0 |
+| KEY-04 | Copy the public key with one click | P0 |
+| KEY-05 | Before deleting, show which hosts use the key | P0 |
+| KEY-06 | Deploy the public key to a chosen host (like `ssh-copy-id`) | P1 |
+| KEY-07 | View the private key (asks for the master password again) | P2 |
 
 ---
 
-## 9. 界面需求
+## 9. UI requirements
 
-视觉以设计稿为准，本节只规定每个页面必须具备的行为和状态。
+The design defines the visuals. This section only specifies the behavior and states each page must have.
 
-| 页面 | 关键行为 | 必须覆盖的状态 |
+| Page | Key behavior | Required states |
 |---|---|---|
-| 解锁 | 输入主密码；Windows Hello（P1）；"忘记主密码"进入恢复码流程 | 密码错误、节流等待中 |
-| 首次启动 | 二选一："创建新保险库"或"从云端恢复" | — |
-| 主机列表 | 侧边栏包含全部、收藏、分组、标签；列表行显示名称、`user@host:port`、标签、在线状态、最近连接时间；顶部有搜索框和新建按钮 | 空状态（引导新建主机或导入 ssh config）、搜索无结果 |
-| 主机编辑 | 字段见 §5.1；密码字段规则见 HOST-08 | 字段校验错误 |
-| 终端 | 顶部标签栏、连接状态、可展开的 SFTP 面板 | 连接中、连接失败（带重试按钮）、指纹确认对话框、指纹不匹配警告、已断开 |
-| 密钥库 | 见 §8.3 | 空状态 |
-| 云同步 | 三步向导：选择模式 → 填写连接信息（Worker URL + Setup Token，或 Account ID + API Token 并选择数据库）→ 设置或输入主密码；完成后显示状态页 | 已同步、同步中、有冲突、离线、认证失效；设备列表与吊销操作 |
-| 设置 | 终端外观、自动锁定时长、锁定时是否断开会话、语言 | — |
+| Unlock | Enter the master password, Windows Hello (P1), and a forgotten-password link into the recovery code flow | Wrong password, throttled |
+| First launch | Choose between **Create a New Vault** and **Restore from Cloud** | None |
+| Host list | The sidebar has All, Favorites, groups, and tags. List rows show the name, `user@host:port`, tags, online status, and last connection time. A search box and a new-host button sit at the top | Empty (suggesting a new host or an ssh config import), no search results |
+| Host edit | Fields as in §5.1, password field rules as in HOST-08 | Field validation errors |
+| Terminal | Tab bar at the top, connection status, and an expandable SFTP panel | Connecting, connection failed (with a retry button), fingerprint confirmation dialog, fingerprint mismatch warning, disconnected |
+| Keys | See §8.3 | Empty |
+| Cloud Sync | A three-step wizard: choose a method → enter connection details (Worker URL and setup token, or Account ID and API token plus a database) → set or enter the master password. A status page follows | Synced, syncing, conflicts, offline, signed out. Device list and revocation |
+| Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language | None |
 
-**全局要求**：
+**Global requirements**:
 
-- 快捷键见 §9.1 WIN-04。
-- 主题默认跟随系统，浅色和深色两套 token 均从设计稿中提取。
-- 国际化：**从第一天起所有文案都要外置，不允许硬编码**（P0）；简体中文、日文、英文三套翻译列为 P1，默认跟随系统语言。
-- 设计稿中的 macOS 元素（红绿灯按钮、SF 字体、半透明侧边栏）在 Windows 上的替代方案见 §9.1。
+- Shortcuts: see WIN-04 in §9.1.
+- The theme follows the system by default, and both the light and dark tokens come from the design.
+- Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Japanese, and English translations are P1, and the default follows the system language.
+- §9.1 covers the Windows replacements for the design's macOS elements (traffic-light buttons, SF fonts, translucent sidebar).
 
-### 9.1 Windows 适配
+### 9.1 Windows adaptation
 
-设计稿是 macOS 外观，Windows 首发版按下表适配。原则是保留设计稿的留白、层级、圆角和配色，只替换平台相关的部分。
+The design has a macOS look, and the first Windows release adapts it as below. It keeps the design's whitespace, hierarchy, corner radii, and colors and replaces only the platform-specific parts.
 
-| 编号 | 需求 | 优先级 |
+| ID | Requirement | Priority |
 |---|---|---|
-| WIN-01 | 自绘标题栏（Tauri `decorations: false`）：标签栏与标题栏合一，右上角为 Windows 风格的最小化、最大化、关闭按钮；支持拖动、双击最大化，以及悬停最大化按钮时弹出 Windows 11 Snap Layouts（可参考 tauri-plugin-decorum 等方案）。设计稿左上角的红绿灯按钮在 Windows 上不显示 | P0 |
-| WIN-02 | 字体映射：界面字体 SF Pro → `Segoe UI Variable`（Windows 10 回退 `Segoe UI`）；终端字体 SF Mono → `Cascadia Mono`（回退 `Consolas`）；中文回退 `Microsoft YaHei UI`，日文回退 `Yu Gothic UI` | P0 |
-| WIN-03 | 高 DPI 与多显示器：100%、125%、150%、200% 缩放下显示清晰，窗口在不同缩放比例的显示器之间拖动时不模糊、不错位 | P0 |
-| WIN-04 | 快捷键（见下表）。终端获得焦点时，Ctrl+字母必须原样发送给远端（Ctrl+L 清屏、Ctrl+W 删词、Ctrl+K 删到行尾等），因此应用级快捷键统一加 Shift | P0 |
-| WIN-05 | 终端复制粘贴：有选中文本时 Ctrl+C 复制，否则发送 `^C`；Ctrl+V 和 Ctrl+Shift+V 都是粘贴；右键行为可设置为"有选中则复制，否则粘贴"（PuTTY 习惯）或弹出菜单 | P0 |
-| WIN-06 | WebView2 运行时：安装包内置引导程序，Windows 10 上缺少运行时时自动安装 | P0 |
-| WIN-07 | 背景材质：设计稿的半透明侧边栏在 Windows 11 上用 Mica 实现，Windows 10 回退为设计稿的纯色背景 | P1 |
-| WIN-08 | 跟随系统浅色 / 深色模式，切换时实时更新 | P0 |
-| WIN-09 | 私钥导入支持 PuTTY `.ppk` 格式（v2 / v3）。需确认所选密钥库是否支持，不支持则单独实现解析 | P1 |
+| WIN-01 | Custom title bar (Tauri `decorations: false`): the tab bar and the title bar are one, with Windows-style minimize, maximize, and close buttons at the top right. It supports dragging, double-click to maximize, and Windows 11 Snap Layouts on hovering the maximize button (tauri-plugin-decorum and similar projects are useful references). The design's traffic-light buttons at the top left are not shown on Windows | P0 |
+| WIN-02 | Font mapping: the UI font SF Pro becomes `Segoe UI Variable`, falling back to `Segoe UI` on Windows 10. The terminal font SF Mono becomes `Cascadia Mono`, falling back to `Consolas`. Chinese falls back to `Microsoft YaHei UI`, and Japanese to `Yu Gothic UI` | P0 |
+| WIN-03 | High DPI and multiple monitors: sharp at 100%, 125%, 150%, and 200% scaling, with no blur or misplacement when the window moves between monitors with different scaling | P0 |
+| WIN-04 | Shortcuts (see the table below). While the terminal has focus, Ctrl+letter must reach the remote side unchanged (Ctrl+L clears the screen, Ctrl+W deletes a word, Ctrl+K deletes to the end of the line, and so on), so every app-level shortcut adds Shift | P0 |
+| WIN-05 | Terminal copy and paste: Ctrl+C copies when text is selected and sends `^C` otherwise. Ctrl+V and Ctrl+Shift+V both paste. Right-click can be set to copy if text is selected and paste otherwise (the PuTTY habit), or to open a menu | P0 |
+| WIN-06 | WebView2 runtime: the installer embeds the bootstrapper and installs the runtime automatically when Windows 10 lacks it | P0 |
+| WIN-07 | Backdrop: the design's translucent sidebar uses Mica on Windows 11 and falls back to the design's solid color on Windows 10 | P1 |
+| WIN-08 | Follow the system light or dark mode and update live when it changes | P0 |
+| WIN-09 | Import PuTTY `.ppk` private keys (v2 and v3). Check whether the chosen key library supports them, and write a parser if it does not | P1 |
 
-| 操作 | Windows / Linux | macOS（P1） |
+| Action | Windows / Linux | macOS (P1) |
 |---|---|---|
-| 搜索主机 | Ctrl+Shift+K（焦点不在终端时 Ctrl+K 也可） | ⌘K |
-| 新建标签 | Ctrl+Shift+T | ⌘T |
-| 关闭标签 | Ctrl+Shift+W | ⌘W |
-| 切换标签 | Ctrl+Tab / Ctrl+Shift+Tab | ⌃Tab / ⌃⇧Tab |
-| 打开设置 | Ctrl+, | ⌘, |
-| 锁定 | Ctrl+Shift+L | ⌘L |
-| 复制 | Ctrl+Shift+C；有选中文本时 Ctrl+C | ⌘C |
-| 粘贴 | Ctrl+Shift+V 或 Ctrl+V | ⌘V |
+| Search hosts | Ctrl+Shift+K (Ctrl+K also works when the terminal does not have focus) | ⌘K |
+| New tab | Ctrl+Shift+T | ⌘T |
+| Close tab | Ctrl+Shift+W | ⌘W |
+| Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab | ⌃Tab / ⌃⇧Tab |
+| Open settings | Ctrl+, | ⌘, |
+| Lock | Ctrl+Shift+L | ⌘L |
+| Copy | Ctrl+Shift+C, or Ctrl+C with text selected | ⌘C |
+| Paste | Ctrl+Shift+V or Ctrl+V | ⌘V |
 
 ---
 
-## 10. IPC 约定
+## 10. IPC conventions
 
-### 10.1 Commands（前端调用 Rust）
+### 10.1 Commands (frontend calls Rust)
 
-命令的完整列表和签名由 tauri-specta 生成在 `apps/desktop/src/ipc/bindings.ts` 的 `commands` 对象中，Rust 实现按模块（vault、hosts、keys、ssh、forwards、sftp、sync、settings、app）放在 `apps/desktop/src-tauri/src/commands/` 下的同名文件里。
+tauri-specta generates the full list of commands and their signatures into the `commands` object in `apps/desktop/src/ipc/bindings.ts`. The Rust implementations are grouped by module (vault, hosts, keys, ssh, forwards, sftp, sync, settings, app) in files of the same names under `apps/desktop/src-tauri/src/commands/`.
 
-返回给前端的 DTO 一律不含秘密字段。例如 `HostView` 只有 `has_password: bool`，`KeyView` 只有公钥和指纹。
+DTOs returned to the frontend never contain secret fields. For example, `HostView` has only `has_password: bool`, and `KeyView` has only the public key and the fingerprint.
 
-### 10.2 Events（Rust 推送给前端）
+### 10.2 Events (Rust pushes to the frontend)
 
-事件的完整列表由 tauri-specta 生成在 `apps/desktop/src/ipc/bindings.ts` 的 `events` 对象中，事件名由 `apps/desktop/src-tauri/src/dto.rs` 中各事件类型的 `#[tauri_specta(event_name = ...)]` 定义，按 `vault://`、`sync://`、`ssh://`、`transfer://` 前缀分组。
+tauri-specta generates the full list of events into the `events` object in `apps/desktop/src/ipc/bindings.ts`. Event names come from `#[tauri_specta(event_name = ...)]` on each event type in `apps/desktop/src-tauri/src/dto.rs`, grouped by the prefixes `vault://`, `sync://`, `ssh://`, and `transfer://`.
 
-### 10.3 终端数据流
+### 10.3 Terminal data flow
 
-- **输出**：每个会话对应一个 Tauri `Channel`。Rust 端对 SSH 输出做缓冲，每 8 ms 或累积到 32 KB 时（以先到者为准）推送一次。事件类型为 `Data(bytes) | Closed { reason } | Error { message }`。
-- 输出字节走 Tauri 2 Channel 的原始二进制传输路径（WebView 中为 `ArrayBuffer`），不序列化成 JSON 数组，否则吞吐量会很差。
-- **输入**：`ssh_write` 把键盘输入发给 Rust。
-- **背压（P1）**：前端处理不过来时，Rust 端缓冲上限设为 4 MB，超过后暂停从 SSH 通道读取数据。
+- **Output**: each session has its own Tauri `Channel`. The Rust side buffers SSH output and pushes it every 8 ms or once 32 KB has accumulated, whichever comes first. The event type is `Data(bytes) | Closed { reason } | Error { message }`.
+- Output bytes take the raw binary path of Tauri 2 channels (an `ArrayBuffer` in the WebView). Serializing them as JSON arrays would ruin throughput.
+- **Input**: `ssh_write` sends keyboard input to Rust.
+- **Backpressure (P1)**: when the frontend cannot keep up, the Rust side buffers up to 4 MB and then stops reading from the SSH channel.
 
 ---
 
-## 11. 非功能需求
+## 11. Non-functional requirements
 
-| 类别 | 要求 |
+| Category | Requirement |
 |---|---|
-| 性能 | 冷启动到解锁界面 < 1 秒（主流 Windows 笔记本）；解锁（Argon2id）< 1.5 秒；持续大量输出（如 `cat` 一个 50 MB 文件）时界面不冻结；按键回显延迟 < 50 ms；1,000 台主机时搜索结果即时出现 |
-| 可靠性 | 同步失败不影响本地使用；任何情况下都不能因为同步丢失私钥 |
-| 平台 | Windows 10（21H2+）/ Windows 11 x64 为 P0；Windows arm64、macOS 13+、Linux（AppImage / deb）为 P1 |
-| 分发 | Windows：NSIS 安装包（按用户安装，无需管理员权限）为 P0；Authenticode 代码签名为 P1（未签名会触发 SmartScreen 警告）；Tauri updater 签名更新为 P1。macOS 签名与公证随 macOS 版本 |
-| 隐私 | 不收集任何遥测数据；本地日志按天滚动，保留 7 天 |
-| 开源 | 公开仓库，MIT 许可证（[LICENSE](../LICENSE)） |
+| Performance | Cold start to the unlock screen under 1 second (on a mainstream Windows laptop). Unlock (Argon2id) under 1.5 seconds. The UI does not freeze during sustained heavy output (such as `cat` on a 50 MB file). Keystroke echo latency under 50 ms. Search results appear instantly with 1,000 hosts |
+| Reliability | A failed sync does not affect local use. Sync must never lose a private key, under any circumstances |
+| Platforms | Windows 10 (21H2+) and Windows 11 x64 are P0. Windows arm64, macOS 13+, and Linux (AppImage, deb) are P1 |
+| Distribution | Windows: an NSIS installer (per-user, no administrator rights) is P0. Authenticode code signing is P1 (unsigned builds trigger a SmartScreen warning). Signed updates through the Tauri updater are P1. macOS signing and notarization come with the macOS version |
+| Privacy | No telemetry. Local logs roll daily and are kept for 7 days |
+| Open source | Public repository under the MIT license ([LICENSE](../LICENSE)) |
 
 ---
 
-## 12. 测试
+## 12. Testing
 
-运行各项测试的命令见[开发指南](development.md#测试)。
+The [development guide](development.md#testing) has the commands that run each test suite.
 
-- **单元测试**：加密模块使用固定测试向量；验证信封加解密往返；篡改 AAD 或密文时解密必须失败；冲突解决规则逐条覆盖。
-- **SSH 集成测试**：测试启动一个临时的本机 OpenSSH `sshd`，覆盖密码、各类私钥、带口令私钥、PPK、指纹校验与指纹变化、keyboard-interactive、多级 ProxyJump、ssh-agent、SFTP、端口转发、50 MB 输出吞吐与背压、错误分类。`hatoba-ssh` 与平台无关，这部分测试在 CI 的 Linux runner 上运行。
-- **Windows 测试**：CI 在 `windows-latest` 上构建并跑单元测试；发布前在 Windows 10 和 Windows 11 实机上手动验证安装、标题栏、输入法、高 DPI 和 Windows Hello。
-- **Worker 测试**：使用 Vitest 配合 `@cloudflare/vitest-plugin`，在本地 workerd 和本地 D1 上测试所有 API，包括 Setup Token、会话与过期、并发冲突、分页、大小限制、改密吊销会话、恢复流程、设备管理和限流。
-- **同步测试**：模拟两个客户端经模拟服务端并发修改同一条目，以及同步过程中网络中断；Worker 与 D1 直连两种后端的请求映射。
-- **客户端与 Worker 联调**：`crates/hatoba-core/tests/worker_live.rs` 让两台设备通过 `wrangler dev` 运行的真实 Worker 同步（初始化、恢复、双向编辑、冲突、删除、设备列表、吊销），结束后扫描本地 D1，确认只有密文。
-- **前端**：TypeScript 严格模式；tauri-specta 生成的绑定与 `apps/desktop/src/ipc/contract.check.ts` 中前端使用的契约在类型检查时双向比对；Vitest 单元测试；[端到端冒烟测试](../apps/desktop/e2e/README.md)用真实 Rust 后端和临时 `sshd` 走主流程。
-- **安全检查**：对本地数据库文件、D1 导出文件和日志文件做明文扫描，确认其中不含测试数据里的主机名、密码和私钥。
+- **Unit tests**: the crypto module uses fixed test vectors. The tests cover envelope encryption round trips, require decryption to fail when the AAD or the ciphertext is tampered with, and cover each conflict resolution rule.
+- **SSH integration tests**: the tests start a throwaway local OpenSSH `sshd` and cover passwords, each key type, passphrase-protected keys, PPK, host key verification and key changes, keyboard-interactive, multi-hop ProxyJump, ssh-agent, SFTP, port forwarding, 50 MB output throughput and backpressure, and error classification. `hatoba-ssh` is platform independent, so these tests run on the Linux runner in CI.
+- **Windows tests**: CI builds and runs the unit tests on `windows-latest`. Before a release, installation, the title bar, input methods, high DPI, and Windows Hello are checked by hand on real Windows 10 and Windows 11 machines.
+- **Worker tests**: Vitest with `@cloudflare/vitest-plugin` tests every API on local workerd and a local D1, including the setup token, sessions and expiry, concurrent conflicts, pagination, size limits, session revocation on password change, the recovery flow, device management, and rate limiting.
+- **Sync tests**: two simulated clients modify the same item concurrently through a simulated server, and the network drops in the middle of a sync. Request mapping is tested for both the Worker and the D1 direct backends.
+- **Client and Worker integration**: `crates/hatoba-core/tests/worker_live.rs` syncs two devices through a real Worker running in `wrangler dev` (setup, recovery, edits on both sides, conflicts, deletion, the device list, revocation), then scans the local D1 to confirm it holds only ciphertext.
+- **Frontend**: TypeScript strict mode. Type checking compares the tauri-specta bindings with the contract the frontend uses in `apps/desktop/src/ipc/contract.check.ts`, in both directions. Vitest unit tests. The [end-to-end smoke test](../apps/desktop/e2e/README.md) walks the main path with the real Rust backend and a throwaway `sshd`.
+- **Security checks**: scan the local database file, the D1 export, and the log files for plaintext, and confirm that none of the host names, passwords, or private keys from the test data appear in them.

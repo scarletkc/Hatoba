@@ -1,98 +1,98 @@
-# 开发指南
+# Development guide
 
-在本地构建、运行和测试 Hatoba。CI 执行的完整检查见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。
+Build, run, and test Hatoba locally. [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) has the full set of checks that CI runs.
 
-## 环境要求
+## Requirements
 
-- Rust stable、Node.js 22+、pnpm（版本见根目录 [`package.json`](../package.json) 的 `packageManager`）。
-- Windows：WebView2（Windows 11 自带）。
-- Linux：`libwebkit2gtk-4.1-dev` 等 Tauri 依赖，CI 安装的完整列表见 `ci.yml` 中 `rust-linux` 任务的 System dependencies 步骤。
-- SSH 集成测试和端到端测试需要 OpenSSH 服务器（`sshd`）。
+- Rust stable, Node.js 22+, and pnpm (the version is in `packageManager` in the root [`package.json`](../package.json)).
+- Windows: WebView2 (included in Windows 11).
+- Linux: the Tauri dependencies, such as `libwebkit2gtk-4.1-dev`. The System dependencies step of the `rust-linux` job in `ci.yml` has the full list that CI installs.
+- The SSH integration tests and the end-to-end test need an OpenSSH server (`sshd`).
 
-## 运行
+## Run
 
 ```sh
 pnpm install
-pnpm tauri dev            # 启动桌面应用
-pnpm dev                  # 只启动前端，在浏览器中使用模拟后端
+pnpm tauri dev            # Start the desktop app
+pnpm dev                  # Start only the frontend, with a mock backend in the browser
 ```
 
-`pnpm dev` 在浏览器中运行时使用 `apps/desktop/src/ipc/mock` 的模拟后端，带设计稿示例数据。URL 参数可以切换演示状态，例如 `?state=locked`、`?sync=conflict`；完整的参数列表见 `apps/desktop/src/ipc/mock/index.ts` 中 `createMockApi` 的注释。
+In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with the design's sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
 
-## 测试
+## Testing
 
-`hatoba-desktop` 编译时会嵌入前端构建产物，所以第一次运行 `cargo` 命令前先构建一次前端：
+`hatoba-desktop` embeds the frontend build output at compile time, so build the frontend once before your first `cargo` command:
 
 ```sh
 pnpm build
 ```
 
-然后：
+Then:
 
 ```sh
-cargo test --workspace         # Rust 单元测试
-pnpm typecheck && pnpm test    # 前端类型检查与单元测试
+cargo test --workspace         # Rust unit tests
+pnpm typecheck && pnpm test    # Frontend type check and unit tests
 ```
 
-各项测试覆盖的范围见[架构与需求文档 §12](hatoba-spec.md#12-测试)。
+[§12 of the architecture and requirements](hatoba-spec.md#12-testing) describes what each suite covers.
 
-### SSH 集成测试
+### SSH integration tests
 
-这些测试会启动一个临时的本机 `sshd`，需要已安装 OpenSSH 服务器；没有设置 `HATOBA_SSH_IT=1` 时跳过。
+These tests start a throwaway local `sshd` and need the OpenSSH server installed. They are skipped unless `HATOBA_SSH_IT=1` is set.
 
 ```sh
 HATOBA_SSH_IT=1 cargo test -p hatoba-ssh
 ```
 
-### 同步 Worker
+### Sync Worker
 
-在 `workers/sync` 目录执行：
+Run these in `workers/sync`:
 
 ```sh
 npm install
 npm run typecheck
-npm test               # Vitest，在本地 workerd + 本地 D1 上运行全部接口测试
+npm test               # Vitest, runs every API test on local workerd with a local D1
 ```
 
-每个测试前清空本地 D1，迁移在测试启动时自动应用。
+Each test starts with an empty local D1, and the migrations are applied when the test run starts.
 
-手动调试：
+For manual debugging:
 
 ```sh
-cp .dev.vars.example .dev.vars        # 里面的 SETUP_TOKEN 只用于本地
+cp .dev.vars.example .dev.vars        # Its SETUP_TOKEN is for local use only
 npm run db:migrate:local
 npm run dev                           # http://localhost:8787
 ```
 
-本地 `wrangler dev` 没有 `CF-Connecting-IP` 请求头，所有请求共用同一个限流计数。
+Local `wrangler dev` has no `CF-Connecting-IP` header, so all requests share one rate limit counter.
 
-### 客户端与 Worker 联调
+### Client and Worker integration
 
-`crates/hatoba-core/tests/worker_live.rs` 让 Rust 客户端与 `wrangler dev` 运行的真实 Worker 同步，没有设置 `HATOBA_WORKER_URL` 时跳过。启动 Worker 和运行测试的命令写在该文件开头的注释里。
+`crates/hatoba-core/tests/worker_live.rs` syncs the Rust client with a real Worker running in `wrangler dev`, and is skipped unless `HATOBA_WORKER_URL` is set. The comment at the top of that file has the commands that start the Worker and run the test.
 
-### 端到端冒烟测试
+### End-to-end smoke test
 
-只支持 Linux，步骤见[端到端冒烟测试](../apps/desktop/e2e/README.md)。
+Linux only. See [Run the end-to-end smoke test](../apps/desktop/e2e/README.md).
 
-## 更新 TypeScript 绑定
+## Update the TypeScript bindings
 
-修改了 Rust 端的 command、事件或 DTO 之后，重新生成 `apps/desktop/src/ipc/bindings.ts`：
+After changing a Rust command, event, or DTO, regenerate `apps/desktop/src/ipc/bindings.ts`:
 
 ```sh
 cargo test -p hatoba-desktop export_bindings
 ```
 
-`pnpm typecheck` 会通过 `apps/desktop/src/ipc/contract.check.ts` 比对生成的绑定与前端使用的契约；CI 在绑定没有更新时失败。
+`pnpm typecheck` compares the generated bindings with the contract the frontend uses, through `apps/desktop/src/ipc/contract.check.ts`. CI fails when the bindings are out of date.
 
-## 提交前检查
+## Checks before committing
 
-CI 还会运行格式和 lint 检查：
+CI also runs format and lint checks:
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## 常见问题
+## Troubleshooting
 
-- 在 `workers/sync` 添加依赖时，npm 10 可能报 `Cannot read properties of null (reading 'edgesOut')`。这是 npm 10.x 解析 vitest 可选 peer 依赖时的已知问题，升级到 npm 11 或改用 pnpm 即可。直接 `npm install` / `npm ci` 已有的 `package-lock.json` 不受影响。
+- When you add a dependency in `workers/sync`, npm 10 may fail with `Cannot read properties of null (reading 'edgesOut')`. This is a known npm 10.x issue with resolving the optional peer dependencies of vitest. Upgrade to npm 11 or use pnpm. A plain `npm install` or `npm ci` from the existing `package-lock.json` is not affected.

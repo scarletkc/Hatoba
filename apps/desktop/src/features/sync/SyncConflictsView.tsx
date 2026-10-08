@@ -128,8 +128,8 @@ function ConflictCard({
 }
 
 /**
- * Review of automatically resolved conflicts (spec §6.4, P1 "逐条查看"): sync was not interrupted, so each
- * card offers to keep the result or restore the version that lost.
+ * Review of automatically resolved conflicts (spec §6.4, P1 "item-by-item review"): sync was not interrupted,
+ * so each card offers to keep the result or restore the version that lost.
  */
 export function SyncConflictsView({ onClose }: { onClose: () => void }) {
   const t = useT();

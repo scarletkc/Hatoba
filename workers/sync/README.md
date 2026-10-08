@@ -1,133 +1,131 @@
-# 部署 Hatoba Sync Worker
+# Deploy the Hatoba sync Worker
 
-> English: the project [README](../../README.md#set-up-sync) gives the deployment steps in English.
+Hatoba's sync backend is a Worker (Hono) and a D1 database running in **your own Cloudflare account**, with no dependency on any official Hatoba server. One deployment serves one user (a single vault). The server stores only ciphertext and never sees the master password, `vault_key`, or any plaintext.
 
-Hatoba 的云同步服务端是一个运行在**你自己的 Cloudflare 账号**里的 Worker（Hono）加一个 D1 数据库，不依赖任何 Hatoba 官方服务器。一个部署只服务一个用户（单保险库），服务端只保存密文，拿不到主密码、`vault_key` 或任何明文。
+This page covers deployment, upgrades, and maintenance. The API and server behavior are in [§6.2 of the architecture and requirements](../../docs/hatoba-spec.md#62-worker-api), the security properties in [§4.4 Threat model](../../docs/hatoba-spec.md#44-threat-model) and [§4.5 Data visible to the server](../../docs/hatoba-spec.md#45-data-visible-to-the-server), and local development and testing in the [development guide](../../docs/development.md#sync-worker).
 
-本页给出部署、升级和维护的步骤。接口与服务端行为见[架构与需求文档 §6.2](../../docs/hatoba-spec.md#62-worker-api)，安全属性见 [§4.4 威胁模型](../../docs/hatoba-spec.md#44-威胁模型)和 [§4.5 服务端可见的数据](../../docs/hatoba-spec.md#45-服务端可见的数据)，本地开发与测试见[开发指南](../../docs/development.md#同步-worker)。
+## Before you start
 
-## 准备
+You need:
 
-需要：
+- A Cloudflare account. The free plan works, and personal use usually stays within its limits.
+- Node.js **22 or later** (required by wrangler 4) and npm.
 
-- 一个 Cloudflare 账号（免费版即可，个人使用通常在免费额度内）
-- Node.js **22 或更新**（wrangler 4 的要求）和 npm
+Run every command below in this directory (`workers/sync`). They work the same in Windows PowerShell and on macOS and Linux.
 
-以下命令均在本目录（`workers/sync`）执行，Windows PowerShell 与 macOS / Linux 通用。
+## Deploy
 
-## 部署
-
-### 1. 安装依赖并登录
+### 1. Install dependencies and sign in
 
 ```sh
 npm install
 npx wrangler login
 ```
 
-### 2. 创建 D1 数据库
+### 2. Create the D1 database
 
 ```sh
 npx wrangler d1 create hatoba
 ```
 
-可以用 `--location apac|weur|eeur|oc|wnam|enam` 指定离你近的区域，例如 `npx wrangler d1 create hatoba --location apac`。
+Add `--location apac|weur|eeur|oc|wnam|enam` to pick a region near you, for example `npx wrangler d1 create hatoba --location apac`.
 
-命令会打印一个 `database_id`。把它填进 [`wrangler.toml`](./wrangler.toml) 的 `[[d1_databases]]`，替换占位值 `00000000-0000-0000-0000-000000000000`：
+The command prints a `database_id`. Put it in `[[d1_databases]]` in [`wrangler.toml`](./wrangler.toml), replacing the placeholder `00000000-0000-0000-0000-000000000000`:
 
 ```toml
 [[d1_databases]]
-binding = "DB"                  # 不要改，代码依赖这个名字
+binding = "DB"                  # Do not change it, the code depends on this name
 database_name = "hatoba"
-database_id = "<这里填 wrangler 打印的 id>"
+database_id = "<the id that wrangler printed>"
 migrations_dir = "migrations"
 ```
 
-如果 wrangler 询问是否自动把绑定写入配置，选择"否"并手动填写；若选了"是"，请确认配置里没有重复的 `[[d1_databases]]` 段。
+If wrangler offers to add the binding to the configuration for you, answer no and fill it in by hand. If you answered yes, make sure the configuration has no duplicate `[[d1_databases]]` section.
 
-### 3. 建表（迁移）
+### 3. Create the tables (migrations)
 
 ```sh
 npx wrangler d1 migrations apply hatoba --remote
 ```
 
-没有 `--remote` 时只会作用于本地开发数据库。
+Without `--remote`, the migrations apply only to the local development database.
 
-### 4. 设置 Setup Token
+### 4. Set the setup token
 
-Setup Token 用来防止别人抢在你之前初始化一个刚部署、还没配置的 Worker。它是一个只有你知道的随机字符串，**请用强随机值**：
+The setup token stops someone else from initializing a freshly deployed, unconfigured Worker before you do. It is a random string that only you know, so **use a strong random value**:
 
 ```sh
 # macOS / Linux / Git Bash
 openssl rand -base64 32
 
-# 任意系统（只要装了 Node）
+# Any system with Node installed
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 
-# Windows PowerShell（不需要 openssl）
+# Windows PowerShell (no openssl needed)
 $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
 ```
 
-把生成的值存进密码管理器（稍后要在 Hatoba 里粘贴），然后写入 Worker 的 secret：
+Save the value in your password manager (you paste it into Hatoba later), then store it as a Worker secret:
 
 ```sh
 npx wrangler secret put SETUP_TOKEN
 ```
 
-按提示粘贴该值。如果 wrangler 提示"还没有名为 hatoba-sync 的 Worker，是否创建"，回答是。Secret 不会出现在 `wrangler.toml` 或 git 里。
+Paste the value when prompted. If wrangler says there is no Worker named hatoba-sync yet and asks whether to create one, answer yes. The secret never appears in `wrangler.toml` or in git.
 
-### 5. 部署
+### 5. Deploy
 
 ```sh
 npx wrangler deploy
 ```
 
-输出里会有 Worker 的地址，形如 `https://hatoba-sync.<你的子域>.workers.dev`。验证部署是否成功：
+The output includes the Worker's URL, such as `https://hatoba-sync.<your-subdomain>.workers.dev`. Check that the deployment works:
 
 ```sh
-curl https://hatoba-sync.<你的子域>.workers.dev/v1/health
+curl https://hatoba-sync.<your-subdomain>.workers.dev/v1/health
 ```
 
-返回的 JSON 中 `service` 为 `"hatoba-sync"`、`initialized` 为 `false`，表示部署成功、尚未初始化。如果返回 `503 database_unavailable`，说明第 2 步的 `database_id` 填错了或第 3 步没有执行。
+A JSON response with `service` set to `"hatoba-sync"` and `initialized` set to `false` means the Worker is deployed and not initialized yet. A `503 database_unavailable` means the `database_id` from step 2 is wrong or step 3 did not run.
 
-### 6. 在 Hatoba 里启用同步
+### 6. Enable sync in Hatoba
 
-1. 在 Hatoba 的侧边栏打开**云同步**，选择**部署 Worker**。
-2. 填写 **Worker URL**（第 5 步的地址）和 **Setup Token**（第 4 步生成的值），点击"测试连接"。
-3. 按向导设置或输入主密码。第一台设备会调用 `/v1/setup` 完成初始化，随后自动登录并推送全部条目。
+1. In Hatoba, open **Cloud Sync** in the sidebar and choose **Deploy a Worker**.
+2. Enter the **Worker URL** from step 5 and the **Setup Token** from step 4, and select **Test Connection**.
+3. Follow the wizard to set or enter the master password. The first device calls `/v1/setup` to initialize the vault, then signs in and pushes every item.
 
-其他设备加入：在新设备首次启动时选择"从云端恢复"，只需要 Worker URL 和主密码，**不需要** Setup Token。
+To add another device, choose **Restore from Cloud** on its first launch. It needs only the Worker URL and the master password, **not** the setup token.
 
-## 维护
+## Maintenance
 
-### 初始化之后（可选加固）
+### After initialization (optional hardening)
 
-初始化完成后 Setup Token 就不再需要了。你可以删除它，这样 `/v1/setup` 会一直返回 `503 setup_token_not_configured`：
+Once the vault is initialized, the setup token is no longer needed. You can delete it, and `/v1/setup` then always returns `503 setup_token_not_configured`:
 
 ```sh
 npx wrangler secret delete SETUP_TOKEN
 ```
 
-### 升级
+### Upgrade
 
 ```sh
 git pull
 npm install
-npx wrangler d1 migrations apply hatoba --remote   # 只会执行新增的迁移
+npx wrangler d1 migrations apply hatoba --remote   # Applies only the new migrations
 npx wrangler deploy
 ```
 
-### 重置（丢弃云端保险库）
+### Reset (discard the cloud vault)
 
-只在你确定要清空云端数据（例如初始化时填错了东西）时使用，本地设备上的数据不受影响：
+Use this only when you are sure you want to wipe the cloud data, for example after entering something wrong during setup. Data on your devices is not affected:
 
 ```sh
 npx wrangler d1 execute hatoba --remote --command "DELETE FROM sessions; DELETE FROM items; DELETE FROM meta;"
 ```
 
-### 备份与检查
+### Back up and inspect
 
 ```sh
 npx wrangler d1 export hatoba --remote --output hatoba-backup.sql
 ```
 
-导出文件里只有密文、KDF 参数和哈希，搜不到任何主机名、密码或私钥。这也是检查"服务端只有密文"的办法。
+The export holds only ciphertext, KDF parameters, and hashes, and a search finds no host name, password, or private key in it. This is also how you can check that the server holds only ciphertext.

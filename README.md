@@ -14,15 +14,15 @@
 </div>
 
 Hatoba (波止場, "wharf") keeps your hosts, keys, and terminal sessions in one
-place. Its sync backend is a Worker and a D1 database that you deploy to your
-own Cloudflare account, and every item is encrypted on your device before it
-leaves. There is no Hatoba server, and nobody else holds your data.
+place and syncs them between your devices. The sync backend is a Worker and a
+D1 database that you deploy to your own Cloudflare account.
 
-- **No official server.** The sync backend runs in your Cloudflare account,
-  so Hatoba never sees your data.
-- **End-to-end encrypted.** A leaked Worker, D1 database, or even the whole
-  Cloudflare account exposes only ciphertext.
-- **Local first.** Everything works offline, with or without sync.
+- **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
+  nobody else holds your data.
+- **End-to-end encrypted.** Everything is encrypted on your device before it
+  leaves, so a leaked Worker, D1 database, or even the whole Cloudflare account
+  exposes only ciphertext.
+- **Local first.** Everything works offline, and sync is optional.
 - **Windows first.** A custom title bar with Snap Layouts, Mica, Segoe UI and
   Cascadia fonts, and Windows input methods. macOS and Linux follow.
 
@@ -47,11 +47,21 @@ leaves. There is no Hatoba server, and nobody else holds your data.
   sync, automatic conflict resolution you can review item by item, and a
   device list with revocation.
 
+## Security
+
+Keys are derived from your master password with Argon2id, and every item is
+encrypted with AES-256-GCM before it is stored or synced. The Worker stores
+ciphertext and the hashes it needs to sign you in, never your master password
+or any plaintext. If you forget the master password and lose the recovery code,
+your data cannot be recovered. The
+[security model](docs/hatoba-spec.md#4-security-model-and-encryption) describes
+the key hierarchy and the threat model.
+
 ## Build from source
 
 You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
-WebView2, which Windows 11 includes; Linux needs the Tauri system dependencies
-such as `libwebkit2gtk-4.1-dev`.
+WebView2, which Windows 11 includes, and Linux needs the Tauri system
+dependencies such as `libwebkit2gtk-4.1-dev`.
 
 ```sh
 pnpm install
@@ -60,49 +70,25 @@ pnpm tauri dev
 
 On Windows, `pnpm tauri build` produces the NSIS installer. The
 [development guide](docs/development.md) covers the browser-only frontend,
-tests, and generated TypeScript bindings.
+tests, and the generated TypeScript bindings.
 
 ## Set up sync
 
-Sync is optional. To deploy the Worker, run these commands from `workers/sync`
-with Node.js 22 or later:
+Sync is optional. It runs on a Worker and a D1 database that you deploy once to
+your Cloudflare account with wrangler, and the free plan usually covers
+personal use. The first device connects with the Worker URL and a setup token
+you generate during deployment. Other devices need only the Worker URL and the
+master password.
 
-```sh
-npm install
-npx wrangler login
-npx wrangler d1 create hatoba                       # put the printed database_id in wrangler.toml
-npx wrangler d1 migrations apply hatoba --remote
-openssl rand -base64 32                             # generate a setup token and keep it
-npx wrangler secret put SETUP_TOKEN                 # paste the setup token
-npx wrangler deploy
-```
-
-In Hatoba, open **Cloud Sync** in the sidebar, choose **Deploy a Worker**,
-enter the Worker URL and the setup token, and select **Test Connection**.
-Other devices choose **Restore from Cloud** on first launch and need only the
-Worker URL and the master password.
-The [deployment guide](workers/sync/README.md) explains each step and covers
-upgrades, resets, and backups.
-
-## Security
-
-Keys are derived from your master password with Argon2id, and every item is
-encrypted with AES-256-GCM before it is stored or synced. The Worker stores
-ciphertext and the hashes it needs to sign you in, never your master password
-or any plaintext. If you forget the master
-password and lose the recovery code, your data cannot be recovered. The
-[security model](docs/hatoba-spec.md#4-安全模型与加密设计) describes the key
-hierarchy and the threat model.
+[Deploy the sync Worker](workers/sync/README.md) walks through deployment and
+connecting Hatoba, and covers upgrades, resets, and backups.
 
 ## Documentation
 
-The documentation below is written in Chinese, except the end-to-end test
-guide and the contributing guide.
-
 - [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
 - [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
-- [Development](docs/development.md): building, running, and testing
-- [Deploying the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
+- [Development guide](docs/development.md): building, running, and testing
+- [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
 - [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
 - [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests

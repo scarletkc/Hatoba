@@ -12,7 +12,7 @@ and prepare releases.
 Do not open a public issue for a security vulnerability. Report it through
 [private vulnerability reporting](https://github.com/scarletkc/Hatoba/security/advisories/new)
 instead. This covers anything that exposes passwords, keys, or other vault data
-beyond what the [security model](docs/hatoba-spec.md#4-安全模型与加密设计)
+beyond what the [security model](docs/hatoba-spec.md#4-security-model-and-encryption)
 allows.
 
 ## Start with an issue
@@ -163,8 +163,8 @@ Before requesting review:
 - When behavior changes, update the
   [architecture and requirements](docs/hatoba-spec.md) and any other affected
   docs in the same pull request; the
-  [implementation status](docs/status.md) is the easiest to forget. Most pages
-  under `docs/` are written in Chinese, so edit each page in its own language.
+  [implementation status](docs/status.md) is the easiest to forget. Write
+  documentation in English.
 - Change a schema by adding a migration, never by editing an existing one:
   `MIGRATIONS` in `crates/hatoba-core/src/store.rs` for the local database,
   and `workers/sync/migrations/` for D1. Vaults and Workers that already ran a
@@ -211,7 +211,7 @@ to layout, styling, components, visible text, and interaction states.
 
 `pnpm dev` runs the frontend in a browser with the mock backend and the
 design's sample data, and URL parameters select states and platforms, as the
-[development guide](docs/development.md#运行) describes. Capture changes that
+[development guide](docs/development.md#run) describes. Capture changes that
 depend on the native window or the operating system, such as the title bar,
 Mica, or input methods, in the desktop app from `pnpm tauri dev` on the
 affected platform.

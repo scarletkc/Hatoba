@@ -25,7 +25,7 @@ fn find_host(vault: &Vault, id: &str) -> AppResult<Host> {
         .ok_or_else(|| AppError::not_found("host"))
 }
 
-/// Validates the form (spec §9 "字段校验错误") and builds the stored model.
+/// Validates the form (spec §9 "field validation errors") and builds the stored model.
 pub fn host_from_input(
     input: &HostInput,
     existing: Option<&Host>,

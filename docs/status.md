@@ -1,107 +1,107 @@
-# 实现状态
+# Implementation status
 
-对照[架构与需求文档](hatoba-spec.md)的需求编号记录实现进度、待验证项和后续工作。需求的定义以该文档为准，本页只记录状态；各项测试覆盖的范围见其 [§12 测试](hatoba-spec.md#12-测试)。
+This page tracks implementation progress, items awaiting verification, and follow-up work against the requirement IDs in the [architecture and requirements](hatoba-spec.md). That document defines the requirements, and this page records only their status. Its [§12 Testing](hatoba-spec.md#12-testing) describes what each test suite covers.
 
-✅ 已实现并有测试或实测；🟡 已实现，但需在 Windows 实机上验证或尚未对接真实服务；⬜ 未实现。
+✅ Implemented, with tests or hands-on verification. 🟡 Implemented, but needs verification on a real Windows machine or has not been tried against the real service yet. ⬜ Not implemented.
 
-## 安全（§4.3）
+## Security (§4.3)
 
-| 编号 | 名称 | 状态 | 备注 |
+| ID | Name | Status | Notes |
 |---|---|---|---|
-| SEC-01 | 秘密只在 Rust 内存 | ✅ | |
-| SEC-02 | 自动锁定 | ✅ | |
-| SEC-03 | 锁定时保持会话 | ✅ | |
-| SEC-04 | 日志不含秘密 | ✅ | 端到端测试后扫描日志确认 |
-| SEC-05 | Tauri 加固 | ✅ | |
-| SEC-06 | 解锁失败递增延迟 | ✅ | |
-| SEC-07 | Windows Hello | 🟡 | 需 Windows 实机验证 |
-| SEC-08 | 剪贴板自动清空 | ✅ | |
-| SEC-09 | 密码强度提示 | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2，随 macOS 版本 |
+| SEC-01 | Secrets only in Rust memory | ✅ | |
+| SEC-02 | Auto-lock | ✅ | |
+| SEC-03 | Keep sessions while locked | ✅ | |
+| SEC-04 | No secrets in logs | ✅ | Confirmed by scanning the logs after the end-to-end test |
+| SEC-05 | Tauri hardening | ✅ | |
+| SEC-06 | Increasing delay after failed unlocks | ✅ | |
+| SEC-07 | Windows Hello | 🟡 | Needs verification on a real Windows machine |
+| SEC-08 | Clipboard auto-clear | ✅ | |
+| SEC-09 | Password strength hint | ✅ | |
+| SEC-10 | Touch ID | ⬜ | P2, with the macOS version |
 
-## SSH / 终端 / SFTP / 转发（§7）
+## SSH, terminal, SFTP, and forwarding (§7)
 
-| 编号 | 名称 | 状态 | 备注 |
+| ID | Name | Status | Notes |
 |---|---|---|---|
-| SSH-01…07 | 连接、认证、指纹、超时、重连 | ✅ | |
+| SSH-01…07 | Connection, authentication, fingerprints, timeouts, reconnect | ✅ | |
 | SSH-08 | keyboard-interactive | ✅ | |
-| SSH-09 | ssh-agent | 🟡 | Windows 命名管道需实机验证；Pageant（P2）⬜ |
+| SSH-09 | ssh-agent | 🟡 | The Windows named pipe needs verification on a real machine. Pageant (P2) ⬜ |
 | SSH-10 | ProxyJump | ✅ | |
-| SSH-11 | 导入 ssh config | ✅ | |
-| SSH-12 | 导入 PuTTY 会话 | ⬜ | P2 |
-| TERM-01…06 | 标签、颜色、宽字符、PTY、粘贴、回滚、外观 | ✅ / 🟡 | 微软拼音、日文输入法的候选框位置需 Windows 实机验证 |
-| TERM-07、08 | 终端内搜索、链接 | ✅ | |
-| TERM-09…11 | 分屏、会话日志、Snippets | ⬜ | P2 |
-| SFTP-01…04 | 文件面板、传输、文件操作、属性 | ✅ | |
-| SFTP-05 | 编辑远程文件 | ⬜ | P2 |
-| FWD-01、02 | 本地转发、随连接启动 | ✅ | |
-| FWD-03、04 | 远程转发、SOCKS | ⬜ | P2 |
+| SSH-11 | Import ssh config | ✅ | |
+| SSH-12 | Import PuTTY sessions | ⬜ | P2 |
+| TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin and the Japanese IME needs verification on a real Windows machine |
+| TERM-07, 08 | Terminal search, links | ✅ | |
+| TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
+| SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
+| SFTP-05 | Edit remote files | ⬜ | P2 |
+| FWD-01, 02 | Local forwarding, start with the connection | ✅ | |
+| FWD-03, 04 | Remote forwarding, SOCKS | ⬜ | P2 |
 
-## 保险库、主机、密钥（§8）
+## Vault, hosts, and keys (§8)
 
-| 编号 | 名称 | 状态 | 备注 |
+| ID | Name | Status | Notes |
 |---|---|---|---|
-| VAULT-01…07 | 主密码、恢复码、解锁、改密、加密备份 | ✅ | |
-| VAULT-08 | 明文导出 | ⬜ | P2 |
-| HOST-01…10 | 主机管理、搜索、在线探测 | ✅ | |
-| KEY-01…06 | 导入、生成、列表、部署公钥 | ✅ | |
-| KEY-07 | 查看私钥 | ⬜ | P2 |
+| VAULT-01…07 | Master password, recovery code, unlock, password change, encrypted backup | ✅ | |
+| VAULT-08 | Plaintext export | ⬜ | P2 |
+| HOST-01…10 | Host management, search, online probing | ✅ | |
+| KEY-01…06 | Import, generation, list, public key deployment | ✅ | |
+| KEY-07 | View private key | ⬜ | P2 |
 
-## 同步（§6）
+## Sync (§6)
 
-| 项 | 状态 | 备注 |
+| Item | Status | Notes |
 |---|---|---|
-| Worker 模式（§6.2） | ✅ | |
-| D1 直连模式（§6.1） | 🟡 | 已用 SQLite 模拟 REST 接口测试；尚未对接真实 Cloudflare D1 |
-| 同步引擎（§6.3） | ✅ | |
-| 冲突解决（§6.4） | ✅ | |
-| 流程 A / B（§6.6） | ✅ | |
-| 流程 C（§6.6） | ⬜ | P1 |
-| 设备管理 | ✅ | |
-| Deploy to Cloudflare 按钮（§6.6） | 🟡 | 向导中提供链接；需仓库公开后验证 |
-| 应用内一键部署（§6.6） | ⬜ | P2 |
-| 墓碑清理（§6.5） | ⬜ | P2 |
-| 回滚检测（§4.4） | ⬜ | P2 |
+| Worker mode (§6.2) | ✅ | |
+| D1 direct mode (§6.1) | 🟡 | Tested against a SQLite mock of the REST API, not yet against real Cloudflare D1 |
+| Sync engine (§6.3) | ✅ | |
+| Conflict resolution (§6.4) | ✅ | |
+| Flows A and B (§6.6) | ✅ | |
+| Flow C (§6.6) | ⬜ | P1 |
+| Device management | ✅ | |
+| Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it. Needs verification once the repository is public |
+| In-app one-click deployment (§6.6) | ⬜ | P2 |
+| Tombstone purge (§6.5) | ⬜ | P2 |
+| Rollback detection (§4.4) | ⬜ | P2 |
 
-## Windows 适配（§9.1）
+## Windows adaptation (§9.1)
 
-| 编号 | 名称 | 状态 | 备注 |
+| ID | Name | Status | Notes |
 |---|---|---|---|
-| WIN-01 | 自绘标题栏与 Snap Layouts | 🟡 | 需实机验证 |
-| WIN-02 | 字体映射 | ✅ | |
-| WIN-03 | 高 DPI 与多显示器 | 🟡 | 需在 100–200% 缩放下实机验证 |
-| WIN-04、05 | 快捷键、终端复制粘贴 | ✅ | |
-| WIN-06 | WebView2 引导程序 | ✅ | |
-| WIN-07 | Mica 背景 | 🟡 | 需实机验证 |
-| WIN-08 | 跟随系统深浅色 | ✅ | |
+| WIN-01 | Custom title bar and Snap Layouts | 🟡 | Needs verification on a real machine |
+| WIN-02 | Font mapping | ✅ | |
+| WIN-03 | High DPI and multiple monitors | 🟡 | Needs verification on a real machine at 100–200% scaling |
+| WIN-04, 05 | Shortcuts, terminal copy and paste | ✅ | |
+| WIN-06 | WebView2 bootstrapper | ✅ | |
+| WIN-07 | Mica backdrop | 🟡 | Needs verification on a real machine |
+| WIN-08 | Follow the system light or dark mode | ✅ | |
 | WIN-09 | PuTTY `.ppk` | ✅ | |
 
-## 发布（§11）
+## Release (§11)
 
-| 项 | 状态 | 备注 |
+| Item | Status | Notes |
 |---|---|---|
-| NSIS 安装包 | ✅ | 推送 `main` 或手动触发时由 [CI](../.github/workflows/ci.yml) 的 `rust-windows` 任务构建（PR 不构建），未签名 |
-| Authenticode 代码签名 | ⬜ | P1；可考虑 Azure Trusted Signing 降低成本 |
-| Tauri updater 签名更新 | ⬜ | P1 |
+| NSIS installer | ✅ | Built by the `rust-windows` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests). Unsigned |
+| Authenticode code signing | ⬜ | P1. Azure Trusted Signing could keep the cost down |
+| Signed updates through the Tauri updater | ⬜ | P1 |
 
-## MVP 范围
+## MVP scope
 
-团队共享与多人保险库、移动端（架构上预留，见规格 [§3.4](hatoba-spec.md#34-移动端预留)）、内置 AI、Telnet / Serial / RDP / VNC、Hatoba 官方托管的同步服务，以上均不在 MVP 范围内。
+Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), built-in AI, Telnet, Serial, RDP, VNC, and a sync service hosted by Hatoba.
 
-## 里程碑
+## Milestones
 
-| 里程碑 | 内容 | 验收标准 |
+| Milestone | Scope | Acceptance criteria |
 |---|---|---|
-| M0 骨架 | monorepo、Tauri 应用壳、从设计稿提取 token、Windows 自绘标题栏（WIN-01）、基础布局与路由、IPC 绑定生成 | 在 Windows 11 和 Windows 10 上启动后用假数据呈现设计稿中的主要页面，窗口拖动、最大化、Snap 正常 |
-| M1 终端 | 主机数据暂存内存；密码 / 密钥连接、多标签、PTY 尺寸同步、指纹确认 | 连接 OpenSSH 测试服务器，vim、htop 显示正常，用 Windows 中文、日文输入法输入正常，50 MB 输出不卡顿，150% 缩放下显示清晰 |
-| M2 本地保险库 | 加密、SQLite、主机 / 分组 / 标签 / 密钥增删改、解锁与自动锁定、恢复码 | 在本地数据库文件中搜索不到任何明文主机名、密码或私钥 |
-| M3 同步 | Worker + D1、同步引擎、同步向导与状态页、设备管理 | 两台设备双向同步；离线修改后能正确合并；冲突按 §6.4 处理；D1 中只有密文 |
-| M4 SFTP 与打磨 | SFTP 面板、所有空状态与错误状态、快捷键、导入 ssh config | §7、§8、§9 中的 P0 项全部完成 |
-| M5 发布 | Windows 安装包与代码签名、自动更新、README、Worker 部署模板 | 新用户按 README 能在 10 分钟内完成部署并启用同步 |
+| M0 Skeleton | Monorepo, Tauri app shell, tokens extracted from the design, Windows custom title bar (WIN-01), basic layout and routing, IPC binding generation | On Windows 11 and Windows 10, the app starts and shows the design's main pages with fake data, and window dragging, maximizing, and Snap work |
+| M1 Terminal | Host data held in memory. Password and key connections, multiple tabs, PTY size sync, fingerprint confirmation | Connects to an OpenSSH test server, vim and htop render correctly, Windows Chinese and Japanese input methods work, 50 MB of output does not stutter, and text is sharp at 150% scaling |
+| M2 Local vault | Encryption, SQLite, creating, editing, and deleting hosts, groups, tags, and keys, unlock and auto-lock, recovery code | A search of the local database file finds no plaintext host name, password, or private key |
+| M3 Sync | Worker + D1, sync engine, sync wizard and status page, device management | Two devices sync both ways, offline changes merge correctly, conflicts are handled per §6.4, and D1 holds only ciphertext |
+| M4 SFTP and polish | SFTP panel, all empty and error states, shortcuts, ssh config import | Every P0 item in §7, §8, and §9 is done |
+| M5 Release | Windows installer and code signing, auto-update, README, Worker deployment template | A new user can deploy the Worker and enable sync within 10 minutes by following the README |
 
-## 待定问题
+## Open questions
 
-1. 主机在线状态探测（HOST-10）是否默认开启。目前的实现默认开启，可在设置中关闭。
-2. D1 直连模式是否进入首个公开版本。
-3. 是否支持一个 Worker 部署服务多个用户（当前设计为单用户）。
-4. 流程 C（本地已有保险库，连接到已初始化的云端）的合并细节和界面。
+1. Whether host online status probing (HOST-10) is on by default. The current implementation turns it on by default, and a setting turns it off.
+2. Whether D1 direct mode ships in the first public release.
+3. Whether one Worker deployment should serve several users (the current design is single-user).
+4. The merge details and UI for Flow C (connecting an existing local vault to an initialized cloud vault).

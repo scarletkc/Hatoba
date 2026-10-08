@@ -7,7 +7,7 @@ path against a real OpenSSH server:
 2. create a password-auth host (HOST-01);
 3. connect → first-connection host-key dialog (SSH-04, the fingerprint must match the server's)
    → run a command and print UTF-8 text over the binary terminal channel
-   ([spec §10.3](../../../docs/hatoba-spec.md#103-终端数据流), TERM-02);
+   ([spec §10.3](../../../docs/hatoba-spec.md#103-terminal-data-flow), TERM-02);
 4. open the SFTP panel (SFTP-01);
 5. lock with Ctrl+Shift+L, try a wrong password, unlock (SEC-02, VAULT-03, SEC-03).
 

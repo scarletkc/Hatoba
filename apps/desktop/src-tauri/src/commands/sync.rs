@@ -1,4 +1,4 @@
-//! Cloud sync commands: wizard, status, devices, conflicts (spec §6, §9 云同步).
+//! Cloud sync commands: wizard, status, devices, conflicts (spec §6, §9 Cloud Sync).
 
 use std::sync::Arc;
 use std::time::Instant;
