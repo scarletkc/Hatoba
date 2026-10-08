@@ -60,6 +60,7 @@ flowchart LR
       CMD["Tauri commands / channels"]
       CORE["hatoba-core<br/>crypto · vault · models · sync"]
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
+      AI["hatoba-ai<br/>chat completions · web tools"]
       DB[("Local SQLite<br/>ciphertext only")]
       KC["System credential store"]
     end
@@ -71,6 +72,8 @@ flowchart LR
   UI <--> CMD
   CMD --> CORE
   CMD --> SSH
+  CMD --> AI
+  AI -->|HTTPS, or HTTP on a local network| Providers["User-configured model<br/>and search providers"]
   CORE --> DB
   CORE --> KC
   SSH -->|SSH| Servers["Remote servers"]
@@ -93,7 +96,7 @@ hatoba/
 ├── apps/desktop/
 │   ├── src/                  # Frontend
 │   │   ├── app/              # Layout, routing
-│   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings
+│   │   ├── features/         # onboarding, unlock, hosts, terminal, sftp, keys, sync, settings, ai
 │   │   ├── components/       # Shared components ported from the design
 │   │   ├── styles/           # Design tokens (CSS variables, light and dark)
 │   │   ├── i18n/             # Message tables
@@ -101,6 +104,7 @@ hatoba/
 │   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
 │   └── e2e/                  # WebDriver end-to-end smoke test
 ├── crates/
+│   ├── hatoba-ai/            # Chat Completions client, web search, URL fetching
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
 │   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
@@ -157,7 +161,7 @@ each item → AES-256-GCM(vault_key)
 | SEC-01 | After unlock, vault_key and decrypted items live only in Rust memory and are cleared with zeroize on lock | P0 |
 | SEC-02 | Auto-lock: idle timeout (15 minutes by default, configurable), system sleep, and manual lock (Ctrl+Shift+L) | P0 |
 | SEC-03 | By default, established SSH sessions stay connected while locked, and the UI is covered. A setting disconnects them on lock instead | P0 |
-| SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, or terminal content | P0 |
+| SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, terminal content, AI provider API keys, or AI conversation content (messages, tool inputs, and tool results) | P0 |
 | SEC-05 | Tauri hardening: CSP `default-src 'self'`, no remote content, least-privilege capabilities, devtools disabled in release builds, and no shell plugin | P0 |
 | SEC-06 | Increasing delay after repeated local unlock failures: no delay for the first 3, then doubling each time up to 5 minutes (`unlock_delay_ms` in `crates/hatoba-core/src/vault.rs`). The failure count is persisted and survives an app restart. Argon2id does not run during the delay | P0 |
 | SEC-07 | Windows Hello unlock: create a Hello credential with `KeyCredentialManager`, sign a fixed challenge, derive a wrapping key from the signature with HKDF, encrypt vault_key with it, and store the ciphertext in Credential Manager. A `UserConsentVerifier` prompt alone does not meet the requirement, because it has no cryptographic binding to vault_key | P1 |
@@ -177,6 +181,8 @@ each item → AES-256-GCM(vault_key)
 | A malicious Worker returns weakened KDF parameters from `/v1/prelogin` | The client refuses to sign in, per the minimums in §4.1 |
 | Someone holds a valid full session token | They can change the master password (`PUT /v1/vault/password` does not ask for the old one). After losing a device, revoke it from another device and consider changing the master password |
 | Someone holds the recovery code | That equals holding the whole vault: the code decrypts `vault_key` and can reset the master password through `/v1/recover` |
+| Text on the screen, in command output, or in a fetched page steers the AI assistant (prompt injection) | In manual approval mode, every command, terminal input, and URL waits for the user, and only `web_search` queries leave without asking, to the search provider the user chose. In bypass mode the assistant can run what it is steered to on the tab's host, and `fetch_url` can carry data out in the URL it fetches. Bypass is chosen per device and per conversation (§13.5) |
+| The AI model provider leaks or keeps conversation data | It holds what the assistant sent it: messages, screen text, and tool results (§13.1). Of the vault, only the tab host's display name and user name reach it |
 | The device is compromised while unlocked | Out of scope |
 | The master password is forgotten and the recovery code is lost | The data cannot be recovered. This is by design, and the UI must say so clearly |
 
@@ -186,7 +192,7 @@ The columns the server stores are defined by the migrations in §5.3, where item
 
 **The server cannot see**: the master password, `master_key`, `enc_key`, `vault_key`, the recovery code, any item plaintext, or item types (the type is inside the encrypted plaintext).
 
-**Metadata the server can see**: the number of items, their IDs, ciphertext sizes, modification times, the number of devices, sign-in and sync times, and the IP addresses Cloudflare sees anyway.
+**Metadata the server can see**: the number of items, their IDs, ciphertext sizes, modification times, the number of devices, sign-in and sync times, and the IP addresses Cloudflare sees anyway. AI conversations add items as they grow (§13.7), so these numbers also show when and how much the assistant is used.
 
 ---
 
@@ -197,7 +203,10 @@ The columns the server stores are defined by the migrations in §5.3, where item
 All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields, so different app versions can read each other's data. The Rust implementation is `Item` in `crates/hatoba-core/src/model.rs`.
 
 ```ts
-type Item = Host | Group | SshKey | KnownHost | PortForward | Snippet | Settings;
+type Item =
+  | Host | Group | SshKey | KnownHost | PortForward | Snippet
+  | AiProvider | SearchProvider | AiConversation | AiMessage
+  | Settings;
 
 interface Host {
   type: "host";
@@ -270,6 +279,47 @@ interface Snippet {              // P2
   updated_at: number;
 }
 
+interface AiProvider {           // P1, §13.2
+  type: "ai_provider";
+  name: string;
+  base_url: string;             // Chat Completions base, such as https://api.openai.com/v1
+  api_key: string;              // Empty when the server needs none
+  models: {
+    id: string;                 // Model ID sent in requests
+    name: string;               // Display name
+    context_window: number | null;  // Tokens, null when unknown
+  }[];
+  updated_at: number;
+}
+
+interface SearchProvider {       // P1, the backend of web_search (§13.4)
+  type: "search_provider";
+  kind: "brave" | "tavily" | "searxng";
+  base_url: string | null;      // The instance URL for searxng, null otherwise
+  api_key: string;              // Empty for searxng
+  updated_at: number;
+}
+
+interface AiConversation {       // P1, §13.7
+  type: "ai_conversation";
+  title: string;
+  host_id: string | null;       // The host the conversation last worked on
+  pinned: boolean;
+  context_start: string | null; // entry_id where the context sent to the model starts (AI-21)
+  created_at: number;
+  updated_at: number;
+}
+
+interface AiMessage {            // P1, one part of a conversation entry (§13.7)
+  type: "ai_message";
+  conversation_id: string;
+  entry_id: string;             // UUIDv7, orders the entries of a conversation
+  part: number;                 // 0-based
+  part_count: number;
+  data: string;                 // This part's slice of the entry's JSON
+  updated_at: number;
+}
+
 interface Settings {             // Fixed ID "settings", a single item
   type: "settings";
   terminal: {
@@ -281,6 +331,10 @@ interface Settings {             // Fixed ID "settings", a single item
   };
   auto_lock_minutes: number;
   lock_disconnects_sessions: boolean;
+  ai: {                         // P1, §13
+    default_model: { provider_id: string; model_id: string } | null;
+    search_provider_id: string | null;
+  };
   updated_at: number;
 }
 ```
@@ -774,7 +828,8 @@ The design defines the visuals. This section only specifies the behavior and sta
 | Keys | See §8.3 | Empty |
 | Cloud Sync | A three-step wizard: choose a method → enter connection details → set or enter the master password. The methods are deploying the Worker from the app (recommended, §6.7), connecting a Worker deployed with the Deploy to Cloudflare button or wrangler (Worker URL and setup token), and D1 direct mode (Account ID and API token plus a database). A status page follows | Synced, syncing, conflicts, offline, signed out, Worker update available, Worker update required. Device list and revocation |
 | Cloud Sync: in-app deployment | The connection step of the in-app method: the API token field with the **Create token** link, the Account ID (filled in when possible, or a list when the token reaches several accounts), and the Worker and database names in an expandable section. After the token check, the page lists what it will create or reuse and the Worker URL, and **Deploy** runs the steps of §6.7 with a progress row for each. On success it shows the Worker URL and continues to the master password step. **Update Worker** on the status page opens the same form with the known values filled in | Token rejected or missing a permission (naming the permission, with a link to edit the token), no workers.dev subdomain (choose one), name taken (per §6.7), each step pending, running, done, skipped, or failed, a failed step (the error, **Retry**, **Remove what Hatoba created**), waiting for workers.dev (**Check again**), offline, a build without the Worker bundle |
-| Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language | None |
+| AI panel | A resizable panel at the right edge of the window, toggled with the shortcut in §9.1. The header has the conversation title, the tab's host, the permission mode switch, history, and **New conversation**. Messages render as Markdown with no raw HTML and no remote images, and links open in the system browser. Each tool call is a collapsible block with its input, output, and exit status, and approval cards appear in place. The input area has a multi-line box (Enter sends, Shift+Enter adds a line), the model selector, the context meter, and **Stop** during a turn. §13 defines the behavior | No provider configured (with a link to **Settings → AI**), no terminal tab (AI-09), streaming, waiting for approval, tool running, tool call limit reached, tab disconnected, provider error (the HTTP status and the provider's message, with **Retry**), context nearly full, empty history |
+| Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language. **AI**: providers and their models, search provider, default model, default permission mode, and the tool call limit (§13) | AI provider test passed or failed (AI-04), model list failed to load |
 
 **Global requirements**:
 
@@ -807,6 +862,7 @@ The design has a macOS look, and the first Windows release adapts it as below. I
 | Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab | ⌃Tab / ⌃⇧Tab |
 | Open settings | Ctrl+, | ⌘, |
 | Lock | Ctrl+Shift+L | ⌘L |
+| Show or hide the AI panel | Ctrl+Shift+A | ⌘⇧A |
 | Copy | Ctrl+Shift+C, or Ctrl+C with text selected | ⌘C |
 | Paste | Ctrl+Shift+V or Ctrl+V | ⌘V |
 
@@ -816,7 +872,7 @@ The design has a macOS look, and the first Windows release adapts it as below. I
 
 ### 10.1 Commands (frontend calls Rust)
 
-tauri-specta generates the full list of commands and their signatures into the `commands` object in `apps/desktop/src/ipc/bindings.ts`. The Rust implementations are grouped by module (vault, hosts, keys, ssh, forwards, sftp, sync, settings, app) in files of the same names under `apps/desktop/src-tauri/src/commands/`.
+tauri-specta generates the full list of commands and their signatures into the `commands` object in `apps/desktop/src/ipc/bindings.ts`. The Rust implementations are grouped by module (vault, hosts, keys, ssh, forwards, sftp, sync, settings, ai, app) in files of the same names under `apps/desktop/src-tauri/src/commands/`.
 
 DTOs returned to the frontend never contain secret fields. For example, `HostView` has only `has_password: bool`, and `KeyView` has only the public key and the fingerprint.
 
@@ -858,4 +914,117 @@ The [development guide](development.md#testing) has the commands that run each t
 - **Deployment tests**: the in-app deployment (§6.7) runs against a mock of the Cloudflare API. The tests cover each step, every row of the existing Workers and databases tables, a failure at each step followed by a retry, cleanup, and an upgrade with a new migration, and check that the API token and the setup token never reach a log or a DTO.
 - **Client and Worker integration**: `crates/hatoba-core/tests/worker_live.rs` syncs two devices through a real Worker running in `wrangler dev` (setup, recovery, edits on both sides, conflicts, deletion, the device list, revocation), then scans the local D1 to confirm it holds only ciphertext.
 - **Frontend**: TypeScript strict mode. Type checking compares the tauri-specta bindings with the contract the frontend uses in `apps/desktop/src/ipc/contract.check.ts`, in both directions. Vitest unit tests. The [end-to-end smoke test](../apps/desktop/e2e/README.md) walks the main path with the real Rust backend and a throwaway `sshd`.
+- **AI assistant**: `hatoba-ai` runs against a mock Chat Completions server, covering streamed text, reasoning, and tool calls, usage with and without `stream_options`, and provider errors. The turn tests cover approval, edit, rejection, stop, lock, the tool call limit, and cancelled results for calls left without one. Storage tests split large entries into parts under the envelope limit and merge entries that two devices added to one conversation. `fetch_url` tests refuse private addresses, including after a redirect. API keys never reach a log or a DTO, and conversation content never reaches a log.
 - **Security checks**: scan the local database file, the D1 export, and the log files for plaintext, and confirm that none of the host names, passwords, or private keys from the test data appear in them.
+
+---
+
+## 13. AI assistant
+
+The AI assistant is a chat panel at the right edge of the window that works on a terminal tab. It reads the screen, runs commands, types into the shell, searches the web, and fetches pages, within the permission mode the user chose (§13.5). It calls a model provider that the user configures with their own API key, in the OpenAI Chat Completions format, so it works with any service or local server that offers that API. Hatoba runs no AI service, and nothing is sent anywhere until the user adds a provider and sends a message.
+
+Conversations are vault items (§5.1), encrypted and synced like hosts and keys.
+
+### 13.1 Architecture
+
+The Rust backend holds the API keys and the conversations, builds every request from the stored conversation, and runs `run_command`, `web_search`, and `fetch_url`. The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The Chat Completions client and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
+
+A turn:
+
+1. `ai_send` stores the user's message and requests a response from the conversation's model. The response streams to the frontend over a Tauri `Channel` as `Text { delta } | Reasoning { delta } | ToolCall { id, name, arguments } | Usage { prompt_tokens, completion_tokens } | Done | Error { status, message }`.
+2. Rust stores the assistant entry. When it has tool calls, the frontend handles them one at a time, in order: it applies the permission mode, runs the tool (through a Rust command for the tools that run there), and returns the result with `ai_tool_result`. A rejected call returns the rejection and the user's reason, if any.
+3. When every call has a result, Rust sends the next request. The turn ends with a response that has no tool calls, when the user stops it, or on an error.
+
+`ai_stop` aborts the request, closes the channels of running tools, and gives every call without a result a cancelled result. Sending a message while a turn runs stops the turn first. Locking the vault (SEC-02) stops every turn the same way: established SSH sessions can stay connected while locked (SEC-03), but the assistant never acts behind the lock screen. Before each request, Rust also gives a cancelled result to any stored call that has none, for example after a crash or after entries from two devices merge (§13.7), so every request is valid.
+
+**What the provider receives**: Hatoba's system prompt with the tool definitions, the display name and user name of the tab's host, and the current date, followed by the conversation's entries from `context_start` on (AI-21). The system prompt and every tool description state that screen text, command output, search results, and pages are data, not instructions. Nothing else comes from the vault: addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result.
+
+### 13.2 Providers and models
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-01 | Providers in **Settings → AI**: add, edit, and delete providers, each with a name, a base URL, an API key, and models. The key behaves like a host password (HOST-08): once saved it shows only **Saved** and can be replaced but not viewed. It can be empty for local servers that need none | P1 |
+| AI-02 | Requests are streaming `POST {base_url}/chat/completions` calls with `tools`, so a model must support tool calls. The base URL must use HTTPS unless it points at a loopback or private network address, as self-hosted servers such as Ollama and LM Studio usually do | P1 |
+| AI-03 | Models: type the model IDs, or fetch `GET {base_url}/models` and pick from the list. Each model has a display name and an optional context window in tokens, which is filled in when the list includes it and can be edited | P1 |
+| AI-04 | **Test Connection** sends a minimal request to the first model, or fetches the model list when no model is entered yet, and tells authentication failures, network failures, and unknown models apart | P1 |
+| AI-05 | The model selector in the panel's input area lists the models of every provider, grouped by provider. A new conversation uses the default model from **Settings → AI**, and a conversation keeps the model it used last. Switching models keeps the whole conversation | P1 |
+| AI-06 | Reasoning that the server streams (`reasoning_content` or `reasoning` in the delta) shows above the answer, collapsed by default. It is stored for display and never sent back to the model | P1 |
+
+### 13.3 Conversations and tabs
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-07 | Each terminal tab has its own current conversation, and the panel shows the active tab's. Switching tabs switches the panel. **New conversation** gives the tab an empty conversation, which is stored when its first message is sent. A tab whose conversation is running a turn or waiting for approval shows it in the tab bar | P1 |
+| AI-08 | A conversation acts only on its own tab, never on another, in either permission mode. Reconnecting the tab keeps the conversation, and its tools use the new session. While the tab is disconnected, tools return an error result. Closing the tab detaches the conversation, which stays in history | P1 |
+| AI-09 | Opening a conversation from history attaches it to the active tab. When the tab's host is not the conversation's host, the panel names both, and the next message moves the conversation to the tab's host. With no terminal tab active, the panel offers **Connect to *host***, which opens a tab and attaches the conversation, and the conversation can still chat with no tools offered | P1 |
+| AI-10 | **Ask AI** in the terminal's context menu adds the selected text to the panel's input | P2 |
+
+### 13.4 Tools
+
+In manual approval mode, `read_terminal` and `web_search` run without asking, and the others wait for approval (§13.5). Every call and its result appear in the conversation as a collapsible block in both modes. A result longer than 16,000 characters keeps its first 4,000 and last 12,000 characters, with a line between them saying how much was left out. `fetch_url` pages through long content instead.
+
+| ID | Tool | Behavior | Priority |
+|---|---|---|---|
+| AI-11 | `read_terminal` | Returns the visible screen and up to `lines` lines of scrollback above it (100 by default, at most 1,000) as plain text with soft-wrapped lines joined, and whether the alternate screen (vim, htop, and so on) is active | P1 |
+| AI-12 | `run_command` | Runs `command` on a new exec channel of the tab's SSH connection (`SshSession::exec_output` in `crates/hatoba-ssh/src/session.rs`) and returns stdout, stderr, and the exit status. `timeout_seconds` is 30 by default and at most 600. The channel has no PTY and does not share the shell's working directory, environment, or sudo session, and its output does not appear in the terminal | P1 |
+| AI-13 | `send_input` | Writes `text` to the tab's PTY through `ssh_write`, the same path as the keyboard, followed by an optional key (`enter`, `tab`, `esc`, `ctrl_c`, `ctrl_d`, or an arrow key). It then waits until the output has been quiet for 1 second or `wait_seconds` has passed (10 by default, at most 120) and returns the output that appeared after the input, or the whole screen when the alternate screen is active | P1 |
+| AI-14 | `web_search` | Sends `query` to the search provider chosen in **Settings → AI** (Brave Search API, Tavily, or a SearXNG instance) and returns up to 10 results with title, URL, and snippet. The model is offered the tool only when a search provider is chosen | P1 |
+| AI-15 | `fetch_url` | Fetches an `http` or `https` URL with GET, without cookies or credentials, following at most 5 redirects. Returns up to 16,000 characters from `offset` (0 by default) and the total length, with HTML converted to Markdown. Content types other than text, HTML, JSON, and XML are refused, and so are addresses that resolve to loopback, private, or link-local ranges, including after a redirect | P1 |
+
+### 13.5 Permission modes
+
+| Mode | Behavior |
+|---|---|
+| Manual approval | `run_command`, `send_input`, and `fetch_url` wait for the user's approval. This is the default |
+| Bypass | Every tool runs without asking |
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-16 | The default mode is set in **Settings → AI** and stored on the device, not synced, so turning on bypass on one device leaves the others unchanged. The switch in the panel header changes the current conversation's mode on this device until the app quits. The first switch to bypass on a device asks for confirmation and says that the assistant will run commands on the tab's host without asking, and that text on the screen or in a page can steer it | P1 |
+| AI-17 | The approval card shows the tool, the tab's host (display name and `user@address:port`), and the full input: the command and its timeout, the text and key to send, or the URL. **Run** runs it. **Edit** changes the input before running, and the result tells the model what the user changed. **Reject** takes an optional reason, which goes back to the model | P1 |
+| AI-18 | In both modes, a turn pauses after 25 tool calls (a device-local setting in **Settings → AI**) and goes on only when the user selects **Continue**. **Stop**, or Esc while focus is in the panel, stops the turn (§13.1). Stopping sends nothing to the terminal, so a command started with `send_input` keeps running in the shell | P1 |
+| AI-19 | **Allow for this conversation** on the approval card: later calls of the same tool in that conversation run without asking until the app quits | P2 |
+
+### 13.6 Context usage and compaction
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-20 | The context meter in the input area shows the tokens the conversation uses against the model's context window, as a ring and a percentage with the numbers on hover, or only the token count when the context window is unknown. The count is the last response's `prompt_tokens + completion_tokens` (requests set `stream_options.include_usage`) plus an estimate from text length for what was added since. When the server rejects `stream_options`, the request is retried once without it, and the count becomes an estimate marked `≈`. Each assistant entry stores its usage, so a reopened conversation shows the meter without a request. After a model switch, the count is an estimate until the next response | P1 |
+| AI-21 | **Compact** asks the current model to summarize the context, stores the summary as an entry, and moves `context_start` to it. Earlier entries stay in the panel, marked as outside the context. At 80% the meter takes the warning color and offers **Compact** | P1 |
+| AI-22 | Compact automatically before a request that would pass 90% of the context window | P2 |
+
+### 13.7 History and sync
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-23 | History in the panel: conversations sorted by last activity, pinned ones first, each with its title, host, and time. Open (AI-09), rename, pin, and delete with confirmation. The title starts as the first line of the first message, cut to 60 characters | P1 |
+| AI-24 | Search conversation titles and message text | P2 |
+| AI-25 | Export a conversation as Markdown | P2 |
+| AI-26 | Edit an earlier message of the user and send it again, which deletes the entries after it | P2 |
+
+A conversation is an `ai_conversation` item and its entries, which are stored in `ai_message` items (§5.1). Only the conversation item changes (title, pin, host, `context_start`), and it follows §6.4. Entries are written once and never change, so they never conflict. They are ordered by `entry_id`, a UUIDv7 that each device generates in increasing order, so entries that two devices add to one conversation merge on sync.
+
+An entry's JSON is one of:
+
+```ts
+type AiEntry = { created_at: number } & (
+  | { role: "user"; text: string }
+  | {
+      role: "assistant";
+      provider_id: string;
+      model_id: string;
+      text: string;
+      reasoning: string | null;   // AI-06, never sent back
+      tool_calls: { id: string; name: string; arguments: string }[];  // arguments as the JSON string the model produced
+      usage: { prompt_tokens: number; completion_tokens: number; estimated: boolean } | null;
+    }
+  | { role: "tool"; tool_call_id: string; status: "ok" | "error" | "rejected" | "cancelled"; content: string }
+  | { role: "summary"; text: string }  // AI-21
+);
+```
+
+Entries map one to one onto Chat Completions messages, except that a `summary` is sent as a user message that introduces it as a summary of the earlier conversation.
+
+- An entry's JSON is split across as many `ai_message` items as it takes to keep each item's plaintext at most 40 KB, so every envelope stays under the 64 KB limit (§6.2).
+- After unlock and after each sync pull, `ai_message` items are decrypted to read `conversation_id`, `entry_id`, and `part`, and `data` is not kept in memory. Opening a conversation decrypts its items again from the local database, so a long history does not stay in memory.
+- Deleting a conversation deletes its `ai_conversation` item and all of its `ai_message` items, which leave tombstones (§6.5).

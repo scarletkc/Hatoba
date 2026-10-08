@@ -85,9 +85,24 @@ This page tracks implementation progress, items awaiting verification, and follo
 | Authenticode code signing | ⬜ | P1. Azure Trusted Signing could keep the cost down |
 | Signed updates through the Tauri updater | ⬜ | P1 |
 
+## AI assistant (§13)
+
+| ID | Name | Status | Notes |
+|---|---|---|---|
+| AI-01…06 | Providers, models, Test Connection, model selector, reasoning | ⬜ | P1 |
+| AI-07…09 | One conversation per tab, attaching conversations | ⬜ | P1 |
+| AI-10 | Ask AI about the terminal selection | ⬜ | P2 |
+| AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | ⬜ | P1 |
+| AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ⬜ | P1 |
+| AI-19 | Allow a tool for the rest of a conversation | ⬜ | P2 |
+| AI-20, 21 | Context meter, compaction | ⬜ | P1 |
+| AI-22 | Automatic compaction | ⬜ | P2 |
+| AI-23 | Conversation history | ⬜ | P1 |
+| AI-24…26 | History search, Markdown export, edit and resend | ⬜ | P2 |
+
 ## MVP scope
 
-Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), built-in AI, Telnet, Serial, RDP, VNC, and a sync service hosted by Hatoba.
+Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), Telnet, Serial, RDP, VNC, and a sync service hosted by Hatoba.
 
 ## Milestones
 
