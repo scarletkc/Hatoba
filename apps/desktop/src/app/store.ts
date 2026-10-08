@@ -19,6 +19,8 @@ export type Page =
 
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
+export type SettingsTab = "general" | "appearance" | "terminal" | "security" | "about";
+
 export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
@@ -26,6 +28,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   right_click: "copy_paste",
   host_probe: true,
   confirm_multiline_paste: true,
+  auto_update_check: false,
 };
 
 interface AppState {
@@ -37,6 +40,8 @@ interface AppState {
   page: Page;
   sidebarCollapsed: boolean;
   settingsOpen: boolean;
+  /** The tab the settings window opens on; null reopens the last one. */
+  settingsTab: SettingsTab | null;
   /** Bumped to ask the hosts page to focus its search field (Ctrl+Shift+K). */
   searchFocusTick: number;
 
@@ -46,7 +51,7 @@ interface AppState {
   setSync(status: SyncStatus): void;
   setPhase(phase: Phase): void;
   toggleSidebar(): void;
-  openSettings(open: boolean): void;
+  openSettings(open: boolean, tab?: SettingsTab): void;
   focusSearch(): void;
   lock(): Promise<void>;
 }
@@ -60,6 +65,7 @@ export const useApp = create<AppState>((set, get) => ({
   page: { kind: "hosts", filter: { kind: "all" } },
   sidebarCollapsed: false,
   settingsOpen: false,
+  settingsTab: null,
   searchFocusTick: 0,
 
   navigate: (page) => set({ page }),
@@ -76,7 +82,7 @@ export const useApp = create<AppState>((set, get) => ({
   setSync: (sync) => set({ sync }),
   setPhase: (phase) => set({ phase }),
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
-  openSettings: (settingsOpen) => set({ settingsOpen }),
+  openSettings: (settingsOpen, tab) => set({ settingsOpen, settingsTab: tab ?? null }),
   focusSearch: () => set((s) => ({ searchFocusTick: s.searchFocusTick + 1 })),
   lock: async () => {
     await api.vault_lock();

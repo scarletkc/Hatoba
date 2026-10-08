@@ -18,6 +18,7 @@ import { Sidebar } from "./Sidebar";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
+import { useStartupUpdateCheck } from "./update";
 import s from "./App.module.css";
 
 export function App() {
@@ -27,6 +28,7 @@ export function App() {
 
   useGlobalEvents();
   useActivityPing(phase === "unlocked");
+  useStartupUpdateCheck(phase === "unlocked");
 
   if (phase === "boot") return null;
   if (phase === "onboarding")

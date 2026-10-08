@@ -11,6 +11,7 @@ export function createTauriApi(): HatobaApi {
 
   return {
     app_info: () => call("app_info"),
+    update_check: () => call("update_check"),
 
     vault_status: () => call("vault_status"),
     vault_create: (password) => call("vault_create", { password }),

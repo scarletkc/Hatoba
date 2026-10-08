@@ -26,3 +26,4 @@ The implementation differs from the design in these places, all following the sp
 - Recovery code: shown as 8 groups of 4 characters, per the format in spec §4.1.
 - The unlock page footer does not show the host count: item types must not be stored in plaintext (spec §4.2), so the count is unknown while the vault is locked.
 - Viewing a private key (KEY-07) is P2 and would hand the private key to the WebView, so the MVP has no such button.
+- Settings (§07) has a fifth tab, About, after the design's General, Appearance, Terminal, and Security. It holds the app version and the update check from spec §11, which the design has no place for, and follows the style of the other settings panes.

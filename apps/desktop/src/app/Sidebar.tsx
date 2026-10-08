@@ -11,6 +11,7 @@ import { errorMessage } from "./errors";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TitlebarDrag } from "./TitleBar";
+import { selectUpdateAvailable, useUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
 type Key = "all" | "favorites" | "recent" | `group:${string}` | `tag:${string}` | "keys" | "sync";
@@ -34,6 +35,8 @@ function pageKey(page: Page): Key | null {
 export function Sidebar() {
   const t = useT();
   const { page, navigate, info, sync, lock, openSettings } = useApp();
+  const updateAvailable = useUpdate(selectUpdateAvailable);
+  const settingsLabel = updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings");
   const activateHome = () => useTabs.getState().activate("home");
   const { hosts, groups, tags, keys } = useVaultData();
   const active = pageKey(page);
@@ -80,8 +83,15 @@ export function Sidebar() {
       <TitlebarDrag className={st.header}>
         {info.platform === "macos" && <span className={st.traffic} />}
         <span style={{ flex: 1 }} data-tauri-drag-region />
-        <button type="button" className={st.footerButton} title={t("sidebar.settings")} aria-label={t("sidebar.settings")} onClick={() => openSettings(true)}>
+        <button
+          type="button"
+          className={cx(st.footerButton, st.settingsButton)}
+          title={settingsLabel}
+          aria-label={settingsLabel}
+          onClick={() => openSettings(true, updateAvailable ? "about" : undefined)}
+        >
           <Icon name="gear-six" size={16} />
+          {updateAvailable && <span className={st.updateDot} />}
         </button>
         <button type="button" className={st.footerButton} title={t("window.toggleSidebar")} aria-label={t("window.toggleSidebar")} onClick={() => useApp.getState().toggleSidebar()}>
           <Icon name="sidebar-simple" size={16} />

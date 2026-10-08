@@ -501,6 +501,9 @@ pub struct LocalPrefs {
     pub right_click: RightClick,
     pub host_probe: bool,
     pub confirm_multiline_paste: bool,
+    /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
+    /// the device unless the user asks for it (spec §11, no telemetry).
+    pub auto_update_check: bool,
 }
 
 impl Default for LocalPrefs {
@@ -512,6 +515,7 @@ impl Default for LocalPrefs {
             right_click: RightClick::CopyPaste,
             host_probe: true,
             confirm_multiline_paste: true,
+            auto_update_check: false,
         }
     }
 }
@@ -553,6 +557,17 @@ pub struct AppInfo {
     pub version: String,
     pub platform: Platform,
     pub mica: bool,
+}
+
+/// What the update check found on GitHub Releases (spec §11).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct UpdateCheck {
+    pub current_version: String,
+    /// The newest stable release, or `None` when none has been published yet.
+    pub latest_version: Option<String>,
+    /// The release page to download the installer from.
+    pub release_url: Option<String>,
+    pub update_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
@@ -612,4 +627,18 @@ pub struct ForwardStatusEvent {
     /// The actually bound local port (differs from `bind_port` when it was 0).
     pub local_port: Option<u16>,
     pub error: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LocalPrefs;
+
+    #[test]
+    fn prefs_from_an_older_version_leave_the_update_check_off() {
+        let prefs = LocalPrefs::from_stored(r#"{"language":"ja","host_probe":false}"#);
+        assert!(!prefs.auto_update_check);
+        assert!(!prefs.host_probe);
+        let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":true}"#);
+        assert!(prefs.auto_update_check);
+    }
 }

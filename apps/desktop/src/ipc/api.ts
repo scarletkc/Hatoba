@@ -25,6 +25,7 @@ import type {
   SyncTestResult,
   TagCount,
   TestResult,
+  UpdateCheck,
   VaultStatus,
 } from "./types";
 
@@ -38,6 +39,8 @@ export type Unlisten = () => void;
  */
 export interface HatobaApi {
   app_info(): Promise<AppInfo>;
+  /** Asks GitHub Releases for the newest stable release. A repository without releases is up to date. */
+  update_check(): Promise<UpdateCheck>;
 
   // vault
   vault_status(): Promise<VaultStatus>;

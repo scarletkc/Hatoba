@@ -207,6 +207,7 @@ export const PREFS: LocalPrefs = {
   right_click: "copy_paste",
   host_probe: true,
   confirm_multiline_paste: true,
+  auto_update_check: false,
 };
 
 export function syncStatus(): SyncStatus {
