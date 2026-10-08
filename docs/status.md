@@ -80,7 +80,7 @@
 
 | 项 | 状态 | 备注 |
 |---|---|---|
-| NSIS 安装包 | ✅ | 由 [CI](../.github/workflows/ci.yml) 的 `rust-windows` 任务构建，未签名 |
+| NSIS 安装包 | ✅ | 推送 `main` 或手动触发时由 [CI](../.github/workflows/ci.yml) 的 `rust-windows` 任务构建（PR 不构建），未签名 |
 | Authenticode 代码签名 | ⬜ | P1；可考虑 Azure Trusted Signing 降低成本 |
 | Tauri updater 签名更新 | ⬜ | P1 |
 

@@ -1,3 +1,22 @@
 fn main() {
-    tauri_build::build()
+    let mut attributes = tauri_build::Attributes::new();
+
+    // tauri-build links its Windows manifest into the app binary only, so the lib's unit-test exe
+    // lacks the Common Controls v6 dependency and fails to load (`TaskDialogIndirect` missing,
+    // STATUS_ENTRYPOINT_NOT_FOUND). On MSVC, embed the same manifest through the linker into every
+    // target instead; see tauri-apps/tauri#13419.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    if target_os == "windows" && target_env == "msvc" {
+        attributes = attributes
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+
+        let manifest =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
+    }
+
+    tauri_build::try_build(attributes).expect("failed to run tauri-build");
 }

@@ -3,19 +3,27 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
 
+# Superseded PR runs are cancelled; every main commit runs to completion so it gets a result
+# and saves the Rust cache.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
+  # Keeps line numbers in backtraces; smaller target/ (and cache) and faster linking than full debuginfo.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -31,6 +39,7 @@ jobs:
   worker:
     name: Sync Worker
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: workers/sync
@@ -48,6 +57,7 @@ jobs:
   rust-linux:
     name: Rust (Linux, SSH integration)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: System dependencies
@@ -58,6 +68,9 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -77,10 +90,14 @@ jobs:
   rust-windows:
     name: Rust (Windows)
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -89,9 +106,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hatoba/desktop build
       - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-desktop
+      # The release profile (fat LTO, one codegen unit) is a second full build, so PRs skip it.
       - name: Build NSIS installer
+        if: github.event_name != 'pull_request'
         run: pnpm tauri build --bundles nsis
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: hatoba-windows-nsis
           path: target/release/bundle/nsis/*.exe
