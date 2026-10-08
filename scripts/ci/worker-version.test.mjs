@@ -26,6 +26,9 @@ const packageLock = (version, packages = {}) =>
     },
   });
 
+const tsconfig = (compilerOptions = {}, include = ["src", "test"]) =>
+  npm({ compilerOptions: { target: "ES2022", strict: true, verbatimModuleSyntax: true, noEmit: true, ...compilerOptions }, include });
+
 const configTs = (version) => `export const API_VERSION = 1;\n/** Keep in sync with package.json (enforced by a test). */\nexport const VERSION = "${version}";\n`;
 
 const WORKER = {
@@ -35,6 +38,7 @@ const WORKER = {
   "workers/sync/src/index.ts": 'export default { fetch: () => new Response("ok") };\n',
   "workers/sync/migrations/0001_init.sql": "CREATE TABLE items (id TEXT);\n",
   "workers/sync/wrangler.toml": 'name = "hatoba-sync"\nmain = "src/index.ts"\n',
+  "workers/sync/tsconfig.json": tsconfig(),
   "workers/sync/test/index.test.ts": "// test\n",
   "workers/sync/README.md": "# Sync Worker\n",
 };
@@ -115,6 +119,24 @@ test("counts the dependencies the bundle includes, and not devDependencies", (t)
     }),
   );
   assert.ok(dev.check().ok, dev.check().message);
+});
+
+test("counts the tsconfig.json options esbuild reads, and not the type-checking ones", (t) => {
+  for (const [name, contents] of Object.entries({
+    "a bundling option": tsconfig({ useDefineForClassFields: false }),
+    "extends": npm({ extends: "./base.json", ...JSON.parse(tsconfig()) }),
+    "comments": `// Bundling\n${tsconfig()}`,
+  })) {
+    const repo = repository(t);
+    repo.write("workers/sync/tsconfig.json", contents);
+    const result = repo.check();
+    assert.equal(result.ok, false, name);
+    assert.ok(result.message.includes("Changed:\n  workers/sync/tsconfig.json (bundling options)\n"), result.message);
+  }
+
+  const typeCheck = repository(t);
+  typeCheck.write("workers/sync/tsconfig.json", tsconfig({ noUncheckedIndexedAccess: true, noEmit: false }, ["src", "test", "vitest.config.ts"]));
+  assert.ok(typeCheck.check().ok, typeCheck.check().message);
 });
 
 test("passes once the Worker version is raised", (t) => {

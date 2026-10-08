@@ -15,6 +15,27 @@ const INPUT_DIRS = [`${WORKER}/src`, `${WORKER}/migrations`];
 const WRANGLER = `${WORKER}/wrangler.toml`;
 const PACKAGE = `${WORKER}/package.json`;
 const LOCK = `${WORKER}/package-lock.json`;
+const TSCONFIG = `${WORKER}/tsconfig.json`;
+/**
+ * The tsconfig.json fields that esbuild reads when wrangler bundles the Worker
+ * (https://esbuild.github.io/content-types/#tsconfig-json). It ignores the type-checking options.
+ */
+const BUNDLING_OPTIONS = [
+  "alwaysStrict",
+  "baseUrl",
+  "experimentalDecorators",
+  "importsNotUsedAsValues",
+  "jsx",
+  "jsxFactory",
+  "jsxFragmentFactory",
+  "jsxImportSource",
+  "paths",
+  "preserveValueImports",
+  "strict",
+  "target",
+  "useDefineForClassFields",
+  "verbatimModuleSyntax",
+];
 
 function git(args, root) {
   return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
@@ -40,11 +61,25 @@ function commitTree(root, commit) {
 
 const versionFiles = new Map(WORKER_VERSION_FILES.map((file) => [file.path, file]));
 
+/** The part of tsconfig.json that can change the bundle, or the whole file when it is not plain JSON. */
+function bundlingOptions(text) {
+  if (text === null) return null;
+  let config;
+  try {
+    config = JSON.parse(text);
+  } catch {
+    // tsconfig.json may hold comments, which JSON.parse rejects.
+    return text.replaceAll("\r\n", "\n");
+  }
+  const options = config.compilerOptions ?? {};
+  return JSON.stringify({ extends: config.extends, ...Object.fromEntries(BUNDLING_OPTIONS.filter((key) => key in options).map((key) => [key, options[key]])) });
+}
+
 /**
  * Returns what the Worker's bundle and migrations are made from in `tree`, by path: every file in
- * INPUT_DIRS, wrangler.toml, the dependencies in package.json, and the packages in package-lock.json
- * that are not only for devDependencies. Version fields read as 0.0.0, so that raising the version
- * changes nothing here, and line endings as LF.
+ * INPUT_DIRS, wrangler.toml, the dependencies in package.json, the packages in package-lock.json
+ * that are not only for devDependencies, and the BUNDLING_OPTIONS in tsconfig.json. Version fields
+ * read as 0.0.0, so that raising the version changes nothing here, and line endings as LF.
  */
 function workerInputs(tree) {
   const inputs = new Map();
@@ -65,6 +100,7 @@ function workerInputs(tree) {
   // npm marks the packages that only devDependencies need, such as wrangler and vitest, as dev.
   const packages = Object.entries(json(LOCK).packages ?? {}).filter(([path, entry]) => path !== "" && !entry.dev && !entry.devOptional);
   inputs.set(`${LOCK} (dependencies)`, JSON.stringify(packages));
+  inputs.set(`${TSCONFIG} (bundling options)`, bundlingOptions(tree.read(TSCONFIG)));
   return inputs;
 }
 

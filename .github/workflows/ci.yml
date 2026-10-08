@@ -54,7 +54,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: workers/sync/package-lock.json
+      # A manual run can be on a branch, where the parent commit is not where the branch left main.
+      # Pull requests and pushes to main already check every change.
       - name: Worker version is raised when the Worker changes
+        if: github.event_name != 'workflow_dispatch'
         working-directory: .
         run: node scripts/ci/worker-version.mjs HEAD^1
       - run: npm ci
@@ -70,7 +73,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Includes a check that every version file has the same version.
+      # Includes checks that the app's version files agree, and that the Worker's do.
       - run: node --test "scripts/**/*.test.mjs"
 
   rust-linux:

@@ -87,7 +87,7 @@ cargo test -p hatoba-desktop export_bindings
 
 ## Raise the Worker version
 
-The sync Worker has a version of its own, separate from the app version. A pull request that changes the Worker raises it ([Versions in §6.7](hatoba-spec.md#worker-bundle)), and `workerInputs` in [`scripts/ci/worker-version.mjs`](../scripts/ci/worker-version.mjs) lists the files and dependencies that count. From the repository root:
+The sync Worker has a version of its own, separate from the app version. A pull request that changes the Worker raises it ([Versions in §6.7](hatoba-spec.md#worker-bundle)), and `workerInputs` in [`scripts/ci/worker-version.mjs`](../scripts/ci/worker-version.mjs) lists the files, dependencies, and `tsconfig.json` options that count. From the repository root:
 
 ```sh
 node scripts/release/bump.mjs --worker patch   # Or minor, major, or an explicit version
