@@ -12,8 +12,11 @@
  *
  *   the typed text
  *
- * The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3 ("Attachment
- * blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a conversation.
+ * Before them, Rust stores the notes Hatoba writes itself when a message moves the conversation to
+ * another host or goes to another model (`host_change`, `model_change`); the panel shows those as
+ * dividers. The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3
+ * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
+ * conversation.
  */
 
 import type { DroppedFile } from "@/ipc/types";
@@ -195,6 +198,17 @@ export function attachmentTokens(a: Attachment): number {
 
 // ───────────── the stored blocks ─────────────
 
+/**
+ * A note Hatoba writes before a message (AI-05, AI-09), never the user: the conversation moved to
+ * another host with this message, or went to another model. `from` of a host change is empty when
+ * the earlier host no longer exists; a model is named as `Name (id)`, or by its ID alone.
+ */
+export interface Note {
+  kind: "host_change" | "model_change";
+  from: string;
+  to: string;
+}
+
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
@@ -218,6 +232,14 @@ const TAGS = {
   file: "file",
 } as const satisfies Record<Attachment["kind"], string>;
 
+/** One line of a name inside a note: control characters as spaces, trimmed, as Rust writes it. */
+const noteText = (s: string) => s.replace(/\p{Cc}/gu, " ").trim();
+
+function writeBlock(tag: string, attrs: [string, string][], body: string): string {
+  const list = attrs.map(([name, value]) => ` ${name}="${attr(value)}"`).join("");
+  return `<${tag}${list}>\n${escapeBody(body, tag)}\n</${tag}>`;
+}
+
 function block(a: Attachment): string {
   const attrs: [string, string][] =
     a.kind === "diagnostics"
@@ -227,9 +249,20 @@ function block(a: Attachment): string {
         : a.kind === "paste"
           ? [["lines", String(a.lines)]]
           : [["name", a.name], ["lines", String(a.lines)]];
-  const tag = TAGS[a.kind];
-  const list = attrs.map(([name, value]) => ` ${name}="${attr(value)}"`).join("");
-  return `<${tag}${list}>\n${escapeBody(a.text, tag)}\n</${tag}>`;
+  return writeBlock(TAGS[a.kind], attrs, a.text);
+}
+
+/**
+ * A note as Rust writes it (`host_change_block` and `model_change_block` in crates/hatoba-ai). The
+ * panel never sends one; Rust adds them when it stores a message, and the mock does the same.
+ */
+export function noteBlock(n: Note): string {
+  const from = noteText(n.from);
+  const body =
+    n.kind === "model_change"
+      ? "Earlier replies in this conversation came from another model."
+      : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
+  return writeBlock(n.kind, [["from", from], ["to", noteText(n.to)]], body);
 }
 
 /**
@@ -244,78 +277,100 @@ export function orderAttachments(list: readonly Attachment[]): Attachment[] {
   return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...rest];
 }
 
-/** The user entry's text: the attachment blocks, then the typed text. */
-export function composeMessage(typed: string, attachments: readonly Attachment[]): string {
-  return [...orderAttachments(attachments).map(block), typed].join("\n\n");
+/** The user entry's text: Hatoba's notes (host first), the attachment blocks, then the typed text. */
+export function composeMessage(typed: string, attachments: readonly Attachment[], notes: readonly Note[] = []): string {
+  const ordered = [...notes.filter((n) => n.kind === "host_change"), ...notes.filter((n) => n.kind === "model_change")];
+  return [...ordered.map(noteBlock), ...orderAttachments(attachments).map(block), typed].join("\n\n");
 }
 
-/** A user entry's text split into its attachments and what the user typed. */
+/** A user entry's text split into Hatoba's notes, its attachments and what the user typed. */
 export interface MessageParts {
+  notes: Note[];
   attachments: Attachment[];
   typed: string;
 }
 
-const OPEN = /^<(terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+const OPEN = /^<(host_change|model_change|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
-/** The attachment an opening tag describes, when its attributes are the kind's own, in order. */
-function attachmentOf(tag: string, attrs: [string, string][], body: string): Attachment | null {
+type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
+
+/** The block an opening tag describes, when its attributes are the kind's own, in order. */
+function blockOf(tag: string, attrs: [string, string][], body: string): Block | null {
   const names = attrs.map(([name]) => name).join(",");
   const value = (i: number) => attrs[i][1];
+  const attachment = (a: Attachment): Block => ({ kind: "attachment", attachment: a });
   switch (tag) {
+    case "host_change":
+    case "model_change":
+      return names === "from,to" ? { kind: "note", note: { kind: tag, from: value(0), to: value(1) } } : null;
     case TAGS.selection:
       if ((names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) && DIGITS.test(value(1)))
-        return { kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body };
+        return attachment({ kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body });
       return null;
     case TAGS.diagnostics:
-      return names === "host" ? { kind: "diagnostics", host: value(0), text: body } : null;
+      return names === "host" ? attachment({ kind: "diagnostics", host: value(0), text: body }) : null;
     case TAGS.paste:
-      return names === "lines" && DIGITS.test(value(0)) ? { kind: "paste", lines: Number(value(0)), text: body } : null;
+      return names === "lines" && DIGITS.test(value(0)) ? attachment({ kind: "paste", lines: Number(value(0)), text: body }) : null;
     case TAGS.file:
-      return names === "name,lines" && DIGITS.test(value(1)) ? { kind: "file", name: value(0), lines: Number(value(1)), text: body } : null;
+      return names === "name,lines" && DIGITS.test(value(1)) ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body }) : null;
     default:
       return null;
   }
 }
 
 /**
- * The attachment block `text` starts with, as Rust's `leading_attachment` reads it: the opening tag
- * with its attributes in the kind's order, a line break, the body, a line break and the closing tag,
- * then a blank line, a line break or the end. The body ends at the first closing tag that such a
- * break or the end follows.
+ * The block `text` starts with, as Rust's `leading_block` reads it: the opening tag with its
+ * attributes in the kind's order, a line break, the body, a line break and the closing tag, then a
+ * blank line, a line break or the end. The body ends at the first closing tag that such a break or
+ * the end follows.
  */
-function leadingBlock(text: string): { attachment: Attachment; rest: string } | null {
+function leadingBlock(text: string): { block: Block; rest: string } | null {
   const m = OPEN.exec(text);
   if (!m) return null;
   const tag = m[1];
   const attrs = [...m[2].matchAll(/ ([a-z_]+)="([^"]*)"/g)].map((a): [string, string] => [a[1], unattr(a[2])]);
-  if (!attachmentOf(tag, attrs, "")) return null;
+  if (!blockOf(tag, attrs, "")) return null;
   const close = `\n</${tag}>`;
   for (let from = m[0].length; ; ) {
     const at = text.indexOf(close, from);
     if (at < 0) return null;
     const after = text.slice(at + close.length);
     const rest = after.startsWith("\n\n") ? after.slice(2) : after.startsWith("\n") ? after.slice(1) : after === "" ? "" : null;
-    if (rest !== null) return { attachment: attachmentOf(tag, attrs, unescapeBody(text.slice(m[0].length, at), tag))!, rest };
+    if (rest !== null) return { block: blockOf(tag, attrs, unescapeBody(text.slice(m[0].length, at), tag))!, rest };
     from = at + 1;
   }
 }
 
 /**
- * A user entry's text split into its leading attachment blocks and the typed text. Blocks are read
- * in any order; a second diagnostics or selection block, like anything that is not a valid block,
- * is part of the typed text.
+ * A user entry's text split into its leading blocks and the typed text. Hatoba's notes come first,
+ * at most one of each kind; the attachment blocks after them are read in any order. A note after an
+ * attachment, a second note of a kind, a second diagnostics or selection block, like anything that
+ * is not a valid block, is part of the typed text.
  */
 export function parseMessage(text: string): MessageParts {
-  const parts: MessageParts = { attachments: [], typed: text };
+  const parts: MessageParts = { notes: [], attachments: [], typed: text };
   for (;;) {
     const b = leadingBlock(parts.typed);
     if (!b) return parts;
-    const single = b.attachment.kind === "diagnostics" || b.attachment.kind === "selection";
-    if (single && parts.attachments.some((a) => a.kind === b.attachment.kind)) return parts;
-    parts.attachments.push(b.attachment);
+    if (b.block.kind === "note") {
+      const note = b.block.note;
+      if (parts.attachments.length > 0 || parts.notes.some((n) => n.kind === note.kind)) return parts;
+      parts.notes.push(note);
+    } else {
+      const a = b.block.attachment;
+      const single = a.kind === "diagnostics" || a.kind === "selection";
+      if (single && parts.attachments.some((x) => x.kind === a.kind)) return parts;
+      parts.attachments.push(a);
+    }
     parts.typed = b.rest;
   }
+}
+
+/** A model as a `model_change` note names it (`Name (id)`), by its name alone, for the panel. */
+export function modelName(label: string): string {
+  const m = /^(.+) \([^()]+\)$/.exec(label);
+  return m ? m[1] : label;
 }
 
 // ───────────── the selection chip ─────────────

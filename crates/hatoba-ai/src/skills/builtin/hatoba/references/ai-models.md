@@ -4,7 +4,7 @@ Which model the assistant uses, how deeply it thinks, and how much of the model'
 
 ## The model
 
-The **Model** button in the input area opens a menu of the models of all providers, grouped by provider, each with its context window. A new conversation starts with the default model (Settings → AI → **Default Model**); a conversation keeps the model it used last. Switching models keeps the whole conversation, but the context count is an estimate until the next response.
+The **Model** button in the input area opens a menu of the models of all providers, grouped by provider, each with its context window. A new conversation starts with the default model (Settings → AI → **Default Model**); a conversation keeps the model it used last. Switching models keeps the whole conversation, but the context count is an estimate until the next response. The first message to the new model gets a divider above it, "Switched to <new model> (was <old model>)", and the model is told that earlier replies came from another model.
 
 | en | zh-CN | ja |
 |---|---|---|

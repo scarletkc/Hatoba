@@ -171,6 +171,7 @@ export function createMockApi(): HatobaApi {
     ...createAiMock({
       providers: aiSettings.ai_providers_list,
       settings: aiSettings.ai_settings_get,
+      hosts: async () => hosts,
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
     app_info: async () => {
@@ -273,6 +274,7 @@ export function createMockApi(): HatobaApi {
       needUnlocked();
       if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
+      if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
@@ -288,6 +290,7 @@ export function createMockApi(): HatobaApi {
         favorite: input.favorite,
         jump_host_id: input.jump_host_id,
         note: input.note,
+        ai_notes: input.ai_notes,
         updated_at: Date.now(),
         last_connected_at: existing?.last_connected_at ?? null,
       };

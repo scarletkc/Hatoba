@@ -28,7 +28,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 - Header: the conversation title, the tab's host, the permission mode button, **History**, **New Conversation**, and close.
 - Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the paperclip, the context meter, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting, for example during the compaction before it.
 - A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
-- Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
+- Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
 - With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands or send input: those three tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation.
 
 | en | zh-CN | ja |
@@ -137,8 +137,8 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 | More | 更多操作 | その他の操作 |
 
 - **Delete…** removes the conversation on every synced device for good, after a confirmation.
-- **Export as Markdown…** saves the conversation as a Markdown file.
-- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**).
+- **Export as Markdown…** saves the conversation as a Markdown file, with each divider about a move to another host or model as a line.
+- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider above the message stays with it.
 
 | en | zh-CN | ja |
 |---|---|---|

@@ -247,29 +247,36 @@ describe("default model", () => {
   const search: SearchProviderView[] = [{ id: "s1", kind: "brave", base_url: null, has_api_key: true, updated_at: 5 }];
 
   it("keeps a default that still exists", () => {
-    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", builtin_skill_enabled: false };
+    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "" };
     expect(sanitizeSettings(settings, providers, search)).toEqual(settings);
   });
 
   it("drops a default whose provider, model or search provider is gone", () => {
     expect(
-      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", builtin_skill_enabled: true }, providers, search),
+      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", builtin_skill_enabled: true, custom_instructions: "" }, providers, search),
     ).toEqual({
       default_model: null,
       default_effort: "low",
       search_provider_id: null,
       builtin_skill_enabled: true,
+      custom_instructions: "",
     });
     expect(
-      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true }, providers, search)
+      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "" }, providers, search)
         .default_model,
     ).toBeNull();
   });
 
   it("tells a changed default thinking level apart (AI-05)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true };
+    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "" };
     expect(sameSettings(base, { ...base })).toBe(true);
     expect(sameSettings(base, { ...base, default_effort: "high" })).toBe(false);
+  });
+
+  it("keeps and compares the custom instructions (AI-36)", () => {
+    const base = { default_model: null, default_effort: null, search_provider_id: "gone", builtin_skill_enabled: true, custom_instructions: "Answer in English." };
+    expect(sanitizeSettings(base, providers, search).custom_instructions).toBe("Answer in English.");
+    expect(sameSettings(base, { ...base, custom_instructions: "Answer in English. " })).toBe(false);
   });
 });
 

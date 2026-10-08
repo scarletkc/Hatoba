@@ -88,17 +88,22 @@ export function slotEffort(slotId: string): AiEffort | null {
   return chosenEffort(slot.effort, slot.conversationId, slot.conversation, useAi.getState().catalog.settings);
 }
 
-/** What a request may act on: the tab's host and, when connected, its terminal tools (AI-08, AI-09). */
+/**
+ * What a request may act on: the tab's host and, when connected, its terminal tools and session,
+ * whose server's identification string the system prompt states (AI-08, AI-09, §13.1).
+ */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
   if (!model) return null;
   const target = attachedTab(slotId);
+  const connected = !!target && target.tab.status === "connected";
   return {
     provider_id: model.provider_id,
     model_id: model.model_id,
     effort: slotEffort(slotId),
     host_id: target ? target.tab.hostId : (getSlot(slotId).conversation?.host_id ?? null),
-    tab: !!target && target.tab.status === "connected",
+    tab: connected,
+    session_id: connected ? (target.tab.sessionId ?? null) : null,
     disabled_mcp_servers: getSlot(slotId).mcpOff,
   };
 }
@@ -540,7 +545,10 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
 
   const runner = new TurnRunner(slotId, id);
   runners.set(slotId, runner);
-  const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
+  // Rust keeps the notes of the message it replaces (AI-05, AI-09), so its dividers stay while it is sent.
+  const original = now.entries.find((e) => e.entry_id === entryId);
+  const kept = original?.role === "user" ? parseMessage(original.text).notes : [];
+  const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text: composeMessage(text, [], kept) };
   patchSlot(slotId, (s) => ({ entries: [...entriesBefore(s.entries, entryId), local], turn: newTurn(), outcome: null, effortIgnored: false }));
   try {
     const started = await api.ai_edit_resend(id, entryId, text, context, runner.onEvent);

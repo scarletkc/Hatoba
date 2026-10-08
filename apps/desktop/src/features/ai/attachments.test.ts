@@ -15,7 +15,9 @@ import {
   makeDiagnostics,
   makePaste,
   MESSAGE_MAX_BYTES,
+  modelName,
   nextSelection,
+  noteBlock,
   orderAttachments,
   parseMessage,
   SELECTION_MAX_CHARS,
@@ -23,6 +25,7 @@ import {
   type Attachment,
   type DiagnosticsAttachment,
   type FileAttachment,
+  type Note,
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
@@ -73,7 +76,7 @@ describe("the stored blocks", () => {
 
   it("reads back what it wrote", () => {
     const a = att("$ make\ncc -o app main.c\nmain.c:3: error: expected ';'");
-    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", [a]))).toEqual({ attachments: [a], typed: "What is wrong?\nAnd how do I fix it?" });
+    expect(parseMessage(composeMessage("What is wrong?\nAnd how do I fix it?", [a]))).toEqual({ notes: [], attachments: [a], typed: "What is wrong?\nAnd how do I fix it?" });
   });
 
   it("keeps a selection that contains the closing tag inside the block, and restores it exactly", () => {
@@ -99,7 +102,7 @@ describe("the stored blocks", () => {
   });
 
   it("leaves a message without a block as typed text", () => {
-    expect(parseMessage("hello")).toEqual({ attachments: [], typed: "hello" });
+    expect(parseMessage("hello")).toEqual({ notes: [], attachments: [], typed: "hello" });
     for (const text of [
       'see <terminal_selection host="x" lines="1">\nx\n</terminal_selection>',
       '<terminal_selection host="x" lines="1">\nno end',
@@ -113,13 +116,14 @@ describe("the stored blocks", () => {
       '<file name="a.txt">\nx\n</file>\n\nq',
       '<image name="a.png" lines="1">\nx\n</image>\n\nq',
     ]) {
-      expect(parseMessage(text), text).toEqual({ attachments: [], typed: text });
+      expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
     }
   });
 
   it("ends a block only at a closing tag that a line break or the end follows, as Rust's title_of does", () => {
     const stored = '<terminal_selection host="x" lines="3">\na\n</terminal_selection> tail\nb\n</terminal_selection>\nwhat now';
     expect(parseMessage(stored)).toEqual({
+      notes: [],
       attachments: [{ kind: "selection", host: "x", lines: 3, truncated: false, text: "a\n</terminal_selection> tail\nb" }],
       typed: "what now",
     });
@@ -146,7 +150,7 @@ describe("connection diagnostics (AI-10)", () => {
 
   it("reads a message that is only a block", () => {
     const d = diag();
-    expect(parseMessage(blockOf(d))).toEqual({ attachments: [d], typed: "" });
+    expect(parseMessage(blockOf(d))).toEqual({ notes: [], attachments: [d], typed: "" });
   });
 });
 
@@ -175,7 +179,7 @@ describe("long pastes (AI-35)", () => {
     const text = "x </pasted_text> y\n</pasted_text>";
     const stored = composeMessage("q", [paste(text)]);
     expect(stored).toBe('<pasted_text lines="2">\nx <\\/pasted_text> y\n<\\/pasted_text>\n</pasted_text>\n\nq');
-    expect(parseMessage(stored)).toEqual({ attachments: [paste(text)], typed: "q" });
+    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [paste(text)], typed: "q" });
   });
 });
 
@@ -187,7 +191,7 @@ describe("text files (AI-35)", () => {
     expect(f).toEqual({ kind: "file", name: 'a "b" <c>.log', lines: 1, text: "ok\n" });
     const stored = composeMessage("q", [f]);
     expect(stored.split("\n")[0]).toBe('<file name="a &quot;b&quot; &lt;c&gt;.log" lines="1">');
-    expect(parseMessage(stored)).toEqual({ attachments: [f], typed: "q" });
+    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [f], typed: "q" });
   });
 
   it("accepts UTF-8 text and refuses NUL bytes and invalid UTF-8", () => {
@@ -233,7 +237,7 @@ describe("several attachments in one message (AI-35)", () => {
     expect(orderAttachments(list)).toEqual([d, s, p1, f1, p2, f2]);
     const stored = composeMessage("What now?", list);
     expect(stored.indexOf("<connection_diagnostics")).toBe(0);
-    expect(parseMessage(stored)).toEqual({ attachments: [d, s, p1, f1, p2, f2], typed: "What now?" });
+    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [d, s, p1, f1, p2, f2], typed: "What now?" });
   });
 
   it("keeps at most one diagnostics and one selection", () => {
@@ -245,9 +249,9 @@ describe("several attachments in one message (AI-35)", () => {
     const d = diag();
     const s = att("ls");
     const f = file("x.txt", "x");
-    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(s)}\n\n${blockOf(d)}\n\nq`)).toEqual({ attachments: [f, s, d], typed: "q" });
-    expect(parseMessage(`${blockOf(d)}\n\n${blockOf(d)}\n\nq`)).toEqual({ attachments: [d], typed: `${blockOf(d)}\n\nq` });
-    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(f)}\n\nq`)).toEqual({ attachments: [f, f], typed: "q" });
+    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(s)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [f, s, d], typed: "q" });
+    expect(parseMessage(`${blockOf(d)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [d], typed: `${blockOf(d)}\n\nq` });
+    expect(parseMessage(`${blockOf(f)}\n\n${blockOf(f)}\n\nq`)).toEqual({ notes: [], attachments: [f, f], typed: "q" });
   });
 
   it("caps all attachments of a message at 512 KB together", () => {
@@ -265,7 +269,63 @@ describe("several attachments in one message (AI-35)", () => {
     const p = paste("p".repeat(200_000));
     const stored = composeMessage("look", [big, p]);
     expect(stored.length).toBeGreaterThan(450_000);
-    expect(parseMessage(stored)).toEqual({ attachments: [big, p], typed: "look" });
+    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [big, p], typed: "look" });
+  });
+});
+
+describe("Hatoba's notes (AI-05, AI-09)", () => {
+  const moved: Note = { kind: "host_change", from: "staging-web", to: "prod-db" };
+  const switched: Note = { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" };
+
+  it("are written exactly as Rust writes them", () => {
+    // host_change_block and model_change_block in crates/hatoba-ai/src/tools.rs.
+    expect(noteBlock(moved)).toBe(
+      '<host_change from="staging-web" to="prod-db">\nThe conversation moved to another host. Screens and command output before this message came from "staging-web".\n</host_change>',
+    );
+    expect(noteBlock(switched)).toBe(
+      '<model_change from="Claude Sonnet 5.5 (claude-sonnet-5-5)" to="Claude Opus 5.5 (claude-opus-5-5)">\nEarlier replies in this conversation came from another model.\n</model_change>',
+    );
+    expect(noteBlock({ kind: "host_change", from: "", to: "prod-db" })).toBe(
+      '<host_change from="" to="prod-db">\nThe conversation moved to another host. Screens and command output before this message came from another host.\n</host_change>',
+    );
+    expect(noteBlock({ kind: "host_change", from: 'a"b</host_change>', to: "c&d\n" })).toBe(
+      '<host_change from="a&quot;b&lt;/host_change&gt;" to="c&amp;d">\nThe conversation moved to another host. Screens and command output before this message came from "a"b<\\/host_change>".\n</host_change>',
+    );
+  });
+
+  it("come first, the host's before the model's, then the attachments and the typed text", () => {
+    const d = diag();
+    const s = att("$ psql");
+    const p = paste("a long paste");
+    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, moved]);
+    expect(stored.indexOf("<host_change")).toBe(0);
+    expect(stored.indexOf("<model_change")).toBeLessThan(stored.indexOf("<connection_diagnostics"));
+    expect(parseMessage(stored)).toEqual({ notes: [moved, switched], attachments: [d, s, p], typed: "Why is it slow?" });
+    // Without attachments, and a message that is only notes.
+    expect(parseMessage(composeMessage("hi", [], [moved]))).toEqual({ notes: [moved], attachments: [], typed: "hi" });
+    expect(parseMessage(composeMessage("", [], [moved, switched]))).toEqual({ notes: [moved, switched], attachments: [], typed: "" });
+  });
+
+  it("read back names with quotes, ampersands and closing tags", () => {
+    const odd: Note = { kind: "host_change", from: 'db "main" <1> & </host_change>', to: "x" };
+    expect(parseMessage(composeMessage("q", [], [odd]))).toEqual({ notes: [odd], attachments: [], typed: "q" });
+  });
+
+  it("are typed text after an attachment, as a second note of a kind, or with other attributes", () => {
+    const f = file("x.txt", "x");
+    const afterAttachment = `${blockOf(f)}\n\n${noteBlock(moved)}\n\nq`;
+    expect(parseMessage(afterAttachment)).toEqual({ notes: [], attachments: [f], typed: `${noteBlock(moved)}\n\nq` });
+    const twice = `${noteBlock(moved)}\n\n${noteBlock(moved)}\n\nq`;
+    expect(parseMessage(twice)).toEqual({ notes: [moved], attachments: [], typed: `${noteBlock(moved)}\n\nq` });
+    for (const text of ['<host_change to="b" from="a">\nx\n</host_change>\n\nq', '<model_change from="a">\nx\n</model_change>\n\nq']) {
+      expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
+    }
+  });
+
+  it("name a model by its display name in the panel", () => {
+    expect(modelName("Claude Opus 5.5 (claude-opus-5-5)")).toBe("Claude Opus 5.5");
+    expect(modelName("GPT-5 (preview) (gpt-5-preview)")).toBe("GPT-5 (preview)");
+    expect(modelName("qwen3:8b")).toBe("qwen3:8b");
   });
 });
 

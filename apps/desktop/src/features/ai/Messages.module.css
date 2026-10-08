@@ -37,6 +37,33 @@
   background: var(--line2);
 }
 
+/* AI-05, AI-09: a note Hatoba stored before a message, as a line across the conversation. */
+.noteDivider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.noteDivider::before,
+.noteDivider::after {
+  content: "";
+  flex: 1 1 16px;
+  min-width: 16px;
+  height: 0.5px;
+  background: var(--line2);
+}
+
+.noteText {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .userRow {
   display: flex;
   justify-content: flex-end;

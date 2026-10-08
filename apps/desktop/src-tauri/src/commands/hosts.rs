@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use hatoba_core::model::{Group, Host, HostAuth, Item, SshKey};
+use hatoba_core::model::{Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -52,6 +52,12 @@ pub fn host_from_input(
         return Err(AppError::invalid(
             "port",
             "port must be between 1 and 65535",
+        ));
+    }
+    if input.ai_notes.chars().count() > MAX_HOST_AI_NOTES_CHARS {
+        return Err(AppError::invalid(
+            "ai_notes",
+            "AI notes are limited to 2,000 characters",
         ));
     }
     if let Some(jump) = &input.jump_host_id {
@@ -114,6 +120,7 @@ pub fn host_from_input(
         favorite: input.favorite,
         jump_host_id: input.jump_host_id.clone(),
         note: input.note.clone(),
+        ai_notes: input.ai_notes.clone(),
         updated_at: 0,
     })
 }
@@ -564,4 +571,51 @@ pub fn host_copy_password(app: AppHandle, state: State<'_, AppState>, id: String
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use hatoba_core::KdfParams;
+
+    use super::*;
+
+    fn input(ai_notes: String) -> HostInput {
+        HostInput {
+            id: None,
+            name: "prod-db".into(),
+            address: "10.0.0.5".into(),
+            port: 22,
+            username: "ops".into(),
+            auth_kind: AuthKind::Agent,
+            password: None,
+            key_id: None,
+            group_id: None,
+            tags: Vec::new(),
+            favorite: false,
+            jump_host_id: None,
+            note: String::new(),
+            ai_notes,
+        }
+    }
+
+    #[test]
+    fn ai_notes_are_saved_with_the_host_up_to_their_limit() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+            .unwrap();
+        // AI-37: kept as typed, line breaks and placeholders included.
+        let notes = "PostgreSQL 16 primary.\nRestart with `systemctl restart <unit>`.";
+        let host = host_from_input(&input(notes.into()), None, &v).unwrap();
+        assert_eq!(host.ai_notes, notes);
+        let id = v.put(None, Item::Host(host)).unwrap();
+        assert_eq!(
+            host_view(&id, &find_host(&v, &id).unwrap(), &v).ai_notes,
+            notes
+        );
+
+        assert!(host_from_input(&input("日".repeat(MAX_HOST_AI_NOTES_CHARS)), None, &v).is_ok());
+        let err = host_from_input(&input("日".repeat(MAX_HOST_AI_NOTES_CHARS + 1)), None, &v)
+            .unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("ai_notes"));
+    }
 }

@@ -71,6 +71,7 @@ When the vault has no hosts yet, the empty host list offers **Import SSH Config*
 | Jump Host | 跳板机 | 踏み台 |
 | Port Forwarding | 端口转发 | ポートフォワーディング |
 | Notes | 备注 | メモ |
+| AI Notes | AI 备注 | AI 向けメモ |
 | Test Connection | 测试连接 | 接続テスト |
 | Delete Host | 删除主机 | ホストを削除 |
 | Save | 保存 | 保存 |
@@ -78,6 +79,7 @@ When the vault has no hosts yet, the empty host list offers **Import SSH Config*
 
 - **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects. It does not save the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
+- **Notes** are for you only. **AI Notes** go to the AI assistant in every request of a conversation on the host; see `references/ai-instructions.md`.
 - **Port Forwarding** in the editor lists the host's forwards; see `references/port-forwarding.md`. A new host must be saved before forwards can be added.
 
 ## Authentication methods

@@ -427,6 +427,13 @@ impl SshSession {
         &self.inner.username
     }
 
+    /// The identification string the target server sent in the version exchange, such as
+    /// `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5`, with control characters dropped and at most
+    /// 255 characters. `None` when nothing printable was sent.
+    pub fn server_id(&self) -> Option<&str> {
+        self.inner.shared.server_id()
+    }
+
     /// `true` once the connection has ended for any reason.
     pub fn is_closed(&self) -> bool {
         self.inner.shared.is_closed() || self.inner.handle.is_closed()

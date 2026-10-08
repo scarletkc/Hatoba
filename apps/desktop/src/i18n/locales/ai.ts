@@ -116,6 +116,10 @@ export default defineMessages({
     "ai.reasoning.active": "正在思考",
     "ai.summary": "已压缩的对话摘要",
     "ai.outsideContext": "以上内容不在上下文中",
+    "ai.note.hostChange": "已转到 {to}（之前在 {from}）",
+    "ai.note.modelChange": "已切换到 {to}（之前是 {from}）",
+    "ai.instructions.size": "{n} / {max} 个字符 · 约 {tokens} 个 token",
+    "ai.instructions.tooLong": "最多 {max} 个字符，缩短后才能保存。",
     "ai.emptyReply": "模型没有返回内容。",
 
     // tool calls
@@ -367,6 +371,10 @@ export default defineMessages({
     "ai.reasoning.active": "Thinking",
     "ai.summary": "Summary of the compacted conversation",
     "ai.outsideContext": "Everything above is outside the context",
+    "ai.note.hostChange": "Moved to {to} (was on {from})",
+    "ai.note.modelChange": "Switched to {to} (was {from})",
+    "ai.instructions.size": "{n} / {max} characters · about {tokens} tokens",
+    "ai.instructions.tooLong": "At most {max} characters. Shorten the text to save it.",
     "ai.emptyReply": "The model returned nothing.",
 
     "ai.tool.read_terminal": "Read terminal",
@@ -607,6 +615,10 @@ export default defineMessages({
     "ai.reasoning.active": "考えています",
     "ai.summary": "圧縮した会話の要約",
     "ai.outsideContext": "ここより上はコンテキストに含まれません",
+    "ai.note.hostChange": "{to} に移りました（以前は {from}）",
+    "ai.note.modelChange": "{to} に切り替えました（以前は {from}）",
+    "ai.instructions.size": "{n} / {max} 文字 · 約 {tokens} トークン",
+    "ai.instructions.tooLong": "最大 {max} 文字です。短くすると保存できます。",
     "ai.emptyReply": "モデルから内容が返されませんでした。",
 
     "ai.tool.read_terminal": "ターミナルを読み取る",

@@ -2,6 +2,7 @@ import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { parseMessage, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
+import { noteTitle } from "./notes";
 import { exitStatusOf, prettyArgs, toolKind, toolLabel } from "./tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -64,8 +65,8 @@ function toolCall(t: Tr, call: AiToolCall, result: ToolEntry | undefined): strin
 
 /**
  * AI-25: the conversation as Markdown. The user's and the assistant's messages under headings,
- * reasoning as a quote, each tool call with its input and result in fenced blocks, and summaries and
- * the start of the context marked.
+ * reasoning as a quote, each tool call with its input and result in fenced blocks, and summaries, the
+ * start of the context, and moves to another host or model marked.
  */
 export function conversationMarkdown({ conversation, entries, host }: ExportSource, { t, time }: ExportFormat): string {
   const results = new Map<string, ToolEntry>();
@@ -83,7 +84,9 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
     if (i === contextAt && i > 0) blocks.push("---", `*${t("ai.outsideContext")}*`);
     switch (entry.role) {
       case "user": {
-        const { attachments, typed } = parseMessage(entry.text);
+        const { notes, attachments, typed } = parseMessage(entry.text);
+        // AI-05, AI-09: Hatoba's notes, a line each, before the message they belong to.
+        for (const n of notes) blocks.push(`*${noteTitle(t, n)}*`);
         blocks.push(`## ${t("ai.export.you")}`);
         // AI-10, AI-35: what was attached to the message, each as a labelled fenced block.
         for (const a of attachments) blocks.push(attachmentLabel(t, a), fenced(a.text));

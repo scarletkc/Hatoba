@@ -39,14 +39,15 @@ use hatoba_ai::entry::{
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, FetchUrlArgs, PromptContext, PromptTools, ReadSkillArgs, RunCommandArgs, ToolSet,
-    WebSearchArgs,
+    self, FetchUrlArgs, PromptContext, PromptModel, PromptTools, ReadSkillArgs, RunCommandArgs,
+    ToolSet, WebSearchArgs,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
-    Item, SearchKind as CoreSearchKind, SearchProvider,
+    Item, MAX_CUSTOM_INSTRUCTIONS_CHARS, MAX_HOST_AI_NOTES_CHARS, SearchKind as CoreSearchKind,
+    SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use serde::de::DeserializeOwned;
@@ -115,6 +116,12 @@ pub trait AiEnv: Send + Sync + 'static {
     fn changed(&self);
     /// The SSH connection of a terminal tab's session, while it is open (AI-08).
     fn session(&self, session_id: &str) -> Option<hatoba_ssh::SshSession>;
+    /// The identification string the server of a tab's open session sent (§13.1).
+    fn server_id(&self, session_id: &str) -> Option<String> {
+        self.session(session_id)
+            .filter(|s| !s.is_closed())
+            .and_then(|s| s.server_id().map(str::to_owned))
+    }
     /// The running app's version, which the built-in skill states (AI-34).
     fn app_version(&self) -> String;
 }
@@ -170,6 +177,9 @@ struct Turn {
     cancel: CancellationToken,
     sink: Arc<dyn EventSink>,
     context: AiTurnContext,
+    /// The identification string of the tab's SSH server when the turn started, so every
+    /// request of the turn has the same system prompt.
+    server_id: Option<String>,
     /// Woken when a tool result of the conversation is stored.
     results: Notify,
     /// `turn_ended` was sent; nothing else is sent after it.
@@ -284,12 +294,14 @@ impl AiManager {
         &self,
         conversation_id: &str,
         context: AiTurnContext,
+        server_id: Option<String>,
         sink: Arc<dyn EventSink>,
     ) -> Arc<Turn> {
         let turn = Arc::new(Turn {
             cancel: CancellationToken::new(),
             sink,
             context,
+            server_id,
             results: Notify::new(),
             ended: AtomicBool::new(false),
         });
@@ -517,20 +529,21 @@ impl AiManager {
         if text.trim().is_empty() {
             return Err(AppError::invalid("text", "The message is empty."));
         }
+        let server_id = turn_server_id(env.as_ref(), &context);
         let mut stored = false;
         let registered = self.open_turn(
             vault,
             conversation_id,
             replace,
             &text,
-            context,
+            (context, server_id),
             sink,
             &mut stored,
         );
         if stored {
             env.changed();
         }
-        let (id, turn, compact) = registered?;
+        let (id, turn, compact, notes) = registered?;
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
@@ -553,7 +566,8 @@ impl AiManager {
                     "the message was stopped before it was sent",
                 ));
             }
-            let entry = AiEntry::user(now_ms(), text);
+            // AI-05, AI-09: Hatoba's notes come before what the panel sent (spec §13.3).
+            let entry = AiEntry::user(now_ms(), format!("{notes}{text}"));
             let entry_id = append(&mut v, &id, &entry)?;
             let conversation = find_conversation(&v, &id)?;
             Ok(AiSendStarted {
@@ -581,7 +595,9 @@ impl AiManager {
 
     /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
     /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host
-    /// (AI-09), the registered turn, and the Compact request the new message needs (AI-22).
+    /// (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the registered turn, and
+    /// the Compact request the new message needs (AI-22). Returns the conversation's id, the
+    /// turn, that request, and the notes.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -592,13 +608,13 @@ impl AiManager {
         conversation_id: Option<String>,
         replace: Option<&str>,
         text: &str,
-        context: AiTurnContext,
+        (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
         stored: &mut bool,
-    ) -> AppResult<(String, Arc<Turn>, Option<Request>)> {
+    ) -> AppResult<(String, Arc<Turn>, Option<Request>, String)> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, compact) = match conversation_id {
+        let (id, compact, notes) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
                 let before = conversation.clone();
@@ -609,7 +625,21 @@ impl AiManager {
                 };
                 cancelled = self.stop_locked(&mut v, &id);
                 *stored |= !cancelled.is_empty();
+                // The entries before the new message, and the host the context came from before
+                // the entries an edit deletes, as their earliest host_change note names it.
+                let Entries {
+                    ids,
+                    list: mut earlier,
+                } = Entries::load(&v, &id)?;
+                let mut came_from = None;
                 if let Some((entry_id, summary_before)) = edit {
+                    if let Some(at) = ids.iter().position(|e| *e == entry_id) {
+                        came_from = earlier[at..].iter().find_map(|e| match &e.body {
+                            EntryBody::User { text } => note_attr(text, HOST_CHANGE, "from"),
+                            _ => None,
+                        });
+                        earlier.truncate(at);
+                    }
                     v.ai_delete_entries_from(&id, &entry_id)?;
                     *stored = true;
                     // The cancelled results came after the edited message: deleted too.
@@ -626,6 +656,12 @@ impl AiManager {
                 if let Some(host_id) = &context.host_id
                     && conversation.host_id.as_ref() != Some(host_id)
                 {
+                    // A conversation that had no host (a home tab chat) did not come from one.
+                    if came_from.is_none()
+                        && let Some(old) = conversation.host_id.as_deref()
+                    {
+                        came_from = Some(host_name(&v, old).unwrap_or_default());
+                    }
                     conversation.host_id = Some(host_id.clone());
                 }
                 // AI-05: the conversation keeps the level of its last message.
@@ -634,8 +670,16 @@ impl AiManager {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
                 }
-                let compact = compaction_before(&v, &id, &conversation, &context, text)?;
-                (id, compact)
+                let notes = notes_before(
+                    &v,
+                    &earlier,
+                    came_from.as_deref(),
+                    conversation.host_id.as_deref(),
+                    &context,
+                );
+                let full = format!("{notes}{text}");
+                let compact = compaction_before(&v, &id, &conversation, &context, &full)?;
+                (id, compact, notes)
             }
             None => {
                 let id = v.put(
@@ -651,16 +695,16 @@ impl AiManager {
                     }),
                 )?;
                 *stored = true;
-                (id, None)
+                (id, None, String::new())
             }
         };
-        let turn = self.register(&id, context, sink);
+        let turn = self.register(&id, context, server_id, sink);
         // The panel stopped listening to the previous turn's channel, so the results the stop
         // stored reach it on this one.
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, compact))
+        Ok((id, turn, compact, notes))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -681,6 +725,7 @@ impl AiManager {
         context: AiTurnContext,
         sink: Arc<dyn EventSink>,
     ) -> AppResult<TurnTask> {
+        let server_id = turn_server_id(env.as_ref(), &context);
         let mut stored = false;
         let registered = (|| {
             let mut v = unlocked(vault)?;
@@ -707,7 +752,7 @@ impl AiManager {
                 stored = true;
             }
             let compact = compaction_before(&v, &conversation_id, &conversation, &context, "")?;
-            let turn = self.register(&conversation_id, context, sink);
+            let turn = self.register(&conversation_id, context, server_id, sink);
             for entry in cancelled {
                 turn.emit(AiTurnEvent::Entry { entry });
             }
@@ -1190,7 +1235,7 @@ fn compact_request(
     mut entries: Vec<AiEntry>,
 ) -> Request {
     entries.push(AiEntry::user(now_ms(), COMPACT_INSTRUCTION));
-    let (system, _) = prompt(v, context, false);
+    let (system, _) = prompt(v, context, false, None);
     Request {
         provider_id: context.provider_id.clone(),
         provider,
@@ -1315,7 +1360,7 @@ fn prepare_locked(
     }
     let (provider, model) = resolve_model(v, &turn.context.provider_id, &turn.context.model_id)
         .map_err(Halt::Failed)?;
-    let (system, mut tools) = prompt(v, &turn.context, true);
+    let (system, mut tools) = prompt(v, &turn.context, true, turn.server_id.as_deref());
     // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09).
     tools.extend(offer.tool_defs(provider.protocol));
     Ok(Request {
@@ -1529,18 +1574,30 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
 /// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
 /// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
 /// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `offer_tools`
-/// is false for Compact (AI-21).
-fn prompt(v: &Vault, context: &AiTurnContext, offer_tools: bool) -> (String, Vec<ToolDef>) {
+/// is false for Compact (AI-21). `server_id` is the tab's SSH server's identification string.
+/// The prompt names the model and its provider, and carries the user's custom instructions
+/// (AI-36) and the host's AI notes (AI-37), each cut to its limit.
+fn prompt(
+    v: &Vault,
+    context: &AiTurnContext,
+    offer_tools: bool,
+    server_id: Option<&str>,
+) -> (String, Vec<ToolDef>) {
     let host = context
         .host_id
         .as_deref()
         .and_then(|id| v.get(id))
         .and_then(Item::as_host);
+    let provider = v.get(&context.provider_id).and_then(Item::as_ai_provider);
+    let model_name = provider
+        .and_then(|p| p.models.iter().find(|m| m.id == context.model_id))
+        .map_or("", |m| m.name.as_str());
+    let settings = v.settings();
     let mut skills: Vec<(String, String)> = enabled_skills(v)
         .into_iter()
         .map(|(_, s)| (s.name, s.description))
         .collect();
-    if v.settings().ai.builtin_skill_enabled {
+    if settings.ai.builtin_skill_enabled {
         skills.push((BUILTIN_NAME.to_owned(), builtin_description()));
     }
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -1550,9 +1607,20 @@ fn prompt(v: &Vault, context: &AiTurnContext, offer_tools: bool) -> (String, Vec
         (true, true) => PromptTools::Terminal,
     };
     let system = tools::system_prompt(&PromptContext {
+        model: PromptModel {
+            id: &context.model_id,
+            name: model_name,
+            provider: provider.map_or("", |p| p.name.as_str()),
+        },
         host_name: host.map(|h| h.name.as_str()),
         host_user: host.map(|h| h.username.as_str()),
+        server_id,
         date: &date,
+        instructions: chars_prefix(
+            &settings.ai.custom_instructions,
+            MAX_CUSTOM_INSTRUCTIONS_CHARS,
+        ),
+        host_notes: host.map_or("", |h| chars_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_CHARS)),
         skills: &skills,
         tools: offered,
     });
@@ -1566,6 +1634,23 @@ fn prompt(v: &Vault, context: &AiTurnContext, offer_tools: bool) -> (String, Vec
         Vec::new()
     };
     (system, defs)
+}
+
+/// The first `max` characters of `s`. Saving refuses longer text; one synced from elsewhere is cut.
+fn chars_prefix(s: &str, max: usize) -> &str {
+    s.char_indices().nth(max).map_or(s, |(i, _)| &s[..i])
+}
+
+/// §13.1: the identification string of the tab's SSH server, read once when a turn starts, so
+/// every request of the turn has the same system prompt. Only with a connected tab.
+fn turn_server_id(env: &dyn AiEnv, context: &AiTurnContext) -> Option<String> {
+    if !context.tab {
+        return None;
+    }
+    context
+        .session_id
+        .as_deref()
+        .and_then(|id| env.server_id(id))
 }
 
 /// The provider and model a request uses (AI-05). The error is a sentence for the panel.
@@ -2005,29 +2090,37 @@ pub fn find_conversation(v: &Vault, id: &str) -> AppResult<AiConversation> {
 }
 
 /// AI-23: the title starts as the first line of the first message, cut to 60 characters. The
-/// attachment blocks the message starts with (AI-10, AI-35) are skipped, so the title is the
-/// first non-empty line the user typed, or the first block's name when nothing was typed (the
-/// panel sends nothing without typed text, so that is only a fallback).
+/// blocks the message starts with (spec §13.3) are skipped, so the title is the first non-empty
+/// line the user typed, or the first attachment's name when nothing was typed (the panel sends
+/// nothing without typed text, so that is only a fallback). Hatoba's notes never title it.
 fn title_of(text: &str) -> String {
-    let mut typed = text;
-    let mut first_block = None;
-    while let Some((title, rest)) = leading_attachment(typed) {
-        first_block = first_block.or(Some(title));
-        typed = rest;
-    }
+    let (blocks, typed) = leading_blocks(text);
     let line = typed
         .lines()
         .map(str::trim)
         .find(|line| !line.is_empty())
         .map(str::to_owned)
-        .or(first_block)
+        .or_else(|| {
+            blocks
+                .iter()
+                .find(|b| !b.kind.note)
+                .map(|b| (b.kind.title)(&b.attrs))
+        })
         .unwrap_or_default();
     line.chars().take(60).collect()
 }
 
-/// A kind of attachment block (spec §13.3, "Attachment blocks").
+/// The tag of the note Hatoba puts before a message that moves the conversation to another
+/// host (AI-09).
+const HOST_CHANGE: &str = "host_change";
+/// The tag of the note Hatoba puts before the first message to another model (AI-05).
+const MODEL_CHANGE: &str = "model_change";
+
+/// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
     tag: &'static str,
+    /// A note Hatoba writes, rather than something the user attached.
+    note: bool,
     /// The title of a conversation whose first message has only this block, from its attributes.
     title: fn(&[(&str, &str)]) -> String,
     /// Whether the opening tag's attributes, in order, are the ones this kind writes.
@@ -2048,11 +2141,24 @@ fn attribute_text(value: &str) -> String {
         .replace("&amp;", "&")
 }
 
-/// The attachment blocks a user entry may start with. The panel writes them
-/// (`features/ai/attachments.ts`), and this parser follows the same rules.
+/// The blocks a user entry may start with. Hatoba writes the notes here, before the blocks the
+/// panel writes (`features/ai/attachments.ts`), whose parser follows the same rules.
 const ATTACHMENTS: &[AttachmentKind] = &[
     AttachmentKind {
+        tag: HOST_CHANGE,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
+    },
+    AttachmentKind {
+        tag: MODEL_CHANGE,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
+    },
+    AttachmentKind {
         tag: "terminal_selection",
+        note: false,
         title: |_| "Terminal selection".to_owned(),
         attributes: |attrs| match attrs {
             [("host", _), ("lines", lines)]
@@ -2062,16 +2168,19 @@ const ATTACHMENTS: &[AttachmentKind] = &[
     },
     AttachmentKind {
         tag: "connection_diagnostics",
+        note: false,
         title: |_| "Connection diagnostics".to_owned(),
         attributes: |attrs| matches!(attrs, [("host", _)]),
     },
     AttachmentKind {
         tag: "pasted_text",
+        note: false,
         title: |_| "Pasted text".to_owned(),
         attributes: |attrs| matches!(attrs, [("lines", lines)] if is_count(lines)),
     },
     AttachmentKind {
         tag: "file",
+        note: false,
         title: |attrs| {
             attrs
                 .first()
@@ -2082,12 +2191,47 @@ const ATTACHMENTS: &[AttachmentKind] = &[
     },
 ];
 
-/// The attachment block `text` starts with (spec §13.3), as the title it would give a
-/// conversation, and the text after it: the opening tag with its attributes (`name="value"`,
-/// values without `"`), a line break, the body, a line break and the closing tag, then one blank
-/// line, one line break or the end. The body ends at the first closing tag that such a break or
-/// the end follows; the panel escapes closing tags inside it.
-fn leading_attachment(text: &str) -> Option<(String, &str)> {
+/// One block a user entry starts with: its kind and its attributes as written.
+struct Block<'a> {
+    kind: &'static AttachmentKind,
+    attrs: Vec<(&'a str, &'a str)>,
+}
+
+/// The blocks `text` starts with, in order, and the text after them. Notes come first, at most
+/// one of each kind: a note after an attachment, or a second one of a kind, is typed text.
+fn leading_blocks(text: &str) -> (Vec<Block<'_>>, &str) {
+    let mut blocks: Vec<Block<'_>> = Vec::new();
+    let mut rest = text;
+    while let Some((block, after)) = leading_block(rest) {
+        if block.kind.note
+            && blocks
+                .iter()
+                .any(|b| !b.kind.note || b.kind.tag == block.kind.tag)
+        {
+            break;
+        }
+        blocks.push(block);
+        rest = after;
+    }
+    (blocks, rest)
+}
+
+/// An attribute of the note `tag` among the notes a user entry starts with, read back.
+fn note_attr(text: &str, tag: &str, name: &str) -> Option<String> {
+    leading_blocks(text)
+        .0
+        .iter()
+        .take_while(|b| b.kind.note)
+        .find(|b| b.kind.tag == tag)
+        .and_then(|b| b.attrs.iter().find(|(n, _)| *n == name))
+        .map(|(_, value)| attribute_text(value))
+}
+
+/// The block `text` starts with (spec §13.3), and the text after it: the opening tag with its
+/// attributes (`name="value"`, values without `"`), a line break, the body, a line break and the
+/// closing tag, then one blank line, one line break or the end. The body ends at the first
+/// closing tag that such a break or the end follows; its writer escapes closing tags inside it.
+fn leading_block(text: &str) -> Option<(Block<'_>, &str)> {
     let rest = text.strip_prefix('<')?;
     let kind = ATTACHMENTS.iter().find(|k| {
         rest.strip_prefix(k.tag)
@@ -2116,14 +2260,78 @@ fn leading_attachment(text: &str) -> Option<(String, &str)> {
             .strip_prefix("\n\n")
             .or_else(|| after.strip_prefix('\n'))
         {
-            return Some(((kind.title)(&attrs), typed));
+            return Some((Block { kind, attrs }, typed));
         }
         if after.is_empty() {
-            return Some(((kind.title)(&attrs), after));
+            return Some((Block { kind, attrs }, after));
         }
         from += at + 1;
     }
     None
+}
+
+/// A host's display name, when the host exists.
+fn host_name(v: &Vault, host_id: &str) -> Option<String> {
+    v.get(host_id)
+        .and_then(Item::as_host)
+        .map(|h| h.name.clone())
+}
+
+/// How a stored model is named in a `model_change` note: its display name and ID, or the ID
+/// alone when its provider or the model is gone.
+fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
+    let name = v
+        .get(provider_id)
+        .and_then(Item::as_ai_provider)
+        .and_then(|p| p.models.iter().find(|m| m.id == model_id))
+        .map_or("", |m| m.name.as_str());
+    tools::model_label(model_id, name)
+}
+
+/// The notes Hatoba puts before a new message (spec §13.3), the host's first:
+///
+/// - `host_change` (AI-09) when the entries before the message came from another host than the
+///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
+///   `None` when the conversation did not move.
+/// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
+///   `earlier` (the entries before the message) came from. A switch an earlier message noted
+///   already, which got no reply (a failed request, say), is not noted again.
+fn notes_before(
+    v: &Vault,
+    earlier: &[AiEntry],
+    came_from: Option<&str>,
+    host_now: Option<&str>,
+    context: &AiTurnContext,
+) -> String {
+    let mut notes = String::new();
+    // A message with nothing before it has no earlier screens to tell apart.
+    if let (Some(from), Some(to), false) = (
+        came_from,
+        host_now.and_then(|id| host_name(v, id)),
+        earlier.is_empty(),
+    ) && from != to
+    {
+        notes.push_str(&tools::host_change_block(from, &to));
+    }
+    let to = stored_model_label(v, &context.provider_id, &context.model_id);
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => {
+                if a.model_id != context.model_id {
+                    let from = stored_model_label(v, &a.provider_id, &a.model_id);
+                    notes.push_str(&tools::model_change_block(&from, &to));
+                }
+                break;
+            }
+            EntryBody::User { text } => {
+                if note_attr(text, MODEL_CHANGE, "to").is_some_and(|noted| noted == to) {
+                    break;
+                }
+            }
+            EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
+        }
+    }
+    notes
 }
 
 // ---- history search (AI-24) ----

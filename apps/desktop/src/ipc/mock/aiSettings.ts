@@ -1,3 +1,4 @@
+import { INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
 import type { HatobaApi } from "../api";
 import type {
   AiEffort,
@@ -12,6 +13,10 @@ import type {
 } from "../types";
 
 const ALL_LEVELS: readonly AiEffort[] = ["low", "medium", "high", "xhigh", "max"];
+
+/** `?ai=instructions`: custom instructions are saved (AI-36). */
+const INSTRUCTIONS_DEMO =
+  "Answer in the language I write in.\nI use Debian 12 and zsh, and manage services with systemctl.\nWrite <placeholders> for values I need to fill in.";
 
 type AiSettingsApi = Pick<
   HatobaApi,
@@ -35,6 +40,7 @@ type AiSettingsApi = Pick<
  *   ?ai=testfail     Test Connection fails with an authentication error (401 and a provider message)
  *   ?ai=modelsfail   Fetch Models fails with an `ai` error (404)
  *   ?ai=search       a Brave Search provider is saved and chosen for web search
+ *   ?ai=instructions custom instructions are saved (AI-36)
  * Without parameters there are two providers (Anthropic, and Ollama on localhost), so the default
  * model selector shows two groups. Inside the editor a few inputs trigger the other states:
  *   a base URL on a `.invalid` host        Test Connection fails with a network error
@@ -87,6 +93,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     default_effort: null,
     search_provider_id: flags.has("search") ? "s-brave" : null,
     builtin_skill_enabled: true,
+    custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
   };
 
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
@@ -247,6 +254,9 @@ export function createAiSettingsMock(): AiSettingsApi {
     },
     ai_settings_get: async () => structuredClone(settings),
     ai_settings_save: async (next) => {
+      // Like Rust (AI-36).
+      if ([...next.custom_instructions].length > INSTRUCTIONS_MAX_CHARS)
+        throw { code: "invalid_input", detail: "custom instructions are limited to 4,000 characters", field: "custom_instructions" } satisfies AppError;
       settings = structuredClone(next);
     },
   };

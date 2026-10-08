@@ -34,6 +34,9 @@ const PW: &str = "correct horse battery staple";
 /// The app version the test environment reports (AI-34).
 const VERSION: &str = "9.8.7-test";
 const KEY: &str = "sk-test-turns-NEVER-SHOWN";
+/// The one session the test environment has open, and what its server sent (§13.1).
+const LIVE_SESSION: &str = "live";
+const SERVER_ID: &str = "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5";
 
 /// Collects a turn's events.
 #[derive(Debug, Default)]
@@ -134,6 +137,11 @@ impl AiEnv for Env {
 
     fn session(&self, _session_id: &str) -> Option<hatoba_ssh::SshSession> {
         None
+    }
+
+    /// The session `live` is open, and its server identifies itself as [`SERVER_ID`].
+    fn server_id(&self, session_id: &str) -> Option<String> {
+        (session_id == LIVE_SESSION).then(|| SERVER_ID.to_owned())
     }
 
     fn app_version(&self) -> String {
@@ -272,6 +280,7 @@ impl Fixture {
             effort: None,
             host_id: None,
             tab: true,
+            session_id: None,
             disabled_mcp_servers: Vec::new(),
         }
     }
@@ -1837,6 +1846,34 @@ fn titles_skip_the_attachment_blocks_a_message_starts_with() {
         60
     );
 
+    // AI-05, AI-09: Hatoba's notes come first and never title the conversation.
+    let notes = "<host_change from=\"staging-web\" to=\"prod-db\">\nThe conversation moved.\n\
+                 </host_change>\n\n<model_change from=\"A (a)\" to=\"B (b)\">\nOther model.\n\
+                 </model_change>\n\n";
+    assert_eq!(
+        title_of(&format!(
+            "{notes}<file name=\"a.log\" lines=\"1\">\nx\n</file>\n\nWhat now?"
+        )),
+        "What now?"
+    );
+    assert_eq!(
+        title_of(&format!(
+            "{notes}<pasted_text lines=\"1\">\nx\n</pasted_text>"
+        )),
+        "Pasted text"
+    );
+    assert_eq!(title_of(notes), "");
+    // A note whose attributes are not the kind's own, a note after an attachment, or a second
+    // note of a kind, is typed text.
+    let odd = "<host_change to=\"b\" from=\"a\">\nx\n</host_change>\n\nq";
+    assert_eq!(title_of(odd), "<host_change to=\"b\" from=\"a\">");
+    let late = "<pasted_text lines=\"1\">\nx\n</pasted_text>\n\n\
+                <host_change from=\"a\" to=\"b\">\nx\n</host_change>\n\nq";
+    assert_eq!(title_of(late), "<host_change from=\"a\" to=\"b\">");
+    let twice = "<model_change from=\"a\" to=\"b\">\nx\n</model_change>\n\n\
+                 <model_change from=\"b\" to=\"c\">\nx\n</model_change>\n\nq";
+    assert_eq!(title_of(twice), "<model_change from=\"b\" to=\"c\">");
+
     // Anything else is typed text.
     for text in [
         "see <terminal_selection host=\"x\" lines=\"1\">\nx\n</terminal_selection>",
@@ -2040,7 +2077,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     crate::commands::skills::save_skill(&mut v, &skill("apache", false)).unwrap();
 
     // AI-28: only enabled skills are listed.
-    let (system, tools) = super::prompt(&v, &f.context(), true);
+    let (system, tools) = super::prompt(&v, &f.context(), true, None);
     assert!(system.contains("nginx: About nginx"), "{system}");
     assert!(!system.contains("apache"), "{system}");
     assert!(tools.iter().any(|t| t.name == "read_skill"));
@@ -2079,7 +2116,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     )
     .unwrap();
     let builtin = hatoba_ai::skills::builtin_skill(VERSION);
-    let (system, _) = super::prompt(&v, &f.context(), true);
+    let (system, _) = super::prompt(&v, &f.context(), true, None);
     assert!(
         system.contains(&format!(
             "- hatoba: {}\n- nginx: About nginx\n",
@@ -2107,7 +2144,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     let mut settings = v.settings();
     settings.ai.builtin_skill_enabled = false;
     v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
-    let (system, tools) = super::prompt(&v, &f.context(), true);
+    let (system, tools) = super::prompt(&v, &f.context(), true, None);
     assert!(!system.contains("- hatoba:"), "{system}");
     assert!(tools.iter().any(|t| t.name == "read_skill"));
     let (status, refused) = read(&v, "hatoba", None);
@@ -2122,7 +2159,7 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
         .unwrap()
         .0;
     crate::commands::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
-    let (_, tools) = super::prompt(&v, &f.context(), true);
+    let (_, tools) = super::prompt(&v, &f.context(), true, None);
     assert!(!tools.iter().any(|t| t.name == "read_skill"));
 }
 
@@ -2400,4 +2437,297 @@ fn the_lock_cancels_provider_requests_outside_a_conversation() {
     assert!(op.token().is_cancelled());
     drop(op);
     assert!(super::guard(&manager.0.ops).is_empty());
+}
+
+// ───────────────────────── the prompt's context, notes, instructions (§13.1, §13.3) ─────────────────────────
+
+impl Fixture {
+    /// Stores a host with AI notes (AI-37) and returns its id.
+    fn add_host(&self, name: &str, ai_notes: &str) -> String {
+        lock(&self.vault)
+            .put(
+                None,
+                Item::Host(hatoba_core::model::Host {
+                    name: name.into(),
+                    address: format!("{name}.example.org"),
+                    username: "ops".into(),
+                    ai_notes: ai_notes.into(),
+                    ..hatoba_core::model::Host::default()
+                }),
+            )
+            .unwrap()
+    }
+
+    /// Gives the provider another model.
+    fn add_model(&self, id: &str, name: &str) {
+        let mut v = lock(&self.vault);
+        let mut provider = v
+            .get(&self.provider_id)
+            .and_then(Item::as_ai_provider)
+            .cloned()
+            .unwrap();
+        provider.models.push(AiModel {
+            id: id.into(),
+            name: name.into(),
+            ..AiModel::default()
+        });
+        v.put(Some(&self.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+
+    /// Sets `Settings.ai.custom_instructions` (AI-36).
+    fn set_instructions(&self, text: &str) {
+        let mut v = lock(&self.vault);
+        let mut settings = v.settings();
+        settings.ai.custom_instructions = text.into();
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+
+    /// The text of every stored user entry, oldest first.
+    fn user_texts(&self, conversation_id: &str) -> Vec<String> {
+        self.entries(conversation_id)
+            .into_iter()
+            .filter_map(|e| match e.body {
+                EntryBody::User { text } => Some(text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Sends and waits until the turn has ended and let go of the conversation.
+    async fn exchange(
+        &self,
+        conversation_id: Option<&str>,
+        text: &str,
+        context: AiTurnContext,
+    ) -> (String, AiTurnEndReason) {
+        let (started, sink) = self.send_with(conversation_id, text, context).await;
+        let id = started.conversation.id;
+        let reason = sink.ended().await;
+        self.idle(&id).await;
+        (id, reason)
+    }
+
+    async fn edit_with(
+        &self,
+        conversation_id: &str,
+        entry_id: &str,
+        text: &str,
+        context: AiTurnContext,
+    ) -> AiTurnEndReason {
+        let sink = Arc::new(Sink::default());
+        let (_, task) = self
+            .manager
+            .edit_resend(
+                &self.vault,
+                self.env(),
+                conversation_id.to_owned(),
+                entry_id,
+                text.to_owned(),
+                context,
+                sink.clone(),
+            )
+            .await
+            .unwrap();
+        tokio::spawn(task);
+        let reason = sink.ended().await;
+        self.idle(conversation_id).await;
+        reason
+    }
+}
+
+/// The text of every user message a request carries.
+fn user_messages(body: &Value) -> Vec<String> {
+    messages(body)
+        .iter()
+        .filter(|m| m["role"] == "user")
+        .map(|m| m["content"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn system_of(body: &Value) -> String {
+    messages(body)[0]["content"].as_str().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn the_prompt_names_the_model_and_the_server_and_carries_instructions_and_host_notes() {
+    let f = Fixture::new(vec![answer("One."), answer("Two."), answer("Three.")]).await;
+    let host = f.add_host(
+        "prod-db",
+        "PostgreSQL 16 primary.\nAsk before <restarting> it.",
+    );
+    f.set_instructions("Answer in English.");
+    let context = AiTurnContext {
+        host_id: Some(host.clone()),
+        session_id: Some(LIVE_SESSION.into()),
+        ..f.context()
+    };
+    let (conv, reason) = f.exchange(None, "status?", context.clone()).await;
+    assert_eq!(reason, AiTurnEndReason::Completed);
+    let system = system_of(&f.requests().await[0]);
+    for needle in [
+        "You are the model \"Model 1\" (m1), which this request asks for through the provider \
+         \"Mock\".\n",
+        "The terminal tab is connected to the host \"prod-db\" as the user \"ops\".\n\
+         The SSH server identifies itself as \"SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5\".\n\
+         </context>",
+        "- Follow the user's instructions and the host notes below unless",
+        "</rules>\n\n<user_instructions>\nAnswer in English.\n</user_instructions>\n\n\
+         <host_notes host=\"prod-db\">\nPostgreSQL 16 primary.\nAsk before <restarting> it.\n\
+         </host_notes>\n\n<attachments>",
+    ] {
+        assert!(system.contains(needle), "missing {needle:?} in {system}");
+    }
+
+    // Without a connected tab there is no server to name, and the session is not asked.
+    let detached = AiTurnContext {
+        tab: false,
+        ..context.clone()
+    };
+    f.exchange(Some(&conv), "and now?", detached).await;
+    let system = system_of(&f.requests().await[1]);
+    assert!(!system.contains("SSH server"), "{system}");
+    assert!(system.contains("<host_notes host=\"prod-db\">"), "{system}");
+
+    // A session that is not open names no server; nothing else changes.
+    let closed = AiTurnContext {
+        session_id: Some("gone".into()),
+        ..context
+    };
+    f.exchange(Some(&conv), "again", closed).await;
+    let system = system_of(&f.requests().await[2]);
+    assert!(!system.contains("SSH server"), "{system}");
+    assert!(system.contains("<user_instructions>"), "{system}");
+}
+
+#[tokio::test]
+async fn a_move_to_another_host_and_a_switch_of_model_are_noted_once() {
+    use hatoba_ai::tools::{host_change_block, model_change_block};
+
+    let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    f.add_model("m2", "Model 2");
+    let staging = f.add_host("staging-web", "");
+    let prod = f.add_host("prod-db", "");
+    let on = |host: &str, model: &str| AiTurnContext {
+        host_id: Some(host.to_owned()),
+        model_id: model.into(),
+        ..f.context()
+    };
+
+    // A chat that had no host (the home tab's) did not come from another one.
+    let (home, _) = f.exchange(None, "hi", f.context()).await;
+    f.exchange(Some(&home), "on a host", on(&staging, "m1"))
+        .await;
+    assert_eq!(f.user_texts(&home), ["hi", "on a host"]);
+
+    let (conv, _) = f.exchange(None, "first", on(&staging, "m1")).await;
+    // AI-09: the message that moves the conversation carries the note, once.
+    f.exchange(Some(&conv), "second", on(&prod, "m1")).await;
+    // AI-05: so does the first message to another model.
+    f.exchange(Some(&conv), "third", on(&prod, "m2")).await;
+    f.exchange(Some(&conv), "fourth", on(&prod, "m2")).await;
+    // Both at once: the host's note first.
+    f.exchange(Some(&conv), "fifth", on(&staging, "m1")).await;
+
+    let moved = host_change_block("staging-web", "prod-db");
+    let switched = model_change_block("Model 1 (m1)", "Model 2 (m2)");
+    let both = format!(
+        "{}{}fifth",
+        host_change_block("prod-db", "staging-web"),
+        model_change_block("Model 2 (m2)", "Model 1 (m1)")
+    );
+    let expected = [
+        "first".to_owned(),
+        format!("{moved}second"),
+        format!("{switched}third"),
+        "fourth".to_owned(),
+        both,
+    ];
+    assert_eq!(f.user_texts(&conv), expected);
+    // The notes go to the model with the message, as stored.
+    let last = f.requests().await.pop().unwrap();
+    assert_eq!(user_messages(&last), expected);
+    // They never title the conversation.
+    assert_eq!(f.detail(&conv).conversation.title, "first");
+}
+
+#[tokio::test]
+async fn a_switch_noted_on_a_message_without_a_reply_is_not_noted_again() {
+    use hatoba_ai::tools::model_change_block;
+
+    let f = Fixture::new(vec![
+        answer("One."),
+        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
+        answer("Two."),
+    ])
+    .await;
+    f.add_model("m2", "Model 2");
+    let to = |model: &str| AiTurnContext {
+        model_id: model.into(),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "one", to("m1")).await;
+    let (_, failed) = f.exchange(Some(&conv), "two", to("m2")).await;
+    assert_eq!(failed, AiTurnEndReason::Error);
+    f.exchange(Some(&conv), "two again", to("m2")).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "one".to_owned(),
+            format!("{}two", model_change_block("Model 1 (m1)", "Model 2 (m2)")),
+            "two again".to_owned()
+        ]
+    );
+}
+
+#[tokio::test]
+async fn editing_a_message_keeps_the_note_of_the_move_it_made() {
+    use hatoba_ai::tools::host_change_block;
+
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let staging = f.add_host("staging-web", "");
+    let prod = f.add_host("prod-db", "");
+    let db = f.add_host("db-2", "");
+    let on = |host: &str| AiTurnContext {
+        host_id: Some(host.to_owned()),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "first", on(&staging)).await;
+    f.exchange(Some(&conv), "second", on(&prod)).await;
+    let second = |f: &Fixture| {
+        let v = lock(&f.vault);
+        let entries = Entries::load(&v, &conv).unwrap();
+        entries.ids[2].clone()
+    };
+
+    // AI-26: the edited message replaces one that moved the conversation, so it keeps the note.
+    let id = second(&f);
+    f.edit_with(&conv, &id, "second, edited", on(&prod)).await;
+    let moved = host_change_block("staging-web", "prod-db");
+    assert_eq!(
+        f.user_texts(&conv),
+        ["first".to_owned(), format!("{moved}second, edited")]
+    );
+
+    // Edited from a tab on a third host: the earlier screens still came from the first one.
+    let id = second(&f);
+    f.edit_with(&conv, &id, "second, from db-2", on(&db)).await;
+    assert_eq!(
+        f.user_texts(&conv)[1],
+        format!(
+            "{}second, from db-2",
+            host_change_block("staging-web", "db-2")
+        )
+    );
+
+    // The first message has nothing before it, so it gets no note.
+    let first = lock(&f.vault).ai_entries(&conv).unwrap()[0]
+        .entry_id
+        .clone();
+    f.edit_with(&conv, &first, "first, edited", on(&prod)).await;
+    assert_eq!(f.user_texts(&conv), ["first, edited"]);
+    assert_eq!(
+        f.detail(&conv).conversation.host_id.as_deref(),
+        Some(prod.as_str())
+    );
 }

@@ -296,6 +296,7 @@ export function sanitizeSettings(
     default_effort: settings.default_effort,
     search_provider_id: searchId,
     builtin_skill_enabled: settings.builtin_skill_enabled,
+    custom_instructions: settings.custom_instructions,
   };
 }
 
@@ -322,7 +323,8 @@ export function sameSettings(a: AiSettingsView, b: AiSettingsView): boolean {
     sameRef(a.default_model, b.default_model) &&
     a.default_effort === b.default_effort &&
     a.search_provider_id === b.search_provider_id &&
-    a.builtin_skill_enabled === b.builtin_skill_enabled
+    a.builtin_skill_enabled === b.builtin_skill_enabled &&
+    a.custom_instructions === b.custom_instructions
   );
 }
 

@@ -89,6 +89,18 @@ describe("Markdown export (AI-25)", () => {
     expect(out).toContain("## You\n\n**Pasted text · 3 lines**\n\n```\na\nb\nc\n```\n\n**nginx.conf · 3 lines**\n\n```\nserver {\n  listen 80;\n}\n\n```\n\nCheck these");
   });
 
+  it("writes a move to another host or model as a line before the message (AI-05, AI-09)", () => {
+    const text = composeMessage("And now?", [makePaste("x")!], [
+      { kind: "host_change", from: "staging-web", to: "prod-db" },
+      { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" },
+    ]);
+    const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
+    expect(out).toContain(
+      "*Moved to prod-db (was on staging-web)*\n\n*Switched to Claude Opus 5.5 (claude-opus-5-5) (was Claude Sonnet 5.5 (claude-sonnet-5-5))*\n\n## You\n\n**Pasted text · 1 line**",
+    );
+    expect(out).toContain("```\n\nAnd now?");
+  });
+
   it("names a deleted host and an untitled conversation", () => {
     const out = conversationMarkdown({ conversation: { ...conversation, title: "" }, entries: [], host: null }, { t, time });
     expect(out).toBe("# Untitled conversation\n\n- Host: Deleted host\n- Created: T1000\n");

@@ -8,9 +8,10 @@ import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo
 import { cx } from "@/lib/cx";
 import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
-import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts } from "./attachments";
+import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
+import { noteLabel, noteTitle } from "./notes";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -201,22 +202,49 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 
 // ───────────────────────── entries ─────────────────────────
 
-/** The user's message. With `onResend`, Edit replaces it and sends it again (AI-26). */
+/**
+ * The user's message. With `onResend`, Edit replaces it and sends it again (AI-26). The notes Hatoba
+ * stored before it (AI-05, AI-09) are dividers above it, not part of the bubble; an edit keeps them,
+ * since Rust carries them over to the new message.
+ */
 function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
-  // AI-10, AI-35: what was attached to the message is in blocks at its start.
+  // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
   const parts = useMemo(() => parseMessage(text), [text]);
-  if (editing && onResend) return <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
+  const notes = parts.notes.map((note, i) => <NoteDivider key={i} note={note} />);
+  if (editing && onResend)
+    return (
+      <>
+        {notes}
+        <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
+      </>
+    );
   return (
-    <div className={s.userRow}>
-      {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
-      <div className={s.userStack}>
-        {parts.attachments.map((a, i) => (
-          <AttachmentCardFor key={i} attachment={a} />
-        ))}
-        <div className={cx(s.user, pending && s.userPending, "selectable")}>{parts.typed}</div>
+    <>
+      {notes}
+      <div className={s.userRow}>
+        {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
+        <div className={s.userStack}>
+          {parts.attachments.map((a, i) => (
+            <AttachmentCardFor key={i} attachment={a} />
+          ))}
+          <div className={cx(s.user, pending && s.userPending, "selectable")}>{parts.typed}</div>
+        </div>
       </div>
+    </>
+  );
+}
+
+/** A note Hatoba stored before a message: the conversation moved to another host, or went to another model. */
+function NoteDivider({ note }: { note: Note }) {
+  const t = useT();
+  return (
+    <div className={s.noteDivider} role="note" title={noteTitle(t, note)}>
+      <span className={s.noteText}>
+        <Icon name={note.kind === "host_change" ? "arrows-left-right" : "swap"} size={12} />
+        {noteLabel(t, note)}
+      </span>
     </div>
   );
 }

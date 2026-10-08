@@ -97,6 +97,10 @@ export default defineMessages({
     "aiSettings.default.empty": "先添加一个带有模型的服务商。",
     "aiSettings.default.effort": "新对话的思考程度",
     "aiSettings.default.effortHint": "新对话以这个思考程度开始，之后会沿用上次用过的程度。模型不提供这个程度时，使用它提供的较低程度中最高的一个。此设置会同步到其他设备。",
+    "aiSettings.instructions": "自定义指令",
+    "aiSettings.instructions.hint": "每次请求都会带上这段文字，所有对话都一样。适合写偏好，比如回答用的语言、语气，以及你常用的工具和系统。较长的操作步骤更适合写成技能。",
+    "aiSettings.instructions.placeholder": "例如：用中文回答。我用 Debian 和 zsh，服务用 systemctl 管理。",
+    "aiSettings.instructions.privacy": "这段文字会随每次请求发送给模型服务商，并同步到其他设备。",
 
     "aiSettings.search": "网页搜索",
     "aiSettings.search.row": "搜索服务",
@@ -453,6 +457,10 @@ export default defineMessages({
     "aiSettings.default.empty": "Add a provider with at least one model first.",
     "aiSettings.default.effort": "Thinking level for new conversations",
     "aiSettings.default.effortHint": "New conversations start at this level, and each one keeps the level it used last. A model that doesn’t offer it uses the highest lower level it has. This setting syncs to your other devices.",
+    "aiSettings.instructions": "Custom Instructions",
+    "aiSettings.instructions.hint": "Sent with every request, in every conversation. Good for preferences such as the language to answer in, the tone, and the tools and systems you use. Long procedures belong in a skill.",
+    "aiSettings.instructions.placeholder": "For example: Answer in English. I use Debian and zsh, and manage services with systemctl.",
+    "aiSettings.instructions.privacy": "This text goes to the model provider with every request, and syncs to your other devices.",
 
     "aiSettings.search": "Web Search",
     "aiSettings.search.row": "Search provider",
@@ -813,6 +821,10 @@ export default defineMessages({
     "aiSettings.default.empty": "先に、モデルのあるプロバイダーを追加してください。",
     "aiSettings.default.effort": "新しい会話の思考レベル",
     "aiSettings.default.effortHint": "新しい会話はこのレベルで始まり、その後は最後に使ったレベルが引き継がれます。モデルがこのレベルに対応していない場合は、それより低いレベルのうち最も高いものを使います。この設定は他のデバイスにも同期されます。",
+    "aiSettings.instructions": "カスタム指示",
+    "aiSettings.instructions.hint": "すべての会話で、リクエストのたびに送信されます。回答の言語や口調、使っているツールやシステムなどの好みを書くのに向いています。長い手順はスキルにしてください。",
+    "aiSettings.instructions.placeholder": "例：日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
+    "aiSettings.instructions.privacy": "このテキストはリクエストのたびにモデルのプロバイダーに送信され、他のデバイスにも同期されます。",
 
     "aiSettings.search": "Web 検索",
     "aiSettings.search.row": "検索プロバイダー",

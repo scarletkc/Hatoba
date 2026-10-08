@@ -60,6 +60,7 @@ function host(
     favorite: false,
     jump_host_id: null,
     note: "",
+    ai_notes: "",
     updated_at: ago(3 * DAY),
     last_connected_at: last,
     ...extra,
@@ -82,6 +83,10 @@ export const HOSTS: HostView[] = [
     favorite: true,
     key_id: "k-dbops",
     jump_host_id: "h-bastion",
+    // AI-37: what the assistant is told about this host.
+    ai_notes: zh
+      ? "PostgreSQL 16 主库，数据目录 /srv/pgdata。工作时间（09:00–19:00）不要重启 postgresql。"
+      : "PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours (09:00–19:00).",
   }),
   host("h-api-tokyo-02", "prod-api-tokyo-02", "deploy", "43.206.118.31", 22, "g-tokyo", ["production", "api"], ago(40 * MIN), {
     key_id: "k-deploy",

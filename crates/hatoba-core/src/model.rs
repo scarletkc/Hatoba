@@ -103,9 +103,16 @@ pub struct Host {
     pub jump_host_id: Option<String>,
     /// Free-form note.
     pub note: String,
+    /// What the AI assistant is told about this host in its system prompt (AI-37), at most
+    /// [`MAX_HOST_AI_NOTES_CHARS`] characters. Absent while empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub ai_notes: String,
     /// Last modification, Unix ms. Drives last-writer-wins conflict resolution.
     pub updated_at: i64,
 }
+
+/// The longest [`Host::ai_notes`], in characters (AI-37).
+pub const MAX_HOST_AI_NOTES_CHARS: usize = 2_000;
 
 impl Default for Host {
     fn default() -> Self {
@@ -120,6 +127,7 @@ impl Default for Host {
             favorite: false,
             jump_host_id: None,
             note: String::new(),
+            ai_notes: String::new(),
             updated_at: 0,
         }
     }
@@ -865,7 +873,14 @@ pub struct AiSettings {
     /// The built-in `hatoba` skill is offered (AI-34). On by default, also for settings written
     /// before it existed.
     pub builtin_skill_enabled: bool,
+    /// The user's instructions, sent with every request (AI-36), at most
+    /// [`MAX_CUSTOM_INSTRUCTIONS_CHARS`] characters. Absent while empty.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub custom_instructions: String,
 }
+
+/// The longest [`AiSettings::custom_instructions`], in characters (AI-36).
+pub const MAX_CUSTOM_INSTRUCTIONS_CHARS: usize = 4_000;
 
 impl Default for AiSettings {
     fn default() -> Self {
@@ -874,6 +889,7 @@ impl Default for AiSettings {
             default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
+            custom_instructions: String::new(),
         }
     }
 }
@@ -1277,6 +1293,18 @@ mod tests {
                 "updated_at": 1_700_000_000_000_i64
             })
         );
+
+        // AI-37: the AI notes are written only when there are some, and read back.
+        let host = Host {
+            ai_notes: "Debian 12; the app lives in /srv/api.".into(),
+            ..sample_host()
+        };
+        let value = serde_json::to_value(Item::Host(host.clone())).unwrap();
+        assert_eq!(value["ai_notes"], "Debian 12; the app lives in /srv/api.");
+        let back = Item::from_plaintext(&Item::Host(host.clone()).to_plaintext().unwrap()).unwrap();
+        assert_eq!(back, Item::Host(host));
+        let old: Item = serde_json::from_value(json!({"type": "host", "name": "old"})).unwrap();
+        assert_eq!(old.as_host().unwrap().ai_notes, "");
     }
 
     #[test]
@@ -1510,6 +1538,7 @@ mod tests {
         });
         settings.ai.search_provider_id = Some("sp1".into());
         settings.ai.default_effort = Some(AiEffort::Medium);
+        settings.ai.custom_instructions = "Answer in English.".into();
         let value = serde_json::to_value(Item::Settings(settings)).unwrap();
         assert_eq!(
             value["ai"],
@@ -1517,7 +1546,8 @@ mod tests {
                 "default_model": {"provider_id": "p1", "model_id": "m1"},
                 "default_effort": "medium",
                 "search_provider_id": "sp1",
-                "builtin_skill_enabled": true
+                "builtin_skill_enabled": true,
+                "custom_instructions": "Answer in English."
             })
         );
         assert_eq!(
@@ -1555,6 +1585,16 @@ mod tests {
         assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
         let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
         assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
+        // AI-36: settings from before custom instructions have none.
+        assert_eq!(ai.custom_instructions, "");
+        let with = read(json!({
+            "type": "settings",
+            "ai": {"custom_instructions": "Reply in English.\nUse zsh."}
+        }));
+        assert_eq!(
+            with.as_settings().unwrap().ai.custom_instructions,
+            "Reply in English.\nUse zsh."
+        );
 
         // AI-05: settings, conversations and models from before thinking levels read as Default
         // and unknown, and a level a newer version added does not make the item unreadable.

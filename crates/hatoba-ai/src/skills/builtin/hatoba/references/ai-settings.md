@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Skills, MCP Servers and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Skills, MCP Servers and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -9,6 +9,7 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 | Providers | 服务商 | プロバイダー |
 | Default Model | 默认模型 | 既定のモデル |
 | Web Search | 网页搜索 | Web 検索 |
+| Custom Instructions | 自定义指令 | カスタム指示 |
 | Skills | 技能 | スキル |
 | MCP Servers | MCP 服务器 | MCP サーバー |
 | This Device | 此设备 | このデバイス |

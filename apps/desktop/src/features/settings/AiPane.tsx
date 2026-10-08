@@ -3,6 +3,8 @@ import { Button, Icon, IconButton, Segmented, Spinner, TextField, controlStyles 
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
+import { InstructionsField } from "@/features/ai/InstructionsField";
+import { charCount, INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
@@ -39,7 +41,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), and the permission mode and tool call limit of this device (AI-16, AI-18).
+ * web search (AI-14), custom instructions (AI-36), and the permission mode and tool call limit of this
+ * device (AI-16, AI-18).
  */
 export function AiPane() {
   const t = useT();
@@ -209,6 +212,12 @@ export function AiPane() {
         </>
       )}
 
+      {data && (
+        <InstructionsSection
+          value={data.settings.custom_instructions}
+          onSave={(custom_instructions) => void saveSettings({ ...(dataRef.current?.settings ?? data.settings), custom_instructions })}
+        />
+      )}
       <SkillsSection
         builtin={
           data
@@ -312,6 +321,60 @@ function ModelSelect({
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={ref.current?.offsetWidth} />}
     </>
+  );
+}
+
+/** How long after the last keystroke custom instructions are saved. */
+const INSTRUCTIONS_SAVE_MS = 800;
+
+/**
+ * AI-36: custom instructions, sent with every request. Saved a moment after typing stops, when the
+ * box loses focus, and when the pane closes, unless they are over the limit. A change synced from
+ * another device shows while the box is not being edited.
+ */
+function InstructionsSection({ value, onSave }: { value: string; onSave: (text: string) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState(value);
+  const editing = useRef(false);
+  const latest = useRef({ draft, value, onSave });
+  latest.current = { draft, value, onSave };
+
+  useEffect(() => {
+    if (!editing.current) setDraft(value);
+  }, [value]);
+
+  const commit = useCallback(() => {
+    const { draft, value, onSave } = latest.current;
+    editing.current = false;
+    if (draft !== value && charCount(draft) <= INSTRUCTIONS_MAX_CHARS) onSave(draft);
+  }, []);
+
+  useEffect(() => {
+    if (draft === value) return;
+    const timer = window.setTimeout(commit, INSTRUCTIONS_SAVE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, value, commit]);
+  useEffect(() => commit, [commit]);
+
+  return (
+    <section className={layoutStyles.section}>
+      <div className={layoutStyles.sectionTitle}>{t("aiSettings.instructions")}</div>
+      <div className={s.sectionHint}>{t("aiSettings.instructions.hint")}</div>
+      <InstructionsField
+        id="ai-custom-instructions"
+        label={t("aiSettings.instructions")}
+        value={draft}
+        max={INSTRUCTIONS_MAX_CHARS}
+        rows={6}
+        placeholder={t("aiSettings.instructions.placeholder")}
+        onChange={(text) => {
+          editing.current = true;
+          setDraft(text);
+        }}
+        onBlur={commit}
+      />
+      <div className={s.sectionHint}>{t("aiSettings.instructions.privacy")}</div>
+    </section>
   );
 }
 

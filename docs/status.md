@@ -105,6 +105,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | AI-24…26 | History search, Markdown export, edit and resend | ✅ | |
 | AI-27, 28, 34 | Skills: management, import and export, `read_skill`, the built-in `hatoba` skill | ✅ | A test checks every label the built-in skill quotes against the i18n tables |
 | AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | 🟡 | Tests run mock `stdio` and Streamable HTTP servers. Not yet tried with real servers on Windows, such as ones started with `npx` |
+| AI-36, 37 | Custom instructions, AI notes of a host | ✅ | |
 
 ## MVP scope
 

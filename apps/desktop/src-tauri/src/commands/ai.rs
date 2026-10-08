@@ -13,8 +13,8 @@ use hatoba_ai::web::SearchConfig;
 use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, SETTINGS_ID,
-    SearchKind as CoreSearchKind, SearchProvider,
+    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS,
+    SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
@@ -138,6 +138,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         default_effort: s.default_effort.map(effort_view),
         search_provider_id: s.search_provider_id.clone(),
         builtin_skill_enabled: s.builtin_skill_enabled,
+        custom_instructions: s.custom_instructions.clone(),
     }
 }
 
@@ -588,11 +589,18 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         }
         other => other.clone(),
     };
+    if input.custom_instructions.chars().count() > MAX_CUSTOM_INSTRUCTIONS_CHARS {
+        return Err(AppError::invalid(
+            "custom_instructions",
+            "custom instructions are limited to 4,000 characters",
+        ));
+    }
     let ai = AiSettings {
         default_model,
         default_effort: input.default_effort.map(core_effort),
         search_provider_id,
         builtin_skill_enabled: input.builtin_skill_enabled,
+        custom_instructions: input.custom_instructions.clone(),
     };
     if ai == settings.ai {
         return Ok(());
@@ -1060,6 +1068,7 @@ mod tests {
                 default_effort: None,
                 search_provider_id: Some(search.id.clone()),
                 builtin_skill_enabled: true,
+                custom_instructions: String::new(),
             },
         )
         .unwrap();
@@ -1099,6 +1108,30 @@ mod tests {
         save_ai_settings(&mut v, &default).unwrap();
         assert_eq!(v.settings().ai.default_effort, None);
 
+        // AI-36: custom instructions are stored with them, up to 4,000 characters.
+        let instructions = AiSettingsView {
+            custom_instructions: "Answer in English.\n<host> means the tab's host.".into(),
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &instructions).unwrap();
+        assert_eq!(
+            v.settings().ai.custom_instructions,
+            "Answer in English.\n<host> means the tab's host."
+        );
+        assert_eq!(ai_settings_view(&v.settings().ai), instructions);
+        let longest = AiSettingsView {
+            custom_instructions: "日".repeat(4_000),
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &longest).unwrap();
+        let too_long = AiSettingsView {
+            custom_instructions: "日".repeat(4_001),
+            ..ai_settings_view(&v.settings().ai)
+        };
+        let err = save_ai_settings(&mut v, &too_long).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("custom_instructions"));
+        assert_eq!(v.settings().ai.custom_instructions, "日".repeat(4_000));
+
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);
         assert!(v.settings().ai.default_model.is_some());
@@ -1119,6 +1152,7 @@ mod tests {
                 default_effort: None,
                 search_provider_id: None,
                 builtin_skill_enabled: true,
+                custom_instructions: String::new(),
             },
         )
         .unwrap_err();
@@ -1133,6 +1167,7 @@ mod tests {
             default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
+            custom_instructions: String::new(),
         };
         assert!(save_ai_settings(&mut v, &wrong_model).is_err());
         let err = save_ai_settings(
@@ -1142,6 +1177,7 @@ mod tests {
                 default_effort: None,
                 search_provider_id: Some("nope".into()),
                 builtin_skill_enabled: true,
+                custom_instructions: String::new(),
             },
         )
         .unwrap_err();
@@ -1162,6 +1198,7 @@ mod tests {
             default_effort: None,
             search_provider_id: None,
             builtin_skill_enabled: true,
+            custom_instructions: String::new(),
         };
         save_ai_settings(&mut v, &dangling).unwrap();
     }

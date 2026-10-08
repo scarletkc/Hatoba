@@ -14,7 +14,7 @@ use hatoba_ssh::{
 };
 use russh::keys::{Algorithm, PrivateKey, PublicKey};
 use russh::server::{Auth, Config, Handler, Response};
-use russh::{MethodKind, MethodSet};
+use russh::{MethodKind, MethodSet, SshId};
 use tokio::net::TcpListener;
 use zeroize::Zeroizing;
 
@@ -161,6 +161,9 @@ impl Handler for MockHandler {
     }
 }
 
+/// The identification string the scripted server sends.
+const SERVER_ID: &str = "SSH-2.0-HatobaMock_1.0 scripted";
+
 struct Mock {
     port: u16,
     answers: Arc<Mutex<Vec<Vec<String>>>>,
@@ -173,6 +176,7 @@ async fn start_mock(script: Script) -> Mock {
         methods: MethodSet::from(&[MethodKind::KeyboardInteractive, MethodKind::PublicKey][..]),
         auth_rejection_time: Duration::from_millis(20),
         auth_rejection_time_initial: Some(Duration::ZERO),
+        server_id: SshId::Standard(Cow::Borrowed(SERVER_ID)),
         ..Config::default()
     });
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -258,6 +262,8 @@ async fn password_prompt_is_answered_automatically() {
         *mock.answers.lock().unwrap(),
         vec![vec!["s3cret".to_owned()]]
     );
+    // The version exchange's identification string, without its CR LF.
+    assert_eq!(session.server_id(), Some(SERVER_ID));
     session.disconnect().await;
 }
 

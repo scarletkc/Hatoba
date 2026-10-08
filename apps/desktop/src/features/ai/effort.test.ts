@@ -29,6 +29,7 @@ const settings = (default_effort: AiSettingsView["default_effort"]): AiSettingsV
   default_effort,
   search_provider_id: null,
   builtin_skill_enabled: true,
+  custom_instructions: "",
 });
 
 describe("thinking levels (AI-05)", () => {

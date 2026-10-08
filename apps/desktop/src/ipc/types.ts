@@ -123,6 +123,8 @@ export interface HostView {
   favorite: boolean;
   jump_host_id: string | null;
   note: string;
+  /** What the AI assistant is told about the host, in its system prompt (AI-37). */
+  ai_notes: string;
   updated_at: number;
   /** Device-local, never synced (HOST-06). */
   last_connected_at: number | null;
@@ -144,6 +146,8 @@ export interface HostInput {
   favorite: boolean;
   jump_host_id: string | null;
   note: string;
+  /** At most 2,000 characters (AI-37). */
+  ai_notes: string;
 }
 
 export interface GroupView {
@@ -698,6 +702,8 @@ export interface AiSettingsView {
   search_provider_id: string | null;
   /** The built-in `hatoba` skill is offered (AI-34). */
   builtin_skill_enabled: boolean;
+  /** Sent with every request, at most 4,000 characters (AI-36). */
+  custom_instructions: string;
 }
 
 export type AiPermissionMode = "manual" | "bypass";
@@ -769,6 +775,8 @@ export interface AiTurnContext {
   host_id: string | null;
   /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
   tab: boolean;
+  /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */
+  session_id: string | null;
   /** MCP servers switched off for this conversation in the tools menu (AI-30, P2). */
   disabled_mcp_servers: string[];
 }

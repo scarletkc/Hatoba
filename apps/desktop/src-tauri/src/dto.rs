@@ -57,6 +57,8 @@ pub struct HostView {
     pub favorite: bool,
     pub jump_host_id: Option<String>,
     pub note: String,
+    /// What the AI assistant is told about the host (AI-37).
+    pub ai_notes: String,
     pub updated_at: i64,
     pub last_connected_at: Option<i64>,
 }
@@ -77,6 +79,8 @@ pub struct HostInput {
     pub favorite: bool,
     pub jump_host_id: Option<String>,
     pub note: String,
+    /// At most 2,000 characters (AI-37).
+    pub ai_notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -1015,6 +1019,8 @@ pub struct AiSettingsView {
     pub search_provider_id: Option<String>,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
+    /// Sent with every request, at most 4,000 characters (AI-36).
+    pub custom_instructions: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1128,6 +1134,9 @@ pub struct AiTurnContext {
     pub host_id: Option<String>,
     /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
     pub tab: bool,
+    /// The tab's SSH session while it is connected, whose server's identification string the
+    /// system prompt states (§13.1).
+    pub session_id: Option<String>,
     /// MCP servers switched off for this conversation (AI-30, P2).
     pub disabled_mcp_servers: Vec<String>,
 }

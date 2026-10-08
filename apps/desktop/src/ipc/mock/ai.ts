@@ -1,4 +1,4 @@
-import { parseMessage } from "@/features/ai/attachments";
+import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
@@ -16,6 +16,7 @@ import type {
   AiTurnEvent,
   AiUsage,
   AppError,
+  HostView,
 } from "../types";
 
 type AiApi = Pick<
@@ -40,6 +41,8 @@ type AiApi = Pick<
 export interface AiMockDeps {
   providers: HatobaApi["ai_providers_list"];
   settings: HatobaApi["ai_settings_get"];
+  /** The hosts mock's list, whose names the notes of a move to another host carry (AI-09). */
+  hosts?: () => Promise<HostView[]>;
   /** The MCP servers of the extensions mock, whose tools the fake model calls. */
   mcp?: {
     servers: HatobaApi["mcp_servers_list"];
@@ -107,6 +110,9 @@ const DAY = 24 * HOUR;
  *              without it, so the panel says the level was not used (AI-05)
  *   noprovider (Settings → AI mock) no provider is configured
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
+ * Like Rust, a message that moves the conversation to another host (AI-09) or goes to another model
+ * than the last reply (AI-05) is stored with Hatoba's note before it, which the panel shows as a
+ * divider: open a conversation from history in a tab on another host, or pick another model.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createAiMock(deps: AiMockDeps): AiApi {
@@ -548,6 +554,38 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return user_entry;
   }
 
+  /**
+   * Like Rust's `notes_before` (AI-05, AI-09): a `host_change` note when the entries before the message
+   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), and
+   * a `model_change` note when the newest reply came from another model, unless a message without a
+   * reply noted that switch already. Returned as the text that goes before the message.
+   */
+  async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, context: AiTurnContext): Promise<string> {
+    const notes: Note[] = [];
+    const hosts = (await deps.hosts?.()) ?? [];
+    const to = hosts.find((h) => h.id === c.view.host_id)?.name;
+    if (cameFrom !== null && to !== undefined && earlier.length > 0 && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
+    const providers = await deps.providers();
+    const label = (providerId: string, modelId: string) => {
+      const name = (providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)?.name ?? "").trim();
+      return name && name !== modelId ? `${name} (${modelId})` : modelId;
+    };
+    const now = label(context.provider_id, context.model_id);
+    for (const e of [...earlier].reverse()) {
+      if (e.role === "assistant") {
+        if (e.model_id !== context.model_id) notes.push({ kind: "model_change", from: label(e.provider_id, e.model_id), to: now });
+        break;
+      }
+      if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
+    }
+    return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
+  }
+
+  /** The name of a host for a note: empty when it no longer exists. */
+  async function hostName(id: string | null): Promise<string> {
+    return ((await deps.hosts?.()) ?? []).find((h) => h.id === id)?.name ?? "";
+  }
+
   /** Like Rust: the call must belong to the newest response and have no result yet. */
   function openCall(c: Conv, callId: string): AiToolCall {
     const newest = [...c.entries].reverse().find((e): e is Assistant => e.role === "assistant");
@@ -811,10 +849,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       const turn = startTurn(c, input.context, onEvent, false);
       convs.set(c.view.id, c);
-      if (input.context.host_id && input.context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
+      const earlier = [...c.entries];
+      let cameFrom: string | null = null;
+      if (input.context.host_id && input.context.host_id !== c.view.host_id) {
+        // A chat that had no host (the home tab's) did not come from one.
+        cameFrom = c.view.host_id ? await hostName(c.view.host_id) : null;
+        c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
+      }
       // Like Rust: the conversation keeps the level of its last message.
       if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
-      const user_entry = await storeMessage(c, turn, input.text);
+      const notes = input.conversation_id ? await notesBefore(c, earlier, cameFrom, input.context) : "";
+      const user_entry = await storeMessage(c, turn, notes + input.text);
       return { conversation: view(c), user_entry };
     },
     ai_retry: async (id, context, onEvent) => {
@@ -886,6 +931,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await checkModel(context);
       // The stopped turn's cancelled results go with everything else after the message.
       stopTurn(id);
+      // Like Rust: the earliest move the deleted messages noted still tells where the earlier screens came from.
+      let cameFrom: string | null =
+        c.entries
+          .slice(i)
+          .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
+          .find((n) => n.kind === "host_change")?.from ?? null;
       c.entries = c.entries.slice(0, i);
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
@@ -893,9 +944,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       c.view = { ...c.view, updated_at: Date.now() };
       const turn = startTurn(c, context, onEvent, false);
-      if (context.host_id && context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: context.host_id };
+      if (context.host_id && context.host_id !== c.view.host_id) {
+        if (cameFrom === null && c.view.host_id) cameFrom = await hostName(c.view.host_id);
+        c.view = { ...c.view, host_id: context.host_id };
+      }
       c.view = { ...c.view, effort: context.effort };
-      const user_entry = await storeMessage(c, turn, text);
+      const notes = await notesBefore(c, [...c.entries], cameFrom, context);
+      const user_entry = await storeMessage(c, turn, notes + text);
       return { conversation: view(c), user_entry };
     },
     // The browser reads dropped files itself (File API); there are no paths to read here.
