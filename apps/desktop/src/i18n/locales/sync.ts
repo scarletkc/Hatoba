@@ -307,7 +307,7 @@ export default defineMessages({
     "sync.cf.desc.keptBoth": "{type} · edited on two devices, both versions kept",
     "sync.cf.result.local_won": "Kept this PC’s version",
     "sync.cf.result.remote_won": "Kept the cloud version",
-    "sync.cf.result.kept_both": "Kept both versions; one is marked “(conflicted copy)”",
+    "sync.cf.result.kept_both": "Kept both versions; one is marked “(conflict copy)”",
     "sync.cf.result.modified_won": "Kept the edited version (an edit wins over a delete)",
     "sync.type.host": "Host",
     "sync.type.group": "Group",
