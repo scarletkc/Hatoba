@@ -2,10 +2,11 @@
 
 use tauri::{AppHandle, State};
 
-use crate::dto::AppInfo;
+use crate::dto::{AppInfo, UpdateCheck};
 use crate::error::{AppError, AppResult};
 use crate::platform;
 use crate::state::AppState;
+use crate::update;
 
 #[tauri::command]
 #[specta::specta]
@@ -15,6 +16,14 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
         platform: platform::platform(),
         mica: state.mica,
     }
+}
+
+/// Asks GitHub Releases whether a newer version exists (Settings → About). Runs only when the
+/// user checks, or after unlock when they turned on the automatic check.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_check(app: AppHandle) -> AppResult<UpdateCheck> {
+    update::check(&app.package_info().version.to_string()).await
 }
 
 /// Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01).

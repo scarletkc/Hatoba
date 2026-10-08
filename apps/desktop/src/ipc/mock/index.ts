@@ -19,13 +19,16 @@ import { FakeShell } from "./shell";
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth
- *   ?platform=windows | macos | linux
+ *   ?platform=windows | macos | linux       ?update=available | offline | error
+ * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createMockApi(): HatobaApi {
   const q = new URLSearchParams(location.search);
   const demo = q.get("state");
   const syncDemo = q.get("sync");
+  const updateDemo = q.get("update");
+  const version = "0.1.0-dev";
 
   let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
   let groups: GroupView[] = demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g }));
@@ -103,7 +106,15 @@ export function createMockApi(): HatobaApi {
     app_info: async () => {
       const p = q.get("platform");
       const platform = p === "macos" || p === "linux" || p === "windows" ? p : "windows";
-      return { version: "0.1.0-dev", platform, mica: false };
+      return { version, platform, mica: false };
+    },
+    update_check: async () => {
+      await delay(800);
+      if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");
+      if (updateDemo === "error") fail("internal", "GitHub answered HTTP 403");
+      if (updateDemo === "available")
+        return { current_version: version, latest_version: "0.2.0", release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0", update_available: true };
+      return { current_version: version, latest_version: null, release_url: null, update_available: false };
     },
 
     vault_status: async () => ({

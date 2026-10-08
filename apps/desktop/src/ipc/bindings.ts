@@ -15,6 +15,11 @@ export const commands = {
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
+	/**
+	 *  Asks GitHub Releases whether a newer version exists (Settings → About). Runs only when the
+	 *  user checks, or after unlock when they turned on the automatic check.
+	 */
+	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	vaultStatus: () => __TAURI_INVOKE<VaultStatus>("vault_status"),
 	/**  VAULT-01/02: creates the vault and returns the recovery code (shown exactly once). */
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
@@ -377,6 +382,11 @@ export type LocalPrefs = {
 	right_click: RightClick,
 	host_probe: boolean,
 	confirm_multiline_paste: boolean,
+	/**
+	 *  Check GitHub for a newer release once after unlock. Off by default: no request leaves
+	 *  the device unless the user asks for it (spec §11, no telemetry).
+	 */
+	auto_update_check: boolean,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -497,6 +507,16 @@ export type TransferProgressEvent = {
 };
 
 export type TransferState = "running" | "done" | "failed" | "cancelled";
+
+/**  What the update check found on GitHub Releases (spec §11). */
+export type UpdateCheck = {
+	current_version: string,
+	/**  The newest stable release, or `None` when none has been published yet. */
+	latest_version: string | null,
+	/**  The release page to download the installer from. */
+	release_url: string | null,
+	update_available: boolean,
+};
 
 export type VaultLockedEvent = {
 	reason: LockReason,

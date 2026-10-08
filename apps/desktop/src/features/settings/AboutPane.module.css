@@ -1,0 +1,60 @@
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0 4px;
+}
+
+/* The app icon, drawn like the unlock screen's logo. */
+.logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-icon);
+  background: var(--logo-bg);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.name {
+  margin-top: 12px;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.version {
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--fg2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+
+.version:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status i {
+  font-size: 13px;
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}

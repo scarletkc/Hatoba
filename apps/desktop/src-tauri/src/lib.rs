@@ -11,6 +11,7 @@ mod platform;
 mod ssh;
 mod state;
 mod sync;
+mod update;
 
 use commands::{
     app, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd, sync as sync_cmd, vault,
@@ -29,6 +30,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             app::window_snap_overlay,
             app::save_text_file,
             app::activity_ping,
+            app::update_check,
             vault::vault_status,
             vault::vault_create,
             vault::vault_unlock,

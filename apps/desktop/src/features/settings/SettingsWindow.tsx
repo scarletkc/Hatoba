@@ -1,39 +1,46 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { errorMessage } from "@/app/errors";
+import { useApp, type SettingsTab } from "@/app/store";
 import { Icon, IconButton } from "@/components/controls";
 import { Modal, toast } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SettingsView, TerminalSettings } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { AboutPane } from "./AboutPane";
 import { AppearancePane } from "./AppearancePane";
 import { GeneralPane } from "./GeneralPane";
 import { SecurityPane } from "./SecurityPane";
 import { TerminalPane } from "./TerminalPane";
 import s from "./SettingsWindow.module.css";
 
-type Tab = "general" | "appearance" | "terminal" | "security";
-
-const TABS: { id: Tab; icon: string; label: MessageKey }[] = [
+const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
   { id: "general", icon: "gear-six", label: "settings.tab.general" },
   { id: "appearance", icon: "paint-brush", label: "settings.tab.appearance" },
   { id: "terminal", icon: "terminal-window", label: "settings.tab.terminal" },
   { id: "security", icon: "lock-key", label: "settings.tab.security" },
+  { id: "about", icon: "info", label: "settings.tab.about" },
 ];
 
-let lastTab: Tab = "general";
+let lastTab: SettingsTab = "general";
 
-/** Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security. */
+/**
+ * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
+ * About for the version and the update check.
+ */
 export function SettingsWindow({ onClose }: { onClose: () => void }) {
   const t = useT();
-  const [tab, setTabState] = useState<Tab>(lastTab);
+  const [tab, setTabState] = useState<SettingsTab>(() => {
+    lastTab = useApp.getState().settingsTab ?? lastTab;
+    return lastTab;
+  });
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const settingsRef = useRef<SettingsView | null>(null);
   const escapeBlocked = useRef(false);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
-  const setTab = (next: Tab) => {
+  const setTab = (next: SettingsTab) => {
     lastTab = next;
     setTabState(next);
   };
@@ -130,6 +137,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "security" && <SecurityPane {...pane} />}
+          {tab === "about" && <AboutPane />}
         </div>
       </div>
     </Modal>

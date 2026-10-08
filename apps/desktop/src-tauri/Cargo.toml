@@ -41,6 +41,9 @@ dirs = "6"
 bytes.workspace = true
 async-trait.workspace = true
 futures.workspace = true
+# The update check. Same features and TLS stack as hatoba-core's sync transport.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8"

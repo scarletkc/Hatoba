@@ -201,6 +201,22 @@
   background: var(--fill);
 }
 
+.settingsButton {
+  position: relative;
+}
+
+/* A newer release was found; the button opens Settings → About. */
+.updateDot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--side);
+}
+
 .spin {
   animation: spin 1.2s linear infinite;
 }

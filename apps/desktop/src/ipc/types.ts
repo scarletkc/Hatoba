@@ -432,6 +432,8 @@ export interface LocalPrefs {
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
   confirm_multiline_paste: boolean;
+  /** Check GitHub Releases once after unlock. Off by default (no telemetry, spec §11). */
+  auto_update_check: boolean;
 }
 
 export interface AppInfo {
@@ -439,6 +441,16 @@ export interface AppInfo {
   platform: "windows" | "macos" | "linux" | "web";
   /** Windows 11 Mica is active (WIN-07). */
   mica: boolean;
+}
+
+/** What the update check found on GitHub Releases (spec §11). */
+export interface UpdateCheck {
+  current_version: string;
+  /** The newest stable release, or null before the first release. */
+  latest_version: string | null;
+  /** The release page to download the installer from. */
+  release_url: string | null;
+  update_available: boolean;
 }
 
 // ───────────────────────── Events (§10.2) ─────────────────────────

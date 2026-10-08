@@ -47,6 +47,7 @@ export default defineMessages({
     "sidebar.deleteGroupConfirm": "删除分组「{name}」？其中的主机会移到“全部主机”，不会被删除。",
     "sidebar.lock": "锁定",
     "sidebar.settings": "设置",
+    "sidebar.settingsUpdate": "设置（有新版本）",
 
     "sync.footer.synced": "已同步",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",
@@ -163,6 +164,7 @@ export default defineMessages({
     "sidebar.deleteGroupConfirm": "Delete the group “{name}”? Its hosts move to All Hosts and are not deleted.",
     "sidebar.lock": "Lock",
     "sidebar.settings": "Settings",
+    "sidebar.settingsUpdate": "Settings (update available)",
 
     "sync.footer.synced": "Synced",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",
@@ -283,6 +285,7 @@ export default defineMessages({
     "sidebar.deleteGroupConfirm": "グループ「{name}」を削除しますか？ 含まれるホストは「すべてのホスト」に移動し、削除されません。",
     "sidebar.lock": "ロック",
     "sidebar.settings": "設定",
+    "sidebar.settingsUpdate": "設定（アップデートあり）",
 
     "sync.footer.synced": "同期済み",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",

@@ -8,6 +8,7 @@ export default defineMessages({
     "settings.tab.appearance": "外观",
     "settings.tab.terminal": "终端",
     "settings.tab.security": "安全",
+    "settings.tab.about": "关于",
     "settings.loadFailed": "无法读取设置。",
 
     "settings.appearance": "外观",
@@ -86,6 +87,22 @@ export default defineMessages({
 
     "settings.newCode.title": "新的恢复码",
     "settings.newCode.body": "旧的恢复码已经失效。请把这一个保存到安全的地方，它只会显示这一次。",
+
+    "settings.about.version": "版本 {version}",
+    "settings.about.copyVersion": "复制版本号",
+    "settings.about.update": "软件更新",
+    "settings.about.update.hint": "新版本发布在 GitHub Releases。",
+    "settings.about.checking": "正在检查…",
+    "settings.about.latest": "已是最新版本。",
+    "settings.about.available": "新版本 v{version} 可供下载。",
+    "settings.about.offline": "无法连接到 GitHub，请检查网络后重试。",
+    "settings.about.failed": "检查更新失败，请稍后再试。",
+    "settings.about.check": "检查更新",
+    "settings.about.download": "前往下载",
+    "settings.about.auto": "启动时自动检查更新",
+    "settings.about.auto.hint": "解锁后向 GitHub 查询一次是否有新版本。关闭时，只有点击“检查更新”才会联系 GitHub。",
+    "settings.about.source": "源代码",
+    "settings.about.license": "MIT 许可证",
   },
   en: {
     "settings.title": "Settings",
@@ -93,6 +110,7 @@ export default defineMessages({
     "settings.tab.appearance": "Appearance",
     "settings.tab.terminal": "Terminal",
     "settings.tab.security": "Security",
+    "settings.tab.about": "About",
     "settings.loadFailed": "Couldn’t load your settings.",
 
     "settings.appearance": "Appearance",
@@ -172,6 +190,22 @@ export default defineMessages({
 
     "settings.newCode.title": "Your New Recovery Code",
     "settings.newCode.body": "The old recovery code no longer works. Keep this one somewhere safe — it is shown only once.",
+
+    "settings.about.version": "Version {version}",
+    "settings.about.copyVersion": "Copy version",
+    "settings.about.update": "Software Update",
+    "settings.about.update.hint": "New versions are published on GitHub Releases.",
+    "settings.about.checking": "Checking…",
+    "settings.about.latest": "Hatoba is up to date.",
+    "settings.about.available": "Hatoba v{version} is available.",
+    "settings.about.offline": "Can’t reach GitHub. Check your network and try again.",
+    "settings.about.failed": "Couldn’t check for updates. Try again later.",
+    "settings.about.check": "Check for Updates",
+    "settings.about.download": "Download",
+    "settings.about.auto": "Automatically check for updates at startup",
+    "settings.about.auto.hint": "After you unlock, asks GitHub once whether a newer release exists. When off, Hatoba contacts GitHub only when you click Check for Updates.",
+    "settings.about.source": "Source Code",
+    "settings.about.license": "MIT License",
   },
   ja: {
     "settings.title": "設定",
@@ -179,6 +213,7 @@ export default defineMessages({
     "settings.tab.appearance": "外観",
     "settings.tab.terminal": "ターミナル",
     "settings.tab.security": "セキュリティ",
+    "settings.tab.about": "情報",
     "settings.loadFailed": "設定を読み込めませんでした。",
 
     "settings.appearance": "外観",
@@ -257,5 +292,21 @@ export default defineMessages({
 
     "settings.newCode.title": "新しいリカバリーコード",
     "settings.newCode.body": "古いリカバリーコードは使えなくなりました。このコードは一度しか表示されないので、安全な場所に保管してください。",
+
+    "settings.about.version": "バージョン {version}",
+    "settings.about.copyVersion": "バージョンをコピー",
+    "settings.about.update": "ソフトウェアアップデート",
+    "settings.about.update.hint": "新しいバージョンは GitHub Releases で公開されます。",
+    "settings.about.checking": "確認しています…",
+    "settings.about.latest": "最新バージョンです。",
+    "settings.about.available": "新しいバージョン v{version} があります。",
+    "settings.about.offline": "GitHub に接続できません。ネットワークを確認して、もう一度お試しください。",
+    "settings.about.failed": "アップデートを確認できませんでした。しばらくしてからもう一度お試しください。",
+    "settings.about.check": "アップデートを確認",
+    "settings.about.download": "ダウンロード",
+    "settings.about.auto": "起動時にアップデートを自動で確認",
+    "settings.about.auto.hint": "ロック解除後に一度、新しいリリースがあるか GitHub に問い合わせます。オフの場合、GitHub に接続するのは「アップデートを確認」をクリックしたときだけです。",
+    "settings.about.source": "ソースコード",
+    "settings.about.license": "MIT ライセンス",
   },
 });
