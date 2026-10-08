@@ -1,7 +1,7 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
+import { parseMessage, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
-import { parseMessage } from "./selection";
 import { exitStatusOf, prettyArgs, toolKind, toolLabel } from "./tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -33,6 +33,20 @@ function callStatus(t: Tr, call: AiToolCall, result: ToolEntry | undefined): str
       return t("ai.call.rejected");
     case "cancelled":
       return t("ai.call.cancelled");
+  }
+}
+
+/** The label above an attachment's fenced block: the kind and size, a file's name. */
+function attachmentLabel(t: Tr, a: Attachment): string {
+  switch (a.kind) {
+    case "diagnostics":
+      return `**${t("ai.diagnostics", { host: a.host })}**`;
+    case "selection":
+      return [`**${t("ai.selection", { n: a.lines })}**`, a.host && `\`${a.host}\``, a.truncated && t("ai.selection.truncated")].filter(Boolean).join(" · ");
+    case "paste":
+      return `**${t("ai.paste", { n: a.lines })}**`;
+    case "file":
+      return `**${t("ai.file", { name: a.name, n: a.lines })}**`;
   }
 }
 
@@ -69,14 +83,10 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
     if (i === contextAt && i > 0) blocks.push("---", `*${t("ai.outsideContext")}*`);
     switch (entry.role) {
       case "user": {
-        const { diagnostics, selection, typed } = parseMessage(entry.text);
+        const { attachments, typed } = parseMessage(entry.text);
         blocks.push(`## ${t("ai.export.you")}`);
-        // AI-10: what was attached to the message, each as a labelled fenced block.
-        if (diagnostics) blocks.push(`**${t("ai.diagnostics", { host: diagnostics.host })}**`, fenced(diagnostics.text));
-        if (selection) {
-          const label = [`**${t("ai.selection", { n: selection.lines })}**`, selection.host && `\`${selection.host}\``, selection.truncated && t("ai.selection.truncated")];
-          blocks.push(label.filter(Boolean).join(" · "), fenced(selection.text));
-        }
+        // AI-10, AI-35: what was attached to the message, each as a labelled fenced block.
+        for (const a of attachments) blocks.push(attachmentLabel(t, a), fenced(a.text));
         blocks.push(typed);
         break;
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiEntryView, AiUsage } from "@/ipc/types";
-import { contextUsage, estimateTokens, formatTokens } from "./meter";
+import { contextUsage, estimateTokens, formatTokens, messageFit } from "./meter";
 
 const user = (id: string, text: string): AiEntryView => ({ role: "user", entry_id: id, created_at: 0, text });
 const tool = (id: string, content: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: "c", status: "ok", content });
@@ -78,5 +78,25 @@ describe("token helpers", () => {
     expect(formatTokens(128_400)).toBe("128k");
     expect(formatTokens(1_000_000)).toBe("1M");
     expect(formatTokens(1_250_000)).toBe("1.3M");
+  });
+});
+
+describe("how the next message fits (AI-35)", () => {
+  const state = (tokens: number, window: number | null) => ({ tokens, window, ratio: window ? tokens / window : null, estimated: false, warn: false });
+
+  it("says nothing without a context window or below 80%", () => {
+    expect(messageFit(state(500_000, null), 900_000)).toEqual({ level: "ok" });
+    expect(messageFit(state(30_000, 100_000), 49_000)).toEqual({ level: "ok" });
+  });
+
+  it("warns from 80% of the window with the current context", () => {
+    expect(messageFit(state(30_000, 100_000), 50_000)).toEqual({ level: "warn", tokens: 80_000, window: 100_000, ratio: 0.8 });
+    // Past the window together, but compaction can make room: still a warning.
+    expect(messageFit(state(90_000, 100_000), 50_000)).toMatchObject({ level: "warn", tokens: 140_000 });
+  });
+
+  it("blocks a message larger than the whole window", () => {
+    expect(messageFit(state(0, 100_000), 100_001)).toEqual({ level: "over", tokens: 100_001, window: 100_000, ratio: 1.00001 });
+    expect(messageFit(state(0, 100_000), 100_000).level).toBe("warn");
   });
 });

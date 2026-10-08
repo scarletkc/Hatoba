@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
-import type { DiagnosticsAttachment, SelectionState } from "./selection";
+import type { DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionState } from "./attachments";
 import type { TurnOutcome, TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
@@ -29,10 +29,18 @@ export interface Slot {
   remoteRunning: boolean;
   /** Unsent text in the input box. */
   draft: string;
+  /** AI-35: long pastes and text files that go with the next message, in the order they were added. */
+  extras: PendingAttachment[];
   /** AI-30: MCP servers switched off for this conversation in the tools menu. */
   mcpOff: string[];
   /** AI-24: an entry to scroll to and highlight once it is shown (a history search hit). */
   reveal: string | null;
+}
+
+/** A paste or file waiting in the input area; `id` tells their chips apart. */
+export interface PendingAttachment {
+  id: string;
+  attachment: PasteAttachment | FileAttachment;
 }
 
 /** A tab's selection; `hidden` is the `seq` whose chip was removed or sent (it shows again once the selection changes). */
@@ -89,7 +97,8 @@ export function defaultMode(): AiPermissionMode {
   return useApp.getState().prefs.ai_permission_mode;
 }
 
-export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = ""): Slot {
+/** A slot with no conversation; `draft` and `extras` carry over what the input area held. */
+export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", extras: PendingAttachment[] = []): Slot {
   return {
     conversationId: null,
     conversation: null,
@@ -103,6 +112,7 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = ""): S
     outcome: null,
     remoteRunning: false,
     draft,
+    extras,
     mcpOff: [],
     reveal: null,
   };

@@ -88,3 +88,19 @@ export function formatTokens(n: number): string {
   if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
+
+export type MessageFit = { level: "ok" } | { level: "warn" | "over"; tokens: number; window: number; ratio: number };
+
+/**
+ * AI-35: how the next message, attachments included, fits the model's context window. Past 80% with
+ * the current context it warns; Rust then compacts before the request (AI-22). Compaction cannot
+ * shrink the new message, so a message larger than the whole window cannot be sent.
+ */
+export function messageFit(current: MeterState, messageTokens: number): MessageFit {
+  if (current.window === null) return { level: "ok" };
+  const tokens = current.tokens + messageTokens;
+  const ratio = tokens / current.window;
+  if (messageTokens > current.window) return { level: "over", tokens: messageTokens, window: current.window, ratio: messageTokens / current.window };
+  if (ratio >= WARN_RATIO) return { level: "warn", tokens, window: current.window, ratio };
+  return { level: "ok" };
+}

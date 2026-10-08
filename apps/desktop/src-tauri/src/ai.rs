@@ -1836,20 +1836,21 @@ pub fn find_conversation(v: &Vault, id: &str) -> AppResult<AiConversation> {
 }
 
 /// AI-23: the title starts as the first line of the first message, cut to 60 characters. The
-/// attachment blocks the message starts with (AI-10) are skipped, so the title is the first
-/// non-empty line the user typed, or the first block's name when nothing was typed (the panel
-/// sends nothing without typed text, so that is only a fallback).
+/// attachment blocks the message starts with (AI-10, AI-35) are skipped, so the title is the
+/// first non-empty line the user typed, or the first block's name when nothing was typed (the
+/// panel sends nothing without typed text, so that is only a fallback).
 fn title_of(text: &str) -> String {
     let mut typed = text;
     let mut first_block = None;
-    while let Some((kind, rest)) = leading_attachment(typed) {
-        first_block = first_block.or(Some(kind.title));
+    while let Some((title, rest)) = leading_attachment(typed) {
+        first_block = first_block.or(Some(title));
         typed = rest;
     }
     let line = typed
         .lines()
         .map(str::trim)
         .find(|line| !line.is_empty())
+        .map(str::to_owned)
         .or(first_block)
         .unwrap_or_default();
     line.chars().take(60).collect()
@@ -1858,39 +1859,66 @@ fn title_of(text: &str) -> String {
 /// A kind of attachment block (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
     tag: &'static str,
-    /// The title of a conversation whose first message has only this block.
-    title: &'static str,
+    /// The title of a conversation whose first message has only this block, from its attributes.
+    title: fn(&[(&str, &str)]) -> String,
     /// Whether the opening tag's attributes, in order, are the ones this kind writes.
     attributes: fn(&[(&str, &str)]) -> bool,
 }
 
+/// A `lines` attribute: a decimal count.
+fn is_count(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// An attribute value as written, with `&amp;`, `&quot;`, `&lt;` and `&gt;` read back.
+fn attribute_text(value: &str) -> String {
+    value
+        .replace("&quot;", "\"")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+}
+
 /// The attachment blocks a user entry may start with. The panel writes them
-/// (`features/ai/selection.ts`), and this parser follows the same rules.
+/// (`features/ai/attachments.ts`), and this parser follows the same rules.
 const ATTACHMENTS: &[AttachmentKind] = &[
     AttachmentKind {
         tag: "terminal_selection",
-        title: "Terminal selection",
+        title: |_| "Terminal selection".to_owned(),
         attributes: |attrs| match attrs {
             [("host", _), ("lines", lines)]
-            | [("host", _), ("lines", lines), ("truncated", "true")] => {
-                !lines.is_empty() && lines.bytes().all(|b| b.is_ascii_digit())
-            }
+            | [("host", _), ("lines", lines), ("truncated", "true")] => is_count(lines),
             _ => false,
         },
     },
     AttachmentKind {
         tag: "connection_diagnostics",
-        title: "Connection diagnostics",
+        title: |_| "Connection diagnostics".to_owned(),
         attributes: |attrs| matches!(attrs, [("host", _)]),
+    },
+    AttachmentKind {
+        tag: "pasted_text",
+        title: |_| "Pasted text".to_owned(),
+        attributes: |attrs| matches!(attrs, [("lines", lines)] if is_count(lines)),
+    },
+    AttachmentKind {
+        tag: "file",
+        title: |attrs| {
+            attrs
+                .first()
+                .map(|(_, name)| attribute_text(name))
+                .unwrap_or_default()
+        },
+        attributes: |attrs| matches!(attrs, [("name", _), ("lines", lines)] if is_count(lines)),
     },
 ];
 
-/// The attachment block `text` starts with (spec §13.3) and the text after it: the opening tag
-/// with its attributes (`name="value"`, values without `"`), a line break, the body, a line
-/// break and the closing tag, then one blank line, one line break or the end. The body ends at
-/// the first closing tag that such a break or the end follows; the panel escapes closing tags
-/// inside it.
-fn leading_attachment(text: &str) -> Option<(&'static AttachmentKind, &str)> {
+/// The attachment block `text` starts with (spec §13.3), as the title it would give a
+/// conversation, and the text after it: the opening tag with its attributes (`name="value"`,
+/// values without `"`), a line break, the body, a line break and the closing tag, then one blank
+/// line, one line break or the end. The body ends at the first closing tag that such a break or
+/// the end follows; the panel escapes closing tags inside it.
+fn leading_attachment(text: &str) -> Option<(String, &str)> {
     let rest = text.strip_prefix('<')?;
     let kind = ATTACHMENTS.iter().find(|k| {
         rest.strip_prefix(k.tag)
@@ -1919,10 +1947,10 @@ fn leading_attachment(text: &str) -> Option<(&'static AttachmentKind, &str)> {
             .strip_prefix("\n\n")
             .or_else(|| after.strip_prefix('\n'))
         {
-            return Some((kind, typed));
+            return Some(((kind.title)(&attrs), typed));
         }
         if after.is_empty() {
-            return Some((kind, after));
+            return Some(((kind.title)(&attrs), after));
         }
         from += at + 1;
     }

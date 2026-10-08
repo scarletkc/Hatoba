@@ -1,14 +1,16 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
-import { PopupSelect } from "@/components/overlay";
+import { PopupSelect, toast } from "@/components/overlay";
+import { readClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { decideCall, editAndResend, retryTurn, stopTurn, type Decision } from "./actions";
+import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
+import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
+import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts } from "./attachments";
+import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
-import { composeMessage, parseMessage, type MessageParts } from "./selection";
-import { DiagnosticsCard, DiagnosticsChip, SelectionCard, SelectionChip } from "./SelectionChip";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -197,22 +199,26 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
-  // AI-10: what was attached to the message (connection diagnostics, a terminal selection) is in blocks at its start.
+  // AI-10, AI-35: what was attached to the message is in blocks at its start.
   const parts = useMemo(() => parseMessage(text), [text]);
   if (editing && onResend) return <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
   return (
     <div className={s.userRow}>
       {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
       <div className={s.userStack}>
-        {parts.diagnostics && <DiagnosticsCard attachment={parts.diagnostics} />}
-        {parts.selection && <SelectionCard attachment={parts.selection} />}
+        {parts.attachments.map((a, i) => (
+          <AttachmentCardFor key={i} attachment={a} />
+        ))}
         <div className={cx(s.user, pending && s.userPending, "selectable")}>{parts.typed}</div>
       </div>
     </div>
   );
 }
 
-/** AI-26: edits the typed text; what was attached to it stays unless its chip is removed. */
+/**
+ * AI-26: edits the typed text; what was attached to it stays unless its chip is removed. A long
+ * paste becomes another attachment, as in the input box (AI-35).
+ */
 function EditMessage({
   parts,
   onCancel,
@@ -227,9 +233,9 @@ function EditMessage({
   const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(parts.typed);
-  const [diagnostics, setDiagnostics] = useState(parts.diagnostics);
-  const [selection, setSelection] = useState(parts.selection);
+  const [items, setItems] = useState(() => parts.attachments.map((attachment, i) => ({ id: `a${i}`, attachment })));
   const [busy, setBusy] = useState(false);
+  const seq = useRef(parts.attachments.length);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -246,17 +252,40 @@ function EditMessage({
   const send = async () => {
     if (!value.trim() || busy) return;
     setBusy(true);
-    const ok = await onSend(composeMessage(value.trim(), { diagnostics, selection }));
+    const ok = await onSend(composeMessage(value.trim(), items.map((x) => x.attachment)));
     setBusy(false);
     if (ok) onSent();
   };
 
+  const insertText = (text: string) => {
+    const el = ref.current;
+    const next = insertAtCaret(el, el?.value ?? value, text);
+    setValue(next.value);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
   return (
     <div className={s.editMessage}>
-      {(diagnostics || selection) && (
+      {items.length > 0 && (
         <div className={s.editAttachment}>
-          {diagnostics && <DiagnosticsChip attachment={diagnostics} onRemove={() => setDiagnostics(null)} />}
-          {selection && <SelectionChip attachment={selection} onRemove={() => setSelection(null)} />}
+          {items.map((x) => (
+            <AttachmentChipFor
+              key={x.id}
+              attachment={x.attachment}
+              onRemove={() => setItems((list) => list.filter((y) => y.id !== x.id))}
+              onPasteAsText={
+                x.attachment.kind === "paste"
+                  ? () => {
+                      setItems((list) => list.filter((y) => y.id !== x.id));
+                      insertText(x.attachment.text);
+                    }
+                  : undefined
+              }
+            />
+          ))}
         </div>
       )}
       <textarea
@@ -267,9 +296,25 @@ function EditMessage({
         spellCheck={false}
         rows={1}
         onChange={(e) => setValue(e.target.value)}
+        onPaste={(e) => {
+          const text = e.clipboardData.getData("text/plain");
+          if (!isLongPaste(text)) return;
+          e.preventDefault();
+          const paste = makePaste(text);
+          if (!paste) return;
+          if (!fitsMessage(items.map((x) => x.attachment), paste)) return toast(tooMuchMessage(), "error");
+          setItems((list) => [...list, { id: `a${++seq.current}`, attachment: paste }]);
+        }}
         onKeyDown={(e) => {
-          // As in the input box: Enter sends, Shift+Enter adds a line; Esc leaves the editor, not the turn.
-          if (e.key === "Escape") {
+          // As in the input box: Enter sends, Shift+Enter adds a line, Ctrl+Shift+V pastes plain text;
+          // Esc leaves the editor, not the turn.
+          if (isPlainPasteKey(e)) {
+            e.preventDefault();
+            readClipboard().then(
+              (text) => text && insertText(text.replace(/\r\n?/g, "\n")),
+              () => toast(t("terminal.clipboardDenied"), "error"),
+            );
+          } else if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
             onCancel();

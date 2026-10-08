@@ -168,3 +168,42 @@
 .stop:hover:not(:disabled) {
   background: color-mix(in srgb, var(--fg) 85%, var(--win) 15%);
 }
+
+/* AI-35: the paperclip, in the look of the tools menu button. */
+.attach {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.attach:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+/* AI-35: how the next message fits the model's context window. */
+.fit {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--orange);
+}
+
+.fitOver {
+  color: var(--red);
+}
+
+.fitIcon {
+  flex: none;
+  margin-top: 1px;
+}

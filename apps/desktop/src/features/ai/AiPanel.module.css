@@ -214,3 +214,22 @@
 .empty :global(button) {
   margin-top: 6px;
 }
+
+/* AI-35: the drop target while text files are dragged over the panel. */
+.drop {
+  position: absolute;
+  z-index: 30;
+  inset: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--accent) 8%, var(--win));
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  pointer-events: none;
+}

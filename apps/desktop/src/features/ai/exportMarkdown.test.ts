@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { AiConversationView, AiEntryView } from "@/ipc/types";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
-import { composeMessage, makeAttachment, makeDiagnostics } from "./selection";
+import { composeMessage, makeAttachment, makeDiagnostics, makePaste, textFile } from "./attachments";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const time = (ms: number) => `T${ms}`;
@@ -67,20 +67,25 @@ describe("Markdown export (AI-25)", () => {
   });
 
   it("shows a terminal selection sent with a message as a labelled fenced block (AI-10)", () => {
-    const text = composeMessage("What failed?", { selection: makeAttachment("prod-api", "$ make\nmain.c: error ``` here") });
+    const text = composeMessage("What failed?", [makeAttachment("prod-api", "$ make\nmain.c: error ``` here")!]);
     const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
     expect(out).toContain("## You\n\n**Selection · 2 lines** · `prod-api`\n\n````\n$ make\nmain.c: error ``` here\n````\n\nWhat failed?");
   });
 
   it("shows connection diagnostics before a selection, each as a labelled fenced block", () => {
-    const text = composeMessage("Why?", {
-      diagnostics: makeDiagnostics("staging-web-02", "Error: ETIMEDOUT (ssh/timeout)"),
-      selection: makeAttachment("staging-web-02", "attempt 3"),
-    });
+    const text = composeMessage("Why?", [makeAttachment("staging-web-02", "attempt 3")!, makeDiagnostics("staging-web-02", "Error: ETIMEDOUT (ssh/timeout)")!]);
     const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
     expect(out).toContain(
       "## You\n\n**Connection diagnostics · staging-web-02**\n\n```\nError: ETIMEDOUT (ssh/timeout)\n```\n\n**Selection · 1 line** · `staging-web-02`\n\n```\nattempt 3\n```\n\nWhy?",
     );
+  });
+
+  it("shows pasted text and files with their labels, the file named (AI-35)", () => {
+    const file = textFile("/home/kc/nginx.conf", new TextEncoder().encode("server {\n  listen 80;\n}\n"));
+    if (!file.ok) throw new Error(file.reason);
+    const text = composeMessage("Check these", [makePaste("a\nb\nc")!, file.file]);
+    const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
+    expect(out).toContain("## You\n\n**Pasted text · 3 lines**\n\n```\na\nb\nc\n```\n\n**nginx.conf · 3 lines**\n\n```\nserver {\n  listen 80;\n}\n\n```\n\nCheck these");
   });
 
   it("names a deleted host and an untitled conversation", () => {

@@ -1,4 +1,4 @@
-import { parseMessage } from "@/features/ai/selection";
+import { parseMessage } from "@/features/ai/attachments";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -82,8 +82,8 @@ const DAY = 24 * HOUR;
  *                     ("mcp filesystem"); without one, a tool no server offers
  *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
- * Keywords come from the typed text; a message with a terminal selection (AI-10) and none gets an
- * answer about the selection.
+ * Keywords come from the typed text. A message without one gets an answer about what it carries:
+ * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
  * Before a request that would pass 90% of the model's context window, the turn compacts the
  * conversation first (AI-22): a `summary` entry arrives and the context starts there.
  * `?ai=` demo values (comma-separated, shared with the Settings → AI mock):
@@ -244,7 +244,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const results = since.filter((e): e is ToolEntry => e.role === "tool");
     const callsSoFar = since.reduce((n, e) => n + (e.role === "assistant" ? e.tool_calls.length : 0), 0);
     // AI-10: what is attached to the message is in blocks before the typed text; keywords come from the typed text.
-    const { diagnostics, selection: attachment, typed } = parseMessage(user.text);
+    const { attachments, typed } = parseMessage(user.text);
+    const diagnostics = attachments.find((a) => a.kind === "diagnostics");
+    const attachment = attachments.find((a) => a.kind === "selection");
+    const added = attachments.filter((a) => a.kind === "paste" || a.kind === "file");
     const errorLine = diagnostics?.text.split("\n").find((line) => line.startsWith("Error:")) ?? "";
     const words = typed.toLowerCase();
     const want = (...w: string[]) => w.some((x) => words.includes(x));
@@ -325,6 +328,18 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         text: zh
           ? `这是我看到的结果：\n\n${parts.join("\n")}\n\n| 项目 | 状态 |\n|---|---|\n| 根分区 | 已用 48%，正常 |\n| 负载 | 0.21，空闲 |\n\n如果还需要我做什么，告诉我。`
           : `Here is what I found:\n\n${parts.join("\n")}\n\n| Item | State |\n|---|---|\n| Root filesystem | 48% used, fine |\n| Load | 0.21, idle |\n\nTell me if you want me to do anything else.`,
+        calls: [],
+        finish: "stop",
+      };
+    }
+
+    if (added.length > 0) {
+      const list = added.map((a) => `- ${a.kind === "file" ? `\`${a.name}\`` : zh ? "粘贴的文本" : "pasted text"}: ${a.lines} ${zh ? "行" : "line(s)"}, ${[...a.text].length} ${zh ? "个字符" : "characters"}`).join("\n");
+      return {
+        reasoning: zh ? "用户附上了文本，根据它回答。" : "The user attached text; answer from it.",
+        text: zh
+          ? `我收到了这些附件：\n\n${list}\n\n内容都完整地到了。告诉我要从里面找什么。`
+          : `I received these attachments:\n\n${list}\n\nAll of it arrived whole. Tell me what to look for in it.`,
         calls: [],
         finish: "stop",
       };
@@ -817,10 +832,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
  * (AI-10), or the first block's kind when nothing was typed, cut to 60 characters.
  */
 function titleOf(text: string): string {
-  const { diagnostics, selection, typed } = parseMessage(text);
-  const fallback = diagnostics ? "Connection diagnostics" : selection ? "Terminal selection" : "";
-  const first = typed.split(/\r?\n/).find((line) => line.trim())?.trim() ?? fallback;
-  return [...first].slice(0, 60).join("");
+  const { attachments, typed } = parseMessage(text);
+  const block = attachments[0];
+  const fallback = !block
+    ? ""
+    : block.kind === "diagnostics"
+      ? "Connection diagnostics"
+      : block.kind === "selection"
+        ? "Terminal selection"
+        : block.kind === "paste"
+          ? "Pasted text"
+          : block.name;
+  const line = typed.split(/\r?\n/).find((l) => l.trim())?.trim() ?? fallback;
+  return [...line].slice(0, 60).join("");
 }
 
 /** About 40 characters before the first match of `q` (lowercase) in `text` and 100 after, on one line. */

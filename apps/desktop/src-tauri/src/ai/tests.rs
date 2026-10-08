@@ -1701,6 +1701,36 @@ fn titles_skip_the_attachment_blocks_a_message_starts_with() {
         "Connection diagnostics"
     );
 
+    // AI-35: pasted text and files, several of each, after the diagnostics and the selection.
+    let many = "<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\n\
+                <terminal_selection host=\"db-1\" lines=\"1\">\n$ ssh db-1\n</terminal_selection>\n\n\
+                <pasted_text lines=\"2\">\na\n<\\/pasted_text>\n</pasted_text>\n\n\
+                <file name=\"nginx.conf\" lines=\"1\">\nserver {}\n</file>\n\n\
+                <pasted_text lines=\"1\">\nb\n</pasted_text>\n\n\
+                <file name=\"a.log\" lines=\"1\">\n</file> inside\n</file>\n\n\
+                What is wrong here?";
+    assert_eq!(title_of(many), "What is wrong here?");
+    assert_eq!(
+        title_of("<pasted_text lines=\"3\">\na\nb\nc\n</pasted_text>"),
+        "Pasted text"
+    );
+    // A file's name, with its attribute escapes read back.
+    assert_eq!(
+        title_of(
+            "<file name=\"a &quot;b&quot; &lt;c&gt; &amp; d.txt\" lines=\"1\">\nx\n</file>\n\n"
+        ),
+        "a \"b\" <c> & d.txt"
+    );
+    assert_eq!(
+        title_of(&format!(
+            "<file name=\"{}.txt\" lines=\"1\">\nx\n</file>",
+            "长".repeat(70)
+        ))
+        .chars()
+        .count(),
+        60
+    );
+
     // Anything else is typed text.
     for text in [
         "see <terminal_selection host=\"x\" lines=\"1\">\nx\n</terminal_selection>",
@@ -1710,6 +1740,11 @@ fn titles_skip_the_attachment_blocks_a_message_starts_with() {
         "<terminal_selection host=\"x\" lines=\"1\" truncated=\"yes\">\nx\n</terminal_selection>\n\nq",
         "<connection_diagnostics host=\"x\" lines=\"1\">\nx\n</connection_diagnostics>\n\nq",
         "<other_block host=\"x\">\nx\n</other_block>\n\nq",
+        "<pasted_text>\nx\n</pasted_text>\n\nq",
+        "<pasted_text lines=\"x\">\nx\n</pasted_text>\n\nq",
+        "<file lines=\"1\" name=\"a.txt\">\nx\n</file>\n\nq",
+        "<file name=\"a.txt\">\nx\n</file>\n\nq",
+        "<files name=\"a.txt\" lines=\"1\">\nx\n</files>\n\nq",
         "<terminal_selection host=\"x\" lines=\"1\">x\n</terminal_selection>\n\nq",
     ] {
         assert_eq!(
@@ -1735,6 +1770,41 @@ async fn a_message_with_a_selection_keeps_the_block_and_is_titled_after_the_type
         .find(|m| m["role"] == "user")
         .unwrap();
     assert_eq!(user["content"], text);
+}
+
+#[tokio::test]
+async fn a_message_with_attachments_as_large_as_the_panel_allows_is_stored_whole() {
+    // AI-35: the panel caps a message's attachments at 512 KB; the entry is split into parts of at
+    // most 40 KB (§13.7), and nothing on the way cuts it.
+    let f = Fixture::new(vec![answer("Read it all.")]).await;
+    let file =
+        "2026-10-09 09:41:12 nginx[812]: upstream \"timed out\" <\\/file> 日本語\n".repeat(3_500);
+    let paste = "p".repeat(262_000);
+    let text = format!(
+        "<pasted_text lines=\"1\">\n{paste}\n</pasted_text>\n\n\
+         <file name=\"error.log\" lines=\"3500\">\n{file}\n</file>\n\nWhat failed?"
+    );
+    assert!(text.len() > 500 * 1024, "{} bytes", text.len());
+    let (started, sink) = f.send(None, &text).await;
+    assert_eq!(started.conversation.title, "What failed?");
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    let detail = f.detail(&started.conversation.id);
+    let stored = detail
+        .entries
+        .iter()
+        .find_map(|e| match e {
+            AiEntryView::User { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(stored, text);
+    // The model receives the message as stored.
+    let requests = f.requests().await;
+    let user = messages(&requests[0])
+        .iter()
+        .find(|m| m["role"] == "user")
+        .unwrap();
+    assert_eq!(user["content"], text.as_str());
 }
 
 #[test]

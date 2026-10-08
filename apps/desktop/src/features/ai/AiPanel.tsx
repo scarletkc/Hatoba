@@ -9,8 +9,9 @@ import { useT } from "@/i18n";
 import type { AiPermissionMode, HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import { connectConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
+import { attachFiles, connectConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
 import { Composer } from "./Composer";
+import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
 import { conversationModel, hasModels } from "./models";
@@ -48,6 +49,8 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const model = conversationModel(slot.entries, catalog.providers, catalog.settings, slot.model);
   const ready = catalog.loaded && hasModels(catalog.providers);
   const busy = !!slot.turn || slot.remoteRunning;
+  // AI-35: text files dropped on the panel go with the next message.
+  const drop = usePanelFileDrop(panelRef, ready, (files) => void attachFiles(slotId, files));
 
   const saveWidth = (width: number) => {
     const app = useApp.getState();
@@ -99,7 +102,14 @@ export function AiPanel({ slotId }: { slotId: string }) {
       style={{ width: dragWidth ?? clampWidth(prefWidth || PANEL_DEFAULT_WIDTH) }}
       aria-label={t("ai.title")}
       onKeyDown={onKeyDown}
+      {...drop.handlers}
     >
+      {drop.dragging && (
+        <div className={s.drop} aria-hidden>
+          <Icon name="file-arrow-up" size={22} />
+          <span>{t("ai.attach.drop")}</span>
+        </div>
+      )}
       <div
         className={s.resize}
         role="separator"

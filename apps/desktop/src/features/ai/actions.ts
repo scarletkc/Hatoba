@@ -20,9 +20,26 @@ import type {
   McpToolInfo,
 } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
+import {
+  baseName,
+  checkFile,
+  chipShown,
+  composeMessage,
+  FILE_MAX_BYTES,
+  fitsMessage,
+  makeAttachment,
+  makeDiagnostics,
+  makePaste,
+  MESSAGE_MAX_BYTES,
+  nextSelection,
+  textFile,
+  type Attachment,
+  type FileAttachment,
+  type PasteAttachment,
+  type SelectionAttachment,
+} from "./attachments";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
-import { chipShown, composeMessage, makeAttachment, makeDiagnostics, nextSelection, type SelectionAttachment } from "./selection";
 import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot, type TabSelection } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
@@ -388,7 +405,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   if (attachment) hideSelection(slotId);
   const diagnostics = slotId === HOME_SLOT ? null : (useAi.getState().diagnostics[slotId] ?? null);
   if (diagnostics) removeDiagnostics(slotId);
-  const text = composeMessage(typed, { diagnostics, selection: attachment });
+  const extras = slot.extras;
+  const text = composeMessage(typed, [...(diagnostics ? [diagnostics] : []), ...(attachment ? [attachment] : []), ...extras.map((x) => x.attachment)]);
   const runner = new TurnRunner(slotId, slot.conversationId);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
@@ -398,6 +416,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     outcome: null,
     remoteRunning: false,
     draft: "",
+    extras: [],
   }));
   try {
     const started = await api.ai_send({ conversation_id: slot.conversationId, text, context }, runner.onEvent);
@@ -415,6 +434,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY),
       turn: null,
       draft: s.draft || raw,
+      extras: [...extras, ...s.extras],
     }));
     if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
     if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
@@ -520,7 +540,7 @@ function release(slotId: string) {
 /** New conversation (AI-07): stored when its first message is sent. */
 export function newConversation(slotId: string) {
   release(slotId);
-  setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft));
+  setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
   focusInput();
 }
 
@@ -541,7 +561,7 @@ export async function reloadSlot(slotId: string) {
   } catch (e) {
     if (getSlot(slotId).conversationId !== id) return;
     if (toAppError(e).code === "not_found") {
-      setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft)); // deleted on another device
+      setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras)); // deleted on another device
       return;
     }
     patchSlot(slotId, { loading: false, loadFailed: true });
@@ -552,7 +572,10 @@ export async function reloadSlot(slotId: string) {
 function moveSlot(from: string, to: string) {
   const source = getSlot(from);
   const runner = runners.get(from);
-  setSlot(to, { ...source, draft: getSlot(to).draft || source.draft });
+  const target = getSlot(to);
+  // The input area of the slot the conversation moves to wins when it holds something.
+  const keep = !!target.draft || target.extras.length > 0;
+  setSlot(to, { ...source, draft: keep ? target.draft : source.draft, extras: keep ? target.extras : source.extras });
   setSlot(from, blankSlot());
   if (runner) {
     runners.delete(from);
@@ -581,7 +604,7 @@ export async function openConversation(slotId: string, id: string, reveal: strin
   const st = useAi.getState();
   const known = st.history?.find((c) => c.id === id) ?? null;
   setSlot(slotId, {
-    ...blankSlot(st.modes[id] ?? defaultMode(), current.draft),
+    ...blankSlot(st.modes[id] ?? defaultMode(), current.draft, current.extras),
     conversationId: id,
     conversation: known,
     loading: true,
@@ -724,6 +747,83 @@ export function askAiAboutConnection(tabId: string, host: string, text: string) 
   focusInput(suggest);
 }
 
+// ───────────────────────── long pastes and text files (AI-35) ─────────────────────────
+
+let extraSeq = 0;
+
+/** Everything that would go with the slot's next message, for the size cap. */
+export function pendingAttachments(slotId: string): Attachment[] {
+  const diagnostics = slotId === HOME_SLOT ? undefined : useAi.getState().diagnostics[slotId];
+  const selection = selectionAttachment(slotId);
+  return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...getSlot(slotId).extras.map((x) => x.attachment)];
+}
+
+const kb = (bytes: number) => `${bytes / 1024} KB`;
+
+/** The toast for an attachment that would pass the per-message cap. */
+export function tooMuchMessage(): string {
+  return t("ai.attach.total", { size: kb(MESSAGE_MAX_BYTES) });
+}
+
+/** Adds a paste or a file to the slot's next message, unless the message would pass the cap. */
+function addExtra(slotId: string, attachment: PasteAttachment | FileAttachment): boolean {
+  if (!fitsMessage(pendingAttachments(slotId), attachment)) {
+    toast(tooMuchMessage(), "error");
+    return false;
+  }
+  patchSlot(slotId, (s) => ({ extras: [...s.extras, { id: `x${++extraSeq}`, attachment }] }));
+  return true;
+}
+
+/** A long paste into the input box becomes an attachment. */
+export function addPaste(slotId: string, text: string): boolean {
+  const paste = makePaste(text);
+  return paste ? addExtra(slotId, paste) : false;
+}
+
+export function removeExtra(slotId: string, id: string) {
+  patchSlot(slotId, (s) => ({ extras: s.extras.filter((x) => x.id !== id) }));
+}
+
+function refusal(reason: "image" | "too_large" | "binary", name: string): string {
+  if (reason === "image") return t("ai.attach.image", { name });
+  if (reason === "too_large") return t("ai.attach.tooLarge", { name, size: kb(FILE_MAX_BYTES) });
+  return t("ai.attach.binary", { name });
+}
+
+/**
+ * Reads files the user picked or dropped, in the WebView. UTF-8 text files come back; an image, a
+ * file over the size cap, or one with NUL bytes or invalid UTF-8 is refused with a toast naming it.
+ */
+export async function readTextFiles(files: readonly File[]): Promise<FileAttachment[]> {
+  const read: FileAttachment[] = [];
+  for (const file of files) {
+    const name = baseName(file.name);
+    const early = checkFile(name, file.type, file.size);
+    if (early && !early.ok) {
+      toast(refusal(early.reason, name), "error");
+      continue;
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } catch {
+      toast(t("ai.attach.readFailed", { name }), "error");
+      continue;
+    }
+    const result = textFile(name, bytes);
+    if (result.ok) read.push(result.file);
+    else toast(refusal(result.reason, name), "error");
+  }
+  return read;
+}
+
+/** The paperclip, or files dropped on the panel: they go with the slot's next message. */
+export async function attachFiles(slotId: string, files: readonly File[]) {
+  for (const file of await readTextFiles(files)) if (!addExtra(slotId, file)) break;
+  focusInput();
+}
+
 /** × on the diagnostics chip, or the diagnostics were sent. */
 export function removeDiagnostics(tabId: string) {
   useAi.setState((st) => {
@@ -824,7 +924,7 @@ export async function deleteConversation(id: string) {
   const slotId = slotOf(id);
   if (slotId) {
     release(slotId);
-    setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft));
+    setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
   }
   try {
     await api.ai_conversation_delete(id);
