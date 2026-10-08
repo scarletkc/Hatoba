@@ -30,8 +30,9 @@ pnpm build
 Then:
 
 ```sh
-cargo test --workspace         # Rust unit tests
-pnpm typecheck && pnpm test    # Frontend type check and unit tests
+cargo test --workspace                # Rust unit tests
+pnpm typecheck && pnpm test           # Frontend type check and unit tests
+node --test "scripts/**/*.test.mjs"   # Release scripts
 ```
 
 [§12 of the architecture and requirements](hatoba-spec.md#12-testing) describes what each suite covers.

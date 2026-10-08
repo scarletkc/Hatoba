@@ -54,6 +54,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  scripts:
+    name: Release scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Includes a check that every version file has the same version.
+      - run: node --test "scripts/**/*.test.mjs"
+
   rust-linux:
     name: Rust (Linux, SSH integration)
     runs-on: ubuntu-latest

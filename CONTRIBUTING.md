@@ -171,7 +171,7 @@ Before requesting review:
   migration do not run it again.
 - Update the branch with the latest `main`; only an up-to-date branch can merge.
 - Change only what the issue asks for, and leave version numbers unchanged.
-  Maintainers set them when preparing a release.
+  Maintainers set them when [preparing a release](docs/releasing.md).
 
 Open the pull request as a draft while the work is in progress. Merging
 requires approval from a maintainer, and new commits dismiss an earlier

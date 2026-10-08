@@ -1,0 +1,99 @@
+name: Release
+
+# Publishes the version in Cargo.toml as a GitHub Release of the selected commit, after approval in
+# the release environment. docs/releasing.md describes the steps.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads the CI runs and the release environment.
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tags and history select the previous release and the changelog.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test "scripts/**/*.test.mjs"
+      - run: node scripts/release/release.mjs check
+      - run: node scripts/release/release.mjs gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: node scripts/release/release.mjs notes --output release-notes.md
+      - name: Show the release notes in the run summary
+        run: cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  build:
+    name: Build (Windows)
+    needs: preflight
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # No Rust cache: the installer is built from a clean target directory.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --bundles nsis
+      - run: node scripts/release/release.mjs dist --bundle target/release/bundle/nsis --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hatoba-windows
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The environment's required reviewers hold this job until someone approves the run.
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes
+      - uses: actions/download-artifact@v4
+        with:
+          name: hatoba-windows
+          path: dist
+      - run: node scripts/release/release.mjs publish --notes release-notes/release-notes.md --dist dist
+        env:
+          GH_TOKEN: ${{ github.token }}

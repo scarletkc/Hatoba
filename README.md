@@ -88,6 +88,7 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 - [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
 - [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
 - [Development guide](docs/development.md): building, running, and testing
+- [Release Hatoba](docs/releasing.md): versions, release notes, and publishing
 - [Deploy the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
 - [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
 - [Design](docs/design/README.md): design files, porting conventions, and deviations from the design

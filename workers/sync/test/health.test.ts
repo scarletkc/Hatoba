@@ -1,12 +1,13 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { VERSION } from "../src/config";
 import { KDF_PARAMS, KDF_SALT, call, setupVault } from "./helpers";
 
 describe("GET /v1/health", () => {
   it("reports an uninitialised vault, then an initialised one", async () => {
     const before = await call("/v1/health");
     expect(before.status).toBe(200);
-    expect(before.body).toEqual({ service: "hatoba-sync", version: "0.1.0", api: 1, initialized: false });
+    expect(before.body).toEqual({ service: "hatoba-sync", version: VERSION, api: 1, initialized: false });
 
     await setupVault();
     const after = await call("/v1/health");

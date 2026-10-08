@@ -840,7 +840,7 @@ tauri-specta generates the full list of events into the `events` object in `apps
 | Performance | Cold start to the unlock screen under 1 second (on a mainstream Windows laptop). Unlock (Argon2id) under 1.5 seconds. The UI does not freeze during sustained heavy output (such as `cat` on a 50 MB file). Keystroke echo latency under 50 ms. Search results appear instantly with 1,000 hosts |
 | Reliability | A failed sync does not affect local use. Sync must never lose a private key, under any circumstances |
 | Platforms | Windows 10 (21H2+) and Windows 11 x64 are P0. Windows arm64, macOS 13+, and Linux (AppImage, deb) are P1 |
-| Distribution | Windows: an NSIS installer (per-user, no administrator rights) is P0. Authenticode code signing is P1 (unsigned builds trigger a SmartScreen warning). Signed updates through the Tauri updater are P1. macOS signing and notarization come with the macOS version |
+| Distribution | Windows: an NSIS installer (per-user, no administrator rights), published as a GitHub Release, is P0. Authenticode code signing is P1 (unsigned builds trigger a SmartScreen warning). Signed updates through the Tauri updater are P1. macOS signing and notarization come with the macOS version |
 | Privacy | No telemetry. Local logs roll daily and are kept for 7 days |
 | Open source | Public repository under the MIT license ([LICENSE](../LICENSE)) |
 
