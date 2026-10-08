@@ -66,7 +66,7 @@ The assistant calls the providers added here directly from the device, with the 
 
 ## Skills
 
-A skill is a set of instructions for the assistant in the Agent Skills format: a `SKILL.md` with a name and a description, and optional text files such as `topics/nginx.md`. The assistant sees the name and description of every enabled skill and reads the rest with its **Read skill** tool when it needs it (no approval needed). Skills contain text only. Hatoba never runs a file from a skill, and `allowed-tools` changes nothing. Skills sync to the other devices. Skill text reaches the model as instructions, so import only skills you trust. The assistant also has a built-in skill named `hatoba` with this documentation.
+A skill is a set of instructions for the assistant in the Agent Skills format: a `SKILL.md` with a name and a description, and optional text files such as `topics/nginx.md`. The assistant sees the name and description of every enabled skill and reads the rest with its **Read skill** tool when it needs it (no approval needed). Skills contain text only. Hatoba never runs a file from a skill, and `allowed-tools` changes nothing. Skills sync to the other devices. Skill text reaches the model as instructions, so import only skills you trust.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -87,7 +87,19 @@ A skill is a set of instructions for the assistant in the Agent Skills format: a
 
 - **New Skill** writes one in the app: a name (1 to 64 lowercase letters, digits and hyphens), a description (at most 1,024 characters; tells the assistant what the skill does and when to use it), the **Instructions** (the Markdown body of `SKILL.md`, at most 32 KB) and extra files added with **Add File** (relative paths, each at most 32 KB; at most 200 files and 5 MB in all).
 - **Import** has **Import Folder…** and **Import .zip…** for a folder or archive with a `SKILL.md` at its top. **Import Skill** lists every file to be saved before anything is stored. Files that are not UTF-8 text are skipped and listed. If the name is taken, choose **Replace it** or **Import under a new name**.
-- Each row has an enable switch, an export button (saves a `.zip`), and a delete button. Click the row to edit it.
+- Each row of your own skills has an enable switch, an export button (saves a `.zip`), and a delete button. Click the row to edit it.
+
+*The built-in skill.* The first row is always the `hatoba` skill that ships with the app (this documentation). It carries a **Built-in** badge, its description and file count, an enable switch, and a view button (an eye icon, labelled "View hatoba"; clicking the row does the same) that opens a read-only viewer titled **Built-in skill** with `SKILL.md` and every other file. It is on by default, and the switch syncs to the other devices; switched off, the assistant no longer sees it and cannot answer from it. It comes with the app and changes with each version, so it cannot be edited, deleted, exported or replaced.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Built-in | 内置 | 組み込み |
+| Built-in skill | 内置技能 | 組み込みスキル |
+| hatoba is the built-in skill’s name. Choose another. | hatoba 是内置技能的名称，请换一个。 | hatoba は組み込みスキルの名前です。別の名前にしてください。 |
+| This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | 这个名称现在属于内置技能，助手不会使用这个技能。重命名后即可使用。 | この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。 |
+
+- The name `hatoba` is reserved. **New Skill** refuses it with "hatoba is the built-in skill’s name. Choose another." An import of a skill named `hatoba` cannot replace anything: the import dialog says the name is the built-in skill's and asks for another one (it suggests `hatoba-2`).
+- A skill of your own that was saved under that name by an earlier version stays in the list with the note "This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it." Rename it, or delete it.
 
 ## MCP Servers
 

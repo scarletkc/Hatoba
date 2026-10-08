@@ -5,8 +5,8 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 ## Opening the panel
 
 - Click the sparkle button at the right of the tab bar, or press Ctrl+Shift+A (⌘⇧A on macOS). The close button (×) in the panel header hides it again. The open state and the width are remembered on this device.
-- **Ask AI** in a terminal's right-click menu or **More actions** menu opens the panel with the input focused and the selected text attached.
-- Drag the panel's left edge to resize it (300 to 900 px); double-click the edge to reset the width.
+- **Ask AI** in a terminal's right-click menu or **More actions** menu opens the panel on that tab with the input focused; the selected text shows as a chip above the input. It is disabled while nothing is selected, and the right-click menu appears only when **Right-Click in Terminal** is set to **Show context menu** (`references/terminal.md`). **Ask AI** on a failed connection's card is covered below.
+- Drag the panel's left edge to resize it (300 to 900 px); double-click the edge to reset the width ("Drag to resize, double-click to reset").
 - With no provider, the panel says "Add a model provider" with a button that opens Settings → AI. With a provider that has no model, it asks to add a model.
 
 | en | zh-CN | ja |
@@ -15,10 +15,11 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 | Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
 | Hide AI Panel | 隐藏 AI 面板 | AI パネルを隠す |
 | Close AI Panel | 关闭 AI 面板 | AI パネルを閉じる |
-| Drag to resize, double-click to reset | 拖动调整宽度，双击恢复默认宽度 | ドラッグで幅を変更、ダブルクリックで元に戻す |
 | Open Settings → AI | 打开设置 → AI | 設定 → AI を開く |
 | Ask AI | 询问 AI | AI に質問 |
 | More actions | 更多操作 | その他の操作 |
+| Right-Click in Terminal | 终端中的右键 | ターミナルでの右クリック |
+| Show context menu | 弹出菜单 | コンテキストメニューを表示 |
 
 ## One conversation per tab
 
@@ -26,22 +27,20 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 
 - Header: the conversation title, the tab's host, the permission mode button, **History**, **New Conversation**, and close.
 - Input area: a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the context meter, and **Send (Enter)** (replaced by **Stop** while a turn runs).
-- A conversation acts only on its own tab, never on another, in either permission mode. If the tab disconnects, terminal tools return errors until it reconnects (the panel offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
+- A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
 - Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host.
-- With no terminal tab (the home tab), the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands or send input. For a conversation that belongs to a host, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation.
+- With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands or send input: those three tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation.
 
 | en | zh-CN | ja |
 |---|---|---|
 | New Conversation | 新对话 | 新しい会話 |
 | History | 历史对话 | 履歴 |
 | Model | 模型 | モデル |
-| Message to the assistant | 发给 AI 助手的消息 | アシスタントへのメッセージ |
 | Send (Enter) | 发送（Enter） | 送信（Enter） |
 | Stop | 停止 | 停止 |
 | MCP tools | MCP 工具 | MCP ツール |
 | The assistant is working | AI 助手正在工作 | アシスタントが作業中です |
 | The assistant is waiting for you | AI 助手在等你确认 | アシスタントが確認を待っています |
-| Untitled conversation | 未命名对话 | 無題の会話 |
 | Reconnect | 重新连接 | 再接続 |
 
 ## Tools and approvals
@@ -113,13 +112,33 @@ An approval card appears in the conversation for a call that needs approval. It 
 
 ## Selecting terminal text
 
-Text selected in the tab's terminal appears as a chip above the input ("Selection · N lines"). It goes with the next message. Click the chip to preview it, and press × (**Don’t Attach the Selection**) to leave it out. Very long selections are cut and marked "truncated". After a message takes the selection, the chip comes back only when the selection changes. A sent message shows the selection as a collapsed block.
+Text selected in the tab's terminal appears as a chip above the input ("Selection · N lines") while the panel shows that tab's conversation. It follows the selection as it changes and goes with the next message. Hover or click the chip to preview the first lines, and press × (**Don’t Attach the Selection**) to leave it out. Very long selections are cut like a long tool result and marked "truncated". After a message takes the selection, the chip comes back only when the selection changes. A sent message shows it as a collapsed block above what you typed. The home tab has no selection.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Preview the selection | 预览选中内容 | 選択範囲をプレビュー |
 | Don’t Attach the Selection | 不附带选中内容 | 選択範囲を添付しない |
 | truncated | 已截断 | 切り詰め |
+
+## Asking about a failed connection
+
+When a connection fails, the card over the terminal has **Copy Diagnostics**, **Ask AI**, **Edit Host** and **Retry**. **Ask AI** opens the AI panel on that tab and does three things:
+
+- It attaches the connection diagnostics as a chip above the input, titled "Connection diagnostics · <host>". The diagnostics hold the host's name, address and port, user name, authentication kind, jump host, error kind and detail, the number of attempts and the time. They never hold a password, key or passphrase.
+- It puts a suggested question in the input, selected, so typing replaces it. This happens only when the input was empty; a draft you already wrote stays.
+- It sends nothing. The diagnostics reach the provider only when you press Send. Hover or click the chip to preview exactly what will be sent; × (**Don’t Attach the Diagnostics**) leaves it out.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Copy Diagnostics | 复制诊断信息 | 診断情報をコピー |
+| Edit Host | 编辑主机 | ホストを編集 |
+| Retry | 重试 | 再試行 |
+| Preview the diagnostics that will be sent | 预览将要发送的诊断信息 | 送信する診断情報をプレビュー |
+| Sent with your next message: | 随下一条消息发送： | 次のメッセージと一緒に送信します： |
+| Don’t Attach the Diagnostics | 不附带连接诊断 | 接続の診断を添付しない |
+| I can’t connect to this host. Can you help me find out why? | 这台主机连不上，帮我看看原因。 | このホストに接続できません。原因を調べてください。 |
+
+A message carries at most one selection and one diagnostics attachment, the diagnostics first. A sent message shows each as a collapsed block above what you typed, and **Edit and Resend** keeps them unless their chip is removed. The diagnostics stay on the tab until they are sent or removed. If no provider is set up yet, the panel first asks for one (Settings → AI). While the tab is not connected the terminal tools are unavailable, so the assistant can explain the error and what to check in Hatoba, but it cannot run anything on the host; `references/troubleshooting-connections.md` explains each error kind.
 
 ## Model, context and compaction
 

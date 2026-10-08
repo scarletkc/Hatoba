@@ -98,4 +98,4 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), Auto-Lock, Disconnect all sessions when locked, the default AI model, the search provider | Language, appearance, list density, host reachability, the update check switch, the AI permission mode, the tool call limit, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), Auto-Lock, Disconnect all sessions when locked, the default AI model, the search provider, the built-in skill's switch | Language, appearance, list density, host reachability, the update check switch, the AI permission mode, the tool call limit, the AI panel width and whether it is open, MCP on/off and Always allow |

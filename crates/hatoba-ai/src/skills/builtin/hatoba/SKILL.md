@@ -72,11 +72,11 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
-| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, selection, history, compaction |
-| `references/ai-settings.md` | Settings → AI: providers and models, web search, default model, permission mode, tool call limit, skills, MCP servers |
+| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, the terminal selection, Ask AI about a failed connection, history, compaction |
+| `references/ai-settings.md` | Settings → AI: providers and models, web search, default model, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
 | `references/settings.md` | General, Appearance, Security and About settings, language, update check, Report a Problem, and which settings sync |
-| `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, …), jump hosts, host key prompts, keepalive and the disconnect banner |
+| `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, …), jump hosts, host key prompts, keepalive and the disconnect banner, and how to read the diagnostics that **Ask AI** attaches |
 | `references/troubleshooting.md` | Key, master password, recovery, SFTP and other error messages |
 | `references/troubleshooting-sync.md` | Sync and Cloudflare errors and what to do |
 | `references/troubleshooting-ai.md` | AI provider, search and MCP errors and what to do |
@@ -88,7 +88,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 - Mention platform differences. Shortcuts use Ctrl+Shift+letter on Windows and Linux and ⌘ on macOS. Windows Hello exists on Windows only. The SSH agent is the OpenSSH agent on Windows and the `SSH_AUTH_SOCK` agent elsewhere. If the user's platform is unknown, give both.
 - Say plainly when Hatoba does not support something, and do not invent a feature, menu or setting. Offer a real workaround only when one exists, such as running `ssh` or `scp` in the terminal.
 - Treat these files as the description of the current version. If the user describes a screen that differs, say that their version may differ and point to Settings → About for the version and the update check.
-- Never ask the user to paste a master password, recovery code, API key, token or private key. For connection problems, ask for the error text or the **Copy Diagnostics** output, which holds no secrets.
+- Never ask the user to paste a master password, recovery code, API key, token or private key. For connection problems, ask for the error text, or for the **Copy Diagnostics** output; **Ask AI** on the failed connection's card attaches the same secret-free diagnostics to a message when the user sends it.
 - Keep answers short and in steps. Answer from these files first, and use web tools only for things outside Hatoba, such as Cloudflare or a provider's documentation.
 
 ## Project, feedback and newer information
@@ -116,6 +116,7 @@ Labels used above:
 | en | zh-CN | ja |
 |---|---|---|
 | Copy Diagnostics | 复制诊断信息 | 診断情報をコピー |
+| Ask AI | 询问 AI | AI に質問 |
 | Report a Problem | 反馈问题 | 問題を報告 |
 | Check for Updates | 检查更新 | アップデートを確認 |
 | Settings (update available) | 设置（有新版本） | 設定（アップデートあり） |

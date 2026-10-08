@@ -45,7 +45,7 @@ export default defineMessages({
     // notices (AI-08, AI-09)
     "ai.notice.noTab": "没有终端标签页：助手可以聊天、搜索和阅读网页、使用技能和 MCP 工具，但无法操作终端。",
     "ai.connectTo": "连接到 {host}",
-    "ai.notice.disconnected": "{host} 已断开连接。重新连接之前，终端工具都会返回错误。",
+    "ai.notice.disconnected": "{host} 未连接，连接上之前助手无法操作终端。",
     "ai.notice.connecting": "正在连接 {host}…",
     "ai.notice.moveHost": "这个对话之前在 {from} 上进行。发送下一条消息后，它会转到 {to}。",
 
@@ -269,7 +269,7 @@ export default defineMessages({
 
     "ai.notice.noTab": "No terminal tab: the assistant can chat, search and read the web, and use skills and MCP tools, but not the terminal.",
     "ai.connectTo": "Connect to {host}",
-    "ai.notice.disconnected": "{host} is disconnected. Terminal tools return errors until it reconnects.",
+    "ai.notice.disconnected": "{host} isn’t connected, so the assistant can’t use the terminal until it connects.",
     "ai.notice.connecting": "Connecting to {host}…",
     "ai.notice.moveHost": "This conversation was on {from}. Your next message moves it to {to}.",
 
@@ -482,7 +482,7 @@ export default defineMessages({
 
     "ai.notice.noTab": "ターミナルのタブがないため、アシスタントは会話、Web の検索と閲覧、スキルと MCP ツールの利用はできますが、ターミナルは操作できません。",
     "ai.connectTo": "{host} に接続",
-    "ai.notice.disconnected": "{host} は切断されています。再接続するまで、ターミナルのツールはエラーを返します。",
+    "ai.notice.disconnected": "{host} に接続されていないため、接続するまでアシスタントはターミナルを操作できません。",
     "ai.notice.connecting": "{host} に接続しています…",
     "ai.notice.moveHost": "この会話は {from} で行われていました。次のメッセージで {to} に移ります。",
 

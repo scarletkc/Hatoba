@@ -23,7 +23,7 @@ Open it from the sidebar (**Cloud Sync**, under **Vault**). The sync button at t
 
 ## What syncs
 
-- Synced (encrypted): hosts and saved passwords, groups, SSH keys with their passphrases, trusted host fingerprints, port forwards, terminal settings, Auto-Lock settings, AI providers with their API keys and models, the search provider, the default model, AI conversations, skills, and MCP server definitions (with the **Always ask** setting).
+- Synced (encrypted): hosts and saved passwords, groups, SSH keys with their passphrases, trusted host fingerprints, port forwards, terminal settings, Auto-Lock settings, AI providers with their API keys and models, the search provider, the default model, AI conversations, skills (and the switch of the built-in skill), and MCP server definitions (with the **Always ask** setting).
 - Not synced, kept on each device: language, theme, list density, host reachability, the update-check switch, the AI permission mode, the tool call limit and the AI panel size, whether an MCP server is switched on for the device, and the MCP "Always allow" switches.
 - A sync round runs after unlock, about 2 seconds after a local change, every 60 seconds, when the window regains focus, and on **Sync Now**. Local work never waits for it.
 

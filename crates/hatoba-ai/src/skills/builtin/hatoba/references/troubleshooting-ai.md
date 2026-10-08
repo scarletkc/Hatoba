@@ -86,6 +86,9 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | en | zh-CN | ja |
 |---|---|---|
 | Use only lowercase letters, digits, and hyphens, up to 64 characters. | 名称只能用小写字母、数字和连字符，最多 64 个字符。 | 小文字の英字、数字、ハイフンだけを使い、64 文字以内にしてください。 |
+| hatoba is the built-in skill’s name. Choose another. | hatoba 是内置技能的名称，请换一个。 | hatoba は組み込みスキルの名前です。別の名前にしてください。 |
+| This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | 这个名称现在属于内置技能，助手不会使用这个技能。重命名后即可使用。 | この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。 |
+| Built-in | 内置 | 組み込み |
 | Another skill already has this name. | 已有同名的技能。 | 同じ名前のスキルがすでにあります。 |
 | Enter a description. | 请输入描述。 | 説明を入力してください。 |
 | SKILL.md is over 32 KB. Move detail into other files. | SKILL.md 超过了 32 KB，请把细节放进其他文件。 | SKILL.md が 32 KB を超えています。詳細は他のファイルに移してください。 |
@@ -98,6 +101,8 @@ Without a search provider the assistant has no web search tool. In Settings → 
 - A skill name is 1 to 64 lowercase letters, digits and hyphens. The description is at most 1,024 characters; `SKILL.md` and each other file at most 32 KB; at most 200 files and 5 MB per skill; only UTF-8 text files.
 - Import needs a `SKILL.md` at the top of the folder or `.zip`, with a valid frontmatter (`name` and `description`). The import dialog lists every problem. If the name exists, choose **Replace it** or **Import under a new name**.
 - If the assistant does not use a skill, check that its switch is on and that the description says when to use it.
+- The name `hatoba` is reserved for the **Built-in** skill (the first row). Creating a skill with that name is refused, and an import of a skill named `hatoba` asks for another name (it suggests `hatoba-2`). A skill of your own that already had that name stays in the list with the note above, and the assistant does not use it until you rename it or delete it.
+- The built-in skill cannot be edited, deleted, exported or replaced. If the assistant cannot answer questions about Hatoba, check that its switch is on (Settings → AI → Skills); the switch syncs across devices.
 
 ## MCP servers
 

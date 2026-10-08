@@ -75,4 +75,4 @@ Uploads and downloads show in a **Transfers** section at the bottom of the panel
 
 Editing a remote file in the app, uploading or downloading folders, moving files by drag and drop inside the panel, and changing permissions. For those, use commands in the terminal (`scp`, `rsync`, `chmod`) or an editor on the server.
 
-Errors such as "The SFTP subsystem isn’t available." are covered in `references/troubleshooting.md`.
+The error "The SFTP subsystem isn’t available." is explained in `references/troubleshooting-connections.md`, and other file errors in `references/troubleshooting.md`.
