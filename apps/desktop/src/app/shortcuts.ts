@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { Platform } from "@/lib/platform";
 
-export type ShortcutAction = "search" | "newTab" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock";
+export type ShortcutAction = "search" | "newTab" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
 
 /**
  * App-level shortcuts (WIN-04). On Windows/Linux every app shortcut uses Ctrl+Shift so that plain
@@ -18,6 +18,7 @@ export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: 
     if (key === "w" && !e.shiftKey) return "closeTab";
     if (key === "," && !e.shiftKey) return "settings";
     if (key === "l" && !e.shiftKey) return "lock";
+    if (key === "a" && e.shiftKey) return "aiPanel";
     return null;
   }
   if (!e.ctrlKey || e.altKey || e.metaKey) return null;
@@ -34,6 +35,8 @@ export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: 
         return "closeTab";
       case "KeyL":
         return "lock";
+      case "KeyA":
+        return "aiPanel";
     }
     return null;
   }

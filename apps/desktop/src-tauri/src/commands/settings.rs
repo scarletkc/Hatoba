@@ -103,6 +103,7 @@ pub fn settings_save(
             terminal,
             auto_lock_minutes: settings.auto_lock_minutes.min(24 * 60),
             lock_disconnects_sessions: settings.lock_disconnects_sessions,
+            ai: v.settings().ai,
             updated_at: 0,
         };
         v.put(Some(SETTINGS_ID), Item::Settings(model))?;

@@ -1,0 +1,627 @@
+import { detectLocale } from "@/i18n";
+import type { HatobaApi } from "../api";
+import type {
+  AiConversationView,
+  AiEntryView,
+  AiFinish,
+  AiToolCall,
+  AiToolResultInput,
+  AiToolStatus,
+  AiTurnContext,
+  AiTurnEndReason,
+  AiTurnEvent,
+  AiUsage,
+  AppError,
+} from "../types";
+
+type AiApi = Pick<
+  HatobaApi,
+  | "ai_conversations_list"
+  | "ai_conversation_get"
+  | "ai_conversation_rename"
+  | "ai_conversation_pin"
+  | "ai_conversation_delete"
+  | "ai_send"
+  | "ai_retry"
+  | "ai_tool_result"
+  | "ai_tool_run"
+  | "ai_stop"
+  | "ai_compact"
+  | "ai_search"
+  | "ai_edit_resend"
+>;
+
+/** What the conversation mock reads from the settings mock. */
+export interface AiMockDeps {
+  providers: HatobaApi["ai_providers_list"];
+  settings: HatobaApi["ai_settings_get"];
+}
+
+type Assistant = Extract<AiEntryView, { role: "assistant" }>;
+type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
+
+interface Conv {
+  view: Omit<AiConversationView, "last_activity">;
+  entries: AiEntryView[];
+  /** `?ai=running`: a turn "runs in Rust" until then, started by an earlier page. */
+  runningUntil: number;
+}
+
+interface Turn {
+  convId: string;
+  emit: (ev: AiTurnEvent) => void;
+  context: AiTurnContext;
+  ended: boolean;
+  timers: Set<number>;
+}
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+
+/**
+ * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
+ * reasoning and then Markdown with timers, and calls tools by keyword in the user's message (English,
+ * Chinese or Japanese) when a connected terminal tab is attached:
+ *   "disk"            run_command `df -h /`          "fail"     run_command that exits with 5
+ *   "screen"          read_terminal                  "type" / "send"   send_input `uptime` + Enter
+ *   "search"          web_search                     "fetch" / "url"   fetch_url
+ *   "mcp"             an MCP tool (its server is not running)   "unknown"   a tool that does not exist
+ *   "sleep"           run_command `sleep 8`, to see a long-running tool and Stop
+ * It waits for every result, then answers from them. Other messages get a Markdown sample.
+ * `?ai=` demo values (comma-separated, shared with the Settings → AI mock):
+ *   history    prefilled history: a pinned conversation, a compacted one near the context limit,
+ *              one with tool calls in every state, and one on a host with no context window
+ *   running    history as above, and the newest conversation has a turn "running in Rust" (started
+ *              by an earlier page) for 20 s; open it from History to see it, or Stop it
+ *   error      the first request fails with HTTP 529 and the provider's message; Retry succeeds
+ *   refused    every response is declined by the model
+ *   length     every response is cut off at the output limit
+ *   limit      the model keeps calling read_terminal, so the turn pauses at the tool call limit
+ *   noprovider (Settings → AI mock) no provider is configured
+ * Nothing here is secure; it never runs inside the Tauri app.
+ */
+export function createAiMock(deps: AiMockDeps): AiApi {
+  const flags = new Set((new URLSearchParams(location.search).get("ai") ?? "").split(",").map((x) => x.trim()));
+  const zh = detectLocale() === "zh-CN";
+  const convs = new Map<string, Conv>();
+  const turns = new Map<string, Turn>();
+  let errorShown = false;
+  let lastMs = 0;
+  let seq = 0;
+
+  /** Increasing ids, like the UUIDv7 entry ids Rust makes. */
+  const newId = (ms = Date.now()) => {
+    lastMs = Math.max(ms, lastMs + 1);
+    return `${lastMs.toString(16).padStart(12, "0")}-7${(++seq).toString(16).padStart(5, "0")}`;
+  };
+  const fail = (code: AppError["code"], detail: string): never => {
+    throw { code, detail } satisfies AppError;
+  };
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  function need(id: string): Conv {
+    return convs.get(id) ?? fail("not_found", "conversation not found");
+  }
+
+  function view(c: Conv): AiConversationView {
+    const last = c.entries.reduce((m, e) => Math.max(m, e.created_at), 0);
+    return { ...c.view, last_activity: Math.max(c.view.updated_at, last) };
+  }
+
+  function answered(c: Conv): Set<string> {
+    return new Set(c.entries.flatMap((e) => (e.role === "tool" ? [e.tool_call_id] : [])));
+  }
+
+  function unanswered(c: Conv): AiToolCall[] {
+    const done = answered(c);
+    return c.entries.flatMap((e) => (e.role === "assistant" ? e.tool_calls.filter((x) => !done.has(x.id)) : []));
+  }
+
+  function store(c: Conv, entry: AiEntryView) {
+    c.entries.push(entry);
+    turns.get(c.view.id)?.emit({ kind: "entry", entry });
+  }
+
+  /** §13.1 step 5: every call without a result gets a cancelled one. */
+  function cancelOpenCalls(c: Conv) {
+    for (const call of unanswered(c)) {
+      store(c, { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran." });
+    }
+  }
+
+  function endTurn(turn: Turn, reason: AiTurnEndReason) {
+    if (turn.ended) return;
+    turn.ended = true;
+    turn.timers.forEach((t) => clearTimeout(t));
+    turn.emit({ kind: "turn_ended", reason });
+    if (turns.get(turn.convId) === turn) turns.delete(turn.convId);
+  }
+
+  function stopTurn(convId: string) {
+    const turn = turns.get(convId);
+    if (!turn) return;
+    turn.timers.forEach((t) => clearTimeout(t));
+    const c = convs.get(convId);
+    if (c) cancelOpenCalls(c);
+    endTurn(turn, "stopped");
+  }
+
+  /** Resolves false once the turn has ended. */
+  function sleep(turn: Turn, ms: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (turn.ended) return resolve(false);
+      const t = window.setTimeout(() => {
+        turn.timers.delete(t);
+        resolve(!turn.ended);
+      }, ms);
+      turn.timers.add(t);
+    });
+  }
+
+  function chunks(text: string): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < text.length; ) {
+      const n = 3 + Math.floor(Math.random() * 7);
+      out.push(text.slice(i, i + n));
+      i += n;
+    }
+    return out;
+  }
+
+  const call = (name: string, args: Record<string, unknown>): AiToolCall => ({ id: `call_${(++seq).toString(36)}`, name, arguments: JSON.stringify(args) });
+
+  // ───────────── the fake model ─────────────
+
+  interface Plan {
+    reasoning: string;
+    text: string;
+    calls: AiToolCall[];
+    finish: AiFinish;
+  }
+
+  function lastUser(c: Conv): { text: string; index: number } {
+    for (let i = c.entries.length - 1; i >= 0; i--) {
+      const e = c.entries[i];
+      if (e.role === "user") return { text: e.text, index: i };
+    }
+    return { text: "", index: -1 };
+  }
+
+  function plan(c: Conv, turn: Turn): Plan {
+    const user = lastUser(c);
+    const since = c.entries.slice(user.index + 1);
+    const results = since.filter((e): e is ToolEntry => e.role === "tool");
+    const callsSoFar = since.reduce((n, e) => n + (e.role === "assistant" ? e.tool_calls.length : 0), 0);
+    const words = user.text.toLowerCase();
+    const want = (...w: string[]) => w.some((x) => words.includes(x));
+    const tools = turn.context.tab;
+
+    if (flags.has("refused")) return { reasoning: "", text: zh ? "抱歉，我不能帮助完成这个请求。" : "I can’t help with that request.", calls: [], finish: "refused" };
+    if (flags.has("length")) {
+      const para = zh
+        ? "这台主机上运行着多个服务，下面逐一说明它们的配置、日志位置和常见问题的排查方法。"
+        : "This host runs several services; here is each one with its configuration, log location and the usual ways to debug it. ";
+      return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
+    }
+    if (flags.has("limit") && tools && callsSoFar < 40) {
+      return {
+        reasoning: zh ? "再看一次屏幕，确认部署进度。" : "Check the screen again to follow the deploy.",
+        text: callsSoFar === 0 ? (zh ? "我会持续观察屏幕上的部署进度。" : "I’ll keep watching the deploy on the screen.") : "",
+        calls: Array.from({ length: 5 }, () => call("read_terminal", { lines: 20 })),
+        finish: "tool_calls",
+      };
+    }
+
+    if (results.length === 0 && callsSoFar === 0) {
+      const calls: AiToolCall[] = [];
+      if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
+      if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
+      if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
+      if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
+      if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
+      if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
+      if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
+      if (want("mcp")) calls.push(call("mcp__github__list_issues", { repo: "scarletkc/Hatoba", state: "open" }));
+      if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
+      if (calls.length > 0 && tools)
+        return {
+          reasoning: zh
+            ? "用户想了解主机的状态。先用工具收集信息，再根据结果回答。"
+            : "The user wants to know about the host. Gather the facts with tools first, then answer from the results.",
+          text: zh ? "我先看一下。" : "Let me check.",
+          calls,
+          finish: "tool_calls",
+        };
+      if (calls.length > 0)
+        return {
+          reasoning: "",
+          text: zh
+            ? "这个对话没有连接终端标签页，所以我无法运行命令或读取屏幕。请打开一台主机，然后再问我一次。"
+            : "No terminal tab is attached to this conversation, so I can’t run commands or read the screen. Open a host and ask me again.",
+          calls: [],
+          finish: "stop",
+        };
+    }
+
+    if (results.length > 0) {
+      const parts = results.map((r) => {
+        const head = r.content.split("\n").slice(0, 8).join("\n");
+        const label = r.status === "ok" ? "" : ` _(${r.status})_`;
+        return `- \`${r.tool_call_id}\`${label}\n\n  \`\`\`\n${head.replace(/^/gm, "  ")}\n  \`\`\``;
+      });
+      return {
+        reasoning: zh ? "根据工具结果整理答案。" : "Summarize what the tools returned.",
+        text: zh
+          ? `这是我看到的结果：\n\n${parts.join("\n")}\n\n| 项目 | 状态 |\n|---|---|\n| 根分区 | 已用 48%，正常 |\n| 负载 | 0.21，空闲 |\n\n如果还需要我做什么，告诉我。`
+          : `Here is what I found:\n\n${parts.join("\n")}\n\n| Item | State |\n|---|---|\n| Root filesystem | 48% used, fine |\n| Load | 0.21, idle |\n\nTell me if you want me to do anything else.`,
+        calls: [],
+        finish: "stop",
+      };
+    }
+
+    return {
+      reasoning: zh ? "这是一般性的问题，不需要工具。用 Markdown 简短回答。" : "A general question; no tools needed. Answer briefly in Markdown.",
+      text: zh
+        ? "我是 Hatoba 的 AI 助手（演示模式）。我可以：\n\n1. **读取屏幕**，解释报错\n2. 运行 `df -h` 之类的**命令**\n3. 在 shell 里**输入**内容\n4. **搜索**和读取网页\n\n```bash\n# 例如\njournalctl -u nginx -n 50 --no-pager\n```\n\n试试问我**磁盘**用量、**屏幕**上的内容、**搜索**某个错误，或者让我**输入**一条命令。文档见 [Hatoba 仓库](https://github.com/scarletkc/Hatoba)。远程图片不会加载：![架构图](https://example.com/diagram.png)\n\n> 原始 HTML 只会显示为文字：<b>不加粗</b>"
+        : "I’m Hatoba’s AI assistant (demo mode). I can:\n\n1. **Read the screen** and explain errors\n2. Run **commands** such as `df -h`\n3. **Type** into the shell\n4. **Search** and read the web\n\n```bash\n# for example\njournalctl -u nginx -n 50 --no-pager\n```\n\nTry asking about **disk** usage, what’s on the **screen**, to **search** for an error, or to **type** a command. See the [Hatoba repository](https://github.com/scarletkc/Hatoba). Remote images are never loaded: ![diagram](https://example.com/diagram.png)\n\n> Raw HTML shows as text: <b>not bold</b>",
+      calls: [],
+      finish: "stop",
+    };
+  }
+
+  const estimate = (c: Conv) => Math.ceil(c.entries.reduce((n, e) => n + JSON.stringify(e).length, 0) / 4);
+
+  async function respond(turn: Turn) {
+    const c = convs.get(turn.convId);
+    if (!c || turn.ended) return;
+    turn.emit({ kind: "request_started" });
+    if (!(await sleep(turn, 450))) return;
+    if (flags.has("error") && !errorShown) {
+      errorShown = true;
+      turn.emit({ kind: "error", status: 529, message: "Overloaded: the service is temporarily overloaded, please try again later." });
+      endTurn(turn, "error");
+      return;
+    }
+    const p = plan(c, turn);
+    for (const piece of chunks(p.reasoning)) {
+      if (!(await sleep(turn, 22))) return;
+      turn.emit({ kind: "reasoning", delta: piece });
+    }
+    for (const piece of chunks(p.text)) {
+      if (!(await sleep(turn, 26))) return;
+      turn.emit({ kind: "text", delta: piece });
+    }
+    for (const x of p.calls) {
+      if (!(await sleep(turn, 120))) return;
+      turn.emit({ kind: "tool_call", id: x.id, name: x.name, arguments: x.arguments });
+    }
+    const usage: AiUsage = { input_tokens: estimate(c) + 2400, output_tokens: Math.ceil((p.text.length + p.reasoning.length) / 4) + 20, estimated: false };
+    turn.emit({ kind: "usage", ...usage });
+    if (!(await sleep(turn, 80))) return;
+    const entry: Assistant = {
+      role: "assistant",
+      entry_id: newId(),
+      created_at: Date.now(),
+      provider_id: turn.context.provider_id,
+      model_id: turn.context.model_id,
+      text: p.text,
+      reasoning: p.reasoning || null,
+      tool_calls: p.calls,
+      finish: p.finish,
+      usage,
+    };
+    store(c, entry);
+    turn.emit({ kind: "done", finish: p.finish });
+    if (p.finish === "tool_calls") return;
+    endTurn(turn, p.finish === "stop" ? "completed" : p.finish === "length" ? "length" : "refused");
+  }
+
+  /** When the last call of a response has its result, the next request goes out. */
+  function maybeContinue(c: Conv) {
+    const turn = turns.get(c.view.id);
+    if (!turn || turn.ended || unanswered(c).length > 0) return;
+    const t = window.setTimeout(() => {
+      turn.timers.delete(t);
+      void respond(turn);
+    }, 250);
+    turn.timers.add(t);
+  }
+
+  async function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void) {
+    const providers = await deps.providers();
+    if (!providers.some((p) => p.id === context.provider_id && p.models.some((m) => m.id === context.model_id))) fail("invalid_input", "the model is not configured");
+    stopTurn(c.view.id);
+    c.runningUntil = 0;
+    cancelOpenCalls(c);
+    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set() };
+    turns.set(c.view.id, turn);
+    window.setTimeout(() => void respond(turn), 0);
+  }
+
+  function findCall(c: Conv, callId: string): AiToolCall {
+    for (const e of c.entries) if (e.role === "assistant") for (const x of e.tool_calls) if (x.id === callId) return x;
+    return fail("not_found", "tool call not found");
+  }
+
+  function storeResult(c: Conv, callId: string, status: AiToolStatus, content: string, edited: string | null): ToolEntry {
+    const existing = c.entries.find((e): e is ToolEntry => e.role === "tool" && e.tool_call_id === callId);
+    if (existing) return existing;
+    const text = edited ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}` : content;
+    const entry: ToolEntry = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: callId, status, content: text };
+    store(c, entry);
+    maybeContinue(c);
+    return entry;
+  }
+
+  // ───────────── tools that run in "Rust" ─────────────
+
+  function exec(command: string): { status: number; stdout: string; stderr: string } {
+    if (/nonexistent|fail/.test(command)) return { status: 5, stdout: "", stderr: "Failed to restart nonexistent.service: Unit nonexistent.service not found." };
+    if (/\bdf\b/.test(command))
+      return { status: 0, stdout: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   49G   23G   24G  48% /", stderr: "" };
+    if (/uptime/.test(command)) return { status: 0, stdout: " 09:41:12 up 41 days,  3:12,  1 user,  load average: 0.21, 0.18, 0.12", stderr: "" };
+    if (/sleep/.test(command)) return { status: 0, stdout: "done", stderr: "" };
+    return { status: 0, stdout: `(demo output of \`${command}\`)`, stderr: "" };
+  }
+
+  async function runTool(c: Conv, x: AiToolCall, sessionId: string | null, edited: string | null): Promise<{ status: AiToolStatus; content: string }> {
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(edited ?? x.arguments) as Record<string, unknown>;
+    } catch {
+      return { status: "error", content: "The arguments are not valid JSON." };
+    }
+    const turn = turns.get(c.view.id);
+    const wait = (ms: number) => (turn ? sleep(turn, ms) : delay(ms).then(() => true));
+    switch (x.name) {
+      case "run_command": {
+        if (!sessionId) return { status: "error", content: "The terminal tab is not connected." };
+        const command = String(args.command ?? "");
+        const secs = Number(/sleep\s+(\d+)/.exec(command)?.[1] ?? 0);
+        await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
+        const r = exec(command);
+        return { status: "ok", content: `exit status: ${r.status}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}` };
+      }
+      case "web_search":
+        await wait(700);
+        return {
+          status: "ok",
+          content: [
+            `1. nginx 502 Bad Gateway: upstream prematurely closed connection\n   https://serverfault.com/questions/nginx-502-upstream\n   The upstream closed the connection before sending a full response; check its logs and timeouts.`,
+            `2. Module ngx_http_upstream_module\n   https://nginx.org/en/docs/http/ngx_http_upstream_module.html\n   Directives for groups of upstream servers: keepalive, max_fails, fail_timeout.`,
+            `3. Debugging 502 errors behind a reverse proxy\n   https://example.com/blog/debugging-502\n   A checklist: is the upstream listening, does it crash, are the proxy timeouts too short.`,
+          ].join("\n\n"),
+        };
+      case "fetch_url":
+        await wait(900);
+        return {
+          status: "ok",
+          content: `URL: ${String(args.url ?? "")} (characters 0–1,180 of 1,180, text/html)\n\n# Module ngx_http_upstream_module\n\nThe ngx_http_upstream_module module is used to define groups of servers that can be referenced by the proxy_pass directive.\n\n## keepalive\n\nActivates the cache for connections to upstream servers.`,
+        };
+      case "read_skill":
+        await wait(200);
+        return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
+      default:
+        await wait(300);
+        return { status: "error", content: `The MCP server for ${x.name} is not running.` };
+    }
+  }
+
+  // ───────────── demo history ─────────────
+
+  function seed() {
+    const now = Date.now();
+    const add = (id: string, title: string, host: string | null, ago: number, pinned: boolean, build: (at: (offset: number) => number) => AiEntryView[]) => {
+      const created = now - ago;
+      const at = (offset: number) => created + offset;
+      const c: Conv = {
+        view: { id, title, host_id: host, pinned, context_start: null, created_at: created, updated_at: created },
+        entries: build(at),
+        runningUntil: 0,
+      };
+      convs.set(id, c);
+      return c;
+    };
+    const user = (ms: number, text: string): AiEntryView => ({ role: "user", entry_id: newId(ms), created_at: ms, text });
+    const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => ({
+      role: "assistant",
+      entry_id: newId(ms),
+      created_at: ms,
+      provider_id: model[0],
+      model_id: model[1],
+      text,
+      reasoning: null,
+      tool_calls: [],
+      finish: "stop",
+      usage: { input_tokens: 3200, output_tokens: 240, estimated: false },
+      ...opts,
+    });
+    const result = (ms: number, callId: string, status: AiToolStatus, content: string): AiEntryView => ({ role: "tool", entry_id: newId(ms), created_at: ms, tool_call_id: callId, status, content });
+    const SONNET: [string, string] = ["p-anthropic", "claude-sonnet-5-5"];
+    const QWEN: [string, string] = ["p-ollama", "qwen3:8b"];
+    const OSS: [string, string] = ["p-ollama", "gpt-oss:20b"];
+
+    add("c-nginx", zh ? "排查 prod-api 上的 nginx 502" : "Debug nginx 502 on prod-api", "h-api-tokyo", 2 * DAY, true, (at) => {
+      const logs = call("run_command", { command: "sudo journalctl -u nginx -n 20 --no-pager", timeout_seconds: 30 });
+      const screen = call("read_terminal", { lines: 100 });
+      return [
+        user(at(0), zh ? "网站一直返回 502，帮我看看 nginx" : "The site keeps returning 502. Can you look at nginx?"),
+        reply(at(MIN), SONNET, zh ? "我先看 nginx 的日志和当前屏幕。" : "I’ll check the nginx log and the current screen first.", {
+          reasoning: zh ? "502 通常是上游服务的问题。先看 nginx 错误日志。" : "A 502 usually means the upstream failed. Start with nginx’s error log.",
+          tool_calls: [logs, screen],
+          finish: "tool_calls",
+        }),
+        result(at(2 * MIN), logs.id, "ok", "exit status: 0\n--- stdout ---\nOct 06 09:12:01 prod-api-tokyo nginx[812]: upstream prematurely closed connection while reading response header from upstream, client: 10.0.0.4, upstream: \"http://127.0.0.1:8080/v1/hosts\"\n--- stderr ---\n"),
+        result(at(2 * MIN + 1000), screen.id, "ok", "Alternate screen: no. This is the visible screen with 12 line(s) of scrollback above it.\n\ndeploy@prod-api-tokyo:/srv/api$"),
+        reply(at(3 * MIN), SONNET, zh
+          ? "上游 `api.service`（127.0.0.1:8080）在返回响应头之前关闭了连接。\n\n| 检查项 | 结果 |\n|---|---|\n| nginx | 正常运行 |\n| 上游 | **提前关闭连接** |\n\n建议先看 `journalctl -u api -n 100`，确认服务是否崩溃重启。"
+          : "The upstream `api.service` (127.0.0.1:8080) closed the connection before sending headers.\n\n| Check | Result |\n|---|---|\n| nginx | running |\n| upstream | **closed early** |\n\nNext, look at `journalctl -u api -n 100` to see whether the service crashed and restarted.", {
+          reasoning: zh ? "日志说明问题在上游。" : "The log points at the upstream.",
+          usage: { input_tokens: 5400, output_tokens: 310, estimated: false },
+        }),
+      ];
+    });
+
+    const vacuum = add("c-vacuum", zh ? "Postgres VACUUM 计划" : "Postgres vacuum plan", "h-db-osaka-01", DAY + 3 * HOUR, false, (at) => [
+      user(at(0), zh ? "帮我规划一下 db-osaka-01 的 VACUUM" : "Help me plan VACUUM on db-osaka-01"),
+      reply(at(MIN), QWEN, zh ? "先确认哪些表膨胀最严重……（很长的分析）" : "First find the most bloated tables… (a long analysis)", { usage: { input_tokens: 21_000, output_tokens: 3_100, estimated: false } }),
+      user(at(4 * MIN), zh ? "继续，给出每张表的建议" : "Go on, with advice for each table"),
+      reply(at(6 * MIN), QWEN, zh ? "按表给出的建议……（很长）" : "Per-table advice… (long)", { usage: { input_tokens: 29_500, output_tokens: 4_200, estimated: false } }),
+    ]);
+    const summary: AiEntryView = {
+      role: "summary",
+      entry_id: newId(vacuum.view.created_at + 8 * MIN),
+      created_at: vacuum.view.created_at + 8 * MIN,
+      text: zh
+        ? "**之前的对话摘要**：用户要为 db-osaka-01 规划 VACUUM。已确认 `events` 和 `sessions` 两张表膨胀最严重，建议在凌晨低峰期对它们运行 `VACUUM (ANALYZE)`，并把 `autovacuum_vacuum_scale_factor` 调到 0.05。"
+        : "**Summary of the earlier conversation**: the user is planning VACUUM on db-osaka-01. `events` and `sessions` are the most bloated tables; run `VACUUM (ANALYZE)` on them off-peak and lower `autovacuum_vacuum_scale_factor` to 0.05.",
+    };
+    vacuum.entries.push(summary);
+    vacuum.view.context_start = summary.entry_id;
+    const vt = vacuum.view.created_at + 10 * MIN;
+    vacuum.entries.push(
+      user(vt, zh ? "那 sessions 表现在能直接跑吗？" : "Can I run it on sessions right now?"),
+      reply(vt + MIN, QWEN, zh ? "可以，但现在是业务高峰，建议等到 02:00 以后。" : "You can, but it’s peak time now; wait until after 02:00.", {
+        usage: { input_tokens: 32_800, output_tokens: 160, estimated: false },
+      }),
+    );
+
+    add("c-cleanup", zh ? "清理 staging 磁盘空间" : "Clean up disk on staging", "h-staging-worker", 3 * HOUR, false, (at) => {
+      const rm = call("run_command", { command: "sudo rm -rf /var/log/journal/*", timeout_seconds: 60 });
+      const vacuumLogs = call("run_command", { command: "sudo journalctl --vacuum-size=200M" });
+      const type = call("send_input", { text: "docker system prune -af", key: "enter", wait_seconds: 30 });
+      const fetch = call("fetch_url", { url: "https://docs.docker.com/engine/manage-resources/pruning/" });
+      const mcp = call("mcp__github__create_issue", { repo: "scarletkc/infra", title: "staging disk full" });
+      return [
+        user(at(0), zh ? "staging-worker-01 的磁盘快满了" : "staging-worker-01 is nearly out of disk"),
+        reply(at(MIN), OSS, zh ? "我来清理日志和 Docker 缓存。" : "I’ll clean up logs and the Docker cache.", {
+          tool_calls: [rm, vacuumLogs, type, fetch, mcp],
+          finish: "tool_calls",
+          usage: null,
+        }),
+        result(at(2 * MIN), rm.id, "rejected", "The user rejected this call: don't delete the journal by hand"),
+        result(at(3 * MIN), vacuumLogs.id, "ok", "The user edited the arguments before the call ran; it ran with {\"command\":\"sudo journalctl --vacuum-size=500M\"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n"),
+        result(at(4 * MIN), type.id, "error", "The terminal tab disconnected while waiting. Output before that:\n\ndocker system prune -af\nDeleted Containers:"),
+        result(at(5 * MIN), fetch.id, "cancelled", "The call was cancelled before it ran."),
+        result(at(5 * MIN), mcp.id, "error", "The MCP server for mcp__github__create_issue is not running."),
+        reply(at(6 * MIN), OSS, zh ? "日志已压缩到 500M，释放了 1.2G。Docker 清理在终端断开时中断了，重新连接后可以再试。" : "The journal is down to 500M, which freed 1.2G. The Docker prune stopped when the terminal disconnected; try again after reconnecting.", {
+          usage: { input_tokens: 2100, output_tokens: 90, estimated: true },
+        }),
+      ];
+    });
+
+    const deploy = add("c-deploy", zh ? "盯一下 prod-api 的部署" : "Watch the prod-api deploy", "h-api-tokyo", 20 * MIN, false, (at) => [
+      user(at(0), zh ? "部署跑完之后告诉我结果" : "Tell me how the deploy went when it finishes"),
+    ]);
+    if (flags.has("running")) deploy.runningUntil = now + 20_000;
+  }
+
+  if (flags.has("history") || flags.has("running")) seed();
+
+  /** `?ai=running`: the turn an earlier page started finishes. */
+  function settleRemote(c: Conv) {
+    if (!c.runningUntil || Date.now() < c.runningUntil) return;
+    c.runningUntil = 0;
+    c.entries.push({
+      role: "assistant",
+      entry_id: newId(),
+      created_at: Date.now(),
+      provider_id: "p-anthropic",
+      model_id: "claude-sonnet-5-5",
+      text: zh ? "部署完成：3 个实例都已健康，`/healthz` 返回 200。" : "The deploy finished: all 3 instances are healthy and `/healthz` returns 200.",
+      reasoning: null,
+      tool_calls: [],
+      finish: "stop",
+      usage: { input_tokens: 4100, output_tokens: 40, estimated: false },
+    });
+  }
+
+  return {
+    ai_conversations_list: async () => {
+      await delay(150);
+      return [...convs.values()].map(view);
+    },
+    ai_conversation_get: async (id) => {
+      await delay(120);
+      const c = need(id);
+      settleRemote(c);
+      return { conversation: view(c), entries: c.entries.map((e) => ({ ...e })), running: turns.has(id) || c.runningUntil > Date.now() };
+    },
+    ai_conversation_rename: async (id, title) => {
+      const c = need(id);
+      c.view = { ...c.view, title: title.slice(0, 200), updated_at: Date.now() };
+      return view(c);
+    },
+    ai_conversation_pin: async (id, pinned) => {
+      const c = need(id);
+      c.view = { ...c.view, pinned, updated_at: Date.now() };
+      return view(c);
+    },
+    ai_conversation_delete: async (id) => {
+      stopTurn(id);
+      convs.delete(id);
+    },
+    ai_send: async (input, onEvent) => {
+      await delay(120);
+      let c: Conv;
+      if (input.conversation_id) {
+        c = need(input.conversation_id);
+      } else {
+        const id = newId();
+        const first = input.text.split(/\r?\n/)[0].trim();
+        c = {
+          view: { id, title: [...first].slice(0, 60).join(""), host_id: input.context.host_id, pinned: false, context_start: null, created_at: Date.now(), updated_at: Date.now() },
+          entries: [],
+          runningUntil: 0,
+        };
+      }
+      await startTurn(c, input.context, onEvent);
+      convs.set(c.view.id, c);
+      if (input.context.host_id && input.context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
+      const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text: input.text };
+      c.entries.push(user_entry);
+      return { conversation: view(c), user_entry };
+    },
+    ai_retry: async (id, context, onEvent) => {
+      await delay(80);
+      await startTurn(need(id), context, onEvent);
+    },
+    ai_tool_result: async (id, callId, result: AiToolResultInput) => {
+      const c = need(id);
+      findCall(c, callId);
+      const content = result.status === "rejected" ? (result.content ? `The user rejected this call: ${result.content}` : "The user rejected this call.") : result.content;
+      return storeResult(c, callId, result.status, content, result.edited_arguments);
+    },
+    ai_tool_run: async (id, callId, sessionId, edited) => {
+      const c = need(id);
+      const x = findCall(c, callId);
+      const r = await runTool(c, x, sessionId, edited);
+      return storeResult(c, callId, r.status, r.content, edited);
+    },
+    ai_stop: async (id) => {
+      const c = convs.get(id);
+      if (c?.runningUntil) c.runningUntil = 0;
+      stopTurn(id);
+    },
+    ai_compact: async (id) => {
+      const c = need(id);
+      if (turns.has(id)) fail("invalid_input", "a turn is running");
+      await delay(1500);
+      const entry: AiEntryView = {
+        role: "summary",
+        entry_id: newId(),
+        created_at: Date.now(),
+        text: zh
+          ? `**之前的对话摘要**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态，并完成了相关检查。`
+          : `**Summary of the earlier conversation**: ${c.entries.length} entries. The user and the assistant went over this host’s state and finished the checks.`,
+      };
+      c.entries.push(entry);
+      c.view = { ...c.view, context_start: entry.entry_id, updated_at: Date.now() };
+      return entry;
+    },
+    // Phase 2 placeholders (AI-24, AI-26), replaced by the panel's phase-2 work.
+    ai_search: async () => [],
+    ai_edit_resend: async () => fail("internal", "not implemented in the mock yet"),
+  };
+}

@@ -112,6 +112,8 @@ export default defineMessages({
     "err.worker_not_found": "这个账户中找不到这个名称的 Hatoba Worker，或者它没有保存保险库。请检查账户和 Worker 名称。",
     "err.worker_newer": "这个 Worker 比这个版本的 Hatoba 内置的更新，Hatoba 不会用旧版本替换它。",
     "err.no_worker_bundle": "这个版本的 Hatoba 没有内置同步 Worker，无法一键部署。请改用其他部署方式。",
+    "err.ai": "AI 请求失败：{detail}",
+    "err.ai_status": "服务商返回了 HTTP {status}：{detail}",
 
     "ssh.err.dns": "找不到主机 {host}，请检查地址拼写或 DNS。",
     "ssh.err.refused": "{host}:{port} 拒绝了连接，SSH 服务可能没有运行，或端口不对。",
@@ -251,6 +253,8 @@ export default defineMessages({
     "err.worker_not_found": "This account has no Hatoba Worker with this name, or it holds no vault. Check the account and the Worker name.",
     "err.worker_newer": "This Worker is newer than the one in this version of Hatoba, and Hatoba won’t replace it with an older one.",
     "err.no_worker_bundle": "This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy.",
+    "err.ai": "The AI request failed: {detail}",
+    "err.ai_status": "The provider returned HTTP {status}: {detail}",
 
     "ssh.err.dns": "Can’t find the host {host}. Check the address or DNS.",
     "ssh.err.refused": "{host}:{port} refused the connection. The SSH service may not be running, or the port is wrong.",
@@ -387,6 +391,8 @@ export default defineMessages({
     "err.worker_not_found": "このアカウントにこの名前の Hatoba Worker がないか、保管庫がありません。アカウントと Worker 名を確認してください。",
     "err.worker_newer": "この Worker はこのバージョンの Hatoba に含まれるものより新しいため、Hatoba は古いバージョンで置き換えません。",
     "err.no_worker_bundle": "このビルドの Hatoba には同期 Worker が含まれていないため、デプロイできません。別の方法でデプロイしてください。",
+    "err.ai": "AI リクエストに失敗しました: {detail}",
+    "err.ai_status": "プロバイダーが HTTP {status} を返しました: {detail}",
 
     "ssh.err.dns": "ホスト {host} が見つかりません。アドレスまたは DNS を確認してください。",
     "ssh.err.refused": "{host}:{port} に接続を拒否されました。SSH サービスが動いていないか、ポートが違う可能性があります。",

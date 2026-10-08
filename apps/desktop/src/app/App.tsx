@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { ConfirmHost, ToastHost } from "@/components/overlay";
+import { toggleAiPanel } from "@/features/ai/actions";
+import { AiPanel } from "@/features/ai/AiPanel";
+import { useAiLifecycle } from "@/features/ai/lifecycle";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { KeysPage } from "@/features/keys/KeysPage";
@@ -27,6 +30,7 @@ export function App() {
   const hasSessions = useTabs((st) => st.tabs.length > 0);
 
   useGlobalEvents();
+  useAiLifecycle();
   useActivityPing(phase === "unlocked");
   useStartupUpdateCheck(phase === "unlocked");
 
@@ -63,6 +67,7 @@ function Main() {
   const page = useApp((st) => st.page);
   const collapsed = useApp((st) => st.sidebarCollapsed);
   const platform = useApp((st) => st.info.platform);
+  const aiOpen = useApp((st) => st.prefs.ai_panel_open);
   const { tabs, active } = useTabs();
   const groups = useVaultData((st) => st.groups);
 
@@ -93,6 +98,9 @@ function Main() {
       case "lock":
         void app.lock();
         break;
+      case "aiPanel":
+        toggleAiPanel();
+        break;
     }
   }, []);
   useShortcuts(platform, onShortcut);
@@ -107,11 +115,15 @@ function Main() {
           onNewTab={() => onShortcut("newTab")}
           onCloseTab={(id) => void closeSessionTab(id)}
         />
-        <div className={s.body}>
-          {active === "home" && <HomePage page={page} />}
-          {tabs.map((tab) => (
-            <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
-          ))}
+        <div className={s.workspace}>
+          <div className={s.body}>
+            {active === "home" && <HomePage page={page} />}
+            {tabs.map((tab) => (
+              <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
+            ))}
+          </div>
+          {/* §9: the AI panel shows the active tab's conversation (AI-07). */}
+          {aiOpen && <AiPanel slotId={active} />}
         </div>
       </div>
     </div>

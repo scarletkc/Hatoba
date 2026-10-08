@@ -38,6 +38,9 @@ pub enum ErrorCode {
     WorkerNewer,
     /// This build does not embed the Worker, so it cannot deploy it.
     NoWorkerBundle,
+    /// AI assistant (§13): a model provider or search provider failed. `http_status` has the
+    /// status it answered with, when it answered; `detail` is its own message.
+    Ai,
     Cancelled,
     Io,
     Internal,
@@ -90,6 +93,8 @@ pub struct AppError {
     pub key_kind: Option<KeyParseErrorKind>,
     pub permission: Option<CloudflarePermission>,
     pub cf_code: Option<u32>,
+    /// `ai`: the HTTP status the provider answered with.
+    pub http_status: Option<u16>,
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -105,6 +110,7 @@ impl AppError {
             key_kind: None,
             permission: None,
             cf_code: None,
+            http_status: None,
         }
     }
 
@@ -208,6 +214,27 @@ impl From<hatoba_core::Error> for AppError {
             | E::Unsupported
             | E::VaultMismatch => Self::new(ErrorCode::Sync, detail),
             _ => Self::internal(detail),
+        }
+    }
+}
+
+/// A provider or search provider failure (§13). The adapters' messages never carry a key, a URL
+/// or request content: an HTTP error keeps the provider's own message in `detail`.
+impl From<hatoba_ai::AiError> for AppError {
+    fn from(e: hatoba_ai::AiError) -> Self {
+        use hatoba_ai::AiError as E;
+        match e {
+            E::Cancelled => Self::new(ErrorCode::Cancelled, "cancelled"),
+            E::InvalidUrl(message) => Self::invalid("base_url", message),
+            E::Http { status, message } => Self {
+                http_status: Some(status),
+                ..Self::new(ErrorCode::Ai, message)
+            },
+            E::Config(message)
+            | E::Network(message)
+            | E::Protocol(message)
+            | E::Blocked(message)
+            | E::UnsupportedContentType(message) => Self::new(ErrorCode::Ai, message),
         }
     }
 }

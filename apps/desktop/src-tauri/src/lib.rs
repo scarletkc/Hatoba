@@ -1,6 +1,7 @@
 //! Hatoba desktop shell: Tauri commands, events and channels on top of `hatoba-core` (vault,
 //! crypto, sync) and `hatoba-ssh` (sessions, SFTP). The WebView never receives secrets (spec §3.2).
 
+mod ai;
 mod commands;
 mod convert;
 mod deploy;
@@ -15,7 +16,7 @@ mod sync;
 mod update;
 
 use commands::{
-    app, deploy as deploy_cmd, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd,
+    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd,
     sync as sync_cmd, vault,
 };
 use tauri::Manager;
@@ -117,6 +118,28 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             settings::prefs_save,
             settings::star_prompt_get,
             settings::star_prompt_done,
+            ai_cmd::ai_providers_list,
+            ai_cmd::ai_provider_save,
+            ai_cmd::ai_provider_delete,
+            ai_cmd::ai_provider_models,
+            ai_cmd::ai_provider_test,
+            ai_cmd::search_providers_list,
+            ai_cmd::search_provider_save,
+            ai_cmd::search_provider_delete,
+            ai_cmd::search_provider_test,
+            ai_cmd::ai_settings_get,
+            ai_cmd::ai_settings_save,
+            ai_cmd::ai_conversations_list,
+            ai_cmd::ai_conversation_get,
+            ai_cmd::ai_conversation_rename,
+            ai_cmd::ai_conversation_pin,
+            ai_cmd::ai_conversation_delete,
+            ai_cmd::ai_send,
+            ai_cmd::ai_retry,
+            ai_cmd::ai_tool_result,
+            ai_cmd::ai_tool_run,
+            ai_cmd::ai_stop,
+            ai_cmd::ai_compact,
         ])
         .events(collect_events![
             dto::VaultLockedEvent,

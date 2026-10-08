@@ -7,6 +7,7 @@ use std::time::Instant;
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
+use crate::ai::AiManager;
 use crate::deploy::Deployments;
 use crate::error::{AppError, AppResult};
 use crate::lock::LockPolicy;
@@ -23,6 +24,8 @@ pub struct AppState {
     pub sync: SyncController,
     /// The in-app deployment in progress (§6.7).
     pub deploy: Deployments,
+    /// The AI assistant's running turns and tools (§13.1).
+    pub ai: AiManager,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -36,6 +39,7 @@ impl AppState {
             ssh: SshManager::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),
+            ai: AiManager::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

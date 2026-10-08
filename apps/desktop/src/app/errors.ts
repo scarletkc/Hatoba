@@ -23,6 +23,11 @@ export function errorMessage(t: T, e: unknown, ctx: { host?: string; port?: numb
       });
     case "cloudflare":
       return err.cf_code ? t("err.cloudflare_code", { code: err.cf_code }) : t("err.cloudflare");
+    case "ai":
+      // `detail` is the provider's own message (spec §13.2), which is not translated.
+      return err.http_status
+        ? t("err.ai_status", { status: err.http_status, detail: err.detail })
+        : t("err.ai", { detail: err.detail });
     default:
       return t(`err.${err.code}` as MessageKey);
   }

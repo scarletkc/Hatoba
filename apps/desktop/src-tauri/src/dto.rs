@@ -5,8 +5,11 @@
 //! Inputs may carry secrets one way (WebView → Rust), e.g. a new host password; they are never
 //! echoed back.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use zeroize::Zeroize;
 
 // ───────────────────────── Vault ─────────────────────────
 
@@ -424,6 +427,13 @@ pub enum ItemType {
     KnownHost,
     Forward,
     Snippet,
+    AiProvider,
+    SearchProvider,
+    AiConversation,
+    AiMessage,
+    Skill,
+    SkillFile,
+    McpServer,
     Settings,
 }
 
@@ -676,6 +686,16 @@ pub struct LocalPrefs {
     /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
     /// the device unless the user asks for it (spec §11, no telemetry).
     pub auto_update_check: bool,
+    /// AI-16: the permission mode new conversations start in on this device.
+    pub ai_permission_mode: AiPermissionMode,
+    /// AI-16: the user confirmed the first switch to bypass on this device.
+    pub ai_bypass_confirmed: bool,
+    /// AI-18: a turn pauses after this many tool calls.
+    pub ai_tool_call_limit: u32,
+    /// The AI panel is open (§9).
+    pub ai_panel_open: bool,
+    /// The AI panel's width in CSS pixels.
+    pub ai_panel_width: u32,
 }
 
 impl Default for LocalPrefs {
@@ -686,6 +706,11 @@ impl Default for LocalPrefs {
             density: Density::Regular,
             host_probe: true,
             auto_update_check: false,
+            ai_permission_mode: AiPermissionMode::Manual,
+            ai_bypass_confirmed: false,
+            ai_tool_call_limit: 25,
+            ai_panel_open: false,
+            ai_panel_width: 380,
         }
     }
 }
@@ -808,9 +833,380 @@ pub struct ForwardStatusEvent {
     pub error: Option<String>,
 }
 
+// ───────────────────────── AI assistant (§13) ─────────────────────────
+//
+// API keys travel one way, WebView → Rust: views say only `has_api_key`, and the inputs that
+// carry a key print it redacted and wipe it when dropped. Conversation content (messages, tool
+// inputs and results) is never logged (SEC-04), so the inputs that carry it print only lengths.
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProtocol {
+    ChatCompletions,
+    Anthropic,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub enum AiAuthHeader {
+    #[serde(rename = "x-api-key")]
+    XApiKey,
+    #[serde(rename = "authorization")]
+    Authorization,
+}
+
+/// A model of a provider (AI-03). Token limits are `None` when unknown.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiModel {
+    pub id: String,
+    pub name: String,
+    pub context_window: Option<u64>,
+    pub max_output_tokens: Option<u64>,
+}
+
+/// AI-01. The API key never reaches the WebView: only whether one is saved.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiProviderView {
+    pub id: String,
+    pub name: String,
+    pub protocol: AiProtocol,
+    pub base_url: String,
+    pub has_api_key: bool,
+    /// Only used by `anthropic`.
+    pub auth_header: AiAuthHeader,
+    pub models: Vec<AiModel>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct AiProviderInput {
+    /// `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one.
+    pub id: Option<String>,
+    pub name: String,
+    pub protocol: AiProtocol,
+    pub base_url: String,
+    /// `None` keeps the saved key (as HOST-08 does for passwords); `""` clears it.
+    pub api_key: Option<String>,
+    pub auth_header: AiAuthHeader,
+    pub models: Vec<AiModel>,
+}
+
+impl fmt::Debug for AiProviderInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiProviderInput")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("protocol", &self.protocol)
+            .field("base_url", &self.base_url)
+            .field("api_key", &redacted(self.api_key.as_deref()))
+            .field("auth_header", &self.auth_header)
+            .field("models", &self.models)
+            .finish()
+    }
+}
+
+impl Drop for AiProviderInput {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+    }
+}
+
+/// AI-04 Test Connection, also used for the search provider test.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTestFailure {
+    Auth,
+    Network,
+    UnknownModel,
+    InvalidUrl,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiTestResult {
+    pub ok: bool,
+    pub failure: Option<AiTestFailure>,
+    pub status: Option<u16>,
+    /// The provider's own message, when it sent one.
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchKind {
+    Brave,
+    Tavily,
+    Searxng,
+}
+
+/// The backend of `web_search` (AI-14).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SearchProviderView {
+    pub id: String,
+    pub kind: SearchKind,
+    /// The instance URL for SearXNG, `None` otherwise.
+    pub base_url: Option<String>,
+    pub has_api_key: bool,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct SearchProviderInput {
+    pub id: Option<String>,
+    pub kind: SearchKind,
+    pub base_url: Option<String>,
+    /// `None` keeps the saved key; `""` clears it.
+    pub api_key: Option<String>,
+}
+
+impl fmt::Debug for SearchProviderInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchProviderInput")
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .field("base_url", &self.base_url)
+            .field("api_key", &redacted(self.api_key.as_deref()))
+            .finish()
+    }
+}
+
+impl Drop for SearchProviderInput {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+    }
+}
+
+/// How an optional secret prints: whether it is there, never what it is.
+fn redacted(secret: Option<&str>) -> &'static str {
+    match secret {
+        None => "<keep>",
+        Some("") => "<empty>",
+        Some(_) => "<redacted>",
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiModelRef {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+/// The synced `Settings.ai` (§5.1).
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiSettingsView {
+    pub default_model: Option<AiModelRef>,
+    pub search_provider_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiPermissionMode {
+    Manual,
+    Bypass,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiConversationView {
+    pub id: String,
+    pub title: String,
+    /// The host the conversation last worked on.
+    pub host_id: Option<String>,
+    pub pinned: bool,
+    /// `entry_id` where the context sent to the model starts (AI-21).
+    pub context_start: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    /// The newest entry or conversation change, for sorting history (AI-23).
+    pub last_activity: i64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFinish {
+    Stop,
+    ToolCalls,
+    Length,
+    Refused,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiToolStatus {
+    Ok,
+    Error,
+    Rejected,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiToolCall {
+    pub id: String,
+    pub name: String,
+    /// JSON text.
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+pub struct AiUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub estimated: bool,
+}
+
+/// A stored conversation entry (§13.7), without the provider's raw message.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "role", rename_all = "snake_case")]
+pub enum AiEntryView {
+    User {
+        entry_id: String,
+        created_at: i64,
+        text: String,
+    },
+    Assistant {
+        entry_id: String,
+        created_at: i64,
+        provider_id: String,
+        model_id: String,
+        text: String,
+        reasoning: Option<String>,
+        tool_calls: Vec<AiToolCall>,
+        finish: AiFinish,
+        usage: Option<AiUsage>,
+    },
+    Tool {
+        entry_id: String,
+        created_at: i64,
+        tool_call_id: String,
+        status: AiToolStatus,
+        content: String,
+    },
+    Summary {
+        entry_id: String,
+        created_at: i64,
+        text: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiConversationDetail {
+    pub conversation: AiConversationView,
+    pub entries: Vec<AiEntryView>,
+    /// A turn of this conversation is running (its events go to the channel that started it).
+    pub running: bool,
+}
+
+/// What a request is made with. The frontend owns the tab, so it says what the turn may act on.
+#[derive(Debug, Clone, Deserialize, Type, PartialEq, Eq)]
+pub struct AiTurnContext {
+    pub provider_id: String,
+    pub model_id: String,
+    /// The tab's host; the next message moves the conversation to it (AI-09).
+    pub host_id: Option<String>,
+    /// A connected terminal tab is attached; `false` offers no tools (AI-09).
+    pub tab: bool,
+    /// MCP servers switched off for this conversation (AI-30, P2).
+    pub disabled_mcp_servers: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct AiSendInput {
+    /// `None` starts a new conversation, stored with this first message (AI-07).
+    pub conversation_id: Option<String>,
+    pub text: String,
+    pub context: AiTurnContext,
+}
+
+impl fmt::Debug for AiSendInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiSendInput")
+            .field("conversation_id", &self.conversation_id)
+            .field(
+                "text",
+                &format_args!("<{} chars>", self.text.chars().count()),
+            )
+            .field("context", &self.context)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiSendStarted {
+    pub conversation: AiConversationView,
+    pub user_entry: AiEntryView,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTurnEndReason {
+    Completed,
+    Length,
+    Refused,
+    Stopped,
+    Error,
+}
+
+/// Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AiTurnEvent {
+    RequestStarted,
+    Text {
+        delta: String,
+    },
+    Reasoning {
+        delta: String,
+    },
+    ToolCall {
+        id: String,
+        name: String,
+        arguments: String,
+    },
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+        estimated: bool,
+    },
+    /// An entry was stored: the assistant response, a tool result, or a cancelled result.
+    Entry {
+        entry: AiEntryView,
+    },
+    /// One response finished. With `tool_calls`, Rust waits for every call's result.
+    Done {
+        finish: AiFinish,
+    },
+    Error {
+        status: Option<u16>,
+        message: String,
+    },
+    TurnEnded {
+        reason: AiTurnEndReason,
+    },
+}
+
+/// A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17).
+#[derive(Clone, Deserialize, Type)]
+pub struct AiToolResultInput {
+    pub status: AiToolStatus,
+    pub content: String,
+    /// AI-17 Edit: the arguments the user changed the call to, so the result tells the model.
+    pub edited_arguments: Option<String>,
+}
+
+impl fmt::Debug for AiToolResultInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiToolResultInput")
+            .field("status", &self.status)
+            .field(
+                "content",
+                &format_args!("<{} chars>", self.content.chars().count()),
+            )
+            .field("edited", &self.edited_arguments.is_some())
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::LocalPrefs;
+    use super::{AiPermissionMode, LocalPrefs};
 
     #[test]
     fn prefs_from_an_older_version_leave_the_update_check_off() {
@@ -819,5 +1215,29 @@ mod tests {
         assert!(!prefs.host_probe);
         let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":true}"#);
         assert!(prefs.auto_update_check);
+    }
+
+    #[test]
+    fn ai_prefs_default_to_manual_and_unknown_values_fall_back() {
+        let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
+        assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
+        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (25, 380));
+
+        let prefs = LocalPrefs::from_stored(
+            r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
+                "ai_panel_open":true,"ai_panel_width":520}"#,
+        );
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
+        assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
+        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (40, 520));
+
+        // A mode a newer build added, or a broken value, is read as the default.
+        let prefs = LocalPrefs::from_stored(
+            r#"{"ai_permission_mode":"auto","ai_tool_call_limit":-1,"host_probe":false}"#,
+        );
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
+        assert_eq!(prefs.ai_tool_call_limit, 25);
+        assert!(!prefs.host_probe);
     }
 }

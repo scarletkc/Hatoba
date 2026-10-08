@@ -7,7 +7,14 @@
 //! Every struct tolerates unknown fields and missing fields (`#[serde(default)]`) so devices on
 //! different app versions can read each other's data. Secret-bearing types implement `Debug`
 //! by hand so they can never leak into logs, and wipe themselves when dropped.
+//!
+//! The AI assistant adds seven item types (spec §5.1, §13): [`AiProvider`] and [`SearchProvider`]
+//! hold API keys, [`McpServer`] holds environment and header values, and [`AiMessage`] holds a
+//! slice of conversation content (SEC-04). All four have a redacting `Debug`. An `ai_message`'s
+//! `data` is only held while an entry is being read or written: the in-memory item map keeps the
+//! header alone (see [`Item::strip_message_data`]).
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -272,6 +279,354 @@ pub struct Snippet {
     pub updated_at: i64,
 }
 
+/// Wire protocol of an [`AiProvider`] (spec §13.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProtocol {
+    /// Anthropic Messages (`/v1/messages`).
+    Anthropic,
+    /// OpenAI-style Chat Completions. Also what a missing or unknown future value decodes to
+    /// (`serde(other)` must be last).
+    #[default]
+    #[serde(other)]
+    ChatCompletions,
+}
+
+impl AiProtocol {
+    /// The `protocol` string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Anthropic => "anthropic",
+            Self::ChatCompletions => "chat_completions",
+        }
+    }
+}
+
+/// Which header carries an Anthropic provider's key (spec §13.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiAuthHeader {
+    /// `Authorization: Bearer <key>`.
+    Authorization,
+    /// `x-api-key: <key>`. Also what a missing or unknown future value decodes to.
+    #[default]
+    #[serde(other)]
+    XApiKey,
+}
+
+impl AiAuthHeader {
+    /// The `auth_header` string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Authorization => "authorization",
+            Self::XApiKey => "x-api-key",
+        }
+    }
+}
+
+/// A model offered by an [`AiProvider`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiModel {
+    /// Model id sent in requests.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Context window in tokens, `None` when unknown.
+    pub context_window: Option<u64>,
+    /// Output limit in tokens, `None` when unknown.
+    pub max_output_tokens: Option<u64>,
+}
+
+/// An AI model provider (P1, spec §13.2). The API key is wiped on drop and never printed.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiProvider {
+    /// Display name.
+    pub name: String,
+    /// Wire protocol.
+    #[zeroize(skip)]
+    pub protocol: AiProtocol,
+    /// Base URL, e.g. `https://api.openai.com/v1` or `https://api.anthropic.com`.
+    pub base_url: String,
+    /// The API key (secret); empty when the server needs none. Never sent to the front-end.
+    pub api_key: Zeroizing<String>,
+    /// Header that carries the key (Anthropic protocol only).
+    #[zeroize(skip)]
+    pub auth_header: AiAuthHeader,
+    /// Models the user can pick.
+    pub models: Vec<AiModel>,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+impl fmt::Debug for AiProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiProvider")
+            .field("name", &self.name)
+            .field("protocol", &self.protocol)
+            .field("base_url", &self.base_url)
+            .field("api_key", &"<redacted>")
+            .field("auth_header", &self.auth_header)
+            .field("models", &self.models)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
+/// Which web search service a [`SearchProvider`] talks to (spec §13.4).
+///
+/// Unlike the AI enums, an unknown future value is not mapped to a default: sending the key to
+/// the wrong service would be worse than leaving the item unreadable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchKind {
+    /// Brave Search API.
+    #[default]
+    Brave,
+    /// Tavily.
+    Tavily,
+    /// A SearXNG instance.
+    Searxng,
+}
+
+impl SearchKind {
+    /// The `kind` string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Brave => "brave",
+            Self::Tavily => "tavily",
+            Self::Searxng => "searxng",
+        }
+    }
+}
+
+/// The backend of the `web_search` tool (P1, spec §13.4). The API key is wiped on drop and never
+/// printed.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct SearchProvider {
+    /// Search service.
+    #[zeroize(skip)]
+    pub kind: SearchKind,
+    /// The instance URL for SearXNG, `None` otherwise.
+    pub base_url: Option<String>,
+    /// The API key (secret); empty for SearXNG.
+    pub api_key: Zeroizing<String>,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+impl fmt::Debug for SearchProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchProvider")
+            .field("kind", &self.kind)
+            .field("base_url", &self.base_url)
+            .field("api_key", &"<redacted>")
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
+/// An AI conversation (P1, spec §13.7). Its entries live in [`AiMessage`] items.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiConversation {
+    /// Title; starts as the first line of the first message, cut to 60 characters.
+    pub title: String,
+    /// The host the conversation last worked on.
+    pub host_id: Option<String>,
+    /// Pinned to the top of the history.
+    pub pinned: bool,
+    /// `entry_id` where the context sent to the model starts (AI-21).
+    pub context_start: Option<String>,
+    /// Creation time, Unix ms.
+    pub created_at: i64,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+/// One part of a conversation entry (P1, spec §13.7). Entries are written once and never change,
+/// so they never conflict; they are ordered by `entry_id`.
+///
+/// `data` is this part's slice of the entry's JSON, so it is conversation content (SEC-04): it is
+/// not printed by `Debug` and not kept in the item map (see [`Item::strip_message_data`]).
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiMessage {
+    /// The [`AiConversation`] the entry belongs to.
+    pub conversation_id: String,
+    /// UUIDv7 that orders the entries of a conversation.
+    pub entry_id: String,
+    /// 0-based index of this part.
+    pub part: u32,
+    /// Number of parts of the entry.
+    pub part_count: u32,
+    /// This part's slice of the entry's JSON (conversation content).
+    pub data: String,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+impl fmt::Debug for AiMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiMessage")
+            .field("conversation_id", &self.conversation_id)
+            .field("entry_id", &self.entry_id)
+            .field("part", &self.part)
+            .field("part_count", &self.part_count)
+            .field(
+                "data",
+                &format_args!("<{} bytes redacted>", self.data.len()),
+            )
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
+/// A skill in the Agent Skills format (P2, spec §13.8); its text lives in [`SkillFile`] items.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct Skill {
+    /// 1 to 64 lowercase letters, digits and hyphens.
+    pub name: String,
+    /// At most 1,024 characters.
+    pub description: String,
+    /// Other `SKILL.md` frontmatter fields, kept for export.
+    #[zeroize(skip)]
+    pub frontmatter: serde_json::Map<String, serde_json::Value>,
+    /// Offered to the assistant.
+    pub enabled: bool,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+/// One text file of a [`Skill`] (P2, spec §13.8).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct SkillFile {
+    /// The [`Skill`] it belongs to.
+    pub skill_id: String,
+    /// `SKILL.md` (its body, without frontmatter) or a relative path such as `references/nginx.md`.
+    pub path: String,
+    /// UTF-8 text, at most 32 KB.
+    pub content: String,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+/// How an [`McpServer`] is reached (spec §13.9). The environment and header values are secrets:
+/// they are wiped on drop and never printed.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpTransport {
+    /// A child process started on this device.
+    Stdio {
+        /// Executable, looked up on `PATH`.
+        #[serde(default)]
+        command: String,
+        /// Arguments.
+        #[serde(default)]
+        args: Vec<String>,
+        /// Environment variables (values are secrets).
+        #[serde(default)]
+        env: BTreeMap<String, Zeroizing<String>>,
+    },
+    /// A Streamable HTTP endpoint.
+    Http {
+        /// Endpoint URL.
+        #[serde(default)]
+        url: String,
+        /// Request headers (values are secrets).
+        #[serde(default)]
+        headers: BTreeMap<String, Zeroizing<String>>,
+    },
+}
+
+impl Default for McpTransport {
+    fn default() -> Self {
+        Self::Stdio {
+            command: String::new(),
+            args: Vec::new(),
+            env: BTreeMap::new(),
+        }
+    }
+}
+
+impl McpTransport {
+    /// The `kind` string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::Stdio { .. } => "stdio",
+            Self::Http { .. } => "http",
+        }
+    }
+}
+
+impl Zeroize for McpTransport {
+    fn zeroize(&mut self) {
+        // `zeroize` has no impl for maps: taking the map out and dropping its entries one by one
+        // wipes every `Zeroizing` value.
+        fn wipe(map: &mut BTreeMap<String, Zeroizing<String>>) {
+            for (mut name, value) in std::mem::take(map) {
+                name.zeroize();
+                drop(value);
+            }
+        }
+        match self {
+            Self::Stdio { command, args, env } => {
+                command.zeroize();
+                args.zeroize();
+                wipe(env);
+            }
+            Self::Http { url, headers } => {
+                url.zeroize();
+                wipe(headers);
+            }
+        }
+    }
+}
+
+impl fmt::Debug for McpTransport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Names only: the values are what is secret.
+        fn redacted(map: &BTreeMap<String, Zeroizing<String>>) -> Vec<(&String, &'static str)> {
+            map.keys().map(|k| (k, "<redacted>")).collect()
+        }
+        match self {
+            Self::Stdio { command, args, env } => f
+                .debug_struct("Stdio")
+                .field("command", command)
+                .field("args", args)
+                .field("env", &redacted(env))
+                .finish(),
+            Self::Http { url, headers } => f
+                .debug_struct("Http")
+                .field("url", url)
+                .field("headers", &redacted(headers))
+                .finish(),
+        }
+    }
+}
+
+/// An MCP server that adds tools to the assistant (P2, spec §13.9).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct McpServer {
+    /// Display name; used in tool names.
+    pub name: String,
+    /// How to reach it.
+    pub transport: McpTransport,
+    /// Ask before every call, even in bypass mode (AI-31).
+    pub always_ask: bool,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
 /// Terminal colour theme preference.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -388,6 +743,26 @@ fn record<T: PartialEq>(field: &mut Option<T>, value: T, default: T) {
     }
 }
 
+/// A model picked by provider and model id.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiModelRef {
+    /// Id of the [`AiProvider`] item.
+    pub provider_id: String,
+    /// Model id within that provider.
+    pub model_id: String,
+}
+
+/// AI assistant settings that sync (spec §5.1).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiSettings {
+    /// The model new conversations start with.
+    pub default_model: Option<AiModelRef>,
+    /// Id of the [`SearchProvider`] item behind `web_search`.
+    pub search_provider_id: Option<String>,
+}
+
 /// The user's synced settings. There is exactly one, with the fixed id [`SETTINGS_ID`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
@@ -398,6 +773,8 @@ pub struct Settings {
     pub auto_lock_minutes: u32,
     /// Disconnect SSH sessions when the vault locks.
     pub lock_disconnects_sessions: bool,
+    /// AI assistant settings.
+    pub ai: AiSettings,
     /// Last modification, Unix ms.
     pub updated_at: i64,
 }
@@ -408,13 +785,15 @@ impl Default for Settings {
             terminal: TerminalSettings::default(),
             auto_lock_minutes: 15,
             lock_disconnects_sessions: false,
+            ai: AiSettings::default(),
             updated_at: 0,
         }
     }
 }
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
-/// "forward" | "snippet" | "settings"`.
+/// "forward" | "snippet" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" |
+/// "skill" | "skill_file" | "mcp_server" | "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
@@ -430,6 +809,20 @@ pub enum Item {
     Forward(PortForward),
     /// A command snippet.
     Snippet(Snippet),
+    /// An AI model provider.
+    AiProvider(AiProvider),
+    /// The web search backend.
+    SearchProvider(SearchProvider),
+    /// An AI conversation.
+    AiConversation(AiConversation),
+    /// One part of a conversation entry.
+    AiMessage(AiMessage),
+    /// An assistant skill.
+    Skill(Skill),
+    /// A text file of a skill.
+    SkillFile(SkillFile),
+    /// An MCP server.
+    McpServer(McpServer),
     /// The settings singleton.
     Settings(Settings),
 }
@@ -445,6 +838,13 @@ impl Item {
             Self::KnownHost(_) => "known_host",
             Self::Forward(_) => "forward",
             Self::Snippet(_) => "snippet",
+            Self::AiProvider(_) => "ai_provider",
+            Self::SearchProvider(_) => "search_provider",
+            Self::AiConversation(_) => "ai_conversation",
+            Self::AiMessage(_) => "ai_message",
+            Self::Skill(_) => "skill",
+            Self::SkillFile(_) => "skill_file",
+            Self::McpServer(_) => "mcp_server",
             Self::Settings(_) => "settings",
         }
     }
@@ -459,6 +859,13 @@ impl Item {
             Self::KnownHost(i) => i.updated_at,
             Self::Forward(i) => i.updated_at,
             Self::Snippet(i) => i.updated_at,
+            Self::AiProvider(i) => i.updated_at,
+            Self::SearchProvider(i) => i.updated_at,
+            Self::AiConversation(i) => i.updated_at,
+            Self::AiMessage(i) => i.updated_at,
+            Self::Skill(i) => i.updated_at,
+            Self::SkillFile(i) => i.updated_at,
+            Self::McpServer(i) => i.updated_at,
             Self::Settings(i) => i.updated_at,
         }
     }
@@ -472,6 +879,13 @@ impl Item {
             Self::KnownHost(i) => i.updated_at = at,
             Self::Forward(i) => i.updated_at = at,
             Self::Snippet(i) => i.updated_at = at,
+            Self::AiProvider(i) => i.updated_at = at,
+            Self::SearchProvider(i) => i.updated_at = at,
+            Self::AiConversation(i) => i.updated_at = at,
+            Self::AiMessage(i) => i.updated_at = at,
+            Self::Skill(i) => i.updated_at = at,
+            Self::SkillFile(i) => i.updated_at = at,
+            Self::McpServer(i) => i.updated_at = at,
             Self::Settings(i) => i.updated_at = at,
         }
     }
@@ -486,6 +900,13 @@ impl Item {
             Self::KnownHost(i) => format!("{}:{}", i.host, i.port),
             Self::Forward(i) => format!("{}:{}", i.bind_address, i.bind_port),
             Self::Snippet(i) => i.name.clone(),
+            Self::AiProvider(i) => i.name.clone(),
+            Self::SearchProvider(i) => i.kind.as_str().to_owned(),
+            Self::AiConversation(i) => i.title.clone(),
+            Self::AiMessage(_) => "message".to_owned(),
+            Self::Skill(i) => i.name.clone(),
+            Self::SkillFile(i) => i.path.clone(),
+            Self::McpServer(i) => i.name.clone(),
             Self::Settings(_) => "settings".to_owned(),
         }
     }
@@ -546,6 +967,76 @@ impl Item {
         }
     }
 
+    /// The AI provider, if this is one.
+    #[must_use]
+    pub fn as_ai_provider(&self) -> Option<&AiProvider> {
+        if let Self::AiProvider(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    /// The search provider, if this is one.
+    #[must_use]
+    pub fn as_search_provider(&self) -> Option<&SearchProvider> {
+        if let Self::SearchProvider(p) = self {
+            Some(p)
+        } else {
+            None
+        }
+    }
+
+    /// The AI conversation, if this is one.
+    #[must_use]
+    pub fn as_ai_conversation(&self) -> Option<&AiConversation> {
+        if let Self::AiConversation(c) = self {
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    /// The conversation message part, if this is one.
+    #[must_use]
+    pub fn as_ai_message(&self) -> Option<&AiMessage> {
+        if let Self::AiMessage(m) = self {
+            Some(m)
+        } else {
+            None
+        }
+    }
+
+    /// The skill, if this is one.
+    #[must_use]
+    pub fn as_skill(&self) -> Option<&Skill> {
+        if let Self::Skill(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    /// The skill file, if this is one.
+    #[must_use]
+    pub fn as_skill_file(&self) -> Option<&SkillFile> {
+        if let Self::SkillFile(f) = self {
+            Some(f)
+        } else {
+            None
+        }
+    }
+
+    /// The MCP server, if this is one.
+    #[must_use]
+    pub fn as_mcp_server(&self) -> Option<&McpServer> {
+        if let Self::McpServer(m) = self {
+            Some(m)
+        } else {
+            None
+        }
+    }
+
     /// The settings, if this is the settings item.
     #[must_use]
     pub fn as_settings(&self) -> Option<&Settings> {
@@ -566,9 +1057,27 @@ impl Item {
             Self::Group(i) => i.name.push_str(suffix),
             Self::Key(i) => i.name.push_str(suffix),
             Self::Snippet(i) => i.name.push_str(suffix),
-            Self::KnownHost(_) | Self::Forward(_) | Self::Settings(_) => {}
+            Self::AiProvider(i) => i.name.push_str(suffix),
+            Self::Skill(i) => i.name.push_str(suffix),
+            Self::McpServer(i) => i.name.push_str(suffix),
+            Self::KnownHost(_)
+            | Self::Forward(_)
+            | Self::SearchProvider(_)
+            | Self::AiConversation(_)
+            | Self::AiMessage(_)
+            | Self::SkillFile(_)
+            | Self::Settings(_) => {}
         }
         copy
+    }
+
+    /// Drops the `data` of an `ai_message`, wiping it first: the item map keeps only the header
+    /// of a message part, because a long history must not stay in memory (spec §13.7). Items of
+    /// every other type are left alone.
+    pub fn strip_message_data(&mut self) {
+        if let Self::AiMessage(m) = self {
+            std::mem::take(&mut m.data).zeroize();
+        }
     }
 
     /// Serialises to the plaintext JSON that gets sealed. The buffer is wiped on drop.
@@ -577,8 +1086,17 @@ impl Item {
     /// [`Error::Json`] if serialisation fails (cannot happen for these types in practice).
     pub fn to_plaintext(&self) -> Result<Zeroizing<Vec<u8>>> {
         // Pre-size so typical items (even a 4096-bit RSA key) never reallocate, which would
-        // leave an un-wiped copy of the plaintext in freed memory.
-        let mut buf = Zeroizing::new(Vec::with_capacity(16 * 1024));
+        // leave an un-wiped copy of the plaintext in freed memory. A message part can be larger
+        // than that and holds conversation content, so its exact size is measured first.
+        let capacity = match self {
+            Self::AiMessage(_) => {
+                let mut counter = ByteCounter(0);
+                serde_json::to_writer(&mut counter, self)?;
+                counter.0
+            }
+            _ => 16 * 1024,
+        };
+        let mut buf = Zeroizing::new(Vec::with_capacity(capacity));
         serde_json::to_writer(&mut *buf, self)?;
         Ok(buf)
     }
@@ -589,6 +1107,20 @@ impl Item {
     /// [`Error::Format`] for invalid JSON or an unknown `type` (e.g. written by a newer app).
     pub fn from_plaintext(bytes: &[u8]) -> Result<Self> {
         serde_json::from_slice(bytes).map_err(|_| Error::Format("unreadable item".into()))
+    }
+}
+
+/// An [`io::Write`](std::io::Write) that only counts.
+struct ByteCounter(usize);
+
+impl std::io::Write for ByteCounter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 += buf.len();
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -641,6 +1173,19 @@ mod tests {
             (Item::KnownHost(KnownHost::default()), "known_host"),
             (Item::Forward(PortForward::default()), "forward"),
             (Item::Snippet(Snippet::default()), "snippet"),
+            (Item::AiProvider(AiProvider::default()), "ai_provider"),
+            (
+                Item::SearchProvider(SearchProvider::default()),
+                "search_provider",
+            ),
+            (
+                Item::AiConversation(AiConversation::default()),
+                "ai_conversation",
+            ),
+            (Item::AiMessage(AiMessage::default()), "ai_message"),
+            (Item::Skill(Skill::default()), "skill"),
+            (Item::SkillFile(SkillFile::default()), "skill_file"),
+            (Item::McpServer(McpServer::default()), "mcp_server"),
             (Item::Settings(Settings::default()), "settings"),
         ];
         for (item, tag) in items {
@@ -650,6 +1195,358 @@ mod tests {
             let back = Item::from_plaintext(&item.to_plaintext().unwrap()).unwrap();
             assert_eq!(back, item);
         }
+    }
+
+    #[test]
+    fn ai_items_match_the_spec_shape() {
+        let provider = Item::AiProvider(AiProvider {
+            name: "Anthropic".into(),
+            protocol: AiProtocol::Anthropic,
+            base_url: "https://api.anthropic.com".into(),
+            api_key: Zeroizing::new("sk-ant-key".into()),
+            auth_header: AiAuthHeader::Authorization,
+            models: vec![
+                AiModel {
+                    id: "claude-x".into(),
+                    name: "Claude X".into(),
+                    context_window: Some(200_000),
+                    max_output_tokens: None,
+                },
+                AiModel::default(),
+            ],
+            updated_at: 7,
+        });
+        assert_eq!(
+            serde_json::to_value(&provider).unwrap(),
+            json!({
+                "type": "ai_provider",
+                "name": "Anthropic",
+                "protocol": "anthropic",
+                "base_url": "https://api.anthropic.com",
+                "api_key": "sk-ant-key",
+                "auth_header": "authorization",
+                "models": [
+                    {"id": "claude-x", "name": "Claude X",
+                     "context_window": 200_000, "max_output_tokens": null},
+                    {"id": "", "name": "", "context_window": null, "max_output_tokens": null}
+                ],
+                "updated_at": 7
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Item::AiProvider(AiProvider::default())).unwrap(),
+            json!({
+                "type": "ai_provider", "name": "", "protocol": "chat_completions",
+                "base_url": "", "api_key": "", "auth_header": "x-api-key",
+                "models": [], "updated_at": 0
+            })
+        );
+
+        let search = Item::SearchProvider(SearchProvider {
+            kind: SearchKind::Searxng,
+            base_url: Some("https://searx.example.org".into()),
+            api_key: Zeroizing::new(String::new()),
+            updated_at: 8,
+        });
+        assert_eq!(
+            serde_json::to_value(&search).unwrap(),
+            json!({
+                "type": "search_provider", "kind": "searxng",
+                "base_url": "https://searx.example.org", "api_key": "", "updated_at": 8
+            })
+        );
+        for (kind, text) in [
+            (SearchKind::Brave, "brave"),
+            (SearchKind::Tavily, "tavily"),
+            (SearchKind::Searxng, "searxng"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), text);
+            assert_eq!(kind.as_str(), text);
+        }
+
+        let conversation = Item::AiConversation(AiConversation {
+            title: "Why is nginx down".into(),
+            host_id: Some("h1".into()),
+            pinned: true,
+            context_start: Some("e1".into()),
+            created_at: 5,
+            updated_at: 9,
+        });
+        assert_eq!(
+            serde_json::to_value(&conversation).unwrap(),
+            json!({
+                "type": "ai_conversation", "title": "Why is nginx down", "host_id": "h1",
+                "pinned": true, "context_start": "e1", "created_at": 5, "updated_at": 9
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Item::AiConversation(AiConversation::default())).unwrap(),
+            json!({
+                "type": "ai_conversation", "title": "", "host_id": null, "pinned": false,
+                "context_start": null, "created_at": 0, "updated_at": 0
+            })
+        );
+
+        let message = Item::AiMessage(AiMessage {
+            conversation_id: "c1".into(),
+            entry_id: "e1".into(),
+            part: 1,
+            part_count: 3,
+            data: r#"{"role":"user"}"#.into(),
+            updated_at: 10,
+        });
+        assert_eq!(
+            serde_json::to_value(&message).unwrap(),
+            json!({
+                "type": "ai_message", "conversation_id": "c1", "entry_id": "e1",
+                "part": 1, "part_count": 3, "data": r#"{"role":"user"}"#, "updated_at": 10
+            })
+        );
+
+        let mut frontmatter = serde_json::Map::new();
+        frontmatter.insert("license".into(), json!("MIT"));
+        frontmatter.insert("metadata".into(), json!({"author": "x", "tags": [1, 2]}));
+        let skill = Item::Skill(Skill {
+            name: "nginx-ops".into(),
+            description: "Operate nginx".into(),
+            frontmatter,
+            enabled: true,
+            updated_at: 11,
+        });
+        assert_eq!(
+            serde_json::to_value(&skill).unwrap(),
+            json!({
+                "type": "skill", "name": "nginx-ops", "description": "Operate nginx",
+                "frontmatter": {"license": "MIT", "metadata": {"author": "x", "tags": [1, 2]}},
+                "enabled": true, "updated_at": 11
+            })
+        );
+
+        let file = Item::SkillFile(SkillFile {
+            skill_id: "s1".into(),
+            path: "references/nginx.md".into(),
+            content: "# nginx".into(),
+            updated_at: 12,
+        });
+        assert_eq!(
+            serde_json::to_value(&file).unwrap(),
+            json!({
+                "type": "skill_file", "skill_id": "s1", "path": "references/nginx.md",
+                "content": "# nginx", "updated_at": 12
+            })
+        );
+
+        let stdio = Item::McpServer(McpServer {
+            name: "fs".into(),
+            transport: McpTransport::Stdio {
+                command: "npx".into(),
+                args: vec!["-y".into(), "server-fs".into()],
+                env: BTreeMap::from([("TOKEN".to_owned(), Zeroizing::new("t0k".to_owned()))]),
+            },
+            always_ask: true,
+            updated_at: 13,
+        });
+        assert_eq!(
+            serde_json::to_value(&stdio).unwrap(),
+            json!({
+                "type": "mcp_server", "name": "fs",
+                "transport": {"kind": "stdio", "command": "npx", "args": ["-y", "server-fs"],
+                              "env": {"TOKEN": "t0k"}},
+                "always_ask": true, "updated_at": 13
+            })
+        );
+        let http = Item::McpServer(McpServer {
+            name: "remote".into(),
+            transport: McpTransport::Http {
+                url: "https://mcp.example.org/mcp".into(),
+                headers: BTreeMap::from([(
+                    "Authorization".to_owned(),
+                    Zeroizing::new("Bearer b".to_owned()),
+                )]),
+            },
+            always_ask: false,
+            updated_at: 14,
+        });
+        assert_eq!(
+            serde_json::to_value(&http).unwrap(),
+            json!({
+                "type": "mcp_server", "name": "remote",
+                "transport": {"kind": "http", "url": "https://mcp.example.org/mcp",
+                              "headers": {"Authorization": "Bearer b"}},
+                "always_ask": false, "updated_at": 14
+            })
+        );
+
+        let mut settings = Settings::default();
+        settings.ai.default_model = Some(AiModelRef {
+            provider_id: "p1".into(),
+            model_id: "m1".into(),
+        });
+        settings.ai.search_provider_id = Some("sp1".into());
+        let value = serde_json::to_value(Item::Settings(settings)).unwrap();
+        assert_eq!(
+            value["ai"],
+            json!({
+                "default_model": {"provider_id": "p1", "model_id": "m1"},
+                "search_provider_id": "sp1"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Item::Settings(Settings::default())).unwrap()["ai"],
+            json!({"default_model": null, "search_provider_id": null})
+        );
+
+        // Every shape reads back as written.
+        for item in [
+            provider,
+            search,
+            conversation,
+            message,
+            skill,
+            file,
+            stdio,
+            http,
+        ] {
+            let back = Item::from_plaintext(&item.to_plaintext().unwrap()).unwrap();
+            assert_eq!(back, item);
+        }
+    }
+
+    #[test]
+    fn ai_items_tolerate_unknown_and_missing_fields() {
+        let read = |value: serde_json::Value| -> Item { serde_json::from_value(value).unwrap() };
+
+        // Settings written before the AI assistant existed have no `ai`.
+        let old = read(json!({"type": "settings", "auto_lock_minutes": 5}));
+        assert_eq!(old.as_settings().unwrap().ai, AiSettings::default());
+
+        // A missing or unknown protocol / auth header reads as the default.
+        let provider = read(json!({
+            "type": "ai_provider", "name": "p", "protocol": "grpc", "auth_header": "cookie",
+            "base_url": "https://x", "future": [1],
+            "models": [{"id": "m", "extra": true}]
+        }));
+        let provider = provider.as_ai_provider().unwrap();
+        assert_eq!(provider.protocol, AiProtocol::ChatCompletions);
+        assert_eq!(provider.auth_header, AiAuthHeader::XApiKey);
+        assert_eq!(provider.models[0].id, "m");
+        assert_eq!(provider.models[0].context_window, None);
+        assert_eq!(provider.api_key.as_str(), "");
+        let bare = read(json!({"type": "ai_provider"}));
+        assert_eq!(
+            bare.as_ai_provider().unwrap().protocol,
+            AiProtocol::ChatCompletions
+        );
+
+        // A search kind from the future is not guessed: the item is unreadable instead.
+        assert!(matches!(
+            Item::from_plaintext(br#"{"type":"search_provider","kind":"kagi"}"#),
+            Err(Error::Format(_))
+        ));
+        assert_eq!(
+            read(json!({"type": "search_provider"}))
+                .as_search_provider()
+                .unwrap()
+                .kind,
+            SearchKind::Brave
+        );
+
+        // MCP transports tolerate missing fields; their kind is required to be known.
+        let mcp = read(json!({
+            "type": "mcp_server", "name": "m", "extra": 1,
+            "transport": {"kind": "http", "url": "https://m", "future": 1}
+        }));
+        assert_eq!(
+            mcp.as_mcp_server().unwrap().transport,
+            McpTransport::Http {
+                url: "https://m".into(),
+                headers: BTreeMap::new()
+            }
+        );
+        let stdio = read(json!({"type": "mcp_server", "transport": {"kind": "stdio"}}));
+        assert_eq!(
+            stdio.as_mcp_server().unwrap().transport,
+            McpTransport::default()
+        );
+        assert!(
+            Item::from_plaintext(br#"{"type":"mcp_server","transport":{"kind":"carrier-pigeon"}}"#)
+                .is_err()
+        );
+        let missing = read(json!({"type": "mcp_server"}));
+        assert_eq!(
+            missing.as_mcp_server().unwrap().transport.kind_str(),
+            "stdio"
+        );
+
+        let skill = read(json!({"type": "skill", "name": "s", "unknown": {}}));
+        assert!(skill.as_skill().unwrap().frontmatter.is_empty());
+        assert!(!skill.as_skill().unwrap().enabled);
+    }
+
+    #[test]
+    fn ai_item_names_and_accessors() {
+        let provider = Item::AiProvider(AiProvider {
+            name: "Anthropic".into(),
+            updated_at: 3,
+            ..AiProvider::default()
+        });
+        assert_eq!(provider.display_name(), "Anthropic");
+        assert_eq!(provider.updated_at(), 3);
+        assert_eq!(
+            provider.with_name_suffix(" (copy)").display_name(),
+            "Anthropic (copy)"
+        );
+        assert!(provider.as_ai_provider().is_some() && provider.as_host().is_none());
+        assert!(!provider.is_key());
+
+        let search = Item::SearchProvider(SearchProvider {
+            kind: SearchKind::Tavily,
+            ..SearchProvider::default()
+        });
+        assert_eq!(search.display_name(), "tavily");
+        assert_eq!(search.with_name_suffix(" (copy)"), search);
+        assert!(search.as_search_provider().is_some());
+
+        let mut conversation = Item::AiConversation(AiConversation {
+            title: "Disk full".into(),
+            ..AiConversation::default()
+        });
+        assert_eq!(conversation.display_name(), "Disk full");
+        conversation.set_updated_at(99);
+        assert_eq!(conversation.updated_at(), 99);
+        assert!(conversation.as_ai_conversation().is_some());
+
+        let mut message = Item::AiMessage(AiMessage {
+            data: "x".into(),
+            ..AiMessage::default()
+        });
+        assert_eq!(message.display_name(), "message");
+        message.set_updated_at(4);
+        assert_eq!(message.updated_at(), 4);
+        assert_eq!(message.as_ai_message().unwrap().data, "x");
+        message.strip_message_data();
+        assert_eq!(message.as_ai_message().unwrap().data, "");
+
+        let mut skill = Item::Skill(Skill {
+            name: "nginx".into(),
+            ..Skill::default()
+        });
+        skill.strip_message_data(); // a no-op for every other type
+        assert_eq!(skill.display_name(), "nginx");
+        assert!(skill.as_skill().is_some());
+        let file = Item::SkillFile(SkillFile {
+            path: "SKILL.md".into(),
+            ..SkillFile::default()
+        });
+        assert_eq!(file.display_name(), "SKILL.md");
+        assert!(file.as_skill_file().is_some());
+        let mcp = Item::McpServer(McpServer {
+            name: "fs".into(),
+            ..McpServer::default()
+        });
+        assert_eq!(mcp.display_name(), "fs");
+        assert_eq!(mcp.with_name_suffix("!").display_name(), "fs!");
+        assert!(mcp.as_mcp_server().is_some());
     }
 
     #[test]
@@ -816,6 +1713,60 @@ mod tests {
         let dbg = format!("{key:?}");
         assert!(!dbg.contains("SECRETBODY"));
         assert!(!dbg.contains("pass-phrase-secret"));
+
+        let provider = Item::AiProvider(AiProvider {
+            name: "openai".into(),
+            api_key: Zeroizing::new("sk-provider-secret".into()),
+            ..AiProvider::default()
+        });
+        let search = Item::SearchProvider(SearchProvider {
+            api_key: Zeroizing::new("search-api-secret".into()),
+            ..SearchProvider::default()
+        });
+        let stdio = Item::McpServer(McpServer {
+            name: "fs".into(),
+            transport: McpTransport::Stdio {
+                command: "npx".into(),
+                args: vec!["server".into()],
+                env: BTreeMap::from([(
+                    "API_TOKEN".to_owned(),
+                    Zeroizing::new("env-secret".to_owned()),
+                )]),
+            },
+            ..McpServer::default()
+        });
+        let http = Item::McpServer(McpServer {
+            transport: McpTransport::Http {
+                url: "https://mcp.example.org".into(),
+                headers: BTreeMap::from([(
+                    "Authorization".to_owned(),
+                    Zeroizing::new("header-secret".to_owned()),
+                )]),
+            },
+            ..McpServer::default()
+        });
+        let message = Item::AiMessage(AiMessage {
+            entry_id: "e1".into(),
+            data: "conversation-secret".into(),
+            ..AiMessage::default()
+        });
+        for (item, secret) in [
+            (&provider, "sk-provider-secret"),
+            (&search, "search-api-secret"),
+            (&stdio, "env-secret"),
+            (&http, "header-secret"),
+            (&message, "conversation-secret"),
+        ] {
+            let dbg = format!("{item:?}");
+            assert!(!dbg.contains(secret), "{dbg}");
+            let pretty = format!("{item:#?}");
+            assert!(!pretty.contains(secret), "{pretty}");
+        }
+        // What is not secret stays readable.
+        assert!(format!("{provider:?}").contains("openai"));
+        assert!(format!("{stdio:?}").contains("API_TOKEN"));
+        assert!(format!("{http:?}").contains("https://mcp.example.org"));
+        assert!(format!("{message:?}").contains("e1"));
     }
 
     #[test]
@@ -831,5 +1782,63 @@ mod tests {
         assert!(key.private_key.is_empty());
         assert!(key.passphrase.is_none());
         assert!(key.name.is_empty());
+
+        let mut provider = Item::AiProvider(AiProvider {
+            name: "n".into(),
+            api_key: Zeroizing::new("KEY".into()),
+            models: vec![AiModel {
+                id: "m".into(),
+                ..AiModel::default()
+            }],
+            ..AiProvider::default()
+        });
+        provider.zeroize();
+        let provider = provider.as_ai_provider().unwrap();
+        assert!(provider.api_key.is_empty() && provider.name.is_empty());
+        assert!(provider.models.is_empty());
+
+        let mut search = Item::SearchProvider(SearchProvider {
+            base_url: Some("https://s".into()),
+            api_key: Zeroizing::new("KEY".into()),
+            ..SearchProvider::default()
+        });
+        search.zeroize();
+        let search = search.as_search_provider().unwrap();
+        assert!(search.api_key.is_empty() && search.base_url.is_none());
+
+        let mut mcp = Item::McpServer(McpServer {
+            name: "n".into(),
+            transport: McpTransport::Stdio {
+                command: "cmd".into(),
+                args: vec!["a".into()],
+                env: BTreeMap::from([("K".to_owned(), Zeroizing::new("V".to_owned()))]),
+            },
+            ..McpServer::default()
+        });
+        mcp.zeroize();
+        let mcp = mcp.as_mcp_server().unwrap();
+        assert!(mcp.name.is_empty());
+        assert_eq!(mcp.transport, McpTransport::default());
+        let mut http = McpTransport::Http {
+            url: "https://u".into(),
+            headers: BTreeMap::from([("H".to_owned(), Zeroizing::new("V".to_owned()))]),
+        };
+        http.zeroize();
+        assert_eq!(
+            http,
+            McpTransport::Http {
+                url: String::new(),
+                headers: BTreeMap::new()
+            }
+        );
+
+        let mut message = Item::AiMessage(AiMessage {
+            data: "DATA".into(),
+            conversation_id: "c".into(),
+            ..AiMessage::default()
+        });
+        message.zeroize();
+        let message = message.as_ai_message().unwrap();
+        assert!(message.data.is_empty() && message.conversation_id.is_empty());
     }
 }

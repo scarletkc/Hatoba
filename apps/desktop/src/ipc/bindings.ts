@@ -169,6 +169,44 @@ export const commands = {
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
 	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
+	aiProvidersList: () => __TAURI_INVOKE<AiProviderView[]>("ai_providers_list"),
+	aiProviderSave: (input: AiProviderInput) => __TAURI_INVOKE<AiProviderView>("ai_provider_save", { input }),
+	aiProviderDelete: (id: string) => __TAURI_INVOKE<null>("ai_provider_delete", { id }),
+	/**  AI-03: the model list of a saved or unsaved provider. */
+	aiProviderModels: (input: AiProviderInput) => __TAURI_INVOKE<AiModel[]>("ai_provider_models", { input }),
+	/**  AI-04: a minimal request to the first model, or the model list when there is none. */
+	aiProviderTest: (input: AiProviderInput) => __TAURI_INVOKE<AiTestResult>("ai_provider_test", { input }),
+	searchProvidersList: () => __TAURI_INVOKE<SearchProviderView[]>("search_providers_list"),
+	searchProviderSave: (input: SearchProviderInput) => __TAURI_INVOKE<SearchProviderView>("search_provider_save", { input }),
+	searchProviderDelete: (id: string) => __TAURI_INVOKE<null>("search_provider_delete", { id }),
+	/**  A real query through a saved or unsaved search provider. */
+	searchProviderTest: (input: SearchProviderInput) => __TAURI_INVOKE<AiTestResult>("search_provider_test", { input }),
+	aiSettingsGet: () => __TAURI_INVOKE<AiSettingsView>("ai_settings_get"),
+	aiSettingsSave: (settings: AiSettingsView) => __TAURI_INVOKE<null>("ai_settings_save", { settings }),
+	/**  Every conversation, unsorted; the panel sorts by `last_activity`, pinned first. */
+	aiConversationsList: () => __TAURI_INVOKE<AiConversationView[]>("ai_conversations_list"),
+	aiConversationGet: (id: string) => __TAURI_INVOKE<AiConversationDetail>("ai_conversation_get", { id }),
+	aiConversationRename: (id: string, title: string) => __TAURI_INVOKE<AiConversationView>("ai_conversation_rename", { id, title }),
+	aiConversationPin: (id: string, pinned: boolean) => __TAURI_INVOKE<AiConversationView>("ai_conversation_pin", { id, pinned }),
+	aiConversationDelete: (id: string) => __TAURI_INVOKE<null>("ai_conversation_delete", { id }),
+	/**
+	 *  Stores the user's message and starts a turn; its events stream on `channel` until
+	 *  `turn_ended`.
+	 */
+	aiSend: (input: AiSendInput, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_send", { input, channel }),
+	/**  Retry after an error: the next request from the stored conversation, on a new channel. */
+	aiRetry: (conversationId: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<null>("ai_retry", { conversationId, context, channel }),
+	/**  Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
+	aiToolResult: (conversationId: string, toolCallId: string, result: AiToolResultInput) => __TAURI_INVOKE<AiEntryView>("ai_tool_result", { conversationId, toolCallId, result }),
+	/**
+	 *  Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`,
+	 *  `read_skill`, MCP tools) and stores its result.
+	 */
+	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiEntryView>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
+	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
+	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
+	aiCompact: (conversationId: string, context: AiTurnContext) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context }),
 };
 
 /** Events */
@@ -183,6 +221,149 @@ export const events = {
 };
 
 /* Types */
+export type AiAuthHeader = "x-api-key" | "authorization";
+
+export type AiConversationDetail = {
+	conversation: AiConversationView,
+	entries: AiEntryView[],
+	/**  A turn of this conversation is running (its events go to the channel that started it). */
+	running: boolean,
+};
+
+export type AiConversationView = {
+	id: string,
+	title: string,
+	/**  The host the conversation last worked on. */
+	host_id: string | null,
+	pinned: boolean,
+	/**  `entry_id` where the context sent to the model starts (AI-21). */
+	context_start: string | null,
+	created_at: number,
+	updated_at: number,
+	/**  The newest entry or conversation change, for sorting history (AI-23). */
+	last_activity: number,
+};
+
+/**  A stored conversation entry (§13.7), without the provider's raw message. */
+export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
+
+export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
+
+/**  A model of a provider (AI-03). Token limits are `None` when unknown. */
+export type AiModel = {
+	id: string,
+	name: string,
+	context_window: number | null,
+	max_output_tokens: number | null,
+};
+
+export type AiModelRef = {
+	provider_id: string,
+	model_id: string,
+};
+
+export type AiPermissionMode = "manual" | "bypass";
+
+export type AiProtocol = "chat_completions" | "anthropic";
+
+export type AiProviderInput = {
+	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */
+	id: string | null,
+	name: string,
+	protocol: AiProtocol,
+	base_url: string,
+	/**  `None` keeps the saved key (as HOST-08 does for passwords); `""` clears it. */
+	api_key: string | null,
+	auth_header: AiAuthHeader,
+	models: AiModel[],
+};
+
+/**  AI-01. The API key never reaches the WebView: only whether one is saved. */
+export type AiProviderView = {
+	id: string,
+	name: string,
+	protocol: AiProtocol,
+	base_url: string,
+	has_api_key: boolean,
+	/**  Only used by `anthropic`. */
+	auth_header: AiAuthHeader,
+	models: AiModel[],
+	updated_at: number,
+};
+
+export type AiSendInput = {
+	/**  `None` starts a new conversation, stored with this first message (AI-07). */
+	conversation_id: string | null,
+	text: string,
+	context: AiTurnContext,
+};
+
+export type AiSendStarted = {
+	conversation: AiConversationView,
+	user_entry: AiEntryView,
+};
+
+/**  The synced `Settings.ai` (§5.1). */
+export type AiSettingsView = {
+	default_model: AiModelRef | null,
+	search_provider_id: string | null,
+};
+
+/**  AI-04 Test Connection, also used for the search provider test. */
+export type AiTestFailure = "auth" | "network" | "unknown_model" | "invalid_url" | "other";
+
+export type AiTestResult = {
+	ok: boolean,
+	failure: AiTestFailure | null,
+	status: number | null,
+	/**  The provider's own message, when it sent one. */
+	message: string | null,
+};
+
+export type AiToolCall = {
+	id: string,
+	name: string,
+	/**  JSON text. */
+	arguments: string,
+};
+
+/**  A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17). */
+export type AiToolResultInput = {
+	status: AiToolStatus,
+	content: string,
+	/**  AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
+	edited_arguments: string | null,
+};
+
+export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";
+
+/**  What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
+export type AiTurnContext = {
+	provider_id: string,
+	model_id: string,
+	/**  The tab's host; the next message moves the conversation to it (AI-09). */
+	host_id: string | null,
+	/**  A connected terminal tab is attached; `false` offers no tools (AI-09). */
+	tab: boolean,
+	/**  MCP servers switched off for this conversation (AI-30, P2). */
+	disabled_mcp_servers: string[],
+};
+
+export type AiTurnEndReason = "completed" | "length" | "refused" | "stopped" | "error";
+
+/**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
+export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
+/**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
+{ kind: "entry"; entry: AiEntryView } | 
+/**  One response finished. With `tool_calls`, Rust waits for every call's result. */
+{ kind: "done"; finish: AiFinish } | { kind: "error"; status: number | null; message: string } | { kind: "turn_ended"; reason: AiTurnEndReason };
+
+export type AiUsage = {
+	input_tokens: number,
+	output_tokens: number,
+	estimated: boolean,
+};
+
 export type AppError = {
 	code: ErrorCode,
 	detail: string,
@@ -192,6 +373,8 @@ export type AppError = {
 	key_kind: KeyParseErrorKind | null,
 	permission: CloudflarePermission | null,
 	cf_code: number | null,
+	/**  `ai`: the HTTP status the provider answered with. */
+	http_status: number | null,
 };
 
 export type AppInfo = {
@@ -344,7 +527,12 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  An upgrade found a Worker newer than the one this build deploys. */
 "worker_newer" | 
 /**  This build does not embed the Worker, so it cannot deploy it. */
-"no_worker_bundle" | "cancelled" | "io" | "internal";
+"no_worker_bundle" | 
+/**
+ *  AI assistant (§13): a model provider or search provider failed. `http_status` has the
+ *  status it answered with, when it answered; `detail` is its own message.
+ */
+"ai" | "cancelled" | "io" | "internal";
 
 export type FileEntry = {
 	name: string,
@@ -460,7 +648,7 @@ export type ImportResult = {
 	warnings: string[],
 };
 
-export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "settings";
+export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings";
 
 export type KeyAlgorithm = "ed25519" | "ecdsa" | "rsa";
 
@@ -507,6 +695,16 @@ export type LocalPrefs = {
 	 *  the device unless the user asks for it (spec §11, no telemetry).
 	 */
 	auto_update_check: boolean,
+	/**  AI-16: the permission mode new conversations start in on this device. */
+	ai_permission_mode: AiPermissionMode,
+	/**  AI-16: the user confirmed the first switch to bypass on this device. */
+	ai_bypass_confirmed: boolean,
+	/**  AI-18: a turn pauses after this many tool calls. */
+	ai_tool_call_limit: number,
+	/**  The AI panel is open (§9). */
+	ai_panel_open: boolean,
+	/**  The AI panel's width in CSS pixels. */
+	ai_panel_width: number,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -520,6 +718,26 @@ export type ProbeResult = {
 };
 
 export type RightClick = "copy_paste" | "menu";
+
+export type SearchKind = "brave" | "tavily" | "searxng";
+
+export type SearchProviderInput = {
+	id: string | null,
+	kind: SearchKind,
+	base_url: string | null,
+	/**  `None` keeps the saved key; `""` clears it. */
+	api_key: string | null,
+};
+
+/**  The backend of `web_search` (AI-14). */
+export type SearchProviderView = {
+	id: string,
+	kind: SearchKind,
+	/**  The instance URL for SearXNG, `None` otherwise. */
+	base_url: string | null,
+	has_api_key: boolean,
+	updated_at: number,
+};
 
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";
 

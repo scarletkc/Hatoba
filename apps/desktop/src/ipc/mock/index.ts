@@ -13,6 +13,9 @@ import type {
   VaultStatus,
 } from "../types";
 import { FRAME_CLOSED, FRAME_DATA } from "../types";
+import { createAiMock } from "./ai";
+import { createAiExtensionsMock } from "./aiExtensions";
+import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
 import { FakeShell } from "./shell";
 
@@ -142,7 +145,11 @@ export function createMockApi(): HatobaApi {
 
   const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
 
+  const aiSettings = createAiSettingsMock();
   return {
+    ...aiSettings,
+    ...createAiExtensionsMock((event, payload) => emit(event, payload)),
+    ...createAiMock({ providers: aiSettings.ai_providers_list, settings: aiSettings.ai_settings_get }),
     app_info: async () => {
       const p = q.get("platform");
       const platform = p === "macos" || p === "linux" || p === "windows" ? p : "windows";

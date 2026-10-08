@@ -44,6 +44,16 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.DeployOutcome, Ui.DeployOutcome>>,
   Check<Assignable<Rust.UpgradeDefaults, Ui.UpgradeDefaults>>,
   Check<Assignable<Rust.UpgradePlan, Ui.UpgradePlan>>,
+  Check<Assignable<Rust.AiProviderView, Ui.AiProviderView>>,
+  Check<Assignable<Rust.AiModel, Ui.AiModel>>,
+  Check<Assignable<Rust.AiTestResult, Ui.AiTestResult>>,
+  Check<Assignable<Rust.SearchProviderView, Ui.SearchProviderView>>,
+  Check<Assignable<Rust.AiSettingsView, Ui.AiSettingsView>>,
+  Check<Assignable<Rust.AiConversationView, Ui.AiConversationView>>,
+  Check<Assignable<Rust.AiConversationDetail, Ui.AiConversationDetail>>,
+  Check<Assignable<Rust.AiEntryView, Ui.AiEntryView>>,
+  Check<Assignable<Rust.AiSendStarted, Ui.AiSendStarted>>,
+  Check<Assignable<Rust.AiTurnEvent, Ui.AiTurnEvent>>,
 ];
 
 /** UI → Rust: command arguments. */
@@ -59,4 +69,11 @@ export type InputsMatch = [
   Check<Assignable<Ui.ForwardInput, Rust.ForwardInput>>,
   Check<Assignable<Ui.DeployTarget, Rust.DeployTarget>>,
   Check<Assignable<Ui.UpgradeTarget, Rust.UpgradeTarget>>,
+  Check<Assignable<Ui.AiProviderInput, Rust.AiProviderInput>>,
+  Check<Assignable<Ui.AiModel, Rust.AiModel>>,
+  Check<Assignable<Ui.SearchProviderInput, Rust.SearchProviderInput>>,
+  Check<Assignable<Ui.AiSettingsView, Rust.AiSettingsView>>,
+  Check<Assignable<Ui.AiSendInput, Rust.AiSendInput>>,
+  Check<Assignable<Ui.AiTurnContext, Rust.AiTurnContext>>,
+  Check<Assignable<Ui.AiToolResultInput, Rust.AiToolResultInput>>,
 ];

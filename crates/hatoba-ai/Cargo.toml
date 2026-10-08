@@ -1,0 +1,51 @@
+[package]
+name = "hatoba-ai"
+description = "Model provider adapters, web tools and MCP client for the Hatoba AI assistant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+tokio.workspace = true
+tokio-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+futures.workspace = true
+bytes.workspace = true
+url = "2.5"
+# Same TLS stack as hatoba-core's sync transport: rustls with the `ring` provider, no native-tls.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy", "stream", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# fetch_url: HTML to Markdown (pure Rust, html5ever based), and charset decoding of fetched pages
+# (encoding_rs is already in the tree through reqwest's `charset` feature).
+htmd = "0.5"
+encoding_rs = "0.8"
+# MCP client (spec §13.9): client features only, JSON-RPC over a child's pipes and Streamable HTTP.
+rmcp = { version = "3.5", optional = true, default-features = false, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
+# MCP stdio servers: PATH/PATHEXT lookup, and spawning in a Job Object (Windows) or process group
+# (Unix) so shutdown kills the whole tree. No `tracing` feature: it would log the command's env.
+which = { version = "8", optional = true }
+process-wrap = { version = "10", optional = true, default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
+# Skills (spec §13.8): SKILL.md frontmatter and .zip import / export.
+serde_yaml_ng = { version = "0.10", optional = true }
+zip = { version = "8.6", optional = true, default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(windows)'.dependencies]
+# CREATE_NO_WINDOW for MCP stdio servers, in the type process-wrap's `CreationFlags` takes.
+windows = { version = "0.62", optional = true, features = ["Win32_System_Threading"] }
+
+[features]
+# Phase-2 modules, off until the desktop shell wires them up.
+mcp = ["dep:rmcp", "dep:which", "dep:process-wrap", "dep:windows", "tokio/process"]
+skills = ["dep:serde_yaml_ng", "dep:zip"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = "0.6"
+tempfile = "3"

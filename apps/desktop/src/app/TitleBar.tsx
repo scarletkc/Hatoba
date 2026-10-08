@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/controls";
+import { AiPanelButton } from "@/features/ai/AiPanel";
+import { slotActivity, useAi } from "@/features/ai/store";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
 import { cx } from "@/lib/cx";
@@ -82,6 +84,19 @@ const STATUS_DOT: Record<TabStatus, string> = {
   disconnected: "var(--fg3)",
 };
 
+/** AI-07: a tab whose conversation is running a turn, or waiting for approval or Continue. */
+function AiActivity({ slotId }: { slotId: string }) {
+  const t = useT();
+  const activity = useAi((st) => slotActivity(st.slots[slotId]));
+  if (activity === "idle") return null;
+  const label = t(activity === "waiting" ? "ai.tabWaiting" : "ai.tabRunning");
+  return (
+    <span className={cx(s.tabAi, activity === "waiting" ? s.tabAiWaiting : s.tabAiRunning)} title={label} aria-label={label} role="img">
+      <Icon name={activity === "waiting" ? "hand-palm" : "sparkle"} fill={activity === "waiting"} />
+    </span>
+  );
+}
+
 /** Tab bar merged with the title bar (design TabBar + WIN-01). */
 export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   homeLabel: string;
@@ -112,6 +127,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
         >
           <Icon name={homeIcon} className={s.tabIcon} />
           <span className={s.tabLabel}>{homeLabel}</span>
+          <AiActivity slotId="home" />
         </button>
         {tabs.length > 0 && <span className={s.sep} />}
         {tabs.map((tab) => (
@@ -129,6 +145,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
           >
             <span className={s.tabDot} style={{ background: STATUS_DOT[tab.status] }} />
             <span className={s.tabLabel}>{tab.title}</span>
+            <AiActivity slotId={tab.id} />
             <span
               role="button"
               tabIndex={-1}
@@ -149,6 +166,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
         <Icon name="plus" />
       </button>
       <div className={s.drag} data-tauri-drag-region />
+      <AiPanelButton className={s.aiButton} activeClassName={s.aiButtonOn} dotClassName={s.aiDot} />
       <WindowControls />
     </div>
   );

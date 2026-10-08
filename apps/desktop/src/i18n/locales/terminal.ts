@@ -34,6 +34,7 @@ export default defineMessages({
     "terminal.menu.clear": "清除回滚缓冲",
     "terminal.menu.selectAll": "全选",
     "terminal.menu.find": "查找…",
+    "terminal.menu.askAi": "询问 AI",
     "terminal.menu.editHost": "编辑主机",
 
     // connection states
@@ -167,6 +168,7 @@ export default defineMessages({
     "terminal.menu.clear": "Clear Scrollback",
     "terminal.menu.selectAll": "Select All",
     "terminal.menu.find": "Find…",
+    "terminal.menu.askAi": "Ask AI",
     "terminal.menu.editHost": "Edit Host",
 
     "terminal.connectingTo": "Connecting to {host}…",
@@ -294,6 +296,7 @@ export default defineMessages({
     "terminal.menu.clear": "スクロールバックを消去",
     "terminal.menu.selectAll": "すべて選択",
     "terminal.menu.find": "検索…",
+    "terminal.menu.askAi": "AI に質問",
     "terminal.menu.editHost": "ホストを編集",
 
     "terminal.connectingTo": "{host} に接続中…",

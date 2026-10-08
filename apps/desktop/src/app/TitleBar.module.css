@@ -121,6 +121,65 @@
   min-width: 24px;
 }
 
+/* AI panel toggle (§9) and the per-tab assistant state (AI-07) */
+.aiButton {
+  position: relative;
+  width: 30px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.aiButton:hover {
+  background: var(--fill);
+}
+
+.aiButtonOn,
+.aiButtonOn:hover {
+  background: var(--fill2);
+  color: var(--accent);
+}
+
+.aiDot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 0 1.5px var(--win);
+}
+
+.tabAi {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  font-size: 12px;
+}
+
+.tabAiRunning {
+  color: var(--accent);
+  animation: aiPulse 1.4s ease-in-out infinite;
+}
+
+.tabAiWaiting {
+  color: var(--orange);
+}
+
+@keyframes aiPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* Windows caption buttons (WIN-01) */
 .caption {
   display: flex;

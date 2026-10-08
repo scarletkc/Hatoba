@@ -96,6 +96,8 @@ export class LiveSession {
   private container: HTMLElement | null = null;
   private observer: ResizeObserver | null = null;
   private fitTimer: number | undefined;
+  private readonly outputListeners = new Set<(text: string) => void>();
+  private readonly outputDecoder = new TextDecoder();
 
   constructor(
     readonly tabId: string,
@@ -335,7 +337,14 @@ export class LiveSession {
     if (gen !== this.gen || this.disposed || frame.length === 0) return;
     switch (frame[0]) {
       case FRAME_DATA:
-        if (frame.length > 1) this.term.write(frame.subarray(1));
+        if (frame.length > 1) {
+          const data = frame.subarray(1);
+          if (this.outputListeners.size > 0) {
+            const text = this.outputDecoder.decode(data, { stream: true });
+            this.outputListeners.forEach((listener) => listener(text));
+          }
+          this.term.write(data);
+        }
         break;
       case FRAME_CLOSED:
         this.markDisconnected(decoder.decode(frame.subarray(1)).trim() || null, true);
@@ -416,6 +425,22 @@ export class LiveSession {
   private write(data: string) {
     const sid = this.sessionId;
     if (sid && this.status === "connected") void api.ssh_write(sid, data).catch(() => {});
+  }
+
+  /** Types `data` into the shell through the same path as the keyboard (AI-13). Rejects when not connected. */
+  async sendInput(data: string): Promise<void> {
+    const sid = this.sessionId;
+    if (!sid || this.status !== "connected") throw toAppError(new Error("the session is not connected"));
+    this.term.scrollToBottom();
+    await api.ssh_write(sid, data);
+  }
+
+  /** Calls `listener` with the output as it arrives, decoded to text (AI-13). Returns the unsubscribe function. */
+  onOutput(listener: (text: string) => void): () => void {
+    this.outputListeners.add(listener);
+    return () => {
+      this.outputListeners.delete(listener);
+    };
   }
 
   private sendResize() {

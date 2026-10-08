@@ -19,9 +19,17 @@
   background: var(--win);
 }
 
+/* The page or terminal, with the AI panel at its right (§9). */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;

@@ -27,6 +27,8 @@
     "@zxcvbn-ts/language-en": "^4.1.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import type { SessionTab } from "@/app/tabs";
 import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { askAi as askAiAbout } from "@/features/ai/actions";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { shortcutLabel } from "@/lib/platform";
@@ -109,7 +110,15 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       icon: "magnifying-glass",
       onSelect: () => setFindOpen(true),
     };
-    if (context) return [copy, paste, selectAll, { kind: "separator" }, clear, find];
+    // AI-10: the selection goes into the AI panel's input for this tab.
+    const selection = hasSelection ? session.term.getSelection() : "";
+    const askAi: MenuEntry = {
+      label: t("terminal.menu.askAi"),
+      icon: "sparkle",
+      disabled: !selection.trim(),
+      onSelect: () => askAiAbout(tab.id, selection),
+    };
+    if (context) return [copy, paste, selectAll, { kind: "separator" }, askAi, { kind: "separator" }, clear, find];
     return [
       { label: t("terminal.menu.reconnect"), icon: "arrow-clockwise", disabled: tab.status === "connecting", onSelect: () => void reconnectSession(tab.id) },
       { label: t("terminal.menu.disconnect"), icon: "plugs", disabled: !connected, onSelect: () => void session.disconnect() },
