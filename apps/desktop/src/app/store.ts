@@ -25,9 +25,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
   appearance: "system",
   density: "regular",
-  right_click: "copy_paste",
   host_probe: true,
-  confirm_multiline_paste: true,
   auto_update_check: false,
 };
 

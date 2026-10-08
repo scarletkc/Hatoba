@@ -331,6 +331,8 @@ interface Settings {             // Fixed ID "settings", a single item
     theme: "system" | "light" | "dark";
     cursor_style: "block" | "bar" | "underline";
     scrollback: number;         // 10000 by default
+    right_click?: "copy_paste" | "menu"; // WIN-05, "copy_paste" while absent
+    confirm_multiline_paste?: boolean;   // TERM-04, true while absent
   };
   auto_lock_minutes: number;
   lock_disconnects_sessions: boolean;
@@ -341,6 +343,8 @@ interface Settings {             // Fixed ID "settings", a single item
   updated_at: number;
 }
 ```
+
+`terminal.right_click` and `terminal.confirm_multiline_paste` were device-local in earlier versions, which do not write them. Each stays absent until it is set to a value other than its default. On the first unlock after the upgrade, each device moves its own values into the fields that are still absent, under the same rule, and never again. A value that is already set, from any device, is kept.
 
 Device-local data such as the last connection time and the window size is **not synced**. Otherwise every connection would cause a write and a potential conflict.
 

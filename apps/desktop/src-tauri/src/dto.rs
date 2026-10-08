@@ -442,6 +442,13 @@ pub enum CursorChoice {
     Underline,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RightClick {
+    CopyPaste,
+    Menu,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct TerminalSettings {
     pub font_family: String,
@@ -449,6 +456,8 @@ pub struct TerminalSettings {
     pub theme: ThemeChoice,
     pub cursor_style: CursorChoice,
     pub scrollback: u32,
+    pub right_click: RightClick,
+    pub confirm_multiline_paste: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -485,22 +494,13 @@ pub enum Density {
     Compact,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum RightClick {
-    CopyPaste,
-    Menu,
-}
-
 /// Device-local UI preferences (readable while locked; never synced).
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct LocalPrefs {
     pub language: Language,
     pub appearance: Appearance,
     pub density: Density,
-    pub right_click: RightClick,
     pub host_probe: bool,
-    pub confirm_multiline_paste: bool,
     /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
     /// the device unless the user asks for it (spec §11, no telemetry).
     pub auto_update_check: bool,
@@ -512,9 +512,7 @@ impl Default for LocalPrefs {
             language: Language::System,
             appearance: Appearance::System,
             density: Density::Regular,
-            right_click: RightClick::CopyPaste,
             host_probe: true,
-            confirm_multiline_paste: true,
             auto_update_check: false,
         }
     }

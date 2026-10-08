@@ -300,7 +300,20 @@ pub enum CursorStyle {
     Block,
 }
 
-/// Terminal appearance settings.
+/// What right-clicking in the terminal does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RightClick {
+    /// Open a context menu.
+    Menu,
+    /// Copy the selection if there is one, otherwise paste (the PuTTY habit). Also what an
+    /// unknown future value decodes to.
+    #[default]
+    #[serde(other)]
+    CopyPaste,
+}
+
+/// Terminal appearance and behaviour settings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct TerminalSettings {
@@ -316,6 +329,15 @@ pub struct TerminalSettings {
     pub cursor_style: CursorStyle,
     /// Scrollback lines.
     pub scrollback: u32,
+    /// Right-click behaviour. `None` until a value is recorded, which items written by builds
+    /// that kept it device-local never have; read it with [`Self::right_click`].
+    #[zeroize(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right_click: Option<RightClick>,
+    /// Ask before pasting text with line breaks. `None` until a value is recorded; read it with
+    /// [`Self::confirm_multiline_paste`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm_multiline_paste: Option<bool>,
 }
 
 impl Default for TerminalSettings {
@@ -326,7 +348,43 @@ impl Default for TerminalSettings {
             theme: ThemeMode::Dark,
             cursor_style: CursorStyle::Block,
             scrollback: 10_000,
+            right_click: None,
+            confirm_multiline_paste: None,
         }
+    }
+}
+
+impl TerminalSettings {
+    /// The right-click behaviour; copy/paste while unset.
+    #[must_use]
+    pub fn right_click(&self) -> RightClick {
+        self.right_click.unwrap_or_default()
+    }
+
+    /// Whether multi-line pastes need confirming; `true` while unset.
+    #[must_use]
+    pub fn confirm_multiline_paste(&self) -> bool {
+        self.confirm_multiline_paste.unwrap_or(true)
+    }
+
+    /// Records the right-click behaviour. An unset field stays unset when `value` is the default.
+    pub fn set_right_click(&mut self, value: RightClick) {
+        record(&mut self.right_click, value, RightClick::default());
+    }
+
+    /// Records whether multi-line pastes need confirming. An unset field stays unset when `value`
+    /// is the default.
+    pub fn set_confirm_multiline_paste(&mut self, value: bool) {
+        record(&mut self.confirm_multiline_paste, value, true);
+    }
+}
+
+/// Stores `value` in a field that reads as `default` while unset, except that an unset field
+/// stays unset when `value` is that default: the user has not chosen anything yet, and leaving
+/// it open lets a device carrying over a different device-local value fill it in.
+fn record<T: PartialEq>(field: &mut Option<T>, value: T, default: T) {
+    if field.is_some() || value != default {
+        *field = Some(value);
     }
 }
 
@@ -622,11 +680,62 @@ mod tests {
         assert_eq!(s.terminal.theme, ThemeMode::Dark);
         assert_eq!(s.terminal.cursor_style, CursorStyle::Block);
         assert_eq!(s.terminal.scrollback, 10_000);
+        assert_eq!(s.terminal.right_click(), RightClick::CopyPaste);
+        assert!(s.terminal.confirm_multiline_paste());
         assert_eq!(s.auto_lock_minutes, 15);
         assert!(!s.lock_disconnects_sessions);
         let value = serde_json::to_value(Item::Settings(s)).unwrap();
         assert_eq!(value["terminal"]["theme"], "dark");
         assert_eq!(value["terminal"]["cursor_style"], "block");
+        // Unset fields are left out, as builds that kept them device-local wrote them.
+        assert!(value["terminal"].get("right_click").is_none());
+        assert!(value["terminal"].get("confirm_multiline_paste").is_none());
+    }
+
+    #[test]
+    fn terminal_behaviour_tells_unset_from_default() {
+        let read = |terminal: serde_json::Value| -> TerminalSettings {
+            let item: Item =
+                serde_json::from_value(json!({"type":"settings","terminal":terminal})).unwrap();
+            item.as_settings().unwrap().terminal.clone()
+        };
+        let unset = read(json!({"font_size": 14}));
+        assert_eq!(unset.right_click, None);
+        assert_eq!(unset.confirm_multiline_paste, None);
+        let set = read(json!({"right_click":"copy_paste","confirm_multiline_paste":true}));
+        assert_eq!(set.right_click, Some(RightClick::CopyPaste));
+        assert_eq!(set.confirm_multiline_paste, Some(true));
+        let set = read(json!({"right_click":"menu","confirm_multiline_paste":false}));
+        assert_eq!(set.right_click(), RightClick::Menu);
+        assert!(!set.confirm_multiline_paste());
+        let value = serde_json::to_value(&set).unwrap();
+        assert_eq!(value["right_click"], "menu");
+        assert_eq!(value["confirm_multiline_paste"], false);
+        // An unknown future value still counts as a choice the user made.
+        assert_eq!(
+            read(json!({"right_click":"middle_paste"})).right_click,
+            Some(RightClick::CopyPaste)
+        );
+    }
+
+    #[test]
+    fn recording_the_default_leaves_an_unset_field_unset() {
+        let mut t = TerminalSettings::default();
+        t.set_right_click(RightClick::CopyPaste);
+        t.set_confirm_multiline_paste(true);
+        assert_eq!(t.right_click, None);
+        assert_eq!(t.confirm_multiline_paste, None);
+
+        t.set_right_click(RightClick::Menu);
+        t.set_confirm_multiline_paste(false);
+        assert_eq!(t.right_click, Some(RightClick::Menu));
+        assert_eq!(t.confirm_multiline_paste, Some(false));
+
+        // Once set, changing back to the default is recorded too.
+        t.set_right_click(RightClick::CopyPaste);
+        t.set_confirm_multiline_paste(true);
+        assert_eq!(t.right_click, Some(RightClick::CopyPaste));
+        assert_eq!(t.confirm_multiline_paste, Some(true));
     }
 
     #[test]
