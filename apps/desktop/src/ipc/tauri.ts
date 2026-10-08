@@ -107,6 +107,8 @@ export function createTauriApi(): HatobaApi {
     settings_save: (settings) => call("settings_save", { settings }),
     prefs_get: () => call("prefs_get"),
     prefs_save: (prefs) => call("prefs_save", { prefs }),
+    star_prompt_get: () => call("star_prompt_get"),
+    star_prompt_done: () => call("star_prompt_done"),
 
     window_snap_overlay: () => call("window_snap_overlay"),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),

@@ -103,6 +103,7 @@ export default defineMessages({
     "settings.about.auto.hint": "解锁后向 GitHub 查询一次是否有新版本。关闭时，只有点击“检查更新”才会联系 GitHub。",
     "settings.about.source": "源代码",
     "settings.about.license": "MIT 许可证",
+    "settings.about.report": "反馈问题",
   },
   en: {
     "settings.title": "Settings",
@@ -206,6 +207,7 @@ export default defineMessages({
     "settings.about.auto.hint": "After you unlock, asks GitHub once whether a newer release exists. When off, Hatoba contacts GitHub only when you click Check for Updates.",
     "settings.about.source": "Source Code",
     "settings.about.license": "MIT License",
+    "settings.about.report": "Report a Problem",
   },
   ja: {
     "settings.title": "設定",
@@ -308,5 +310,6 @@ export default defineMessages({
     "settings.about.auto.hint": "ロック解除後に一度、新しいリリースがあるか GitHub に問い合わせます。オフの場合、GitHub に接続するのは「アップデートを確認」をクリックしたときだけです。",
     "settings.about.source": "ソースコード",
     "settings.about.license": "MIT ライセンス",
+    "settings.about.report": "問題を報告",
   },
 });

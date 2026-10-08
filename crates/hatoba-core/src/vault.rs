@@ -938,6 +938,23 @@ impl Vault {
         self.store.set_meta(meta::LOCAL_PREFS, json)
     }
 
+    /// The device-local state of the star prompt (plaintext JSON owned by the shell). Works
+    /// while locked.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn star_prompt(&self) -> Result<Option<String>> {
+        self.store.get_meta(meta::STAR_PROMPT)
+    }
+
+    /// Stores the star prompt state. Works while locked. Must not contain secrets.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_star_prompt(&mut self, json: &str) -> Result<()> {
+        self.store.set_meta(meta::STAR_PROMPT, json)
+    }
+
     // ---- backup ----
 
     /// Writes an encrypted backup (VAULT-07). Only envelopes and key blobs are written; the
@@ -1764,6 +1781,12 @@ mod tests {
         assert_eq!(
             vault.local_prefs().unwrap().as_deref(),
             Some(r#"{"window":{"w":1200}}"#)
+        );
+        assert_eq!(vault.star_prompt().unwrap(), None);
+        vault.set_star_prompt(r#"{"done":true}"#).unwrap();
+        assert_eq!(
+            vault.star_prompt().unwrap().as_deref(),
+            Some(r#"{"done":true}"#)
         );
         // last_connected is not an item and never dirties anything.
         assert_eq!(vault.pending_count(), 2);

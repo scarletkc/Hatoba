@@ -48,6 +48,10 @@ export default defineMessages({
     "sidebar.lock": "锁定",
     "sidebar.settings": "设置",
     "sidebar.settingsUpdate": "设置（有新版本）",
+    "sidebar.star.title": "喜欢 Hatoba 吗？",
+    "sidebar.star.body": "在 GitHub 上点个 Star，能帮更多人发现它。",
+    "sidebar.star.star": "点 Star",
+    "sidebar.star.report": "反馈问题",
 
     "sync.footer.synced": "已同步",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",
@@ -173,6 +177,10 @@ export default defineMessages({
     "sidebar.lock": "Lock",
     "sidebar.settings": "Settings",
     "sidebar.settingsUpdate": "Settings (update available)",
+    "sidebar.star.title": "Enjoying Hatoba?",
+    "sidebar.star.body": "A star on GitHub helps more people find it.",
+    "sidebar.star.star": "Star",
+    "sidebar.star.report": "Report a Problem",
 
     "sync.footer.synced": "Synced",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",
@@ -302,6 +310,10 @@ export default defineMessages({
     "sidebar.lock": "ロック",
     "sidebar.settings": "設定",
     "sidebar.settingsUpdate": "設定（アップデートあり）",
+    "sidebar.star.title": "Hatoba は気に入りましたか？",
+    "sidebar.star.body": "GitHub でスターを付けていただくと、より多くの人に見つけてもらえます。",
+    "sidebar.star.star": "スターを付ける",
+    "sidebar.star.report": "問題を報告",
 
     "sync.footer.synced": "同期済み",
     "sync.footer.synced_sub": "{time} · Cloudflare D1",

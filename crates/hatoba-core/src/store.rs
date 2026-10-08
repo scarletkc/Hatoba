@@ -1,7 +1,7 @@
 //! The local SQLite store (spec §5.2).
 //!
 //! The database holds only ciphertext (plus a few non-secret counters and the opaque
-//! `local_prefs` string). `secure_delete` is on so freed pages do not keep old rows around.
+//! `local_prefs` and `star_prompt` strings). `secure_delete` is on so freed pages do not keep old rows around.
 //!
 //! All row-level operations live on the [`StoreOps`] trait, implemented by both [`Store`]
 //! (auto-commit) and [`StoreTx`] (inside a transaction opened with [`Store::transaction`]).
@@ -44,6 +44,8 @@ pub mod meta {
     pub const UNLOCK_LAST_FAILURE_AT: &str = "unlock_last_failure_at";
     /// Opaque plaintext JSON of device-local UI preferences.
     pub const LOCAL_PREFS: &str = "local_prefs";
+    /// Opaque plaintext JSON of the device-local star prompt state.
+    pub const STAR_PROMPT: &str = "star_prompt";
     /// Envelope JSON: `recovery_auth` sealed under the vault key, so sync setup can upload it.
     pub const RECOVERY_AUTH_SEALED: &str = "recovery_auth_sealed";
     /// Envelope JSON: a constant sealed under the vault key, to verify a candidate vault key.
