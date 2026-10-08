@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**']
+  # No paths filter: the ruleset on main requires these checks, so a skipped run would block the PR.
   pull_request:
-    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 # Superseded PR runs are cancelled; every main commit runs to completion so it gets a result
