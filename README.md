@@ -97,7 +97,7 @@ hierarchy and the threat model.
 ## Documentation
 
 The documentation below is written in Chinese, except the end-to-end test
-guide.
+guide and the contributing guide.
 
 - [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
 - [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
@@ -105,6 +105,7 @@ guide.
 - [Deploying the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
 - [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
 - [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
+- [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
 
 ## License
 

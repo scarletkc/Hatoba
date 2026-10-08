@@ -1,0 +1,26 @@
+name: PR title
+
+on:
+  pull_request:
+    branches: [main]
+    # synchronize reports the check on each new head commit.
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # The script reads the title from the event payload, so it never passes through the shell.
+      - run: node scripts/ci/pr-title.mjs
