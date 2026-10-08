@@ -1,5 +1,7 @@
 //! Sync scheduling (spec §6.3): after unlock, 2 s after local edits, every 60 s, on window focus
 //! and on demand. Failures never affect local use; transient ones retry with exponential backoff.
+//! In Worker mode, the first round after unlock reads `/v1/health` and pauses sync while the
+//! Worker's version needs an update (spec §6.7, Upgrades).
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -7,13 +9,14 @@ use std::time::Duration;
 use hatoba_core::model::Item;
 use hatoba_core::platform::{SecretStore, secret_keys};
 use hatoba_core::sync::{
-    Backoff, D1Backend, SyncBackend, SyncConfig, SyncEngine, WorkerBackend, load_session,
+    Backoff, D1Backend, SyncBackend, SyncConfig, SyncEngine, WorkerBackend, WorkerCompat,
+    load_session, worker_compat,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
 use tokio::sync::Notify;
 
-use crate::dto::{SyncCounts, SyncKind, SyncState, SyncStatus};
+use crate::dto::{SyncCounts, SyncKind, SyncState, SyncStatus, WorkerUpdate, WorkerUpdateKind};
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, state};
 
@@ -28,12 +31,20 @@ pub enum Trigger {
     Manual,
 }
 
+/// What the Worker's `/v1/health` last reported, against this build.
+struct WorkerCheck {
+    compat: WorkerCompat,
+    version: String,
+}
+
 struct Inner {
     backend: Option<Arc<dyn SyncBackend>>,
     state: SyncState,
     message: Option<String>,
     auto: bool,
     pending_trigger: Option<Trigger>,
+    /// Worker mode: the last `/v1/health` reading since the backend was set.
+    worker: Option<WorkerCheck>,
 }
 
 pub struct SyncController {
@@ -52,6 +63,7 @@ impl Default for SyncController {
                 message: None,
                 auto: true,
                 pending_trigger: None,
+                worker: None,
             }),
             wake: Notify::new(),
             round: tokio::sync::Mutex::new(()),
@@ -82,6 +94,7 @@ impl SyncController {
         };
         inner.message = None;
         inner.backend = backend;
+        inner.worker = None;
     }
 
     pub fn set_auto(&self, auto: bool) {
@@ -96,6 +109,75 @@ impl SyncController {
         let mut inner = self.inner();
         inner.state = state;
         inner.message = message;
+    }
+
+    /// Whether the Worker's version pauses sync.
+    fn paused(&self) -> bool {
+        self.inner()
+            .worker
+            .as_ref()
+            .is_some_and(|w| w.compat.pauses_sync())
+    }
+}
+
+/// The Worker version this build deploys, when it embeds the Worker.
+pub fn bundled_version() -> Option<String> {
+    crate::deploy::bundle().ok().map(|b| b.version.clone())
+}
+
+fn worker_mode(st: &AppState) -> bool {
+    matches!(
+        st.vault().sync_config(),
+        Ok(Some(SyncConfig::Worker { .. }))
+    )
+}
+
+/// Reads the Worker's `/v1/health` and records how it compares with this build. A Worker that
+/// does not answer keeps the last reading; the sync round reports the failure.
+async fn read_worker_health(st: &AppState, backend: &dyn SyncBackend) {
+    match backend.health().await {
+        Ok(info) => {
+            let compat = worker_compat(&info, bundled_version().as_deref());
+            tracing::info!(version = %info.version, api = info.api, ?compat, "worker health");
+            st.sync.inner().worker = Some(WorkerCheck {
+                compat,
+                version: info.version,
+            });
+        }
+        Err(e) => tracing::info!("worker health check failed: {}", e.code()),
+    }
+}
+
+/// Reads the Worker's `/v1/health` now, because the sync status page opened or an upgrade
+/// finished, and pauses or resumes sync to match.
+pub async fn recheck_worker(app: &AppHandle) {
+    let st = state(app);
+    let Some(backend) = st.sync.backend() else {
+        return;
+    };
+    if !worker_mode(&st) {
+        return;
+    }
+    let resumed = {
+        let _guard = st.sync.round.lock().await;
+        let was_paused = st.sync.paused();
+        read_worker_health(&st, backend.as_ref()).await;
+        match (was_paused, st.sync.paused()) {
+            (false, true) => {
+                st.sync.set_state(SyncState::Paused, None);
+                false
+            }
+            (true, false) => {
+                st.sync.set_state(SyncState::Idle, None);
+                true
+            }
+            _ => false,
+        }
+    };
+    emit_status(app);
+    if resumed {
+        // Pushes what was edited while sync was paused.
+        trigger(app, Trigger::Manual);
     }
 }
 
@@ -177,10 +259,33 @@ pub fn status(app: &AppHandle) -> SyncStatus {
     let st = state(app);
     let vault = st.vault();
     let config = vault.sync_config().ok().flatten();
-    let (state, message, auto) = {
+    let (state, message, auto, worker) = {
         let inner = st.sync.inner();
-        (inner.state, inner.message.clone(), inner.auto)
+        (
+            inner.state,
+            inner.message.clone(),
+            inner.auto,
+            inner.worker.as_ref().map(|w| (w.compat, w.version.clone())),
+        )
     };
+    let worker_update = worker.and_then(|(compat, version)| {
+        let bundled = bundled_version();
+        let kind = match compat {
+            WorkerCompat::Current => return None,
+            // Dismissed until the next bundled version.
+            WorkerCompat::UpdateAvailable if vault.worker_update_dismissed() == bundled => {
+                return None;
+            }
+            WorkerCompat::UpdateAvailable => WorkerUpdateKind::Available,
+            WorkerCompat::UpdateRequired => WorkerUpdateKind::Required,
+            WorkerCompat::AppUpdateRequired => WorkerUpdateKind::AppRequired,
+        };
+        Some(WorkerUpdate {
+            kind,
+            version,
+            bundled,
+        })
+    });
     let (kind, endpoint, database) = match &config {
         None => (SyncKind::None, None, None),
         Some(SyncConfig::Worker { url, .. }) => {
@@ -233,6 +338,7 @@ pub fn status(app: &AppHandle) -> SyncStatus {
         auto_sync: auto,
         message,
         counts,
+        worker_update,
     }
 }
 
@@ -276,6 +382,20 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
     let _guard = st.sync.round.lock().await;
     st.sync.set_state(SyncState::Syncing, None);
     emit_status(app);
+    if worker_mode(&st) {
+        // The first round after unlock reads /v1/health, and so does every round while the
+        // Worker's version pauses sync, so an upgrade from another device resumes it.
+        let unread = st.sync.inner().worker.is_none();
+        if unread || st.sync.paused() {
+            read_worker_health(&st, backend.as_ref()).await;
+        }
+        if st.sync.paused() {
+            // Local changes stay pending and go out after the update.
+            st.sync.set_state(SyncState::Paused, None);
+            emit_status(app);
+            return Ok(());
+        }
+    }
     let engine =
         SyncEngine::new(st.vault.clone(), backend).with_conflict_suffix(conflict_suffix(app));
     let result = engine.sync().await;

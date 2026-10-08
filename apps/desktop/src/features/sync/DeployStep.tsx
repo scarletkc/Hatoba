@@ -6,7 +6,7 @@ import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AppError, DeployPlan, DeployTarget } from "@/ipc/types";
+import type { AppError, DeployPlan, DeployStep as Step, DeployTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { API_TOKENS_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
 import type { T } from "./syncUtils";
@@ -17,18 +17,18 @@ import s from "./Wizard.module.css";
 type Set = Dispatch<SetStateAction<DeployForm>>;
 
 /** A lowercase DNS label, as Cloudflare requires for Worker names and workers.dev subdomains. */
-const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+export const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const DATABASE = /^[a-z0-9_-]{1,60}$/;
 
 /** Deployment failures in the words of this flow; anything else uses the shared error text. */
-function deployError(t: T, e: AppError): string {
+export function deployError(t: T, e: AppError): string {
   if (e.code === "sync_offline") return t("sync.dep.offline");
   if (e.code === "invalid_input" && e.field) return t(`sync.dep.invalid.${e.field}` as MessageKey);
   return errorMessage(t, e);
 }
 
 /** Errors the user fixes by editing the token in the Cloudflare dashboard. */
-function EditTokenLink({ error }: { error: AppError | null }) {
+export function EditTokenLink({ error }: { error: AppError | null }) {
   const t = useT();
   if (error?.code !== "cloudflare_token" && error?.code !== "cloudflare_permission") return null;
   return (
@@ -403,6 +403,53 @@ const STEP_ICON: Record<StepState | "pending", { name: string; fill?: boolean; c
   failed: { name: "x-circle", fill: true, color: "var(--red)" },
 };
 
+/** The deployment steps with their progress, and the error under the step that failed. */
+export function StepList({
+  steps,
+  states,
+  error,
+  label,
+  ariaLabel,
+}: {
+  steps: Step[];
+  states: Partial<Record<Step, StepState>>;
+  error: AppError | null;
+  label: (step: Step) => string;
+  ariaLabel: string;
+}) {
+  const t = useT();
+  const failedStep = steps.find((step) => states[step] === "failed");
+  return (
+    <ol className={s.stepList} aria-label={ariaLabel}>
+      {steps.map((step) => {
+        const state = states[step] ?? "pending";
+        const icon = STEP_ICON[state];
+        return (
+          <li key={step} className={cx(s.stepRow, state === "pending" && s.dim)} aria-current={state === "running" ? "step" : undefined}>
+            <span className={s.stepIcon}>
+              {state === "running" ? <Spinner /> : <Icon name={icon.name} fill={icon.fill} color={icon.color} size={16} />}
+            </span>
+            <span className={s.stepText}>
+              <span>
+                {label(step)}
+                {state === "skipped" && <span className={s.dim}> · {t("sync.dep.skipped")}</span>}
+              </span>
+              {step === failedStep && error && (
+                <>
+                  <span className={s.stepError} role="alert">
+                    {deployError(t, error)}
+                  </span>
+                  <EditTokenLink error={error} />
+                </>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; handle: string; onReady: (handle: string) => void }) {
   const t = useT();
   const [checking, setChecking] = useState(false);
@@ -524,33 +571,13 @@ function RunPhase({ form, set, handle, onReady }: { form: DeployForm; set: Set; 
       footer={footer}
     >
       <WizardTitle title={title} />
-      <ol className={s.stepList} aria-label={t("sync.dep.run.title")}>
-        {DEPLOY_STEPS.map((step) => {
-          const state = form.steps[step] ?? "pending";
-          const icon = STEP_ICON[state];
-          return (
-            <li key={step} className={cx(s.stepRow, state === "pending" && s.dim)} aria-current={state === "running" ? "step" : undefined}>
-              <span className={s.stepIcon}>
-                {state === "running" ? <Spinner /> : <Icon name={icon.name} fill={icon.fill} color={icon.color} size={16} />}
-              </span>
-              <span className={s.stepText}>
-                <span>
-                  {t(`sync.dep.step.${step}` as MessageKey)}
-                  {state === "skipped" && <span className={s.dim}> · {t("sync.dep.skipped")}</span>}
-                </span>
-                {step === failedStep && form.runError && (
-                  <>
-                    <span className={s.stepError} role="alert">
-                      {deployError(t, form.runError)}
-                    </span>
-                    <EditTokenLink error={form.runError} />
-                  </>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+      <StepList
+        steps={DEPLOY_STEPS}
+        states={form.steps}
+        error={form.runError}
+        label={(step) => t(`sync.dep.step.${step}` as MessageKey)}
+        ariaLabel={t("sync.dep.run.title")}
+      />
       {form.run === "failed" && !fixInReview && <div className={s.planNote}>{t("sync.dep.retryHint")}</div>}
       {form.run === "failed" && !failedStep && form.runError && (
         <div className={s.stepError} role="alert">

@@ -228,6 +228,7 @@ export function syncStatus(): SyncStatus {
     auto_sync: true,
     message: null,
     counts: { hosts: HOSTS.length, keys: KEYS.length, groups: GROUPS.length },
+    worker_update: null,
   };
 }
 

@@ -85,6 +85,8 @@ export function createTauriApi(): HatobaApi {
     sync_now: () => call("sync_now"),
     sync_login: (password) => call("sync_login", { password }),
     sync_set_auto: (enabled) => call("sync_set_auto", { enabled }),
+    sync_check_worker: () => call("sync_check_worker"),
+    sync_dismiss_worker_update: () => call("sync_dismiss_worker_update"),
     sync_disconnect: () => call("sync_disconnect"),
     sync_devices: () => call("sync_devices"),
     sync_revoke_device: (deviceId) => call("sync_revoke_device", { deviceId }),
@@ -102,6 +104,13 @@ export function createTauriApi(): HatobaApi {
     deploy_cleanup: (handle) => call("deploy_cleanup", { handle }),
     deploy_cancel: (handle) => call("deploy_cancel", { handle }),
     deploy_setup: (handle, password) => call("deploy_setup", { handle, password }),
+    deploy_upgrade_defaults: () => call("deploy_upgrade_defaults"),
+    deploy_upgrade_inspect: (handle, target) => call("deploy_upgrade_inspect", { handle, target }),
+    deploy_upgrade: (handle, target, onProgress) => {
+      const progress = new Channel<DeployProgress>();
+      progress.onmessage = onProgress;
+      return call("deploy_upgrade", { handle, target, progress });
+    },
 
     settings_get: () => call("settings_get"),
     settings_save: (settings) => call("settings_save", { settings }),

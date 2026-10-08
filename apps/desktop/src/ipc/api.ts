@@ -32,6 +32,9 @@ import type {
   TagCount,
   TestResult,
   UpdateCheck,
+  UpgradeDefaults,
+  UpgradePlan,
+  UpgradeTarget,
   VaultStatus,
 } from "./types";
 
@@ -136,6 +139,10 @@ export interface HatobaApi {
   /** Re-authenticate after the session expired or was revoked ("auth_failed"). */
   sync_login(password: string): Promise<void>;
   sync_set_auto(enabled: boolean): Promise<void>;
+  /** The status page opened: rereads the Worker's `/v1/health`, which updates `worker_update` and may pause or resume sync. */
+  sync_check_worker(): Promise<void>;
+  /** Hides "Worker update available" until the app bundles a newer Worker. */
+  sync_dismiss_worker_update(): Promise<void>;
   sync_disconnect(): Promise<void>;
   sync_devices(): Promise<DeviceView[]>;
   sync_revoke_device(device_id: string): Promise<void>;
@@ -158,6 +165,12 @@ export interface HatobaApi {
   deploy_cancel(handle: string): Promise<void>;
   /** The master password step after a deployment: initialises the new Worker and enables sync. */
   deploy_setup(handle: string, password: string): Promise<void>;
+  /** What "Update Worker" starts from. */
+  deploy_upgrade_defaults(): Promise<UpgradeDefaults>;
+  /** Step 2 of an upgrade, against the deployment started with `deploy_start`. */
+  deploy_upgrade_inspect(handle: string, target: UpgradeTarget): Promise<UpgradePlan>;
+  /** "Update Worker": the deployment steps as an upgrade. Run it again after a failure to continue; `deploy_check` asks again while step 8 waits. */
+  deploy_upgrade(handle: string, target: UpgradeTarget, onProgress: (p: DeployProgress) => void): Promise<DeployOutcome>;
 
   // settings
   settings_get(): Promise<SettingsView>;

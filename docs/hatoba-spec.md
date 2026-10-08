@@ -650,7 +650,7 @@ The release build runs `npx wrangler deploy --dry-run --outdir <dir>` in `worker
 
 The Rust shell embeds the package in the binary. The package is generated and never committed, and `tauri build` creates it through `beforeBuildCommand`. A build without it, such as `cargo test`, still compiles, and the deploy commands then return an error saying that the build has no Worker bundle.
 
-**Versions.** The Worker version is `version` in `workers/sync/package.json`, which a test keeps equal to `VERSION` in `workers/sync/src/config.ts`, and `/v1/health` reports it as `version`. It is separate from the app version, so an app release that does not touch the Worker asks nobody to redeploy. Any change that alters the bundle or adds a migration (the source, its dependencies, `wrangler.toml`, or `migrations/`) raises the Worker version in the same pull request, and CI fails a change to these files that leaves the Worker version unchanged. The app knows two Worker versions: the bundled version, which is the newest it can deploy, and the minimum version it can sync with.
+**Versions.** The Worker version is `version` in `workers/sync/package.json`, which a test keeps equal to `VERSION` in `workers/sync/src/config.ts`, and `/v1/health` reports it as `version`. It is separate from the app version, so an app release that does not touch the Worker asks nobody to redeploy. Any change that alters the bundle or adds a migration (the source, its dependencies, `wrangler.toml`, or `migrations/`) raises the Worker version in the same pull request, and CI fails a change to these files that leaves the Worker version unchanged. The app knows two Worker versions: the bundled version, which is the newest it can deploy, and the minimum version it can sync with, `MIN_WORKER_VERSION` in `crates/hatoba-core/src/sync/compat.rs`.
 
 **Compatibility.** Within one `api` number, Worker changes are additive. A new Worker version still serves apps built against older Worker versions, and a new migration works with the previous Worker code, because an upgrade applies migrations before it uploads the new code.
 
@@ -741,7 +741,7 @@ If the user leaves the wizard between step 8 and the end of the setup, the Worke
 
 #### Upgrades
 
-In Worker mode the app reads `/v1/health` on the first sync round after unlock and whenever the sync status page opens, and compares `api` and `version` with what it supports:
+In Worker mode the app reads `/v1/health` on the first sync round after unlock, on every round while sync is paused, and whenever the sync status page opens, and compares `api` and `version` with what it supports:
 
 | `/v1/health` reports | What the app does |
 |---|---|

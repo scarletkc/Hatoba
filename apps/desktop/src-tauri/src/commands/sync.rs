@@ -201,6 +201,24 @@ pub async fn sync_login(
     Ok(())
 }
 
+/// The sync status page opened: reads the Worker's `/v1/health` (§6.7, Upgrades).
+#[tauri::command]
+#[specta::specta]
+pub async fn sync_check_worker(app: AppHandle) {
+    sync::recheck_worker(&app).await;
+}
+
+/// Hides "Worker update available" until the app bundles a newer Worker version.
+#[tauri::command]
+#[specta::specta]
+pub fn sync_dismiss_worker_update(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    if let Some(bundled) = sync::bundled_version() {
+        state.vault().set_worker_update_dismissed(&bundled)?;
+    }
+    sync::emit_status(&app);
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn sync_set_auto(app: AppHandle, state: State<'_, AppState>, enabled: bool) {

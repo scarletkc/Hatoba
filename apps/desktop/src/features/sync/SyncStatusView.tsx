@@ -3,12 +3,15 @@ import { Button, Icon, LinkButton, Switch, TextField } from "@/components/contro
 import { Group, Row, RowValue, Section, StatusTile } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { DeviceView, SyncStatus } from "@/ipc/types";
+import type { DeviceView, SyncStatus, WorkerUpdate } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { DEPLOY_GUIDE_URL, openExternal } from "./external";
 import { ChangePasswordDialog, RecoveryCodeDialog } from "./SyncDialogs";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";
+import { UpgradeDialog } from "./UpgradeDialog";
 import s from "./Sync.module.css";
 
 /** Icon, tint and copy for each sync state; titles reuse the sidebar footer strings. */
@@ -39,6 +42,13 @@ function present(t: T, st: SyncStatus) {
       title: t("sync.footer.error"),
       sub: st.message ?? t("sync.footer.error_sub"),
     };
+  if (st.state === "paused")
+    return {
+      icon: "cloud-warning",
+      color: "var(--orange)",
+      title: t(st.worker_update?.kind === "app_required" ? "sync.footer.appUpdate" : "sync.footer.workerUpdate"),
+      sub: st.pending > 0 ? t("sync.footer.paused_sub", { n: st.pending }) : t("sync.footer.paused_sub_none"),
+    };
   const last = st.last_synced_at ? t("sync.sub.last", { time: formatRelative(t.locale, st.last_synced_at) }) : t("sync.sub.never");
   const sub = st.counts ? `${last} · ${countsLine(t, st.counts)}` : last;
   if (st.conflicts > 0)
@@ -51,6 +61,13 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
   const view = present(t, status);
   const [busy, setBusy] = useState(false);
   const syncing = status.state === "syncing" || busy;
+  // The Worker version "Update Worker" deploys; the dialog stays open after the notice goes.
+  const [upgradeTo, setUpgradeTo] = useState<string | null>(null);
+
+  // §6.7 Upgrades: the Worker's version is read again whenever this page opens.
+  useEffect(() => {
+    void api.sync_check_worker().catch(() => {});
+  }, []);
 
   const syncNow = async () => {
     setBusy(true);
@@ -92,6 +109,9 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
 
           {status.state === "auth_failed" && <ReloginForm />}
 
+          {status.worker_update && <WorkerUpdateNotice update={status.worker_update} onUpdate={setUpgradeTo} />}
+          {upgradeTo && <UpgradeDialog bundled={upgradeTo} onClose={() => setUpgradeTo(null)} />}
+
           {status.conflicts > 0 && status.state !== "syncing" && (
             <div className={s.banner} role="status">
               <Icon name="warning-circle" className={s.bannerIcon} />
@@ -125,6 +145,48 @@ export function SyncStatusView({ status, onReview }: { status: SyncStatus; onRev
           <SecurityNote />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** §6.7 Upgrades: "Worker update available" (dismissible), "Worker update required", or a Worker that needs a newer Hatoba. */
+function WorkerUpdateNotice({ update, onUpdate }: { update: WorkerUpdate; onUpdate: (bundled: string) => void }) {
+  const t = useT();
+  const openSettings = useApp((st) => st.openSettings);
+  const { bundled } = update;
+  const available = update.kind === "available";
+
+  const dismiss = async () => {
+    try {
+      await api.sync_dismiss_worker_update();
+    } catch (e) {
+      toast(errorMessage(t, e), "error");
+    }
+  };
+
+  const text =
+    update.kind === "available"
+      ? t("sync.wu.available", { version: update.version, bundled: bundled ?? "" })
+      : update.kind === "required"
+        ? t("sync.wu.required", { version: update.version })
+        : t("sync.wu.app", { version: update.version });
+
+  return (
+    <div className={cx(s.banner, available && s.bannerInfo)} role="status">
+      <Icon name={available ? "arrow-circle-up" : "warning-circle"} className={s.bannerIcon} />
+      <span className={s.bannerText}>{text}</span>
+      {update.kind === "app_required" ? (
+        <LinkButton onClick={() => openSettings(true, "about")}>{t("sync.wu.checkApp")}</LinkButton>
+      ) : bundled ? (
+        <LinkButton onClick={() => onUpdate(bundled)}>{t("sync.wu.update")}</LinkButton>
+      ) : (
+        <LinkButton onClick={() => void openExternal(`${DEPLOY_GUIDE_URL}#upgrade`)}>{t("sync.up.guide")}</LinkButton>
+      )}
+      {available && (
+        <LinkButton tone="muted" onClick={() => void dismiss()}>
+          {t("sync.wu.dismiss")}
+        </LinkButton>
+      )}
     </div>
   );
 }

@@ -67,6 +67,10 @@ export default defineMessages({
     "sync.footer.auth_sub": "请重新输入主密码",
     "sync.footer.error": "同步出错",
     "sync.footer.error_sub": "将自动重试",
+    "sync.footer.workerUpdate": "需要更新 Worker",
+    "sync.footer.appUpdate": "需要更新 Hatoba",
+    "sync.footer.paused_sub": "同步已暂停 · {n} 项更改待上传",
+    "sync.footer.paused_sub_none": "同步已暂停",
     "sync.footer.none": "未开启云同步",
     "sync.footer.none_sub": "数据仅保存在本机",
 
@@ -105,6 +109,8 @@ export default defineMessages({
     "err.subdomain_required": "请为这个账户选择一个 workers.dev 子域名。",
     "err.subdomain_unavailable": "这个 workers.dev 子域名已被占用，请换一个。",
     "err.worker_name_taken": "已有同名的 Worker，但它不是 Hatoba 的同步 Worker。请换一个名称。",
+    "err.worker_not_found": "这个账户中找不到这个名称的 Hatoba Worker，或者它没有保存保险库。请检查账户和 Worker 名称。",
+    "err.worker_newer": "这个 Worker 比这个版本的 Hatoba 内置的更新，Hatoba 不会用旧版本替换它。",
     "err.no_worker_bundle": "这个版本的 Hatoba 没有内置同步 Worker，无法一键部署。请改用其他部署方式。",
 
     "ssh.err.dns": "找不到主机 {host}，请检查地址拼写或 DNS。",
@@ -199,6 +205,11 @@ export default defineMessages({
     "sync.footer.auth_sub": "Enter your master password again",
     "sync.footer.error": "Sync error",
     "sync.footer.error_sub": "Will retry automatically",
+    "sync.footer.workerUpdate": "Worker update required",
+    "sync.footer.appUpdate": "Hatoba update required",
+    "sync.footer.paused_sub": "Sync paused · {n} changes pending",
+    "sync.footer.paused_sub_one": "Sync paused · 1 change pending",
+    "sync.footer.paused_sub_none": "Sync paused",
     "sync.footer.none": "Sync is off",
     "sync.footer.none_sub": "Stored on this device only",
 
@@ -237,6 +248,8 @@ export default defineMessages({
     "err.subdomain_required": "Choose a workers.dev subdomain for this account.",
     "err.subdomain_unavailable": "This workers.dev subdomain is taken. Choose another.",
     "err.worker_name_taken": "Another Worker already has this name, and it isn’t a Hatoba sync Worker. Choose another name.",
+    "err.worker_not_found": "This account has no Hatoba Worker with this name, or it holds no vault. Check the account and the Worker name.",
+    "err.worker_newer": "This Worker is newer than the one in this version of Hatoba, and Hatoba won’t replace it with an older one.",
     "err.no_worker_bundle": "This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy.",
 
     "ssh.err.dns": "Can’t find the host {host}. Check the address or DNS.",
@@ -329,6 +342,10 @@ export default defineMessages({
     "sync.footer.auth_sub": "マスターパスワードを再入力してください",
     "sync.footer.error": "同期エラー",
     "sync.footer.error_sub": "自動的に再試行します",
+    "sync.footer.workerUpdate": "Worker の更新が必要",
+    "sync.footer.appUpdate": "Hatoba の更新が必要",
+    "sync.footer.paused_sub": "同期を一時停止中 · {n} 件の変更が未送信",
+    "sync.footer.paused_sub_none": "同期を一時停止中",
     "sync.footer.none": "クラウド同期はオフ",
     "sync.footer.none_sub": "このデバイスにのみ保存",
 
@@ -367,6 +384,8 @@ export default defineMessages({
     "err.subdomain_required": "このアカウントの workers.dev サブドメインを選んでください。",
     "err.subdomain_unavailable": "この workers.dev サブドメインはすでに使われています。別の名前を選んでください。",
     "err.worker_name_taken": "同じ名前の Worker がありますが、Hatoba の同期 Worker ではありません。別の名前を選んでください。",
+    "err.worker_not_found": "このアカウントにこの名前の Hatoba Worker がないか、保管庫がありません。アカウントと Worker 名を確認してください。",
+    "err.worker_newer": "この Worker はこのバージョンの Hatoba に含まれるものより新しいため、Hatoba は古いバージョンで置き換えません。",
     "err.no_worker_bundle": "このビルドの Hatoba には同期 Worker が含まれていないため、デプロイできません。別の方法でデプロイしてください。",
 
     "ssh.err.dns": "ホスト {host} が見つかりません。アドレスまたは DNS を確認してください。",

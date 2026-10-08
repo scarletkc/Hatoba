@@ -23,9 +23,15 @@ import { FakeShell } from "./shell";
  *   ?platform=windows | macos | linux       ?update=available | offline | error
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
+ *   ?worker=available | required | custom | app
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * The in-app deployment accepts any API token of 20 or more characters.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
+ * `?worker` shows a Worker update notice (§6.7, Upgrades): `available` on a Worker the app
+ * deployed, `required` on one deployed another way (sync paused), `custom` on a custom domain,
+ * and `app` for a Worker that needs a newer Hatoba. "Update Worker" honours `?deploy=fail`,
+ * `waiting`, `permission`, `nobundle`, and `accounts`, and also `missing`, `novault`, `newer`, and
+ * `foreign` for the review.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createMockApi(): HatobaApi {
@@ -34,7 +40,10 @@ export function createMockApi(): HatobaApi {
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
   const deployDemo = q.get("deploy");
+  const workerDemo = q.get("worker");
   const version = "0.1.0-dev";
+  /** The Worker version this build "bundles". */
+  const BUNDLED_WORKER = "0.2.0";
 
   let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
   let groups: GroupView[] = demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g }));
@@ -55,7 +64,7 @@ export function createMockApi(): HatobaApi {
   let failed = 0;
   let retryAt: number | null = null;
   let sync: SyncStatus = makeSync();
-  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null } | null = null;
+  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null = null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
   let seq = 0;
@@ -67,6 +76,16 @@ export function createMockApi(): HatobaApi {
     if (syncDemo === "offline") return { ...s, state: "offline", pending: 3 };
     if (syncDemo === "auth") return { ...s, state: "auth_failed" };
     if (syncDemo === "conflict") return { ...s, conflicts: D.CONFLICTS.length };
+    if (workerDemo === "available") return { ...s, worker_update: { kind: "available", version: "0.1.0", bundled: BUNDLED_WORKER } };
+    if (workerDemo === "required" || workerDemo === "custom")
+      return {
+        ...s,
+        state: "paused",
+        pending: 3,
+        endpoint: workerDemo === "custom" ? "sync.example.com" : s.endpoint,
+        worker_update: { kind: "required", version: "0.0.9", bundled: deployDemo === "nobundle" ? null : BUNDLED_WORKER },
+      };
+    if (workerDemo === "app") return { ...s, state: "paused", pending: 3, worker_update: { kind: "app_required", version: "1.0.0", bundled: BUNDLED_WORKER } };
     return s;
   }
 
@@ -109,8 +128,16 @@ export function createMockApi(): HatobaApi {
 
   function touch() {
     if (sync.kind === "none") return;
+    if (sync.state === "paused") return setSync({ pending: sync.pending + 1 });
     setSync({ state: "syncing", pending: sync.pending + 1 });
     setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now() }), 900);
+  }
+
+  /** The Worker answers with the bundled version: the notice goes, and a paused sync pushes what waited. */
+  function upgraded() {
+    const paused = sync.state === "paused";
+    setSync({ worker_update: null, state: paused ? "syncing" : sync.state });
+    if (paused) setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now() }), 900);
   }
 
   const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
@@ -493,8 +520,11 @@ export function createMockApi(): HatobaApi {
     },
     sync_now: async () => {
       if (sync.kind === "none") return;
+      const paused = sync.state === "paused";
       setSync({ state: "syncing" });
       await delay(900);
+      // A paused round only rereads /v1/health.
+      if (paused) return setSync({ state: "paused" });
       setSync({ state: "idle", pending: 0, last_synced_at: Date.now() });
     },
     sync_login: async (password) => {
@@ -503,6 +533,13 @@ export function createMockApi(): HatobaApi {
       setSync({ state: "idle", last_synced_at: Date.now() });
     },
     sync_set_auto: async (enabled) => setSync({ auto_sync: enabled }),
+    sync_check_worker: async () => {
+      await delay(300);
+      emit("sync://status", sync);
+    },
+    sync_dismiss_worker_update: async () => {
+      if (sync.worker_update?.kind === "available") setSync({ worker_update: null });
+    },
     sync_disconnect: async () => {
       sync = { ...sync, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null, conflicts: 0 };
       emit("sync://status", sync);
@@ -521,7 +558,7 @@ export function createMockApi(): HatobaApi {
       await delay(700);
       if (deployDemo === "nobundle") fail("no_worker_bundle");
       if (token.length < 20) fail("cloudflare_token");
-      deployment = { handle: id("deploy"), failed: false, waited: false, url: null };
+      deployment = { handle: id("deploy"), failed: false, waited: false, url: null, upgrade: false };
       const accounts =
         deployDemo === "accounts"
           ? [
@@ -566,8 +603,9 @@ export function createMockApi(): HatobaApi {
       return { url: d.url, ready: true };
     },
     deploy_check: async (handle) => {
-      needDeployment(handle);
+      const d = needDeployment(handle);
       await delay(900);
+      if (d.upgrade) upgraded();
       return true;
     },
     deploy_cleanup: async (handle) => {
@@ -590,6 +628,54 @@ export function createMockApi(): HatobaApi {
       };
       deployment = null;
       emit("sync://status", sync);
+    },
+
+    deploy_upgrade_defaults: async () => {
+      if (sync.kind !== "worker") fail("sync", "sync does not use a Worker");
+      const url = `https://${sync.endpoint}`;
+      const workersDev = url.endsWith(".workers.dev");
+      return workerDemo === "available"
+        ? { url, account_id: "0123456789abcdef0123456789abcdef", worker_name: "hatoba-sync", deployed_by_app: true }
+        : { url, account_id: null, worker_name: workersDev ? (sync.endpoint ?? "").split(".")[0] : null, deployed_by_app: false };
+    },
+    deploy_upgrade_inspect: async (handle, target) => {
+      needDeployment(handle);
+      await delay(800);
+      if (deployDemo === "permission") fail("cloudflare_permission", "token lacks D1 Edit", { permission: "d1" });
+      const version = sync.worker_update?.version ?? null;
+      const stop = target.worker_name !== "hatoba-sync" ? "missing" : ({ missing: "missing", novault: "no_vault", newer: "newer", foreign: "foreign" } as const)[deployDemo ?? ""];
+      return {
+        worker: stop ?? "upgrade",
+        database_name: stop ? null : "hatoba",
+        migrations: 1,
+        route: !!sync.endpoint?.endsWith(".workers.dev"),
+        version: stop === "newer" ? "0.3.0" : version,
+        bundled: BUNDLED_WORKER,
+      };
+    },
+    deploy_upgrade: async (handle, _target, onProgress) => {
+      const d = needDeployment(handle);
+      d.upgrade = true;
+      const route = !!sync.endpoint?.endsWith(".workers.dev");
+      for (const step of ["inspect", "migrate", "upload", "route", "wait"] as const) {
+        if (step === "route" && !route) {
+          onProgress({ step, status: "skipped" });
+          continue;
+        }
+        onProgress({ step, status: "running" });
+        await delay(step === "wait" ? 1500 : 600);
+        if (step === "upload" && deployDemo === "fail" && !d.failed) {
+          d.failed = true;
+          fail("cloudflare", "HTTP 500, code 10013", { cf_code: 10013 });
+        }
+        if (step === "wait" && deployDemo === "waiting" && !d.waited) {
+          d.waited = true;
+          return { url: `https://${sync.endpoint}`, ready: false };
+        }
+        onProgress({ step, status: d.failed && step === "migrate" ? "skipped" : "done" });
+      }
+      upgraded();
+      return { url: `https://${sync.endpoint}`, ready: true };
     },
 
     settings_get: async () => structuredClone(settings),

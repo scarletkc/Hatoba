@@ -1016,6 +1016,24 @@ impl Vault {
         self.store.get_meta_i64(meta::SYNC_LAST_AT).ok().flatten()
     }
 
+    /// The bundled Worker version whose "update available" notice the user dismissed on this
+    /// device (spec §6.7, Upgrades). The notice comes back with the next bundled version.
+    #[must_use]
+    pub fn worker_update_dismissed(&self) -> Option<String> {
+        self.store
+            .get_meta(meta::WORKER_UPDATE_DISMISSED)
+            .ok()
+            .flatten()
+    }
+
+    /// Records that the user dismissed the "update available" notice for `bundled`.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_worker_update_dismissed(&mut self, bundled: &str) -> Result<()> {
+        self.store.set_meta(meta::WORKER_UPDATE_DISMISSED, bundled)
+    }
+
     /// Number of items with local changes not yet pushed.
     #[must_use]
     pub fn pending_count(&self) -> u64 {
@@ -1788,6 +1806,9 @@ mod tests {
             vault.star_prompt().unwrap().as_deref(),
             Some(r#"{"done":true}"#)
         );
+        assert_eq!(vault.worker_update_dismissed(), None);
+        vault.set_worker_update_dismissed("0.3.0").unwrap();
+        assert_eq!(vault.worker_update_dismissed().as_deref(), Some("0.3.0"));
         // last_connected is not an item and never dirties anything.
         assert_eq!(vault.pending_count(), 2);
     }

@@ -112,6 +112,10 @@ export const commands = {
 	syncNow: () => __TAURI_INVOKE<null>("sync_now"),
 	/**  Re-authenticate after "认证失效" (session expired or revoked). */
 	syncLogin: (password: string) => __TAURI_INVOKE<null>("sync_login", { password }),
+	/**  The sync status page opened: reads the Worker's `/v1/health` (§6.7, Upgrades). */
+	syncCheckWorker: () => __TAURI_INVOKE<void>("sync_check_worker"),
+	/**  Hides "Worker update available" until the app bundles a newer Worker version. */
+	syncDismissWorkerUpdate: () => __TAURI_INVOKE<null>("sync_dismiss_worker_update"),
 	syncSetAuto: (enabled: boolean) => __TAURI_INVOKE<void>("sync_set_auto", { enabled }),
 	/**  Stops syncing on this device. Local data and the remote copy are both kept. */
 	syncDisconnect: () => __TAURI_INVOKE<null>("sync_disconnect"),
@@ -144,6 +148,18 @@ export const commands = {
 	 *  the deployment.
 	 */
 	deploySetup: (handle: string, password: string) => __TAURI_INVOKE<null>("deploy_setup", { handle, password }),
+	/**
+	 *  What "Update Worker" starts from (DEPLOY-08): the account ID and Worker name recorded when the
+	 *  app deployed the Worker, or else the name in its workers.dev URL.
+	 */
+	deployUpgradeDefaults: () => __TAURI_INVOKE<UpgradeDefaults>("deploy_upgrade_defaults"),
+	/**  Step 2 of an upgrade: what it will do, before anything is written. */
+	deployUpgradeInspect: (handle: string, target: UpgradeTarget) => __TAURI_INVOKE<UpgradePlan>("deploy_upgrade_inspect", { handle, target }),
+	/**
+	 *  "Update Worker" (DEPLOY-08): the deployment steps as an upgrade, reporting each step on
+	 *  `progress`. Run it again after a failure to continue the upgrade.
+	 */
+	deployUpgrade: (handle: string, target: UpgradeTarget, progress: Channel<DeployProgress>) => __TAURI_INVOKE<DeployOutcome>("deploy_upgrade", { handle, target, progress }),
 	settingsGet: () => __TAURI_INVOKE<SettingsView>("settings_get"),
 	settingsSave: (settings: SettingsView) => __TAURI_INVOKE<null>("settings_save", { settings }),
 	/**  Readable while locked: the unlock screen needs the language. */
@@ -323,6 +339,10 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 "cloudflare_permission" | 
 /**  Any other Cloudflare API failure; `cf_code` has Cloudflare's code when it sent one. */
 "cloudflare" | "subdomain_required" | "subdomain_unavailable" | "worker_name_taken" | 
+/**  An upgrade found no Hatoba Worker with a vault under the name. */
+"worker_not_found" | 
+/**  An upgrade found a Worker newer than the one this build deploys. */
+"worker_newer" | 
 /**  This build does not embed the Worker, so it cannot deploy it. */
 "no_worker_bundle" | "cancelled" | "io" | "internal";
 
@@ -548,7 +568,9 @@ export type SyncCounts = {
 
 export type SyncKind = "none" | "worker" | "d1";
 
-export type SyncState = "off" | "idle" | "syncing" | "offline" | "auth_failed" | "error";
+export type SyncState = "off" | "idle" | "syncing" | "offline" | "auth_failed" | "error" | 
+/**  The Worker's version stops sync until it or the app is updated; `worker_update` says which. */
+"paused";
 
 export type SyncStatus = {
 	kind: SyncKind,
@@ -561,6 +583,11 @@ export type SyncStatus = {
 	auto_sync: boolean,
 	message: string | null,
 	counts: SyncCounts | null,
+	/**
+	 *  Worker mode: how the Worker's `/v1/health` compares with this build (§6.7, Upgrades).
+	 *  `None` when there is nothing to show, including a dismissed "update available".
+	 */
+	worker_update: WorkerUpdate | null,
 };
 
 export type SyncTestResult = {
@@ -628,6 +655,54 @@ export type UpdateCheck = {
 	update_available: boolean,
 };
 
+/**  What the "Update Worker" form starts from (§6.7, Upgrades). */
+export type UpgradeDefaults = {
+	/**  The Worker URL in the sync settings. */
+	url: string,
+	/**  The account ID, when the app deployed the Worker. */
+	account_id: string | null,
+	/**
+	 *  The Worker name: recorded when the app deployed it, or the first label of a workers.dev
+	 *  URL. `None` for a custom domain, where the user enters it.
+	 */
+	worker_name: string | null,
+	/**
+	 *  The app deployed the Worker. Otherwise it may have come from the Deploy to Cloudflare
+	 *  button, whose next push from the user's repository replaces the upgrade.
+	 */
+	deployed_by_app: boolean,
+};
+
+/**  What step 2 of an upgrade found, shown before anything is written. */
+export type UpgradePlan = {
+	worker: UpgradeWorkerAction,
+	/**  The database bound to the Worker. */
+	database_name: string | null,
+	/**  Migrations step 4 applies. */
+	migrations: number,
+	/**  Step 7 runs: the Worker URL is its workers.dev URL. */
+	route: boolean,
+	/**  The version the Worker URL reports, when it answers. */
+	version: string | null,
+	/**  The version the upgrade deploys. */
+	bundled: string,
+};
+
+export type UpgradeTarget = {
+	account_id: string,
+	worker_name: string,
+};
+
+export type UpgradeWorkerAction = "upgrade" | 
+/**  No Worker has the name: the upgrade stops. */
+"missing" | 
+/**  A Worker the app does not recognize: the upgrade stops. */
+"foreign" | 
+/**  A Hatoba Worker without a vault: the upgrade stops. */
+"no_vault" | 
+/**  The Worker is newer than the bundled version: the upgrade stops. */
+"newer";
+
 export type VaultLockedEvent = {
 	reason: LockReason,
 };
@@ -642,6 +717,22 @@ export type VaultStatus = {
 	biometric_available: boolean,
 	biometric_enabled: boolean,
 };
+
+export type WorkerUpdate = {
+	kind: WorkerUpdateKind,
+	/**  The version the Worker reports. */
+	version: string,
+	/**  The version "Update Worker" deploys; `None` in builds without the Worker bundle. */
+	bundled: string | null,
+};
+
+export type WorkerUpdateKind = 
+/**  Older than the bundled version: sync continues, and the update can be dismissed. */
+"available" | 
+/**  Older than the minimum version, or a lower `api`: sync is paused. */
+"required" | 
+/**  A newer `api` than this app speaks: sync is paused until Hatoba is updated. */
+"app_required";
 
 /* Tauri Specta runtime */
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;

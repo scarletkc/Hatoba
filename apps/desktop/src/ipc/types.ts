@@ -33,6 +33,8 @@ export type ErrorCode =
   | "subdomain_required"
   | "subdomain_unavailable"
   | "worker_name_taken"
+  | "worker_not_found"
+  | "worker_newer"
   | "no_worker_bundle"
   | "cancelled"
   | "io"
@@ -344,7 +346,8 @@ export interface TransferProgressEvent {
 
 export type SyncKind = "none" | "worker" | "d1";
 
-export type SyncState = "off" | "idle" | "syncing" | "offline" | "auth_failed" | "error";
+/** `paused`: the Worker's version stops sync until it or the app is updated; `worker_update` says which. */
+export type SyncState = "off" | "idle" | "syncing" | "offline" | "auth_failed" | "error" | "paused";
 
 export interface SyncStatus {
   kind: SyncKind;
@@ -360,6 +363,19 @@ export interface SyncStatus {
   auto_sync: boolean;
   message: string | null;
   counts: { hosts: number; keys: number; groups: number } | null;
+  /** Worker mode: how the Worker's `/v1/health` compares with this app (§6.7, Upgrades). `null` when there is nothing to show. */
+  worker_update: WorkerUpdate | null;
+}
+
+/** `available`: sync continues and the notice can be dismissed. `required` and `app_required` pause sync. */
+export type WorkerUpdateKind = "available" | "required" | "app_required";
+
+export interface WorkerUpdate {
+  kind: WorkerUpdateKind;
+  /** The version the Worker reports. */
+  version: string;
+  /** The version "Update Worker" deploys; `null` in builds without the Worker bundle. */
+  bundled: string | null;
 }
 
 export type SyncConfigInput =
@@ -429,6 +445,40 @@ export type DeployStepStatus = "running" | "done" | "skipped";
 export interface DeployProgress {
   step: DeployStep;
   status: DeployStepStatus;
+}
+
+/** What "Update Worker" starts from. */
+export interface UpgradeDefaults {
+  /** The Worker URL in the sync settings. */
+  url: string;
+  /** Recorded when the app deployed the Worker. */
+  account_id: string | null;
+  /** Recorded when the app deployed the Worker, or the first label of a workers.dev URL; `null` for a custom domain. */
+  worker_name: string | null;
+  /** `false`: the Worker may come from the Deploy to Cloudflare button, whose next push replaces the upgrade. */
+  deployed_by_app: boolean;
+}
+
+export interface UpgradeTarget {
+  account_id: string;
+  worker_name: string;
+}
+
+/** Everything but `upgrade` stops the upgrade. */
+export type UpgradeWorkerAction = "upgrade" | "missing" | "foreign" | "no_vault" | "newer";
+
+/** What step 2 of an upgrade found, before anything is written. */
+export interface UpgradePlan {
+  worker: UpgradeWorkerAction;
+  database_name: string | null;
+  /** Migrations step 4 applies. */
+  migrations: number;
+  /** Step 7 runs: the Worker URL is its workers.dev URL. */
+  route: boolean;
+  /** The version the Worker URL reports, when it answers. */
+  version: string | null;
+  /** The version the upgrade deploys. */
+  bundled: string;
 }
 
 export interface DeployOutcome {

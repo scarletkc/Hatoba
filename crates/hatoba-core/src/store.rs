@@ -38,6 +38,8 @@ pub mod meta {
     pub const SYNC_CURSOR: &str = "sync_cursor";
     /// Time of the last completed sync round, Unix ms.
     pub const SYNC_LAST_AT: &str = "sync_last_at";
+    /// The bundled Worker version whose "update available" notice the user dismissed.
+    pub const WORKER_UPDATE_DISMISSED: &str = "worker_update_dismissed";
     /// Consecutive failed unlock attempts (SEC-06).
     pub const UNLOCK_FAILURES: &str = "unlock_failures";
     /// Time of the last failed unlock attempt, Unix ms.

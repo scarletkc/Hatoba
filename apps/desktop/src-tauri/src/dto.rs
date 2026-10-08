@@ -309,6 +309,8 @@ pub enum SyncState {
     Offline,
     AuthFailed,
     Error,
+    /// The Worker's version stops sync until it or the app is updated; `worker_update` says which.
+    Paused,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -331,6 +333,29 @@ pub struct SyncStatus {
     pub auto_sync: bool,
     pub message: Option<String>,
     pub counts: Option<SyncCounts>,
+    /// Worker mode: how the Worker's `/v1/health` compares with this build (§6.7, Upgrades).
+    /// `None` when there is nothing to show, including a dismissed "update available".
+    pub worker_update: Option<WorkerUpdate>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerUpdateKind {
+    /// Older than the bundled version: sync continues, and the update can be dismissed.
+    Available,
+    /// Older than the minimum version, or a lower `api`: sync is paused.
+    Required,
+    /// A newer `api` than this app speaks: sync is paused until Hatoba is updated.
+    AppRequired,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct WorkerUpdate {
+    pub kind: WorkerUpdateKind,
+    /// The version the Worker reports.
+    pub version: String,
+    /// The version "Update Worker" deploys; `None` in builds without the Worker bundle.
+    pub bundled: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -511,6 +536,57 @@ pub enum DeployStepStatus {
 pub struct DeployProgress {
     pub step: DeployStep,
     pub status: DeployStepStatus,
+}
+
+/// What the "Update Worker" form starts from (§6.7, Upgrades).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct UpgradeDefaults {
+    /// The Worker URL in the sync settings.
+    pub url: String,
+    /// The account ID, when the app deployed the Worker.
+    pub account_id: Option<String>,
+    /// The Worker name: recorded when the app deployed it, or the first label of a workers.dev
+    /// URL. `None` for a custom domain, where the user enters it.
+    pub worker_name: Option<String>,
+    /// The app deployed the Worker. Otherwise it may have come from the Deploy to Cloudflare
+    /// button, whose next push from the user's repository replaces the upgrade.
+    pub deployed_by_app: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct UpgradeTarget {
+    pub account_id: String,
+    pub worker_name: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UpgradeWorkerAction {
+    Upgrade,
+    /// No Worker has the name: the upgrade stops.
+    Missing,
+    /// A Worker the app does not recognize: the upgrade stops.
+    Foreign,
+    /// A Hatoba Worker without a vault: the upgrade stops.
+    NoVault,
+    /// The Worker is newer than the bundled version: the upgrade stops.
+    Newer,
+}
+
+/// What step 2 of an upgrade found, shown before anything is written.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct UpgradePlan {
+    pub worker: UpgradeWorkerAction,
+    /// The database bound to the Worker.
+    pub database_name: Option<String>,
+    /// Migrations step 4 applies.
+    pub migrations: u32,
+    /// Step 7 runs: the Worker URL is its workers.dev URL.
+    pub route: bool,
+    /// The version the Worker URL reports, when it answers.
+    pub version: Option<String>,
+    /// The version the upgrade deploys.
+    pub bundled: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

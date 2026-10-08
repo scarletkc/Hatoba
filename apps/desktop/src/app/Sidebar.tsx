@@ -294,6 +294,14 @@ export function syncFooterView(t: ReturnType<typeof useT>, s: SyncStatus | null)
       return { icon: "cloud-warning", color: "var(--orange)", title: t("sync.footer.auth"), sub: t("sync.footer.auth_sub"), spin: false };
     case "error":
       return { icon: "cloud-warning", color: "var(--red)", title: t("sync.footer.error"), sub: t("sync.footer.error_sub"), spin: false };
+    case "paused":
+      return {
+        icon: "cloud-warning",
+        color: "var(--orange)",
+        title: t(s.worker_update?.kind === "app_required" ? "sync.footer.appUpdate" : "sync.footer.workerUpdate"),
+        sub: s.pending > 0 ? t("sync.footer.paused_sub", { n: s.pending }) : t("sync.footer.paused_sub_none"),
+        spin: false,
+      };
     case "off":
       return { icon: "cloud", color: "var(--fg2)", title: t("sync.footer.none"), sub: t("sync.footer.none_sub"), spin: false };
     default:

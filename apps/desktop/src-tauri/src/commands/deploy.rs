@@ -1,9 +1,10 @@
-//! In-app deployment of the sync Worker (spec §6.7, DEPLOY-01…07).
+//! In-app deployment of the sync Worker (spec §6.7, DEPLOY-01…07), and its upgrades (DEPLOY-08).
 
 use std::sync::Arc;
 
 use hatoba_core::sync::deploy::{
-    DatabasePlan, Deployment, Outcome, Step, StepStatus, Target, WorkerPlan,
+    self as core_deploy, DatabasePlan, Deployment, Outcome, Step, StepFailure, StepStatus, Target,
+    UpgradeWorker, WorkerPlan,
 };
 use hatoba_core::sync::{
     SyncBackend, SyncConfig, WorkerBackend, WorkerDeployment, flows, save_session,
@@ -15,9 +16,10 @@ use zeroize::Zeroizing;
 use crate::deploy::bundle;
 use crate::dto::{
     CloudflareAccount, DeployDatabaseAction, DeployOutcome, DeployPlan, DeployProgress,
-    DeployStart, DeployStep, DeployStepStatus, DeployTarget, DeployWorkerAction,
+    DeployStart, DeployStep, DeployStepStatus, DeployTarget, DeployWorkerAction, UpgradeDefaults,
+    UpgradePlan, UpgradeTarget, UpgradeWorkerAction,
 };
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::state::AppState;
 use crate::sync::{self, Trigger, device_info};
 
@@ -52,6 +54,32 @@ fn step(step: Step) -> DeployStep {
         Step::Route => DeployStep::Route,
         Step::Wait => DeployStep::Wait,
     }
+}
+
+/// Sends each step's progress to the wizard.
+fn reporter(progress: &Channel<DeployProgress>) -> impl Fn(Step, StepStatus) + Send + Sync + '_ {
+    move |s, status| {
+        tracing::info!(step = s as u8, ?status, "deploy step");
+        let _ = progress.send(DeployProgress {
+            step: step(s),
+            status: match status {
+                StepStatus::Running => DeployStepStatus::Running,
+                StepStatus::Done => DeployStepStatus::Done,
+                StepStatus::Skipped => DeployStepStatus::Skipped,
+            },
+        });
+    }
+}
+
+fn step_failed(failure: StepFailure) -> AppError {
+    // The error's text has the HTTP status and Cloudflare's code, never a body or token.
+    tracing::warn!(
+        step = failure.step as u8,
+        code = failure.error.code(),
+        "deploy step failed: {}",
+        failure.error
+    );
+    deploy_error(failure.error)
 }
 
 /// Step 1 (DEPLOY-02): checks the API token. The token crosses to Rust here once; every later
@@ -144,45 +172,34 @@ pub async fn deploy_run(
 ) -> AppResult<DeployOutcome> {
     let deployment = state.deploy.get(&handle)?;
     let mut deployment = deployment.lock().await;
-    let report = |s: Step, status: StepStatus| {
-        tracing::info!(step = s as u8, ?status, "deploy step");
-        let _ = progress.send(DeployProgress {
-            step: step(s),
-            status: match status {
-                StepStatus::Running => DeployStepStatus::Running,
-                StepStatus::Done => DeployStepStatus::Done,
-                StepStatus::Skipped => DeployStepStatus::Skipped,
-            },
-        });
-    };
-    match deployment.deploy(&self::target(target), &report).await {
-        Ok(outcome) => Ok(DeployOutcome {
-            url: deployment
-                .deployed()
-                .map(|d| d.url.clone())
-                .unwrap_or_default(),
-            ready: outcome == Outcome::Ready,
-        }),
-        Err(failure) => {
-            // The error's text has the HTTP status and Cloudflare's code, never a body or token.
-            tracing::warn!(
-                step = failure.step as u8,
-                code = failure.error.code(),
-                "deploy step failed: {}",
-                failure.error
-            );
-            Err(deploy_error(failure.error))
-        }
-    }
+    let outcome = deployment
+        .deploy(&self::target(target), &reporter(&progress))
+        .await
+        .map_err(step_failed)?;
+    Ok(DeployOutcome {
+        url: deployment
+            .deployed()
+            .map(|d| d.url.clone())
+            .unwrap_or_default(),
+        ready: outcome == Outcome::Ready,
+    })
 }
 
 /// "Check again" while step 8 waits for the Worker.
 #[tauri::command]
 #[specta::specta]
-pub async fn deploy_check(state: State<'_, AppState>, handle: String) -> AppResult<bool> {
+pub async fn deploy_check(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    handle: String,
+) -> AppResult<bool> {
     let deployment = state.deploy.get(&handle)?;
     let deployment = deployment.lock().await;
-    deployment.check_ready().await.map_err(deploy_error)
+    let ready = deployment.check_ready().await.map_err(deploy_error)?;
+    if ready && deployment.is_upgrade() {
+        upgraded(&app);
+    }
+    Ok(ready)
 }
 
 /// "Remove what Hatoba created": only what this deployment created (DEPLOY-05).
@@ -259,4 +276,145 @@ pub async fn deploy_setup(
     sync::emit_status(&app);
     sync::trigger(&app, Trigger::Manual);
     Ok(())
+}
+
+/// `https://{name}.{subdomain}.workers.dev` → `name`.
+fn workers_dev_name(url: &str) -> Option<String> {
+    let url = reqwest::Url::parse(url).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    let mut labels = host.strip_suffix(".workers.dev")?.split('.');
+    let (name, _subdomain) = (labels.next()?, labels.next()?);
+    labels.next().is_none().then(|| name.to_owned())
+}
+
+/// The Worker URL in the sync settings, which an upgrade polls.
+fn configured_url(state: &AppState) -> AppResult<(String, Option<WorkerDeployment>)> {
+    match state.vault().sync_config()? {
+        Some(SyncConfig::Worker { url, deployment }) => Ok((url, deployment)),
+        _ => Err(AppError::new(ErrorCode::Sync, "sync does not use a Worker")),
+    }
+}
+
+fn upgrade_target(state: &AppState, input: UpgradeTarget) -> AppResult<core_deploy::UpgradeTarget> {
+    Ok(core_deploy::UpgradeTarget {
+        account_id: input.account_id.trim().to_owned(),
+        worker_name: input.worker_name.trim().to_owned(),
+        url: configured_url(state)?.0,
+    })
+}
+
+/// Once the Worker answers with the bundled version, sync rereads it, resumes if the old version
+/// paused it, and pushes what waited.
+fn upgraded(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { sync::recheck_worker(&app).await });
+}
+
+/// What "Update Worker" starts from (DEPLOY-08): the account ID and Worker name recorded when the
+/// app deployed the Worker, or else the name in its workers.dev URL.
+#[tauri::command]
+#[specta::specta]
+pub fn deploy_upgrade_defaults(state: State<'_, AppState>) -> AppResult<UpgradeDefaults> {
+    let (url, deployment) = configured_url(&state)?;
+    Ok(match deployment {
+        Some(d) => UpgradeDefaults {
+            url,
+            account_id: Some(d.account_id),
+            worker_name: Some(d.worker_name),
+            deployed_by_app: true,
+        },
+        None => UpgradeDefaults {
+            worker_name: workers_dev_name(&url),
+            url,
+            account_id: None,
+            deployed_by_app: false,
+        },
+    })
+}
+
+/// Step 2 of an upgrade: what it will do, before anything is written.
+#[tauri::command]
+#[specta::specta]
+pub async fn deploy_upgrade_inspect(
+    state: State<'_, AppState>,
+    handle: String,
+    target: UpgradeTarget,
+) -> AppResult<UpgradePlan> {
+    let target = upgrade_target(&state, target)?;
+    let deployment = state.deploy.get(&handle)?;
+    let deployment = deployment.lock().await;
+    let plan = deployment
+        .inspect_upgrade(&target)
+        .await
+        .map_err(deploy_error)?;
+    let (worker, database_name) = match plan.worker {
+        UpgradeWorker::Ready { database_name, .. } => {
+            (UpgradeWorkerAction::Upgrade, Some(database_name))
+        }
+        UpgradeWorker::Missing => (UpgradeWorkerAction::Missing, None),
+        UpgradeWorker::Foreign => (UpgradeWorkerAction::Foreign, None),
+        UpgradeWorker::NoVault => (UpgradeWorkerAction::NoVault, None),
+        UpgradeWorker::Newer => (UpgradeWorkerAction::Newer, None),
+    };
+    Ok(UpgradePlan {
+        worker,
+        database_name,
+        migrations: u32::try_from(plan.migrations).unwrap_or(u32::MAX),
+        route: plan.route,
+        version: plan.version,
+        bundled: deployment.bundle().version.clone(),
+    })
+}
+
+/// "Update Worker" (DEPLOY-08): the deployment steps as an upgrade, reporting each step on
+/// `progress`. Run it again after a failure to continue the upgrade.
+#[tauri::command]
+#[specta::specta]
+pub async fn deploy_upgrade(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    handle: String,
+    target: UpgradeTarget,
+    progress: Channel<DeployProgress>,
+) -> AppResult<DeployOutcome> {
+    let target = upgrade_target(&state, target)?;
+    let deployment = state.deploy.get(&handle)?;
+    let mut deployment = deployment.lock().await;
+    let outcome = deployment
+        .upgrade(&target, &reporter(&progress))
+        .await
+        .map_err(step_failed)?;
+    let ready = outcome == Outcome::Ready;
+    if ready {
+        upgraded(&app);
+    }
+    Ok(DeployOutcome {
+        url: target.url,
+        ready,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workers_dev_name;
+
+    #[test]
+    fn takes_the_worker_name_from_a_workers_dev_url() {
+        assert_eq!(
+            workers_dev_name("https://hatoba-sync.kc.workers.dev").as_deref(),
+            Some("hatoba-sync")
+        );
+        assert_eq!(
+            workers_dev_name("https://My-Sync.KC.workers.dev").as_deref(),
+            Some("my-sync")
+        );
+        for other in [
+            "https://sync.example.com",
+            "https://kc.workers.dev",
+            "https://a.b.kc.workers.dev",
+            "not a url",
+        ] {
+            assert_eq!(workers_dev_name(other), None, "{other}");
+        }
+    }
 }

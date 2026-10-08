@@ -42,6 +42,8 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.DeployPlan, Ui.DeployPlan>>,
   Check<Assignable<Rust.DeployProgress, Ui.DeployProgress>>,
   Check<Assignable<Rust.DeployOutcome, Ui.DeployOutcome>>,
+  Check<Assignable<Rust.UpgradeDefaults, Ui.UpgradeDefaults>>,
+  Check<Assignable<Rust.UpgradePlan, Ui.UpgradePlan>>,
 ];
 
 /** UI → Rust: command arguments. */
@@ -56,4 +58,5 @@ export type InputsMatch = [
   Check<Assignable<Ui.LocalPrefs, Rust.LocalPrefs>>,
   Check<Assignable<Ui.ForwardInput, Rust.ForwardInput>>,
   Check<Assignable<Ui.DeployTarget, Rust.DeployTarget>>,
+  Check<Assignable<Ui.UpgradeTarget, Rust.UpgradeTarget>>,
 ];

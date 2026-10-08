@@ -32,6 +32,10 @@ pub enum ErrorCode {
     SubdomainRequired,
     SubdomainUnavailable,
     WorkerNameTaken,
+    /// An upgrade found no Hatoba Worker with a vault under the name.
+    WorkerNotFound,
+    /// An upgrade found a Worker newer than the one this build deploys.
+    WorkerNewer,
     /// This build does not embed the Worker, so it cannot deploy it.
     NoWorkerBundle,
     Cancelled,
@@ -196,6 +200,8 @@ impl From<hatoba_core::Error> for AppError {
             E::SubdomainRequired => Self::new(ErrorCode::SubdomainRequired, detail),
             E::SubdomainUnavailable => Self::new(ErrorCode::SubdomainUnavailable, detail),
             E::WorkerNameTaken => Self::new(ErrorCode::WorkerNameTaken, detail),
+            E::WorkerNotFound => Self::new(ErrorCode::WorkerNotFound, detail),
+            E::WorkerNewer => Self::new(ErrorCode::WorkerNewer, detail),
             E::SyncNotConfigured
             | E::Server(_)
             | E::Protocol(_)

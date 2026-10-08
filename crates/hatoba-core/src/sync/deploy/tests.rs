@@ -1243,7 +1243,7 @@ async fn retry_continues_a_failed_upgrade() {
             .unwrap(),
         Outcome::Ready
     );
-    let events = events.lock().unwrap();
+    let events = events.lock().unwrap().clone();
     assert!(events.contains(&(Step::Migrate, StepStatus::Skipped)));
     assert!(events.contains(&(Step::Upload, StepStatus::Done)));
     assert_eq!(h.health().await.version, NEXT_VERSION);
