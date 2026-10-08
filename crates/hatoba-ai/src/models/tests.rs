@@ -47,7 +47,9 @@ async fn chat_completions_list_reads_ids_names_and_limits() {
         })))
         .mount(&server)
         .await;
-    let models = list_models(&http_client(), &cc(&server)).await.unwrap();
+    let models = list_models(&http_client(), &cc(&server), &CancellationToken::new())
+        .await
+        .unwrap();
     assert_eq!(
         models,
         vec![
@@ -104,9 +106,13 @@ async fn anthropic_list_follows_pages() {
         })))
         .mount(&server)
         .await;
-    let models = list_models(&http_client(), &anthropic(&server))
-        .await
-        .unwrap();
+    let models = list_models(
+        &http_client(),
+        &anthropic(&server),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
     let summary: Vec<(&str, &str, Option<u64>, Option<u64>)> = models
         .iter()
         .map(|m| {
@@ -151,9 +157,13 @@ async fn a_page_that_repeats_its_cursor_ends_the_listing() {
         })))
         .mount(&server)
         .await;
-    let models = list_models(&http_client(), &anthropic(&server))
-        .await
-        .unwrap();
+    let models = list_models(
+        &http_client(),
+        &anthropic(&server),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }
@@ -176,7 +186,13 @@ async fn test_connection_with_a_model_sends_a_minimal_request() {
         .mount(&server)
         .await;
     let http = http_client();
-    let outcome = test_connection(&http, &cc(&server), Some("gpt-4.1")).await;
+    let outcome = test_connection(
+        &http,
+        &cc(&server),
+        Some("gpt-4.1"),
+        &CancellationToken::new(),
+    )
+    .await;
     assert_eq!(
         outcome,
         TestOutcome {
@@ -187,9 +203,14 @@ async fn test_connection_with_a_model_sends_a_minimal_request() {
         }
     );
     assert!(
-        test_connection(&http, &anthropic(&server), Some("claude-opus-4-8"))
-            .await
-            .ok
+        test_connection(
+            &http,
+            &anthropic(&server),
+            Some("claude-opus-4-8"),
+            &CancellationToken::new()
+        )
+        .await
+        .ok
     );
     let bodies: Vec<Value> = server
         .received_requests()
@@ -212,7 +233,13 @@ async fn outcome_for(status: u16, body: Value, model: Option<&str>) -> TestOutco
         .respond_with(ResponseTemplate::new(status).set_body_json(body))
         .mount(&server)
         .await;
-    test_connection(&http_client(), &cc(&server), model).await
+    test_connection(
+        &http_client(),
+        &cc(&server),
+        model,
+        &CancellationToken::new(),
+    )
+    .await
 }
 
 #[tokio::test]
@@ -294,24 +321,25 @@ async fn test_connection_network_and_url_failures() {
     let http = http_client();
     // Nothing listens on port 9 of the loopback address.
     let closed = provider("http://127.0.0.1:9/v1".into(), Protocol::ChatCompletions);
-    let outcome = test_connection(&http, &closed, Some("m")).await;
+    let outcome = test_connection(&http, &closed, Some("m"), &CancellationToken::new()).await;
     assert_eq!(outcome.failure, Some(TestFailure::Network), "{outcome:?}");
     assert_eq!(outcome.status, None);
 
     let public_http = provider("http://8.8.8.8/v1".into(), Protocol::ChatCompletions);
-    let outcome = test_connection(&http, &public_http, None).await;
+    let outcome = test_connection(&http, &public_http, None, &CancellationToken::new()).await;
     assert_eq!(outcome.failure, Some(TestFailure::InvalidUrl));
     let outcome = test_connection(
         &http,
         &provider("nonsense".into(), Protocol::Anthropic),
         None,
+        &CancellationToken::new(),
     )
     .await;
     assert_eq!(outcome.failure, Some(TestFailure::InvalidUrl));
 
     let mut bad_key = closed.clone();
     bad_key.api_key = Zeroizing::new("line\nbreak".into());
-    let outcome = test_connection(&http, &bad_key, Some("m")).await;
+    let outcome = test_connection(&http, &bad_key, Some("m"), &CancellationToken::new()).await;
     assert_eq!(outcome.failure, Some(TestFailure::Auth));
     assert!(!outcome.message.unwrap().contains("line"));
 }
@@ -325,9 +353,14 @@ async fn test_connection_without_a_model_lists_models() {
         .mount(&server)
         .await;
     assert!(
-        test_connection(&http_client(), &cc(&server), Some("  "))
-            .await
-            .ok
+        test_connection(
+            &http_client(),
+            &cc(&server),
+            Some("  "),
+            &CancellationToken::new()
+        )
+        .await
+        .ok
     );
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests[0].method.as_str(), "GET");
@@ -363,4 +396,96 @@ fn classification_of_errors() {
         serde_json::to_string(&TestFailure::UnknownModel).unwrap(),
         "\"unknown_model\""
     );
+}
+
+/// A server that takes 30 s to answer anything.
+async fn slow_server() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(wiremock::matchers::any())
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(30))
+                .set_body_json(json!({"data": []})),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+/// A token that fires after 200 ms, like a lock arriving while a request is in flight.
+fn cancel_soon() -> CancellationToken {
+    let cancel = CancellationToken::new();
+    let later = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        later.cancel();
+    });
+    cancel
+}
+
+#[tokio::test]
+async fn cancelling_aborts_the_model_list_and_the_test_connection() {
+    let server = slow_server().await;
+    let http = http_client();
+    let started = std::time::Instant::now();
+
+    let err = list_models(&http, &cc(&server), &cancel_soon())
+        .await
+        .unwrap_err();
+    assert_eq!(err, AiError::Cancelled);
+    let err = list_models(&http, &anthropic(&server), &cancel_soon())
+        .await
+        .unwrap_err();
+    assert_eq!(err, AiError::Cancelled);
+
+    for model in [None, Some("m")] {
+        let outcome = test_connection(&http, &cc(&server), model, &cancel_soon()).await;
+        assert!(!outcome.ok);
+        assert_eq!(outcome.message.as_deref(), Some("cancelled"), "{model:?}");
+    }
+    assert!(
+        started.elapsed() < Duration::from_secs(20),
+        "each request was dropped when the token fired, not after the 30 s the server takes"
+    );
+
+    // A token that has fired already: nothing is sent.
+    let before = server.received_requests().await.unwrap().len();
+    let fired = CancellationToken::new();
+    fired.cancel();
+    assert_eq!(
+        list_models(&http, &cc(&server), &fired).await,
+        Err(AiError::Cancelled)
+    );
+    let outcome = test_connection(&http, &cc(&server), Some("m"), &fired).await;
+    assert_eq!(outcome.message.as_deref(), Some("cancelled"));
+    assert_eq!(server.received_requests().await.unwrap().len(), before);
+}
+
+#[tokio::test]
+async fn an_http_base_url_with_a_host_name_goes_through_the_guarded_client() {
+    // `localhost` is a host name, so these requests use the client whose resolver keeps to local
+    // addresses; it resolves to loopback, which the mock server listens on.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"data": [{"id": "m1"}]})))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"choices": []})))
+        .mount(&server)
+        .await;
+    let provider = provider(
+        format!("http://localhost:{}/v1", server.address().port()),
+        Protocol::ChatCompletions,
+    );
+    let http = http_client();
+    let models = list_models(&http, &provider, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "m1");
+    let outcome = test_connection(&http, &provider, Some("m1"), &CancellationToken::new()).await;
+    assert!(outcome.ok, "{outcome:?}");
 }

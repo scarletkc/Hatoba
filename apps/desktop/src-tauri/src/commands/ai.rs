@@ -339,7 +339,10 @@ pub async fn ai_provider_models(
     input: AiProviderInput,
 ) -> AppResult<Vec<AiModel>> {
     let config = state.with_unlocked(|v| provider_config_for(v, &input))?;
-    let models = hatoba_ai::models::list_models(&state.ai.http(), &config)
+    // `AiManager` has no token a lock cancels for work outside a conversation, so a lock cannot
+    // abort this request yet.
+    let cancel = CancellationToken::new();
+    let models = hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel)
         .await
         .map_err(|e| {
             tracing::info!(
@@ -369,8 +372,11 @@ pub async fn ai_provider_test(
 ) -> AppResult<AiTestResult> {
     let config = state.with_unlocked(|v| provider_config_for(v, &input))?;
     let model = input.models.first().map(|m| m.id.trim().to_owned());
+    // As for the model list, the token is not one a lock cancels.
+    let cancel = CancellationToken::new();
     let outcome =
-        hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref()).await;
+        hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref(), &cancel)
+            .await;
     tracing::info!(ok = outcome.ok, failure = ?outcome.failure, status = ?outcome.status, "AI provider test");
     Ok(test_result(outcome))
 }

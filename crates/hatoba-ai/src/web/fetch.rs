@@ -10,14 +10,11 @@
 //! Text, HTML, JSON and XML are accepted; HTML becomes Markdown. The download is capped at 5 MB
 //! and the whole fetch at 30 s. The result is up to 16,000 characters from `offset`.
 
-use std::io;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::future::BoxFuture;
 use reqwest::StatusCode;
-use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
@@ -25,7 +22,9 @@ use url::{Host, Url};
 
 use super::text::document_text;
 use crate::error::AiError;
-use crate::net::{self, BLOCKED_MESSAGE, BlockedAddress, is_blocked};
+use crate::net::{
+    self, BLOCKED_MESSAGE, GuardedResolver, Lookup, is_blocked, refuse_blocked, system_lookup,
+};
 
 /// Characters returned per call.
 pub const MAX_FETCH_CHARS: usize = 16_000;
@@ -101,46 +100,6 @@ pub fn format_fetch_result(r: &FetchResult) -> String {
     out
 }
 
-type Lookup = Arc<dyn Fn(String) -> BoxFuture<'static, io::Result<Vec<IpAddr>>> + Send + Sync>;
-
-/// The system resolver.
-fn system_lookup() -> Lookup {
-    Arc::new(|host: String| {
-        Box::pin(async move {
-            Ok(tokio::net::lookup_host((host.as_str(), 0))
-                .await?
-                .map(|addr| addr.ip())
-                .collect())
-        })
-    })
-}
-
-/// A resolver that refuses a name when any of its addresses is not allowed, and otherwise
-/// returns exactly the addresses it checked (the connection is pinned to them).
-struct GuardedResolver {
-    allowed: fn(IpAddr) -> bool,
-    lookup: Lookup,
-}
-
-impl Resolve for GuardedResolver {
-    fn resolve(&self, name: Name) -> Resolving {
-        let host = name.as_str().to_owned();
-        let allowed = self.allowed;
-        let lookup = Arc::clone(&self.lookup);
-        Box::pin(async move {
-            let addrs = lookup(host).await?;
-            if addrs.is_empty() {
-                return Err(io::Error::new(io::ErrorKind::NotFound, "no addresses").into());
-            }
-            if addrs.iter().any(|ip| !allowed(*ip)) {
-                return Err(Box::new(BlockedAddress) as Box<dyn std::error::Error + Send + Sync>);
-            }
-            let addrs: Addrs = Box::new(addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)));
-            Ok(addrs)
-        })
-    }
-}
-
 /// `fetch_url` with an injectable address policy and resolver (tests use them to reach the
 /// mock server on 127.0.0.1); [`fetch_url`] always uses [`Fetcher::public`].
 pub(crate) struct Fetcher {
@@ -193,6 +152,7 @@ impl Fetcher {
             .dns_resolver(GuardedResolver {
                 allowed: self.allowed,
                 lookup: Arc::clone(&self.lookup),
+                refusal: refuse_blocked,
             })
             .connect_timeout(CONNECT_TIMEOUT)
             .user_agent(net::USER_AGENT)

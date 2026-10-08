@@ -1168,8 +1168,12 @@ fn consecutive_results_share_one_user_message_with_status_wording() {
     );
     let cc = request::chat_completions(&request(&model, &entries, &tools), true).body;
     assert_eq!(
-        cc["messages"][2]["tool_calls"][1]["function"]["arguments"], "not json",
-        "Chat Completions sends the arguments text as stored"
+        cc["messages"][2]["tool_calls"][0]["function"]["arguments"], "{\"command\":\"rm x\"}",
+        "Chat Completions sends the arguments of a call as stored when they are a JSON object"
+    );
+    assert_eq!(
+        cc["messages"][2]["tool_calls"][1]["function"]["arguments"], "{}",
+        "and `{{}}` when they are not"
     );
     assert_eq!(
         cc["messages"][4],
@@ -1656,7 +1660,14 @@ fn requests_with_tools_keep_structured_tool_blocks() {
              "content": "The user rejected this tool call. The user's reason: too risky"},
             {"role": "tool", "tool_call_id": "c3",
              "content": "The tool call was cancelled before it finished."},
-            raw_of(&entries, 4),
+            // Rebuilt, not raw: its cut-off arguments are not a JSON object (see
+            // `cut_off_chat_completions_arguments_are_never_sent`).
+            {"role": "assistant", "content": null, "tool_calls": [
+                {"id": "c4", "type": "function",
+                 "function": {"name": "read_terminal", "arguments": "{}"}},
+                {"id": "c5", "type": "function",
+                 "function": {"name": "run_command", "arguments": "{}"}}
+            ]},
             {"role": "tool", "tool_call_id": "c4", "content": "(no output)"},
             {"role": "tool", "tool_call_id": "c5",
              "content": "The tool call was cancelled before it finished."},
@@ -1666,6 +1677,10 @@ fn requests_with_tools_keep_structured_tool_blocks() {
         ])
     );
     assert_eq!(built.body["tools"].as_array().unwrap().len(), tools.len());
+    assert!(
+        built.used_raw,
+        "the other assistant entries still replay raw"
+    );
     let other = ModelSpec::new("gpt-4.1");
     let rebuilt = request::chat_completions(&request(&other, &entries, &tools), true);
     assert_eq!(
@@ -1677,6 +1692,160 @@ fn requests_with_tools_keep_structured_tool_blocks() {
         rebuilt.body["messages"][6]["tool_calls"][0]["function"]["arguments"], "{}",
         "blank arguments are sent as {{}} with tools, as before"
     );
+    assert_eq!(
+        rebuilt.body["messages"][6]["tool_calls"][1]["function"]["arguments"], "{}",
+        "and so are cut-off ones"
+    );
+}
+
+/// A Chat Completions assistant message as a stream assembles it, with `arguments` as given.
+fn chat_message(calls: &[(&str, &str, Value)]) -> Value {
+    let calls: Vec<Value> = calls
+        .iter()
+        .map(|(id, name, arguments)| {
+            json!({"id": id, "type": "function",
+                   "function": {"name": name, "arguments": arguments}})
+        })
+        .collect();
+    json!({"role": "assistant", "content": "Listing.", "reasoning_content": "Plan.",
+           "tool_calls": calls})
+}
+
+/// The `arguments` of every call of the assistant message at `index` of the request's messages.
+fn sent_arguments(body: &Value, index: usize) -> Vec<String> {
+    body["messages"][index]["tool_calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["function"]["arguments"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn cut_off_chat_completions_arguments_are_never_sent() {
+    // A reply cut off by `finish: length` stores arguments that are not complete JSON, and
+    // servers that parse assistant tool-call arguments (vLLM) refuse every later request that
+    // carries them.
+    let tools = terminal_tools();
+    let model = ModelSpec::new("qwen3");
+    let cut = "{\"command\":\"ls";
+    let entries_with = |raw: Value, calls: Vec<ToolCall>| {
+        vec![
+            AiEntry::user(1, "list /"),
+            assistant_entry(&model.id, "Listing.", calls, raw),
+            AiEntry::tool(3, "c1", ToolStatus::Cancelled, ""),
+            AiEntry::user(4, "try again"),
+        ]
+    };
+
+    // The raw path: same provider and model, but `raw` holds the cut-off text.
+    let raw = chat_message(&[("c1", "run_command", json!(cut))]);
+    let entries = entries_with(raw.clone(), vec![call("c1", "run_command", cut)]);
+    let built = request::chat_completions(&request(&model, &entries, &tools), true);
+    assert!(
+        !built.used_raw,
+        "a raw message with cut-off arguments is not replayed"
+    );
+    assert_eq!(sent_arguments(&built.body, 2), ["{}"]);
+    assert_eq!(built.body["messages"][2]["content"], "Listing.");
+    assert!(
+        built.body["messages"][2].get("reasoning_content").is_none(),
+        "what only raw held is left out with it"
+    );
+
+    // The rebuild path: another model, whatever `raw` holds.
+    let other = ModelSpec::new("gpt-4.1");
+    let valid_raw = chat_message(&[("c1", "run_command", json!("{}"))]);
+    for raw in [valid_raw, raw] {
+        let entries = entries_with(raw, vec![call("c1", "run_command", cut)]);
+        let built = request::chat_completions(&request(&other, &entries, &tools), true);
+        assert!(!built.used_raw);
+        assert_eq!(sent_arguments(&built.body, 2), ["{}"]);
+    }
+
+    // Every shape of arguments that is not a JSON object becomes `{}`; objects stay as stored.
+    let stored = [
+        ("c1", "", "{}"),
+        ("c2", "   ", "{}"),
+        ("c3", "{\"command\":\"ls", "{}"),
+        ("c4", "not json", "{}"),
+        ("c5", "[1,2]", "{}"),
+        ("c6", "\"text\"", "{}"),
+        ("c7", "null", "{}"),
+        (
+            "c8",
+            "{\"command\": \"uptime\"}",
+            "{\"command\": \"uptime\"}",
+        ),
+        ("c9", "{}", "{}"),
+    ];
+    let calls: Vec<ToolCall> = stored
+        .iter()
+        .map(|(id, arguments, _)| call(id, "run_command", arguments))
+        .collect();
+    let entries = vec![
+        AiEntry::user(1, "go"),
+        assistant_entry(&other.id, "", calls, json!(null)),
+    ];
+    let built = request::chat_completions(&request(&other, &entries, &tools), true);
+    let expected: Vec<&str> = stored.iter().map(|(_, _, sent)| *sent).collect();
+    assert_eq!(sent_arguments(&built.body, 2), expected);
+}
+
+#[test]
+fn chat_completions_raw_is_replayed_only_with_object_arguments() {
+    let tools = terminal_tools();
+    let model = ModelSpec::new("qwen3");
+    let replayed = |raw: Value| {
+        let entries = vec![
+            AiEntry::user(1, "go"),
+            assistant_entry(&model.id, "Listing.", vec![call("c1", "f", "{}")], raw),
+        ];
+        request::chat_completions(&request(&model, &entries, &tools), true).used_raw
+    };
+    let one = |arguments: Value| chat_message(&[("c1", "f", arguments)]);
+
+    // Arguments that are a JSON object, as text or (some servers) as an object itself.
+    assert!(replayed(one(json!("{\"command\":\"ls\"}"))));
+    assert!(replayed(one(json!("{}"))));
+    assert!(replayed(one(json!({"command": "ls"}))));
+    // Everything else.
+    for arguments in [
+        json!(""),
+        json!("  "),
+        json!("{\"command\":\"ls"),
+        json!("[]"),
+        json!("null"),
+        json!(null),
+        json!(5),
+    ] {
+        assert!(!replayed(one(arguments.clone())), "{arguments}");
+    }
+    // One bad call among good ones is enough; a call without a `function` or `arguments` too.
+    assert!(!replayed(chat_message(&[
+        ("c1", "f", json!("{}")),
+        ("c2", "f", json!("{\"a\":")),
+    ])));
+    let mut raw = one(json!("{}"));
+    raw["tool_calls"][0]["function"]
+        .as_object_mut()
+        .unwrap()
+        .remove("arguments");
+    assert!(!replayed(raw));
+    let mut raw = one(json!("{}"));
+    raw["tool_calls"][0] = json!({"id": "c1", "type": "function"});
+    assert!(!replayed(raw));
+    // The legacy `function_call` is held to the same rule.
+    let legacy = |arguments: Value| {
+        json!({"role": "assistant", "content": "Listing.",
+               "function_call": {"name": "f", "arguments": arguments}})
+    };
+    assert!(replayed(legacy(json!("{}"))));
+    assert!(!replayed(legacy(json!("{\"a\":"))));
+    // No calls at all: nothing to check.
+    assert!(replayed(
+        json!({"role": "assistant", "content": "Hi.", "tool_calls": []})
+    ));
 }
 
 #[test]

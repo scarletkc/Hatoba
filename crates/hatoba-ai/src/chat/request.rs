@@ -7,6 +7,11 @@
 //! - An assistant entry is sent as its `raw` message when its provider and model are the
 //!   request's (and `raw` has the protocol's shape); otherwise it is rebuilt from `text` and
 //!   `tool_calls`, which leaves out whatever only `raw` held (reasoning, signatures).
+//! - Chat Completions tool-call arguments are always a JSON object in what is sent: a call cut off
+//!   mid-stream (`finish: length`) stores text such as `{"command":"ls`, and servers that parse
+//!   assistant tool-call arguments (vLLM does) refuse every later request that carries it. A
+//!   `raw` message holding such arguments is not replayed, and a rebuilt call sends `{}` for them
+//!   ([`chat_arguments`]).
 //! - An assistant entry with blank text and no tool calls (e.g. a response that was only
 //!   reasoning, or an empty refusal) is skipped: neither protocol accepts an empty assistant
 //!   message, and it carries nothing the model needs.
@@ -61,10 +66,32 @@ enum Turn<'a> {
 
 fn raw_usable(protocol: Protocol, raw: &Value, tools_offered: bool) -> bool {
     let shaped = match protocol {
-        Protocol::ChatCompletions => raw.is_object(),
+        Protocol::ChatCompletions => raw.is_object() && raw_arguments_are_objects(raw),
         Protocol::Anthropic => raw.as_array().is_some_and(|blocks| !blocks.is_empty()),
     };
     shaped && (tools_offered || !raw_has_tool_blocks(protocol, raw))
+}
+
+/// Whether every tool call in a Chat Completions `raw` message carries arguments that are a JSON
+/// object: the text of one, or an object itself (servers that send the arguments parsed). Blank,
+/// cut-off or missing arguments are not, and the message is then rebuilt rather than replayed.
+fn raw_arguments_are_objects(raw: &Value) -> bool {
+    let is_object = |arguments: Option<&Value>| match arguments {
+        Some(Value::Object(_)) => true,
+        Some(Value::String(text)) => is_json_object(text),
+        _ => false,
+    };
+    let calls = match raw.get("tool_calls") {
+        Some(Value::Array(calls)) => calls
+            .iter()
+            .all(|call| is_object(call.pointer("/function/arguments"))),
+        _ => true,
+    };
+    let legacy = match raw.get("function_call") {
+        Some(function_call @ Value::Object(_)) => is_object(function_call.get("arguments")),
+        _ => true,
+    };
+    calls && legacy
 }
 
 /// Whether a stored `raw` message carries tool calls or results in its protocol's own format.
@@ -218,12 +245,28 @@ pub(crate) fn flattened_result_text(call: &ToolCall, status: ToolStatus, content
     )
 }
 
+/// Whether `text` is a JSON object.
+fn is_json_object(text: &str) -> bool {
+    matches!(serde_json::from_str::<Value>(text), Ok(Value::Object(_)))
+}
+
 /// Tool arguments as a JSON object (Anthropic's `tool_use.input` must be one); anything else,
 /// including arguments cut off mid-stream, becomes `{}`.
 fn arguments_object(arguments: &str) -> Value {
     match serde_json::from_str::<Value>(arguments) {
         Ok(value @ Value::Object(_)) => value,
         _ => json!({}),
+    }
+}
+
+/// The `arguments` text of a rebuilt Chat Completions tool call: the stored text when it is a JSON
+/// object, so the model's own wording goes back unchanged, and `{}` for anything else (blank,
+/// cut off, not an object).
+fn chat_arguments(arguments: &str) -> Cow<'_, str> {
+    if is_json_object(arguments) {
+        Cow::Borrowed(arguments)
+    } else {
+        Cow::Owned(arguments_object(arguments).to_string())
     }
 }
 
@@ -261,15 +304,13 @@ pub(crate) fn chat_completions(req: &ChatRequest<'_>, stream_options: bool) -> B
                         .tool_calls
                         .iter()
                         .map(|call| {
-                            let arguments = if call.arguments.trim().is_empty() {
-                                "{}"
-                            } else {
-                                call.arguments.as_str()
-                            };
                             json!({
                                 "id": call.id,
                                 "type": "function",
-                                "function": {"name": call.name, "arguments": arguments},
+                                "function": {
+                                    "name": call.name,
+                                    "arguments": chat_arguments(&call.arguments),
+                                },
                             })
                         })
                         .collect();

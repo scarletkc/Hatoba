@@ -4,9 +4,12 @@
 //! Nothing here logs a URL, a header or a body (SEC-04). Error messages describe the failure
 //! without the URL, and HTTP errors carry the provider's own message.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::sync::Once;
+use std::io;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::{Arc, Once};
 
+use futures::future::BoxFuture;
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::header::CONTENT_TYPE;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -36,8 +39,11 @@ const MAX_MESSAGE_CHARS: usize = 500;
 // ---------------------------------------------------------------------------------------------
 
 /// The IPv4 address an IPv6 address carries, for the forms a router or the OS may translate to
-/// IPv4: IPv4-mapped (`::ffff:a.b.c.d`), IPv4-compatible (`::a.b.c.d`), NAT64 (`64:ff9b::/96`)
-/// and 6to4 (`2002::/16`).
+/// IPv4: IPv4-mapped (`::ffff:a.b.c.d`), IPv4-compatible (`::a.b.c.d`), NAT64 (`64:ff9b::/96`),
+/// the local-use NAT64 prefix (`64:ff9b:1::/48`, RFC 8215) and 6to4 (`2002::/16`).
+///
+/// Operators carve longer prefixes out of the local-use range; the IPv4 address is read from the
+/// last 32 bits, which is where it sits in the common `/96` layout.
 fn embedded_v4(v6: &Ipv6Addr) -> Option<Ipv4Addr> {
     if let Some(v4) = v6.to_ipv4_mapped() {
         return Some(v4);
@@ -47,7 +53,7 @@ fn embedded_v4(v6: &Ipv6Addr) -> Option<Ipv4Addr> {
     if s[..6] == [0; 6] && !v6.is_unspecified() && !v6.is_loopback() {
         return Some(tail);
     }
-    if s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+    if s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] || s[..3] == [0x64, 0xff9b, 1] {
         return Some(tail);
     }
     if s[0] == 0x2002 {
@@ -94,6 +100,10 @@ pub(crate) fn is_local_network(ip: IpAddr) -> bool {
 /// Whether `fetch_url` must refuse this address (AI-15): loopback, private, link-local,
 /// unspecified, multicast, broadcast, reserved, CGNAT, site-local, and IPv6 forms that carry
 /// such an IPv4 address.
+///
+/// 198.18.0.0/15 (benchmarking, RFC 2544) is deliberately allowed: fake-IP proxies in TUN mode
+/// (Clash, sing-box) answer every lookup with an address from it. Under such a proxy this check
+/// cannot protect the user, because the proxy connects to the name's real address itself.
 pub(crate) fn is_blocked(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -111,6 +121,57 @@ pub(crate) fn is_blocked(ip: IpAddr) -> bool {
             let first = v6.segments()[0];
             is_local_network(IpAddr::V6(v6)) || v6.is_multicast() || (first & 0xffc0) == 0xfec0 // fec0::/10 site-local (deprecated)
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Guarded resolver
+// ---------------------------------------------------------------------------------------------
+
+/// Resolves a host name to its addresses.
+pub(crate) type Lookup =
+    Arc<dyn Fn(String) -> BoxFuture<'static, io::Result<Vec<IpAddr>>> + Send + Sync>;
+
+/// The system resolver.
+pub(crate) fn system_lookup() -> Lookup {
+    Arc::new(|host: String| {
+        Box::pin(async move {
+            Ok(tokio::net::lookup_host((host.as_str(), 0))
+                .await?
+                .map(|addr| addr.ip())
+                .collect())
+        })
+    })
+}
+
+/// A resolver that refuses a name when any of its addresses is not allowed, and otherwise
+/// returns exactly the addresses it checked (the connection is pinned to them, so the answer
+/// cannot change between the check and the connection).
+///
+/// `refusal` builds the error, which [`network_error`] recognises in reqwest's error chain.
+pub(crate) struct GuardedResolver {
+    pub(crate) allowed: fn(IpAddr) -> bool,
+    pub(crate) lookup: Lookup,
+    pub(crate) refusal: fn() -> Box<dyn std::error::Error + Send + Sync>,
+}
+
+impl Resolve for GuardedResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().to_owned();
+        let allowed = self.allowed;
+        let refusal = self.refusal;
+        let lookup = Arc::clone(&self.lookup);
+        Box::pin(async move {
+            let addrs = lookup(host).await?;
+            if addrs.is_empty() {
+                return Err(io::Error::new(io::ErrorKind::NotFound, "no addresses").into());
+            }
+            if addrs.iter().any(|ip| !allowed(*ip)) {
+                return Err(refusal());
+            }
+            let addrs: Addrs = Box::new(addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)));
+            Ok(addrs)
+        })
     }
 }
 
@@ -256,7 +317,8 @@ pub(crate) fn clean_message(message: &str) -> String {
 }
 
 /// Maps a transport-level failure (no usable HTTP response) to [`AiError::Network`], without
-/// the URL. A refusal by `fetch_url`'s address guard becomes [`AiError::Blocked`].
+/// the URL. A refusal by `fetch_url`'s address guard becomes [`AiError::Blocked`], and one by the
+/// guard of an `http` base URL becomes [`AiError::InvalidUrl`].
 pub(crate) fn network_error(err: &reqwest::Error) -> AiError {
     use std::error::Error as _;
 
@@ -265,6 +327,9 @@ pub(crate) fn network_error(err: &reqwest::Error) -> AiError {
     while let Some(cause) = source {
         if cause.downcast_ref::<BlockedAddress>().is_some() {
             return AiError::Blocked(BLOCKED_MESSAGE.into());
+        }
+        if cause.downcast_ref::<NotLocalAddress>().is_some() {
+            return AiError::InvalidUrl(NOT_LOCAL_MESSAGE.into());
         }
         innermost = Some(cause);
         source = cause.source();
@@ -303,6 +368,34 @@ impl std::fmt::Display for BlockedAddress {
 }
 
 impl std::error::Error for BlockedAddress {}
+
+/// Builds the [`BlockedAddress`] refusal of `fetch_url`'s resolver.
+pub(crate) fn refuse_blocked() -> Box<dyn std::error::Error + Send + Sync> {
+    Box::new(BlockedAddress)
+}
+
+/// Message for an `http` base URL whose host name resolves to a public address when connecting,
+/// after it resolved to local addresses when the URL was checked (DNS rebinding, or a changed
+/// network). The URL is left out.
+pub(crate) const NOT_LOCAL_MESSAGE: &str = "the host name now resolves to a public address, and \
+     http is allowed only for loopback and private network addresses; use https";
+
+/// The refusal of the resolver that guards `http` base URLs, recognised by [`network_error`].
+#[derive(Debug)]
+pub(crate) struct NotLocalAddress;
+
+impl std::fmt::Display for NotLocalAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(NOT_LOCAL_MESSAGE)
+    }
+}
+
+impl std::error::Error for NotLocalAddress {}
+
+/// Builds the [`NotLocalAddress`] refusal of the resolver that guards `http` base URLs.
+pub(crate) fn refuse_not_local() -> Box<dyn std::error::Error + Send + Sync> {
+    Box::new(NotLocalAddress)
+}
 
 /// `{base}{suffix}` with the base path's trailing slashes removed; the query (e.g. Azure's
 /// `api-version`) is kept and the fragment dropped.
@@ -383,6 +476,10 @@ mod tests {
             "::ffff:10.0.0.1",
             "::127.0.0.1",
             "64:ff9b::a9fe:a9fe",
+            // Local-use NAT64 (RFC 8215), the address in the last 32 bits.
+            "64:ff9b:1::a9fe:a9fe",
+            "64:ff9b:1::a00:1",
+            "64:ff9b:1:1:2:3:c0a8:101",
             "2002:c0a8:0101::1",
         ] {
             assert!(is_blocked(ip(blocked)), "{blocked} must be blocked");
@@ -390,10 +487,15 @@ mod tests {
         for allowed in [
             "8.8.8.8",
             "93.184.216.34",
+            // 198.18.0.0/15 stays allowed on purpose. Fake-IP proxies in TUN mode (Clash,
+            // sing-box) answer every lookup with an address from it, so blocking it would break
+            // `fetch_url` for their users. For the same reason the resolver check cannot protect
+            // them: the proxy connects to the name's real address itself, after the check.
             "198.18.0.1",
             "2606:4700::1111",
             "::ffff:1.1.1.1",
             "64:ff9b::808:808",
+            "64:ff9b:1::808:808",
             "2002:0808:0808::1",
         ] {
             assert!(!is_blocked(ip(allowed)), "{allowed} must be allowed");

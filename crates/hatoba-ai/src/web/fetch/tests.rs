@@ -5,6 +5,7 @@
 //! that is really the mock server, `rebind.test` resolves to a private address, `mixed.test` to
 //! one allowed and one private address. [`fetch_url`] itself is tested to refuse the mock server.
 
+use std::io;
 use std::net::Ipv4Addr;
 
 use reqwest::header::CONTENT_TYPE;

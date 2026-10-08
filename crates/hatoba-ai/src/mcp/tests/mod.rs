@@ -132,6 +132,61 @@ fn debug_never_prints_env_or_header_values() {
     assert_eq!(http.kind_str(), "http");
 }
 
+#[test]
+fn debug_prints_only_the_origin_of_a_url_and_the_count_of_arguments() {
+    for (url, shown) in [
+        (
+            "https://mcp.example.com/t/path-secret/mcp?key=query-secret#frag-secret",
+            "https://mcp.example.com",
+        ),
+        (
+            "http://user:pass-secret@192.168.1.5:8931/sse?token=query-secret",
+            "http://192.168.1.5:8931",
+        ),
+        (
+            " https://MCP.example.com:8443/path-secret ",
+            "https://mcp.example.com:8443",
+        ),
+        ("http://[::1]:9000/path-secret", "http://[::1]:9000"),
+    ] {
+        let http = McpTransportConfig::Http {
+            url: url.into(),
+            headers: Vec::new(),
+        };
+        let debug = format!("{http:?}");
+        assert!(debug.contains(shown), "{debug}");
+        for hidden in ["secret", "?", "#"] {
+            assert!(!debug.contains(hidden), "{hidden} in {debug}");
+        }
+        assert!(
+            debug.contains(&format!("\"{shown}\"")),
+            "nothing follows the origin: {debug}"
+        );
+    }
+    for url in ["not a url", "", "mailto:someone@example.com?subject=secret"] {
+        let http = McpTransportConfig::Http {
+            url: url.into(),
+            headers: Vec::new(),
+        };
+        let debug = format!("{http:?}");
+        assert!(debug.contains('<') && !debug.contains("secret"), "{debug}");
+    }
+
+    let stdio = McpTransportConfig::Stdio {
+        command: "npx".into(),
+        args: vec!["-y".into(), "server".into(), "--token=arg-secret".into()],
+        env: vec![("API_KEY".into(), secret("env-secret"))],
+    };
+    let debug = format!("{stdio:?}");
+    assert!(
+        debug.contains("npx") && debug.contains("API_KEY") && debug.contains("arg_count: 3"),
+        "{debug}"
+    );
+    for hidden in ["arg-secret", "--token", "server", "env-secret"] {
+        assert!(!debug.contains(hidden), "{hidden} in {debug}");
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdio_session_lists_calls_and_shuts_down() {
     let conn = McpConnection::connect(&mock_command("serve"), &http_client(), CONNECT)

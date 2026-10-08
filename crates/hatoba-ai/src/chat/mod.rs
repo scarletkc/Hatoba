@@ -38,7 +38,7 @@ use self::sse::{SseEvent, SseParser};
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{ModelSpec, Protocol, ProviderConfig, validate_base_url};
+use crate::provider::{ModelSpec, Protocol, ProviderConfig, client_for, validate_base_url};
 
 /// A tool offered to the model.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -147,6 +147,8 @@ pub async fn stream_chat(
         base = validate_base_url(&provider.base_url) => base?,
     };
     let headers = provider.headers()?;
+    let http = client_for(http, &base);
+    let http = &*http;
     match provider.protocol {
         Protocol::ChatCompletions => {
             let url = net::endpoint(&base, "/chat/completions");

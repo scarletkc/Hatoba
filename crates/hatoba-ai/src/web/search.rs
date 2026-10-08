@@ -12,7 +12,7 @@ use zeroize::Zeroizing;
 use super::text::plain_text;
 use crate::error::AiError;
 use crate::net;
-use crate::provider::validate_base_url;
+use crate::provider::{client_for, validate_base_url};
 
 /// The search services Hatoba supports.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -157,7 +157,9 @@ async fn search(
             )
         }
         SearchKind::Tavily => {
-            let key = key_header(&format!("Bearer {}", require_key(cfg)?))?;
+            // The key sits in a plain `String` only for as long as the header value is built.
+            let bearer = Zeroizing::new(format!("Bearer {}", require_key(cfg)?));
+            let key = key_header(&bearer)?;
             (
                 http.post(&endpoints.tavily)
                     .header(AUTHORIZATION, key)
@@ -182,7 +184,9 @@ async fn search(
                 .append_pair("q", query)
                 .append_pair("format", "json");
             (
-                http.get(url).header(ACCEPT, "application/json"),
+                client_for(http, &base)
+                    .get(url)
+                    .header(ACCEPT, "application/json"),
                 "/results",
                 "content",
             )

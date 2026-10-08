@@ -32,6 +32,8 @@ pub use stdio::{STDERR_LINES, StderrTail};
 
 /// How to reach an MCP server. The environment and header values are secrets: they are wiped when
 /// dropped, never printed by `Debug`, and only the child process or the server receives them.
+/// `Debug` does not print the URL beyond its scheme, host and port (hosted servers often carry a
+/// token in the path or query), nor the arguments (only how many there are).
 #[derive(Clone, PartialEq, Eq)]
 pub enum McpTransportConfig {
     /// A child process started on this device, speaking JSON-RPC over its stdin and stdout.
@@ -77,15 +79,29 @@ impl fmt::Debug for McpTransportConfig {
             Self::Stdio { command, args, env } => f
                 .debug_struct("Stdio")
                 .field("command", command)
-                .field("args", args)
+                .field("arg_count", &args.len())
                 .field("env", &redacted(env))
                 .finish(),
             Self::Http { url, headers } => f
                 .debug_struct("Http")
-                .field("url", url)
+                .field("origin", &origin_of(url))
                 .field("headers", &redacted(headers))
                 .finish(),
         }
+    }
+}
+
+/// `scheme://host[:port]` of a server URL: no user name, password, path, query or fragment.
+fn origin_of(url: &str) -> String {
+    let Ok(url) = url::Url::parse(url.trim()) else {
+        return "<invalid URL>".into();
+    };
+    let Some(host) = url.host_str() else {
+        return "<no host>".into();
+    };
+    match url.port() {
+        Some(port) => format!("{}://{host}:{port}", url.scheme()),
+        None => format!("{}://{host}", url.scheme()),
     }
 }
 

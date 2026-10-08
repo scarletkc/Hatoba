@@ -9,9 +9,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{Protocol, ProviderConfig, validate_base_url};
+use crate::provider::{Protocol, ProviderConfig, client_for, validate_base_url};
 
-/// A let push = |model from the provider's list.
+/// A model from the provider's list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelInfo {
     /// The model id requests use.
@@ -78,14 +78,29 @@ fn chat_completions_model(item: &Value) -> Option<ModelInfo> {
 /// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions, or
 /// `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`.
 /// Duplicate ids are dropped; the provider's order is kept.
+///
+/// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
+/// is dropped, so a lock does not leave the key in use).
 pub async fn list_models(
     http: &reqwest::Client,
     provider: &ProviderConfig,
+    cancel: &CancellationToken,
 ) -> Result<Vec<ModelInfo>, AiError> {
-    let cancel = CancellationToken::new();
-    tokio::time::timeout(REQUEST_TIMEOUT, list_models_inner(http, provider, &cancel))
+    tokio::time::timeout(REQUEST_TIMEOUT, list_models_inner(http, provider, cancel))
         .await
         .unwrap_or_else(|_| Err(AiError::Network("the request timed out".into())))
+}
+
+/// [`validate_base_url`], giving up as soon as `cancel` fires.
+async fn checked_base(
+    provider: &ProviderConfig,
+    cancel: &CancellationToken,
+) -> Result<url::Url, AiError> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(AiError::Cancelled),
+        base = validate_base_url(&provider.base_url) => base,
+    }
 }
 
 async fn list_models_inner(
@@ -93,8 +108,9 @@ async fn list_models_inner(
     provider: &ProviderConfig,
     cancel: &CancellationToken,
 ) -> Result<Vec<ModelInfo>, AiError> {
-    let base = validate_base_url(&provider.base_url).await?;
+    let base = checked_base(provider, cancel).await?;
     let headers = provider.headers()?;
+    let http = client_for(http, &base);
     let mut models: Vec<ModelInfo> = Vec::new();
     let push = |model: ModelInfo, models: &mut Vec<ModelInfo>| {
         if !models.iter().any(|m| m.id == model.id) {
@@ -275,18 +291,19 @@ pub(crate) fn classify(err: &AiError, with_model: bool) -> TestOutcome {
 
 /// Test Connection (AI-04): with a model id, a minimal non-streaming request to that model
 /// (a few tokens at most where the protocol allows a limit); without one, the model list.
-/// Gives up after 60 s.
+/// Gives up after 60 s, and as soon as `cancel` fires with a failed outcome whose message is
+/// `cancelled` (the connection is dropped, so a lock does not leave the key in use).
 pub async fn test_connection(
     http: &reqwest::Client,
     provider: &ProviderConfig,
     model_id: Option<&str>,
+    cancel: &CancellationToken,
 ) -> TestOutcome {
     let model_id = model_id.map(str::trim).filter(|m| !m.is_empty());
-    let cancel = CancellationToken::new();
     let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
         match model_id {
-            Some(model) => probe_model(http, provider, model, &cancel).await,
-            None => list_models_inner(http, provider, &cancel).await.map(drop),
+            Some(model) => probe_model(http, provider, model, cancel).await,
+            None => list_models_inner(http, provider, cancel).await.map(drop),
         }
     })
     .await
@@ -303,8 +320,9 @@ async fn probe_model(
     model: &str,
     cancel: &CancellationToken,
 ) -> Result<(), AiError> {
-    let base = validate_base_url(&provider.base_url).await?;
+    let base = checked_base(provider, cancel).await?;
     let headers = provider.headers()?;
+    let http = client_for(http, &base);
     let messages = json!([{"role": "user", "content": "Hi"}]);
     let (url, body) = match provider.protocol {
         // No token limit: OpenAI's newer models refuse `max_tokens`, and the field name differs

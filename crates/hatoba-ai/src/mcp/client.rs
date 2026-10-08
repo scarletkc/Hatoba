@@ -28,6 +28,7 @@ use super::stdio::{self, ChildGuard, StderrTail};
 use super::{McpError, McpTool, McpToolResult, McpTransportConfig, ToolAnnotations};
 use crate::error::AiError;
 use crate::net::{clean_message, network_error};
+use crate::provider::client_for;
 
 /// How long a stdio server gets to exit by itself after its stdin closes, and an HTTP session to
 /// be deleted, before shutdown kills or drops it.
@@ -125,7 +126,9 @@ impl McpConnection {
     ///
     /// HTTP: `headers` go with every request; the URL must be `https`, or `http` for a loopback
     /// or private network address (the provider base URL rules, AI-02). `http` is the shared
-    /// client from [`crate::provider::http_client`].
+    /// client from [`crate::provider::http_client`], except for an `http` URL with a host name:
+    /// that gets its own client, which resolves the name again when connecting and refuses a
+    /// public address (DNS rebinding) and does not use the system proxy.
     ///
     /// On failure a started child is killed and its stderr is lost; use
     /// [`Self::connect_with_stderr`] to keep it.
@@ -470,7 +473,9 @@ async fn connect_http(
     let headers = header_map(headers)?;
     let config =
         StreamableHttpClientTransportConfig::with_uri(url.as_str()).custom_headers(headers);
-    let transport = StreamableHttpClientTransport::with_client(http.clone(), config);
+    // An `http` URL with a host name gets a client that keeps to local addresses at connect time.
+    let transport =
+        StreamableHttpClientTransport::with_client(client_for(http, &url).into_owned(), config);
     let tools_changed = Arc::new(AtomicBool::new(false));
     let handler = Handler {
         tools_changed: tools_changed.clone(),

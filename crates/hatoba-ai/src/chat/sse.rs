@@ -3,7 +3,8 @@
 //! Lines end with LF, CRLF or CR, also when the CR and LF arrive in different chunks. `data`
 //! lines of one event are joined with `\n`, comments (`:`) are skipped, and `id` and `retry` are
 //! ignored. Bytes are buffered until a line is complete, so a multi-byte character split across
-//! chunks decodes correctly.
+//! chunks decodes correctly. A line that grows over many chunks is scanned for its end once, not
+//! again with every chunk.
 
 use crate::error::AiError;
 
@@ -24,6 +25,9 @@ pub(crate) struct SseEvent {
 #[derive(Debug, Default)]
 pub(crate) struct SseParser {
     buf: Vec<u8>,
+    /// The first `scanned` bytes of `buf` are known to hold no line end, so the next chunk is
+    /// scanned from there.
+    scanned: usize,
     /// The previous chunk ended with CR: a leading LF in the next one belongs to it.
     pending_cr: bool,
     event: Option<String>,
@@ -46,11 +50,12 @@ impl SseParser {
         }
         self.buf.extend_from_slice(chunk);
         let mut start = 0;
-        while let Some(rel) = self.buf[start..]
+        let mut scan_from = self.scanned;
+        while let Some(rel) = self.buf[scan_from..]
             .iter()
             .position(|&b| b == b'\n' || b == b'\r')
         {
-            let end = start + rel;
+            let end = scan_from + rel;
             let line = String::from_utf8_lossy(&self.buf[start..end]).into_owned();
             let mut next = end + 1;
             if self.buf[end] == b'\r' {
@@ -62,8 +67,11 @@ impl SseParser {
             }
             self.line(&line, out);
             start = next;
+            scan_from = next;
         }
         self.buf.drain(..start);
+        // What is left has no line end in it.
+        self.scanned = self.buf.len();
         if self.buf.len() > MAX_LINE {
             return Err(AiError::Protocol("a stream line is too long".into()));
         }
@@ -76,6 +84,7 @@ impl SseParser {
         if !self.buf.is_empty() {
             let line = String::from_utf8_lossy(&self.buf).into_owned();
             self.buf.clear();
+            self.scanned = 0;
             self.line(&line, out);
         }
         self.dispatch(out);
@@ -161,6 +170,45 @@ mod tests {
         }
         let singles: Vec<&[u8]> = bytes.chunks(1).collect();
         assert_eq!(parse_all(&singles), whole);
+    }
+
+    #[test]
+    fn a_long_line_in_many_small_chunks_is_scanned_once() {
+        // 1 MiB in single bytes: rescanning the buffered part with every chunk would take
+        // minutes (about 5 * 10^11 byte comparisons).
+        const LEN: usize = 1024 * 1024;
+        let payload = "x".repeat(LEN);
+        let stream = format!("data: {payload}\n\n");
+        let mut parser = SseParser::new();
+        let mut out = Vec::new();
+        for (i, byte) in stream.as_bytes().chunks(1).enumerate() {
+            parser.push(byte, &mut out).unwrap();
+            if i < LEN {
+                // Everything buffered has been scanned: the next chunk starts after it.
+                assert_eq!(parser.scanned, parser.buf.len());
+            }
+        }
+        parser.finish(&mut out);
+        assert_eq!(out, vec![ev(None, &payload)]);
+        assert!(parser.buf.is_empty());
+        assert_eq!(parser.scanned, 0);
+    }
+
+    #[test]
+    fn a_long_line_ends_correctly_wherever_the_chunks_split() {
+        let long = "y".repeat(10_000);
+        let stream = format!("data: {long}\r\ndata: tail\r\n\r\nevent: e\rdata: z\r\r");
+        let whole = parse_all(&[stream.as_bytes()]);
+        assert_eq!(
+            whole,
+            vec![ev(None, &format!("{long}\ntail")), ev(Some("e"), "z")]
+        );
+        // Chunk sizes that put every line end (CR, LF, CRLF) on a chunk boundary somewhere,
+        // after a long run of bytes without one.
+        for size in [1, 2, 3, 7, 64, 4096, 10_006, 10_007, 10_008] {
+            let chunks: Vec<&[u8]> = stream.as_bytes().chunks(size).collect();
+            assert_eq!(parse_all(&chunks), whole, "chunks of {size}");
+        }
     }
 
     #[test]

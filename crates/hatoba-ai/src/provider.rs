@@ -1,5 +1,6 @@
 //! Provider configuration, base URL validation (AI-02) and the shared HTTP client.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
 
@@ -9,7 +10,9 @@ use url::{Host, Url};
 use zeroize::Zeroizing;
 
 use crate::error::AiError;
-use crate::net::{self, is_local_network};
+use crate::net::{
+    self, GuardedResolver, Lookup, is_local_network, refuse_not_local, system_lookup,
+};
 
 /// The wire protocol a provider speaks (spec §13.2).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -129,6 +132,11 @@ impl ModelSpec {
 /// address (RFC 1918, unique local, link-local, CGNAT 100.64/10): IP literals are checked
 /// directly, `localhost` is allowed, and other host names are resolved and every address must be
 /// local. URLs with credentials, without a host, or with another scheme are refused.
+///
+/// The lookup here happens before the request, which resolves the name again. Requests to an
+/// `http` base URL with a host name therefore go through [`client_for`], whose resolver applies the
+/// same rule at connect time, so a name that starts resolving to a public address (DNS rebinding,
+/// a changed network) never receives the API key in clear text.
 pub async fn validate_base_url(base_url: &str) -> Result<Url, AiError> {
     let mut url = Url::parse(base_url.trim())
         .map_err(|_| AiError::InvalidUrl("the base URL is not a valid URL".into()))?;
@@ -180,14 +188,10 @@ const READ_TIMEOUT: Duration = Duration::from_secs(300);
 /// Redirects followed, and only within the same origin so a key never reaches another host.
 const MAX_REDIRECTS: usize = 5;
 
-/// The client for provider and search requests: rustls with the ring provider, connect timeout
-/// 15 s, read (idle) timeout 5 minutes and no overall timeout, User-Agent `Hatoba/<version>`,
-/// the system proxy, and redirects followed only within the same origin.
-///
-/// Build it once and share it (cloning is cheap); it holds a connection pool bound to the tokio
-/// runtime it is first used on.
-#[must_use]
-pub fn http_client() -> reqwest::Client {
+/// The builder behind [`http_client`] and [`client_for`]'s guarded client: rustls with the ring
+/// provider, connect timeout 15 s, read (idle) timeout 5 minutes and no overall timeout,
+/// User-Agent `Hatoba/<version>`, and redirects followed only within the same origin.
+fn client_builder() -> reqwest::ClientBuilder {
     net::ensure_crypto_provider();
     reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
@@ -208,13 +212,69 @@ pub fn http_client() -> reqwest::Client {
                 attempt.stop()
             }
         }))
+}
+
+/// The client for provider and search requests: rustls with the ring provider, connect timeout
+/// 15 s, read (idle) timeout 5 minutes and no overall timeout, User-Agent `Hatoba/<version>`,
+/// the system proxy, and redirects followed only within the same origin.
+///
+/// Build it once and share it (cloning is cheap); it holds a connection pool bound to the tokio
+/// runtime it is first used on. Requests to a validated base URL go through [`client_for`], which
+/// returns this client unless the URL is an `http` one with a host name.
+#[must_use]
+pub fn http_client() -> reqwest::Client {
+    client_builder()
         .build()
         // Only fails when no TLS provider is available, which `ensure_crypto_provider` rules out.
         .expect("the HTTP client must build with the ring provider installed")
 }
 
+/// The client to send requests to the validated base URL `base` with: `http` itself, except for an
+/// `http` URL whose host is a name (an IP literal needs no lookup, and `https` is not limited to
+/// local addresses). That gets a client whose resolver refuses a name with any address that is not
+/// loopback, private, link-local or CGNAT, and connects to exactly the addresses it checked, so
+/// the rule [`validate_base_url`] applied still holds when the connection is made. A refusal is
+/// [`AiError::InvalidUrl`].
+///
+/// This client ignores the system proxy, because a proxy resolves names itself and would defeat
+/// the check; validation already needs the name to resolve on this machine. It is built per use
+/// and has no connection pool worth sharing: base URLs of this kind are LAN servers.
+pub(crate) fn client_for<'a>(http: &'a reqwest::Client, base: &Url) -> Cow<'a, reqwest::Client> {
+    if needs_local_guard(base) {
+        Cow::Owned(local_http_client(system_lookup()))
+    } else {
+        Cow::Borrowed(http)
+    }
+}
+
+/// Whether requests to `base` must be bound to local addresses at connect time.
+fn needs_local_guard(base: &Url) -> bool {
+    base.scheme() == "http" && matches!(base.host(), Some(Host::Domain(_)))
+}
+
+/// [`client_for`]'s guarded client, resolving names with `lookup`.
+fn local_http_client(lookup: Lookup) -> reqwest::Client {
+    client_builder()
+        .no_proxy()
+        .dns_resolver(GuardedResolver {
+            allowed: is_local_network,
+            lookup,
+            refusal: refuse_not_local,
+        })
+        .build()
+        .expect("the HTTP client must build with the ring provider installed")
+}
+
 #[cfg(test)]
 mod tests {
+    use std::net::IpAddr;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use tokio_util::sync::CancellationToken;
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
     use super::*;
 
     fn config(protocol: Protocol, key: &str, auth_header: AuthHeader) -> ProviderConfig {
@@ -328,5 +388,117 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(url.fragment(), None);
+    }
+
+    #[test]
+    fn only_http_urls_with_a_host_name_get_the_guarded_client() {
+        let http = http_client();
+        for (url, guarded) in [
+            ("https://api.openai.com/v1", false),
+            ("https://nas.local:8443/v1", false),
+            ("http://nas.local:11434/v1", true),
+            ("http://localhost:11434/v1", true),
+            ("http://LOCALHOST:1234", true),
+            // IP literals need no lookup, and validation checked them already.
+            ("http://127.0.0.1:11434", false),
+            ("http://127.1", false),
+            ("http://192.168.1.20/v1", false),
+            ("http://[::1]:8000", false),
+            ("http://[fd00::5]/v1", false),
+        ] {
+            let url = Url::parse(url).unwrap();
+            assert_eq!(needs_local_guard(&url), guarded, "{url}");
+            assert_eq!(
+                matches!(client_for(&http, &url), Cow::Owned(_)),
+                guarded,
+                "{url}"
+            );
+        }
+    }
+
+    fn lookup_of(
+        answer: impl Fn(&str) -> std::io::Result<Vec<IpAddr>> + Send + Sync + 'static,
+    ) -> Lookup {
+        Arc::new(move |host: String| {
+            let answer = answer(&host);
+            Box::pin(async move { answer })
+        })
+    }
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn http_hosts_are_held_to_local_addresses_when_connecting() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&server)
+            .await;
+        let port = server.address().port();
+        let lookup = lookup_of(|host| match host {
+            // A LAN name that resolves to a local address (the mock server is on loopback).
+            "nas.local" => Ok(vec![ip("127.0.0.1")]),
+            // A name that now resolves to a public address: DNS rebinding.
+            "rebind.test" => Ok(vec![ip("93.184.216.34")]),
+            "rebind6.test" => Ok(vec![ip("2606:4700::1111")]),
+            // One local and one public address is refused as well.
+            "mixed.test" => Ok(vec![ip("127.0.0.1"), ip("8.8.8.8")]),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "unknown test host",
+            )),
+        });
+        let client = local_http_client(lookup);
+        let cancel = CancellationToken::new();
+        let get = |host: &str| client.get(format!("http://{host}:{port}/models"));
+
+        let response = net::send(get("nas.local"), &cancel).await.unwrap();
+        assert_eq!(response.status(), 200);
+        for host in ["rebind.test", "rebind6.test", "mixed.test"] {
+            let err = net::send(get(host), &cancel).await.unwrap_err();
+            assert_eq!(
+                err,
+                AiError::InvalidUrl(net::NOT_LOCAL_MESSAGE.into()),
+                "{host}"
+            );
+        }
+        let err = net::send(get("gone.test"), &cancel).await.unwrap_err();
+        assert!(matches!(err, AiError::Network(_)), "{err:?}");
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            1,
+            "only the request to the local address went out"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_name_that_changes_its_answer_after_validation_is_refused() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let url = format!("http://llm.test:{}/v1/models", server.address().port());
+        // The first lookup (what validation sees) is local, every later one is public.
+        let lookups = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&lookups);
+        let lookup = lookup_of(move |_| {
+            Ok(vec![if counter.fetch_add(1, Ordering::SeqCst) == 0 {
+                ip("127.0.0.1")
+            } else {
+                ip("203.0.113.9")
+            }])
+        });
+        let cancel = CancellationToken::new();
+
+        let first = local_http_client(Arc::clone(&lookup));
+        assert!(net::send(first.get(&url), &cancel).await.is_ok());
+        let second = local_http_client(lookup);
+        let err = net::send(second.get(&url), &cancel).await.unwrap_err();
+        assert!(matches!(err, AiError::InvalidUrl(_)), "{err:?}");
+        assert_eq!(lookups.load(Ordering::SeqCst), 2);
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
     }
 }
