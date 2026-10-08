@@ -84,10 +84,10 @@ export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number;
   return { on: used.length, total: rows.length, failed: used.some((r) => r.state === "failed") };
 }
 
-/** A command argument as a shell would need it written: quoted when it has spaces or quotes. */
+/** An argument as one word: in double quotes when it is empty or has spaces or quotes. */
 function shellWord(arg: string): string {
-  if (arg && !/[\s"'\\$`]/.test(arg)) return arg;
-  return `"${arg.replace(/(["\\$`])/g, "\\$1")}"`;
+  if (arg && !/[\s"']/.test(arg)) return arg;
+  return `"${arg.replace(/"/g, '\\"')}"`;
 }
 
 /** The transport in one line: the command line of a `stdio` server or the URL of an `http` one. */

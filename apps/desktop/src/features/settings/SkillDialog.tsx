@@ -213,7 +213,7 @@ export function SkillDialog({
                   placeholder={t("aiSettings.skills.f.namePlaceholder")}
                   onChange={(e) => patch({ name: e.target.value })}
                 />
-                <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>
+                {nameProblem !== "invalid" && <span className={s.hint}>{t("aiSettings.skills.f.nameHint")}</span>}
               </div>
             </FormRow>
             <FormRow

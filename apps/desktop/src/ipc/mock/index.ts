@@ -146,10 +146,15 @@ export function createMockApi(): HatobaApi {
   const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
 
   const aiSettings = createAiSettingsMock();
+  const aiExtensions = createAiExtensionsMock((event, payload) => emit(event, payload));
   return {
     ...aiSettings,
-    ...createAiExtensionsMock((event, payload) => emit(event, payload)),
-    ...createAiMock({ providers: aiSettings.ai_providers_list, settings: aiSettings.ai_settings_get }),
+    ...aiExtensions,
+    ...createAiMock({
+      providers: aiSettings.ai_providers_list,
+      settings: aiSettings.ai_settings_get,
+      mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
+    }),
     app_info: async () => {
       const p = q.get("platform");
       const platform = p === "macos" || p === "linux" || p === "windows" ? p : "windows";

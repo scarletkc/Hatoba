@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AiEntryView, AiTurnEvent } from "@/ipc/types";
-import { newTurn, reduceTurnEvent, unansweredCalls, upsertEntry, type TurnSnapshot } from "./turn";
+import { entriesBefore, laterContextStart, laterMessages, newTurn, reduceTurnEvent, unansweredCalls, upsertEntry, type TurnSnapshot } from "./turn";
 
-const start: TurnSnapshot = { entries: [], turn: newTurn(), outcome: null };
+const start: TurnSnapshot = { entries: [], turn: newTurn(), outcome: null, contextStart: null };
 const run = (events: AiTurnEvent[], s: TurnSnapshot = start) => events.reduce(reduceTurnEvent, s);
 
 const assistant: AiEntryView = {
@@ -60,15 +60,63 @@ describe("reduceTurnEvent (§13.1)", () => {
   });
 
   it("clears the last outcome when a new request starts", () => {
-    const s = run([{ kind: "request_started" }], { entries: [], turn: newTurn(), outcome: { reason: "refused" } });
+    const s = run([{ kind: "request_started" }], { entries: [], turn: newTurn(), outcome: { reason: "refused" }, contextStart: null });
     expect(s.outcome).toBeNull();
     expect(s.turn?.phase).toBe("waiting");
   });
 
   it("ignores deltas when no turn is tracked but keeps entries", () => {
-    const idle: TurnSnapshot = { entries: [], turn: null, outcome: null };
+    const idle: TurnSnapshot = { entries: [], turn: null, outcome: null, contextStart: null };
     expect(run([{ kind: "text", delta: "x" }], idle)).toEqual(idle);
     expect(run([{ kind: "entry", entry: assistant }], idle).entries).toHaveLength(1);
+  });
+});
+
+describe("automatic compaction (AI-22)", () => {
+  const summary: AiEntryView = { role: "summary", entry_id: "e9", created_at: 0, text: "Summary" };
+
+  it("moves the context start to a summary that arrives during a turn", () => {
+    const s = run([{ kind: "request_started" }, { kind: "entry", entry: summary }], { ...start, contextStart: "e0" });
+    expect(s.contextStart).toBe("e9");
+    expect(s.entries).toEqual([summary]);
+    expect(s.turn?.phase).toBe("waiting");
+  });
+
+  it("keeps the context start for other entries", () => {
+    expect(run([{ kind: "entry", entry: assistant }], { ...start, contextStart: "e0" }).contextStart).toBe("e0");
+  });
+
+  it("never moves the start back to an older one a command returned", () => {
+    const entries: AiEntryView[] = [
+      { role: "summary", entry_id: "s1", created_at: 0, text: "old" },
+      { role: "user", entry_id: "u1", created_at: 0, text: "hi" },
+      { role: "summary", entry_id: "s2", created_at: 0, text: "new" },
+    ];
+    expect(laterContextStart(entries, "s2", "s1")).toBe("s2");
+    expect(laterContextStart(entries, "s1", "s2")).toBe("s2");
+    expect(laterContextStart(entries, null, "s1")).toBe("s1");
+    expect(laterContextStart(entries, "s2", null)).toBe("s2");
+    expect(laterContextStart(entries, "gone", "s1")).toBe("s1");
+  });
+});
+
+describe("edit and resend (AI-26)", () => {
+  const entries: AiEntryView[] = [
+    { role: "user", entry_id: "u1", created_at: 0, text: "first" },
+    assistant,
+    { role: "tool", entry_id: "t1", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok" },
+    { role: "user", entry_id: "u2", created_at: 0, text: "second" },
+  ];
+
+  it("keeps the entries before the edited message", () => {
+    expect(entriesBefore(entries, "u2").map((e) => e.entry_id)).toEqual(["u1", "e2", "t1"]);
+    expect(entriesBefore(entries, "u1")).toEqual([]);
+  });
+
+  it("counts the messages that would be deleted, not their tool results", () => {
+    expect(laterMessages(entries, "u1")).toBe(2);
+    expect(laterMessages(entries, "u2")).toBe(0);
+    expect(laterMessages(entries, "missing")).toBe(0);
   });
 });
 

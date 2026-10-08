@@ -260,10 +260,10 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
   let seq = 0;
   const id = (p: string) => `${p}-${(++seq).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const fail = (code: AppError["code"], detail: string, field?: string): never => {
+  function fail(code: AppError["code"], detail: string, field?: string): never {
     const err: AppError = { code, detail, ...(field ? { field } : {}) };
     throw err;
-  };
+  }
 
   // ── skills ──
   const skills = new Map<string, SkillDetail>(skillFlags.has("demo") ? demoSkills().map((s) => [s.detail.skill.id, s.detail]) : []);
@@ -588,9 +588,8 @@ export function createAiExtensionsMock(emit: Emit): AiExtensionsApi {
       if (!input.name.trim()) fail("invalid_input", "the name is empty", "name");
       const transport = transportView(input.transport, old?.view);
       if (old) {
-        const changed = JSON.stringify(old.view.transport) !== JSON.stringify(transport) || input.transport.kind === "stdio"
-          ? input.transport.env.some((r) => r.value !== null) || JSON.stringify(old.view.transport) !== JSON.stringify(transport)
-          : input.transport.headers.some((r) => r.value !== null) || JSON.stringify(old.view.transport) !== JSON.stringify(transport);
+        const rows = input.transport.kind === "stdio" ? input.transport.env : input.transport.headers;
+        const changed = JSON.stringify(old.view.transport) !== JSON.stringify(transport) || rows.some((r) => r.value !== null);
         old.view = { ...old.view, name: input.name.trim(), transport, always_ask: input.always_ask, updated_at: Date.now() };
         // A running server whose configuration changed is stopped; it starts again when a conversation needs it.
         if (changed && old.state !== "stopped") {

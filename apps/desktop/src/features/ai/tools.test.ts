@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { McpToolInfo } from "@/ipc/types";
 import {
   callSummary,
   exitStatusOf,
   keySequence,
+  mustAsk,
   needsApproval,
   needsSession,
   parseArgs,
@@ -11,6 +13,7 @@ import {
   runsInFrontend,
   splitMcpName,
   toolKind,
+  toolLabel,
 } from "./tools";
 
 describe("tool kinds", () => {
@@ -114,5 +117,49 @@ describe("display helpers", () => {
     expect(exitStatusOf("exit status: 0\nstdout:\nok")).toBe(0);
     expect(exitStatusOf("Exit code 127")).toBe(127);
     expect(exitStatusOf("no status here")).toBeNull();
+  });
+});
+
+describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)", () => {
+  const info = (always_allow: boolean, always_ask: boolean): McpToolInfo => ({
+    server_id: "s1",
+    server_name: "github",
+    always_ask,
+    tool: {
+      name: "mcp__github__list_issues",
+      tool: "list_issues",
+      description: "Lists issues.",
+      annotations: { title: null, read_only_hint: true, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
+      always_allow,
+    },
+  });
+
+  it("asks for MCP tools in manual mode unless the tool is always allowed on this device", () => {
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(false, false) })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(true, false) })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(true, true) })).toBe(false);
+  });
+
+  it("asks for MCP tools in bypass mode only when the server is set to Always ask", () => {
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: info(false, false) })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: info(true, true) })).toBe(true);
+  });
+
+  it("runs an MCP name no running server offers, so Rust answers it with an error", () => {
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: null })).toBe(false);
+  });
+
+  it("runs any tool allowed for this conversation without asking", () => {
+    expect(mustAsk({ kind: "run_command", mode: "manual", allowedHere: true })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: true, mcp: info(false, true) })).toBe(false);
+    expect(mustAsk({ kind: "run_command", mode: "manual", allowedHere: false })).toBe(true);
+    expect(mustAsk({ kind: "web_search", mode: "manual", allowedHere: false })).toBe(false);
+  });
+
+  it("labels built-in, MCP and unknown tools", () => {
+    const t = (key: string, params?: Record<string, string | number>) => (params ? `${key}:${JSON.stringify(params)}` : key);
+    expect(toolLabel(t, "run_command")).toBe("ai.tool.run_command");
+    expect(toolLabel(t, "mcp__github__list_issues")).toBe('ai.tool.mcp:{"server":"github","tool":"list_issues"}');
+    expect(toolLabel(t, "rm_rf")).toBe("rm_rf");
   });
 });

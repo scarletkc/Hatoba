@@ -12,7 +12,8 @@
 //! * The item map keeps the header of a part (`conversation_id`, `entry_id`, `part`,
 //!   `part_count`, `updated_at`) and not its `data`. [`Vault::ai_entries`] reads a conversation
 //!   back from the local database and decrypts it again.
-//! * Deleting a conversation or a skill tombstones everything that belongs to it (§6.5).
+//! * Deleting a conversation or a skill tombstones everything that belongs to it (§6.5), and
+//!   editing a message to send it again (AI-26) tombstones that entry and every later one.
 
 use std::collections::BTreeMap;
 
@@ -313,6 +314,40 @@ impl Vault {
             return Err(Error::ItemNotFound(conversation_id.to_owned()));
         }
         self.tombstone(&ids)
+    }
+
+    /// Deletes the entry `entry_id` of a conversation and every later entry (AI-26), leaving
+    /// tombstones that sync, in one transaction. Returns how many entries were deleted.
+    ///
+    /// Entries are ordered by `entry_id`, so "later" means a greater id, wherever it was written.
+    /// The conversation item is not touched; a `context_start` that pointed at a deleted entry is
+    /// the caller's to move.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; [`Error::ItemNotFound`] if there is no such conversation or it has no
+    /// entry `entry_id`; storage errors.
+    pub fn ai_delete_entries_from(&mut self, conversation_id: &str, entry_id: &str) -> Result<usize> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        if !matches!(self.get(conversation_id), Some(Item::AiConversation(_))) {
+            return Err(Error::ItemNotFound(conversation_id.to_owned()));
+        }
+        let mut entries = std::collections::BTreeSet::new();
+        let mut ids = Vec::new();
+        let mut found = false;
+        for (id, header) in self.message_headers(conversation_id) {
+            if header.entry_id.as_str() >= entry_id {
+                found |= header.entry_id == entry_id;
+                entries.insert(header.entry_id.clone());
+                ids.push(id.to_owned());
+            }
+        }
+        if !found {
+            return Err(Error::ItemNotFound(entry_id.to_owned()));
+        }
+        self.tombstone(&ids)?;
+        Ok(entries.len())
     }
 
     /// Deletes a skill and its files, leaving tombstones that sync.
@@ -980,6 +1015,59 @@ mod tests {
             Err(Error::InvalidItem(_))
         ));
         assert!(vault.get(&host).is_some());
+    }
+
+    #[test]
+    fn deleting_entries_from_one_removes_it_and_every_later_entry() {
+        let (mut vault, clock) = vault();
+        let conv = conversation(&mut vault, "edit");
+        let other = conversation(&mut vault, "other");
+        let first = vault.ai_append_entry(&conv, r#"{"n":1}"#).unwrap();
+        let json = serde_json::to_string(&json!({"text": nasty(70_000)})).unwrap();
+        let second = vault.ai_append_entry(&conv, &json).unwrap();
+        vault.ai_append_entry(&conv, r#"{"n":3}"#).unwrap();
+        vault.ai_append_entry(&other, r#"{"n":4}"#).unwrap();
+        let parts_of = |vault: &Vault, entry: &str| -> Vec<String> {
+            vault
+                .items()
+                .filter(|(_, i)| i.as_ai_message().is_some_and(|m| m.entry_id == entry))
+                .map(|(id, _)| id.to_owned())
+                .collect()
+        };
+        let second_parts = parts_of(&vault, &second);
+        assert!(second_parts.len() >= 2);
+        let before = vault.pending_count();
+
+        clock.advance(1_000);
+        assert_eq!(vault.ai_delete_entries_from(&conv, &second).unwrap(), 2);
+        let left = vault.ai_entries(&conv).unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].entry_id, first);
+        for id in &second_parts {
+            let row = vault.store.item_row(id).unwrap().unwrap();
+            assert!(row.deleted && row.dirty && row.envelope.is_none(), "{id}");
+        }
+        assert!(vault.pending_count() > before);
+        assert_eq!(vault.ai_entries(&other).unwrap().len(), 1);
+        assert!(vault.get(&conv).is_some());
+
+        // A new entry still sorts after everything the conversation ever had.
+        let next = vault.ai_append_entry(&conv, r#"{"n":5}"#).unwrap();
+        assert!(next > second);
+
+        assert!(matches!(
+            vault.ai_delete_entries_from(&conv, &second),
+            Err(Error::ItemNotFound(_))
+        ));
+        assert!(matches!(
+            vault.ai_delete_entries_from("missing", &first),
+            Err(Error::ItemNotFound(_))
+        ));
+        vault.lock();
+        assert!(matches!(
+            vault.ai_delete_entries_from(&conv, &first),
+            Err(Error::Locked)
+        ));
     }
 
     #[test]

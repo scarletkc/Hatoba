@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect } from "@/components/overlay";
@@ -7,13 +7,12 @@ import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo
 import { cx } from "@/lib/cx";
 import { decideCall, editAndResend, retryTurn, stopTurn, type Decision } from "./actions";
 import { Markdown } from "./Markdown";
-import { patchSlot, type Slot } from "./store";
+import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
-type T = ReturnType<typeof useT>;
 
 const TOOL_ICON: Record<ToolKind, string> = {
   read_terminal: "terminal-window",
@@ -192,13 +191,78 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 
 // ───────────────────────── entries ─────────────────────────
 
-const UserMessage = memo(function UserMessage({ text, pending }: { text: string; pending: boolean }) {
+/** The user's message. With `onResend`, Edit replaces it and sends it again (AI-26). */
+function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
+  const t = useT();
+  const [editing, setEditing] = useState(false);
+  if (editing && onResend) return <EditMessage initial={text} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
   return (
     <div className={s.userRow}>
+      {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
       <div className={cx(s.user, pending && s.userPending, "selectable")}>{text}</div>
     </div>
   );
-});
+}
+
+function EditMessage({ initial, onCancel, onSend, onSent }: { initial: string; onCancel: () => void; onSend: (text: string) => Promise<boolean>; onSent: () => void }) {
+  const t = useT();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [value, setValue] = useState(initial);
+  const [busy, setBusy] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [value]);
+  useEffect(() => {
+    const el = ref.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  const send = async () => {
+    if (!value.trim() || busy) return;
+    setBusy(true);
+    const ok = await onSend(value);
+    setBusy(false);
+    if (ok) onSent();
+  };
+
+  return (
+    <div className={s.editMessage}>
+      <textarea
+        ref={ref}
+        className={cx(s.input, s.textarea, s.editInput)}
+        value={value}
+        aria-label={t("ai.edit.label")}
+        spellCheck={false}
+        rows={1}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          // As in the input box: Enter sends, Shift+Enter adds a line; Esc leaves the editor, not the turn.
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+          } else if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+            e.preventDefault();
+            void send();
+          }
+        }}
+      />
+      <div className={s.actions}>
+        <Button size="sm" onClick={onCancel}>
+          {t("btn.cancel")}
+        </Button>
+        <Button size="sm" variant="primary" icon="arrow-up" busy={busy} disabled={!value.trim()} onClick={() => void send()}>
+          {t("ai.edit.send")}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveResponse; host: HostInfo | null }) {
   return (
@@ -225,6 +289,7 @@ function AssistantMessage({
   host,
   streaming,
   finish,
+  flash,
 }: {
   slotId: string;
   text: string;
@@ -234,6 +299,8 @@ function AssistantMessage({
   host: HostInfo | null;
   streaming?: boolean;
   finish?: string;
+  /** The highlighted search hit (AI-24). */
+  flash?: string | null;
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
   return (
@@ -242,7 +309,7 @@ function AssistantMessage({
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {!text && !reasoning && calls.length === 0 && !streaming && finish !== "tool_calls" && <EmptyReply />}
       {calls.map((call) => (
-        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} host={host} />
+        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} host={host} flash={flash === `call:${call.id}`} />
       ))}
     </div>
   );
@@ -269,11 +336,14 @@ function Reasoning({ text, active }: { text: string; active: boolean }) {
   );
 }
 
-function SummaryBlock({ text }: { text: string }) {
+function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (flash) setOpen(true);
+  }, [flash]);
   return (
-    <div className={s.summary}>
+    <div className={cx(s.summary, flash && s.flash)}>
       <button type="button" className={s.summaryHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="arrows-in-line-vertical" size={13} />
         <span>{t("ai.summary")}</span>
@@ -329,16 +399,19 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
 }
 
 /** Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. */
-function ToolBlock({ slotId, call, view, host }: { slotId: string; call: AiToolCall; view: CallView; host: HostInfo | null }) {
+function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: AiToolCall; view: CallView; host: HostInfo | null; flash?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const kind = toolKind(call.name);
   const summary = callSummary(call.name, call.arguments);
+  useEffect(() => {
+    if (flash) setOpen(true);
+  }, [flash]);
 
-  if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} />;
+  if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} />;
 
   return (
-    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention)}>
+    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={`call:${call.id}`}>
       <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
         <span className={s.toolName}>{toolLabel(t, call.name)}</span>
@@ -422,8 +495,46 @@ function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { js
   }
 }
 
-/** AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. */
-function ApprovalCard({ slotId, call, host }: { slotId: string; call: AiToolCall; host: HostInfo | null }) {
+/** MCP annotations as chips (AI-31): shown, but they never change whether a call asks. */
+const HINTS: { key: Exclude<keyof McpToolAnnotations, "title">; yes: MessageKey; no: MessageKey; warn?: boolean }[] = [
+  { key: "read_only_hint", yes: "ai.annot.readOnly", no: "ai.annot.notReadOnly" },
+  { key: "destructive_hint", yes: "ai.annot.destructive", no: "ai.annot.notDestructive", warn: true },
+  { key: "idempotent_hint", yes: "ai.annot.idempotent", no: "ai.annot.notIdempotent" },
+  { key: "open_world_hint", yes: "ai.annot.openWorld", no: "ai.annot.closedWorld" },
+];
+
+function McpDetails({ mcp }: { mcp: McpToolInfo }) {
+  const t = useT();
+  const { annotations: a, description } = mcp.tool;
+  const hints = HINTS.filter((h) => a[h.key] !== null);
+  return (
+    <>
+      {a.title && a.title !== mcp.tool.tool && <div className={s.mcpTitle}>{a.title}</div>}
+      {description.trim() && (
+        <>
+          <div className={s.label}>{t("ai.approval.description")}</div>
+          <div className={cx(s.description, "selectable")}>{description}</div>
+        </>
+      )}
+      {hints.length > 0 && (
+        <div className={s.hints} title={t("ai.approval.hints")} aria-label={t("ai.approval.hints")}>
+          {hints.map((h) => (
+            <span key={h.key} className={cx(s.chip, h.warn && a[h.key] && s.chipBad)}>
+              {t(a[h.key] ? h.yes : h.no)}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. An MCP call (AI-31)
+ * shows its server, the tool's description and hints in place of the host, and offers Always allow.
+ * Allow for this conversation (AI-19) is on every card.
+ */
+function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToolCall; host: HostInfo | null; mcp: McpToolInfo | null }) {
   const t = useT();
   const kind = toolKind(call.name);
   const args = useMemo(() => parseArgs(call.arguments) ?? {}, [call.arguments]);
@@ -431,32 +542,46 @@ function ApprovalCard({ slotId, call, host }: { slotId: string; call: AiToolCall
   const [draft, setDraft] = useState<Draft>(() => draftFrom(kind, args, call.arguments));
   const [reason, setReason] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, call.name);
+  const bypass = useAi((st) => st.slots[slotId]?.mode === "bypass");
 
-  const run = () => {
-    if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null });
+  const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
+    if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow });
     const next = argsFrom(kind, args, draft);
     if ("error" in next) return setInvalid(true);
     const same = next.json === JSON.stringify(args);
-    decideCall(slotId, { kind: "run", edited: same ? null : next.json });
+    decideCall(slotId, { kind: "run", edited: same ? null : next.json, allow });
   };
   const reject = () => decideCall(slotId, { kind: "reject", reason: reason.trim() });
   const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
 
   return (
-    <div className={cx(s.tool, s.approval)} role="group" aria-label={t("ai.approval.title", { tool: toolLabel(t, call.name) })}>
+    <div className={cx(s.tool, s.approval)} role="group" aria-label={t("ai.approval.title", { tool: label })}>
       <div className={s.approvalHead}>
         <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
-        <span className={s.toolName}>{toolLabel(t, call.name)}</span>
+        <span className={s.toolName}>{label}</span>
         <span className={s.gap} />
         <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.approval")}</span>
       </div>
-      {host && (
-        <div className={s.approvalHost}>
-          <Icon name="hard-drives" size={12} />
-          <span className={s.hostName}>{host.name}</span>
-          <span className={s.hostTarget}>{host.target}</span>
-        </div>
+      {kind === "mcp" ? (
+        mcp && (
+          <div className={s.approvalHost}>
+            <Icon name="plug" size={12} />
+            <span>{t("ai.approval.server")}</span>
+            <span className={s.hostName}>{mcp.server_name}</span>
+          </div>
+        )
+      ) : (
+        host && (
+          <div className={s.approvalHost}>
+            <Icon name="hard-drives" size={12} />
+            <span className={s.hostName}>{host.name}</span>
+            <span className={s.hostTarget}>{host.target}</span>
+          </div>
+        )
       )}
+      {mcp?.always_ask && bypass && <div className={s.meta}>{t("ai.approval.alwaysAsk")}</div>}
+      {mcp && mode !== "edit" && <McpDetails mcp={mcp} />}
 
       {mode === "edit" ? (
         <div
@@ -533,7 +658,12 @@ function ApprovalCard({ slotId, call, host }: { slotId: string; call: AiToolCall
               {args.offset !== undefined && <div className={s.meta}>{t("ai.approval.offset", { n: str(args.offset) })}</div>}
             </>
           )}
-          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>}
+          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && (
+            <>
+              {mcp && <div className={s.label}>{t("ai.approval.arguments")}</div>}
+              <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+            </>
+          )}
         </div>
       )}
 
@@ -580,9 +710,22 @@ function ApprovalCard({ slotId, call, host }: { slotId: string; call: AiToolCall
               {t("btn.edit")}
             </Button>
           )}
-          <Button size="sm" variant="primary" icon="play" onClick={run}>
+          <Button size="sm" variant="primary" icon="play" onClick={() => run()}>
             {t("ai.approval.run")}
           </Button>
+        </div>
+      )}
+      {mode !== "reject" && (
+        <div className={s.allowRow}>
+          <LinkButton tone="muted" icon="chat-circle-dots" title={t("ai.approval.allowHereHint", { tool: label })} onClick={() => run("conversation")}>
+            {t("ai.approval.allowHere")}
+          </LinkButton>
+          {/* Always allow covers manual mode; a server set to Always ask still asks in bypass mode. */}
+          {mcp && !(bypass && mcp.always_ask) && (
+            <LinkButton tone="muted" icon="check-circle" title={t("ai.approval.alwaysAllowHint", { tool: label })} onClick={() => run("always")}>
+              {t("ai.approval.alwaysAllow")}
+            </LinkButton>
+          )}
         </div>
       )}
     </div>

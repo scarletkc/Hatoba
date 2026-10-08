@@ -963,6 +963,23 @@ impl Vault {
         self.store.set_meta(meta::STAR_PROMPT, json)
     }
 
+    /// The device-local state of the MCP servers (plaintext JSON owned by the shell): which are
+    /// enabled on this device and what they always allow (spec §13.9). Works while locked.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn mcp_device_state(&self) -> Result<Option<String>> {
+        self.store.get_meta(meta::MCP_DEVICE_STATE)
+    }
+
+    /// Stores the device-local MCP server state. Works while locked. Must not contain secrets.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_mcp_device_state(&mut self, json: &str) -> Result<()> {
+        self.store.set_meta(meta::MCP_DEVICE_STATE, json)
+    }
+
     // ---- backup ----
 
     /// Writes an encrypted backup (VAULT-07). Only envelopes and key blobs are written; the
@@ -1828,6 +1845,14 @@ mod tests {
         assert_eq!(
             vault.star_prompt().unwrap().as_deref(),
             Some(r#"{"done":true}"#)
+        );
+        assert_eq!(vault.mcp_device_state().unwrap(), None);
+        vault
+            .set_mcp_device_state(r#"{"servers":{}}"#)
+            .unwrap();
+        assert_eq!(
+            vault.mcp_device_state().unwrap().as_deref(),
+            Some(r#"{"servers":{}}"#)
         );
         assert_eq!(vault.worker_update_dismissed(), None);
         vault.set_worker_update_dismissed("0.3.0").unwrap();

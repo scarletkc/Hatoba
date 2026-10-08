@@ -1204,6 +1204,286 @@ impl fmt::Debug for AiToolResultInput {
     }
 }
 
+// ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
+//
+// Skill text reaches the model as instructions; it is never logged (SEC-04), so the types that
+// carry it print only sizes.
+
+#[derive(Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct SkillFileView {
+    /// Relative path with forward slashes, such as `references/nginx.md`. Never `SKILL.md`.
+    pub path: String,
+    pub content: String,
+}
+
+impl fmt::Debug for SkillFileView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SkillFileView")
+            .field("path", &self.path)
+            .field(
+                "content",
+                &format_args!("<{} bytes>", self.content.len()),
+            )
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct SkillView {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    /// Paths of the files besides `SKILL.md`, sorted.
+    pub files: Vec<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SkillDetail {
+    pub skill: SkillView,
+    /// `SKILL.md` without its frontmatter.
+    pub body: String,
+    pub files: Vec<SkillFileView>,
+    /// Other frontmatter fields, kept for export. They change nothing (AI-27).
+    pub frontmatter_keys: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct SkillInput {
+    /// `None` creates a skill.
+    pub id: Option<String>,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    pub body: String,
+    /// Every file besides `SKILL.md`; a saved file left out is deleted.
+    pub files: Vec<SkillFileView>,
+}
+
+impl fmt::Debug for SkillInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SkillInput")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("enabled", &self.enabled)
+            .field("body", &format_args!("<{} bytes>", self.body.len()))
+            .field("files", &self.files)
+            .finish()
+    }
+}
+
+/// Why a skill cannot be imported or saved (AI-27).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SkillIssue {
+    MissingSkillMd,
+    InvalidFrontmatter { detail: String },
+    InvalidName { name: String },
+    MissingDescription,
+    DescriptionTooLong { chars: u64 },
+    FileTooLarge { path: String, size: u64 },
+    UnsafePath { path: String },
+    TooManyFiles { count: u64 },
+    /// More than 5 MB in total.
+    TooLarge { bytes: u64 },
+}
+
+/// What an import would save, shown before saving (AI-27). Importable when `issues` is empty.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SkillImportPreview {
+    /// `None` when `SKILL.md` is missing or unreadable.
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub body: Option<String>,
+    pub files: Vec<SkillFileView>,
+    pub frontmatter_keys: Vec<String>,
+    /// Files that are not UTF-8 text, which the import skips.
+    pub skipped: Vec<String>,
+    pub issues: Vec<SkillIssue>,
+    /// A saved skill with the same name, which the user may replace (or rename the new one).
+    pub existing_id: Option<String>,
+}
+
+// ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
+//
+// Environment and header values travel one way, WebView → Rust, like API keys: views carry
+// only their names, and the inputs that carry them print them redacted and wipe them when
+// dropped (AI-29).
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpTransportView {
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env_keys: Vec<String>,
+    },
+    Http {
+        url: String,
+        header_keys: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpServerView {
+    pub id: String,
+    pub name: String,
+    pub transport: McpTransportView,
+    /// Ask even in bypass mode. Synced (AI-31).
+    pub always_ask: bool,
+    /// Enabled on this device; a server from another device starts enabled only for `http`.
+    pub enabled: bool,
+    /// On this device, every tool of the server runs without asking in manual mode (AI-31).
+    pub always_allow: bool,
+    /// On this device, these tools (the server's own names) run without asking in manual mode.
+    pub always_allow_tools: Vec<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct McpSecretInput {
+    pub key: String,
+    /// `None` keeps the saved value for this key.
+    pub value: Option<String>,
+}
+
+impl fmt::Debug for McpSecretInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpSecretInput")
+            .field("key", &self.key)
+            .field("value", &redacted(self.value.as_deref()))
+            .finish()
+    }
+}
+
+impl Drop for McpSecretInput {
+    fn drop(&mut self) {
+        self.value.zeroize();
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpTransportInput {
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env: Vec<McpSecretInput>,
+    },
+    Http {
+        url: String,
+        headers: Vec<McpSecretInput>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct McpServerInput {
+    /// `None` creates a server.
+    pub id: Option<String>,
+    pub name: String,
+    pub transport: McpTransportInput,
+    pub always_ask: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum McpServerState {
+    Stopped,
+    Starting,
+    Running,
+    Failed,
+}
+
+/// Shown on the approval card; never changes whether a call asks (AI-31).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq, Default)]
+pub struct McpToolAnnotations {
+    pub title: Option<String>,
+    pub read_only_hint: Option<bool>,
+    pub destructive_hint: Option<bool>,
+    pub idempotent_hint: Option<bool>,
+    pub open_world_hint: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpToolView {
+    /// The name offered to the model, `mcp__<server>__<tool>` after cleaning (AI-30).
+    pub name: String,
+    /// The server's own tool name.
+    pub tool: String,
+    pub description: String,
+    pub annotations: McpToolAnnotations,
+    /// Always allow on this device (per tool, or because the whole server is).
+    pub always_allow: bool,
+}
+
+/// A server's live state (AI-32), also pushed as `ai://mcp-status` on every change. The stderr
+/// lines stay in memory and are never logged.
+#[derive(Clone, Serialize, Type, PartialEq, Eq, tauri_specta::Event)]
+#[tauri_specta(event_name = "ai://mcp-status")]
+pub struct McpServerStatus {
+    pub server_id: String,
+    pub state: McpServerState,
+    pub error: Option<String>,
+    /// The last stderr lines of a `stdio` server, kept in memory only (AI-32).
+    pub stderr: Vec<String>,
+    /// The tools from the last successful listing.
+    pub tools: Vec<McpToolView>,
+}
+
+impl fmt::Debug for McpServerStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpServerStatus")
+            .field("server_id", &self.server_id)
+            .field("state", &self.state)
+            .field("error", &self.error.is_some())
+            .field("stderr", &format_args!("<{} lines>", self.stderr.len()))
+            .field("tools", &self.tools.len())
+            .finish()
+    }
+}
+
+/// The MCP tool behind a name the model called, for the approval card (AI-31).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpToolInfo {
+    pub server_id: String,
+    pub server_name: String,
+    pub always_ask: bool,
+    pub tool: McpToolView,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportServer {
+    pub name: String,
+    pub transport: McpTransportView,
+    /// A saved server has this name; the import adds a numeric suffix.
+    pub exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportSkipped {
+    pub name: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportPreview {
+    pub servers: Vec<McpImportServer>,
+    /// Entries that cannot be imported, such as an `sse` server, with the reason.
+    pub skipped: Vec<McpImportSkipped>,
+}
+
+// ───────────────────────── AI assistant: history search (AI-24) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiSearchHit {
+    pub conversation_id: String,
+    /// The first matching entry, or `None` when only the title matched.
+    pub entry_id: Option<String>,
+    /// Text around the first match.
+    pub snippet: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AiPermissionMode, LocalPrefs};

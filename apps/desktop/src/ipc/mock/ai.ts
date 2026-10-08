@@ -4,6 +4,7 @@ import type {
   AiConversationView,
   AiEntryView,
   AiFinish,
+  AiSearchHit,
   AiToolCall,
   AiToolResultInput,
   AiToolStatus,
@@ -31,10 +32,17 @@ type AiApi = Pick<
   | "ai_edit_resend"
 >;
 
-/** What the conversation mock reads from the settings mock. */
+/** What the conversation mock reads from the settings and MCP mocks. */
 export interface AiMockDeps {
   providers: HatobaApi["ai_providers_list"];
   settings: HatobaApi["ai_settings_get"];
+  /** The MCP servers of the extensions mock, whose tools the fake model calls. */
+  mcp?: {
+    servers: HatobaApi["mcp_servers_list"];
+    status: HatobaApi["mcp_server_status"];
+    start: HatobaApi["mcp_server_start"];
+    toolInfo: HatobaApi["mcp_tool_info"];
+  };
 }
 
 type Assistant = Extract<AiEntryView, { role: "assistant" }>;
@@ -53,6 +61,8 @@ interface Turn {
   context: AiTurnContext;
   ended: boolean;
   timers: Set<number>;
+  /** AI-22 ran once in this turn. */
+  compacted: boolean;
 }
 
 const MIN = 60_000;
@@ -66,9 +76,13 @@ const DAY = 24 * HOUR;
  *   "disk"            run_command `df -h /`          "fail"     run_command that exits with 5
  *   "screen"          read_terminal                  "type" / "send"   send_input `uptime` + Enter
  *   "search"          web_search                     "fetch" / "url"   fetch_url
- *   "mcp"             an MCP tool (its server is not running)   "unknown"   a tool that does not exist
- *   "sleep"           run_command `sleep 8`, to see a long-running tool and Stop
+ *   "mcp"             a tool of the first running (or startable) MCP server the conversation uses,
+ *                     from the extensions mock (`?mcp=demo`), preferring a server named in the message
+ *                     ("mcp filesystem"); without one, a tool no server offers
+ *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
+ * Before a request that would pass 90% of the model's context window, the turn compacts the
+ * conversation first (AI-22): a `summary` entry arrives and the context starts there.
  * `?ai=` demo values (comma-separated, shared with the Settings → AI mock):
  *   history    prefilled history: a pinned conversation, a compacted one near the context limit,
  *              one with tool calls in every state, and one on a host with no context window
@@ -78,7 +92,9 @@ const DAY = 24 * HOUR;
  *   refused    every response is declined by the model
  *   length     every response is cut off at the output limit
  *   limit      the model keeps calling read_terminal, so the turn pauses at the tool call limit
+ *   autocompact every turn of a conversation that has an answer compacts it first (AI-22)
  *   noprovider (Settings → AI mock) no provider is configured
+ * History search (AI-24) matches titles and the text of user, assistant and summary entries.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createAiMock(deps: AiMockDeps): AiApi {
@@ -95,8 +111,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     lastMs = Math.max(ms, lastMs + 1);
     return `${lastMs.toString(16).padStart(12, "0")}-7${(++seq).toString(16).padStart(5, "0")}`;
   };
-  const fail = (code: AppError["code"], detail: string): never => {
-    throw { code, detail } satisfies AppError;
+  const fail = (code: AppError["code"], detail: string, extra: Partial<AppError> = {}): never => {
+    throw { code, detail, ...extra } satisfies AppError;
   };
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -123,11 +139,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     turns.get(c.view.id)?.emit({ kind: "entry", entry });
   }
 
-  /** §13.1 step 5: every call without a result gets a cancelled one. */
-  function cancelOpenCalls(c: Conv) {
-    for (const call of unanswered(c)) {
-      store(c, { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran." });
-    }
+  /** §13.1 step 5: every call without a result gets a cancelled one. Returns the results it stored. */
+  function cancelOpenCalls(c: Conv): AiEntryView[] {
+    return unanswered(c).map((call) => {
+      const entry: AiEntryView = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran." };
+      store(c, entry);
+      return entry;
+    });
   }
 
   function endTurn(turn: Turn, reason: AiTurnEndReason) {
@@ -138,13 +156,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (turns.get(turn.convId) === turn) turns.delete(turn.convId);
   }
 
-  function stopTurn(convId: string) {
+  /** Like Rust's stop: the cancelled results and `turn_ended { stopped }` go to the running turn's channel. */
+  function stopTurn(convId: string): AiEntryView[] {
     const turn = turns.get(convId);
-    if (!turn) return;
-    turn.timers.forEach((t) => clearTimeout(t));
     const c = convs.get(convId);
-    if (c) cancelOpenCalls(c);
-    endTurn(turn, "stopped");
+    if (turn) turn.timers.forEach((t) => clearTimeout(t));
+    const cancelled = c ? cancelOpenCalls(c) : [];
+    if (turn) endTurn(turn, "stopped");
+    return cancelled;
   }
 
   /** Resolves false once the turn has ended. */
@@ -188,7 +207,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return { text: "", index: -1 };
   }
 
-  function plan(c: Conv, turn: Turn): Plan {
+  /**
+   * A call of a tool the conversation's MCP servers offer: a running server's, or one started for it
+   * (as Rust starts a `stdio` server when a conversation first needs its tools, AI-32). A tool that
+   * asks is preferred, to show the approval card. Without one, a name no server offers.
+   */
+  async function mcpCall(turn: Turn, words: string): Promise<AiToolCall> {
+    const args = { query: "nginx 502 bad gateway", limit: 5 };
+    const mcp = deps.mcp;
+    if (mcp) {
+      try {
+        // A server named in the message goes first ("mcp filesystem").
+        const named = (name: string) => (words.includes(name.toLowerCase()) ? 0 : 1);
+        const servers = (await mcp.servers())
+          .filter((s) => s.enabled && !turn.context.disabled_mcp_servers.includes(s.id))
+          .sort((a, b) => named(a.name) - named(b.name));
+        for (const s of servers) {
+          let status = await mcp.status(s.id);
+          if (status.state === "stopped") status = await mcp.start(s.id);
+          const tool = status.tools.find((x) => !x.always_allow) ?? status.tools[0];
+          if (status.state === "running" && tool) return call(tool.name, args);
+        }
+      } catch {
+        // fall through to a tool no server offers
+      }
+    }
+    return call("mcp__github__list_issues", { repo: "scarletkc/Hatoba", state: "open" });
+  }
+
+  async function plan(c: Conv, turn: Turn): Promise<Plan> {
     const user = lastUser(c);
     const since = c.entries.slice(user.index + 1);
     const results = since.filter((e): e is ToolEntry => e.role === "tool");
@@ -222,7 +269,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
-      if (want("mcp")) calls.push(call("mcp__github__list_issues", { repo: "scarletkc/Hatoba", state: "open" }));
+      if (want("mcp") && tools) calls.push(await mcpCall(turn, words));
       if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
       if (calls.length > 0 && tools)
         return {
@@ -272,9 +319,49 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   const estimate = (c: Conv) => Math.ceil(c.entries.reduce((n, e) => n + JSON.stringify(e).length, 0) / 4);
 
+  /** The entries from `context_start` on (AI-21). */
+  function contextOf(c: Conv): AiEntryView[] {
+    const i = c.view.context_start ? c.entries.findIndex((e) => e.entry_id === c.view.context_start) : -1;
+    return i < 0 ? c.entries : c.entries.slice(i);
+  }
+
+  /** The context's size as the meter counts it: the last usage plus a length estimate for what came after. */
+  function contextTokens(c: Conv): number {
+    const ctx = contextOf(c);
+    for (let i = ctx.length - 1; i >= 0; i--) {
+      const e = ctx[i];
+      if (e.role === "assistant" && e.usage) return e.usage.input_tokens + e.usage.output_tokens + Math.ceil(JSON.stringify(ctx.slice(i + 1)).length / 4);
+    }
+    return Math.ceil(JSON.stringify(ctx).length / 4);
+  }
+
+  /** AI-22: before a request that would pass 90% of the context window, compact first. */
+  async function autoCompact(c: Conv, turn: Turn): Promise<boolean> {
+    if (turn.compacted) return true;
+    const providers = await deps.providers();
+    const window = providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id)?.context_window ?? null;
+    const answered = contextOf(c).some((e) => e.role === "assistant");
+    const due = (flags.has("autocompact") && answered) || (!!window && contextTokens(c) > 0.9 * window);
+    if (!due) return true;
+    turn.compacted = true;
+    if (!(await sleep(turn, 1400))) return false;
+    const entry: AiEntryView = {
+      role: "summary",
+      entry_id: newId(),
+      created_at: Date.now(),
+      text: zh
+        ? `**之前的对话摘要（自动压缩）**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态；用户最新的请求是：“${lastUser(c).text}”`
+        : `**Summary of the earlier conversation (compacted automatically)**: ${c.entries.length} entries. The user and the assistant went over this host’s state; the user’s latest request is: “${lastUser(c).text}”`,
+    };
+    c.view = { ...c.view, context_start: entry.entry_id, updated_at: Date.now() };
+    store(c, entry);
+    return true;
+  }
+
   async function respond(turn: Turn) {
     const c = convs.get(turn.convId);
     if (!c || turn.ended) return;
+    if (!(await autoCompact(c, turn))) return;
     turn.emit({ kind: "request_started" });
     if (!(await sleep(turn, 450))) return;
     if (flags.has("error") && !errorShown) {
@@ -283,7 +370,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       endTurn(turn, "error");
       return;
     }
-    const p = plan(c, turn);
+    const p = await plan(c, turn);
+    if (turn.ended) return;
     for (const piece of chunks(p.reasoning)) {
       if (!(await sleep(turn, 22))) return;
       turn.emit({ kind: "reasoning", delta: piece });
@@ -328,26 +416,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     turn.timers.add(t);
   }
 
-  async function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void) {
+  async function checkModel(context: AiTurnContext) {
     const providers = await deps.providers();
     if (!providers.some((p) => p.id === context.provider_id && p.models.some((m) => m.id === context.model_id))) fail("invalid_input", "the model is not configured");
-    stopTurn(c.view.id);
+  }
+
+  /**
+   * Starts a turn on a new channel. A running turn stops first, as in Rust: its channel gets the
+   * cancelled results and `turn_ended`, and the new channel gets the cancelled results too, since
+   * the panel stopped listening to the old one.
+   */
+  function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void) {
+    const cancelled = stopTurn(c.view.id);
     c.runningUntil = 0;
-    cancelOpenCalls(c);
-    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set() };
+    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), compacted: false };
     turns.set(c.view.id, turn);
+    for (const entry of cancelled) turn.emit({ kind: "entry", entry });
     window.setTimeout(() => void respond(turn), 0);
   }
 
-  function findCall(c: Conv, callId: string): AiToolCall {
-    for (const e of c.entries) if (e.role === "assistant") for (const x of e.tool_calls) if (x.id === callId) return x;
-    return fail("not_found", "tool call not found");
+  /** Like Rust: the call must belong to the newest response and have no result yet. */
+  function openCall(c: Conv, callId: string): AiToolCall {
+    const newest = [...c.entries].reverse().find((e): e is Assistant => e.role === "assistant");
+    const x = newest?.tool_calls.find((y) => y.id === callId) ?? fail("not_found", "tool call not found");
+    if (answered(c).has(callId)) fail("invalid_input", "the tool call already has a result", { field: "tool_call_id" });
+    return x;
   }
 
   function storeResult(c: Conv, callId: string, status: AiToolStatus, content: string, edited: string | null): ToolEntry {
-    const existing = c.entries.find((e): e is ToolEntry => e.role === "tool" && e.tool_call_id === callId);
-    if (existing) return existing;
-    const text = edited ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}` : content;
+    const text = edited && (status === "ok" || status === "error") ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}` : content;
     const entry: ToolEntry = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: callId, status, content: text };
     store(c, entry);
     maybeContinue(c);
@@ -402,9 +499,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       case "read_skill":
         await wait(200);
         return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
-      default:
-        await wait(300);
-        return { status: "error", content: `The MCP server for ${x.name} is not running.` };
+      default: {
+        // An MCP tool (AI-30): the server's text content, or an error result when no running server offers it.
+        await wait(700);
+        const info = (await deps.mcp?.toolInfo(x.name).catch(() => null)) ?? null;
+        if (!info || turn?.context.disabled_mcp_servers.includes(info.server_id)) return { status: "error", content: `No running MCP server offers the tool ${x.name}.` };
+        return {
+          status: "ok",
+          content: `${info.server_name} / ${info.tool.tool} (demo result)\n\n${JSON.stringify({ arguments: args, items: [{ title: "nginx 502 after deploy", state: "open" }, { title: "upstream timeouts", state: "closed" }] }, null, 2)}`,
+        };
+      }
     }
   }
 
@@ -500,11 +604,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           finish: "tool_calls",
           usage: null,
         }),
-        result(at(2 * MIN), rm.id, "rejected", "The user rejected this call: don't delete the journal by hand"),
+        result(at(2 * MIN), rm.id, "rejected", "don't delete the journal by hand"),
         result(at(3 * MIN), vacuumLogs.id, "ok", "The user edited the arguments before the call ran; it ran with {\"command\":\"sudo journalctl --vacuum-size=500M\"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n"),
         result(at(4 * MIN), type.id, "error", "The terminal tab disconnected while waiting. Output before that:\n\ndocker system prune -af\nDeleted Containers:"),
         result(at(5 * MIN), fetch.id, "cancelled", "The call was cancelled before it ran."),
-        result(at(5 * MIN), mcp.id, "error", "The MCP server for mcp__github__create_issue is not running."),
+        result(at(5 * MIN), mcp.id, "error", "No running MCP server offers the tool mcp__github__create_issue."),
         reply(at(6 * MIN), OSS, zh ? "日志已压缩到 500M，释放了 1.2G。Docker 清理在终端断开时中断了，重新连接后可以再试。" : "The journal is down to 500M, which freed 1.2G. The Docker prune stopped when the terminal disconnected; try again after reconnecting.", {
           usage: { input_tokens: 2100, output_tokens: 90, estimated: true },
         }),
@@ -564,6 +668,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     },
     ai_send: async (input, onEvent) => {
       await delay(120);
+      if (!input.text.trim()) fail("invalid_input", "the message is empty", { field: "text" });
+      await checkModel(input.context);
       let c: Conv;
       if (input.conversation_id) {
         c = need(input.conversation_id);
@@ -576,7 +682,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           runningUntil: 0,
         };
       }
-      await startTurn(c, input.context, onEvent);
+      startTurn(c, input.context, onEvent);
       convs.set(c.view.id, c);
       if (input.context.host_id && input.context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
       const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text: input.text };
@@ -585,18 +691,26 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     },
     ai_retry: async (id, context, onEvent) => {
       await delay(80);
-      await startTurn(need(id), context, onEvent);
+      const c = need(id);
+      await checkModel(context);
+      // Like Rust: a conversation that ends with the model's answer has nothing to retry.
+      const last = [...contextOf(c)].reverse().find((e) => e.role !== "tool");
+      if (!last || (last.role === "assistant" && last.tool_calls.length === 0)) fail("invalid_input", "nothing to retry: the conversation ends with the model's answer", { field: "conversation_id" });
+      startTurn(c, context, onEvent);
     },
     ai_tool_result: async (id, callId, result: AiToolResultInput) => {
       const c = need(id);
-      findCall(c, callId);
-      const content = result.status === "rejected" ? (result.content ? `The user rejected this call: ${result.content}` : "The user rejected this call.") : result.content;
+      openCall(c, callId);
+      // Like Rust: a rejection stores the user's reason; the adapter tells the model the call was rejected.
+      const content = result.status === "rejected" ? result.content.trim() : result.content;
       return storeResult(c, callId, result.status, content, result.edited_arguments);
     },
     ai_tool_run: async (id, callId, sessionId, edited) => {
       const c = need(id);
-      const x = findCall(c, callId);
+      const x = openCall(c, callId);
       const r = await runTool(c, x, sessionId, edited);
+      // A stop stored a cancelled result while the tool ran.
+      if (answered(c).has(callId)) fail("cancelled", "the tool call was stopped");
       return storeResult(c, callId, r.status, r.content, edited);
     },
     ai_stop: async (id) => {
@@ -620,8 +734,49 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       c.view = { ...c.view, context_start: entry.entry_id, updated_at: Date.now() };
       return entry;
     },
-    // Phase 2 placeholders (AI-24, AI-26), replaced by the panel's phase-2 work.
-    ai_search: async () => [],
-    ai_edit_resend: async () => fail("internal", "not implemented in the mock yet"),
+    ai_search: async (query) => {
+      await delay(200);
+      const q = query.trim().toLowerCase();
+      if (!q) return [];
+      const textOf = (e: AiEntryView) => (e.role === "user" || e.role === "assistant" || e.role === "summary" ? e.text : "");
+      const hits: AiSearchHit[] = [];
+      for (const c of [...convs.values()].sort((a, b) => view(b).last_activity - view(a).last_activity)) {
+        const entry = c.entries.find((e) => textOf(e).toLowerCase().includes(q));
+        if (entry) hits.push({ conversation_id: c.view.id, entry_id: entry.entry_id, snippet: snippetAround(textOf(entry), q) });
+        else if (c.view.title.toLowerCase().includes(q)) hits.push({ conversation_id: c.view.id, entry_id: null, snippet: c.view.title });
+      }
+      return hits;
+    },
+    ai_edit_resend: async (id, entryId, text, context, onEvent) => {
+      await delay(120);
+      const c = need(id);
+      const i = c.entries.findIndex((e) => e.entry_id === entryId);
+      if (i < 0) fail("not_found", "entry not found");
+      if (c.entries[i].role !== "user") fail("invalid_input", "only the user's messages can be edited", { field: "entry_id" });
+      if (!text.trim()) fail("invalid_input", "the message is empty", { field: "text" });
+      await checkModel(context);
+      // The stopped turn's cancelled results go with everything else after the message.
+      stopTurn(id);
+      c.entries = c.entries.slice(0, i);
+      if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
+        const summary = [...c.entries].reverse().find((e) => e.role === "summary");
+        c.view = { ...c.view, context_start: summary?.entry_id ?? null };
+      }
+      c.view = { ...c.view, updated_at: Date.now() };
+      startTurn(c, context, onEvent);
+      if (context.host_id && context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: context.host_id };
+      const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
+      c.entries.push(user_entry);
+      return { conversation: view(c), user_entry };
+    },
   };
+}
+
+/** About 40 characters before the first match of `q` (lowercase) in `text` and 100 after, on one line. */
+function snippetAround(text: string, q: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const at = flat.toLowerCase().indexOf(q);
+  const start = Math.max(0, at - 40);
+  const end = Math.min(flat.length, Math.max(at, 0) + q.length + 100);
+  return `${start > 0 ? "…" : ""}${flat.slice(start, end)}${end < flat.length ? "…" : ""}`;
 }

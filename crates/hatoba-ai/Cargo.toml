@@ -9,7 +9,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-tokio.workspace = true
+# `process`: MCP stdio servers run as child processes.
+tokio = { workspace = true, features = ["process"] }
 tokio-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -27,23 +28,18 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 htmd = "0.5"
 encoding_rs = "0.8"
 # MCP client (spec §13.9): client features only, JSON-RPC over a child's pipes and Streamable HTTP.
-rmcp = { version = "3.5", optional = true, default-features = false, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
+rmcp = { version = "3.5", default-features = false, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
 # MCP stdio servers: PATH/PATHEXT lookup, and spawning in a Job Object (Windows) or process group
 # (Unix) so shutdown kills the whole tree. No `tracing` feature: it would log the command's env.
-which = { version = "8", optional = true }
-process-wrap = { version = "10", optional = true, default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
+which = "8"
+process-wrap = { version = "10", default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
 # Skills (spec §13.8): SKILL.md frontmatter and .zip import / export.
-serde_yaml_ng = { version = "0.10", optional = true }
-zip = { version = "8.6", optional = true, default-features = false, features = ["deflate-flate2-zlib-rs"] }
+serde_yaml_ng = "0.10"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(windows)'.dependencies]
 # CREATE_NO_WINDOW for MCP stdio servers, in the type process-wrap's `CreationFlags` takes.
-windows = { version = "0.62", optional = true, features = ["Win32_System_Threading"] }
-
-[features]
-# Phase-2 modules, off until the desktop shell wires them up.
-mcp = ["dep:rmcp", "dep:which", "dep:process-wrap", "dep:windows", "tokio/process"]
-skills = ["dep:serde_yaml_ng", "dep:zip"]
+windows = { version = "0.62", features = ["Win32_System_Threading"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
