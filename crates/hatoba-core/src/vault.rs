@@ -23,7 +23,7 @@ use crate::crypto::{
 };
 use crate::error::{Error, Result};
 use crate::model::{
-    Group, Host, Item, KnownHost, PortForward, SETTINGS_ID, Settings, SshKey, new_id,
+    Group, Host, Item, KnownHost, PortForward, RightClick, SETTINGS_ID, Settings, SshKey, new_id,
 };
 use crate::recovery::RecoveryCode;
 use crate::store::{ItemRow, Store, StoreOps, meta};
@@ -865,6 +865,45 @@ impl Vault {
             .and_then(Item::as_settings)
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Fills the terminal behaviour fields that are still unset in the settings with the values
+    /// this device kept locally before they were synced, and returns whether it wrote the
+    /// settings. A field already set keeps its value, and a default value leaves the field unset.
+    ///
+    /// Call it only once this device holds the latest settings (after a successful sync round,
+    /// or when sync is off). The write gives the whole item a newer `updated_at`, so on a stale
+    /// copy it would win over newer edits from other devices (spec §6.4).
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn adopt_device_terminal_prefs(
+        &mut self,
+        right_click: Option<RightClick>,
+        confirm_multiline_paste: Option<bool>,
+    ) -> Result<bool> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        // Default settings when none is stored yet; `put` then creates the item.
+        let current = self.settings();
+        let mut settings = current.clone();
+        let t = &mut settings.terminal;
+        if t.right_click.is_none()
+            && let Some(value) = right_click
+        {
+            t.set_right_click(value);
+        }
+        if t.confirm_multiline_paste.is_none()
+            && let Some(value) = confirm_multiline_paste
+        {
+            t.set_confirm_multiline_paste(value);
+        }
+        if settings == current {
+            return Ok(false);
+        }
+        self.put(Some(SETTINGS_ID), Item::Settings(settings))?;
+        Ok(true)
     }
 
     // ---- device-local data ----

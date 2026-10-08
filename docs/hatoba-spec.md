@@ -344,7 +344,7 @@ interface Settings {             // Fixed ID "settings", a single item
 }
 ```
 
-`terminal.right_click` and `terminal.confirm_multiline_paste` were device-local in earlier versions, which do not write them. Each stays absent until it is set to a value other than its default. On the first unlock after the upgrade, each device moves its own values into the fields that are still absent, under the same rule, and never again. A value that is already set, from any device, is kept.
+`terminal.right_click` and `terminal.confirm_multiline_paste` were device-local in earlier versions, which do not write them. Each stays absent until it is set to a value other than its default. After the upgrade, each device moves its own values into the fields that are still absent, under the same rule, and does this once. With sync off, the move happens right after unlock. With sync on, it waits for the first successful sync round after unlock, so it changes the latest `Settings` the server had: a value already set there is kept, and edits other devices had already uploaded are not outdated by the move's newer `updated_at` (§6.4). Until then the values stay in the device-local preferences. The move then uploads like any other edit.
 
 Device-local data such as the last connection time and the window size is **not synced**. Otherwise every connection would cause a write and a potential conflict.
 

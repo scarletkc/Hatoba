@@ -10,7 +10,7 @@ use super::fake::{FakeBackend, FakeServer, SETUP_TOKEN};
 use super::*;
 use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
-use crate::model::{Host, HostAuth, Item, SETTINGS_ID, SshKey, new_id};
+use crate::model::{Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey, new_id};
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
 use crate::store::StoreOps;
@@ -1047,6 +1047,38 @@ async fn settings_item_syncs_like_any_other() {
     a.v().put(None, Item::Settings(s)).unwrap();
     converge(&a, &b).await;
     assert_eq!(b.v().settings().auto_lock_minutes, 42);
+}
+
+#[tokio::test]
+async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_edits() {
+    let (_server, clock, a, b) = two_devices().await;
+    // A edits the settings after B last synced, and records copy/paste for right-click.
+    clock.advance(1000);
+    let mut s = a.v().settings();
+    s.terminal.font_size = 16;
+    s.auto_lock_minutes = 42;
+    s.terminal.right_click = Some(RightClick::CopyPaste);
+    a.v().put(None, Item::Settings(s)).unwrap();
+    a.sync().await;
+
+    // B upgrades later. Its device-local prefs say menu and no paste confirmation; it moves
+    // them in after its first round has pulled A's edit.
+    clock.advance(1000);
+    b.sync().await;
+    assert!(
+        b.v()
+            .adopt_device_terminal_prefs(Some(RightClick::Menu), Some(false))
+            .unwrap()
+    );
+    converge(&a, &b).await;
+
+    let s = a.v().settings();
+    assert_eq!(s.terminal.right_click, Some(RightClick::CopyPaste));
+    assert_eq!(s.terminal.confirm_multiline_paste, Some(false));
+    assert_eq!(s.terminal.font_size, 16);
+    assert_eq!(s.auto_lock_minutes, 42);
+    // B wrote on top of A's version, so nothing had to be resolved.
+    assert!(b.v().conflicts(false).unwrap().is_empty());
 }
 
 // ---- password change, recovery, devices -----------------------------------------------------

@@ -134,7 +134,7 @@ pub fn prefs_save(state: State<'_, AppState>, prefs: LocalPrefs) -> AppResult<()
 
 /// Writes `prefs` over the stored JSON. Keys this build does not know stay: the terminal
 /// behaviour older builds kept there waits for [`adopt_legacy_prefs`], which needs the vault
-/// unlocked, and a newer build's prefs survive a downgrade.
+/// unlocked and the latest settings, and a newer build's prefs survive a downgrade.
 fn merge_prefs(stored: Option<&str>, prefs: &LocalPrefs) -> AppResult<String> {
     let mut merged = stored_prefs(stored);
     if let Value::Object(fields) =
@@ -153,46 +153,46 @@ fn stored_prefs(json: Option<&str>) -> Map<String, Value> {
 }
 
 /// Moves the right-click and multi-line paste prefs that older builds kept in `local_prefs`
-/// into the synced settings. Runs after every unlock, because the settings item is encrypted,
-/// and does its work once: it removes the keys from `local_prefs`. A field already recorded in
-/// the settings, on this device or another, keeps its value, and a default value is not
-/// recorded, so a device whose value differs can still bring it over.
-pub fn adopt_legacy_prefs(vault: &mut Vault) -> AppResult<()> {
+/// into the synced settings ([`Vault::adopt_device_terminal_prefs`]), then removes the keys from
+/// `local_prefs`, so it does its work once. Returns whether it wrote the settings.
+///
+/// It must run on the latest settings: right after unlock when sync is off
+/// ([`adopt_legacy_prefs_after_unlock`]), and otherwise after each successful sync round
+/// (`sync::run_round`). Until then [`merge_prefs`] keeps the keys.
+pub fn adopt_legacy_prefs(vault: &mut Vault) -> AppResult<bool> {
     let mut stored = stored_prefs(vault.local_prefs()?.as_deref());
     let right_click = stored.remove(LEGACY_RIGHT_CLICK);
     let confirm_paste = stored.remove(LEGACY_CONFIRM_PASTE);
     if right_click.is_none() && confirm_paste.is_none() {
-        return Ok(());
+        return Ok(false);
     }
-    // Default settings when none is stored yet; `put` then creates the item.
-    let current = vault.settings();
-    let mut settings = current.clone();
-    let t = &mut settings.terminal;
-    if t.right_click.is_none()
-        && let Some(value) = right_click.and_then(|v| serde_json::from_value(v).ok())
-    {
-        t.set_right_click(value);
-    }
-    if t.confirm_multiline_paste.is_none()
-        && let Some(value) = confirm_paste.as_ref().and_then(Value::as_bool)
-    {
-        t.set_confirm_multiline_paste(value);
-    }
-    if settings != current {
-        vault.put(Some(SETTINGS_ID), Item::Settings(settings))?;
-    }
+    let wrote = vault.adopt_device_terminal_prefs(
+        right_click.and_then(|v| serde_json::from_value(v).ok()),
+        confirm_paste.as_ref().and_then(Value::as_bool),
+    )?;
     let json = serde_json::to_string(&stored).map_err(|e| AppError::internal(e.to_string()))?;
     vault.set_local_prefs(&json)?;
-    Ok(())
+    Ok(wrote)
+}
+
+/// The move after unlock. Without sync this device holds the only copy of the settings, so it
+/// runs now; with sync configured it waits for the first successful round, which pulls any
+/// newer settings first.
+pub fn adopt_legacy_prefs_after_unlock(vault: &mut Vault) -> AppResult<bool> {
+    if vault.sync_config()?.is_some() {
+        return Ok(false);
+    }
+    adopt_legacy_prefs(vault)
 }
 
 #[cfg(test)]
 mod tests {
     use hatoba_core::model::{Item, RightClick, SETTINGS_ID};
+    use hatoba_core::sync::SyncConfig;
     use hatoba_core::{KdfParams, Vault};
     use serde_json::{Value, json};
 
-    use super::{adopt_legacy_prefs, merge_prefs};
+    use super::{adopt_legacy_prefs, adopt_legacy_prefs_after_unlock, merge_prefs};
     use crate::dto::{Language, LocalPrefs};
 
     const PW: &str = "correct horse battery staple";
@@ -237,7 +237,7 @@ mod tests {
         let before = vault.settings().updated_at;
         vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
 
-        adopt_legacy_prefs(&mut vault).unwrap();
+        assert!(adopt_legacy_prefs(&mut vault).unwrap());
 
         let settings = vault.settings();
         assert_eq!(settings.terminal.right_click, Some(RightClick::Menu));
@@ -280,7 +280,7 @@ mod tests {
         vault.put(None, Item::Settings(settings)).unwrap();
         let after_change = vault.settings();
 
-        adopt_legacy_prefs(&mut vault).unwrap();
+        assert!(!adopt_legacy_prefs(&mut vault).unwrap());
         assert_eq!(vault.settings(), after_change);
     }
 
@@ -292,7 +292,7 @@ mod tests {
             .set_local_prefs(&legacy_prefs("copy_paste", true))
             .unwrap();
 
-        adopt_legacy_prefs(&mut vault).unwrap();
+        assert!(!adopt_legacy_prefs(&mut vault).unwrap());
 
         assert_eq!(vault.settings(), before);
         assert!(stored(&vault).get("right_click").is_none());
@@ -332,6 +332,29 @@ mod tests {
         let settings = vault.get(SETTINGS_ID).and_then(Item::as_settings).unwrap();
         assert_eq!(settings.terminal.right_click, Some(RightClick::Menu));
         assert_eq!(settings.terminal.confirm_multiline_paste, Some(false));
+    }
+
+    #[test]
+    fn after_unlock_it_waits_for_sync_when_sync_is_configured() {
+        let mut vault = vault();
+        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        let config = SyncConfig::Worker {
+            url: "https://sync.example.workers.dev".into(),
+        };
+        vault.set_sync_config(Some(&config)).unwrap();
+        let before = vault.settings();
+
+        assert!(!adopt_legacy_prefs_after_unlock(&mut vault).unwrap());
+        assert_eq!(vault.settings(), before);
+        assert_eq!(stored(&vault)["right_click"], "menu");
+
+        // Without sync this device holds the only copy, so the move runs right away.
+        vault.set_sync_config(None).unwrap();
+        assert!(adopt_legacy_prefs_after_unlock(&mut vault).unwrap());
+        assert_eq!(
+            vault.settings().terminal.right_click,
+            Some(RightClick::Menu)
+        );
     }
 
     #[test]

@@ -288,6 +288,7 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
                 "sync round done"
             );
             st.sync.set_state(SyncState::Idle, None);
+            adopt_legacy_prefs(app);
             Ok(())
         }
         Err(e) => {
@@ -305,6 +306,20 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
     };
     emit_status(app);
     outcome
+}
+
+/// The prefs move that waits for sync (`settings::adopt_legacy_prefs`). The round has just
+/// pulled, so this device holds the latest settings and the move cannot outdate newer edits
+/// from other devices. A write goes out with the next round.
+fn adopt_legacy_prefs(app: &AppHandle) {
+    match state(app).with_unlocked(crate::commands::settings::adopt_legacy_prefs) {
+        Ok(true) => local_change(app),
+        Ok(false) => {}
+        Err(e) => tracing::warn!(
+            "could not move the terminal prefs into the synced settings: {}",
+            e.detail
+        ),
+    }
 }
 
 /// The background scheduler loop.
