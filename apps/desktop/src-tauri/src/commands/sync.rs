@@ -30,6 +30,7 @@ pub(crate) fn backend_from_input(
             (
                 SyncConfig::Worker {
                     url: backend.base_url().to_owned(),
+                    deployment: None,
                 },
                 Arc::new(backend),
             )

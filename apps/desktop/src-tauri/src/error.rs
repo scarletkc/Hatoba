@@ -23,6 +23,17 @@ pub enum ErrorCode {
     SyncOffline,
     RemoteInitialized,
     RemoteNotInitialized,
+    /// In-app deployment (§6.7): Cloudflare rejected the API token.
+    CloudflareToken,
+    /// The API token lacks the permission in `permission`.
+    CloudflarePermission,
+    /// Any other Cloudflare API failure; `cf_code` has Cloudflare's code when it sent one.
+    Cloudflare,
+    SubdomainRequired,
+    SubdomainUnavailable,
+    WorkerNameTaken,
+    /// This build does not embed the Worker, so it cannot deploy it.
+    NoWorkerBundle,
     Cancelled,
     Io,
     Internal,
@@ -49,6 +60,13 @@ pub enum SshErrorKind {
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum CloudflarePermission {
+    WorkersScripts,
+    D1,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum KeyParseErrorKind {
     UnsupportedFormat,
     PassphraseRequired,
@@ -66,6 +84,8 @@ pub struct AppError {
     pub field: Option<String>,
     pub ssh_kind: Option<SshErrorKind>,
     pub key_kind: Option<KeyParseErrorKind>,
+    pub permission: Option<CloudflarePermission>,
+    pub cf_code: Option<u32>,
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -79,6 +99,8 @@ impl AppError {
             field: None,
             ssh_kind: None,
             key_kind: None,
+            permission: None,
+            cf_code: None,
         }
     }
 
@@ -157,6 +179,23 @@ impl From<hatoba_core::Error> for AppError {
             E::RemoteNotInitialized => Self::new(ErrorCode::RemoteNotInitialized, detail),
             E::RemoteInitialized => Self::new(ErrorCode::RemoteInitialized, detail),
             E::InvalidUrl(_) => Self::invalid("url", detail),
+            E::CloudflareToken => Self::new(ErrorCode::CloudflareToken, detail),
+            E::CloudflarePermission(p) => Self {
+                permission: Some(match p {
+                    hatoba_core::sync::deploy::Permission::WorkersScripts => {
+                        CloudflarePermission::WorkersScripts
+                    }
+                    hatoba_core::sync::deploy::Permission::D1 => CloudflarePermission::D1,
+                }),
+                ..Self::new(ErrorCode::CloudflarePermission, detail)
+            },
+            E::Cloudflare { code, .. } => Self {
+                cf_code: code,
+                ..Self::new(ErrorCode::Cloudflare, detail)
+            },
+            E::SubdomainRequired => Self::new(ErrorCode::SubdomainRequired, detail),
+            E::SubdomainUnavailable => Self::new(ErrorCode::SubdomainUnavailable, detail),
+            E::WorkerNameTaken => Self::new(ErrorCode::WorkerNameTaken, detail),
             E::SyncNotConfigured
             | E::Server(_)
             | E::Protocol(_)

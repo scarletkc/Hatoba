@@ -120,6 +120,30 @@ export const commands = {
 	/**  §6.4: conflicts are resolved automatically; this lists the unreviewed ones (P1). */
 	syncConflicts: () => __TAURI_INVOKE<ConflictView[]>("sync_conflicts"),
 	syncConflictResolve: (id: number, action: ConflictAction) => __TAURI_INVOKE<null>("sync_conflict_resolve", { id, action }),
+	/**
+	 *  Step 1 (DEPLOY-02): checks the API token. The token crosses to Rust here once; every later
+	 *  call names the deployment by the returned handle (DEPLOY-07).
+	 */
+	deployStart: (apiToken: string, accountId: string | null) => __TAURI_INVOKE<DeployStart>("deploy_start", { apiToken, accountId }),
+	/**  Step 2: what the deployment will do, before anything is written. */
+	deployInspect: (handle: string, target: DeployTarget) => __TAURI_INVOKE<DeployPlan>("deploy_inspect", { handle, target }),
+	/**
+	 *  Steps 2 to 8 (DEPLOY-03), reporting each step on `progress`. Run it again after a failure to
+	 *  continue the deployment (DEPLOY-05).
+	 */
+	deployRun: (handle: string, target: DeployTarget, progress: Channel<DeployProgress>) => __TAURI_INVOKE<DeployOutcome>("deploy_run", { handle, target, progress }),
+	/**  "Check again" while step 8 waits for the Worker. */
+	deployCheck: (handle: string) => __TAURI_INVOKE<boolean>("deploy_check", { handle }),
+	/**  "Remove what Hatoba created": only what this deployment created (DEPLOY-05). */
+	deployCleanup: (handle: string) => __TAURI_INVOKE<null>("deploy_cleanup", { handle }),
+	/**  Ends the deployment and forgets its tokens (the user cancelled or left the wizard). */
+	deployCancel: (handle: string) => __TAURI_INVOKE<void>("deploy_cancel", { handle }),
+	/**
+	 *  The master password step after a deployment: Flow A step 3 (§6.6) with the Worker URL and the
+	 *  setup token from the deployment, then deletes the `SETUP_TOKEN` secret (DEPLOY-06) and ends
+	 *  the deployment.
+	 */
+	deploySetup: (handle: string, password: string) => __TAURI_INVOKE<null>("deploy_setup", { handle, password }),
 	settingsGet: () => __TAURI_INVOKE<SettingsView>("settings_get"),
 	settingsSave: (settings: SettingsView) => __TAURI_INVOKE<null>("settings_save", { settings }),
 	/**  Readable while locked: the unlock screen needs the language. */
@@ -146,6 +170,8 @@ export type AppError = {
 	field: string | null,
 	ssh_kind: SshErrorKind | null,
 	key_kind: KeyParseErrorKind | null,
+	permission: CloudflarePermission | null,
+	cf_code: number | null,
 };
 
 export type AppInfo = {
@@ -170,6 +196,13 @@ export type AuthPromptField = {
 	prompt: string,
 	echo: boolean,
 };
+
+export type CloudflareAccount = {
+	id: string,
+	name: string,
+};
+
+export type CloudflarePermission = "workers_scripts" | "d1";
 
 export type ConflictAction = "keep" | "restore";
 
@@ -213,6 +246,63 @@ export type D1Database = {
 
 export type Density = "regular" | "compact";
 
+export type DeployDatabaseAction = "create" | 
+/**  An existing database with nothing but Hatoba's migrations. */
+"use" | 
+/**  The database already bound to the Hatoba Worker. */
+"bound";
+
+export type DeployOutcome = {
+	url: string,
+	/**  `false`: the Worker has not answered yet (step 8 is waiting); `deploy_check` asks again. */
+	ready: boolean,
+};
+
+/**  What step 2 found, shown before anything is written. */
+export type DeployPlan = {
+	/**  The account's workers.dev subdomain; `None` means the user has to choose one. */
+	subdomain: string | null,
+	worker: DeployWorkerAction,
+	database: DeployDatabaseAction | null,
+	database_name: string | null,
+};
+
+/**  Sent on the `deploy_run` channel as each step starts and ends. */
+export type DeployProgress = {
+	step: DeployStep,
+	status: DeployStepStatus,
+};
+
+/**  Step 1 passed. Later calls name the deployment by `handle`; the API token stays in Rust. */
+export type DeployStart = {
+	handle: string,
+	/**  The token belongs to the account given with it rather than to a user. */
+	account_owned: boolean,
+	/**  The accounts a user token reaches; empty when the user has to enter the account ID. */
+	accounts: CloudflareAccount[],
+	/**  The default Worker and database names. */
+	worker_name: string,
+	database_name: string,
+};
+
+export type DeployStep = "verify" | "inspect" | "create_database" | "migrate" | "upload" | "setup_token" | "route" | "wait";
+
+export type DeployStepStatus = "running" | "done" | "skipped";
+
+export type DeployTarget = {
+	account_id: string,
+	worker_name: string,
+	database_name: string,
+	/**  The workers.dev subdomain to create when the account has none. */
+	subdomain: string | null,
+};
+
+export type DeployWorkerAction = "create" | "update" | 
+/**  A Hatoba Worker whose database holds a vault: the deployment stops. */
+"has_vault" | 
+/**  A Worker the app does not recognize: the deployment stops. */
+"foreign";
+
 export type DeviceView = {
 	device_id: string,
 	name: string,
@@ -222,7 +312,15 @@ export type DeviceView = {
 	current: boolean,
 };
 
-export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | "cancelled" | "io" | "internal";
+export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+/**  In-app deployment (§6.7): Cloudflare rejected the API token. */
+"cloudflare_token" | 
+/**  The API token lacks the permission in `permission`. */
+"cloudflare_permission" | 
+/**  Any other Cloudflare API failure; `cf_code` has Cloudflare's code when it sent one. */
+"cloudflare" | "subdomain_required" | "subdomain_unavailable" | "worker_name_taken" | 
+/**  This build does not embed the Worker, so it cannot deploy it. */
+"no_worker_bundle" | "cancelled" | "io" | "internal";
 
 export type FileEntry = {
 	name: string,

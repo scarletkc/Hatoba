@@ -16,6 +16,13 @@ export function errorMessage(t: T, e: unknown, ctx: { host?: string; port?: numb
       return sshErrorMessage(t, err, ctx);
     case "key_parse":
       return err.key_kind ? t(`key.err.${err.key_kind}` as MessageKey) : t("err.key_parse");
+    case "cloudflare_permission":
+      // The dashboard's names for the permissions, which are not translated.
+      return t("err.cloudflare_permission", {
+        permission: err.permission === "d1" ? "Account · D1 · Edit" : "Account · Workers Scripts · Edit",
+      });
+    case "cloudflare":
+      return err.cf_code ? t("err.cloudflare_code", { code: err.cf_code }) : t("err.cloudflare");
     default:
       return t(`err.${err.code}` as MessageKey);
   }

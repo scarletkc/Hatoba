@@ -1,6 +1,7 @@
-import type { D1Database, SyncTestResult } from "@/ipc/types";
+import type { AppError, D1Database, DeployPlan, DeployStart, DeployStep, SyncTestResult } from "@/ipc/types";
 
-export type Method = "worker" | "d1";
+/** Deploy the Worker from the app (§6.7), connect a deployed Worker, or D1 direct mode (§6.1). */
+export type Method = "deploy" | "worker" | "d1";
 
 /** Progress of a connection test or token verification. */
 export type Probe =
@@ -37,6 +38,54 @@ export const EMPTY_D1: D1Form = {
   verify: { status: "idle" },
   initialized: false,
   checking: false,
+};
+
+/** In-app deployment (spec §6.7), kept by the wizard so going back and forth keeps its progress. */
+export interface DeployForm {
+  phase: "token" | "review" | "run";
+  /** Cleared as soon as Rust accepts it (DEPLOY-07). */
+  apiToken: string;
+  accountId: string;
+  /** Step 1 passed: the deployment's handle and what the token reaches. */
+  start: DeployStart | null;
+  verifying: boolean;
+  tokenError: AppError | null;
+  workerName: string;
+  databaseName: string;
+  subdomain: string;
+  namesOpen: boolean;
+  plan: DeployPlan | null;
+  inspecting: boolean;
+  planError: AppError | null;
+  steps: Partial<Record<DeployStep, StepState>>;
+  run: "idle" | "running" | "failed" | "waiting" | "ready" | "removing" | "removed";
+  runError: AppError | null;
+  url: string | null;
+}
+
+export type StepState = "running" | "done" | "skipped" | "failed";
+
+/** Steps 1 to 8, in the order the spec numbers them. */
+export const DEPLOY_STEPS: DeployStep[] = ["verify", "inspect", "create_database", "migrate", "upload", "setup_token", "route", "wait"];
+
+export const EMPTY_DEPLOY: DeployForm = {
+  phase: "token",
+  apiToken: "",
+  accountId: "",
+  start: null,
+  verifying: false,
+  tokenError: null,
+  workerName: "",
+  databaseName: "",
+  subdomain: "",
+  namesOpen: false,
+  plan: null,
+  inspecting: false,
+  planError: null,
+  steps: {},
+  run: "idle",
+  runError: null,
+  url: null,
 };
 
 /** "hatoba-sync.me.workers.dev/" → "https://hatoba-sync.me.workers.dev" */

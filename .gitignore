@@ -21,3 +21,5 @@ Thumbs.db
 
 # Tauri generated
 apps/desktop/src-tauri/gen/schemas/
+# Worker bundle for in-app deployment (scripts/worker/bundle.mjs)
+apps/desktop/src-tauri/gen/worker/

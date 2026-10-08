@@ -27,6 +27,13 @@ export type ErrorCode =
   | "sync_offline"
   | "remote_initialized"
   | "remote_not_initialized"
+  | "cloudflare_token"
+  | "cloudflare_permission"
+  | "cloudflare"
+  | "subdomain_required"
+  | "subdomain_unavailable"
+  | "worker_name_taken"
+  | "no_worker_bundle"
   | "cancelled"
   | "io"
   | "internal";
@@ -66,7 +73,13 @@ export interface AppError {
   ssh_kind?: SshErrorKind | null;
   /** `key_parse`: why the private key could not be read. */
   key_kind?: KeyParseErrorKind | null;
+  /** `cloudflare_permission`: the permission the API token lacks. */
+  permission?: CloudflarePermission | null;
+  /** `cloudflare`: Cloudflare's numeric error code, when it sent one. */
+  cf_code?: number | null;
 }
+
+export type CloudflarePermission = "workers_scripts" | "d1";
 
 // ───────────────────────── Vault ─────────────────────────
 
@@ -368,6 +381,60 @@ export interface D1Database {
   id: string;
   name: string;
   region: string | null;
+}
+
+// ───────────────────────── In-app deployment (§6.7) ─────────────────────────
+
+export interface CloudflareAccount {
+  id: string;
+  name: string;
+}
+
+/** The API token passed step 1. Later calls name the deployment by `handle`; the token stays in Rust. */
+export interface DeployStart {
+  handle: string;
+  /** The token belongs to the account entered with it rather than to a user. */
+  account_owned: boolean;
+  /** The accounts a user token reaches; empty when the account ID has to be entered. */
+  accounts: CloudflareAccount[];
+  /** Default names. */
+  worker_name: string;
+  database_name: string;
+}
+
+export interface DeployTarget {
+  account_id: string;
+  worker_name: string;
+  database_name: string;
+  /** The workers.dev subdomain to create when the account has none. */
+  subdomain: string | null;
+}
+
+/** `has_vault` and `foreign` stop the deployment. */
+export type DeployWorkerAction = "create" | "update" | "has_vault" | "foreign";
+export type DeployDatabaseAction = "create" | "use" | "bound";
+
+/** What step 2 found, before anything is written. */
+export interface DeployPlan {
+  /** `null`: the account has no workers.dev subdomain yet, so the user chooses one. */
+  subdomain: string | null;
+  worker: DeployWorkerAction;
+  database: DeployDatabaseAction | null;
+  database_name: string | null;
+}
+
+export type DeployStep = "verify" | "inspect" | "create_database" | "migrate" | "upload" | "setup_token" | "route" | "wait";
+export type DeployStepStatus = "running" | "done" | "skipped";
+
+export interface DeployProgress {
+  step: DeployStep;
+  status: DeployStepStatus;
+}
+
+export interface DeployOutcome {
+  url: string;
+  /** `false`: the Worker does not answer yet (step 8 is waiting); `deploy_check` asks again. */
+  ready: boolean;
 }
 
 export interface DeviceView {

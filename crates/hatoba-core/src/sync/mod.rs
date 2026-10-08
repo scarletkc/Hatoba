@@ -3,6 +3,7 @@
 //! * [`backend`]: the `SyncBackend` trait and its wire types.
 //! * [`worker`]: HTTPS to the user's Cloudflare Worker (recommended).
 //! * [`d1`]: Cloudflare D1 REST API directly (P1).
+//! * [`deploy`]: deploying the Worker to the user's account through the Cloudflare API (P1).
 //! * [`engine`]: one pull/push round, conflict handling, tombstones.
 //! * [`conflict`]: the §6.4 rules as pure functions.
 //! * [`flows`]: enable sync, restore on a new device, sign in again, change password, recovery,
@@ -22,6 +23,7 @@ use crate::vault::Vault;
 pub mod backend;
 pub mod conflict;
 pub mod d1;
+pub mod deploy;
 pub mod engine;
 pub mod flows;
 mod http;
@@ -77,6 +79,9 @@ pub enum SyncConfig {
     Worker {
         /// Normalised Worker base URL.
         url: String,
+        /// Set when the app deployed the Worker (spec §6.7); it fills in the upgrade form.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        deployment: Option<WorkerDeployment>,
     },
     /// Direct Cloudflare D1 access.
     D1 {
@@ -85,6 +90,15 @@ pub enum SyncConfig {
         /// D1 database UUID.
         database_id: String,
     },
+}
+
+/// Where the app deployed a Worker. Not secret.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkerDeployment {
+    /// Cloudflare account ID.
+    pub account_id: String,
+    /// Worker name.
+    pub worker_name: String,
 }
 
 /// Saves a session in the OS credential store.
@@ -225,10 +239,26 @@ mod backoff_tests {
     fn sync_config_json_shape() {
         let w = SyncConfig::Worker {
             url: "https://x.example".into(),
+            deployment: None,
         };
         assert_eq!(
             serde_json::to_string(&w).unwrap(),
             r#"{"mode":"worker","url":"https://x.example"}"#
+        );
+        let deployed = SyncConfig::Worker {
+            url: "https://hatoba-sync.kc.workers.dev".into(),
+            deployment: Some(WorkerDeployment {
+                account_id: "a".into(),
+                worker_name: "hatoba-sync".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_string(&deployed).unwrap(),
+            r#"{"mode":"worker","url":"https://hatoba-sync.kc.workers.dev","deployment":{"account_id":"a","worker_name":"hatoba-sync"}}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<SyncConfig>(&serde_json::to_string(&deployed).unwrap()).unwrap(),
+            deployed
         );
         let d = SyncConfig::D1 {
             account_id: "a".into(),

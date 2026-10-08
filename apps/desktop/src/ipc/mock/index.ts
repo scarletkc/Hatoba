@@ -20,7 +20,9 @@ import { FakeShell } from "./shell";
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth
  *   ?platform=windows | macos | linux       ?update=available | offline | error
+ *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
+ * The in-app deployment accepts any API token of 20 or more characters.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createMockApi(): HatobaApi {
@@ -28,6 +30,7 @@ export function createMockApi(): HatobaApi {
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
+  const deployDemo = q.get("deploy");
   const version = "0.1.0-dev";
 
   let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
@@ -48,6 +51,7 @@ export function createMockApi(): HatobaApi {
   let failed = 0;
   let retryAt: number | null = null;
   let sync: SyncStatus = makeSync();
+  let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null } | null = null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
   let seq = 0;
@@ -80,6 +84,11 @@ export function createMockApi(): HatobaApi {
 
   function needUnlocked() {
     if (vaultState !== "unlocked") fail("locked");
+  }
+
+  function needDeployment(handle: string) {
+    if (deployment?.handle !== handle) fail("cancelled", "the deployment has ended");
+    return deployment;
   }
 
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -502,6 +511,81 @@ export function createMockApi(): HatobaApi {
     sync_conflict_resolve: async (cid) => {
       conflicts = conflicts.filter((c) => c.id !== cid);
       setSync({ conflicts: conflicts.length });
+    },
+
+    deploy_start: async (token, accountId) => {
+      await delay(700);
+      if (deployDemo === "nobundle") fail("no_worker_bundle");
+      if (token.length < 20) fail("cloudflare_token");
+      deployment = { handle: id("deploy"), failed: false, waited: false, url: null };
+      const accounts =
+        deployDemo === "accounts"
+          ? [
+              { id: "0123456789abcdef0123456789abcdef", name: "Personal" },
+              { id: "fedcba9876543210fedcba9876543210", name: "Work" },
+            ]
+          : accountId
+            ? []
+            : [{ id: "0123456789abcdef0123456789abcdef", name: "Personal" }];
+      return { handle: deployment.handle, account_owned: !!accountId && deployDemo !== "accounts", accounts, worker_name: "hatoba-sync", database_name: "hatoba" };
+    },
+    deploy_inspect: async (handle, target) => {
+      needDeployment(handle);
+      await delay(800);
+      if (deployDemo === "permission") fail("cloudflare_permission", "token lacks D1 Edit", { permission: "d1" });
+      const fresh = target.worker_name !== "hatoba-sync";
+      return {
+        subdomain: deployDemo === "nosub" ? null : "kc",
+        worker: fresh ? "create" : deployDemo === "vault" ? "has_vault" : deployDemo === "foreign" ? "foreign" : "create",
+        database: "create",
+        database_name: target.database_name,
+      };
+    },
+    deploy_run: async (handle, target, onProgress) => {
+      const d = needDeployment(handle);
+      const steps = ["inspect", "create_database", "migrate", "upload", "setup_token", "route", "wait"] as const;
+      for (const step of steps) {
+        onProgress({ step, status: "running" });
+        await delay(step === "wait" ? 1500 : 600);
+        if (step === "upload" && deployDemo === "fail" && !d.failed) {
+          d.failed = true;
+          fail("cloudflare", "HTTP 500, code 10013", { cf_code: 10013 });
+        }
+        if (step === "wait" && deployDemo === "waiting" && !d.waited) {
+          d.waited = true;
+          d.url = `https://${target.worker_name}.${target.subdomain ?? "kc"}.workers.dev`;
+          return { url: d.url, ready: false };
+        }
+        onProgress({ step, status: d.failed && step === "create_database" ? "skipped" : "done" });
+      }
+      d.url = `https://${target.worker_name}.${target.subdomain ?? "kc"}.workers.dev`;
+      return { url: d.url, ready: true };
+    },
+    deploy_check: async (handle) => {
+      needDeployment(handle);
+      await delay(900);
+      return true;
+    },
+    deploy_cleanup: async (handle) => {
+      const d = needDeployment(handle);
+      await delay(900);
+      d.failed = false;
+    },
+    deploy_cancel: async (handle) => {
+      if (deployment?.handle === handle) deployment = null;
+    },
+    deploy_setup: async (handle, password) => {
+      const d = needDeployment(handle);
+      await delay(1200);
+      if (password.length < 4) fail("wrong_password");
+      sync = {
+        ...D.syncStatus(),
+        endpoint: (d.url ?? "").replace(/^https?:\/\//, ""),
+        last_synced_at: Date.now(),
+        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
+      };
+      deployment = null;
+      emit("sync://status", sync);
     },
 
     settings_get: async () => structuredClone(settings),

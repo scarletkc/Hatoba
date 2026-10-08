@@ -105,7 +105,7 @@ pub fn backend_for(
     secrets: &dyn SecretStore,
 ) -> AppResult<Arc<dyn SyncBackend>> {
     Ok(match config {
-        SyncConfig::Worker { url } => {
+        SyncConfig::Worker { url, .. } => {
             let backend = WorkerBackend::new(url)?;
             backend.set_session(load_session(secrets)?);
             Arc::new(backend)
@@ -183,7 +183,7 @@ pub fn status(app: &AppHandle) -> SyncStatus {
     };
     let (kind, endpoint, database) = match &config {
         None => (SyncKind::None, None, None),
-        Some(SyncConfig::Worker { url }) => {
+        Some(SyncConfig::Worker { url, .. }) => {
             let host = url
                 .trim_start_matches("https://")
                 .trim_start_matches("http://")

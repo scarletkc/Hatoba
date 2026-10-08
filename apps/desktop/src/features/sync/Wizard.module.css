@@ -360,3 +360,127 @@
 .lossBody {
   text-wrap: pretty;
 }
+
+/* Step 2, in-app deployment (spec §6.7) */
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.dim {
+  color: var(--fg2);
+}
+
+.calloutLink {
+  margin-top: 6px;
+}
+
+.accountLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+
+.fieldSuffix {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  padding-right: 4px;
+}
+
+.planStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.planList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.planRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.planIcon {
+  font-size: 15px;
+  color: var(--fg2);
+  margin-top: 1px;
+  flex: none;
+}
+
+.planNote {
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.stepList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stepRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.stepIcon {
+  width: 16px;
+  height: 20px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.stepError {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--red);
+  text-wrap: pretty;
+}
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}

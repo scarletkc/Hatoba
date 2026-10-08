@@ -6,17 +6,16 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
-import { api } from "@/ipc/api";
-import type { SyncConfigInput } from "@/ipc/types";
 import { refreshSyncStatus } from "./syncUtils";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";
 
 /**
  * Step 3. The vault already exists locally (created at first launch), so this asks for the existing
- * master password to authorise the upload; it does not set a new one.
+ * master password to authorise the upload; it does not set a new one. `submit` initialises the
+ * remote: `sync_configure`, or `deploy_setup` after an in-app deployment.
  */
-export function PasswordStep({ config, onBack }: { config: SyncConfigInput; onBack: () => void }) {
+export function PasswordStep({ submit, onBack }: { submit: (password: string) => Promise<void>; onBack: () => void }) {
   const t = useT();
   const fieldId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +33,7 @@ export function PasswordStep({ config, onBack }: { config: SyncConfigInput; onBa
     setBusy(true);
     setError(null);
     try {
-      await api.sync_configure(config, password);
+      await submit(password);
       await refreshSyncStatus();
       toast(t("sync.enabled"), "success");
     } catch (e) {

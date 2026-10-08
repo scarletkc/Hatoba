@@ -8,14 +8,15 @@ This page covers deployment, upgrades, and maintenance. The API and server behav
 
 You need a Cloudflare account. The free plan works, and personal use usually stays within its limits.
 
-There are two ways to deploy:
+There are three ways to deploy:
 
+- From Hatoba: in the Cloud Sync wizard, choose **Deploy a Worker from Hatoba**. It needs only a Cloudflare API token, which Hatoba uses while deploying and never stores. Hatoba creates the database, deploys the Worker, generates and later deletes the setup token, and connects to the Worker, so you need this page only for [maintenance](#maintenance). [§6.7 of the architecture and requirements](../../docs/hatoba-spec.md#67-in-app-deployment) describes each step.
 - [One-click deploy](#one-click-deploy) from the browser. It also needs a GitHub or GitLab account, where Cloudflare creates your own copy of this directory.
 - [Deploy with wrangler](#deploy-with-wrangler) from a clone of this repository. It needs Node.js **22 or later** (required by wrangler 4) and npm.
 
 ## Setup token
 
-Both ways ask for a setup token. It stops someone else from initializing a freshly deployed, unconfigured Worker before you do. It is a random string that only you know, so **use a strong random value**:
+One-click deploy and wrangler ask for a setup token. It stops someone else from initializing a freshly deployed, unconfigured Worker before you do. It is a random string that only you know, so **use a strong random value**:
 
 ```sh
 # macOS / Linux / Git Bash
@@ -107,7 +108,7 @@ A JSON response with `service` set to `"hatoba-sync"` and `initialized` set to `
 
 ## Connect Hatoba
 
-1. In Hatoba, open **Cloud Sync** in the sidebar and choose **Deploy a Worker**.
+1. In Hatoba, open **Cloud Sync** in the sidebar and choose **Connect a deployed Worker**.
 2. Enter the **Worker URL** and the **Setup Token**, and select **Test Connection**.
 3. Follow the wizard to set or enter the master password. The first device calls `/v1/setup` to initialize the vault, then signs in and pushes every item.
 
@@ -115,11 +116,11 @@ To add another device, choose **Restore from Cloud** on its first launch. It nee
 
 ## Maintenance
 
-With a one-click deployment, run the wrangler commands below from a clone of your own repository, after `npm install` and `npx wrangler login`. If you gave the database a different name on the setup page, use that name instead of `hatoba`.
+With a one-click deployment, run the wrangler commands below from a clone of your own repository, after `npm install` and `npx wrangler login`. If you gave the database a different name on the setup page, use that name instead of `hatoba`. After a deployment from Hatoba, run them the same way from a clone of this repository, with the database name the wizard showed.
 
 ### After initialization (optional hardening)
 
-Once the vault is initialized, the setup token is no longer needed. You can delete it, and `/v1/setup` then always returns `503 setup_token_not_configured`:
+Once the vault is initialized, the setup token is no longer needed. You can delete it, and `/v1/setup` then always returns `503 setup_token_not_configured`. A deployment from Hatoba deletes it for you.
 
 ```sh
 npx wrangler secret delete SETUP_TOKEN

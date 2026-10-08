@@ -67,6 +67,10 @@ npm run dev                           # http://localhost:8787
 
 Local `wrangler dev` has no `CF-Connecting-IP` header, so all requests share one rate limit counter.
 
+### In-app deployment
+
+`pnpm tauri build` packages the Worker for [in-app deployment](hatoba-spec.md#67-in-app-deployment) with `scripts/worker/bundle.mjs`, and `build.rs` embeds the package. Other builds, such as `pnpm tauri dev` and `cargo test`, embed the package from the last run of `pnpm worker:bundle`, and without one the deploy commands report that the build has no Worker bundle. Run it again after changing the Worker. `pnpm worker:bundle --no-install` skips `npm ci` and uses the dependencies already installed in `workers/sync`.
+
 ### Client and Worker integration
 
 `crates/hatoba-core/tests/worker_live.rs` syncs the Rust client with a real Worker running in `wrangler dev`, and is skipped unless `HATOBA_WORKER_URL` is set. The comment at the top of that file has the commands that start the Worker and run the test.

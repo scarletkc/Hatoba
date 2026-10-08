@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
+import type { DeployProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -89,6 +90,18 @@ export function createTauriApi(): HatobaApi {
     sync_revoke_device: (deviceId) => call("sync_revoke_device", { deviceId }),
     sync_conflicts: () => call("sync_conflicts"),
     sync_conflict_resolve: (id, action) => call("sync_conflict_resolve", { id, action }),
+
+    deploy_start: (apiToken, accountId) => call("deploy_start", { apiToken, accountId }),
+    deploy_inspect: (handle, target) => call("deploy_inspect", { handle, target }),
+    deploy_run: (handle, target, onProgress) => {
+      const progress = new Channel<DeployProgress>();
+      progress.onmessage = onProgress;
+      return call("deploy_run", { handle, target, progress });
+    },
+    deploy_check: (handle) => call("deploy_check", { handle }),
+    deploy_cleanup: (handle) => call("deploy_cleanup", { handle }),
+    deploy_cancel: (handle) => call("deploy_cancel", { handle }),
+    deploy_setup: (handle, password) => call("deploy_setup", { handle, password }),
 
     settings_get: () => call("settings_get"),
     settings_save: (settings) => call("settings_save", { settings }),

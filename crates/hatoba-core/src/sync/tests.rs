@@ -1332,6 +1332,7 @@ async fn engine_wrapper_and_persistence_across_restart() {
             .unwrap()
             .set_sync_config(Some(&SyncConfig::Worker {
                 url: "https://x.example".into(),
+                deployment: None,
             }))
             .unwrap();
         // Edit after the first sync, then "quit" with the change still pending.
@@ -1348,7 +1349,8 @@ async fn engine_wrapper_and_persistence_across_restart() {
     assert_eq!(
         v.sync_config().unwrap(),
         Some(SyncConfig::Worker {
-            url: "https://x.example".into()
+            url: "https://x.example".into(),
+            deployment: None,
         })
     );
     let engine = SyncEngine::new(share(v), Arc::new(FakeBackend::new(&server)));

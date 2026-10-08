@@ -75,12 +75,13 @@ tests, and the generated TypeScript bindings.
 ## Set up sync
 
 Sync is optional. It runs on a Worker and a D1 database that you deploy once to
-your Cloudflare account, with one click from the browser or with wrangler, and
-the free plan usually covers personal use. The first device connects with the
-Worker URL and a setup token you generate during deployment. Other devices need
-only the Worker URL and the master password.
+your Cloudflare account, and the free plan usually covers personal use. Hatoba
+can deploy them for you with a Cloudflare API token; otherwise deploy them with
+one click from the browser or with wrangler, then connect the first device with
+the Worker URL and a setup token you generate during deployment. Other devices
+need only the Worker URL and the master password.
 
-[Deploy the sync Worker](workers/sync/README.md) walks through both ways and
+[Deploy the sync Worker](workers/sync/README.md) walks through each way and
 connecting Hatoba, and covers upgrades, resets, and backups.
 
 ## Documentation

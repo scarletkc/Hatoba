@@ -21,6 +21,7 @@ The visual and interaction reference is the Claude Design project `https://claud
 The implementation differs from the design in these places, all following the spec:
 
 - Encryption description: the design says XChaCha20-Poly1305, but the implementation uses AES-256-GCM and Argon2id per spec §4, and the copy is corrected to match.
+- Cloud Sync methods: step 1 adds deploying the Worker from the app (spec §6.7) as the recommended method, and the design's Worker method becomes connecting a Worker deployed another way. The design has no pages for the in-app deployment, so they reuse the wizard's cards, fields, and callouts.
 - Worker connection: the design's access token (`SYNC_TOKEN`) is replaced by the setup token (`SETUP_TOKEN`) from spec §6.2, which is used only for the first initialization.
 - Sync conflicts: the design pauses sync and asks for a choice on each item. Spec §6.4 requires automatic resolution with a log, so the conflict page instead lists the automatically resolved conflicts for review, where each one can keep the current result or restore the other version.
 - Recovery code: shown as 8 groups of 4 characters, per the format in spec §4.1.

@@ -18,5 +18,23 @@ fn main() {
         println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
     }
 
+    embed_worker_bundle();
     tauri_build::try_build(attributes).expect("failed to run tauri-build");
+}
+
+/// Copies the Worker bundle from `scripts/worker/bundle.mjs` into OUT_DIR for `include_str!`, or
+/// an empty file when it has not been generated, so builds without it still compile (spec §6.7).
+fn embed_worker_bundle() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("gen")
+        .join("worker");
+    // Cargo reruns a build script on every build while a watched path is missing, so make sure
+    // the directory exists and watch it rather than the file.
+    std::fs::create_dir_all(&dir).expect("create gen/worker");
+    println!("cargo:rerun-if-changed={}", dir.display());
+
+    let out = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR"))
+        .join("worker-bundle.json");
+    let bundle = std::fs::read_to_string(dir.join("bundle.json")).unwrap_or_default();
+    std::fs::write(out, bundle).expect("write worker-bundle.json");
 }

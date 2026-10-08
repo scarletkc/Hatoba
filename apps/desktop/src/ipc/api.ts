@@ -20,6 +20,11 @@ import type {
   ProbeResult,
   SettingsView,
   SshConfigCandidate,
+  DeployOutcome,
+  DeployPlan,
+  DeployProgress,
+  DeployStart,
+  DeployTarget,
   SyncConfigInput,
   SyncStatus,
   SyncTestResult,
@@ -136,6 +141,22 @@ export interface HatobaApi {
   sync_conflicts(): Promise<ConflictView[]>;
   /** `keep`: accept the automatic resolution. `restore`: re-apply the losing version as a new edit. */
   sync_conflict_resolve(id: number, action: "keep" | "restore"): Promise<void>;
+
+  // in-app deployment (§6.7)
+  /** Step 1: checks the API token, which stays in Rust from here on. Rejects with `no_worker_bundle` in builds without the Worker. */
+  deploy_start(api_token: string, account_id: string | null): Promise<DeployStart>;
+  /** Step 2: what the deployment will do, before anything is written. */
+  deploy_inspect(handle: string, target: DeployTarget): Promise<DeployPlan>;
+  /** Steps 2 to 8. Run it again after a failure to continue. */
+  deploy_run(handle: string, target: DeployTarget, onProgress: (p: DeployProgress) => void): Promise<DeployOutcome>;
+  /** "Check again" while step 8 waits for the Worker. */
+  deploy_check(handle: string): Promise<boolean>;
+  /** Deletes only what this deployment created. */
+  deploy_cleanup(handle: string): Promise<void>;
+  /** Ends the deployment and wipes its tokens. */
+  deploy_cancel(handle: string): Promise<void>;
+  /** The master password step after a deployment: initialises the new Worker and enables sync. */
+  deploy_setup(handle: string, password: string): Promise<void>;
 
   // settings
   settings_get(): Promise<SettingsView>;

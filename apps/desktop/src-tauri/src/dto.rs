@@ -424,6 +424,102 @@ pub enum ConflictAction {
     Restore,
 }
 
+// ───────────────────────── In-app deployment (§6.7) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct CloudflareAccount {
+    pub id: String,
+    pub name: String,
+}
+
+/// Step 1 passed. Later calls name the deployment by `handle`; the API token stays in Rust.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct DeployStart {
+    pub handle: String,
+    /// The token belongs to the account given with it rather than to a user.
+    pub account_owned: bool,
+    /// The accounts a user token reaches; empty when the user has to enter the account ID.
+    pub accounts: Vec<CloudflareAccount>,
+    /// The default Worker and database names.
+    pub worker_name: String,
+    pub database_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct DeployTarget {
+    pub account_id: String,
+    pub worker_name: String,
+    pub database_name: String,
+    /// The workers.dev subdomain to create when the account has none.
+    pub subdomain: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeployWorkerAction {
+    Create,
+    Update,
+    /// A Hatoba Worker whose database holds a vault: the deployment stops.
+    HasVault,
+    /// A Worker the app does not recognize: the deployment stops.
+    Foreign,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeployDatabaseAction {
+    Create,
+    /// An existing database with nothing but Hatoba's migrations.
+    Use,
+    /// The database already bound to the Hatoba Worker.
+    Bound,
+}
+
+/// What step 2 found, shown before anything is written.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct DeployPlan {
+    /// The account's workers.dev subdomain; `None` means the user has to choose one.
+    pub subdomain: Option<String>,
+    pub worker: DeployWorkerAction,
+    pub database: Option<DeployDatabaseAction>,
+    pub database_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeployStep {
+    Verify,
+    Inspect,
+    CreateDatabase,
+    Migrate,
+    Upload,
+    SetupToken,
+    Route,
+    Wait,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DeployStepStatus {
+    Running,
+    Done,
+    Skipped,
+}
+
+/// Sent on the `deploy_run` channel as each step starts and ends.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct DeployProgress {
+    pub step: DeployStep,
+    pub status: DeployStepStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct DeployOutcome {
+    pub url: String,
+    /// `false`: the Worker has not answered yet (step 8 is waiting); `deploy_check` asks again.
+    pub ready: bool,
+}
+
 // ───────────────────────── Settings ─────────────────────────
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]

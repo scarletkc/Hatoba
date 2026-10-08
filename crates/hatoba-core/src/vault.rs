@@ -1736,6 +1736,7 @@ mod tests {
         assert_eq!(vault.sync_config().unwrap(), None);
         let cfg = SyncConfig::Worker {
             url: "https://sync.example.workers.dev".into(),
+            deployment: None,
         };
         vault.set_sync_config(Some(&cfg)).unwrap();
         vault.store.set_meta(meta::SYNC_CURSOR, "42").unwrap();

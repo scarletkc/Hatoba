@@ -3,6 +3,8 @@
 //! Error messages never contain secrets, item contents, envelopes or tokens (SEC-04): at most an
 //! item id or a short, server-supplied error code.
 
+use crate::sync::deploy::Permission;
+
 /// Convenience alias used throughout the crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -122,6 +124,31 @@ pub enum Error {
     /// The backend does not implement this operation (e.g. device list in D1 direct mode).
     #[error("not supported by this sync backend")]
     Unsupported,
+
+    // ---- in-app deployment (§6.7) ----------------------------------------------------------
+    /// Cloudflare rejected the API token: invalid, expired, or disabled.
+    #[error("Cloudflare rejected the API token")]
+    CloudflareToken,
+    /// The API token lacks a permission the deployment needs.
+    #[error("the Cloudflare API token lacks the {0} permission")]
+    CloudflarePermission(Permission),
+    /// Any other failed Cloudflare API call, with Cloudflare's first numeric error code.
+    #[error("Cloudflare API error: HTTP {status}{}", code.map(|c| format!(", code {c}")).unwrap_or_default())]
+    Cloudflare {
+        /// HTTP status.
+        status: u16,
+        /// Cloudflare's numeric error code, if the response had one.
+        code: Option<u32>,
+    },
+    /// The account has no workers.dev subdomain and none was chosen.
+    #[error("the account has no workers.dev subdomain")]
+    SubdomainRequired,
+    /// Another account already has the chosen workers.dev subdomain.
+    #[error("the workers.dev subdomain is not available")]
+    SubdomainUnavailable,
+    /// A Worker the app does not recognize already has the chosen name.
+    #[error("another Worker already has this name")]
+    WorkerNameTaken,
 }
 
 impl Error {
@@ -162,6 +189,12 @@ impl Error {
             Self::InvalidUrl(_) => "invalid_url",
             Self::D1Permission => "d1_permission",
             Self::Unsupported => "unsupported",
+            Self::CloudflareToken => "cloudflare_token",
+            Self::CloudflarePermission(_) => "cloudflare_permission",
+            Self::Cloudflare { .. } => "cloudflare",
+            Self::SubdomainRequired => "subdomain_required",
+            Self::SubdomainUnavailable => "subdomain_unavailable",
+            Self::WorkerNameTaken => "worker_name_taken",
         }
     }
 

@@ -7,6 +7,7 @@ use std::time::Instant;
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
+use crate::deploy::Deployments;
 use crate::error::{AppError, AppResult};
 use crate::lock::LockPolicy;
 use crate::platform::secrets::KeyringStore;
@@ -20,6 +21,8 @@ pub struct AppState {
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
     pub sync: SyncController,
+    /// The in-app deployment in progress (§6.7).
+    pub deploy: Deployments,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -32,6 +35,7 @@ impl AppState {
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
             sync: SyncController::default(),
+            deploy: Deployments::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

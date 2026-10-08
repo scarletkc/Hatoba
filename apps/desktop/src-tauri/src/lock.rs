@@ -44,6 +44,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         was
     };
     sync::stop(app);
+    // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
+    state.deploy.clear();
     if state.lock_policy.disconnect_on_lock.load(Ordering::Relaxed) {
         state.ssh.disconnect_all().await;
     }

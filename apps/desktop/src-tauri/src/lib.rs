@@ -3,6 +3,7 @@
 
 mod commands;
 mod convert;
+mod deploy;
 mod dto;
 mod error;
 mod lock;
@@ -14,7 +15,8 @@ mod sync;
 mod update;
 
 use commands::{
-    app, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd, sync as sync_cmd, vault,
+    app, deploy as deploy_cmd, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd,
+    sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -97,6 +99,13 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sync_cmd::sync_revoke_device,
             sync_cmd::sync_conflicts,
             sync_cmd::sync_conflict_resolve,
+            deploy_cmd::deploy_start,
+            deploy_cmd::deploy_inspect,
+            deploy_cmd::deploy_run,
+            deploy_cmd::deploy_check,
+            deploy_cmd::deploy_cleanup,
+            deploy_cmd::deploy_cancel,
+            deploy_cmd::deploy_setup,
             settings::settings_get,
             settings::settings_save,
             settings::prefs_get,
