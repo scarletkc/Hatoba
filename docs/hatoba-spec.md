@@ -60,7 +60,7 @@ flowchart LR
       CMD["Tauri commands / channels"]
       CORE["hatoba-core<br/>crypto · vault · models · sync"]
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
-      AI["hatoba-ai<br/>chat completions · web tools"]
+      AI["hatoba-ai<br/>model providers · web tools"]
       DB[("Local SQLite<br/>ciphertext only")]
       KC["System credential store"]
     end
@@ -104,7 +104,7 @@ hatoba/
 │   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
 │   └── e2e/                  # WebDriver end-to-end smoke test
 ├── crates/
-│   ├── hatoba-ai/            # Chat Completions client, web search, URL fetching
+│   ├── hatoba-ai/            # Model provider adapters, web search, URL fetching
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
 │   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
@@ -282,12 +282,15 @@ interface Snippet {              // P2
 interface AiProvider {           // P1, §13.2
   type: "ai_provider";
   name: string;
-  base_url: string;             // Chat Completions base, such as https://api.openai.com/v1
+  protocol: "chat_completions" | "anthropic";  // Read as chat_completions when missing
+  base_url: string;             // Such as https://api.openai.com/v1 or https://api.anthropic.com
   api_key: string;              // Empty when the server needs none
+  auth_header: "x-api-key" | "authorization";  // anthropic only
   models: {
     id: string;                 // Model ID sent in requests
     name: string;               // Display name
-    context_window: number | null;  // Tokens, null when unknown
+    context_window: number | null;     // Tokens, null when unknown
+    max_output_tokens: number | null;  // Tokens, null when unknown
   }[];
   updated_at: number;
 }
@@ -828,7 +831,7 @@ The design defines the visuals. This section only specifies the behavior and sta
 | Keys | See §8.3 | Empty |
 | Cloud Sync | A three-step wizard: choose a method → enter connection details → set or enter the master password. The methods are deploying the Worker from the app (recommended, §6.7), connecting a Worker deployed with the Deploy to Cloudflare button or wrangler (Worker URL and setup token), and D1 direct mode (Account ID and API token plus a database). A status page follows | Synced, syncing, conflicts, offline, signed out, Worker update available, Worker update required. Device list and revocation |
 | Cloud Sync: in-app deployment | The connection step of the in-app method: the API token field with the **Create token** link, the Account ID (filled in when possible, or a list when the token reaches several accounts), and the Worker and database names in an expandable section. After the token check, the page lists what it will create or reuse and the Worker URL, and **Deploy** runs the steps of §6.7 with a progress row for each. On success it shows the Worker URL and continues to the master password step. **Update Worker** on the status page opens the same form with the known values filled in | Token rejected or missing a permission (naming the permission, with a link to edit the token), no workers.dev subdomain (choose one), name taken (per §6.7), each step pending, running, done, skipped, or failed, a failed step (the error, **Retry**, **Remove what Hatoba created**), waiting for workers.dev (**Check again**), offline, a build without the Worker bundle |
-| AI panel | A resizable panel at the right edge of the window, toggled with the shortcut in §9.1. The header has the conversation title, the tab's host, the permission mode switch, history, and **New conversation**. Messages render as Markdown with no raw HTML and no remote images, and links open in the system browser. Each tool call is a collapsible block with its input, output, and exit status, and approval cards appear in place. The input area has a multi-line box (Enter sends, Shift+Enter adds a line), the model selector, the context meter, and **Stop** during a turn. §13 defines the behavior | No provider configured (with a link to **Settings → AI**), no terminal tab (AI-09), streaming, waiting for approval, tool running, tool call limit reached, tab disconnected, provider error (the HTTP status and the provider's message, with **Retry**), context nearly full, empty history |
+| AI panel | A resizable panel at the right edge of the window, toggled with the shortcut in §9.1. The header has the conversation title, the tab's host, the permission mode switch, history, and **New conversation**. Messages render as Markdown with no raw HTML and no remote images, and links open in the system browser. Each tool call is a collapsible block with its input, output, and exit status, and approval cards appear in place. The input area has a multi-line box (Enter sends, Shift+Enter adds a line), the model selector, the context meter, and **Stop** during a turn. §13 defines the behavior | No provider configured (with a link to **Settings → AI**), no terminal tab (AI-09), streaming, waiting for approval, tool running, tool call limit reached, tab disconnected, response cut off at the output limit, response declined by the model, provider error (the HTTP status and the provider's message, with **Retry**), context nearly full, empty history |
 | Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language. **AI**: providers and their models, search provider, default model, default permission mode, and the tool call limit (§13). **About**: the app version and the update check from §11, with a switch for the automatic check. When a check finds a newer release, the settings button in the sidebar shows a dot and opens the About page | AI provider test passed or failed (AI-04), model list failed to load. Update check: checking, up to date (also when nothing has been released yet), update available (with a link to the release page), offline, failed |
 
 **Global requirements**:
@@ -914,26 +917,26 @@ The [development guide](development.md#testing) has the commands that run each t
 - **Deployment tests**: the in-app deployment (§6.7) runs against a mock of the Cloudflare API. The tests cover each step, every row of the existing Workers and databases tables, a failure at each step followed by a retry, cleanup, and an upgrade with a new migration, and check that the API token and the setup token never reach a log or a DTO.
 - **Client and Worker integration**: `crates/hatoba-core/tests/worker_live.rs` syncs two devices through a real Worker running in `wrangler dev` (setup, recovery, edits on both sides, conflicts, deletion, the device list, revocation), then scans the local D1 to confirm it holds only ciphertext.
 - **Frontend**: TypeScript strict mode. Type checking compares the tauri-specta bindings with the contract the frontend uses in `apps/desktop/src/ipc/contract.check.ts`, in both directions. Vitest unit tests. The [end-to-end smoke test](../apps/desktop/e2e/README.md) walks the main path with the real Rust backend and a throwaway `sshd`.
-- **AI assistant**: `hatoba-ai` runs against a mock Chat Completions server, covering streamed text, reasoning, and tool calls, usage with and without `stream_options`, and provider errors. The turn tests cover approval, edit, rejection, stop, lock, the tool call limit, and cancelled results for calls left without one. Storage tests split large entries into parts under the envelope limit and merge entries that two devices added to one conversation. `fetch_url` tests refuse private addresses, including after a redirect. API keys never reach a log or a DTO, and conversation content never reaches a log.
+- **AI assistant**: each `hatoba-ai` adapter runs against a mock server that replays recorded Chat Completions and Anthropic Messages streams, covering streamed text, reasoning, and tool calls, the assembly of `raw` with unknown fields kept, `raw` replay to the same model and the rebuilt message after a switch, usage with and without `stream_options` and with cached tokens, cut-off and declined responses, and provider errors. The turn tests cover approval, edit, rejection, stop, lock, the tool call limit, and cancelled results for calls left without one. Storage tests split large entries into parts under the envelope limit and merge entries that two devices added to one conversation. `fetch_url` tests refuse private addresses, including after a redirect. API keys never reach a log or a DTO, and conversation content never reaches a log.
 - **Security checks**: scan the local database file, the D1 export, and the log files for plaintext, and confirm that none of the host names, passwords, or private keys from the test data appear in them.
 
 ---
 
 ## 13. AI assistant
 
-The AI assistant is a chat panel at the right edge of the window that works on a terminal tab. It reads the screen, runs commands, types into the shell, searches the web, and fetches pages, within the permission mode the user chose (§13.5). It calls a model provider that the user configures with their own API key, in the OpenAI Chat Completions format, so it works with any service or local server that offers that API. Hatoba runs no AI service, and nothing is sent anywhere until the user adds a provider and sends a message.
+The AI assistant is a chat panel at the right edge of the window that works on a terminal tab. It reads the screen, runs commands, types into the shell, searches the web, and fetches pages, within the permission mode the user chose (§13.5). It calls a model provider that the user configures with their own API key, over OpenAI Chat Completions or Anthropic Messages (§13.2), so it works with any service or local server that offers one of them. Hatoba runs no AI service, and nothing is sent anywhere until the user adds a provider and sends a message.
 
 Conversations are vault items (§5.1), encrypted and synced like hosts and keys.
 
 ### 13.1 Architecture
 
-The Rust backend holds the API keys and the conversations, builds every request from the stored conversation, and runs `run_command`, `web_search`, and `fetch_url`. The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The Chat Completions client and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
+The Rust backend holds the API keys and the conversations, builds every request from the stored conversation, and runs `run_command`, `web_search`, and `fetch_url`. The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The protocol adapters and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
 
 A turn:
 
-1. `ai_send` stores the user's message and requests a response from the conversation's model. The response streams to the frontend over a Tauri `Channel` as `Text { delta } | Reasoning { delta } | ToolCall { id, name, arguments } | Usage { prompt_tokens, completion_tokens } | Done | Error { status, message }`.
+1. `ai_send` stores the user's message and requests a response from the conversation's model. The response streams to the frontend over a Tauri `Channel` as `Text { delta } | Reasoning { delta } | ToolCall { id, name, arguments } | Usage { input_tokens, output_tokens } | Done { finish } | Error { status, message }`, the same for both protocols.
 2. Rust stores the assistant entry. When it has tool calls, the frontend handles them one at a time, in order: it applies the permission mode, runs the tool (through a Rust command for the tools that run there), and returns the result with `ai_tool_result`. A rejected call returns the rejection and the user's reason, if any.
-3. When every call has a result, Rust sends the next request. The turn ends with a response that has no tool calls, when the user stops it, or on an error.
+3. When every call has a result, Rust sends the next request. The turn ends with a response that has no tool calls, when the user stops it, or on an error. A response cut off at the output limit or declined by the model also ends the turn, and the panel says which.
 
 `ai_stop` aborts the request, closes the channels of running tools, and gives every call without a result a cancelled result. Sending a message while a turn runs stops the turn first. Locking the vault (SEC-02) stops every turn the same way: established SSH sessions can stay connected while locked (SEC-03), but the assistant never acts behind the lock screen. Before each request, Rust also gives a cancelled result to any stored call that has none, for example after a crash or after entries from two devices merge (§13.7), so every request is valid.
 
@@ -941,14 +944,23 @@ A turn:
 
 ### 13.2 Providers and models
 
+Each provider uses one of two protocols, and `hatoba-ai` has one adapter for each. An adapter turns the stored entries into a request (§13.7) and the streamed response into the events of §13.1, so nothing outside it depends on the protocol.
+
+| Protocol | Request | Base URL | Authentication |
+|---|---|---|---|
+| `chat_completions` | `POST {base_url}/chat/completions` | Includes the API version, such as `https://api.openai.com/v1` | `Authorization: Bearer` |
+| `anthropic` | `POST {base_url}/v1/messages` with `anthropic-version: 2023-06-01` | The URL the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com` or `https://api.deepseek.com/anthropic` | `x-api-key`, or `Authorization: Bearer` when the provider's `auth_header` is `authorization` |
+
+Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoint, local servers, and most other services. Anthropic Messages covers Claude and the vendors that offer an Anthropic-compatible endpoint.
+
 | ID | Requirement | Priority |
 |---|---|---|
-| AI-01 | Providers in **Settings → AI**: add, edit, and delete providers, each with a name, a base URL, an API key, and models. The key behaves like a host password (HOST-08): once saved it shows only **Saved** and can be replaced but not viewed. It can be empty for local servers that need none | P1 |
-| AI-02 | Requests are streaming `POST {base_url}/chat/completions` calls with `tools`, so a model must support tool calls. The base URL must use HTTPS unless it points at a loopback or private network address, as self-hosted servers such as Ollama and LM Studio usually do | P1 |
-| AI-03 | Models: type the model IDs, or fetch `GET {base_url}/models` and pick from the list. Each model has a display name and an optional context window in tokens, which is filled in when the list includes it and can be edited | P1 |
+| AI-01 | Providers in **Settings → AI**: add, edit, and delete providers, each with a name, a protocol, a base URL, an API key, and models. The form preselects `anthropic` for `api.anthropic.com` and for base URLs whose path ends in `/anthropic`. The key behaves like a host password (HOST-08): once saved it shows only **Saved** and can be replaced but not viewed. It can be empty for local servers that need none | P1 |
+| AI-02 | Requests stream and carry `tools`, so a model must support tool calls. Anthropic requests send `max_tokens` from the model's output limit, or 16,000 when it is unknown, and set top-level `cache_control` so the provider caches the conversation prefix. The base URL must use HTTPS unless it points at a loopback or private network address, as self-hosted servers such as Ollama and LM Studio usually do | P1 |
+| AI-03 | Models: type the model IDs, or fetch the provider's model list (`GET {base_url}/models`, or `GET {base_url}/v1/models` for `anthropic`) and pick from it. Each model has a display name, and an optional context window and output limit in tokens, which are filled in when the list includes them (Anthropic's list has `max_input_tokens` and `max_tokens`) and can be edited | P1 |
 | AI-04 | **Test Connection** sends a minimal request to the first model, or fetches the model list when no model is entered yet, and tells authentication failures, network failures, and unknown models apart | P1 |
 | AI-05 | The model selector in the panel's input area lists the models of every provider, grouped by provider. A new conversation uses the default model from **Settings → AI**, and a conversation keeps the model it used last. Switching models keeps the whole conversation | P1 |
-| AI-06 | Reasoning that the server streams (`reasoning_content` or `reasoning` in the delta) shows above the answer, collapsed by default. It is stored for display and never sent back to the model | P1 |
+| AI-06 | Reasoning that the response carries shows above the answer, collapsed by default: `reasoning_content` or `reasoning` in Chat Completions deltas, and `thinking` blocks in Anthropic responses. It goes back to the model only inside the raw message (§13.7) | P1 |
 
 ### 13.3 Conversations and tabs
 
@@ -989,7 +1001,7 @@ In manual approval mode, `read_terminal` and `web_search` run without asking, an
 
 | ID | Requirement | Priority |
 |---|---|---|
-| AI-20 | The context meter in the input area shows the tokens the conversation uses against the model's context window, as a ring and a percentage with the numbers on hover, or only the token count when the context window is unknown. The count is the last response's `prompt_tokens + completion_tokens` (requests set `stream_options.include_usage`) plus an estimate from text length for what was added since. When the server rejects `stream_options`, the request is retried once without it, and the count becomes an estimate marked `≈`. Each assistant entry stores its usage, so a reopened conversation shows the meter without a request. After a model switch, the count is an estimate until the next response | P1 |
+| AI-20 | The context meter in the input area shows the tokens the conversation uses against the model's context window, as a ring and a percentage with the numbers on hover, or only the token count when the context window is unknown. The count is the last response's input and output tokens plus an estimate from text length for what was added since. For Chat Completions these are `prompt_tokens` and `completion_tokens` (requests set `stream_options.include_usage`). For Anthropic, input is the sum of `input_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens`, because `input_tokens` leaves out the cached part, and output is `output_tokens`. When a Chat Completions server rejects `stream_options`, the request is retried once without it, and the count becomes an estimate marked `≈`. Each assistant entry stores its usage, so a reopened conversation shows the meter without a request. After a model switch, the count is an estimate until the next response | P1 |
 | AI-21 | **Compact** asks the current model to summarize the context, stores the summary as an entry, and moves `context_start` to it. Earlier entries stay in the panel, marked as outside the context. At 80% the meter takes the warning color and offers **Compact** | P1 |
 | AI-22 | Compact automatically before a request that would pass 90% of the context window | P2 |
 
@@ -1014,16 +1026,25 @@ type AiEntry = { created_at: number } & (
       provider_id: string;
       model_id: string;
       text: string;
-      reasoning: string | null;   // AI-06, never sent back
-      tool_calls: { id: string; name: string; arguments: string }[];  // arguments as the JSON string the model produced
-      usage: { prompt_tokens: number; completion_tokens: number; estimated: boolean } | null;
+      reasoning: string | null;   // AI-06, for display
+      tool_calls: { id: string; name: string; arguments: string }[];  // arguments as a JSON string
+      finish: "stop" | "tool_calls" | "length" | "refused";
+      usage: { input_tokens: number; output_tokens: number; estimated: boolean } | null;  // AI-20
+      raw: unknown;               // The message as the provider returned it (below)
     }
   | { role: "tool"; tool_call_id: string; status: "ok" | "error" | "rejected" | "cancelled"; content: string }
   | { role: "summary"; text: string }  // AI-21
 );
 ```
 
-Entries map one to one onto Chat Completions messages, except that a `summary` is sent as a user message that introduces it as a summary of the earlier conversation.
+`raw` is the assistant message in its protocol's own format, assembled from the stream with every field kept, including fields Hatoba does not know: the Chat Completions message object, with string fields concatenated across deltas and tool calls merged by `index`, or the Anthropic content block array. Providers rely on parts of it coming back unchanged, such as reasoning text that must accompany earlier tool calls, thought signatures on tool calls, and signed `thinking` blocks. A request to the same provider and model sends `raw` as it is. After a switch, the adapter builds the message from the other fields, and whatever only `raw` held is left out.
+
+| Entry | Chat Completions | Anthropic Messages |
+|---|---|---|
+| `user` | A `user` message | A `user` message |
+| `assistant` | `raw`, or an `assistant` message with `content` and `tool_calls` | `raw`, or `text` and `tool_use` blocks |
+| `tool` | A `tool` message with `tool_call_id` | A `tool_result` block with `is_error` set for every status but `ok`. Consecutive results go in one `user` message |
+| `summary` | A `user` message that introduces it as a summary of the earlier conversation | The same |
 
 - An entry's JSON is split across as many `ai_message` items as it takes to keep each item's plaintext at most 40 KB, so every envelope stays under the 64 KB limit (§6.2).
 - After unlock and after each sync pull, `ai_message` items are decrypted to read `conversation_id`, `entry_id`, and `part`, and `data` is not kept in memory. Opening a conversation decrypts its items again from the local database, so a long history does not stay in memory.
