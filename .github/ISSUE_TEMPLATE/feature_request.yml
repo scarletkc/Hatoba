@@ -13,7 +13,7 @@ body:
     id: where
     attributes:
       label: Where it happens
-      description: The platform, and whether sync is involved.
+      description: The platform, and whether sync or the AI assistant is involved.
   - type: textarea
     id: impact
     attributes:

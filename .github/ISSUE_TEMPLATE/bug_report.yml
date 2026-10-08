@@ -47,12 +47,14 @@ body:
   - type: textarea
     id: details
     attributes:
-      label: Connection or sync details
+      label: Connection, sync, or AI details
       description: >-
         For a connection or authentication problem: the SSH server and its version, the
         authentication method, and whether the connection goes through ProxyJump or ssh-agent.
         For a sync problem: whether you sync through a Worker or directly to D1, and for a
         Worker, the `version` that its `/v1/health` endpoint reports.
+        For an AI assistant problem: the provider's protocol (OpenAI Chat Completions or
+        Anthropic Messages), the model, and the tool or MCP server involved.
   - type: textarea
     id: logs
     attributes:
@@ -60,5 +62,5 @@ body:
       description: >-
         On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. Read them before
         pasting and redact host details you do not want public. Never post a password, private
-        key, passphrase, recovery code, setup token, or session token.
+        key, passphrase, recovery code, setup token, session token, or API key.
       render: text

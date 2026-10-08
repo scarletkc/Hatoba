@@ -4,7 +4,7 @@
 
 # Hatoba
 
-**Open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account**
+**Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/scarletkc/Hatoba/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/scarletkc/Hatoba/actions/workflows/ci.yml)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
@@ -13,9 +13,10 @@
 
 </div>
 
-Hatoba keeps your hosts, keys, and terminal sessions in one place and syncs
-them between your devices. The sync backend is a Worker and a D1 database that
-you deploy to your own Cloudflare account.
+Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them
+between your devices, and puts an AI assistant beside each terminal. The sync
+backend is a Worker and a D1 database that you deploy to your own Cloudflare
+account.
 
 - **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
   nobody else holds your data.

@@ -118,7 +118,7 @@ Commit messages follow
 | `revert` | Reverting an earlier commit |
 
 - The scope is optional. Use a lowercase crate or area name, such as `core`,
-  `ssh`, `desktop`, or `worker`.
+  `ssh`, `ai`, `desktop`, or `worker`.
 - Write the description in the imperative mood, without a trailing period,
   for example `fix(desktop): keep IME input when switching tabs`. Start it
   with a lowercase word; identifiers keep their case. Keep the header within
