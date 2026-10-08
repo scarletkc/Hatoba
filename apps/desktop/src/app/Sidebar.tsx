@@ -10,7 +10,7 @@ import { REPO_URL, bugReportUrl } from "@/lib/github";
 import { tagColor } from "@/lib/tags";
 import { useVaultData } from "./data";
 import { errorMessage } from "./errors";
-import { starPromptDue, useStarPrompt } from "./star";
+import { useStarPrompt, useStarPromptDue } from "./star";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TitlebarDrag } from "./TitleBar";
@@ -220,15 +220,14 @@ function GroupDialog({ group, count, onClose }: { group: GroupView | null; count
 function StarPrompt() {
   const t = useT();
   const info = useApp((st) => st.info);
-  const prompt = useStarPrompt((s) => s.prompt);
-  const connectedOnce = useTabs((s) => s.connectedOnce);
+  const due = useStarPromptDue(useTabs((s) => s.connectedOnce));
   const home = useTabs((s) => s.active === "home");
   const updateAvailable = useUpdate(selectUpdateAvailable);
   useEffect(() => {
     void useStarPrompt.getState().load();
   }, []);
 
-  if (!home || updateAvailable || !starPromptDue(prompt, connectedOnce, Date.now())) return null;
+  if (!home || updateAvailable || !due) return null;
   const { finish } = useStarPrompt.getState();
   const open = (url: string) => {
     finish();
