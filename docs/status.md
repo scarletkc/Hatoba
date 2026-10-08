@@ -60,7 +60,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | Device management | ✅ | |
 | Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it, and the `deploy` script applies the D1 migrations. Needs a full run through the deploy flow |
 | In-app deployment (§6.7, DEPLOY-01…07) | 🟡 | Tested against a stand-in for the Cloudflare API, not yet against a real account |
-| Worker upgrades from the app (§6.7, DEPLOY-08) | ⬜ | P1. Also needs the Worker version separated from the app version, which the release scripts still bump together, and the CI check of the Worker version rule |
+| Worker upgrades from the app (§6.7, DEPLOY-08) | ⬜ | P1 |
 | Tombstone purge (§6.5) | ⬜ | P2 |
 | Rollback detection (§4.4) | ⬜ | P2 |
 
