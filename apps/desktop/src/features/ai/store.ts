@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
+import type { SelectionState } from "./selection";
 import type { TurnOutcome, TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which can chat without tools (AI-09). */
@@ -34,6 +35,13 @@ export interface Slot {
   reveal: string | null;
 }
 
+/** A tab's selection; `hidden` is the `seq` whose chip was removed or sent (it shows again once the selection changes). */
+export interface TabSelection extends SelectionState {
+  hidden: number | null;
+}
+
+export const NO_SELECTION: TabSelection = { text: "", seq: 0, hidden: null };
+
 export interface Catalog {
   providers: AiProviderView[];
   settings: AiSettingsView | null;
@@ -49,6 +57,8 @@ interface AiState {
   mcpOff: Record<string, string[]>;
   /** AI-19: per conversation, the tools chosen with Allow for this conversation, kept until the app quits. */
   allowed: Record<string, string[]>;
+  /** AI-10: per terminal tab, its selection as the panel last saw it and the chip it shows. */
+  selections: Record<string, TabSelection>;
   /** The history list, once the panel has asked for it (AI-23). */
   history: AiConversationView[] | null;
   historyFailed: boolean;
@@ -62,6 +72,7 @@ export const useAi = create<AiState>(() => ({
   modes: {},
   mcpOff: {},
   allowed: {},
+  selections: {},
   history: null,
   historyFailed: false,
   focusTick: 0,

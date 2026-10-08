@@ -1,6 +1,7 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { fenced, quoted } from "./markdownText";
+import { parseMessage } from "./selection";
 import { exitStatusOf, prettyArgs, toolKind, toolLabel } from "./tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -67,9 +68,17 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
   entries.forEach((entry, i) => {
     if (i === contextAt && i > 0) blocks.push("---", `*${t("ai.outsideContext")}*`);
     switch (entry.role) {
-      case "user":
-        blocks.push(`## ${t("ai.export.you")}`, entry.text);
+      case "user": {
+        const { attachment, typed } = parseMessage(entry.text);
+        blocks.push(`## ${t("ai.export.you")}`);
+        // AI-10: the terminal selection sent with the message.
+        if (attachment) {
+          const label = [`**${t("ai.selection", { n: attachment.lines })}**`, attachment.host && `\`${attachment.host}\``, attachment.truncated && t("ai.selection.truncated")];
+          blocks.push(label.filter(Boolean).join(" · "), fenced(attachment.text));
+        }
+        blocks.push(typed);
         break;
+      }
       case "assistant": {
         blocks.push(`## ${t("ai.export.assistant")} · ${entry.model_id}`);
         if (entry.reasoning?.trim()) blocks.push(quoted(`**${t("ai.reasoning")}**\n\n${entry.reasoning.trim()}`));

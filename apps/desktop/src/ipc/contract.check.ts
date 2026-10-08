@@ -54,6 +54,21 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.AiEntryView, Ui.AiEntryView>>,
   Check<Assignable<Rust.AiSendStarted, Ui.AiSendStarted>>,
   Check<Assignable<Rust.AiTurnEvent, Ui.AiTurnEvent>>,
+  Check<Assignable<Rust.AiSearchHit, Ui.AiSearchHit>>,
+  Check<Assignable<Rust.SkillView, Ui.SkillView>>,
+  Check<Assignable<Rust.SkillDetail, Ui.SkillDetail>>,
+  Check<Assignable<Rust.SkillFileView, Ui.SkillFileView>>,
+  Check<Assignable<Rust.SkillIssue, Ui.SkillIssue>>,
+  Check<Assignable<Rust.SkillImportPreview, Ui.SkillImportPreview>>,
+  Check<Assignable<Rust.McpTransportView, Ui.McpTransportView>>,
+  Check<Assignable<Rust.McpServerView, Ui.McpServerView>>,
+  Check<Assignable<Rust.McpServerState, Ui.McpServerState>>,
+  Check<Assignable<Rust.McpToolAnnotations, Ui.McpToolAnnotations>>,
+  Check<Assignable<Rust.McpToolView, Ui.McpToolView>>,
+  Check<Assignable<Rust.McpServerStatus, Ui.McpServerStatus>>,
+  Check<Assignable<Rust.McpServerStatus, Ui.EventMap["ai://mcp-status"]>>,
+  Check<Assignable<Rust.McpToolInfo, Ui.McpToolInfo>>,
+  Check<Assignable<Rust.McpImportPreview, Ui.McpImportPreview>>,
 ];
 
 /** UI → Rust: command arguments. */
@@ -76,4 +91,9 @@ export type InputsMatch = [
   Check<Assignable<Ui.AiSendInput, Rust.AiSendInput>>,
   Check<Assignable<Ui.AiTurnContext, Rust.AiTurnContext>>,
   Check<Assignable<Ui.AiToolResultInput, Rust.AiToolResultInput>>,
+  Check<Assignable<Ui.SkillInput, Rust.SkillInput>>,
+  Check<Assignable<Ui.SkillFileView, Rust.SkillFileView>>,
+  Check<Assignable<Ui.McpServerInput, Rust.McpServerInput>>,
+  Check<Assignable<Ui.McpTransportInput, Rust.McpTransportInput>>,
+  Check<Assignable<Ui.McpSecretInput, Rust.McpSecretInput>>,
 ];

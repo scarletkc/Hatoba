@@ -7,16 +7,18 @@ import { cx } from "@/lib/cx";
 import { compactConversation, sendMessage, setSlotModel, stopTurn } from "./actions";
 import { contextUsage, formatTokens, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
+import { ComposerSelection, useTerminalSelection } from "./SelectionChip";
 import { patchSlot, useAi, type Slot } from "./store";
 import { ToolsButton } from "./ToolsMenu";
 import s from "./Composer.module.css";
 
-/** The input area (§9): a multi-line box, the model selector, the context meter and Send / Stop. */
+/** The input area (§9): the terminal selection chip, a multi-line box, the model selector, the tools menu, the context meter and Send / Stop. */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const focusTick = useAi((st) => st.focusTick);
   const busy = !!slot.turn || slot.remoteRunning;
+  useTerminalSelection(slotId);
 
   // Focus requests (New conversation, Ask AI, …) put the caret after the draft.
   useEffect(() => {
@@ -51,6 +53,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   return (
     <div className={s.composer}>
       <div className={s.box}>
+        <ComposerSelection slotId={slotId} />
         <textarea
           ref={ref}
           className={s.input}

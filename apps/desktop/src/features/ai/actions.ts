@@ -21,9 +21,9 @@ import type {
 } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
-import { withSelection } from "./markdownText";
 import { conversationModel } from "./models";
-import { blankSlot, defaultMode, getSlot, HOME_SLOT, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot } from "./store";
+import { chipShown, composeMessage, makeAttachment, nextSelection, titleOf, type SelectionAttachment } from "./selection";
+import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot, type TabSelection } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
@@ -360,12 +360,15 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason) {
 
 // ───────────────────────── turns ─────────────────────────
 
-/** Sends a message (§13.1 step 1). Sending while a turn runs stops that turn first. */
+/**
+ * Sends a message (§13.1 step 1). Sending while a turn runs stops that turn first. The tab's
+ * selection chip goes with it (AI-10), and is then hidden until the selection changes.
+ */
 export async function sendMessage(slotId: string, raw: string): Promise<boolean> {
-  const text = raw.trim();
+  const typed = raw.trim();
   const slot = getSlot(slotId);
   // A new conversation has no id until `ai_send` returns, so a second message would start another one.
-  if (!text || (slot.turn?.phase === "starting" && !slot.conversationId)) return false;
+  if (!typed || (slot.turn?.phase === "starting" && !slot.conversationId)) return false;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -373,6 +376,10 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   }
   runners.get(slotId)?.dispose(); // Rust stops that turn when the message arrives
 
+  const attachment = selectionAttachment(slotId);
+  const hiddenBefore = tabSelection(slotId).hidden;
+  if (attachment) hideSelection(slotId);
+  const text = composeMessage(typed, attachment);
   const runner = new TurnRunner(slotId, slot.conversationId);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
@@ -388,6 +395,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     const conv = started.conversation;
     runner.started(conv.id);
     if (useAi.getState().history) void loadHistory();
+    // Rust titles a new conversation after the first line of its message, which here is the selection's tag.
+    if (!slot.conversationId && attachment) void api.ai_conversation_rename(conv.id, titleOf(typed)).then(updateConversation, () => {});
     if (runner.gone) return true; // the slot moved on (or the vault locked) meanwhile
     const target = runner.slotId;
     rememberChoices(target, conv.id);
@@ -400,6 +409,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       turn: null,
       draft: s.draft || raw,
     }));
+    if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
     toast(aiErrorMessage(e), "error");
     return false;
   }
@@ -585,6 +595,12 @@ export async function connectConversation(hostId: string) {
 export function detachSlot(slotId: string) {
   release(slotId);
   setSlot(slotId, null);
+  useAi.setState((st) => {
+    if (!st.selections[slotId]) return {};
+    const selections = { ...st.selections };
+    delete selections[slotId];
+    return { selections };
+  });
 }
 
 /** Locking stops every turn in Rust (§13.1); drop in-flight state and conversation text until unlock. */
@@ -635,9 +651,51 @@ export function setMcpServerOff(slotId: string, serverId: string, off: boolean) 
   if (id) useAi.setState((st) => ({ mcpOff: { ...st.mcpOff, [id]: mcpOff } }));
 }
 
-/** AI-10 Ask AI: opens the panel on the tab and adds the terminal selection to its input. */
+// ───────────────────────── the terminal selection (AI-10) ─────────────────────────
+
+export function tabSelection(tabId: string): TabSelection {
+  return useAi.getState().selections[tabId] ?? NO_SELECTION;
+}
+
+function setTabSelection(tabId: string, update: (sel: TabSelection) => TabSelection) {
+  useAi.setState((st) => {
+    const cur = st.selections[tabId] ?? NO_SELECTION;
+    const next = update(cur);
+    return next === cur ? {} : { selections: { ...st.selections, [tabId]: next } };
+  });
+}
+
+/** xterm's selection of a tab changed; `renewed`: it was cleared on the way, as a new drag does. */
+export function noteSelection(tabId: string, text: string, renewed = false) {
+  setTabSelection(tabId, (sel) => {
+    const next = nextSelection(sel, text, renewed);
+    return next === sel ? sel : { ...sel, ...next };
+  });
+}
+
+/** × on the chip, or the chip was sent: hidden until the selection changes. */
+export function hideSelection(tabId: string) {
+  setTabSelection(tabId, (sel) => (sel.hidden === sel.seq ? sel : { ...sel, hidden: sel.seq }));
+}
+
+/** The host name the selection block carries: the tab host's display name. */
+function selectionHost(tabId: string): string {
+  const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
+  if (!tab) return "";
+  return useVaultData.getState().hosts.find((h) => h.id === tab.hostId)?.name ?? tab.title;
+}
+
+/** What the chip attaches to the next message, or null when it does not show. */
+export function selectionAttachment(slotId: string): SelectionAttachment | null {
+  if (slotId === HOME_SLOT) return null;
+  const sel = tabSelection(slotId);
+  return chipShown(sel, sel.hidden) ? makeAttachment(selectionHost(slotId), sel.text) : null;
+}
+
+/** AI-10 Ask AI: opens the panel on the tab, where the selection shows as the chip, and focuses the input. */
 export function askAi(slotId: string, selection: string) {
-  patchSlot(slotId, (s) => ({ draft: withSelection(s.draft, selection) }));
+  noteSelection(slotId, selection);
+  setTabSelection(slotId, (sel) => (sel.hidden === null ? sel : { ...sel, hidden: null }));
   toggleAiPanel(true);
 }
 

@@ -7,6 +7,8 @@ import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo
 import { cx } from "@/lib/cx";
 import { decideCall, editAndResend, retryTurn, stopTurn, type Decision } from "./actions";
 import { Markdown } from "./Markdown";
+import { composeMessage, parseMessage, type SelectionAttachment } from "./selection";
+import { SelectionCard, SelectionChip } from "./SelectionChip";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -195,19 +197,39 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
-  if (editing && onResend) return <EditMessage initial={text} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
+  // AI-10: a terminal selection sent with the message is a block at its start.
+  const { attachment, typed } = useMemo(() => parseMessage(text), [text]);
+  if (editing && onResend)
+    return <EditMessage initial={typed} attachment={attachment} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />;
   return (
     <div className={s.userRow}>
       {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
-      <div className={cx(s.user, pending && s.userPending, "selectable")}>{text}</div>
+      <div className={s.userStack}>
+        {attachment && <SelectionCard attachment={attachment} />}
+        <div className={cx(s.user, pending && s.userPending, "selectable")}>{typed}</div>
+      </div>
     </div>
   );
 }
 
-function EditMessage({ initial, onCancel, onSend, onSent }: { initial: string; onCancel: () => void; onSend: (text: string) => Promise<boolean>; onSent: () => void }) {
+/** AI-26: edits the typed text; a selection sent with it stays unless its chip is removed. */
+function EditMessage({
+  initial,
+  attachment,
+  onCancel,
+  onSend,
+  onSent,
+}: {
+  initial: string;
+  attachment: SelectionAttachment | null;
+  onCancel: () => void;
+  onSend: (text: string) => Promise<boolean>;
+  onSent: () => void;
+}) {
   const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(initial);
+  const [keep, setKeep] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useLayoutEffect(() => {
@@ -225,13 +247,18 @@ function EditMessage({ initial, onCancel, onSend, onSent }: { initial: string; o
   const send = async () => {
     if (!value.trim() || busy) return;
     setBusy(true);
-    const ok = await onSend(value);
+    const ok = await onSend(composeMessage(value.trim(), keep ? attachment : null));
     setBusy(false);
     if (ok) onSent();
   };
 
   return (
     <div className={s.editMessage}>
+      {attachment && keep && (
+        <div className={s.editAttachment}>
+          <SelectionChip attachment={attachment} onRemove={() => setKeep(false)} />
+        </div>
+      )}
       <textarea
         ref={ref}
         className={cx(s.input, s.textarea, s.editInput)}

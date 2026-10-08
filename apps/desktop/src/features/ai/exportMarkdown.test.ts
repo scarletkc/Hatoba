@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { AiConversationView, AiEntryView } from "@/ipc/types";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
+import { composeMessage, makeAttachment } from "./selection";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const time = (ms: number) => `T${ms}`;
@@ -63,6 +64,12 @@ describe("Markdown export (AI-25)", () => {
   it("marks the summary and where the context starts", () => {
     expect(md).toContain("---\n\n*Everything above is outside the context*\n\n## Summary of the compacted conversation\n\nThe disk is 48% full.");
     expect(md.endsWith("## You\n\nThanks\n")).toBe(true);
+  });
+
+  it("shows a terminal selection sent with a message as a labelled fenced block (AI-10)", () => {
+    const text = composeMessage("What failed?", makeAttachment("prod-api", "$ make\nmain.c: error ``` here"));
+    const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
+    expect(out).toContain("## You\n\n**Selection · 2 lines** · `prod-api`\n\n````\n$ make\nmain.c: error ``` here\n````\n\nWhat failed?");
   });
 
   it("names a deleted host and an untitled conversation", () => {

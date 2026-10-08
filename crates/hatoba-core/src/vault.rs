@@ -1847,9 +1847,7 @@ mod tests {
             Some(r#"{"done":true}"#)
         );
         assert_eq!(vault.mcp_device_state().unwrap(), None);
-        vault
-            .set_mcp_device_state(r#"{"servers":{}}"#)
-            .unwrap();
+        vault.set_mcp_device_state(r#"{"servers":{}}"#).unwrap();
         assert_eq!(
             vault.mcp_device_state().unwrap().as_deref(),
             Some(r#"{"servers":{}}"#)

@@ -1,3 +1,4 @@
+import { parseMessage } from "@/features/ai/selection";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -81,6 +82,8 @@ const DAY = 24 * HOUR;
  *                     ("mcp filesystem"); without one, a tool no server offers
  *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
+ * Keywords come from the typed text; a message with a terminal selection (AI-10) and none gets an
+ * answer about the selection.
  * Before a request that would pass 90% of the model's context window, the turn compacts the
  * conversation first (AI-22): a `summary` entry arrives and the context starts there.
  * `?ai=` demo values (comma-separated, shared with the Settings → AI mock):
@@ -240,7 +243,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const since = c.entries.slice(user.index + 1);
     const results = since.filter((e): e is ToolEntry => e.role === "tool");
     const callsSoFar = since.reduce((n, e) => n + (e.role === "assistant" ? e.tool_calls.length : 0), 0);
-    const words = user.text.toLowerCase();
+    // AI-10: a terminal selection sent with the message is a block before the typed text; keywords come from the typed text.
+    const { attachment, typed } = parseMessage(user.text);
+    const words = typed.toLowerCase();
     const want = (...w: string[]) => w.some((x) => words.includes(x));
     const tools = turn.context.tab;
 
@@ -302,6 +307,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         text: zh
           ? `这是我看到的结果：\n\n${parts.join("\n")}\n\n| 项目 | 状态 |\n|---|---|\n| 根分区 | 已用 48%，正常 |\n| 负载 | 0.21，空闲 |\n\n如果还需要我做什么，告诉我。`
           : `Here is what I found:\n\n${parts.join("\n")}\n\n| Item | State |\n|---|---|\n| Root filesystem | 48% used, fine |\n| Load | 0.21, idle |\n\nTell me if you want me to do anything else.`,
+        calls: [],
+        finish: "stop",
+      };
+    }
+
+    if (attachment) {
+      const first = "```\n" + attachment.text.split("\n")[0] + "\n```";
+      const cut = attachment.truncated ? (zh ? "（太长，中间部分被省略了）" : " (long, so the middle was left out)") : "";
+      return {
+        reasoning: zh ? "用户附上了终端里选中的内容，根据它回答。" : "The user attached text selected in the terminal; answer from it.",
+        text: zh
+          ? `你从 **${attachment.host}** 选中了 ${attachment.lines} 行${cut}。第一行是：\n\n${first}\n\n这看起来是一段正常的终端输出。如果要我进一步检查，告诉我要看什么。`
+          : `You selected ${attachment.lines} line(s) on **${attachment.host}**${cut}. The first one is:\n\n${first}\n\nIt looks like ordinary terminal output. Tell me what to look into next.`,
         calls: [],
         finish: "stop",
       };

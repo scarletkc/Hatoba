@@ -80,6 +80,26 @@
   visibility: visible;
 }
 
+/* The message with a terminal selection card above it (AI-10); an open card takes the row's width. */
+.userStack {
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.userStack:has(> [data-selection-open="true"]) {
+  flex: 1 1 auto;
+}
+
+.editAttachment {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .editMessage {
   display: flex;
   flex-direction: column;

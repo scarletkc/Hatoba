@@ -60,6 +60,14 @@ export default defineMessages({
     "ai.model.none": "未选择模型",
     "ai.err.noModel": "请先在设置 → AI 中添加模型。",
 
+    // terminal selection (AI-10)
+    "ai.selection": "选中内容 · {n} 行",
+    "ai.selection.truncated": "已截断",
+    "ai.selection.remove": "不附带选中内容",
+    "ai.selection.preview": "预览选中内容",
+    "ai.selection.from": "来自 {host}",
+    "ai.selection.more": "…另外 {n} 行",
+
     // context meter (AI-20, AI-21)
     "ai.meter": "上下文用量",
     "ai.meter.detail": "已用 {used} / {total} tokens",
@@ -268,6 +276,15 @@ export default defineMessages({
     "ai.model.none": "No model",
     "ai.err.noModel": "Add a model in Settings → AI first.",
 
+    "ai.selection": "Selection · {n} lines",
+    "ai.selection_one": "Selection · 1 line",
+    "ai.selection.truncated": "truncated",
+    "ai.selection.remove": "Don’t Attach the Selection",
+    "ai.selection.preview": "Preview the selection",
+    "ai.selection.from": "From {host}",
+    "ai.selection.more": "… {n} more lines",
+    "ai.selection.more_one": "… 1 more line",
+
     "ai.meter": "Context usage",
     "ai.meter.detail": "{used} of {total} tokens used",
     "ai.meter.detailUnknown": "{used} tokens used (context window unknown)",
@@ -466,6 +483,13 @@ export default defineMessages({
     "ai.model": "モデル",
     "ai.model.none": "モデル未選択",
     "ai.err.noModel": "先に設定 → AI でモデルを追加してください。",
+
+    "ai.selection": "選択範囲 · {n} 行",
+    "ai.selection.truncated": "切り詰め",
+    "ai.selection.remove": "選択範囲を添付しない",
+    "ai.selection.preview": "選択範囲をプレビュー",
+    "ai.selection.from": "{host} から",
+    "ai.selection.more": "…ほか {n} 行",
 
     "ai.meter": "コンテキストの使用量",
     "ai.meter.detail": "{total} トークン中 {used} を使用",

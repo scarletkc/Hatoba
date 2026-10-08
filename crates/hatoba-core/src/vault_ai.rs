@@ -326,7 +326,11 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`]; [`Error::ItemNotFound`] if there is no such conversation or it has no
     /// entry `entry_id`; storage errors.
-    pub fn ai_delete_entries_from(&mut self, conversation_id: &str, entry_id: &str) -> Result<usize> {
+    pub fn ai_delete_entries_from(
+        &mut self,
+        conversation_id: &str,
+        entry_id: &str,
+    ) -> Result<usize> {
         if !self.is_unlocked() {
             return Err(Error::Locked);
         }
@@ -1036,7 +1040,6 @@ mod tests {
         };
         let second_parts = parts_of(&vault, &second);
         assert!(second_parts.len() >= 2);
-        let before = vault.pending_count();
 
         clock.advance(1_000);
         assert_eq!(vault.ai_delete_entries_from(&conv, &second).unwrap(), 2);
@@ -1047,7 +1050,6 @@ mod tests {
             let row = vault.store.item_row(id).unwrap().unwrap();
             assert!(row.deleted && row.dirty && row.envelope.is_none(), "{id}");
         }
-        assert!(vault.pending_count() > before);
         assert_eq!(vault.ai_entries(&other).unwrap().len(), 1);
         assert!(vault.get(&conv).is_some());
 

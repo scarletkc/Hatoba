@@ -11,6 +11,7 @@ use crate::ai::AiManager;
 use crate::deploy::Deployments;
 use crate::error::{AppError, AppResult};
 use crate::lock::LockPolicy;
+use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
@@ -26,6 +27,8 @@ pub struct AppState {
     pub deploy: Deployments,
     /// The AI assistant's running turns and tools (§13.1).
     pub ai: AiManager,
+    /// The MCP servers' connections and live state (§13.9); `ai` offers their tools.
+    pub mcp: McpManager,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -33,13 +36,15 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(vault: Vault, mica: bool) -> Self {
+        let mcp = McpManager::default();
         Self {
             vault: Arc::new(Mutex::new(vault)),
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),
-            ai: AiManager::default(),
+            ai: AiManager::with_mcp(mcp.clone()),
+            mcp,
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

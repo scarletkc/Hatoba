@@ -1017,7 +1017,7 @@ Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoi
 | AI-07 | Each terminal tab has its own current conversation, and the panel shows the active tab's. Switching tabs switches the panel. **New conversation** gives the tab an empty conversation, which is stored when its first message is sent. A tab whose conversation is running a turn or waiting for approval shows it in the tab bar | P1 |
 | AI-08 | A conversation acts only on its own tab, never on another, in either permission mode. Reconnecting the tab keeps the conversation, and its tools use the new session. While the tab is disconnected, tools return an error result. Closing the tab detaches the conversation, which stays in history | P1 |
 | AI-09 | Opening a conversation from history attaches it to the active tab. When the tab's host is not the conversation's host, the panel names both, and the next message moves the conversation to the tab's host. With no terminal tab active, the panel offers **Connect to *host***, which opens a tab and attaches the conversation, and the conversation can still chat with no tools offered | P1 |
-| AI-10 | **Ask AI** in the terminal's context menu adds the selected text to the panel's input | P2 |
+| AI-10 | Text selected in the tab's terminal shows above the panel's input as an attachment that goes with the next message, cut like a long tool result (§13.4). The attachment can be removed, and after a message takes it, it shows again only when the selection changes. A sent message shows it as a collapsed block. **Ask AI** in the terminal's context menu and its **…** menu opens the panel with the input focused | P2 |
 
 ### 13.4 Tools
 

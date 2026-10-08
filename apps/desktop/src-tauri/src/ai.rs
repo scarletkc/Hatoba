@@ -7,6 +7,11 @@
 //! `read_terminal` and `send_input` and reports with `ai_tool_result`; `ai_tool_run` runs the
 //! other tools here. What is stored is exactly what the model receives (§13.7).
 //!
+//! Before each request the turn asks the [`McpManager`] for the MCP tools to offer (AI-30),
+//! which starts the servers that need it, and compacts the context first when the request would
+//! pass 90% of the model's context window (AI-22). History search (AI-24) and edit and resend
+//! (AI-26) are here too.
+//!
 //! Everything works on a [`SharedVault`] and two small traits, [`EventSink`] (where a turn's
 //! events go) and [`AiEnv`] (the sync trigger and the tab's SSH session), so the turn tests run
 //! without Tauri.
@@ -43,20 +48,25 @@ use hatoba_core::model::{
 };
 use hatoba_core::sync::SharedVault;
 use serde::de::DeserializeOwned;
+use serde_json::{Map, Value};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
-    AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
-    AiUsage,
+    AiConversationDetail, AiConversationView, AiEntryView, AiFinish, AiSearchHit, AiSendInput,
+    AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
+    AiTurnEvent, AiUsage,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
+use crate::mcp::{McpManager, Offer, OfferedTool};
 use crate::state::now_ms;
 
 /// The line a result starts with when the user edited the call before it ran (AI-17).
 const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it ran with";
+
+/// What every MCP tool name starts with (AI-30).
+const MCP_PREFIX: &str = "mcp__";
 
 /// The `run_command` result while the tab has no live session (AI-08).
 const DISCONNECTED: &str = "The terminal tab is disconnected, so the command did not run. Ask \
@@ -72,6 +82,17 @@ const COMPACT_INSTRUCTION: &str = "Summarize the conversation so far so that the
 
 /// A skill's main file (§13.8).
 const SKILL_MD: &str = "SKILL.md";
+
+/// AI-22: a request whose context would pass this share of the context window is compacted
+/// first, in tenths.
+const AUTO_COMPACT_TENTHS: u64 = 9;
+
+/// The rough text-to-token ratio of estimates, the same as the panel's meter (AI-20).
+const CHARS_PER_TOKEN: usize = 4;
+
+/// Characters of a search snippet (AI-24), and how many of them come before the match.
+const SNIPPET_CHARS: usize = 120;
+const SNIPPET_BEFORE: usize = 40;
 
 /// Where a turn's events go: the `Channel` of `ai_send` / `ai_retry` in the app, a list in tests.
 pub trait EventSink: Send + Sync + 'static {
@@ -105,6 +126,8 @@ pub struct AiManager(Arc<Inner>);
 struct Inner {
     /// The client for provider and search requests, built once (`hatoba_ai::provider::http_client`).
     http: OnceLock<reqwest::Client>,
+    /// The MCP servers whose tools requests offer (§13.9).
+    mcp: McpManager,
     /// Running turns by conversation id.
     turns: Mutex<HashMap<String, Arc<Turn>>>,
     /// Running tools and compactions, so that stop and lock reach them.
@@ -216,6 +239,14 @@ fn unlocked(vault: &SharedVault) -> AppResult<MutexGuard<'_, Vault>> {
 }
 
 impl AiManager {
+    /// A manager whose requests offer the tools of `mcp`'s servers.
+    pub fn with_mcp(mcp: McpManager) -> Self {
+        Self(Arc::new(Inner {
+            mcp,
+            ..Inner::default()
+        }))
+    }
+
     /// The shared client for provider and search requests.
     pub fn http(&self) -> reqwest::Client {
         self.0
@@ -389,7 +420,11 @@ impl AiManager {
 
     /// `ai_send` (§13.1 step 1): stores the user's message, creating the conversation when it has
     /// no id yet, and returns the turn's task. A running turn of the conversation stops first.
-    pub fn send(
+    ///
+    /// AI-22: when the context and the new message together would pass 90% of the model's
+    /// context window, the context is compacted before the message is stored, so the summary
+    /// (where `context_start` moves) comes before the message and the request carries both.
+    pub async fn send(
         &self,
         vault: &SharedVault,
         env: Arc<dyn AiEnv>,
@@ -401,59 +436,197 @@ impl AiManager {
             text,
             context,
         } = input;
+        self.start_turn(vault, env, conversation_id, None, text, context, sink)
+            .await
+    }
+
+    /// `ai_edit_resend` (AI-26): stops a running turn, deletes the user's message `entry_id`
+    /// and every later entry (entries are written once, so the edited text becomes a new
+    /// entry), moves a `context_start` that pointed at a deleted entry to the newest remaining
+    /// summary (or clears it), then goes on like [`Self::send`] with `text`.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the command's own arguments, plus the vault, the app and the channel"
+    )]
+    pub async fn edit_resend(
+        &self,
+        vault: &SharedVault,
+        env: Arc<dyn AiEnv>,
+        conversation_id: String,
+        entry_id: &str,
+        text: String,
+        context: AiTurnContext,
+        sink: Arc<dyn EventSink>,
+    ) -> AppResult<(AiSendStarted, TurnTask)> {
+        self.start_turn(
+            vault,
+            env,
+            Some(conversation_id),
+            Some(entry_id),
+            text,
+            context,
+            sink,
+        )
+        .await
+    }
+
+    /// Registers the turn, compacts first when the new message needs it (AI-22), stores the
+    /// user's message (in place of `replace` and the entries after it, for an edit) and returns
+    /// the turn's task.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the two commands that start a turn pass their own pieces"
+    )]
+    async fn start_turn(
+        &self,
+        vault: &SharedVault,
+        env: Arc<dyn AiEnv>,
+        conversation_id: Option<String>,
+        replace: Option<&str>,
+        text: String,
+        context: AiTurnContext,
+        sink: Arc<dyn EventSink>,
+    ) -> AppResult<(AiSendStarted, TurnTask)> {
         if text.trim().is_empty() {
-            return Err(AppError::invalid("text", "the message is empty"));
+            return Err(AppError::invalid("text", "The message is empty."));
         }
-        let (started, conversation_id, turn) = {
-            let mut v = unlocked(vault)?;
-            let now = now_ms();
-            let mut cancelled = Vec::new();
-            let id = match conversation_id {
-                Some(id) => {
-                    let mut conversation = find_conversation(&v, &id)?;
-                    cancelled = self.stop_locked(&mut v, &id);
-                    // AI-09: the next message moves the conversation to the tab's host.
-                    if let Some(host_id) = &context.host_id
-                        && conversation.host_id.as_ref() != Some(host_id)
-                    {
-                        conversation.host_id = Some(host_id.clone());
-                        v.put(Some(&id), Item::AiConversation(conversation))?;
-                    }
-                    id
+        let mut stored = false;
+        let registered = self.open_turn(
+            vault,
+            conversation_id,
+            replace,
+            &text,
+            context,
+            sink,
+            &mut stored,
+        );
+        if stored {
+            env.changed();
+        }
+        let (id, turn, compact) = registered?;
+
+        // AI-22: the summary is stored before the message, so the message stays in the context.
+        // A failed compaction is logged and the message goes anyway: the request may still fit,
+        // and if it does not, the provider's error says so.
+        if let Some(compact) = compact {
+            match self
+                .auto_compact(vault, env.as_ref(), &id, &turn, compact)
+                .await
+            {
+                Ok(()) | Err(CompactFailure::Stopped) => {}
+                Err(CompactFailure::Failed { .. }) => {
+                    tracing::warn!(conversation_id = %id, "AI message sent without compaction");
                 }
-                None => v.put(
+            }
+        }
+
+        let started = (|| {
+            let mut v = unlocked(vault)?;
+            let entry = AiEntry::user(now_ms(), text);
+            let entry_id = append(&mut v, &id, &entry)?;
+            let conversation = find_conversation(&v, &id)?;
+            Ok(AiSendStarted {
+                conversation: conversation_view(&v, &id, &conversation),
+                user_entry: entry_view(&entry_id, &entry),
+            })
+        })();
+        let started = match started {
+            Ok(started) => started,
+            Err(e) => {
+                // Locked or deleted meanwhile: the turn cannot go on.
+                turn.end(AiTurnEndReason::Stopped);
+                self.forget(&id, &turn);
+                return Err(e);
+            }
+        };
+        env.changed();
+        if replace.is_some() {
+            tracing::info!(conversation_id = %id, "AI message edited; turn started");
+        } else {
+            tracing::info!(conversation_id = %id, "AI turn started");
+        }
+        Ok((started, self.task(vault.clone(), env, id, turn)))
+    }
+
+    /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
+    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host
+    /// (AI-09), the registered turn, and the Compact request the new message needs (AI-22).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the pieces of start_turn, which owns them"
+    )]
+    fn open_turn(
+        &self,
+        vault: &SharedVault,
+        conversation_id: Option<String>,
+        replace: Option<&str>,
+        text: &str,
+        context: AiTurnContext,
+        sink: Arc<dyn EventSink>,
+        stored: &mut bool,
+    ) -> AppResult<(String, Arc<Turn>, Option<Request>)> {
+        let mut v = unlocked(vault)?;
+        let mut cancelled = Vec::new();
+        let (id, compact) = match conversation_id {
+            Some(id) => {
+                let mut conversation = find_conversation(&v, &id)?;
+                let before = conversation.clone();
+                // Checked before the stop, so a refused edit leaves the turn running.
+                let edit = match replace {
+                    Some(entry_id) => Some(edited_entry(&v, &id, entry_id)?),
+                    None => None,
+                };
+                cancelled = self.stop_locked(&mut v, &id);
+                *stored |= !cancelled.is_empty();
+                if let Some((entry_id, summary_before)) = edit {
+                    v.ai_delete_entries_from(&id, &entry_id)?;
+                    *stored = true;
+                    // The cancelled results came after the edited message: deleted too.
+                    cancelled.clear();
+                    if conversation
+                        .context_start
+                        .as_deref()
+                        .is_some_and(|start| start >= entry_id.as_str())
+                    {
+                        conversation.context_start = summary_before;
+                    }
+                }
+                // AI-09: the next message moves the conversation to the tab's host.
+                if let Some(host_id) = &context.host_id
+                    && conversation.host_id.as_ref() != Some(host_id)
+                {
+                    conversation.host_id = Some(host_id.clone());
+                }
+                if conversation != before {
+                    v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
+                    *stored = true;
+                }
+                let compact = compaction_before(&v, &id, &conversation, &context, text)?;
+                (id, compact)
+            }
+            None => {
+                let id = v.put(
                     None,
                     Item::AiConversation(AiConversation {
-                        title: title_of(&text),
+                        title: title_of(text),
                         host_id: context.host_id.clone(),
                         pinned: false,
                         context_start: None,
-                        created_at: now,
+                        created_at: now_ms(),
                         updated_at: 0,
                     }),
-                )?,
-            };
-            let entry = AiEntry::user(now, text);
-            let entry_id = append(&mut v, &id, &entry)?;
-            let conversation = find_conversation(&v, &id)?;
-            let started = AiSendStarted {
-                conversation: conversation_view(&v, &id, &conversation),
-                user_entry: entry_view(&entry_id, &entry),
-            };
-            let turn = self.register(&id, context, sink);
-            // The panel stopped listening to the previous turn's channel, so the results the
-            // stop stored reach it on this one.
-            for entry in cancelled {
-                turn.emit(AiTurnEvent::Entry { entry });
+                )?;
+                *stored = true;
+                (id, None)
             }
-            (started, id, turn)
         };
-        env.changed();
-        tracing::info!(conversation_id = %conversation_id, "AI turn started");
-        Ok((
-            started,
-            self.task(vault.clone(), env, conversation_id, turn),
-        ))
+        let turn = self.register(&id, context, sink);
+        // The panel stopped listening to the previous turn's channel, so the results the stop
+        // stored reach it on this one.
+        for entry in cancelled {
+            turn.emit(AiTurnEvent::Entry { entry });
+        }
+        Ok((id, turn, compact))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -524,10 +697,41 @@ impl AiManager {
         turn: &Turn,
     ) -> AiTurnEndReason {
         loop {
-            let request = match prepare(vault, env, conversation_id, turn) {
+            // AI-30: start the servers whose tools this request offers.
+            let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
+            let request = match prepare(vault, env, conversation_id, turn, &offer) {
                 Ok(request) => request,
                 Err(halt) => return halted(turn, conversation_id, halt),
             };
+            if compaction_due(&request) {
+                let compact = {
+                    let v = lock(vault);
+                    if turn.cancel.is_cancelled() || !v.is_unlocked() {
+                        return AiTurnEndReason::Stopped;
+                    }
+                    compact_request(
+                        &v,
+                        &turn.context,
+                        request.provider,
+                        request.model,
+                        request.entries,
+                    )
+                };
+                match self
+                    .auto_compact(vault, env, conversation_id, turn, compact)
+                    .await
+                {
+                    // The next request starts at the summary.
+                    Ok(()) => continue,
+                    Err(CompactFailure::Stopped) => return AiTurnEndReason::Stopped,
+                    Err(CompactFailure::Failed { status, message }) => {
+                        turn.emit(AiTurnEvent::Error { status, message });
+                        return AiTurnEndReason::Error;
+                    }
+                }
+            }
+            // Calls of this response map back through the names this request offered.
+            self.0.mcp.record_offer(conversation_id, offer);
             turn.emit(AiTurnEvent::RequestStarted);
             let http = self.http();
             let result = {
@@ -629,12 +833,27 @@ impl AiManager {
             find_conversation(&v, conversation_id)?;
             let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
-            (
-                Job::new(&v, &call.name, arguments),
-                self.start_op(conversation_id),
-            )
+            let job = if call.name.starts_with(MCP_PREFIX) {
+                Job::mcp(
+                    self.0.mcp.offered(conversation_id, &call.name),
+                    &call.name,
+                    arguments,
+                )
+            } else {
+                Job::new(&v, &call.name, arguments)
+            };
+            (job, self.start_op(conversation_id))
         };
-        let (status, content) = job.run(&self.http(), env, session_id, &op.cancel).await;
+        let (status, content) = job
+            .run(
+                &self.http(),
+                &self.0.mcp,
+                vault,
+                env,
+                session_id,
+                &op.cancel,
+            )
+            .await;
         let content = result_content(status, content, edited_arguments);
         let view = {
             let mut v = unlocked(vault)?;
@@ -693,26 +912,24 @@ impl AiManager {
             env.changed();
         }
         let (request, op) = prepared?;
-        let response =
-            match complete(&self.http(), &request.provider, &request.chat(), &op.cancel).await {
-                Ok(response) => response,
-                Err(e) => {
-                    tracing::warn!(
-                        conversation_id,
-                        kind = error_kind(&e),
-                        status = ?e.status(),
-                        "AI compaction failed"
-                    );
-                    return Err(e.into());
-                }
-            };
-        let summary = response.text.trim();
-        if summary.is_empty() {
+        let summary = match self.summarize(&request, &op.cancel).await {
+            Ok(summary) => summary,
+            Err(e) => {
+                tracing::warn!(
+                    conversation_id,
+                    kind = error_kind(&e),
+                    status = ?e.status(),
+                    "AI compaction failed"
+                );
+                return Err(e.into());
+            }
+        };
+        let Some(summary) = summary else {
             return Err(AppError::new(
                 ErrorCode::Ai,
                 "the model returned an empty summary",
             ));
-        }
+        };
         let view = {
             let mut v = unlocked(vault)?;
             if op.cancel.is_cancelled() {
@@ -721,12 +938,7 @@ impl AiManager {
                     "compaction was stopped",
                 ));
             }
-            let mut conversation = find_conversation(&v, conversation_id)?;
-            let entry = AiEntry::summary(now_ms(), summary);
-            let entry_id = append(&mut v, conversation_id, &entry)?;
-            conversation.context_start = Some(entry_id.clone());
-            v.put(Some(conversation_id), Item::AiConversation(conversation))?;
-            entry_view(&entry_id, &entry)
+            store_summary(&mut v, conversation_id, &summary)?
         };
         drop(op);
         tracing::info!(conversation_id, "AI conversation compacted");
@@ -752,27 +964,229 @@ impl AiManager {
             entries = Entries::load(&v, conversation_id)?;
         }
         let from = entries.context_from(conversation.context_start.as_deref());
-        let mut list = entries.list.split_off(from);
+        let list = entries.list.split_off(from);
         if !list
             .iter()
             .any(|e| matches!(e.body, EntryBody::User { .. } | EntryBody::Assistant(_)))
         {
             return Err(AppError::invalid("conversation_id", "nothing to compact"));
         }
-        list.push(AiEntry::user(now_ms(), COMPACT_INSTRUCTION));
         let (provider, model) = resolve_model(&v, &context.provider_id, &context.model_id)
             .map_err(|message| AppError::invalid("model_id", message))?;
-        let (system, _) = prompt(&v, context, false);
-        let request = Request {
-            provider_id: context.provider_id.clone(),
-            provider,
-            model,
-            system,
-            tools: Vec::new(),
-            entries: list,
-        };
+        let request = compact_request(&v, context, provider, model, list);
         Ok((request, self.start_op(conversation_id)))
     }
+
+    /// Asks the model for the summary a Compact request wants (AI-21); `None` when it answered
+    /// with nothing.
+    async fn summarize(
+        &self,
+        request: &Request,
+        cancel: &CancellationToken,
+    ) -> Result<Option<String>, AiError> {
+        let response = complete(&self.http(), &request.provider, &request.chat(), cancel).await?;
+        let summary = response.text.trim();
+        Ok((!summary.is_empty()).then(|| summary.to_owned()))
+    }
+
+    /// AI-22: runs a Compact request inside a turn, exactly like `ai_compact`, stores the
+    /// summary (moving `context_start` to it) and sends its entry on the turn's channel.
+    async fn auto_compact(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        turn: &Turn,
+        compact: Request,
+    ) -> Result<(), CompactFailure> {
+        tracing::info!(conversation_id, "AI context nearly full; compacting");
+        let summary = match self.summarize(&compact, &turn.cancel).await {
+            Ok(summary) => summary,
+            Err(_) if turn.cancel.is_cancelled() => return Err(CompactFailure::Stopped),
+            Err(AiError::Cancelled) => return Err(CompactFailure::Stopped),
+            Err(e) => {
+                tracing::warn!(
+                    conversation_id,
+                    kind = error_kind(&e),
+                    status = ?e.status(),
+                    "AI automatic compaction failed"
+                );
+                return Err(CompactFailure::Failed {
+                    status: e.status(),
+                    message: error_text(&e),
+                });
+            }
+        };
+        let Some(summary) = summary else {
+            tracing::warn!(
+                conversation_id,
+                "AI automatic compaction got an empty summary"
+            );
+            return Err(CompactFailure::Failed {
+                status: None,
+                message: "The context is nearly full, and the model returned an empty summary                           when asked to compact it."
+                    .into(),
+            });
+        };
+        {
+            let mut v = lock(vault);
+            if turn.cancel.is_cancelled() || !v.is_unlocked() {
+                return Err(CompactFailure::Stopped);
+            }
+            match store_summary(&mut v, conversation_id, &summary) {
+                Ok(view) => turn.emit(AiTurnEvent::Entry { entry: view }),
+                Err(e) if e.code == ErrorCode::Locked => return Err(CompactFailure::Stopped),
+                Err(e) => {
+                    return Err(CompactFailure::Failed {
+                        status: None,
+                        message: e.detail,
+                    });
+                }
+            }
+        }
+        tracing::info!(conversation_id, "AI conversation compacted automatically");
+        env.changed();
+        Ok(())
+    }
+}
+
+/// Why an automatic compaction did not happen.
+enum CompactFailure {
+    /// The turn was stopped, or the vault locked.
+    Stopped,
+    /// The request failed or the summary could not be stored.
+    Failed {
+        status: Option<u16>,
+        message: String,
+    },
+}
+
+/// AI-22, before a new message is stored: the Compact request when the context plus the message
+/// would pass 90% of the model's known context window. Nothing when the context is empty or
+/// ends with a summary (it was just compacted, and no entry has followed it since), or the
+/// model cannot be resolved (the turn then says why).
+fn compaction_before(
+    v: &Vault,
+    conversation_id: &str,
+    conversation: &AiConversation,
+    context: &AiTurnContext,
+    text: &str,
+) -> AppResult<Option<Request>> {
+    let Ok((provider, model)) = resolve_model(v, &context.provider_id, &context.model_id) else {
+        return Ok(None);
+    };
+    let Some(window) = model.context_window.filter(|w| *w > 0) else {
+        return Ok(None);
+    };
+    let mut entries = Entries::load(v, conversation_id)?;
+    let from = entries.context_from(conversation.context_start.as_deref());
+    let list = entries.list.split_off(from);
+    let compactable = list
+        .iter()
+        .any(|e| matches!(e.body, EntryBody::User { .. } | EntryBody::Assistant(_)));
+    if !compactable
+        || matches!(
+            list.last().map(|e| &e.body),
+            Some(EntryBody::Summary { .. })
+        )
+    {
+        return Ok(None);
+    }
+    let tokens = context_tokens(&list).saturating_add(estimate_tokens(text));
+    if !over_threshold(tokens, window) {
+        return Ok(None);
+    }
+    Ok(Some(compact_request(v, context, provider, model, list)))
+}
+
+fn over_threshold(tokens: u64, window: u64) -> bool {
+    tokens.saturating_mul(10) > window.saturating_mul(AUTO_COMPACT_TENTHS)
+}
+
+/// A Compact request (AI-21): the context with the instruction after it, and no tools.
+fn compact_request(
+    v: &Vault,
+    context: &AiTurnContext,
+    provider: ProviderConfig,
+    model: ModelSpec,
+    mut entries: Vec<AiEntry>,
+) -> Request {
+    entries.push(AiEntry::user(now_ms(), COMPACT_INSTRUCTION));
+    let (system, _) = prompt(v, context, false);
+    Request {
+        provider_id: context.provider_id.clone(),
+        provider,
+        model,
+        system,
+        tools: Vec::new(),
+        entries,
+    }
+}
+
+/// Stores a summary entry and moves `context_start` to it (AI-21).
+fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
+    let mut conversation = find_conversation(v, conversation_id)?;
+    let entry = AiEntry::summary(now_ms(), summary);
+    let entry_id = append(v, conversation_id, &entry)?;
+    conversation.context_start = Some(entry_id.clone());
+    v.put(Some(conversation_id), Item::AiConversation(conversation))?;
+    Ok(entry_view(&entry_id, &entry))
+}
+
+/// AI-22, inside a turn: whether the request's context would pass 90% of the model's known
+/// context window. Only between tool calls, when the context ends with a tool result: a new
+/// message is checked before it is stored ([`compaction_before`]), because a summary stored after
+/// it would leave it outside the context. After a compaction the context ends with the summary,
+/// so it is never compacted twice in a row.
+fn compaction_due(request: &Request) -> bool {
+    let Some(window) = request.model.context_window.filter(|w| *w > 0) else {
+        return false;
+    };
+    matches!(
+        request.entries.last().map(|e| &e.body),
+        Some(EntryBody::Tool { .. })
+    ) && over_threshold(context_tokens(&request.entries), window)
+}
+
+/// The tokens a context uses, the way the panel's meter counts them (AI-20): the last response's
+/// input and output tokens, plus about 4 characters a token for every entry stored after it.
+fn context_tokens(entries: &[AiEntry]) -> u64 {
+    let last_usage = entries
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, e)| match &e.body {
+            EntryBody::Assistant(a) => a
+                .usage
+                .map(|u| (i + 1, u.input_tokens.saturating_add(u.output_tokens))),
+            _ => None,
+        });
+    let (from, base) = last_usage.unwrap_or((0, 0));
+    entries[from..]
+        .iter()
+        .map(|e| estimate_tokens(&entry_text(e)))
+        .fold(base, u64::saturating_add)
+}
+
+/// The text of an entry the estimate counts (the meter's `entryText`).
+fn entry_text(entry: &AiEntry) -> std::borrow::Cow<'_, str> {
+    match &entry.body {
+        EntryBody::User { text } | EntryBody::Summary { text } => text.as_str().into(),
+        EntryBody::Tool { content, .. } => content.as_str().into(),
+        EntryBody::Assistant(a) => {
+            let mut text = a.text.clone();
+            for call in &a.tool_calls {
+                text.push_str(&call.name);
+                text.push_str(&call.arguments);
+            }
+            text.into()
+        }
+    }
+}
+
+/// Tokens from text length, rounded up, counting UTF-16 units like the WebView's `length`.
+fn estimate_tokens(text: &str) -> u64 {
+    text.encode_utf16().count().div_ceil(CHARS_PER_TOKEN) as u64
 }
 
 // ---- turn steps ----
@@ -784,9 +1198,10 @@ fn prepare(
     env: &dyn AiEnv,
     conversation_id: &str,
     turn: &Turn,
+    offer: &Offer,
 ) -> Result<Request, Halt> {
     let mut stored = false;
-    let result = prepare_locked(&mut lock(vault), conversation_id, turn, &mut stored);
+    let result = prepare_locked(&mut lock(vault), conversation_id, turn, offer, &mut stored);
     if stored {
         env.changed();
     }
@@ -797,6 +1212,7 @@ fn prepare_locked(
     v: &mut Vault,
     conversation_id: &str,
     turn: &Turn,
+    offer: &Offer,
     stored: &mut bool,
 ) -> Result<Request, Halt> {
     if turn.cancel.is_cancelled() || !v.is_unlocked() {
@@ -820,7 +1236,11 @@ fn prepare_locked(
     }
     let (provider, model) = resolve_model(v, &turn.context.provider_id, &turn.context.model_id)
         .map_err(Halt::Failed)?;
-    let (system, tools) = prompt(v, &turn.context, true);
+    let (system, mut tools) = prompt(v, &turn.context, true);
+    // AI-30: after the built-in tools, those of the MCP servers (only with a tab, like them).
+    if turn.context.tab {
+        tools.extend(offer.tool_defs(provider.protocol));
+    }
     Ok(Request {
         provider_id: turn.context.provider_id.clone(),
         provider,
@@ -957,6 +1377,32 @@ fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
     })
 }
 
+/// AI-26: the user's message `entry_id` that an edit replaces, and the newest summary before it
+/// (where a `context_start` that pointed at a deleted entry moves).
+fn edited_entry(
+    v: &Vault,
+    conversation_id: &str,
+    entry_id: &str,
+) -> AppResult<(String, Option<String>)> {
+    let entries = Entries::load(v, conversation_id)?;
+    let Some(at) = entries.ids.iter().position(|id| id == entry_id) else {
+        return Err(AppError::not_found("message"));
+    };
+    if !matches!(entries.list[at].body, EntryBody::User { .. }) {
+        return Err(AppError::invalid(
+            "entry_id",
+            "Only your own messages can be edited.",
+        ));
+    }
+    let summary = entries.ids[..at]
+        .iter()
+        .zip(&entries.list[..at])
+        .rev()
+        .find(|(_, e)| matches!(e.body, EntryBody::Summary { .. }))
+        .map(|(id, _)| id.clone());
+    Ok((entry_id.to_owned(), summary))
+}
+
 /// A result's stored text: with the edit note in front when the user changed the call (AI-17).
 fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> String {
     match (status, edited.map(str::trim).filter(|a| !a.is_empty())) {
@@ -1087,11 +1533,26 @@ enum Job {
     RunCommand(RunCommandArgs),
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
+    /// An MCP tool the request offered, with its arguments (AI-30).
+    Mcp(Box<OfferedTool>, Map<String, Value>),
 }
 
 impl Job {
     fn error(message: impl Into<String>) -> Self {
         Self::Ready(ToolStatus::Error, message.into())
+    }
+
+    /// A call of an MCP tool: `tool` is what the offer that made the call names `name`.
+    fn mcp(tool: Option<OfferedTool>, name: &str, arguments: &str) -> Self {
+        let Some(tool) = tool else {
+            return Self::error(format!(
+                "There is no MCP tool named \"{name}\": no MCP server offers it now."
+            ));
+        };
+        match parse::<Map<String, Value>>(arguments) {
+            Ok(arguments) => Self::Mcp(Box::new(tool), arguments),
+            Err(message) => Self::error(message),
+        }
     }
 
     fn new(v: &Vault, name: &str, arguments: &str) -> Self {
@@ -1121,9 +1582,6 @@ impl Job {
             tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
                 "{name} runs in the terminal tab and cannot run here."
             )),
-            _ if name.starts_with("mcp__") => {
-                Self::error("MCP servers are not available yet, so this tool cannot run.")
-            }
             _ => Self::error(format!("There is no tool named \"{name}\".")),
         }
     }
@@ -1131,12 +1589,15 @@ impl Job {
     async fn run(
         self,
         http: &reqwest::Client,
+        mcp: &McpManager,
+        vault: &SharedVault,
         env: &dyn AiEnv,
         session_id: Option<&str>,
         cancel: &CancellationToken,
     ) -> (ToolStatus, String) {
         match self {
             Self::Ready(status, content) => (status, content),
+            Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
             Self::WebSearch(config, query) => {
                 match web::web_search(http, &config, &query, cancel).await {
@@ -1352,6 +1813,103 @@ fn title_of(text: &str) -> String {
         .chars()
         .take(60)
         .collect()
+}
+
+// ---- history search (AI-24) ----
+
+/// `ai_search`: conversations whose title or message text contains `query`, ignoring case, newest
+/// activity first. One hit per conversation: its first matching user, assistant or summary entry
+/// (tool results are not searched), or its title. Decrypts every conversation, one at a time
+/// under the vault guard, so run it off the async runtime.
+pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
+    let needle = fold(query.trim());
+    if needle.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conversations: Vec<(String, String, i64)> = {
+        let v = unlocked(vault)?;
+        v.ai_conversations()
+            .into_iter()
+            .map(|(id, c)| {
+                let last = v.ai_last_activity(&id);
+                (id, c.title, last)
+            })
+            .collect()
+    };
+    conversations.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| b.0.cmp(&a.0)));
+    let mut hits = Vec::new();
+    for (conversation_id, title, _) in conversations {
+        let entries = {
+            let v = unlocked(vault)?;
+            Entries::load(&v, &conversation_id)?
+        };
+        let in_entries = entries.ids.iter().zip(&entries.list).find_map(|(id, e)| {
+            let text = match &e.body {
+                EntryBody::User { text } | EntryBody::Summary { text } => text.as_str(),
+                EntryBody::Assistant(a) => a.text.as_str(),
+                EntryBody::Tool { .. } => return None,
+            };
+            snippet(text, &needle).map(|s| (Some(id.clone()), s))
+        });
+        if let Some((entry_id, snippet)) =
+            in_entries.or_else(|| snippet(&title, &needle).map(|s| (None, s)))
+        {
+            hits.push(AiSearchHit {
+                conversation_id,
+                entry_id,
+                snippet,
+            });
+        }
+    }
+    Ok(hits)
+}
+
+/// Text in lowercase, character by character, for matching that ignores case.
+fn fold(text: &str) -> Vec<char> {
+    text.chars().flat_map(char::to_lowercase).collect()
+}
+
+/// About [`SNIPPET_CHARS`] characters of `text` around the first match of `needle` (folded),
+/// whitespace collapsed, with `…` where it was cut. `None` without a match.
+fn snippet(text: &str, needle: &[char]) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    // The folded text, and for each of its characters the original one it came from.
+    let mut folded = Vec::with_capacity(chars.len());
+    let mut origin = Vec::with_capacity(chars.len());
+    for (i, c) in chars.iter().enumerate() {
+        for lower in c.to_lowercase() {
+            folded.push(lower);
+            origin.push(i);
+        }
+    }
+    let at = folded.windows(needle.len()).position(|w| w == needle)?;
+    let (start, end) = (origin[at], origin[at + needle.len() - 1] + 1);
+    let mut from = start.saturating_sub(SNIPPET_BEFORE);
+    let to = chars.len().min(from + SNIPPET_CHARS.max(end - from));
+    // Near the end of the text, the window takes more of what comes before.
+    if to - from < SNIPPET_CHARS {
+        from = to.saturating_sub(SNIPPET_CHARS);
+    }
+    let mut out = String::new();
+    if from > 0 {
+        out.push('…');
+    }
+    let mut space = false;
+    for c in &chars[from..to] {
+        if c.is_whitespace() {
+            space = true;
+        } else {
+            if space && !out.is_empty() && !out.ends_with('…') {
+                out.push(' ');
+            }
+            space = false;
+            out.push(*c);
+        }
+    }
+    if to < chars.len() {
+        out.push('…');
+    }
+    Some(out)
 }
 
 // ---- views ----

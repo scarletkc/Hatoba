@@ -1,5 +1,7 @@
 //! AI assistant commands (spec §13): providers, search providers and the synced settings of
-//! Settings → AI, conversations, and the turn protocol of §13.1, which runs in [`crate::ai`].
+//! Settings → AI, conversations with history search (AI-24), and the turn protocol of §13.1 with
+//! edit and resend (AI-26), which runs in [`crate::ai`]. Skills and MCP servers have their own
+//! modules ([`super::skills`], [`super::mcp`]).
 //! API keys go one way to Rust: views say only whether a key is saved (AI-01).
 
 use std::sync::Arc;
@@ -24,12 +26,12 @@ use crate::ai::{
 };
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiModel, AiModelRef,
-    AiProtocol, AiProviderInput, AiProviderView, AiSendInput, AiSendStarted, AiSettingsView,
-    AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent, SearchKind,
-    SearchProviderInput, SearchProviderView,
+    AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
+    AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent,
+    SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
-use crate::state::{AppState, state};
+use crate::state::{AppState, blocking, state};
 use crate::sync;
 
 /// The query `search_provider_test` sends.
@@ -699,7 +701,8 @@ pub async fn ai_send(
     let sink: Arc<dyn EventSink> = Arc::new(channel);
     let (started, task) = state
         .ai
-        .send(&state.vault, Arc::new(AppEnv(app)), input, sink)?;
+        .send(&state.vault, Arc::new(AppEnv(app)), input, sink)
+        .await?;
     tauri::async_runtime::spawn(task);
     Ok(started)
 }
@@ -795,6 +798,44 @@ pub async fn ai_compact(
         .ai
         .compact(&state.vault, &AppEnv(app), &conversation_id, &context)
         .await
+}
+
+/// AI-24: conversations whose title or message text contains `query`, ignoring case.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_search(state: State<'_, AppState>, query: String) -> AppResult<Vec<AiSearchHit>> {
+    let vault = state.vault.clone();
+    blocking(move || crate::ai::search(&vault, &query)).await
+}
+
+/// AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and
+/// starts a turn whose events stream on `channel`, like `ai_send`.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_edit_resend(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: String,
+    entry_id: String,
+    text: String,
+    context: AiTurnContext,
+    channel: Channel<AiTurnEvent>,
+) -> AppResult<AiSendStarted> {
+    let sink: Arc<dyn EventSink> = Arc::new(channel);
+    let (started, task) = state
+        .ai
+        .edit_resend(
+            &state.vault,
+            Arc::new(AppEnv(app)),
+            conversation_id,
+            &entry_id,
+            text,
+            context,
+            sink,
+        )
+        .await?;
+    tauri::async_runtime::spawn(task);
+    Ok(started)
 }
 
 #[cfg(test)]

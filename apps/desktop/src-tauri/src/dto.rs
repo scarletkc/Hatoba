@@ -1220,10 +1220,7 @@ impl fmt::Debug for SkillFileView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SkillFileView")
             .field("path", &self.path)
-            .field(
-                "content",
-                &format_args!("<{} bytes>", self.content.len()),
-            )
+            .field("content", &format_args!("<{} bytes>", self.content.len()))
             .finish()
     }
 }
@@ -1278,15 +1275,30 @@ impl fmt::Debug for SkillInput {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SkillIssue {
     MissingSkillMd,
-    InvalidFrontmatter { detail: String },
-    InvalidName { name: String },
+    InvalidFrontmatter {
+        detail: String,
+    },
+    InvalidName {
+        name: String,
+    },
     MissingDescription,
-    DescriptionTooLong { chars: u64 },
-    FileTooLarge { path: String, size: u64 },
-    UnsafePath { path: String },
-    TooManyFiles { count: u64 },
+    DescriptionTooLong {
+        chars: u64,
+    },
+    FileTooLarge {
+        path: String,
+        size: u64,
+    },
+    UnsafePath {
+        path: String,
+    },
+    TooManyFiles {
+        count: u64,
+    },
     /// More than 5 MB in total.
-    TooLarge { bytes: u64 },
+    TooLarge {
+        bytes: u64,
+    },
 }
 
 /// What an import would save, shown before saving (AI-27). Importable when `issues` is empty.

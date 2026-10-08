@@ -24,6 +24,8 @@ use crate::dto::{
     AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
 };
 use crate::error::{AppResult, ErrorCode};
+use crate::mcp::McpManager;
+use crate::mcp::tests::Events as McpEvents;
 
 const PW: &str = "correct horse battery staple";
 const KEY: &str = "sk-test-turns-NEVER-SHOWN";
@@ -201,6 +203,8 @@ struct Fixture {
     server: Option<MockServer>,
     vault: SharedVault,
     manager: AiManager,
+    mcp: McpManager,
+    mcp_events: Arc<McpEvents>,
     env: Arc<Env>,
     provider_id: String,
 }
@@ -239,10 +243,13 @@ impl Fixture {
                 }),
             )
             .unwrap();
+        let (mcp, mcp_events) = crate::mcp::tests::manager();
         Self {
             server,
             vault: Arc::new(Mutex::new(vault)),
-            manager: AiManager::default(),
+            manager: AiManager::with_mcp(mcp.clone()),
+            mcp,
+            mcp_events,
             env: Arc::new(Env::default()),
             provider_id,
         }
@@ -262,7 +269,7 @@ impl Fixture {
         self.env.clone()
     }
 
-    fn send(&self, conversation_id: Option<&str>, text: &str) -> (AiSendStarted, Arc<Sink>) {
+    async fn send(&self, conversation_id: Option<&str>, text: &str) -> (AiSendStarted, Arc<Sink>) {
         let sink = Arc::new(Sink::default());
         let (started, task) = self
             .manager
@@ -276,6 +283,7 @@ impl Fixture {
                 },
                 sink.clone(),
             )
+            .await
             .unwrap();
         tokio::spawn(task);
         (started, sink)
@@ -423,7 +431,7 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
         answer("Disk usage is fine."),
     ])
     .await;
-    let (started, sink) = f.send(None, "  check the disk\nplease");
+    let (started, sink) = f.send(None, "  check the disk\nplease").await;
     let conv = started.conversation.id.clone();
     assert_eq!(started.conversation.title, "check the disk");
     assert!(
@@ -550,7 +558,7 @@ async fn an_edited_call_tells_the_model_what_ran() {
         answer("Done."),
     ])
     .await;
-    let (started, sink) = f.send(None, "clean up");
+    let (started, sink) = f.send(None, "clean up").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
 
@@ -574,7 +582,7 @@ async fn a_rejection_sends_the_users_reason() {
         answer("Understood, I will not reboot."),
     ])
     .await;
-    let (started, sink) = f.send(None, "fix it");
+    let (started, sink) = f.send(None, "fix it").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
 
@@ -606,7 +614,7 @@ async fn a_rejection_sends_the_users_reason() {
 async fn stopping_mid_stream_ends_the_turn_and_stores_nothing() {
     let base_url = stalling_server().await;
     let f = Fixture::with_base_url(None, base_url);
-    let (started, sink) = f.send(None, "hello");
+    let (started, sink) = f.send(None, "hello").await;
     let conv = started.conversation.id;
     sink.until("text", |e| {
         e.contains(&AiTurnEvent::Text {
@@ -635,7 +643,7 @@ async fn stopping_while_a_tool_waits_cancels_the_calls_without_a_result() {
         ("call_2", "run_command", json!({"command": "df -h"})),
     ])])
     .await;
-    let (started, sink) = f.send(None, "check");
+    let (started, sink) = f.send(None, "check").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     f.result(&conv, "call_1", AiToolStatus::Ok, "screen", None)
@@ -688,7 +696,7 @@ async fn locking_stops_every_turn() {
         json!({"command": "uptime"}),
     )])])
     .await;
-    let (started, sink) = f.send(None, "uptime?");
+    let (started, sink) = f.send(None, "uptime?").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
 
@@ -764,10 +772,17 @@ async fn a_call_left_without_a_result_is_cancelled_before_the_next_request() {
     assert!(requests[0].get("tools").is_none());
     let system = messages(&requests[0])[0]["content"].as_str().unwrap();
     assert!(system.contains("No terminal is attached"), "{system}");
-    let cancelled = tool_message(&requests[0], "call_9")["content"]
-        .as_str()
-        .unwrap();
-    assert!(cancelled.contains("cancelled"), "{cancelled}");
+    // A request without tools carries the call and its result as text.
+    let cancelled = messages(&requests[0])
+        .iter()
+        .filter(|m| m["role"] == "user")
+        .filter_map(|m| m["content"].as_str())
+        .find(|text| text.contains("(id: call_9)"))
+        .expect("the cancelled result as text");
+    assert!(
+        cancelled.contains("[Tool result: run_command (id: call_9), status: cancelled]"),
+        "{cancelled}"
+    );
 
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 4);
@@ -785,7 +800,7 @@ async fn sending_while_a_turn_runs_stops_it_first() {
         answer("fast"),
     ])
     .await;
-    let (started, first) = f.send(None, "one");
+    let (started, first) = f.send(None, "one").await;
     let conv = started.conversation.id;
     let deadline = Instant::now() + Duration::from_secs(20);
     while f.requests().await.is_empty() {
@@ -793,7 +808,7 @@ async fn sending_while_a_turn_runs_stops_it_first() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
-    let (again, second) = f.send(Some(&conv), "two");
+    let (again, second) = f.send(Some(&conv), "two").await;
     assert_eq!(again.conversation.id, conv);
     assert_eq!(first.ended().await, AiTurnEndReason::Stopped);
     assert_eq!(second.ended().await, AiTurnEndReason::Completed);
@@ -820,7 +835,7 @@ async fn a_provider_error_ends_the_turn_and_retry_goes_on() {
         answer("Recovered."),
     ])
     .await;
-    let (started, sink) = f.send(None, "hi");
+    let (started, sink) = f.send(None, "hi").await;
     let conv = started.conversation.id;
     assert_eq!(sink.ended().await, AiTurnEndReason::Error);
     assert_eq!(
@@ -862,6 +877,7 @@ async fn an_unknown_model_is_an_error_of_the_turn() {
             },
             sink.clone(),
         )
+        .await
         .unwrap();
     tokio::spawn(task);
     assert_eq!(sink.ended().await, AiTurnEndReason::Error);
@@ -870,16 +886,19 @@ async fn an_unknown_model_is_an_error_of_the_turn() {
     assert_eq!(f.entries(&started.conversation.id).len(), 1);
     assert!(f.requests().await.is_empty());
 
-    let empty = f.manager.send(
-        &f.vault,
-        f.env(),
-        AiSendInput {
-            conversation_id: None,
-            text: " \n ".into(),
-            context: f.context(),
-        },
-        sink,
-    );
+    let empty = f
+        .manager
+        .send(
+            &f.vault,
+            f.env(),
+            AiSendInput {
+                conversation_id: None,
+                text: " \n ".into(),
+                context: f.context(),
+            },
+            sink,
+        )
+        .await;
     assert_eq!(empty.err().unwrap().field.as_deref(), Some("text"));
 }
 
@@ -891,7 +910,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
         answer("Next answer."),
     ])
     .await;
-    let (started, sink) = f.send(None, "first question");
+    let (started, sink) = f.send(None, "first question").await;
     let conv = started.conversation.id;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -917,7 +936,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     assert_eq!(last["content"], COMPACT_INSTRUCTION);
     assert!(compact.to_string().contains("first question"));
 
-    let (_, sink) = f.send(Some(&conv), "next question");
+    let (_, sink) = f.send(Some(&conv), "next question").await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     let requests = f.requests().await;
     let next = requests[2].to_string();
@@ -930,7 +949,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
 #[tokio::test]
 async fn compaction_is_refused_while_a_turn_runs() {
     let f = Fixture::new(vec![calls(&[("call_1", "read_terminal", json!({}))])]).await;
-    let (started, sink) = f.send(None, "look");
+    let (started, sink) = f.send(None, "look").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     let err = f
@@ -991,7 +1010,7 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
             .unwrap();
         }
     }
-    let (started, sink) = f.send(None, "help");
+    let (started, sink) = f.send(None, "help").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
 
@@ -1025,11 +1044,7 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
     );
     let c2 = f.run(&conv, "c2", None, None).await.unwrap();
     assert_eq!(view_content(&c2).1, AiToolStatus::Error);
-    assert!(
-        view_content(&c2)
-            .2
-            .contains("MCP servers are not available yet")
-    );
+    assert!(view_content(&c2).2.contains("There is no MCP tool named"));
     let c3 = f.run(&conv, "c3", None, None).await.unwrap();
     assert_eq!(view_content(&c3).1, AiToolStatus::Error);
     assert!(view_content(&c3).2.contains("No search provider"));
@@ -1066,7 +1081,7 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
 #[tokio::test]
 async fn deleting_a_conversation_stops_its_turn() {
     let f = Fixture::new(vec![calls(&[("call_1", "read_terminal", json!({}))])]).await;
-    let (started, sink) = f.send(None, "look");
+    let (started, sink) = f.send(None, "look").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     f.manager
@@ -1082,4 +1097,573 @@ async fn deleting_a_conversation_stops_its_turn() {
         ErrorCode::NotFound
     );
     assert!(lock(&f.vault).ai_entries(&conv).unwrap().is_empty());
+}
+
+// ───────────────────────── phase 2: MCP, AI-22, AI-26, AI-24 ─────────────────────────
+
+impl Fixture {
+    /// Gives the provider's model a known context window (AI-20).
+    fn set_context_window(&self, window: u64) {
+        let mut v = lock(&self.vault);
+        let mut provider = v
+            .get(&self.provider_id)
+            .and_then(Item::as_ai_provider)
+            .cloned()
+            .unwrap();
+        provider.models[0].context_window = Some(window);
+        v.put(Some(&self.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+
+    async fn edit(
+        &self,
+        conversation_id: &str,
+        entry_id: &str,
+        text: &str,
+    ) -> AppResult<(AiSendStarted, Arc<Sink>)> {
+        let sink = Arc::new(Sink::default());
+        let (started, task) = self
+            .manager
+            .edit_resend(
+                &self.vault,
+                self.env(),
+                conversation_id.to_owned(),
+                entry_id,
+                text.to_owned(),
+                self.context(),
+                sink.clone(),
+            )
+            .await?;
+        tokio::spawn(task);
+        Ok((started, sink))
+    }
+
+    fn context_start(&self, conversation_id: &str) -> Option<String> {
+        self.detail(conversation_id).conversation.context_start
+    }
+}
+
+fn entry_id(view: &AiEntryView) -> &str {
+    match view {
+        AiEntryView::User { entry_id, .. }
+        | AiEntryView::Assistant { entry_id, .. }
+        | AiEntryView::Tool { entry_id, .. }
+        | AiEntryView::Summary { entry_id, .. } => entry_id,
+    }
+}
+
+fn summaries(sink: &Sink) -> Vec<AiEntryView> {
+    sink.entries()
+        .into_iter()
+        .filter(|e| matches!(e, AiEntryView::Summary { .. }))
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
+    use crate::dto::McpServerState;
+    use crate::mcp::tests::{
+        http_mock, http_server, missing_server, put_server, set_enabled, stdio_server,
+    };
+
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "mcp__files__echo", json!({"text": "hi"})),
+            ("c2", "mcp__web__lookup", json!({"q": "dns"})),
+            ("c3", "mcp__files__fail", json!({})),
+            ("c4", "mcp__files__notify", json!({})),
+            ("c5", "mcp__broken__x", json!({})),
+        ]),
+        answer("All done."),
+    ])
+    .await;
+    let mock = http_mock().await;
+    let files = put_server(&f.vault, stdio_server("files"));
+    let web = put_server(&f.vault, http_server("web", &mock));
+    let broken = put_server(&f.vault, missing_server("broken"));
+    // `files` and `broken` were turned on here; `web` (http) is on by default (AI-29).
+    set_enabled(&f.vault, &files, true);
+    set_enabled(&f.vault, &broken, true);
+
+    let (started, sink) = f.send(None, "use the servers").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let requests = f.requests().await;
+    assert_eq!(
+        tool_names(&requests[0]),
+        [
+            "read_terminal",
+            "run_command",
+            "send_input",
+            "fetch_url",
+            "mcp__files__echo",
+            "mcp__files__fail",
+            "mcp__files__notify",
+            "mcp__files__pid",
+            "mcp__files__env",
+            "mcp__web__lookup"
+        ]
+    );
+    // The server's description, as it wrote it (AI-30).
+    let echo = requests[0]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["function"]["name"] == "mcp__files__echo")
+        .unwrap();
+    assert_eq!(echo["function"]["description"], "Echoes text");
+    // The server that cannot start offers nothing, and says why.
+    assert_eq!(
+        f.mcp_events.states(&broken),
+        [McpServerState::Starting, McpServerState::Failed]
+    );
+
+    // AI-31: the approval card's view of a call, with Always allow and Always ask.
+    let info = |name: &str| {
+        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, name).expect("tool info")
+    };
+    let echo = info("mcp__files__echo");
+    assert_eq!(
+        (echo.server_id.as_str(), echo.server_name.as_str()),
+        (files.as_str(), "files")
+    );
+    assert!(!echo.always_ask && !echo.tool.always_allow);
+    assert_eq!(echo.tool.tool, "echo");
+    assert_eq!(echo.tool.annotations.read_only_hint, Some(true));
+    crate::commands::mcp::set_always_allow(&mut lock(&f.vault), &files, Some("echo"), true)
+        .unwrap();
+    assert!(info("mcp__files__echo").tool.always_allow);
+    assert!(!info("mcp__files__fail").tool.always_allow);
+    crate::commands::mcp::set_always_allow(&mut lock(&f.vault), &web, None, true).unwrap();
+    assert!(info("mcp__web__lookup").tool.always_allow);
+    {
+        let mut v = lock(&f.vault);
+        let mut server = v.get(&web).and_then(Item::as_mcp_server).cloned().unwrap();
+        server.always_ask = true;
+        v.put(Some(&web), Item::McpServer(server)).unwrap();
+    }
+    assert!(info("mcp__web__lookup").always_ask);
+    assert!(crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, "mcp__nope__x").is_none());
+
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(view_content(&c1), ("c1", AiToolStatus::Ok, "hi"));
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(view_content(&c2), ("c2", AiToolStatus::Ok, "found dns"));
+    let c3 = f.run(&conv, "c3", None, None).await.unwrap();
+    assert_eq!(view_content(&c3), ("c3", AiToolStatus::Error, "boom"));
+    let c4 = f.run(&conv, "c4", None, None).await.unwrap();
+    assert_eq!(view_content(&c4), ("c4", AiToolStatus::Ok, "notified"));
+    let c5 = f.run(&conv, "c5", None, None).await.unwrap();
+    assert_eq!(view_content(&c5).1, AiToolStatus::Error);
+    assert!(view_content(&c5).2.contains("There is no MCP tool named"));
+
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 2);
+    // `tools/list_changed` refreshed the list before the next request (AI-30).
+    assert!(tool_names(&requests[1]).contains(&"mcp__files__added".to_owned()));
+    assert_eq!(tool_message(&requests[1], "c1")["content"], "hi");
+
+    // AI-32: locking stops every server.
+    lock(&f.vault).lock();
+    f.mcp.stop_all(&f.vault).await;
+    for id in [&files, &web] {
+        assert_eq!(
+            f.mcp_events.states(id).last(),
+            Some(&McpServerState::Stopped)
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_new_message_that_would_fill_the_context_is_sent_after_a_compaction() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY: the user asked a first question."),
+        answer("Second answer."),
+    ])
+    .await;
+    // 90% of 1,000 tokens: the first answer used 105, and the long message adds 900 more.
+    f.set_context_window(1_000);
+    let (started, sink) = f.send(None, "first question").await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(f.requests().await.len(), 1);
+
+    let long = "disk ".repeat(720);
+    let (started, sink) = f.send(Some(&conv), &long).await;
+    // The summary was stored and sent on the turn's channel before the message was stored.
+    let summary = summaries(&sink);
+    assert_eq!(summary.len(), 1);
+    let summary_id = entry_id(&summary[0]).to_owned();
+    assert!(entry_id(&started.user_entry) > summary_id.as_str());
+    assert_eq!(
+        started.conversation.context_start.as_deref(),
+        Some(summary_id.as_str())
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 3);
+    let compact = &requests[1];
+    assert!(compact.get("tools").is_none());
+    assert_eq!(
+        messages(compact).last().unwrap()["content"],
+        COMPACT_INSTRUCTION
+    );
+    assert!(compact.to_string().contains("first question"));
+    assert!(!compact.to_string().contains("disk disk"));
+    // The request carries the summary and the new message, not what came before.
+    let next = requests[2].to_string();
+    assert!(next.contains("SUMMARY: the user asked a first question."));
+    assert!(next.contains("disk disk"));
+    assert!(!next.contains("First answer."));
+    let entries = f.entries(&conv);
+    assert!(matches!(&entries[2].body, EntryBody::Summary { .. }));
+    assert!(matches!(&entries[3].body, EntryBody::User { text } if *text == long));
+}
+
+#[tokio::test]
+async fn a_full_context_between_tool_calls_is_compacted_once() {
+    let long_summary = format!("SUMMARY-2 {}", "y".repeat(4_000));
+    let f = Fixture::new(vec![
+        calls(&[("c1", "read_terminal", json!({}))]),
+        answer(&long_summary),
+        answer("Done."),
+    ])
+    .await;
+    f.set_context_window(1_000);
+    let (started, sink) = f.send(None, "look at the screen").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // The screen alone is about 1,000 tokens.
+    f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        messages(&requests[1]).last().unwrap()["content"],
+        COMPACT_INSTRUCTION
+    );
+    // The summary is over 90% too, but it is never compacted again right away.
+    let next = requests[2].to_string();
+    assert!(next.contains("SUMMARY-2"));
+    assert!(!next.contains("look at the screen"));
+    assert!(!tool_names(&requests[2]).is_empty());
+    let summary = summaries(&sink);
+    assert_eq!(summary.len(), 1);
+    assert_eq!(
+        f.context_start(&conv).as_deref(),
+        Some(entry_id(&summary[0]))
+    );
+}
+
+#[tokio::test]
+async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_start() {
+    let f = Fixture::new(vec![
+        answer("Answer to gamma-edited."),
+        answer("Answer to beta-edited."),
+        answer("Answer to alpha-edited."),
+    ])
+    .await;
+    let assistant = |text: &str| {
+        AiEntry::assistant(
+            2,
+            AssistantEntry {
+                provider_id: f.provider_id.clone(),
+                model_id: "m1".into(),
+                text: text.into(),
+                finish: Finish::Stop,
+                ..AssistantEntry::default()
+            },
+        )
+    };
+    // alpha, its answer, summary 1, beta, its answer, summary 2, gamma, its answer.
+    let (conv, ids) = {
+        let mut v = lock(&f.vault);
+        let conv = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "edit".into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        let entries = [
+            AiEntry::user(1, "alpha"),
+            assistant("answer alpha"),
+            AiEntry::summary(3, "SUMMARY ONE"),
+            AiEntry::user(4, "beta"),
+            assistant("answer beta"),
+            AiEntry::summary(6, "SUMMARY TWO"),
+            AiEntry::user(7, "gamma"),
+            assistant("answer gamma"),
+        ];
+        let ids: Vec<String> = entries
+            .iter()
+            .map(|e| append(&mut v, &conv, e).unwrap())
+            .collect();
+        let mut c = v
+            .get(&conv)
+            .and_then(Item::as_ai_conversation)
+            .cloned()
+            .unwrap();
+        c.context_start = Some(ids[5].clone());
+        v.put(Some(&conv), Item::AiConversation(c)).unwrap();
+        (conv, ids)
+    };
+
+    // Only the user's own messages can be edited.
+    let err = f.edit(&conv, &ids[1], "x").await.err().unwrap();
+    assert_eq!(err.field.as_deref(), Some("entry_id"));
+    let err = f
+        .edit(&conv, "0190a0a0-0000-7000-8000-000000000000", "x")
+        .await;
+    assert_eq!(err.err().unwrap().code, ErrorCode::NotFound);
+    let err = f.edit(&conv, &ids[6], "  ").await.err().unwrap();
+    assert_eq!(err.field.as_deref(), Some("text"));
+    assert_eq!(f.entries(&conv).len(), 8);
+
+    // gamma comes after the context start (summary 2): the start stays.
+    let (started, sink) = f.edit(&conv, &ids[6], "gamma-edited").await.unwrap();
+    assert_eq!(
+        started.conversation.context_start.as_deref(),
+        Some(ids[5].as_str())
+    );
+    assert!(entry_id(&started.user_entry) > ids[7].as_str());
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let texts: Vec<String> = f
+        .entries(&conv)
+        .iter()
+        .map(|e| match &e.body {
+            EntryBody::User { text } | EntryBody::Summary { text } => text.clone(),
+            EntryBody::Assistant(a) => a.text.clone(),
+            EntryBody::Tool { content, .. } => content.clone(),
+        })
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            "alpha",
+            "answer alpha",
+            "SUMMARY ONE",
+            "beta",
+            "answer beta",
+            "SUMMARY TWO",
+            "gamma-edited",
+            "Answer to gamma-edited."
+        ]
+    );
+    let request = f.requests().await[0].to_string();
+    assert!(request.contains("SUMMARY TWO") && request.contains("gamma-edited"));
+    assert!(!request.contains("answer gamma") && !request.contains("beta"));
+
+    // beta comes before it: summary 2 is deleted, so the start moves to summary 1.
+    let (started, sink) = f.edit(&conv, &ids[3], "beta-edited").await.unwrap();
+    assert_eq!(
+        started.conversation.context_start.as_deref(),
+        Some(ids[2].as_str())
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(f.entries(&conv).len(), 5);
+    assert_eq!(f.context_start(&conv).as_deref(), Some(ids[2].as_str()));
+
+    // alpha comes before every summary: the start is cleared.
+    let (started, sink) = f.edit(&conv, &ids[0], "alpha-edited").await.unwrap();
+    assert_eq!(started.conversation.context_start, None);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(&entries[0].body, EntryBody::User { text } if text == "alpha-edited"));
+    let request = f.requests().await[2].to_string();
+    assert!(!request.contains("SUMMARY ONE"));
+}
+
+#[tokio::test]
+async fn editing_while_a_turn_runs_stops_it_first() {
+    let f = Fixture::new(vec![
+        calls(&[("c1", "read_terminal", json!({}))]),
+        answer("Edited answer."),
+    ])
+    .await;
+    let (started, first) = f.send(None, "original").await;
+    let conv = started.conversation.id;
+    let user = entry_id(&started.user_entry).to_owned();
+    first.done_with(AiFinish::ToolCalls).await;
+    let (_, second) = f.edit(&conv, &user, "edited").await.unwrap();
+    assert_eq!(first.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(second.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    // The open call and its cancelled result went with the edited message.
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(&entries[0].body, EntryBody::User { text } if text == "edited"));
+    assert!(
+        !second
+            .entries()
+            .iter()
+            .any(|e| matches!(e, AiEntryView::Tool { .. }))
+    );
+}
+
+#[test]
+fn search_finds_titles_and_message_text_once_per_conversation() {
+    let vault: SharedVault = {
+        let mut vault = Vault::open_in_memory().unwrap();
+        vault
+            .create_with_params(PW, KdfParams::for_tests())
+            .unwrap();
+        Arc::new(Mutex::new(vault))
+    };
+    let conversation = |title: &str, entries: &[AiEntry]| -> (String, Vec<String>) {
+        let mut v = lock(&vault);
+        let id = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: title.into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        let ids = entries
+            .iter()
+            .map(|e| append(&mut v, &id, e).unwrap())
+            .collect();
+        (id, ids)
+    };
+    let answer = |text: &str| {
+        AiEntry::assistant(
+            2,
+            AssistantEntry {
+                text: text.into(),
+                ..AssistantEntry::default()
+            },
+        )
+    };
+    let long = format!(
+        "{}needle in the middle{}",
+        "a ".repeat(100),
+        " b".repeat(100)
+    );
+    let (disk, disk_ids) = conversation(
+        "Disk usage on prod",
+        &[
+            AiEntry::user(1, "how full is /var?"),
+            answer("It is at 42% now."),
+            AiEntry::tool(3, "call_1", ToolStatus::Ok, "tool-only-needle"),
+        ],
+    );
+    let (nginx, nginx_ids) = conversation(
+        "nginx",
+        &[
+            AiEntry::user(1, "The NGINX config\nhas a typo"),
+            AiEntry::user(2, "nginx again"),
+            AiEntry::summary(3, &long),
+            AiEntry::user(4, "Ärger mit Umlauten"),
+        ],
+    );
+
+    let search = |q: &str| super::search(&vault, q).unwrap();
+    assert!(search("   ").is_empty());
+    // Only the title matches: no entry.
+    let hits = search("DISK");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(
+        (
+            hits[0].conversation_id.as_str(),
+            hits[0].entry_id.as_deref()
+        ),
+        (disk.as_str(), None)
+    );
+    assert_eq!(hits[0].snippet, "Disk usage on prod");
+    // An answer's text.
+    let hits = search("42%");
+    assert_eq!(hits[0].entry_id.as_deref(), Some(disk_ids[1].as_str()));
+    assert_eq!(hits[0].snippet, "It is at 42% now.");
+    // Tool results are not searched.
+    assert!(search("tool-only-needle").is_empty());
+    // One hit per conversation: the first matching entry, before the title.
+    let hits = search("nginx");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].conversation_id, nginx);
+    assert_eq!(hits[0].entry_id.as_deref(), Some(nginx_ids[0].as_str()));
+    assert_eq!(hits[0].snippet, "The NGINX config has a typo");
+    // A snippet of about 120 characters around the match, cut with an ellipsis.
+    let hits = search("NEEDLE IN");
+    assert_eq!(hits[0].entry_id.as_deref(), Some(nginx_ids[2].as_str()));
+    let snippet = &hits[0].snippet;
+    assert!(
+        snippet.starts_with('…') && snippet.ends_with('…'),
+        "{snippet}"
+    );
+    assert!(snippet.contains("needle in the middle"));
+    assert!(snippet.chars().count() <= 122, "{snippet}");
+    // Case folding beyond ASCII.
+    assert_eq!(search("ärger").len(), 1);
+    // One hit for each conversation that matches.
+    assert_eq!(search("a").len(), 2);
+
+    lock(&vault).lock();
+    assert_eq!(
+        super::search(&vault, "x").unwrap_err().code,
+        ErrorCode::Locked
+    );
+}
+
+#[test]
+fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
+    use crate::dto::{SkillFileView, SkillInput};
+    use hatoba_ai::tools::ReadSkillArgs;
+
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let mut v = lock(&f.vault);
+    let skill = |name: &str, enabled: bool| SkillInput {
+        id: None,
+        name: name.into(),
+        description: format!("About {name}"),
+        enabled,
+        body: format!("Body of {name}"),
+        files: vec![SkillFileView {
+            path: "references/tls.md".into(),
+            content: format!("TLS of {name}"),
+        }],
+    };
+    crate::commands::skills::save_skill(&mut v, &skill("nginx", true)).unwrap();
+    crate::commands::skills::save_skill(&mut v, &skill("apache", false)).unwrap();
+
+    // AI-28: only enabled skills are listed.
+    let (system, tools) = super::prompt(&v, &f.context(), true);
+    assert!(system.contains("nginx: About nginx"), "{system}");
+    assert!(!system.contains("apache"), "{system}");
+    assert!(tools.iter().any(|t| t.name == "read_skill"));
+
+    let read = |name: &str, path: Option<&str>| match super::read_skill(
+        &v,
+        &ReadSkillArgs {
+            name: name.into(),
+            path: path.map(str::to_owned),
+        },
+    ) {
+        super::Job::Ready(status, content) => (status, content),
+        _ => panic!("read_skill reads the vault"),
+    };
+    assert_eq!(
+        read("nginx", None),
+        (ToolStatus::Ok, "Body of nginx".into())
+    );
+    assert_eq!(
+        read("nginx", Some("./references\\tls.md")),
+        (ToolStatus::Ok, "TLS of nginx".into())
+    );
+    assert_eq!(read("apache", None).0, ToolStatus::Error);
 }

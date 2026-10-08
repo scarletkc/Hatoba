@@ -35,7 +35,8 @@ pub fn refresh_policy(state: &AppState) {
 
 /// Locks the vault: wipes keys and decrypted items from memory (zeroize, SEC-01), stops sync and
 /// tells the WebView. Live SSH sessions stay connected but masked unless the user chose otherwise.
-/// Every AI turn and tool stops first, so the assistant never acts behind the lock screen (§13.1).
+/// Every AI turn and tool stops first, so the assistant never acts behind the lock screen (§13.1),
+/// and every MCP server stops (AI-32).
 pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     let state = state(app);
     let was_unlocked = {
@@ -47,6 +48,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         vault.lock();
         was
     };
+    // AI-32: every MCP server stops, and `http` sessions close, with the vault.
+    state.mcp.stop_all(&state.vault).await;
     sync::stop(app);
     // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
     state.deploy.clear();

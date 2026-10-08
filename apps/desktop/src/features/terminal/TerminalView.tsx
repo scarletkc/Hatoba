@@ -110,7 +110,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       icon: "magnifying-glass",
       onSelect: () => setFindOpen(true),
     };
-    // AI-10: the selection goes into the AI panel's input for this tab.
+    // AI-10: opens the AI panel on this tab, where the selection shows as a chip that goes with the next message.
     const selection = hasSelection ? session.term.getSelection() : "";
     const askAi: MenuEntry = {
       label: t("terminal.menu.askAi"),
@@ -129,6 +129,8 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       selectAll,
       { kind: "separator" },
       find,
+      // Also here: with right click set to copy/paste there is no context menu.
+      askAi,
       { kind: "separator" },
       { label: t("terminal.menu.editHost"), icon: "pencil-simple", disabled: !host, onSelect: () => editSessionHost(tab.hostId) },
     ];

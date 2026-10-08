@@ -52,7 +52,8 @@ export function useAiLifecycle() {
       useTabs.subscribe((st, prev) => {
         if (st.tabs === prev.tabs) return;
         const open = new Set(st.tabs.map((x) => x.id));
-        for (const tab of prev.tabs) if (!open.has(tab.id) && useAi.getState().slots[tab.id]) detachSlot(tab.id);
+        const { slots, selections } = useAi.getState();
+        for (const tab of prev.tabs) if (!open.has(tab.id) && (slots[tab.id] || selections[tab.id])) detachSlot(tab.id);
       }),
     [],
   );

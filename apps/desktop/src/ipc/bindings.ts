@@ -207,10 +207,61 @@ export const commands = {
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
 	aiCompact: (conversationId: string, context: AiTurnContext) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context }),
+	/**  AI-24: conversations whose title or message text contains `query`, ignoring case. */
+	aiSearch: (query: string) => __TAURI_INVOKE<AiSearchHit[]>("ai_search", { query }),
+	/**
+	 *  AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and
+	 *  starts a turn whose events stream on `channel`, like `ai_send`.
+	 */
+	aiEditResend: (conversationId: string, entryId: string, text: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_edit_resend", { conversationId, entryId, text, context, channel }),
+	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
+	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
+	/**  Validates like an import (AI-27); rejects with `invalid_input` naming the field. */
+	skillSave: (input: SkillInput) => __TAURI_INVOKE<SkillView>("skill_save", { input }),
+	skillDelete: (id: string) => __TAURI_INVOKE<null>("skill_delete", { id }),
+	skillSetEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<null>("skill_set_enabled", { id, enabled }),
+	/**  Reads a folder or `.zip` the user picked; nothing is saved. */
+	skillImportPreview: (path: string) => __TAURI_INVOKE<SkillImportPreview>("skill_import_preview", { path }),
+	/**
+	 *  Imports what the preview showed, reading the path again. `replace_id` replaces that skill;
+	 *  `rename` saves it under a new name.
+	 */
+	skillImport: (path: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, replaceId, rename }),
+	/**  Writes the skill as a `.zip` to a path the user picked. */
+	skillExport: (id: string, path: string) => __TAURI_INVOKE<null>("skill_export", { id, path }),
+	mcpServersList: () => __TAURI_INVOKE<McpServerView[]>("mcp_servers_list"),
+	/**  Saves a server; a running one restarts when its name or transport changed. */
+	mcpServerSave: (input: McpServerInput) => __TAURI_INVOKE<McpServerView>("mcp_server_save", { input }),
+	mcpServerDelete: (id: string) => __TAURI_INVOKE<null>("mcp_server_delete", { id }),
+	/**  On this device only (AI-29). Disabling stops a running server. */
+	mcpServerSetEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<null>("mcp_server_set_enabled", { id, enabled }),
+	mcpServerStatus: (id: string) => __TAURI_INVOKE<McpServerStatus>("mcp_server_status", { id }),
+	/**  Starts (or restarts) the server now and lists its tools. */
+	mcpServerStart: (id: string) => __TAURI_INVOKE<McpServerStatus>("mcp_server_start", { id }),
+	mcpServerStop: (id: string) => __TAURI_INVOKE<null>("mcp_server_stop", { id }),
+	/**
+	 *  AI-31 Always allow on this device: one tool (the server's own name), or every tool with `tool`
+	 *  null.
+	 */
+	mcpSetAlwaysAllow: (serverId: string, tool: string | null, allow: boolean) => __TAURI_INVOKE<null>("mcp_set_always_allow", { serverId, tool, allow }),
+	/**  The MCP tool behind a name the model called, or null when no server offers it. */
+	mcpToolInfo: (name: string) => __TAURI_INVOKE<{
+	server_id: string,
+	server_name: string,
+	always_ask: boolean,
+	tool: McpToolView,
+} | null>("mcp_tool_info", { name }),
+	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
+	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
+	/**  Adds every importable server; env and header values move into the vault. */
+	mcpImport: (json: string) => __TAURI_INVOKE<McpServerView[]>("mcp_import", { json }),
+	/**  `mcpServers` JSON with placeholders in place of env and header values. */
+	mcpExport: () => __TAURI_INVOKE<string>("mcp_export"),
 };
 
 /** Events */
 export const events = {
+	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -289,6 +340,14 @@ export type AiProviderView = {
 	auth_header: AiAuthHeader,
 	models: AiModel[],
 	updated_at: number,
+};
+
+export type AiSearchHit = {
+	conversation_id: string,
+	/**  The first matching entry, or `None` when only the title matched. */
+	entry_id: string | null,
+	/**  Text around the first match. */
+	snippet: string,
 };
 
 export type AiSendInput = {
@@ -709,6 +768,101 @@ export type LocalPrefs = {
 
 export type LockReason = "manual" | "idle" | "sleep";
 
+export type McpImportPreview = {
+	servers: McpImportServer[],
+	/**  Entries that cannot be imported, such as an `sse` server, with the reason. */
+	skipped: McpImportSkipped[],
+};
+
+export type McpImportServer = {
+	name: string,
+	transport: McpTransportView,
+	/**  A saved server has this name; the import adds a numeric suffix. */
+	exists: boolean,
+};
+
+export type McpImportSkipped = {
+	name: string,
+	reason: string,
+};
+
+export type McpSecretInput = {
+	key: string,
+	/**  `None` keeps the saved value for this key. */
+	value: string | null,
+};
+
+export type McpServerInput = {
+	/**  `None` creates a server. */
+	id: string | null,
+	name: string,
+	transport: McpTransportInput,
+	always_ask: boolean,
+};
+
+export type McpServerState = "stopped" | "starting" | "running" | "failed";
+
+/**
+ *  A server's live state (AI-32), also pushed as `ai://mcp-status` on every change. The stderr
+ *  lines stay in memory and are never logged.
+ */
+export type McpServerStatus = {
+	server_id: string,
+	state: McpServerState,
+	error: string | null,
+	/**  The last stderr lines of a `stdio` server, kept in memory only (AI-32). */
+	stderr: string[],
+	/**  The tools from the last successful listing. */
+	tools: McpToolView[],
+};
+
+export type McpServerView = {
+	id: string,
+	name: string,
+	transport: McpTransportView,
+	/**  Ask even in bypass mode. Synced (AI-31). */
+	always_ask: boolean,
+	/**  Enabled on this device; a server from another device starts enabled only for `http`. */
+	enabled: boolean,
+	/**  On this device, every tool of the server runs without asking in manual mode (AI-31). */
+	always_allow: boolean,
+	/**  On this device, these tools (the server's own names) run without asking in manual mode. */
+	always_allow_tools: string[],
+	updated_at: number,
+};
+
+/**  Shown on the approval card; never changes whether a call asks (AI-31). */
+export type McpToolAnnotations = {
+	title: string | null,
+	read_only_hint: boolean | null,
+	destructive_hint: boolean | null,
+	idempotent_hint: boolean | null,
+	open_world_hint: boolean | null,
+};
+
+/**  The MCP tool behind a name the model called, for the approval card (AI-31). */
+export type McpToolInfo = {
+	server_id: string,
+	server_name: string,
+	always_ask: boolean,
+	tool: McpToolView,
+};
+
+export type McpToolView = {
+	/**  The name offered to the model, `mcp__<server>__<tool>` after cleaning (AI-30). */
+	name: string,
+	/**  The server's own tool name. */
+	tool: string,
+	description: string,
+	annotations: McpToolAnnotations,
+	/**  Always allow on this device (per tool, or because the whole server is). */
+	always_allow: boolean,
+};
+
+export type McpTransportInput = { kind: "stdio"; command: string; args: string[]; env: McpSecretInput[] } | { kind: "http"; url: string; headers: McpSecretInput[] };
+
+export type McpTransportView = { kind: "stdio"; command: string; args: string[]; env_keys: string[] } | { kind: "http"; url: string; header_keys: string[] };
+
 export type Platform = "windows" | "macos" | "linux";
 
 export type ProbeResult = {
@@ -754,6 +908,62 @@ export type SettingsView = {
 	terminal: TerminalSettings,
 	auto_lock_minutes: number,
 	lock_disconnects_sessions: boolean,
+};
+
+export type SkillDetail = {
+	skill: SkillView,
+	/**  `SKILL.md` without its frontmatter. */
+	body: string,
+	files: SkillFileView[],
+	/**  Other frontmatter fields, kept for export. They change nothing (AI-27). */
+	frontmatter_keys: string[],
+};
+
+export type SkillFileView = {
+	/**  Relative path with forward slashes, such as `references/nginx.md`. Never `SKILL.md`. */
+	path: string,
+	content: string,
+};
+
+/**  What an import would save, shown before saving (AI-27). Importable when `issues` is empty. */
+export type SkillImportPreview = {
+	/**  `None` when `SKILL.md` is missing or unreadable. */
+	name: string | null,
+	description: string | null,
+	body: string | null,
+	files: SkillFileView[],
+	frontmatter_keys: string[],
+	/**  Files that are not UTF-8 text, which the import skips. */
+	skipped: string[],
+	issues: SkillIssue[],
+	/**  A saved skill with the same name, which the user may replace (or rename the new one). */
+	existing_id: string | null,
+};
+
+export type SkillInput = {
+	/**  `None` creates a skill. */
+	id: string | null,
+	name: string,
+	description: string,
+	enabled: boolean,
+	body: string,
+	/**  Every file besides `SKILL.md`; a saved file left out is deleted. */
+	files: SkillFileView[],
+};
+
+/**  Why a skill cannot be imported or saved (AI-27). */
+export type SkillIssue = { kind: "missing_skill_md" } | { kind: "invalid_frontmatter"; detail: string } | { kind: "invalid_name"; name: string } | { kind: "missing_description" } | { kind: "description_too_long"; chars: number } | { kind: "file_too_large"; path: string; size: number } | { kind: "unsafe_path"; path: string } | { kind: "too_many_files"; count: number } | 
+/**  More than 5 MB in total. */
+{ kind: "too_large"; bytes: number };
+
+export type SkillView = {
+	id: string,
+	name: string,
+	description: string,
+	enabled: boolean,
+	/**  Paths of the files besides `SKILL.md`, sorted. */
+	files: string[],
+	updated_at: number,
 };
 
 export type SshConfigCandidate = {
