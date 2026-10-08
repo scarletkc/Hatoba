@@ -235,8 +235,11 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
+    // Skips controls taken out of the tab order, such as the unselected tabs of a tablist.
     const first = ref.current?.querySelector<HTMLElement>(
-      "[autofocus], input:not([disabled]), textarea, button:not([disabled])",
+      ["[autofocus]", "input:not([disabled])", "textarea", "button:not([disabled])"]
+        .map((sel) => `${sel}:not([tabindex="-1"])`)
+        .join(", "),
     );
     first?.focus();
     const onKey = (e: KeyboardEvent) => {
