@@ -43,6 +43,7 @@ Individual developers, indie developers, and operators who manage several VPSs.
 | System credential store | `keyring` (Windows Credential Manager, macOS Keychain) | Windows Hello uses the `windows` crate. Touch ID on macOS will use `security-framework` |
 | Windows window effects | `window-vibrancy` | Mica backdrop on Windows 11 |
 | HTTP | `reqwest` (rustls) | |
+| MCP client | `rmcp`, the official Rust SDK | Client features only, used inside `hatoba-ai` (§13.9) |
 | Logging | `tracing` | |
 | Sync service | Cloudflare Workers (TypeScript) + D1 | Hono for routing, wrangler for deployment |
 
@@ -60,7 +61,7 @@ flowchart LR
       CMD["Tauri commands / channels"]
       CORE["hatoba-core<br/>crypto · vault · models · sync"]
       SSH["hatoba-ssh<br/>sessions · sftp · forwarding"]
-      AI["hatoba-ai<br/>model providers · web tools"]
+      AI["hatoba-ai<br/>model providers · web tools · MCP"]
       DB[("Local SQLite<br/>ciphertext only")]
       KC["System credential store"]
     end
@@ -74,6 +75,7 @@ flowchart LR
   CMD --> SSH
   CMD --> AI
   AI -->|HTTPS, or HTTP on a local network| Providers["User-configured model<br/>and search providers"]
+  AI -->|stdio or HTTP| MCP["User-configured<br/>MCP servers"]
   CORE --> DB
   CORE --> KC
   SSH -->|SSH| Servers["Remote servers"]
@@ -104,7 +106,7 @@ hatoba/
 │   ├── src-tauri/            # Tauri shell: commands, channels, capabilities
 │   └── e2e/                  # WebDriver end-to-end smoke test
 ├── crates/
-│   ├── hatoba-ai/            # Model provider adapters, web search, URL fetching
+│   ├── hatoba-ai/            # Model provider adapters, MCP client, web search, URL fetching
 │   ├── hatoba-core/          # Crypto, vault, data model, local store, sync engine
 │   └── hatoba-ssh/           # SSH sessions, PTY, SFTP, port forwarding, known_hosts
 ├── workers/sync/             # Cloudflare Worker source, D1 migrations, deployment guide
@@ -161,7 +163,7 @@ each item → AES-256-GCM(vault_key)
 | SEC-01 | After unlock, vault_key and decrypted items live only in Rust memory and are cleared with zeroize on lock | P0 |
 | SEC-02 | Auto-lock: idle timeout (15 minutes by default, configurable), system sleep, and manual lock (Ctrl+Shift+L) | P0 |
 | SEC-03 | By default, established SSH sessions stay connected while locked, and the UI is covered. A setting disconnects them on lock instead | P0 |
-| SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, terminal content, AI provider API keys, or AI conversation content (messages, tool inputs, and tool results) | P0 |
+| SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, terminal content, AI provider API keys, MCP server environment and header values, MCP server stderr, or AI conversation content (messages, tool inputs, and tool results) | P0 |
 | SEC-05 | Tauri hardening: CSP `default-src 'self'`, no remote content, least-privilege capabilities, devtools disabled in release builds, and no shell plugin | P0 |
 | SEC-06 | Increasing delay after repeated local unlock failures: no delay for the first 3, then doubling each time up to 5 minutes (`unlock_delay_ms` in `crates/hatoba-core/src/vault.rs`). The failure count is persisted and survives an app restart. Argon2id does not run during the delay | P0 |
 | SEC-07 | Windows Hello unlock: create a Hello credential with `KeyCredentialManager`, sign a fixed challenge, derive a wrapping key from the signature with HKDF, encrypt vault_key with it, and store the ciphertext in Credential Manager. A `UserConsentVerifier` prompt alone does not meet the requirement, because it has no cryptographic binding to vault_key | P1 |
@@ -182,7 +184,8 @@ each item → AES-256-GCM(vault_key)
 | Someone holds a valid full session token | They can change the master password (`PUT /v1/vault/password` does not ask for the old one). After losing a device, revoke it from another device and consider changing the master password |
 | Someone holds the recovery code | That equals holding the whole vault: the code decrypts `vault_key` and can reset the master password through `/v1/recover` |
 | Text on the screen, in command output, or in a fetched page steers the AI assistant (prompt injection) | In manual approval mode, every command, terminal input, and URL waits for the user, and only `web_search` queries leave without asking, to the search provider the user chose. In bypass mode the assistant can run what it is steered to on the tab's host, and `fetch_url` can carry data out in the URL it fetches. Bypass is chosen per device and per conversation (§13.5) |
-| The AI model provider leaks or keeps conversation data | It holds what the assistant sent it: messages, screen text, and tool results (§13.1). Of the vault, only the tab host's display name and user name reach it |
+| The AI model provider leaks or keeps conversation data | It holds what the assistant sent it: messages, screen text, and tool results (§13.1). Of the vault, only the tab host's display name and user name reach it, and the skills the assistant lists or reads (§13.8) |
+| A `stdio` MCP server, or an imported skill, is malicious | A `stdio` server runs with the user's privileges, so adding one is like installing software, and the settings show its full command line before it is saved. MCP tool descriptions and skill text reach the model as instructions, so settings and import show them in full, and MCP tool results are treated as data like terminal output (§13.8, §13.9) |
 | The device is compromised while unlocked | Out of scope |
 | The master password is forgotten and the recovery code is lost | The data cannot be recovered. This is by design, and the UI must say so clearly |
 
@@ -206,6 +209,7 @@ All item IDs are UUIDv7. Reading plaintext tolerates unknown and missing fields,
 type Item =
   | Host | Group | SshKey | KnownHost | PortForward | Snippet
   | AiProvider | SearchProvider | AiConversation | AiMessage
+  | Skill | SkillFile | McpServer
   | Settings;
 
 interface Host {
@@ -320,6 +324,33 @@ interface AiMessage {            // P1, one part of a conversation entry (§13.7
   part: number;                 // 0-based
   part_count: number;
   data: string;                 // This part's slice of the entry's JSON
+  updated_at: number;
+}
+
+interface Skill {                // P2, §13.8
+  type: "skill";
+  name: string;                 // 1 to 64 lowercase letters, digits, and hyphens
+  description: string;          // At most 1,024 characters
+  frontmatter: Record<string, unknown>;  // Other SKILL.md frontmatter fields, kept for export
+  enabled: boolean;
+  updated_at: number;
+}
+
+interface SkillFile {            // P2, one text file of a skill (§13.8)
+  type: "skill_file";
+  skill_id: string;
+  path: string;                 // "SKILL.md" (its body, without frontmatter) or a relative path such as references/nginx.md
+  content: string;              // UTF-8 text, at most 32 KB
+  updated_at: number;
+}
+
+interface McpServer {            // P2, §13.9
+  type: "mcp_server";
+  name: string;                 // Used in tool names
+  transport:
+    | { kind: "stdio"; command: string; args: string[]; env: Record<string, string> }
+    | { kind: "http"; url: string; headers: Record<string, string> };
+  always_ask: boolean;          // Ask even in bypass mode (AI-31)
   updated_at: number;
 }
 
@@ -841,8 +872,8 @@ The design defines the visuals. This section only specifies the behavior and sta
 | Keys | See §8.3 | Empty |
 | Cloud Sync | A three-step wizard: choose a method → enter connection details → set or enter the master password. The methods are deploying the Worker from the app (recommended, §6.7), connecting a Worker deployed with the Deploy to Cloudflare button or wrangler (Worker URL and setup token), and D1 direct mode (Account ID and API token plus a database). A status page follows | Synced, syncing, conflicts, offline, signed out, Worker update available, Worker update required. Device list and revocation |
 | Cloud Sync: in-app deployment | The connection step of the in-app method: the API token field with the **Create token** link, the Account ID (filled in when possible, or a list when the token reaches several accounts), and the Worker and database names in an expandable section. After the token check, the page lists what it will create or reuse and the Worker URL, and **Deploy** runs the steps of §6.7 with a progress row for each. On success it shows the Worker URL and continues to the master password step. **Update Worker** on the status page opens the same form with the known values filled in | Token rejected or missing a permission (naming the permission, with a link to edit the token), no workers.dev subdomain (choose one), name taken (per §6.7), each step pending, running, done, skipped, or failed, a failed step (the error, **Retry**, **Remove what Hatoba created**), waiting for workers.dev (**Check again**), offline, a build without the Worker bundle |
-| AI panel | A resizable panel at the right edge of the window, toggled with the shortcut in §9.1. The header has the conversation title, the tab's host, the permission mode switch, history, and **New conversation**. Messages render as Markdown with no raw HTML and no remote images, and links open in the system browser. Each tool call is a collapsible block with its input, output, and exit status, and approval cards appear in place. The input area has a multi-line box (Enter sends, Shift+Enter adds a line), the model selector, the context meter, and **Stop** during a turn. §13 defines the behavior | No provider configured (with a link to **Settings → AI**), no terminal tab (AI-09), streaming, waiting for approval, tool running, tool call limit reached, tab disconnected, response cut off at the output limit, response declined by the model, provider error (the HTTP status and the provider's message, with **Retry**), context nearly full, empty history |
-| Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language. **AI**: providers and their models, search provider, default model, default permission mode, and the tool call limit (§13). **About**: the app version and the update check from §11, with a switch for the automatic check. When a check finds a newer release, the settings button in the sidebar shows a dot and opens the About page | AI provider test passed or failed (AI-04), model list failed to load. Update check: checking, up to date (also when nothing has been released yet), update available (with a link to the release page), offline, failed |
+| AI panel | A resizable panel at the right edge of the window, toggled with the shortcut in §9.1. The header has the conversation title, the tab's host, the permission mode switch, history, and **New conversation**. Messages render as Markdown with no raw HTML and no remote images, and links open in the system browser. Each tool call is a collapsible block with its input, output, and exit status, and approval cards appear in place. The input area has a multi-line box (Enter sends, Shift+Enter adds a line), the model selector, a tools menu that switches MCP servers off for the conversation (AI-30), the context meter, and **Stop** during a turn. §13 defines the behavior | No provider configured (with a link to **Settings → AI**), no terminal tab (AI-09), streaming, waiting for approval, tool running, tool call limit reached, tab disconnected, response cut off at the output limit, response declined by the model, provider error (the HTTP status and the provider's message, with **Retry**), context nearly full, empty history |
+| Settings | Terminal appearance, auto-lock timeout, whether locking disconnects sessions, and language. **AI**: providers and their models, search provider, default model, default permission mode, the tool call limit, skills, and MCP servers (§13). **About**: the app version and the update check from §11, with a switch for the automatic check. When a check finds a newer release, the settings button in the sidebar shows a dot and opens the About page | AI provider test passed or failed (AI-04), model list failed to load, skill import rejected (naming the file or field), MCP server starting, running, or failed (with its stderr). Update check: checking, up to date (also when nothing has been released yet), update available (with a link to the release page), offline, failed |
 
 **Global requirements**:
 
@@ -927,7 +958,7 @@ The [development guide](development.md#testing) has the commands that run each t
 - **Deployment tests**: the in-app deployment (§6.7) runs against a mock of the Cloudflare API. The tests cover each step, every row of the existing Workers and databases tables, a failure at each step followed by a retry, cleanup, and an upgrade with a new migration, and check that the API token and the setup token never reach a log or a DTO.
 - **Client and Worker integration**: `crates/hatoba-core/tests/worker_live.rs` syncs two devices through a real Worker running in `wrangler dev` (setup, recovery, edits on both sides, conflicts, deletion, the device list, revocation), then scans the local D1 to confirm it holds only ciphertext.
 - **Frontend**: TypeScript strict mode. Type checking compares the tauri-specta bindings with the contract the frontend uses in `apps/desktop/src/ipc/contract.check.ts`, in both directions. Vitest unit tests. The [end-to-end smoke test](../apps/desktop/e2e/README.md) walks the main path with the real Rust backend and a throwaway `sshd`.
-- **AI assistant**: each `hatoba-ai` adapter runs against a mock server that replays recorded Chat Completions and Anthropic Messages streams, covering streamed text, reasoning, and tool calls, the assembly of `raw` with unknown fields kept, `raw` replay to the same model and the rebuilt message after a switch, usage with and without `stream_options` and with cached tokens, cut-off and declined responses, and provider errors. The turn tests cover approval, edit, rejection, stop, lock, the tool call limit, and cancelled results for calls left without one. Storage tests split large entries into parts under the envelope limit and merge entries that two devices added to one conversation. `fetch_url` tests refuse private addresses, including after a redirect. API keys never reach a log or a DTO, and conversation content never reaches a log.
+- **AI assistant**: each `hatoba-ai` adapter runs against a mock server that replays recorded Chat Completions and Anthropic Messages streams, covering streamed text, reasoning, and tool calls, the assembly of `raw` with unknown fields kept, `raw` replay to the same model and the rebuilt message after a switch, usage with and without `stream_options` and with cached tokens, cut-off and declined responses, and provider errors. The turn tests cover approval, edit, rejection, stop, lock, the tool call limit, and cancelled results for calls left without one. Storage tests split large entries into parts under the envelope limit and merge entries that two devices added to one conversation. `fetch_url` tests refuse private addresses, including after a redirect. MCP tests run a mock `stdio` server and a mock Streamable HTTP server, covering tool listing and calls, name and schema cleaning, `tools/list_changed`, approvals with **Always allow** and **Always ask**, and shutdown on lock. Skill import tests reject invalid names and oversized files and skip binary files. API keys and MCP environment and header values never reach a log or a DTO, and conversation content and MCP stderr never reach a log.
 - **Security checks**: scan the local database file, the D1 export, and the log files for plaintext, and confirm that none of the host names, passwords, or private keys from the test data appear in them.
 
 ---
@@ -940,7 +971,7 @@ Conversations are vault items (§5.1), encrypted and synced like hosts and keys.
 
 ### 13.1 Architecture
 
-The Rust backend holds the API keys and the conversations, builds every request from the stored conversation, and runs `run_command`, `web_search`, and `fetch_url`. The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The protocol adapters and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
+The Rust backend holds the API keys and the conversations, builds every request from the stored conversation, and runs `run_command`, `web_search`, `fetch_url`, `read_skill`, and MCP tools. The frontend renders the panel, applies the permission mode, and runs `read_terminal` and `send_input`, which need the tab's xterm instance. The protocol adapters and the web tools live in `crates/hatoba-ai`, which depends on neither Tauri nor `hatoba-ssh`. What is stored is exactly what the model receives, so continuing a conversation on another device sends the same context.
 
 A turn:
 
@@ -950,7 +981,7 @@ A turn:
 
 `ai_stop` aborts the request, closes the channels of running tools, and gives every call without a result a cancelled result. Sending a message while a turn runs stops the turn first. Locking the vault (SEC-02) stops every turn the same way: established SSH sessions can stay connected while locked (SEC-03), but the assistant never acts behind the lock screen. Before each request, Rust also gives a cancelled result to any stored call that has none, for example after a crash or after entries from two devices merge (§13.7), so every request is valid.
 
-**What the provider receives**: Hatoba's system prompt with the tool definitions, the display name and user name of the tab's host, and the current date, followed by the conversation's entries from `context_start` on (AI-21). The system prompt and every tool description state that screen text, command output, search results, and pages are data, not instructions. Nothing else comes from the vault: addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result.
+**What the provider receives**: Hatoba's system prompt with the tool definitions, the display name and user name of the tab's host, the current date, and the name and description of each enabled skill (AI-28), then the tool definitions of the enabled MCP servers as the servers describe them (AI-30), followed by the conversation's entries from `context_start` on (AI-21). The system prompt and every tool description state that screen text, command output, search results, and pages are data, not instructions. Nothing else comes from the vault: addresses, passwords, keys, and other hosts reach the provider only when they appear on the screen or in a tool result.
 
 ### 13.2 Providers and models
 
@@ -983,7 +1014,7 @@ Chat Completions covers OpenAI, Gemini through Google's OpenAI-compatible endpoi
 
 ### 13.4 Tools
 
-In manual approval mode, `read_terminal` and `web_search` run without asking, and the others wait for approval (§13.5). Every call and its result appear in the conversation as a collapsible block in both modes. A result longer than 16,000 characters keeps its first 4,000 and last 12,000 characters, with a line between them saying how much was left out. `fetch_url` pages through long content instead.
+In manual approval mode, `read_terminal` and `web_search` run without asking, and the others wait for approval (§13.5). `read_skill` (§13.8) and MCP tools (§13.9) are described in their own sections. Every call and its result appear in the conversation as a collapsible block in both modes. A result longer than 16,000 characters keeps its first 4,000 and last 12,000 characters, with a line between them saying how much was left out. `fetch_url` pages through long content instead.
 
 | ID | Tool | Behavior | Priority |
 |---|---|---|---|
@@ -997,8 +1028,8 @@ In manual approval mode, `read_terminal` and `web_search` run without asking, an
 
 | Mode | Behavior |
 |---|---|
-| Manual approval | `run_command`, `send_input`, and `fetch_url` wait for the user's approval. This is the default |
-| Bypass | Every tool runs without asking |
+| Manual approval | `run_command`, `send_input`, `fetch_url`, and MCP tools wait for the user's approval, except MCP tools set to **Always allow** on this device (AI-31). This is the default |
+| Bypass | Every tool runs without asking, except the tools of MCP servers set to **Always ask** (AI-31) |
 
 | ID | Requirement | Priority |
 |---|---|---|
@@ -1059,3 +1090,29 @@ type AiEntry = { created_at: number } & (
 - An entry's JSON is split across as many `ai_message` items as it takes to keep each item's plaintext at most 40 KB, so every envelope stays under the 64 KB limit (§6.2).
 - After unlock and after each sync pull, `ai_message` items are decrypted to read `conversation_id`, `entry_id`, and `part`, and `data` is not kept in memory. Opening a conversation decrypts its items again from the local database, so a long history does not stay in memory.
 - Deleting a conversation deletes its `ai_conversation` item and all of its `ai_message` items, which leave tombstones (§6.5).
+
+### 13.8 Skills
+
+A skill is a set of instructions for the assistant in the Agent Skills format: a folder with a `SKILL.md`, whose YAML frontmatter has `name` and `description`, and optional text files such as those in `references/`. Skills hold instructions only. Hatoba never runs a file from a skill, and the model acts on what it reads through the tools of §13.4, with the usual approvals. Skills are vault items (`skill` and `skill_file`, §5.1), so they sync to every device.
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-27 | Skills in **Settings → AI**: create a skill and edit its name, description, and files, import a folder or a `.zip` that holds a `SKILL.md`, export a skill as a `.zip`, enable or disable it, and delete it. Import shows every file before saving. It rejects a `name` that is not 1 to 64 lowercase letters, digits, and hyphens, a description longer than 1,024 characters, and files over 32 KB, and it skips files that are not UTF-8 text and lists them. When the name is taken, the user chooses whether to replace the existing skill or rename the new one. Other frontmatter fields are kept for export and have no effect, so `allowed-tools` does not change approvals | P2 |
+| AI-28 | The system prompt lists the name and description of every enabled skill. `read_skill(name, path?)` returns the body of `SKILL.md`, or the file at `path` inside the skill, and runs without asking in both modes | P2 |
+
+### 13.9 MCP servers
+
+MCP servers add tools to the assistant. Hatoba is an MCP client for tools only: it declares no other client capability (sampling, elicitation, roots) and does not use server prompts or resources. MCP tools act on whatever their server reaches, not on the tab, so AI-08 applies only to the built-in tools.
+
+| Transport | Configuration | Where it runs |
+|---|---|---|
+| `stdio` | Command, arguments, and environment variables | A child process that Rust starts on this device |
+| `http` | Streamable HTTP URL and request headers | The service at the URL |
+
+| ID | Requirement | Priority |
+|---|---|---|
+| AI-29 | MCP servers in **Settings → AI**: add, edit, and delete servers, each with a name, a transport, and its configuration. Environment and header values behave like API keys (AI-01), and only the child process or the server receives them. Adding or editing a `stdio` server shows the full command line before it is saved. The configuration syncs, and whether a server is enabled is stored on each device. A server added on another device arrives enabled if it uses `http` and disabled if it uses `stdio`, because a command that runs on one device may not exist on another | P2 |
+| AI-30 | A request offers the tools of every server that is enabled on this device and not switched off for the conversation in the panel's tools menu. Tool names are `mcp__<server>__<tool>`, cleaned to letters, digits, `_`, and `-`, cut to 64 characters, and given a numeric suffix when two collide. The adapter drops input schema keywords its protocol does not accept. A result keeps its text content, and other content is replaced with a line naming its type. A `tools/list_changed` notification refreshes the list before the next request | P2 |
+| AI-31 | In manual approval mode, every MCP tool waits for approval, and the approval card shows the server, the tool, its description, and the arguments. **Always allow**, on the card or in the server's settings, lets one tool or every tool of the server run without asking, and is stored on this device. **Always ask**, set in the server's settings, makes the server ask even in bypass mode, and syncs with the server. Annotations such as `readOnlyHint` are shown but never change whether a call asks | P2 |
+| AI-32 | A `stdio` server starts when a conversation first needs its tools and stops when the app quits or the vault locks, and locking also closes `http` sessions. Commands are looked up on `PATH` the way a shell does, including `PATHEXT` on Windows, so `npx` finds `npx.cmd`. When a server fails to start or to answer, its tool calls return error results, and the panel and the server's settings show the error with the last lines of its stderr, which stay in memory only | P2 |
+| AI-33 | Import pasted JSON or a JSON file in the `mcpServers` format of Claude Desktop, Claude Code, and Cursor, or with the `servers` key of VS Code. `env` and `headers` values move into the vault, and the file is not read again. Export writes the `mcpServers` format with placeholders in place of those values | P2 |
