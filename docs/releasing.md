@@ -12,7 +12,7 @@ Do this once. The workflow stops before building until the `release` environment
 
 ## Prepare the version and the release note
 
-The app, the crates, and the sync Worker share one version. `VERSION_FILES` in [`scripts/release/version.mjs`](../scripts/release/version.mjs) lists the files that record it, and a test in CI fails when they disagree.
+The app and the crates share one version. `VERSION_FILES` in [`scripts/release/version.mjs`](../scripts/release/version.mjs) lists the files that record it, and a test in CI fails when they disagree. The sync Worker has a version of its own, which the pull request that changes the Worker raises ([Raise the Worker version](development.md#raise-the-worker-version)), so a release leaves it as it is.
 
 On a `release/vX.Y.Z` branch from the latest `main`, run:
 
