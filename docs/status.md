@@ -59,7 +59,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | Flow C (§6.6) | ⬜ | P1 |
 | Device management | ✅ | |
 | Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it. Needs verification once the repository is public |
-| In-app one-click deployment (§6.6) | ⬜ | P2 |
+| In-app one-click deployment (§6.6) | ⬜ | P1 |
 | Tombstone purge (§6.5) | ⬜ | P2 |
 | Rollback detection (§4.4) | ⬜ | P2 |
 

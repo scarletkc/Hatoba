@@ -521,7 +521,7 @@ In the MVP, deleted items keep their tombstones forever (`envelope = NULL, delet
 
 The two sides have different vault_keys and need a merge: decrypt every local item with the local vault_key, re-encrypt it with the cloud vault_key, push it as a new item, and then replace the local meta with the cloud's. The master password becomes the cloud's master password as well. The user must confirm explicitly before this runs. In the MVP, this case only shows the message "The cloud already has a vault. On a new device, choose Restore from Cloud."
 
-**Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. A Deploy to Cloudflare button is P1, and one-click deployment inside the app through the Cloudflare API is P2.
+**Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. One-click deployment inside the app through the Cloudflare API and a Deploy to Cloudflare button are both P1.
 
 ---
 
