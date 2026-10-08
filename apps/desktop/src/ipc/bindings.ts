@@ -125,6 +125,10 @@ export const commands = {
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
+	/**  The sidebar's star prompt (spec §9). The first read records when this device started waiting. */
+	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
+	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
+	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
 };
 
 /** Events */
@@ -427,6 +431,14 @@ export type SshConfigCandidate = {
 };
 
 export type SshErrorKind = "dns" | "refused" | "timeout" | "unreachable" | "auth_failed" | "host_key_rejected" | "key_parse" | "disconnected" | "protocol" | "io" | "channel" | "sftp" | "cancelled" | "other";
+
+/**  Device-local state of the sidebar's GitHub star prompt (spec §9; never synced). */
+export type StarPrompt = {
+	/**  When this device first read the state, Unix ms. The prompt waits a day from then. */
+	first_seen_at: number,
+	/**  The user starred the repository, opened the bug report form, or closed the prompt. */
+	done: boolean,
+};
 
 export type SyncConfigInput = { kind: "worker"; url: string; setup_token: string | null } | { kind: "d1"; account_id: string; database_id: string; api_token: string };
 

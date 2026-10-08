@@ -1,13 +1,16 @@
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Button, Icon, TextField } from "@/components/controls";
 import { Dialog, Menu, confirm, toast, useMenu } from "@/components/overlay";
+import { openExternal } from "@/features/sync/external";
 import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { GroupView, SyncStatus } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { REPO_URL, bugReportUrl } from "@/lib/github";
 import { tagColor } from "@/lib/tags";
 import { useVaultData } from "./data";
 import { errorMessage } from "./errors";
+import { useStarPrompt, useStarPromptDue } from "./star";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TitlebarDrag } from "./TitleBar";
@@ -146,6 +149,7 @@ export function Sidebar() {
         {item("sync", "cloud", t("sidebar.sync"), null, () => go({ kind: "sync" }))}
       </div>
 
+      <StarPrompt />
       <div className={st.footer}>
         <SyncFooter status={sync} onClick={() => go({ kind: "sync" })} />
         <button type="button" className={st.footerButton} title={t("sidebar.lock")} aria-label={t("sidebar.lock")} onClick={() => void lock()}>
@@ -209,6 +213,45 @@ function GroupDialog({ group, count, onClose }: { group: GroupView | null; count
         <TextField large autoFocus value={name} placeholder={t("sidebar.groupName")} aria-label={t("sidebar.groupName")} maxLength={64} onChange={(e) => setName(e.target.value)} />
       </form>
     </Dialog>
+  );
+}
+
+/** Asks for a GitHub star once it is due, on the home tab, and not while the update dot shows (spec §9). */
+function StarPrompt() {
+  const t = useT();
+  const info = useApp((st) => st.info);
+  const due = useStarPromptDue(useTabs((s) => s.connectedOnce));
+  const home = useTabs((s) => s.active === "home");
+  const updateAvailable = useUpdate(selectUpdateAvailable);
+  useEffect(() => {
+    void useStarPrompt.getState().load();
+  }, []);
+
+  if (!home || updateAvailable || !due) return null;
+  const { finish } = useStarPrompt.getState();
+  const open = (url: string) => {
+    finish();
+    void openExternal(url);
+  };
+  return (
+    <section className={st.star} aria-label={t("sidebar.star.title")}>
+      <div className={st.starHead}>
+        <Icon name="star" fill className={st.starIcon} />
+        <span className={st.starTitle}>{t("sidebar.star.title")}</span>
+        <button type="button" className={st.headingButton} title={t("btn.close")} aria-label={t("btn.close")} onClick={finish}>
+          <Icon name="x" />
+        </button>
+      </div>
+      <p className={st.starBody}>{t("sidebar.star.body")}</p>
+      <div className={st.starActions}>
+        <Button size="sm" variant="primary" onClick={() => open(REPO_URL)}>
+          {t("sidebar.star.star")}
+        </Button>
+        <Button size="sm" onClick={() => open(bugReportUrl(info))}>
+          {t("sidebar.star.report")}
+        </Button>
+      </div>
+    </section>
   );
 }
 

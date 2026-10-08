@@ -84,6 +84,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | GitHub Releases | 🟡 | The [Release workflow](../.github/workflows/release.yml) publishes the installer after approval; [Release Hatoba](releasing.md) has the steps |
 | Authenticode code signing | ⬜ | P1. Azure Trusted Signing could keep the cost down |
 | Update check in Settings → About | 🟡 | Unit tests cover the handling of GitHub's answers. Not yet tried against a published release |
+| Star prompt and **Report a Problem** (§9) | 🟡 | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form not yet tried on GitHub |
 | Signed updates through the Tauri updater | ⬜ | P1 |
 
 ## AI assistant (§13)

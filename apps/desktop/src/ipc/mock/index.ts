@@ -8,6 +8,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  StarPrompt,
   SyncStatus,
   VaultStatus,
 } from "../types";
@@ -20,7 +21,9 @@ import { FakeShell } from "./shell";
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth
  *   ?platform=windows | macos | linux       ?update=available | offline | error
+ *   ?star=due
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
+ * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createMockApi(): HatobaApi {
@@ -35,6 +38,7 @@ export function createMockApi(): HatobaApi {
   let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
   let settings = structuredClone(D.SETTINGS);
   let prefs: LocalPrefs = loadPrefs();
+  const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
   let forwards: ForwardView[] = demo === "empty" ? [] : D.FORWARDS.map((f) => ({ ...f }));
@@ -513,6 +517,10 @@ export function createMockApi(): HatobaApi {
     prefs_save: async (next) => {
       prefs = next;
       localStorage.setItem("hatoba.mock.prefs", JSON.stringify(next));
+    },
+    star_prompt_get: async () => ({ ...starPrompt }),
+    star_prompt_done: async () => {
+      starPrompt.done = true;
     },
 
     window_snap_overlay: async () => {},

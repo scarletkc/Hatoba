@@ -1,0 +1,64 @@
+# Settings → About and the sidebar's star prompt fill in `version` and `os` through the URL
+# (bugReportUrl in apps/desktop/src/lib/github.ts), so keep those field ids.
+name: Report a problem
+description: Something in Hatoba or the sync Worker does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report a security vulnerability [privately](https://github.com/scarletkc/Hatoba/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Hatoba version
+      description: Settings → About shows it. If you built Hatoba yourself, give the commit.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and its version
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Connection or sync details
+      description: >-
+        For a connection or authentication problem: the SSH server and its version, the
+        authentication method, and whether the connection goes through ProxyJump or ssh-agent.
+        For a sync problem: whether you sync through a Worker or directly to D1, and for a
+        Worker, the `version` that its `/v1/health` endpoint reports.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. Read them before
+        pasting and redact host details you do not want public. Never post a password, private
+        key, passphrase, recovery code, setup token, or session token.
+      render: text

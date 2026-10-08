@@ -134,6 +134,49 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The star prompt (spec §9), above the footer. */
+.star {
+  flex: none;
+  margin: 0 10px 10px;
+  padding: 9px 10px 10px 12px;
+  border-radius: var(--radius-panel);
+  background: var(--fill);
+  font-size: var(--text-sm);
+}
+
+.starHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.starIcon {
+  font-size: 14px;
+  color: var(--orange);
+}
+
+.starTitle {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.starBody {
+  margin: 4px 0 10px;
+  color: var(--fg2);
+  line-height: 1.4;
+}
+
+.starActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.starActions > * {
+  flex: 1 1 auto;
+}
+
 .footer {
   flex: none;
   display: flex;

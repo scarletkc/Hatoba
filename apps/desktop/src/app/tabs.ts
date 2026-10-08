@@ -16,6 +16,8 @@ interface TabsState {
   tabs: SessionTab[];
   /** "home" or a SessionTab id. */
   active: string;
+  /** A session has connected since launch. */
+  connectedOnce: boolean;
   openSession(hostId: string, title: string): string;
   closeTab(id: string): void;
   activate(id: string): void;
@@ -28,6 +30,7 @@ let seq = 0;
 export const useTabs = create<TabsState>((set, get) => ({
   tabs: [],
   active: "home",
+  connectedOnce: false,
   openSession: (hostId, title) => {
     const id = `tab-${++seq}`;
     set((s) => ({ tabs: [...s.tabs, { id, hostId, title, status: "connecting", sessionId: null }], active: id }));
@@ -42,7 +45,11 @@ export const useTabs = create<TabsState>((set, get) => ({
       return { tabs, active };
     }),
   activate: (active) => set({ active }),
-  update: (id, patch) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
+  update: (id, patch) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+      connectedOnce: s.connectedOnce || patch.status === "connected",
+    })),
   cycle: (direction) => {
     const { tabs, active } = get();
     const order = ["home", ...tabs.map((t) => t.id)];

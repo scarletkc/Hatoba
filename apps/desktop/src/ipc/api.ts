@@ -20,6 +20,7 @@ import type {
   ProbeResult,
   SettingsView,
   SshConfigCandidate,
+  StarPrompt,
   SyncConfigInput,
   SyncStatus,
   SyncTestResult,
@@ -142,6 +143,10 @@ export interface HatobaApi {
   settings_save(settings: SettingsView): Promise<void>;
   prefs_get(): Promise<LocalPrefs>;
   prefs_save(prefs: LocalPrefs): Promise<void>;
+  /** The sidebar's star prompt (spec §9). The first call records when this device started waiting. */
+  star_prompt_get(): Promise<StarPrompt>;
+  /** The prompt never shows again. */
+  star_prompt_done(): Promise<void>;
 
   // window (Windows custom title bar, WIN-01)
   window_snap_overlay(): Promise<void>;

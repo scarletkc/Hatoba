@@ -1,0 +1,26 @@
+name: Suggest a feature
+description: A task that Hatoba makes hard or does not support yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: The task that fails or takes too long today, with a real example.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it happens
+      description: The platform, and whether sync is involved.
+  - type: textarea
+    id: impact
+    attributes:
+      label: If nothing changes
+      description: What happens if nothing changes, and any workaround you use.
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Optional. Describe the problem above first.
