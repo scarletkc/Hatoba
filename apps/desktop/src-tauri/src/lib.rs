@@ -123,7 +123,8 @@ pub fn run() {
             builder.mount_events(app);
             let handle = app.handle().clone();
 
-            let data_dir = app.path().app_data_dir()?;
+            // §5.2: the vault holds device-local state, so keep it out of the roaming profile.
+            let data_dir = app.path().app_local_data_dir()?;
             let log_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             std::fs::create_dir_all(&log_dir)?;

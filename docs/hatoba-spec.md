@@ -343,6 +343,16 @@ Device-local data such as the last connection time and the window size is **not 
 
 ### 5.2 Local SQLite
 
+The local database is `vault.db` in the app's local data directory, with SQLite's `vault.db-wal` and `vault.db-shm` beside it:
+
+| Platform | Location |
+|---|---|
+| Windows | `%LOCALAPPDATA%\app.hatoba.desktop\vault.db`, next to the `logs` folder |
+| macOS | `~/Library/Application Support/app.hatoba.desktop/vault.db` |
+| Linux | `$XDG_DATA_HOME/app.hatoba.desktop/vault.db`, by default `~/.local/share/app.hatoba.desktop/vault.db` |
+
+The database holds device-local data (the device ID, the sync cursor, the local preferences, and `local_state`), so it must not live in a directory that roams with the user profile. On Windows that rules out `%APPDATA%`: roaming profiles copy it to other machines, which would then share one device ID, and it is often redirected to a network share, where SQLite's WAL is unreliable.
+
 `MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
 
 - `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on.
