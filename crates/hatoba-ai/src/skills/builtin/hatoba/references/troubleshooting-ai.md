@@ -41,6 +41,25 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 - "The model returned nothing.": the model produced no text; try again or switch model.
 - Models that do not support tool calls cannot work as the assistant: the provider answers with an error as soon as a request carries tools.
 
+## Thinking level and reasoning
+
+| en | zh-CN | ja |
+|---|---|---|
+| Thinking Level | 思考程度 | 思考レベル |
+| Default | 默认 | 既定 |
+| The model doesn’t accept the chosen thinking level, so this message was sent at its default level. | 模型不接受所选的思考程度，这条消息以模型的默认程度发送。 | モデルが選んだ思考レベルを受け付けないため、このメッセージはモデルの既定のレベルで送信しました。 |
+| Reasoning | 思考过程 | 思考過程 |
+| Thinking | 思考程度 | 思考レベル |
+| Levels this model accepts | 这个模型接受的思考程度 | このモデルが受け付けるレベル |
+| None | 无 | なし |
+| Thinking level for new conversations | 新对话的思考程度 | 新しい会話の思考レベル |
+
+- The note "The model doesn’t accept the chosen thinking level, so this message was sent at its default level." means the provider answered with an error naming the thinking fields, so Hatoba sent the message once more without them. Pick **Default** under **Thinking Level** for that model, or fix the model's levels: in the provider (Settings → AI → Providers), open the model's **Thinking** menu ("Levels this model accepts") and untick the levels it refuses, or choose **None**. A provider that is not really OpenAI- or Anthropic-compatible is the usual cause.
+- A level missing from the menu: the menu lists only the levels the model offers. Add them in the model's **Thinking** menu, or use **Fetch Models** so the provider's list fills them in. A model with unknown levels offers Low, Medium and High only.
+- A different level than the one chosen: a level the model lacks is sent as the highest lower level it has, and the menu shows the level that is sent.
+- No **Reasoning** block: the model may not return its reasoning, or at **Default** it may not think at all (some Claude models only think when a level is chosen). Choose a level other than Default. Chat Completions services show reasoning only when they return it as `reasoning_content` or `reasoning`.
+- Slow or costly answers: higher levels think longer and use more output tokens. Lower the level, or set **Thinking level for new conversations** (Settings → AI → Default Model) to Default.
+
 ## Test Connection and provider settings
 
 **Test Connection** in the provider form, and in Settings → AI → Web Search, tells the failure apart:
@@ -75,7 +94,6 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | The search service returned an error. | 搜索服务返回了错误。 | 検索サービスがエラーを返しました。 |
 | Enter the instance URL. | 请输入实例地址。 | インスタンスの URL を入力してください。 |
 | Web Search | 网页搜索 | Web 検索 |
-| None | 无 | なし |
 | SearXNG | SearXNG | SearXNG |
 
 - For **SearXNG** the instance must allow the JSON output format (`search.formats` includes `json` in its settings).

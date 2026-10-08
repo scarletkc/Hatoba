@@ -36,6 +36,8 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | New Conversation | 新对话 | 新しい会話 |
 | History | 历史对话 | 履歴 |
 | Model | 模型 | モデル |
+| Thinking Level | 思考程度 | 思考レベル |
+| Compact | 压缩 | 圧縮 |
 | Send (Enter) | 发送（Enter） | 送信（Enter） |
 | Stop | 停止 | 停止 |
 | MCP tools | MCP 工具 | MCP ツール |
@@ -115,20 +117,9 @@ An approval card appears in the conversation for a call that needs approval. It 
 
 What goes with a message is covered in `references/ai-attachments.md`: the terminal selection, **Ask AI** about a failed connection (diagnostics), long pastes (Ctrl+Shift+V pastes as text), and text files attached with the paperclip, the clipboard or a drop on the panel.
 
-## Model, context and compaction
+## Model, thinking level, context and compaction
 
-- **Model** lists the models of all providers, grouped by provider. A new conversation starts with the default model (Settings → AI → **Default Model**); a conversation keeps the model it used last. Switching keeps the whole conversation.
-- The context meter (a ring with a percentage, or a token count when the model's context window is unknown) shows how much of the window the conversation uses; hover for the numbers. "≈" marks an estimate. At 80% it turns to a warning color and offers **Compact**.
-- **Compact** (also **Compact Conversation** in the meter's menu) asks the model to summarize the conversation. The summary becomes the start of the context; earlier messages stay visible, marked "Everything above is outside the context". Hatoba also compacts by itself before a request that would pass 90% of the context window (the status reads "Compacting the conversation…"). **Stop** during that compaction cancels the message and puts it back in the input.
-- Model reasoning, when the provider returns it, is shown above the answer as **Reasoning**, collapsed.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Context usage | 上下文用量 | コンテキストの使用量 |
-| Compact | 压缩 | 圧縮 |
-| Compact Conversation | 压缩对话 | 会話を圧縮 |
-| Reasoning | 思考过程 | 思考過程 |
-| Everything above is outside the context | 以上内容不在上下文中 | ここより上はコンテキストに含まれません |
+The **Model** picker (with its **Thinking Level** row), the context meter, **Compact**, automatic compaction and the reasoning display are in `references/ai-models.md`. Provider and model setup is in `references/ai-settings.md`.
 
 ## History, search, export, edit
 

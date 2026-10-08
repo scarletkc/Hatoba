@@ -38,6 +38,9 @@ The assistant calls the providers added here directly from the device, with the 
 | Display Name | 显示名称 | 表示名 |
 | Context | 上下文窗口 | コンテキスト |
 | Max Output | 输出上限 | 出力上限 |
+| Thinking | 思考程度 | 思考レベル |
+| Levels this model accepts | 这个模型接受的思考程度 | このモデルが受け付けるレベル |
+| None | 无 | なし |
 | Add | 添加 | 追加 |
 
 - **Add Provider** (shown at the top once a provider exists, or in the empty state) opens the form; click a provider's row to edit it, and the bin icon deletes it. Deleting removes its API key and model list from the vault and from the other devices; existing conversations stay but need another model to continue.
@@ -45,7 +48,7 @@ The assistant calls the providers added here directly from the device, with the 
 - **Base URL**: for Chat Completions include the API version, such as `https://api.openai.com/v1`. For Anthropic use the address the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com`. HTTPS is required; plain HTTP is allowed only for local and private-network addresses.
 - **API Key**: stored encrypted in the vault and synced to the other devices. After saving it shows **Saved** and can be replaced or cleared but never viewed. It may stay empty for a server that needs none.
 - **Auth Header** (Anthropic protocol only): `x-api-key` (most services) or `Authorization: Bearer` (a few).
-- **Models**: type a model ID and press Enter (or **Add**), or use **Fetch Models** to list the provider's models and pick from them. Each model has a display name, an optional **Context** window and **Max Output** in tokens (enter 200000 or 200K). The context window drives the usage meter and compaction. The output limit becomes `max_tokens` for Anthropic requests (16,000 when unknown).
+- **Models**: type a model ID and press Enter (or **Add**), or use **Fetch Models** to list the provider's models and pick from them. Each model has a display name, an optional **Context** window and **Max Output** in tokens (enter 200000 or 200K). The context window drives the usage meter and compaction. **Thinking** lists the thinking levels the model accepts (Low, Medium, High, Extra High, Max). Its button opens a menu titled "Levels this model accepts" where each level is ticked or not; **None** means the model offers only Default. A model typed in by hand, or one whose list gave no levels, shows Low, Medium and High. **Fetch Models** fills the levels in from the provider's list when it gives them (Anthropic's does), also for models already in the form that have none yet. The output limit becomes `max_tokens` for Anthropic requests (16,000 when unknown).
 - **Test Connection** sends a minimal request to the first model (or fetches the model list when none is entered) and tells a rejected key, an unreachable server and an unknown model apart. Test messages are in `references/troubleshooting-ai.md`.
 
 ## Default Model and Web Search
@@ -53,8 +56,8 @@ The assistant calls the providers added here directly from the device, with the 
 | en | zh-CN | ja |
 |---|---|---|
 | Model for new conversations | 新对话使用的模型 | 新しい会話で使うモデル |
+| Thinking level for new conversations | 新对话的思考程度 | 新しい会話の思考レベル |
 | Search provider | 搜索服务 | 検索プロバイダー |
-| None | 无 | なし |
 | Brave Search API | Brave Search API | Brave Search API |
 | Tavily | Tavily | Tavily |
 | SearXNG | SearXNG | SearXNG |
@@ -62,6 +65,7 @@ The assistant calls the providers added here directly from the device, with the 
 | Remove Configuration | 移除配置 | 設定を削除 |
 
 - **Model for new conversations** is the model a new conversation starts with. It needs at least one provider with a model, and it syncs. Each conversation then keeps the model it used last.
+- **Thinking level for new conversations** is the level a new conversation starts at: Default, Low, Medium, High, Extra High or Max (see `references/ai-models.md`). It syncs. A model that does not offer that level uses the highest lower level it has. Each conversation then keeps the level it used last. What is sent: for OpenAI Chat Completions a `reasoning_effort` of low, medium or high (xhigh or max only for a model whose levels include them); for Anthropic Messages an `output_config` effort, with adaptive thinking switched on for models that support it. Default sends none of these.
 - **Search provider** is the backend of the assistant's web search. Choose **Brave Search API** or **Tavily** (enter the **API Key**) or **SearXNG** (enter the **Instance URL** of your own instance, which must have the JSON format enabled), then **Test Connection** and **Save**. **None** (the default) means the assistant has no web search tool. Search terms go to the chosen service. **Remove Configuration** deletes the saved settings and key.
 
 ## Skills

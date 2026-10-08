@@ -72,9 +72,10 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
-| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, context and compaction, history, export and edit |
+| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, history, export and edit, the MCP tools menu |
+| `references/ai-models.md` | The model picker, the Thinking Level (Default to Max), the context meter, Compact and automatic compaction, the reasoning display |
 | `references/ai-attachments.md` | What goes with an AI message: the terminal selection, Ask AI about a failed connection, long pastes, text files, size limits and the context-fit note |
-| `references/ai-settings.md` | Settings → AI: providers and models, web search, default model, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
+| `references/ai-settings.md` | Settings → AI: providers and models (including each model's thinking levels), web search, default model and thinking level, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
 | `references/settings.md` | General, Appearance, Security and About settings, language, update check, Report a Problem, and which settings sync |
 | `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, …), jump hosts, host key prompts, keepalive and the disconnect banner, and how to read the diagnostics that **Ask AI** attaches |
