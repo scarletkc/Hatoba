@@ -101,6 +101,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             settings::settings_save,
             settings::prefs_get,
             settings::prefs_save,
+            settings::star_prompt_get,
+            settings::star_prompt_done,
         ])
         .events(collect_events![
             dto::VaultLockedEvent,

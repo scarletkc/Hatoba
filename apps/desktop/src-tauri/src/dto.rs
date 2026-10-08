@@ -544,6 +544,15 @@ impl LocalPrefs {
     }
 }
 
+/// Device-local state of the sidebar's GitHub star prompt (spec §9; never synced).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct StarPrompt {
+    /// When this device first read the state, Unix ms. The prompt waits a day from then.
+    pub first_seen_at: i64,
+    /// The user starred the repository, opened the bug report form, or closed the prompt.
+    pub done: bool,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Platform {

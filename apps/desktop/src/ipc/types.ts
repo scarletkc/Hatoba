@@ -436,6 +436,14 @@ export interface LocalPrefs {
   auto_update_check: boolean;
 }
 
+/** Device-local state of the sidebar's GitHub star prompt (spec §9). */
+export interface StarPrompt {
+  /** When this device first read the state, Unix ms. The prompt waits a day from then. */
+  first_seen_at: number;
+  /** The user starred the repository, opened the bug report form, or closed the prompt. */
+  done: boolean;
+}
+
 export interface AppInfo {
   version: string;
   platform: "windows" | "macos" | "linux" | "web";

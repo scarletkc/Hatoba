@@ -6,16 +6,17 @@ import { toast } from "@/components/overlay";
 import { copyText } from "@/features/keys/clipboard";
 import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
+import { REPO_URL, bugReportUrl } from "@/lib/github";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
-const REPO_URL = "https://github.com/scarletkc/Hatoba";
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
 
-/** Settings → About: the version, the update check (spec §11), and links to the source and license. */
+/** Settings → About: the version, the update check (spec §11), and links to the source, license, and bug report form. */
 export function AboutPane() {
   const t = useT();
   const version = useApp((st) => st.info.version);
+  const platform = useApp((st) => st.info.platform);
   const [prefs, setPrefs] = usePrefs();
   const { checking, result, error, check } = useUpdate();
   const update = !checking && !error && result?.update_available ? result : null;
@@ -93,6 +94,9 @@ export function AboutPane() {
         </LinkButton>
         <LinkButton icon="scales" onClick={() => void openExternal(LICENSE_URL)}>
           {t("settings.about.license")}
+        </LinkButton>
+        <LinkButton icon="bug" onClick={() => void openExternal(bugReportUrl({ version, platform }))}>
+          {t("settings.about.report")}
         </LinkButton>
       </div>
     </Pane>

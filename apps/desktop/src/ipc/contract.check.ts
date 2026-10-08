@@ -34,6 +34,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.ConflictView, Ui.ConflictView>>,
   Check<Assignable<Rust.SettingsView, Ui.SettingsView>>,
   Check<Assignable<Rust.LocalPrefs, Ui.LocalPrefs>>,
+  Check<Assignable<Rust.StarPrompt, Ui.StarPrompt>>,
   Check<Assignable<Rust.VaultLockedEvent, Ui.VaultLockedEvent>>,
   Check<Assignable<Rust.ForwardView, Ui.ForwardView>>,
   Check<Assignable<Rust.ForwardStatusEvent, Ui.ForwardStatusEvent>>,

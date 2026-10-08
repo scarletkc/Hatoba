@@ -1,13 +1,16 @@
-//! Synced settings item (spec §5.1 `Settings`) and device-local preferences.
+//! Synced settings item (spec §5.1 `Settings`), device-local preferences, and the star prompt state.
 
 use hatoba_core::model::{
     CursorStyle, Item, SETTINGS_ID, Settings, TerminalSettings as CoreTerminal, ThemeMode,
 };
+use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 
-use crate::dto::{CursorChoice, LocalPrefs, SettingsView, TerminalSettings, ThemeChoice};
+use crate::dto::{
+    CursorChoice, LocalPrefs, SettingsView, StarPrompt, TerminalSettings, ThemeChoice,
+};
 use crate::error::{AppError, AppResult};
-use crate::state::AppState;
+use crate::state::{AppState, now_ms};
 use crate::{lock, sync};
 
 pub fn settings_view(s: &Settings) -> SettingsView {
@@ -105,5 +108,44 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 pub fn prefs_save(state: State<'_, AppState>, prefs: LocalPrefs) -> AppResult<()> {
     let json = serde_json::to_string(&prefs).map_err(|e| AppError::internal(e.to_string()))?;
     state.vault().set_local_prefs(&json)?;
+    Ok(())
+}
+
+/// The sidebar's star prompt (spec §9). The first read records when this device started waiting.
+#[tauri::command]
+#[specta::specta]
+pub fn star_prompt_get(state: State<'_, AppState>) -> AppResult<StarPrompt> {
+    load_star_prompt(&mut state.vault())
+}
+
+/// The user starred, opened the bug report form, or closed the prompt: it never shows again.
+#[tauri::command]
+#[specta::specta]
+pub fn star_prompt_done(state: State<'_, AppState>) -> AppResult<()> {
+    let mut vault = state.vault();
+    let mut prompt = load_star_prompt(&mut vault)?;
+    prompt.done = true;
+    store_star_prompt(&mut vault, &prompt)
+}
+
+/// A missing or unreadable state starts the wait now.
+fn load_star_prompt(vault: &mut Vault) -> AppResult<StarPrompt> {
+    if let Some(prompt) = vault
+        .star_prompt()?
+        .and_then(|j| serde_json::from_str(&j).ok())
+    {
+        return Ok(prompt);
+    }
+    let prompt = StarPrompt {
+        first_seen_at: now_ms(),
+        done: false,
+    };
+    store_star_prompt(vault, &prompt)?;
+    Ok(prompt)
+}
+
+fn store_star_prompt(vault: &mut Vault, prompt: &StarPrompt) -> AppResult<()> {
+    let json = serde_json::to_string(prompt).map_err(|e| AppError::internal(e.to_string()))?;
+    vault.set_star_prompt(&json)?;
     Ok(())
 }
