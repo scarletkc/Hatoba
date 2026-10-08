@@ -72,7 +72,8 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
-| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, the terminal selection, Ask AI about a failed connection, history, compaction |
+| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, context and compaction, history, export and edit |
+| `references/ai-attachments.md` | What goes with an AI message: the terminal selection, Ask AI about a failed connection, long pastes, text files, size limits and the context-fit note |
 | `references/ai-settings.md` | Settings → AI: providers and models, web search, default model, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
 | `references/settings.md` | General, Appearance, Security and About settings, language, update check, Report a Problem, and which settings sync |

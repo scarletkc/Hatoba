@@ -131,7 +131,7 @@ A connection opens a new terminal tab (orange dot while connecting). The connect
 
 ## When a connection fails or ends
 
-- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (opens the AI panel with the diagnostics attached; nothing is sent until the user sends it, see `references/ai-panel.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. See `references/troubleshooting-connections.md` for each reason.
+- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (opens the AI panel with the diagnostics attached; nothing is sent until the user sends it, see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. See `references/troubleshooting-connections.md` for each reason.
 - A connection that ends later (the server closed it, the network dropped, keepalives went unanswered) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
 - Closing a tab (the × on the tab, middle-click, or Ctrl+Shift+W / ⌘W) ends its session.
 - Locking keeps open sessions connected in the background unless **Disconnect all sessions when locked** is on (Settings → Security).

@@ -17,6 +17,10 @@ pub const VERSION_PLACEHOLDER: &str = "{{HATOBA_VERSION}}";
 const FILES: &[(&str, &str)] = &[
     (SKILL_MD, include_str!("builtin/hatoba/SKILL.md")),
     (
+        "references/ai-attachments.md",
+        include_str!("builtin/hatoba/references/ai-attachments.md"),
+    ),
+    (
         "references/ai-panel.md",
         include_str!("builtin/hatoba/references/ai-panel.md"),
     ),
