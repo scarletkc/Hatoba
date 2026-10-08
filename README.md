@@ -46,6 +46,12 @@ you deploy to your own Cloudflare account.
 - **Cloud sync**: through your Worker or directly to D1, with incremental
   sync, automatic conflict resolution you can review item by item, and a
   device list with revocation.
+- **AI assistant**: a panel beside each terminal that reads the screen, runs
+  commands, and types into the shell with your approval (or without it, in
+  bypass mode), and can search the web and read pages. It uses your own
+  OpenAI-compatible or Anthropic API key, supports skills and MCP servers, and
+  takes terminal selections, connection errors, long pastes, and text files as
+  attachments. Conversations sync with the rest of the vault.
 
 ## Security
 
@@ -56,6 +62,11 @@ or any plaintext. If you forget the master password and lose the recovery code,
 your data cannot be recovered. The
 [security model](docs/hatoba-spec.md#4-security-model-and-encryption) describes
 the key hierarchy and the threat model.
+
+The AI assistant sends the model provider your messages, their attachments,
+and what its tools read. Host addresses, passwords, and keys reach the provider
+only when they appear on the screen, in a tool result, or in an attachment you
+send.
 
 ## Build from source
 

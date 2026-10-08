@@ -92,18 +92,19 @@ This page tracks implementation progress, items awaiting verification, and follo
 
 | ID | Name | Status | Notes |
 |---|---|---|---|
-| AI-01…06 | Providers, models, Test Connection, model selector, reasoning | ⬜ | P1 |
-| AI-07…09 | One conversation per tab, attaching conversations | ⬜ | P1 |
-| AI-10 | Ask AI about the terminal selection | ⬜ | P2 |
-| AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | ⬜ | P1 |
-| AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ⬜ | P1 |
-| AI-19 | Allow a tool for the rest of a conversation | ⬜ | P2 |
-| AI-20, 21 | Context meter, compaction | ⬜ | P1 |
-| AI-22 | Automatic compaction | ⬜ | P2 |
-| AI-23 | Conversation history | ⬜ | P1 |
-| AI-24…26 | History search, Markdown export, edit and resend | ⬜ | P2 |
-| AI-27, 28 | Skills: management, import and export, `read_skill` | ⬜ | P2 |
-| AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | ⬜ | P2 |
+| AI-01…06 | Providers, models, Test Connection, model selector, reasoning | 🟡 | Adapter tests replay recorded Chat Completions and Anthropic Messages streams from a mock server. Not yet tried against the real providers |
+| AI-07…09 | One conversation per tab, attaching conversations | ✅ | A conversation with no connected tab is offered every tool but the terminal ones |
+| AI-10 | Terminal selection and connection diagnostics as attachments, **Ask AI** | ✅ | |
+| AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |
+| AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
+| AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ✅ | |
+| AI-19 | Allow a tool for the rest of a conversation | ✅ | |
+| AI-20, 21 | Context meter, compaction | ✅ | |
+| AI-22 | Automatic compaction | ✅ | |
+| AI-23 | Conversation history | ✅ | |
+| AI-24…26 | History search, Markdown export, edit and resend | ✅ | |
+| AI-27, 28, 34 | Skills: management, import and export, `read_skill`, the built-in `hatoba` skill | ✅ | A test checks every label the built-in skill quotes against the i18n tables |
+| AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | 🟡 | Tests run mock `stdio` and Streamable HTTP servers. Not yet tried with real servers on Windows, such as ones started with `npx` |
 
 ## MVP scope
 
