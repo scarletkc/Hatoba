@@ -78,6 +78,7 @@
   flex-direction: column;
   gap: 18px;
   padding-bottom: 8px;
+  align-self: flex-start;
 }
 
 /* Address · Port label · Port */
