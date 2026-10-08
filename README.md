@@ -106,10 +106,6 @@ guide.
 - [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
 - [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
 
-Documentation follows the
-[Seiso Convention 0.2.0](https://seiso.fog.moe/0.2.0/convention), checked with
-[seiso](https://github.com/scarletkc/seiso).
-
 ## License
 
 Hatoba is licensed under [MIT](LICENSE).

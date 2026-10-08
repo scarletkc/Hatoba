@@ -1,7 +1,3 @@
----
-kind: howto
----
-
 # 开发指南
 
 在本地构建、运行和测试 Hatoba。CI 执行的完整检查见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)。

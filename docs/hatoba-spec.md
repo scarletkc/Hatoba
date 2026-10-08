@@ -1,7 +1,3 @@
----
-kind: reference
----
-
 # Hatoba 架构与需求文档
 
 ## 0. 范围与约定
