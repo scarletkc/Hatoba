@@ -10,7 +10,7 @@ import { normalizeWorkerUrl, type WorkerForm } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";
 
-/** The manual steps from spec §6.6, in the order the Worker README gives them. */
+/** The manual steps from the Worker deployment guide (`workers/sync/README.md`), in its order. */
 const WRANGLER_STEPS = [
   "npm install",
   "npx wrangler d1 create hatoba",

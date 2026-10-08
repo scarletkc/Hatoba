@@ -1,74 +1,115 @@
+<div align="center">
+
+<img src="apps/desktop/src-tauri/app-icon.svg" alt="Hatoba logo" width="128" />
+
 # Hatoba
 
-**Hatoba（波止場）** 是一款开源桌面 SSH 客户端：集中管理主机、密钥和终端会话，并通过**你自己的 Cloudflare 账号**（Worker + D1）做端到端加密同步。
+**An open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account.**
 
-- **没有官方服务器**：同步后端部署在你的 Cloudflare 账号里，Hatoba 接触不到你的数据。
-- **端到端加密**：所有条目在本机用 AES-256-GCM 加密后才离开设备；Worker、D1 乃至整个 Cloudflare 账号泄露也只会暴露密文。
-- **本地优先**：没有网络、没有开启同步时功能完整可用。
-- **Windows 优先**：自绘标题栏、Snap Layouts、Mica、Segoe / Cascadia 字体、Windows 输入法；macOS 与 Linux 随后跟进。
+[![CI](https://img.shields.io/github/actions/workflow/status/scarletkc/Hatoba/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/scarletkc/Hatoba/actions/workflows/ci.yml)
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
+[![Sync](https://img.shields.io/badge/sync-Cloudflare%20Workers%20%2B%20D1-F38020?logo=cloudflare&logoColor=white)](workers/sync/README.md)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-> 状态：开发中（0.1）。需求与架构见 [`docs/hatoba-spec.md`](docs/hatoba-spec.md)，逐条实现情况见 [`docs/status.md`](docs/status.md)，视觉设计稿见 [`docs/design/`](docs/design/)。
+</div>
 
-## 功能
+Hatoba (波止場, "wharf") keeps your hosts, keys, and terminal sessions in one
+place. Its sync backend is a Worker and a D1 database that you deploy to your
+own Cloudflare account, and every item is encrypted on your device before it
+leaves. There is no Hatoba server, and nobody else holds your data.
 
-| 模块 | 内容 |
-|---|---|
-| 主机 | 分组、标签、收藏、模糊搜索、最近连接、在线状态探测、导入 `~/.ssh/config`、ProxyJump 跳板机 |
-| 终端 | 多标签、xterm-256color / truecolor、中日文宽字符与输入法、复制粘贴（多行确认）、终端内搜索、可点击链接 |
-| 认证 | 密码、私钥（ed25519 / ecdsa / rsa，含口令）、每次询问、ssh-agent、keyboard-interactive（2FA） |
-| 安全 | 首次连接指纹确认（TOFU），指纹变化阻断连接；主密码 + Argon2id；恢复码；自动锁定（闲置 / 睡眠 / 手动） |
-| SFTP | 终端右侧文件面板，拖拽上传、下载、进度与取消、重命名、删除、新建目录 |
-| 密钥库 | 导入（OpenSSH / PEM / PuTTY .ppk）、生成 ed25519 / RSA 4096、复制公钥、部署公钥到主机 |
-| 云同步 | Worker 模式（推荐）或 D1 直连；增量同步、冲突自动解决并可逐条查看、设备管理与吊销 |
+- **No official server.** The sync backend runs in your Cloudflare account,
+  so Hatoba never sees your data.
+- **End-to-end encrypted.** A leaked Worker, D1 database, or even the whole
+  Cloudflare account exposes only ciphertext.
+- **Local first.** Everything works offline, with or without sync.
+- **Windows first.** A custom title bar with Snap Layouts, Mica, Segoe UI and
+  Cascadia fonts, and Windows input methods. macOS and Linux follow.
 
-## 仓库结构
+## Features
 
-```
-apps/desktop/          Tauri 2 桌面应用
-  src/                 前端：React + TypeScript + Vite + Zustand + xterm.js
-  src-tauri/           Tauri 壳：commands、events、channels、capabilities
-crates/hatoba-core/    加密、保险库、数据模型、本地 SQLite、同步引擎（不依赖 Tauri）
-crates/hatoba-ssh/     SSH 会话、PTY、SFTP、端口转发、密钥解析（russh）
-workers/sync/          Cloudflare Worker（Hono + D1）及部署说明
-docs/                  需求文档与设计稿
-```
+- **Hosts**: groups, tags, favorites, fuzzy search, recent connections, online
+  status, `~/.ssh/config` import, and ProxyJump.
+- **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
+  methods, confirmation before multi-line paste, search, and clickable links.
+- **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
+  a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
+  (2FA).
+- **Security**: host key confirmation on first connect, a blocked connection
+  when the key changes, a master password with a recovery code, and auto-lock
+  on idle, on sleep, or on demand.
+- **SFTP**: a file panel beside the terminal with drag-and-drop upload,
+  download with progress and cancel, rename, delete, and new folder.
+- **Key vault**: import OpenSSH, PEM, and PuTTY `.ppk` keys, generate Ed25519
+  or RSA 4096 keys, and copy or deploy public keys.
+- **Port forwarding**: local forwards that can start with the connection.
+- **Cloud sync**: through your Worker or directly to D1, with incremental
+  sync, automatic conflict resolution you can review item by item, and a
+  device list with revocation.
 
-## 开发
+## Build from source
 
-需要 Rust stable、Node.js 22+、pnpm 10。Windows 上需要 WebView2（Windows 11 自带）；Linux 需要 `libwebkit2gtk-4.1-dev` 等 Tauri 依赖。
+You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
+WebView2, which Windows 11 includes; Linux needs the Tauri system dependencies
+such as `libwebkit2gtk-4.1-dev`.
 
 ```sh
 pnpm install
-pnpm tauri dev            # 启动桌面应用
-pnpm dev                  # 只启动前端（浏览器中使用内置的模拟后端，带设计稿示例数据）
-
-cargo test --workspace    # Rust 单元测试
-pnpm typecheck && pnpm test
+pnpm tauri dev
 ```
 
-前端在浏览器中运行时会自动使用 `src/ipc/mock`，可用 URL 参数切换演示状态，例如
-`?state=onboarding`、`?state=locked`、`?state=empty`、`?sync=conflict`。
+On Windows, `pnpm tauri build` produces the NSIS installer. The
+[development guide](docs/development.md) covers the browser-only frontend,
+tests, and generated TypeScript bindings.
 
-SSH 集成测试使用真实的 OpenSSH 服务器：`HATOBA_SSH_IT=1 cargo test -p hatoba-ssh`（需要已安装 `sshd`）。
+## Set up sync
 
-TypeScript 绑定由 tauri-specta 从 Rust 生成：`cargo test -p hatoba-desktop export_bindings`；`src/ipc/contract.check.ts` 会在类型检查时比对生成的绑定与前端使用的契约。
+Sync is optional. To deploy the Worker, run these commands from `workers/sync`
+with Node.js 22 or later:
 
-端到端冒烟测试（Linux，真实后端 + 临时 sshd）：见 [`apps/desktop/e2e`](apps/desktop/e2e/README.md)。
-
-## 部署同步 Worker
-
-见 [`workers/sync/README.md`](workers/sync/README.md)：`wrangler d1 create` → `wrangler d1 migrations apply` → `wrangler secret put SETUP_TOKEN` → `wrangler deploy`，然后在 Hatoba 的「云同步」中填写 Worker 地址和 Setup Token。
-
-## 安全模型（摘要）
-
-```
-主密码 ─Argon2id(64 MiB, t=3, p=4)→ master_key ─HKDF→ enc_key（仅本机） / auth_key（登录 Worker）
-vault_key（随机 32 字节）─AES-256-GCM(enc_key)→ protected_vault_key
-每个条目 ─AES-256-GCM(vault_key, AAD = hatoba/item/v1/{id})→ 信封 {v, n, c}
+```sh
+npm install
+npx wrangler login
+npx wrangler d1 create hatoba                       # put the printed database_id in wrangler.toml
+npx wrangler d1 migrations apply hatoba --remote
+openssl rand -base64 32                             # generate a setup token and keep it
+npx wrangler secret put SETUP_TOKEN                 # paste the setup token
+npx wrangler deploy
 ```
 
-服务端只保存 `SHA-256(auth_key)` 和密文；条目类型等元数据也不以明文出现。忘记主密码且丢失恢复码时数据无法恢复——这是设计使然。完整说明见规格文档 §4。
+In Hatoba, open **Cloud Sync** in the sidebar, choose **Deploy a Worker**,
+enter the Worker URL and the setup token, and select **Test Connection**.
+Other devices choose **Restore from Cloud** on first launch and need only the
+Worker URL and the master password.
+The [deployment guide](workers/sync/README.md) explains each step and covers
+upgrades, resets, and backups.
 
-## 许可证
+## Security
 
-[MIT](LICENSE)
+Keys are derived from your master password with Argon2id, and every item is
+encrypted with AES-256-GCM before it is stored or synced. The Worker stores
+ciphertext and the hashes it needs to sign you in, never your master password
+or any plaintext. If you forget the master
+password and lose the recovery code, your data cannot be recovered. The
+[security model](docs/hatoba-spec.md#4-安全模型与加密设计) describes the key
+hierarchy and the threat model.
+
+## Documentation
+
+The documentation below is written in Chinese, except the end-to-end test
+guide.
+
+- [Architecture and requirements](docs/hatoba-spec.md): architecture, security model, data formats, the sync protocol and Worker API, and requirements
+- [Implementation status](docs/status.md): progress on each requirement, milestones, and open questions
+- [Development](docs/development.md): building, running, and testing
+- [Deploying the sync Worker](workers/sync/README.md): deployment, upgrades, resets, and backups
+- [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
+- [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
+
+Documentation follows the
+[Seiso Convention 0.2.0](https://seiso.fog.moe/0.2.0/convention), checked with
+[seiso](https://github.com/scarletkc/seiso).
+
+## License
+
+Hatoba is licensed under [MIT](LICENSE).
