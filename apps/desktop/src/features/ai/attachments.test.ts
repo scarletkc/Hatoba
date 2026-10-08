@@ -6,6 +6,7 @@ import {
   cleanTerminalText,
   clipText,
   composeMessage,
+  droppedFile,
   FILE_MAX_BYTES,
   fitsMessage,
   isLongPaste,
@@ -203,6 +204,20 @@ describe("text files (AI-35)", () => {
     expect(checkFile("logo.SVG", "", 10)).toEqual({ ok: false, reason: "image" });
     expect(checkFile("big.log", "text/plain", FILE_MAX_BYTES + 1)).toEqual({ ok: false, reason: "too_large" });
     expect(checkFile("app.log", "text/plain", 100)).toBeNull();
+  });
+
+  it("makes files Rust read from a drop on the desktop app into the same attachments", () => {
+    // What `textFile` makes of the same bytes.
+    const bytes = new TextEncoder().encode("server {\r\n  listen 80;\r\n}\n");
+    const read = textFile("nginx.conf", bytes);
+    expect(droppedFile({ status: "ok", name: "nginx.conf", text: "server {\r\n  listen 80;\r\n}\n" })).toEqual(read);
+    expect(droppedFile({ status: "ok", name: "C:\\Users\\kc\\x.md", text: "x" })).toEqual({ ok: true, file: { kind: "file", name: "x.md", lines: 1, text: "x" } });
+    // Each refusal keeps its reason and names the file, never a path.
+    for (const reason of ["image", "too_large", "binary", "unreadable"] as const)
+      expect(droppedFile({ status: "refused", name: "/home/kc/data.bin", reason })).toEqual({ ok: false, name: "data.bin", reason });
+    // The size cap holds here too, in UTF-8 bytes.
+    expect(droppedFile({ status: "ok", name: "big.txt", text: "é".repeat(FILE_MAX_BYTES / 2 + 1) })).toEqual({ ok: false, name: "big.txt", reason: "too_large" });
+    expect(droppedFile({ status: "ok", name: "max.txt", text: "a".repeat(FILE_MAX_BYTES) }).ok).toBe(true);
   });
 });
 

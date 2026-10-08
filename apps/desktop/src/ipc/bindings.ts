@@ -214,6 +214,13 @@ export const commands = {
 	 *  starts a turn whose events stream on `channel`, like `ai_send`.
 	 */
 	aiEditResend: (conversationId: string, entryId: string, text: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_edit_resend", { conversationId, entryId, text, context, channel }),
+	/**
+	 *  AI-35: text files dropped on the panel in the desktop app, whose webview hands the WebView
+	 *  only their paths. Reads only paths of the window's last drop, each once
+	 *  (`crate::dropped`); with any other path, nothing is read. One result per path, in order,
+	 *  naming the file by its base name. The per-message total stays the panel's to check.
+	 */
+	aiReadDroppedFiles: (paths: string[]) => __TAURI_INVOKE<DroppedFile[]>("ai_read_dropped_files", { paths }),
 	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
 	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
 	/**  The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
@@ -225,10 +232,11 @@ export const commands = {
 	/**  Reads a folder or `.zip` the user picked; nothing is saved. */
 	skillImportPreview: (path: string) => __TAURI_INVOKE<SkillImportPreview>("skill_import_preview", { path }),
 	/**
-	 *  Imports what the preview showed, reading the path again. `replace_id` replaces that skill;
-	 *  `rename` saves it under a new name.
+	 *  Imports what the preview showed: reads the path again and refuses it when it no longer
+	 *  matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
+	 *  new name.
 	 */
-	skillImport: (path: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, replaceId, rename }),
+	skillImport: (path: string, token: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, token, replaceId, rename }),
 	/**  Writes the skill as a `.zip` to a path the user picked. */
 	skillExport: (id: string, path: string) => __TAURI_INVOKE<null>("skill_export", { id, path }),
 	mcpServersList: () => __TAURI_INVOKE<McpServerView[]>("mcp_servers_list"),
@@ -247,15 +255,16 @@ export const commands = {
 	 */
 	mcpSetAlwaysAllow: (serverId: string, tool: string | null, allow: boolean) => __TAURI_INVOKE<null>("mcp_set_always_allow", { serverId, tool, allow }),
 	/**
-	 *  The MCP tool behind a name the model called: from the newest offer a request made with it,
-	 *  else from the running servers. Null when neither has it, or its server was deleted.
+	 *  The MCP tool behind a name the model called in the conversation: from the offer of the
+	 *  conversation's latest request, as `ai_tool_run` resolves it, else from the running servers.
+	 *  Null when neither has it, or its server was deleted; the panel then asks in either mode.
 	 */
-	mcpToolInfo: (name: string) => __TAURI_INVOKE<{
+	mcpToolInfo: (conversationId: string, name: string) => __TAURI_INVOKE<{
 	server_id: string,
 	server_name: string,
 	always_ask: boolean,
 	tool: McpToolView,
-} | null>("mcp_tool_info", { name }),
+} | null>("mcp_tool_info", { conversationId, name }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */
@@ -592,6 +601,23 @@ export type DeviceView = {
 	last_seen: number,
 	current: boolean,
 };
+
+/**
+ *  A text file dropped on the AI panel (AI-35), named by its base name only, never its path (a
+ *  path can name the local user).
+ */
+export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
+
+/**  Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons. */
+export type DroppedFileRefusal = 
+/**  An image, which attachments do not take yet. */
+"image" | 
+/**  Over 256 KB. */
+"too_large" | 
+/**  NUL bytes or invalid UTF-8. */
+"binary" | 
+/**  Not a file, gone, or not readable. */
+"unreadable";
 
 export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  In-app deployment (§6.7): Cloudflare rejected the API token. */
@@ -959,6 +985,11 @@ export type SkillImportPreview = {
 	existing_id: string | null,
 	/**  The name is the built-in skill's (AI-34): the skill can be imported only under another. */
 	reserved_name: boolean,
+	/**
+	 *  A digest of what was read, which `skill_import` takes back: it imports the source only if
+	 *  it still reads the same, so what is saved is what this preview showed.
+	 */
+	token: string,
 };
 
 export type SkillInput = {

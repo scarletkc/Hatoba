@@ -24,7 +24,6 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
 
@@ -35,7 +34,7 @@ use hatoba_ai::mcp::{self, McpConnection, McpError, McpTool, McpTransportConfig,
 use hatoba_ai::provider::Protocol;
 use hatoba_ai::tools;
 use hatoba_core::Vault;
-use hatoba_core::model::McpTransport;
+use hatoba_core::model::{Item, McpTransport};
 use hatoba_core::sync::SharedVault;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -52,6 +51,9 @@ use crate::error::{AppError, AppResult};
 const START_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long one tool call may take.
 const CALL_TIMEOUT: Duration = Duration::from_secs(120);
+/// How long stopping every server waits for the starts in flight to end (their children are
+/// killed as soon as they see the stop).
+const START_STOP_WAIT: Duration = Duration::from_secs(5);
 
 fn guard<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -207,6 +209,17 @@ pub fn config_view(c: &McpTransportConfig) -> McpTransportView {
     }
 }
 
+/// Whether the server's item is in the vault: one deleted on another device keeps its
+/// connection until the next request stops it, and must not run a call meanwhile.
+pub fn server_exists(v: &Vault, id: &str) -> bool {
+    v.get(id).and_then(Item::as_mcp_server).is_some()
+}
+
+/// The error result of a call whose server was deleted.
+pub fn server_gone(server_name: &str) -> String {
+    format!("The MCP server \"{server_name}\" was deleted, so the tool did not run.")
+}
+
 /// The kind of a failure, for logs (never its message, which may quote the server).
 pub fn error_kind(e: &McpError) -> &'static str {
     match e {
@@ -319,6 +332,35 @@ enum Unavailable {
     Cancelled,
 }
 
+/// A start in flight, so that a stop can abort it: the start's task drops the connect, which
+/// kills a stdio server's process tree (an `npx` download, say) instead of letting it run on
+/// for up to [`START_TIMEOUT`] behind the lock screen, or past the app's exit.
+struct Start {
+    /// Aborts the start.
+    cancel: CancellationToken,
+    /// Cancelled when the start's task has ended, its child killed (a drop guard in the task).
+    ended: CancellationToken,
+}
+
+/// What a start needs from [`ServerState::begin`].
+struct Begun {
+    generation: u64,
+    /// The stderr buffer the start writes.
+    stderr: StderrTail,
+    /// The previous connection, which the start shuts down first.
+    old: Option<McpConnection>,
+    cancel: CancellationToken,
+    ended: CancellationToken,
+}
+
+/// What a stop leaves to finish outside the locks.
+struct Halted {
+    /// The connection to shut down.
+    conn: Option<McpConnection>,
+    /// Ends when the aborted start's task has ended.
+    start_ended: Option<CancellationToken>,
+}
+
 /// One server's live state.
 struct ServerState {
     /// Bumped by every start and stop, so that a start that was overtaken drops its result.
@@ -328,6 +370,8 @@ struct ServerState {
     name: String,
     config: Option<McpTransportConfig>,
     conn: Option<McpConnection>,
+    /// The start in flight, if any.
+    start: Option<Start>,
     /// Shown with `failed` (AI-32); may quote the server, so never logged.
     error: Option<String>,
     /// The stdio server's stderr, kept in memory only.
@@ -344,6 +388,7 @@ impl Default for ServerState {
             name: String::new(),
             config: None,
             conn: None,
+            start: None,
             error: None,
             stderr: StderrTail::new(),
             tools: Vec::new(),
@@ -352,13 +397,8 @@ impl Default for ServerState {
 }
 
 impl ServerState {
-    /// Begins a start with `config`; returns the start's generation, the stderr buffer it
-    /// writes, and the previous connection, which the start shuts down first.
-    fn begin(
-        &mut self,
-        name: &str,
-        config: &McpTransportConfig,
-    ) -> (u64, StderrTail, Option<McpConnection>) {
+    /// Begins a start with `config`, aborting one that is still in flight.
+    fn begin(&mut self, name: &str, config: &McpTransportConfig) -> Begun {
         self.generation += 1;
         self.phase = McpServerState::Starting;
         name.clone_into(&mut self.name);
@@ -366,18 +406,40 @@ impl ServerState {
         self.error = None;
         self.tools.clear();
         self.stderr = StderrTail::new();
-        (self.generation, self.stderr.clone(), self.conn.take())
+        if let Some(previous) = self.start.take() {
+            previous.cancel.cancel();
+        }
+        let start = Start {
+            cancel: CancellationToken::new(),
+            ended: CancellationToken::new(),
+        };
+        let begun = Begun {
+            generation: self.generation,
+            stderr: self.stderr.clone(),
+            old: self.conn.take(),
+            cancel: start.cancel.clone(),
+            ended: start.ended.clone(),
+        };
+        self.start = Some(start);
+        begun
     }
 
-    /// Stops: returns the connection to shut down.
-    fn halt(&mut self) -> Option<McpConnection> {
+    /// Stops, aborting a start in flight.
+    fn halt(&mut self) -> Halted {
         self.generation += 1;
         self.phase = McpServerState::Stopped;
         self.config = None;
         self.error = None;
         self.tools.clear();
         self.stderr = StderrTail::new();
-        self.conn.take()
+        let start_ended = self.start.take().map(|start| {
+            start.cancel.cancel();
+            start.ended
+        });
+        Halted {
+            conn: self.conn.take(),
+            start_ended,
+        }
     }
 
     /// The connection closed by itself (the child exited, the transport broke): `failed`, with
@@ -397,10 +459,10 @@ struct Server {
 }
 
 impl Server {
-    fn halt(&self) -> Option<McpConnection> {
-        let conn = guard(&self.state).halt();
+    fn halt(&self) -> Halted {
+        let halted = guard(&self.state).halt();
         self.settled.notify_waiters();
-        conn
+        halted
     }
 }
 
@@ -413,9 +475,8 @@ struct Inner {
     http: OnceLock<reqwest::Client>,
     events: OnceLock<Arc<dyn McpEvents>>,
     servers: Mutex<HashMap<String, Arc<Server>>>,
-    /// The latest offer of each conversation, with a sequence number for recency.
-    offers: Mutex<HashMap<String, (u64, Arc<Offer>)>>,
-    next_offer: AtomicU64,
+    /// The latest offer of each conversation.
+    offers: Mutex<HashMap<String, Arc<Offer>>>,
 }
 
 impl McpManager {
@@ -569,7 +630,7 @@ impl McpManager {
                 .collect()
         };
         for (id, server) in gone {
-            let conn = server.halt();
+            let conn = server.halt().conn;
             let (manager, vault) = (self.clone(), Arc::clone(vault));
             spawn(async move {
                 if let Some(conn) = conn {
@@ -595,7 +656,7 @@ impl McpManager {
             Ready(Vec<McpTool>),
             Wait,
             Relist(McpConnection, u64),
-            Start(u64, StderrTail, Option<McpConnection>),
+            Start(Begun),
             Dead(Option<McpConnection>),
         }
         let server = self.server(id);
@@ -618,8 +679,7 @@ impl McpManager {
                 }
                 match s.phase {
                     McpServerState::Running | McpServerState::Failed if changed && !waited => {
-                        let (generation, stderr, old) = s.begin(name, config);
-                        Next::Start(generation, stderr, old)
+                        Next::Start(s.begin(name, config))
                     }
                     McpServerState::Running => match s.conn.clone() {
                         Some(conn) if conn.is_closed() => Next::Dead(s.closed()),
@@ -630,10 +690,7 @@ impl McpManager {
                     McpServerState::Starting => Next::Wait,
                     McpServerState::Failed => return None,
                     McpServerState::Stopped if waited => return None,
-                    McpServerState::Stopped => {
-                        let (generation, stderr, old) = s.begin(name, config);
-                        Next::Start(generation, stderr, old)
-                    }
+                    McpServerState::Stopped => Next::Start(s.begin(name, config)),
                 }
             };
             match next {
@@ -643,16 +700,10 @@ impl McpManager {
                     let s = guard(&server.state);
                     return (s.phase == McpServerState::Running).then(|| s.tools.clone());
                 }
-                Next::Start(generation, stderr, old) => {
+                Next::Start(begun) => {
                     // `starting` goes out before the start can end.
                     self.emit(vault, id);
-                    self.spawn_start(
-                        vault,
-                        id,
-                        &server,
-                        config.clone(),
-                        (generation, stderr, old),
-                    );
+                    self.spawn_start(vault, id, &server, config.clone(), begun);
                 }
                 Next::Dead(conn) => {
                     drop(conn);
@@ -674,14 +725,15 @@ impl McpManager {
 
     /// Starts a server in a task of its own, so a turn that stops waiting does not abort it:
     /// connects, lists the tools, and records the outcome unless a stop or a newer start came
-    /// first, or the vault locked meanwhile.
+    /// first, or the vault locked meanwhile. A stop or a newer start aborts it: dropping the
+    /// connect kills a stdio server's process tree.
     fn spawn_start(
         &self,
         vault: &SharedVault,
         id: &str,
         server: &Arc<Server>,
         config: McpTransportConfig,
-        (generation, stderr, old): (u64, StderrTail, Option<McpConnection>),
+        begun: Begun,
     ) {
         let (manager, vault, server, id) = (
             self.clone(),
@@ -689,13 +741,21 @@ impl McpManager {
             Arc::clone(server),
             id.to_owned(),
         );
+        let Begun {
+            generation,
+            stderr,
+            old,
+            cancel,
+            ended,
+        } = begun;
         spawn(async move {
-            if let Some(old) = old {
-                old.shutdown().await;
-            }
-            tracing::info!(server_id = %id, transport = config.kind_str(), "MCP server starting");
-            let http = manager.http();
-            let started =
+            let _ended = ended.drop_guard();
+            let start = async {
+                if let Some(old) = old {
+                    old.shutdown().await;
+                }
+                tracing::info!(server_id = %id, transport = config.kind_str(), "MCP server starting");
+                let http = manager.http();
                 match McpConnection::connect_with_stderr(&config, &http, START_TIMEOUT, stderr)
                     .await
                 {
@@ -707,12 +767,21 @@ impl McpManager {
                         }
                     },
                     Err(e) => Err(e),
-                };
+                }
+            };
+            let started = tokio::select! {
+                biased;
+                () = cancel.cancelled() => Err(McpError::Cancelled),
+                started = start => started,
+            };
             drop(config);
             let unlocked = guard(&vault).is_unlocked();
             let (current, stale) = {
                 let mut s = guard(&server.state);
                 let current = s.generation == generation;
+                if current {
+                    s.start = None;
+                }
                 if !current {
                     (false, started.ok().map(|(conn, _)| conn))
                 } else if !unlocked {
@@ -787,37 +856,27 @@ impl McpManager {
 
     /// Keeps the offer a conversation's request was made with, so its calls map back to it.
     pub fn record_offer(&self, conversation_id: &str, offer: Offer) {
-        let seq = self.0.next_offer.fetch_add(1, Ordering::Relaxed);
-        guard(&self.0.offers).insert(conversation_id.to_owned(), (seq, Arc::new(offer)));
+        guard(&self.0.offers).insert(conversation_id.to_owned(), Arc::new(offer));
     }
 
     /// The tool behind `name` in a call of the conversation: from the offer of its latest
-    /// request, or, when this run of the app made none, from the running servers.
+    /// request, or, when this run of the app made none, from the running servers. The approval
+    /// card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve names here, so they
+    /// always name the same server: names are per request, since cleaned server names can
+    /// collide and the tools menu changes which servers a conversation's requests offer.
     pub fn offered(&self, conversation_id: &str, name: &str) -> Option<OfferedTool> {
-        let offer = guard(&self.0.offers)
-            .get(conversation_id)
-            .map(|(_, offer)| Arc::clone(offer));
+        let offer = guard(&self.0.offers).get(conversation_id).cloned();
         match offer {
             Some(offer) => offer.find(name).cloned(),
             None => self.current_tools().find(name).cloned(),
         }
     }
 
-    /// The tool behind `name` for the approval card: from the newest offer that has it, else
-    /// from the running servers.
-    pub fn lookup(&self, name: &str) -> Option<OfferedTool> {
-        let mut offers: Vec<(u64, Arc<Offer>)> = guard(&self.0.offers).values().cloned().collect();
-        offers.sort_by_key(|(seq, _)| std::cmp::Reverse(*seq));
-        offers
-            .iter()
-            .find_map(|(_, offer)| offer.find(name).cloned())
-            .or_else(|| self.current_tools().find(name).cloned())
-    }
-
     // ---- calls (AI-30, AI-32) ----
 
     /// Calls an offered tool and returns the result to store: `ok`, `error` (the tool failed,
-    /// or the server is not running or failed, named with its error), or `cancelled`.
+    /// the server is not running or failed, named with its error, or its item was deleted), or
+    /// `cancelled`.
     pub async fn call(
         &self,
         vault: &SharedVault,
@@ -847,6 +906,18 @@ impl McpManager {
                 );
             }
         };
+        // Deleted on another device while the connection still runs (the next request stops
+        // it): nothing runs, whatever the call was approved as. Checked after any wait for a
+        // start, right before the call.
+        {
+            let v = guard(vault);
+            if !v.is_unlocked() {
+                return (ToolStatus::Cancelled, String::new());
+            }
+            if !server_exists(&v, &tool.server_id) {
+                return (ToolStatus::Error, server_gone(server_name));
+            }
+        }
         let result = conn
             .call_tool(&tool.tool.name, arguments, cancel, CALL_TIMEOUT)
             .await;
@@ -966,7 +1037,7 @@ impl McpManager {
     ) -> McpServerStatus {
         let server = self.server(id);
         let begun = guard(&server.state).begin(name, &config);
-        let generation = begun.0;
+        let generation = begun.generation;
         server.settled.notify_waiters();
         self.emit(vault, id);
         self.spawn_start(vault, id, &server, config, begun);
@@ -1020,8 +1091,8 @@ impl McpManager {
                 self.emit(vault, id);
                 self.spawn_start(vault, id, &server, config, begun);
             }
-            Err(conn) => {
-                if let Some(conn) = conn {
+            Err(halted) => {
+                if let Some(conn) = halted.conn {
                     conn.shutdown().await;
                 }
                 self.emit(vault, id);
@@ -1031,7 +1102,7 @@ impl McpManager {
 
     /// Stops a server (`mcp_server_stop`, or disabled on this device).
     pub async fn stop(&self, vault: &SharedVault, id: &str) {
-        if let Some(conn) = self.existing(id).and_then(|server| server.halt()) {
+        if let Some(conn) = self.existing(id).and_then(|server| server.halt().conn) {
             conn.shutdown().await;
             tracing::info!(server_id = id, "MCP server stopped");
         }
@@ -1041,7 +1112,7 @@ impl McpManager {
     /// A deleted server: stopped and forgotten.
     pub async fn forget(&self, vault: &SharedVault, id: &str) {
         let server = guard(&self.0.servers).remove(id);
-        if let Some(conn) = server.and_then(|s| s.halt()) {
+        if let Some(conn) = server.and_then(|s| s.halt().conn) {
             conn.shutdown().await;
             tracing::info!(server_id = id, "MCP server stopped: it was deleted");
         }
@@ -1061,14 +1132,34 @@ impl McpManager {
         self.stop_everything().await;
     }
 
+    /// Stops every server and aborts every start in flight, and waits until the aborted starts
+    /// have killed their children (at most [`START_STOP_WAIT`]).
     async fn stop_everything(&self) -> Vec<String> {
         let servers: Vec<(String, Arc<Server>)> = guard(&self.0.servers).drain().collect();
         guard(&self.0.offers).clear();
-        let conns: Vec<McpConnection> = servers.iter().filter_map(|(_, s)| s.halt()).collect();
-        if !conns.is_empty() {
-            tracing::info!(count = conns.len(), "MCP servers stopping");
+        let mut conns = Vec::new();
+        let mut starts = Vec::new();
+        for (_, server) in &servers {
+            let halted = server.halt();
+            conns.extend(halted.conn);
+            starts.extend(halted.start_ended);
         }
-        join_all(conns.iter().map(McpConnection::shutdown)).await;
+        if !conns.is_empty() || !starts.is_empty() {
+            tracing::info!(
+                count = conns.len(),
+                starting = starts.len(),
+                "MCP servers stopping"
+            );
+        }
+        let starts_ended = join_all(
+            starts
+                .iter()
+                .map(|ended| tokio::time::timeout(START_STOP_WAIT, ended.cancelled())),
+        );
+        futures::join!(
+            join_all(conns.iter().map(McpConnection::shutdown)),
+            starts_ended
+        );
         servers.into_iter().map(|(id, _)| id).collect()
     }
 }

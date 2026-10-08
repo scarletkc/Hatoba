@@ -18,21 +18,21 @@ use hatoba_core::model::{
 };
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
-use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::ai::{
-    AiEnv, EventSink, auth_header, conversation_view, find_conversation, protocol, search_kind,
+    AiEnv, EventSink, auth_header, conversation_view, conversation_view_at, find_conversation,
+    protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiModel, AiModelRef,
     AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
     AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent,
-    SearchKind, SearchProviderInput, SearchProviderView,
+    DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
-use crate::sync;
+use crate::{dropped, sync};
 
 /// The query `search_provider_test` sends.
 const TEST_QUERY: &str = "Hatoba SSH client";
@@ -338,11 +338,10 @@ pub async fn ai_provider_models(
     state: State<'_, AppState>,
     input: AiProviderInput,
 ) -> AppResult<Vec<AiModel>> {
-    let config = state.with_unlocked(|v| provider_config_for(v, &input))?;
-    // `AiManager` has no token a lock cancels for work outside a conversation, so a lock cannot
-    // abort this request yet.
-    let cancel = CancellationToken::new();
-    let models = hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel)
+    // Registered with the read, so a lock either came first or aborts the request.
+    let (config, op) =
+        state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
+    let models = hatoba_ai::models::list_models(&state.ai.http(), &config, op.token())
         .await
         .map_err(|e| {
             tracing::info!(
@@ -370,12 +369,11 @@ pub async fn ai_provider_test(
     state: State<'_, AppState>,
     input: AiProviderInput,
 ) -> AppResult<AiTestResult> {
-    let config = state.with_unlocked(|v| provider_config_for(v, &input))?;
+    let (config, op) =
+        state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
     let model = input.models.first().map(|m| m.id.trim().to_owned());
-    // As for the model list, the token is not one a lock cancels.
-    let cancel = CancellationToken::new();
     let outcome =
-        hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref(), &cancel)
+        hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref(), op.token())
             .await;
     tracing::info!(ok = outcome.ok, failure = ?outcome.failure, status = ?outcome.status, "AI provider test");
     Ok(test_result(outcome))
@@ -511,14 +509,10 @@ pub async fn search_provider_test(
     state: State<'_, AppState>,
     input: SearchProviderInput,
 ) -> AppResult<AiTestResult> {
-    let config = state.with_unlocked(|v| search_config_for(v, &input))?;
-    let result = hatoba_ai::web::web_search(
-        &state.ai.http(),
-        &config,
-        TEST_QUERY,
-        &CancellationToken::new(),
-    )
-    .await;
+    let (config, op) =
+        state.with_unlocked(|v| Ok((search_config_for(v, &input)?, state.ai.background_op())))?;
+    let result =
+        hatoba_ai::web::web_search(&state.ai.http(), &config, TEST_QUERY, op.token()).await;
     Ok(match result {
         Ok(_) => AiTestResult {
             ok: true,
@@ -644,9 +638,10 @@ pub async fn ai_conversations_list(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<AiConversationView>> {
     state.with_unlocked(|v| {
+        let last = v.ai_last_activities();
         Ok(v.ai_conversations()
             .iter()
-            .map(|(id, c)| conversation_view(v, id, c))
+            .map(|(id, c)| conversation_view_at(id, c, last.get(id).copied().unwrap_or(0)))
             .collect())
     })
 }
@@ -848,6 +843,26 @@ pub async fn ai_edit_resend(
         .await?;
     tauri::async_runtime::spawn(task);
     Ok(started)
+}
+
+/// AI-35: text files dropped on the panel in the desktop app, whose webview hands the WebView
+/// only their paths. Reads only paths of the window's last drop, each once
+/// (`crate::dropped`); with any other path, nothing is read. One result per path, in order,
+/// naming the file by its base name. The per-message total stays the panel's to check.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_read_dropped_files(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> AppResult<Vec<DroppedFile>> {
+    state.with_unlocked(|_| Ok(()))?;
+    let paths = state.dropped.take(&paths).ok_or_else(|| {
+        AppError::invalid("paths", "Only files dropped on the window can be read.")
+    })?;
+    let files: Vec<DroppedFile> =
+        blocking(move || Ok(paths.iter().map(|p| dropped::read(p)).collect())).await?;
+    tracing::info!(files = files.len(), "dropped files read");
+    Ok(files)
 }
 
 #[cfg(test)]

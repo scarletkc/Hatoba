@@ -16,6 +16,7 @@
  * blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a conversation.
  */
 
+import type { DroppedFile } from "@/ipc/types";
 import { estimateTokens } from "./meter";
 
 /** As for tool results (§13.4): over this many characters, the first 4,000 and the last 12,000 are kept. */
@@ -129,7 +130,10 @@ export function baseName(name: string): string {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|ico|svg|heic|heif|avif|tiff?)$/i;
 
-export type FileCheck = { ok: true; file: FileAttachment } | { ok: false; reason: "image" | "too_large" | "binary" };
+/** Why a file is not attached: the checks here, and `unreadable` when it could not be read at all. */
+export type FileRefusal = "image" | "too_large" | "binary" | "unreadable";
+
+export type FileCheck = { ok: true; file: FileAttachment } | { ok: false; reason: Exclude<FileRefusal, "unreadable"> };
 
 /** Whether a file is an image, by its type or name; images are not supported yet. */
 export function isImage(name: string, type: string): boolean {
@@ -153,8 +157,25 @@ export function textFile(name: string, bytes: Uint8Array): FileCheck {
   } catch {
     return { ok: false, reason: "binary" };
   }
+  return { ok: true, file: fileAttachment(name, text) };
+}
+
+/** A file's text as an attachment: line breaks as `\n`, named by its base name. */
+function fileAttachment(name: string, text: string): FileAttachment {
   const clean = text.replace(/\r\n?/g, "\n");
-  return { ok: true, file: { kind: "file", name: baseName(name), lines: lineCount(clean), text: clean } };
+  return { kind: "file", name: baseName(name), lines: lineCount(clean), text: clean };
+}
+
+/**
+ * A file dropped on the panel in the desktop app, as Rust read it (`ai_read_dropped_files`, with the
+ * checks of `checkFile` and `textFile`), made into an attachment the same way, or the reason it is
+ * refused. The size cap is checked again here.
+ */
+export function droppedFile(result: DroppedFile): { ok: true; file: FileAttachment } | { ok: false; name: string; reason: FileRefusal } {
+  const name = baseName(result.name);
+  if (result.status === "refused") return { ok: false, name, reason: result.reason };
+  if (new TextEncoder().encode(result.text).length > FILE_MAX_BYTES) return { ok: false, name, reason: "too_large" };
+  return { ok: true, file: fileAttachment(name, result.text) };
 }
 
 /** The UTF-8 size of an attachment's text, which counts toward the per-message cap. */

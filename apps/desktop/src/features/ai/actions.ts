@@ -17,6 +17,7 @@ import type {
   AiTurnContext,
   AiTurnEndReason,
   AiTurnEvent,
+  DroppedFile,
   McpToolInfo,
 } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
@@ -25,6 +26,7 @@ import {
   checkFile,
   chipShown,
   composeMessage,
+  droppedFile,
   FILE_MAX_BYTES,
   fitsMessage,
   makeAttachment,
@@ -32,31 +34,32 @@ import {
   makePaste,
   MESSAGE_MAX_BYTES,
   nextSelection,
+  parseMessage,
   textFile,
   type Attachment,
   type FileAttachment,
+  type FileRefusal,
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
-import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type Slot, type TabSelection } from "./store";
+import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type PendingAttachment, type Slot, type TabSelection } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
-import { mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
+import { grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
   entriesBefore,
   laterContextStart,
   laterMessages,
+  LOCAL_ENTRY,
   newTurn,
+  placeUserEntry,
   reduceTurnEvent,
   unansweredCalls,
   upsertEntry,
   type CallInfo,
   type CallState,
 } from "./turn";
-
-/** The user's message, shown until `ai_send` returns the stored entry. */
-const LOCAL_ENTRY = "~local";
 
 /** User-facing text for a failed AI command (`ai` errors carry the provider's status and message). */
 export function aiErrorMessage(e: unknown, tr: (key: MessageKey, params?: Params) => string = t): string {
@@ -119,16 +122,16 @@ type Decision =
   | { kind: "continue" }
   | { kind: "stop" };
 
-/** AI-19: later calls of the tool in this conversation run without asking until the app quits. */
-function allowInConversation(convId: string, tool: string) {
+/** AI-19: later calls of the tool in this conversation run without asking until the app quits. `grant` is its `grantKey`. */
+function allowInConversation(convId: string, grant: string) {
   useAi.setState((st) => {
     const list = st.allowed[convId] ?? [];
-    return list.includes(tool) ? {} : { allowed: { ...st.allowed, [convId]: [...list, tool] } };
+    return list.includes(grant) ? {} : { allowed: { ...st.allowed, [convId]: [...list, grant] } };
   });
 }
 
-function allowedInConversation(convId: string, tool: string): boolean {
-  return useAi.getState().allowed[convId]?.includes(tool) ?? false;
+function allowedInConversation(convId: string, grant: string | null): boolean {
+  return grant !== null && (useAi.getState().allowed[convId]?.includes(grant) ?? false);
 }
 
 const runners = new Map<string, TurnRunner>();
@@ -139,8 +142,10 @@ const runners = new Map<string, TurnRunner>();
  * tool call limit (AI-18). `read_terminal` and `send_input` run here; other tools run in Rust.
  */
 class TurnRunner {
-  /** Moves with the conversation when it changes slots. */
+  /** The slot the turn's events and state go to; moves with the conversation (Connect to host, AI-09). */
   slotId: string;
+  /** The tab the turn started on, the only one whose terminal its tools may use (AI-08). */
+  private readonly tab: string;
   convId: string | null;
   private ended = false;
   private disposed = false;
@@ -153,6 +158,7 @@ class TurnRunner {
 
   constructor(slotId: string, convId: string | null) {
     this.slotId = slotId;
+    this.tab = slotId;
     this.convId = convId;
     this.ready = new Promise((resolve) => (this.resolveReady = resolve));
     if (convId) this.resolveReady(convId);
@@ -160,6 +166,20 @@ class TurnRunner {
 
   get active(): boolean {
     return !this.disposed && !this.ended;
+  }
+
+  /** Still handling calls: not over, and not asked to stop. */
+  private get acting(): boolean {
+    return this.active && !this.stopping;
+  }
+
+  /**
+   * The terminal the turn's tools act on: its own tab's, and none once the conversation moved to
+   * another slot, whose tab may be on another host (AI-08). Moving a running turn is refused where it
+   * can be; this holds whatever moves it.
+   */
+  private target(): ReturnType<typeof attachedTab> {
+    return this.slotId === this.tab ? attachedTab(this.tab) : null;
   }
 
   get gone(): boolean {
@@ -242,7 +262,7 @@ class TurnRunner {
   }
 
   private wait(callId: string, state: CallState, mcp?: McpToolInfo | null): Promise<Decision> {
-    if (!this.active) return Promise.resolve({ kind: "stop" });
+    if (!this.acting) return Promise.resolve({ kind: "stop" });
     this.setCall({ id: callId, state, mcp });
     return new Promise((resolve) => (this.waiter = resolve));
   }
@@ -276,29 +296,28 @@ class TurnRunner {
     const limit = Math.max(1, useApp.getState().prefs.ai_tool_call_limit || 25);
     if ((getSlot(this.slotId).turn?.toolCount ?? 0) >= limit) {
       const d = await this.wait(call.id, "limit");
-      if (d.kind !== "continue" || !this.active) return;
+      if (d.kind !== "continue" || !this.acting) return;
       patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, toolCount: 0 } } : {}));
     }
 
     const kind = toolKind(call.name);
     // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
-    if (needsSession(kind) && !attachedTab(this.slotId)) {
-      this.setCall({ id: call.id, state: "running" });
-      await this.report(convId, call.id, { status: "error", content: NO_TAB, edited_arguments: null });
-      this.countCall();
-      return;
-    }
-    const allowedHere = allowedInConversation(convId, call.name);
-    // AI-31: whether an MCP call asks depends on its tool's Always allow and its server's Always ask.
+    if (needsSession(kind) && !this.target()) return this.answer(convId, call.id, NO_TAB);
+    // AI-31: an MCP call's tool, resolved the way Rust runs the call; its Always allow and its server's
+    // Always ask decide whether it asks.
     let mcp: McpToolInfo | null = null;
-    if (kind === "mcp" && !allowedHere) {
-      mcp = await api.mcp_tool_info(call.name).catch(() => null);
-      if (!this.active) return;
+    if (kind === "mcp") {
+      mcp = await api.mcp_tool_info(convId, call.name).catch(() => null);
+      if (!this.acting) return;
+      // AI-30: a server switched off in the tools menu runs nothing more, in this turn too.
+      if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
     }
+    const grant = grantKey(kind, call.name, mcp);
+    const allowedHere = allowedInConversation(convId, grant);
     let edited: string | null = null;
     if (mustAsk({ kind, mode: getSlot(this.slotId).mode, allowedHere, mcp })) {
       const d = await this.wait(call.id, "approval", mcp);
-      if (!this.active || d.kind === "stop" || d.kind === "continue") return;
+      if (!this.acting || d.kind === "stop" || d.kind === "continue") return;
       if (d.kind === "reject") {
         this.setCall({ id: call.id, state: "running" });
         await this.report(convId, call.id, { status: "rejected", content: d.reason, edited_arguments: null });
@@ -306,12 +325,19 @@ class TurnRunner {
         return;
       }
       edited = d.edited;
-      if (d.allow === "conversation") allowInConversation(convId, call.name);
+      if (d.allow === "conversation" && grant) allowInConversation(convId, grant);
       else if (d.allow === "always" && mcp) await this.alwaysAllow(mcp);
     }
-    if (!this.active) return;
+    if (!this.acting) return;
     this.setCall({ id: call.id, state: "running" });
     await this.execute(convId, call, kind, edited);
+    this.countCall();
+  }
+
+  /** Answers a call with an error result, without asking or running it. */
+  private async answer(convId: string, callId: string, content: string) {
+    this.setCall({ id: callId, state: "running" });
+    await this.report(convId, callId, { status: "error", content, edited_arguments: null });
     this.countCall();
   }
 
@@ -330,7 +356,7 @@ class TurnRunner {
     const error = (content: string): AiToolResultInput => ({ status: "error", content, edited_arguments: edited });
     if (kind === "unknown") return this.report(convId, call.id, error(`There is no tool named "${call.name}".`));
 
-    const target = attachedTab(this.slotId);
+    const target = this.target();
     if (needsSession(kind)) {
       if (!target) return this.report(convId, call.id, error(NO_TAB));
       if (!target.session || target.session.status !== "connected" || !target.tab.sessionId) return this.report(convId, call.id, error(DISCONNECTED));
@@ -361,12 +387,6 @@ class TurnRunner {
   }
 }
 
-/** The stored user entry in place of the one shown while the command was on its way. */
-function placeUserEntry(entries: AiEntryView[], entry: AiEntryView): AiEntryView[] {
-  if (!entries.some((e) => e.entry_id === LOCAL_ENTRY)) return upsertEntry(entries, entry);
-  return entries.filter((e) => e.entry_id !== entry.entry_id).map((e) => (e.entry_id === LOCAL_ENTRY ? entry : e));
-}
-
 /** A new conversation keeps what was chosen in its slot before it had an id: the mode (AI-16) and the tools menu (AI-30). */
 function rememberChoices(slotId: string, convId: string) {
   const { mode, mcpOff } = getSlot(slotId);
@@ -391,8 +411,10 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason) {
 export async function sendMessage(slotId: string, raw: string): Promise<boolean> {
   const typed = raw.trim();
   const slot = getSlot(slotId);
-  // A new conversation has no id until `ai_send` returns, so a second message would start another one.
-  if (!typed || (slot.turn?.phase === "starting" && !slot.conversationId)) return false;
+  // Not while a message is on its way (`ai_send`, `ai_edit_resend` or `ai_retry` has not returned): a new
+  // conversation has no id yet, so a second message would start another one, and a message waiting for its
+  // compaction (AI-22) would be stopped, and its pending entry dropped here.
+  if (!typed || slot.turn?.phase === "starting") return false;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -429,8 +451,10 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     patchSlot(target, (s) => ({ conversationId: conv.id, conversation: withContext(s, conv), entries: placeUserEntry(s.entries, started.user_entry) }));
     return true;
   } catch (e) {
+    // The conversation may have moved meanwhile (Connect to host); its runner moved with it.
+    const target = runner.slotId;
     runner.dispose();
-    patchSlot(slotId, (s) => ({
+    patchSlot(target, (s) => ({
       entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY),
       turn: null,
       draft: s.draft || raw,
@@ -438,7 +462,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     }));
     if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
     if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
-    toast(aiErrorMessage(e), "error");
+    // Stopped before it was stored (during its compaction, AI-22): the message is back in the input.
+    if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
     return false;
   }
 }
@@ -460,9 +485,19 @@ export async function retryTurn(slotId: string) {
     await api.ai_retry(id, context, runner.onEvent);
   } catch (e) {
     runner.dispose();
-    patchSlot(slotId, { turn: null });
+    settleFailedStart(id);
     toast(aiErrorMessage(e), "error");
   }
+}
+
+/**
+ * A command that started a turn failed: the slot that shows the conversation now (it may have moved
+ * meanwhile) has no turn, unless another one started there.
+ */
+function settleFailedStart(convId: string, patch: Partial<Slot> = {}): string | undefined {
+  const target = slotOf(convId);
+  if (target && !runners.has(target)) patchSlot(target, { ...patch, turn: null });
+  return target;
 }
 
 /**
@@ -504,11 +539,23 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
     return true;
   } catch (e) {
     runner.dispose();
-    patchSlot(slotId, { entries: now.entries, turn: null });
-    toast(aiErrorMessage(e), "error");
-    void reloadSlot(slotId);
+    const target = settleFailedStart(id, { entries: now.entries });
+    if (target) {
+      // Stopped before it was stored (during its compaction, AI-22): the message and what followed it
+      // are deleted already, so the edited text goes back into the input instead of being lost.
+      if (toAppError(e).code === "cancelled") restoreDraft(target, text);
+      void reloadSlot(target);
+    }
+    if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
     return false;
   }
+}
+
+/** Puts a message that was not sent back into the slot's input: its typed text, and its pastes and files. */
+function restoreDraft(slotId: string, text: string) {
+  const { attachments, typed } = parseMessage(text);
+  const extras: PendingAttachment[] = attachments.flatMap((a) => (a.kind === "paste" || a.kind === "file" ? [{ id: `x${++extraSeq}`, attachment: a }] : []));
+  patchSlot(slotId, (s) => (s.draft.trim() || s.extras.length > 0 ? {} : { draft: typed, extras }));
 }
 
 /** Stop, or Esc in the panel (AI-18). */
@@ -568,7 +615,17 @@ export async function reloadSlot(slotId: string) {
   }
 }
 
-/** Moves a slot's conversation, with its running turn, to another slot; the source gets a new conversation. */
+/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, or compacting. */
+function slotBusy(slotId: string): boolean {
+  const s = getSlot(slotId);
+  return !!s.turn || s.remoteRunning || s.compacting || runners.has(slotId);
+}
+
+/**
+ * Moves a slot's conversation to another slot; the source gets a new conversation. A running turn moves
+ * with it (Connect to host moves the home tab's), but it never uses the terminal of the slot it moved to:
+ * its runner stays pinned to the tab it started on (AI-08).
+ */
 function moveSlot(from: string, to: string) {
   const source = getSlot(from);
   const runner = runners.get(from);
@@ -585,7 +642,9 @@ function moveSlot(from: string, to: string) {
 }
 
 /**
- * Opens a conversation from history in a slot (AI-09); a conversation shown elsewhere moves here.
+ * Opens a conversation from history in a slot (AI-09); a conversation shown elsewhere moves here. One
+ * that is busy in another tab (a turn running or waiting for approval, or a compaction) stays there,
+ * since its turn acts on that tab's terminal (AI-08): its tab comes to the front instead.
  * `reveal`: an entry to scroll to and highlight, from a history search hit (AI-24).
  */
 export async function openConversation(slotId: string, id: string, reveal: string | null = null) {
@@ -594,8 +653,13 @@ export async function openConversation(slotId: string, id: string, reveal: strin
     if (reveal) patchSlot(slotId, { reveal });
     return;
   }
-  release(slotId);
   const from = slotOf(id);
+  if (from && from !== slotId && slotBusy(from)) {
+    useTabs.getState().activate(from);
+    if (reveal) patchSlot(from, { reveal });
+    return;
+  }
+  release(slotId);
   if (from && from !== slotId) {
     moveSlot(from, slotId);
     if (reveal) patchSlot(slotId, { reveal });
@@ -785,9 +849,10 @@ export function removeExtra(slotId: string, id: string) {
   patchSlot(slotId, (s) => ({ extras: s.extras.filter((x) => x.id !== id) }));
 }
 
-function refusal(reason: "image" | "too_large" | "binary", name: string): string {
+function refusal(reason: FileRefusal, name: string): string {
   if (reason === "image") return t("ai.attach.image", { name });
   if (reason === "too_large") return t("ai.attach.tooLarge", { name, size: kb(FILE_MAX_BYTES) });
+  if (reason === "unreadable") return t("ai.attach.readFailed", { name });
   return t("ai.attach.binary", { name });
 }
 
@@ -824,6 +889,26 @@ export async function attachFiles(slotId: string, files: readonly File[]) {
   focusInput();
 }
 
+/**
+ * Files dropped on the panel in the desktop app, whose webview hands over paths only: Rust reads them
+ * (only paths of the window's last drop) with the same rules, and they go with the slot's next message.
+ */
+export async function attachDroppedPaths(slotId: string, paths: readonly string[]) {
+  let results: DroppedFile[];
+  try {
+    results = await api.ai_read_dropped_files([...paths]);
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+    return;
+  }
+  for (const result of results) {
+    const read = droppedFile(result);
+    if (!read.ok) toast(refusal(read.reason, read.name), "error");
+    else if (!addExtra(slotId, read.file)) break;
+  }
+  focusInput();
+}
+
 /** × on the diagnostics chip, or the diagnostics were sent. */
 export function removeDiagnostics(tabId: string) {
   useAi.setState((st) => {
@@ -847,18 +932,18 @@ export async function compactConversation(slotId: string) {
   patchSlot(slotId, { compacting: true });
   try {
     const entry = await api.ai_compact(id, context);
-    patchSlot(slotId, (s) =>
-      s.conversationId === id
-        ? {
-            compacting: false,
-            entries: upsertEntry(s.entries, entry),
-            conversation: s.conversation ? { ...s.conversation, context_start: entry.entry_id } : s.conversation,
-          }
-        : { compacting: false },
-    );
-    void reloadSlot(slotId);
+    // The slot that shows the conversation now: it may have moved meanwhile (Connect to host).
+    const target = slotOf(id);
+    if (!target) return;
+    patchSlot(target, (s) => ({
+      compacting: false,
+      entries: upsertEntry(s.entries, entry),
+      conversation: s.conversation ? { ...s.conversation, context_start: entry.entry_id } : s.conversation,
+    }));
+    void reloadSlot(target);
   } catch (e) {
-    patchSlot(slotId, { compacting: false });
+    const target = slotOf(id);
+    if (target) patchSlot(target, { compacting: false });
     toast(aiErrorMessage(e), "error");
   }
 }

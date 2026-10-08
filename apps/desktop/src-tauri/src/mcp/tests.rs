@@ -33,8 +33,19 @@ pub(crate) const HEADER_SECRET: &str = "Bearer header-secret-NEVER-SHOWN";
 /// The mock's entry point; does nothing in a normal test run.
 #[test]
 fn mock_stdio_server() {
-    if std::env::var(MOCK_ENV).as_deref() == Ok("serve") {
-        serve();
+    match std::env::var(MOCK_ENV).as_deref() {
+        Ok("serve") => serve(),
+        Ok("hang") => hang(),
+        _ => {}
+    }
+}
+
+/// A server that never answers `initialize`, like `npx` downloading a package: it says its
+/// process id on stderr and waits.
+fn hang() -> ! {
+    let _ = writeln!(std::io::stderr(), "pid {}", std::process::id());
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
     }
 }
 
@@ -131,6 +142,15 @@ fn serve() -> ! {
 
 /// A stdio server item that runs the mock.
 pub(crate) fn stdio_server(name: &str) -> McpServer {
+    mock_server(name, "serve")
+}
+
+/// A stdio server item whose start never ends ([`hang`]).
+fn hanging_server(name: &str) -> McpServer {
+    mock_server(name, "hang")
+}
+
+fn mock_server(name: &str, mode: &str) -> McpServer {
     McpServer {
         name: name.into(),
         transport: McpTransport::Stdio {
@@ -142,7 +162,7 @@ pub(crate) fn stdio_server(name: &str) -> McpServer {
                 .map(str::to_owned)
                 .to_vec(),
             env: [
-                (MOCK_ENV.to_owned(), Zeroizing::new("serve".to_owned())),
+                (MOCK_ENV.to_owned(), Zeroizing::new(mode.to_owned())),
                 (
                     "MOCK_TOKEN".to_owned(),
                     Zeroizing::new(ENV_SECRET.to_owned()),
@@ -741,4 +761,87 @@ async fn a_server_deleted_elsewhere_is_stopped_by_the_next_request() {
         events.states(&files).last() == Some(&McpServerState::Stopped)
     })
     .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_called_name_resolves_through_its_conversations_offer() {
+    let vault = vault();
+    let (mcp, _events) = manager();
+    let spaced = put_server(&vault, stdio_server("my server"));
+    let snake = put_server(&vault, stdio_server("my_server"));
+    set_enabled(&vault, &spaced, true);
+    set_enabled(&vault, &snake, true);
+    let cancel = CancellationToken::new();
+    // Both names clean to `my_server`, and conversation b switched `my server` off in its tools
+    // menu, so the same name means another server there (AI-30).
+    let all = mcp.offer(&vault, &context(&[]), &cancel).await;
+    let without = mcp
+        .offer(&vault, &context(&[spaced.as_str()]), &cancel)
+        .await;
+    mcp.record_offer("a", all);
+    mcp.record_offer("b", without);
+    let name = "mcp__my_server__echo";
+    let server_of = |conversation: &str| {
+        let v = vault.lock().unwrap();
+        let info = crate::commands::mcp::tool_info(&v, &mcp, conversation, name)
+            .expect("the approval card's tool");
+        // The card names the server the call runs on.
+        assert_eq!(
+            mcp.offered(conversation, name).unwrap().server_id,
+            info.server_id
+        );
+        info.server_id
+    };
+    assert_eq!(server_of("a"), spaced);
+    assert_eq!(server_of("b"), snake);
+    // A conversation without a request in this run of the app: the running servers' names.
+    assert_eq!(server_of("c"), spaced);
+
+    // Deleted on another device, before a request stopped it: no card info, and its calls do
+    // not run although its connection is up.
+    let tool = mcp.offered("a", name).unwrap();
+    vault.lock().unwrap().delete(&spaced).unwrap();
+    assert!(crate::commands::mcp::tool_info(&vault.lock().unwrap(), &mcp, "a", name).is_none());
+    let (status, content) = mcp
+        .call(&vault, &tool, args(json!({"text": "hi"})), &cancel)
+        .await;
+    assert_eq!(status, ToolStatus::Error);
+    assert!(content.contains("was deleted"), "{content}");
+    mcp.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn locking_aborts_a_start_in_flight_and_kills_its_process() {
+    let vault = vault();
+    let (mcp, events) = manager();
+    let slow = put_server(&vault, hanging_server("slow"));
+    set_enabled(&vault, &slow, true);
+    // A request starts the server and stops waiting for it; the start goes on.
+    let cancel = CancellationToken::new();
+    let request = {
+        let (mcp, vault, cancel) = (mcp.clone(), vault.clone(), cancel.clone());
+        tokio::spawn(async move { mcp.offer(&vault, &context(&[]), &cancel).await })
+    };
+    let mut pid = None;
+    eventually("the server process", || {
+        pid = mcp
+            .status(&DeviceState::default(), &slow)
+            .stderr
+            .iter()
+            .find_map(|line| line.strip_prefix("pid ")?.trim().parse::<u32>().ok());
+        pid.is_some()
+    })
+    .await;
+    let pid = pid.unwrap();
+    assert!(alive(pid));
+    cancel.cancel();
+    assert!(request.await.unwrap().tools.is_empty());
+    assert_eq!(events.states(&slow).last(), Some(&McpServerState::Starting));
+
+    vault.lock().unwrap().lock();
+    let stopping = Instant::now();
+    mcp.stop_all(&vault).await;
+    assert!(stopping.elapsed() < Duration::from_secs(15));
+    assert_eq!(events.states(&slow).last(), Some(&McpServerState::Stopped));
+    eventually("the server process to exit", || !alive(pid)).await;
 }

@@ -34,7 +34,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
-    AiEntry, AssistantEntry, EntryBody, Finish, ToolStatus, fix_up_missing_results,
+    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, fix_up_missing_results,
 };
 use hatoba_ai::provider::{AuthHeader, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -134,21 +134,29 @@ struct Inner {
     mcp: McpManager,
     /// Running turns by conversation id.
     turns: Mutex<HashMap<String, Arc<Turn>>>,
-    /// Running tools and compactions, so that stop and lock reach them.
+    /// Running tools, compactions and provider requests, so that stop and lock reach them.
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
 }
 
 struct Op {
-    conversation_id: String,
+    /// `None` for work outside a conversation, which only the lock stops.
+    conversation_id: Option<String>,
     cancel: CancellationToken,
 }
 
-/// A running tool or compaction; unregisters itself when dropped.
-struct OpGuard<'a> {
+/// A running tool, compaction or provider request; unregisters itself when dropped.
+pub struct OpGuard<'a> {
     inner: &'a Inner,
     id: u64,
     cancel: CancellationToken,
+}
+
+impl OpGuard<'_> {
+    /// Cancelled by a stop of the op's conversation, or by the lock.
+    pub fn token(&self) -> &CancellationToken {
+        &self.cancel
+    }
 }
 
 impl Drop for OpGuard<'_> {
@@ -304,7 +312,7 @@ impl AiManager {
             turn.cancel.cancel();
         }
         for op in guard(&self.0.ops).values() {
-            if op.conversation_id == conversation_id {
+            if op.conversation_id.as_deref() == Some(conversation_id) {
                 op.cancel.cancel();
             }
         }
@@ -317,11 +325,22 @@ impl AiManager {
         let cancel = self
             .running(conversation_id)
             .map_or_else(CancellationToken::new, |turn| turn.cancel.child_token());
+        self.register_op(Some(conversation_id), cancel)
+    }
+
+    /// A provider or search request outside a conversation (a model list, a connection test):
+    /// the lock cancels its token (§13.1). Call it under the vault guard that read the provider,
+    /// so that a lock either came first or cancels the request.
+    pub fn background_op(&self) -> OpGuard<'_> {
+        self.register_op(None, CancellationToken::new())
+    }
+
+    fn register_op(&self, conversation_id: Option<&str>, cancel: CancellationToken) -> OpGuard<'_> {
         let id = self.0.next_op.fetch_add(1, Ordering::Relaxed);
         guard(&self.0.ops).insert(
             id,
             Op {
-                conversation_id: conversation_id.to_owned(),
+                conversation_id: conversation_id.map(str::to_owned),
                 cancel: cancel.clone(),
             },
         );
@@ -370,8 +389,9 @@ impl AiManager {
         }
     }
 
-    /// The vault is about to lock (SEC-02): stops every turn and tool, so the assistant never
-    /// acts behind the lock screen (§13.1). Called with the vault guard, before `Vault::lock`.
+    /// The vault is about to lock (SEC-02): stops every turn and tool, and every provider request
+    /// outside a conversation, so the assistant never acts behind the lock screen (§13.1). Called
+    /// with the vault guard, before `Vault::lock`.
     pub fn stop_all(&self, v: &mut Vault) {
         let running: Vec<String> = guard(&self.0.turns).keys().cloned().collect();
         for conversation_id in &running {
@@ -511,21 +531,25 @@ impl AiManager {
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
-        // and if it does not, the provider's error says so.
-        if let Some(compact) = compact {
-            match self
+        // and if it does not, the provider's error says so. A stop meanwhile is checked below.
+        if let Some(compact) = compact
+            && let Err(CompactFailure::Failed { .. }) = self
                 .auto_compact(vault, env.as_ref(), &id, &turn, compact)
                 .await
-            {
-                Ok(()) | Err(CompactFailure::Stopped) => {}
-                Err(CompactFailure::Failed { .. }) => {
-                    tracing::warn!(conversation_id = %id, "AI message sent without compaction");
-                }
-            }
+        {
+            tracing::warn!(conversation_id = %id, "AI message sent without compaction");
         }
 
         let started = (|| {
             let mut v = unlocked(vault)?;
+            // Stopped, or replaced by a newer message, while the context was compacted: the
+            // message is not stored. Checked under the guard a stop takes, like every write.
+            if turn.cancel.is_cancelled() {
+                return Err(AppError::new(
+                    ErrorCode::Cancelled,
+                    "the message was stopped before it was sent",
+                ));
+            }
             let entry = AiEntry::user(now_ms(), text);
             let entry_id = append(&mut v, &id, &entry)?;
             let conversation = find_conversation(&v, &id)?;
@@ -537,7 +561,7 @@ impl AiManager {
         let started = match started {
             Ok(started) => started,
             Err(e) => {
-                // Locked or deleted meanwhile: the turn cannot go on.
+                // Stopped, locked or deleted meanwhile: the turn cannot go on.
                 turn.end(AiTurnEndReason::Stopped);
                 self.forget(&id, &turn);
                 return Err(e);
@@ -549,7 +573,7 @@ impl AiManager {
         } else {
             tracing::info!(conversation_id = %id, "AI turn started");
         }
-        Ok((started, self.task(vault.clone(), env, id, turn)))
+        Ok((started, self.task(vault.clone(), env, id, turn, None)))
     }
 
     /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
@@ -637,6 +661,12 @@ impl AiManager {
     /// running turn of the conversation stops first. A conversation that ends with the model's
     /// answer has nothing to retry: the request would end with an assistant message, which
     /// newer models reject as a prefill.
+    ///
+    /// AI-22: the turn first compacts a context that would pass 90% of the model's context
+    /// window, as [`Self::send`] does before a new message (retrying with a model whose window
+    /// is smaller, say), unless the context ends with a summary, so it never compacts twice in a
+    /// row. The messages being retried are stored already and a summary can only follow them, so
+    /// they are part of what it summarizes.
     pub fn retry(
         &self,
         vault: &SharedVault,
@@ -659,32 +689,57 @@ impl AiManager {
                     "nothing to retry: the conversation ends with the model's answer",
                 ));
             }
+            let compact = compaction_before(&v, &conversation_id, &conversation, &context, "")?;
             let turn = self.register(&conversation_id, context, sink);
             for entry in cancelled {
                 turn.emit(AiTurnEvent::Entry { entry });
             }
-            Ok(turn)
+            Ok((turn, compact))
         })();
         if stored {
             env.changed();
         }
-        let turn = registered?;
+        let (turn, compact) = registered?;
         tracing::info!(conversation_id = %conversation_id, "AI turn retried");
-        Ok(self.task(vault.clone(), env, conversation_id, turn))
+        Ok(self.task(vault.clone(), env, conversation_id, turn, compact))
     }
 
+    /// The turn's task: the Compact request `compact` first, when the context needs one
+    /// (AI-22), then the turn.
     fn task(
         &self,
         vault: SharedVault,
         env: Arc<dyn AiEnv>,
         conversation_id: String,
         turn: Arc<Turn>,
+        compact: Option<Request>,
     ) -> TurnTask {
         let manager = self.clone();
         Box::pin(async move {
-            let reason = manager
-                .turn_loop(&vault, env.as_ref(), &conversation_id, &turn)
-                .await;
+            let compacted = match compact {
+                Some(compact) => {
+                    manager
+                        .auto_compact(&vault, env.as_ref(), &conversation_id, &turn, compact)
+                        .await
+                }
+                None => Ok(()),
+            };
+            let reason = match compacted {
+                Err(CompactFailure::Stopped) => AiTurnEndReason::Stopped,
+                // As for a new message: the request may still fit, and if it does not, the
+                // provider's error says so.
+                Ok(()) | Err(CompactFailure::Failed { .. }) => {
+                    if compacted.is_err() {
+                        tracing::warn!(
+                            conversation_id = %conversation_id,
+                            "AI turn retried without compaction"
+                        );
+                    }
+                    manager
+                        .turn_loop(&vault, env.as_ref(), &conversation_id, &turn)
+                        .await
+                }
+            };
             turn.end(reason);
             manager.forget(&conversation_id, &turn);
             tracing::info!(conversation_id = %conversation_id, ?reason, "AI turn ended");
@@ -839,6 +894,7 @@ impl AiManager {
             let arguments = edited_arguments.unwrap_or(&call.arguments);
             let job = if call.name.starts_with(MCP_PREFIX) {
                 Job::mcp(
+                    &v,
                     self.0.mcp.offered(conversation_id, &call.name),
                     &call.name,
                     arguments,
@@ -1256,6 +1312,10 @@ fn prepare_locked(
 
 /// Stores a response and sends its `entry` and `done` events (under the vault guard, so they
 /// keep the store's order against a concurrent stop). Returns its entry id.
+///
+/// Calls that share their id with another call of the response cannot be told apart by their
+/// results (a result answers the first open call with its id), so none of them runs: each gets
+/// an error result here, sent before `done` so the frontend never handles them.
 fn store_response(
     vault: &SharedVault,
     env: &dyn AiEnv,
@@ -1264,6 +1324,7 @@ fn store_response(
     response: AssistantEntry,
 ) -> Result<String, Halt> {
     let finish = response.finish;
+    let shared = shared_call_ids(&response.tool_calls);
     let entry_id = {
         let mut v = lock(vault);
         if turn.cancel.is_cancelled() || !v.is_unlocked() {
@@ -1274,6 +1335,21 @@ fn store_response(
         turn.emit(AiTurnEvent::Entry {
             entry: entry_view(&entry_id, &entry),
         });
+        for (id, count) in shared {
+            let result = AiEntry::tool(
+                now_ms(),
+                id.as_str(),
+                ToolStatus::Error,
+                format!(
+                    "The call did not run: {count} tool calls of this response have the id \
+                     \"{id}\", and each call needs an id of its own."
+                ),
+            );
+            let result_id = append(&mut v, conversation_id, &result)?;
+            turn.emit(AiTurnEvent::Entry {
+                entry: entry_view(&result_id, &result),
+            });
+        }
         turn.emit(AiTurnEvent::Done {
             finish: finish_view(finish),
         });
@@ -1347,32 +1423,47 @@ fn nothing_to_send(entries: &[AiEntry]) -> bool {
     true
 }
 
+/// For every call of a response whose id another call of it has too, in order: the id and how
+/// many calls have it.
+fn shared_call_ids(calls: &[ToolCall]) -> Vec<(String, usize)> {
+    let count = |id: &str| calls.iter().filter(|c| c.id == id).count();
+    calls
+        .iter()
+        .map(|c| (c.id.clone(), count(&c.id)))
+        .filter(|(_, n)| *n > 1)
+        .collect()
+}
+
 /// The call `tool_call_id` of the conversation's newest response, when it has no result yet.
+/// Results answer the calls with their id in order (`fix_up_missing_results`), so of calls that
+/// share an id (stored before such calls got their results in [`store_response`]), the open one
+/// is the first that no result answers.
 fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
     let newest = entries
         .list
         .iter()
         .rposition(|e| matches!(e.body, EntryBody::Assistant(_)));
-    let call = newest.and_then(|i| match &entries.list[i].body {
-        EntryBody::Assistant(a) => a
+    let calls: Vec<&ToolCall> = match newest.map(|i| &entries.list[i].body) {
+        Some(EntryBody::Assistant(a)) => a
             .tool_calls
             .iter()
-            .find(|c| c.id == tool_call_id)
-            .map(|c| (i, c)),
-        _ => None,
-    });
-    let Some((from, call)) = call else {
+            .filter(|c| c.id == tool_call_id)
+            .collect(),
+        _ => Vec::new(),
+    };
+    let (Some(from), false) = (newest, calls.is_empty()) else {
         return Err(AppError::not_found("tool call"));
     };
-    if !fix_up_missing_results(&entries.list[from..])
+    let open = fix_up_missing_results(&entries.list[from..])
         .iter()
-        .any(|id| id == tool_call_id)
-    {
+        .filter(|id| *id == tool_call_id)
+        .count();
+    let Some(call) = calls.len().checked_sub(open).and_then(|i| calls.get(i)) else {
         return Err(AppError::invalid(
             "tool_call_id",
             "the tool call already has a result",
         ));
-    }
+    };
     Ok(AiToolCall {
         id: call.id.clone(),
         name: call.name.clone(),
@@ -1551,13 +1642,18 @@ impl Job {
         Self::Ready(ToolStatus::Error, message.into())
     }
 
-    /// A call of an MCP tool: `tool` is what the offer that made the call names `name`.
-    fn mcp(tool: Option<OfferedTool>, name: &str, arguments: &str) -> Self {
+    /// A call of an MCP tool: `tool` is what the offer that made the call names `name`. A server
+    /// whose item is gone (deleted on another device, before a request stopped it here) runs
+    /// nothing, even while its connection is still up.
+    fn mcp(v: &Vault, tool: Option<OfferedTool>, name: &str, arguments: &str) -> Self {
         let Some(tool) = tool else {
             return Self::error(format!(
                 "There is no MCP tool named \"{name}\": no MCP server offers it now."
             ));
         };
+        if !crate::mcp::server_exists(v, &tool.server_id) {
+            return Self::error(crate::mcp::server_gone(&tool.server_name));
+        }
         match parse::<Map<String, Value>>(arguments) {
             Ok(arguments) => Self::Mcp(Box::new(tool), arguments),
             Err(message) => Self::error(message),
@@ -1970,11 +2066,12 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
     }
     let mut conversations: Vec<(String, String, i64)> = {
         let v = unlocked(vault)?;
+        let last = v.ai_last_activities();
         v.ai_conversations()
             .into_iter()
             .map(|(id, c)| {
-                let last = v.ai_last_activity(&id);
-                (id, c.title, last)
+                let at = last.get(&id).copied().unwrap_or(0);
+                (id, c.title, at)
             })
             .collect()
     };
@@ -2057,6 +2154,16 @@ fn snippet(text: &str, needle: &[char]) -> Option<String> {
 // ---- views ----
 
 pub fn conversation_view(v: &Vault, id: &str, c: &AiConversation) -> AiConversationView {
+    conversation_view_at(id, c, v.ai_last_activity(id))
+}
+
+/// [`conversation_view`] with the conversation's last activity read already, for lists
+/// (`Vault::ai_last_activities` reads every conversation's in one pass).
+pub fn conversation_view_at(
+    id: &str,
+    c: &AiConversation,
+    last_activity: i64,
+) -> AiConversationView {
     AiConversationView {
         id: id.to_owned(),
         title: c.title.clone(),
@@ -2065,7 +2172,7 @@ pub fn conversation_view(v: &Vault, id: &str, c: &AiConversation) -> AiConversat
         context_start: c.context_start.clone(),
         created_at: c.created_at,
         updated_at: c.updated_at,
-        last_activity: v.ai_last_activity(id),
+        last_activity,
     }
 }
 

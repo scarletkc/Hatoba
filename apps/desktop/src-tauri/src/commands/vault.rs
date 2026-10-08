@@ -23,6 +23,13 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
             e.detail
         );
     }
+    // Message parts of conversations deleted while this device added to them (§13.7); every
+    // sync round does the same after its pull.
+    match state.with_unlocked(|v| Ok(v.ai_sweep_orphaned_parts()?)) {
+        Ok(0) => {}
+        Ok(parts) => tracing::info!(parts, "deleted message parts of deleted conversations"),
+        Err(e) => tracing::warn!("could not delete orphaned message parts: {}", e.detail),
+    }
     lock::refresh_policy(state);
     state.touch_activity();
     sync::on_unlock(app);

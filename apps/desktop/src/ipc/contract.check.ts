@@ -55,6 +55,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.AiSendStarted, Ui.AiSendStarted>>,
   Check<Assignable<Rust.AiTurnEvent, Ui.AiTurnEvent>>,
   Check<Assignable<Rust.AiSearchHit, Ui.AiSearchHit>>,
+  Check<Assignable<Rust.DroppedFile, Ui.DroppedFile>>,
   Check<Assignable<Rust.SkillView, Ui.SkillView>>,
   Check<Assignable<Rust.SkillDetail, Ui.SkillDetail>>,
   Check<Assignable<Rust.SkillFileView, Ui.SkillFileView>>,

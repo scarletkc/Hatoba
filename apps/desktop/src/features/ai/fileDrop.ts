@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState, type DragEvent, type RefObject } from "react";
-import { toast } from "@/components/overlay";
-import { t } from "@/i18n";
 import { isTauri } from "@/ipc/api";
 
+/** Where text files dropped on the AI panel go: `File`s in the browser, paths in the desktop app. */
+export interface PanelDrop {
+  onFiles: (files: File[]) => void;
+  onPaths: (paths: string[]) => void;
+}
+
 /**
- * AI-35: text files dropped on the AI panel. The WebView's own drag and drop hands over the files,
- * which are read with the File API. The desktop app's webview takes file drops itself (for the
- * SFTP panel's uploads, `features/sftp/useFileDrop.ts`) and gives only paths, which the WebView
- * cannot read, so there a drop on the panel says to use the paperclip.
+ * AI-35: text files dropped on the AI panel. In the browser the WebView's own drag and drop hands
+ * over the files, which are read with the File API. The desktop app's webview takes file drops
+ * itself (as for the SFTP panel's uploads, `features/sftp/useFileDrop.ts`) and gives only their
+ * paths, positions in physical pixels; Rust reads those (`ai_read_dropped_files`), and only the
+ * paths of the window's last drop.
  */
-export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: boolean, onFiles: (files: File[]) => void) {
+export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: boolean, drop: PanelDrop) {
   const [dragging, setDragging] = useState(false);
-  const latest = useRef(onFiles);
+  const latest = useRef(drop);
   useEffect(() => {
-    latest.current = onFiles;
+    latest.current = drop;
   });
 
   useEffect(() => {
@@ -29,7 +34,11 @@ export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: 
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent(({ payload }) => {
-          if (payload.type === "drop" && inside(payload.position) && payload.paths.length > 0) toast(t("ai.attach.dropUnsupported"), "info");
+          if (payload.type === "leave") setDragging(false);
+          else if (payload.type === "drop") {
+            setDragging(false);
+            if (inside(payload.position) && payload.paths.length > 0) latest.current.onPaths(payload.paths);
+          } else setDragging(inside(payload.position));
         }),
       )
       .then((un) => {
@@ -39,6 +48,7 @@ export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: 
     return () => {
       cancelled = true;
       unlisten?.();
+      setDragging(false);
     };
   }, [enabled, panel]);
 
@@ -62,7 +72,7 @@ export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: 
       e.preventDefault();
       setDragging(false);
       const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) latest.current(files);
+      if (files.length > 0) latest.current.onFiles(files);
     },
   };
   return { dragging, handlers };

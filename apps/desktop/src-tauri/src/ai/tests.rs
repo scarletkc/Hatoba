@@ -1369,7 +1369,7 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
 
     // AI-31: the approval card's view of a call, with Always allow and Always ask.
     let info = |name: &str| {
-        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, name).expect("tool info")
+        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, name).expect("tool info")
     };
     let echo = info("mcp__files__echo");
     assert_eq!(
@@ -1392,7 +1392,9 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
         v.put(Some(&web), Item::McpServer(server)).unwrap();
     }
     assert!(info("mcp__web__lookup").always_ask);
-    assert!(crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, "mcp__nope__x").is_none());
+    assert!(
+        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__nope__x").is_none()
+    );
 
     let c1 = f.run(&conv, "c1", None, None).await.unwrap();
     assert_eq!(view_content(&c1), ("c1", AiToolStatus::Ok, "hi"));
@@ -2018,4 +2020,280 @@ fn skills_saved_in_settings_are_listed_and_read_by_read_skill() {
     crate::commands::skills::set_skill_enabled(&mut v, &nginx, false).unwrap();
     let (_, tools) = super::prompt(&v, &f.context(), true);
     assert!(!tools.iter().any(|t| t.name == "read_skill"));
+}
+
+/// `ai_send` in a task of its own, for a send that waits on a compaction.
+fn spawn_send(
+    f: &Fixture,
+    conversation_id: &str,
+    text: &str,
+) -> (tokio::task::JoinHandle<AppResult<AiSendStarted>>, Arc<Sink>) {
+    let sink = Arc::new(Sink::default());
+    let (manager, vault, env, context) = (f.manager.clone(), f.vault.clone(), f.env(), f.context());
+    let input = AiSendInput {
+        conversation_id: Some(conversation_id.to_owned()),
+        text: text.to_owned(),
+        context,
+    };
+    let events = sink.clone();
+    let send = tokio::spawn(async move {
+        let (started, task) = manager.send(&vault, env, input, events).await?;
+        tokio::spawn(task);
+        Ok(started)
+    });
+    (send, sink)
+}
+
+impl Fixture {
+    /// A conversation with one exchange, whose context the next long message fills (AI-22).
+    async fn nearly_full(&self) -> String {
+        self.set_context_window(1_000);
+        let (started, sink) = self.send(None, "first question").await;
+        let conv = started.conversation.id;
+        assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+        self.idle(&conv).await;
+        conv
+    }
+
+    async fn wait_for_requests(&self, n: usize) {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while self.requests().await.len() < n {
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for request {n}"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_message_stopped_while_the_context_is_compacted_is_not_stored() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY").set_delay(Duration::from_secs(30)),
+    ])
+    .await;
+    let conv = f.nearly_full().await;
+
+    let (send, sink) = spawn_send(&f, &conv, &"disk ".repeat(720));
+    // The Compact request is on its way when the user stops.
+    f.wait_for_requests(2).await;
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    let err = send.await.unwrap().unwrap_err();
+    assert_eq!(err.code, ErrorCode::Cancelled);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert!(sink.entries().is_empty());
+    // Neither the message nor a summary was stored, and nothing runs.
+    assert_eq!(f.entries(&conv).len(), 2);
+    assert!(!f.manager.is_running(&conv));
+    assert_eq!(f.context_start(&conv), None);
+}
+
+#[tokio::test]
+async fn a_message_replaced_while_the_context_is_compacted_is_not_stored() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY").set_delay(Duration::from_secs(30)),
+        answer("Short answer."),
+    ])
+    .await;
+    let conv = f.nearly_full().await;
+
+    let (send, first) = spawn_send(&f, &conv, &"disk ".repeat(720));
+    f.wait_for_requests(2).await;
+    // A newer message stops the turn that is compacting; only the newer one is stored.
+    let (again, second) = f.send(Some(&conv), "short").await;
+    assert_eq!(again.conversation.id, conv);
+    assert_eq!(send.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
+    assert_eq!(first.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(second.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 4);
+    assert!(matches!(&entries[2].body, EntryBody::User { text } if text == "short"));
+    assert!(matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Short answer."));
+}
+
+#[tokio::test]
+async fn a_retry_compacts_a_context_that_would_fill_the_window_and_only_once() {
+    let f = Fixture::new(vec![
+        ResponseTemplate::new(400)
+            .set_body_json(json!({"error": {"message": "prompt is too long"}})),
+        answer("SUMMARY: the user asked about the disk."),
+        ResponseTemplate::new(503).set_body_json(json!({"error": {"message": "overloaded"}})),
+        answer("Recovered."),
+    ])
+    .await;
+    // Sent while the model's context window was unknown, so nothing was compacted.
+    let long = "disk ".repeat(740);
+    let (started, sink) = f.send(None, &long).await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Error);
+    f.idle(&conv).await;
+
+    // Now the window is known (or a smaller model was picked): the message passes 90% of it.
+    f.set_context_window(1_000);
+    let retry = f.retry(&conv, f.context()).unwrap();
+    assert_eq!(retry.ended().await, AiTurnEndReason::Error);
+    f.idle(&conv).await;
+    let summary = summaries(&retry);
+    assert_eq!(summary.len(), 1);
+    assert_eq!(
+        f.context_start(&conv).as_deref(),
+        Some(entry_id(&summary[0]))
+    );
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        messages(&requests[1]).last().unwrap()["content"],
+        COMPACT_INSTRUCTION
+    );
+    // The retried message is part of what is summarized, and the request starts at the summary.
+    assert!(requests[1].to_string().contains("disk disk"));
+    let next = requests[2].to_string();
+    assert!(next.contains("SUMMARY: the user asked about the disk."));
+    assert!(!next.contains("disk disk"));
+
+    // The context ends with the summary: the next retry does not compact again.
+    let again = f.retry(&conv, f.context()).unwrap();
+    assert_eq!(again.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert!(summaries(&again).is_empty());
+    assert_eq!(f.requests().await.len(), 4);
+}
+
+#[tokio::test]
+async fn calls_that_share_an_id_get_error_results_and_never_run() {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("dup", "run_command", json!({"command": "rm -rf /tmp/x"})),
+            ("dup", "read_terminal", json!({})),
+            ("c3", "read_terminal", json!({})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "go").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // Their results come before `done`, so the panel finds only c3 open.
+    let events = sink.events();
+    let done = events
+        .iter()
+        .position(|e| matches!(e, AiTurnEvent::Done { .. }))
+        .unwrap();
+    let results: Vec<(String, AiToolStatus, String)> = events[..done]
+        .iter()
+        .filter_map(|e| match e {
+            AiTurnEvent::Entry {
+                entry:
+                    AiEntryView::Tool {
+                        tool_call_id,
+                        status,
+                        content,
+                        ..
+                    },
+            } => Some((tool_call_id.clone(), *status, content.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(results.len(), 2);
+    for (id, status, content) in &results {
+        assert_eq!((id.as_str(), *status), ("dup", AiToolStatus::Error));
+        assert!(content.contains("2 tool calls"), "{content}");
+    }
+    let err = f.run(&conv, "dup", Some("s1"), None).await.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidInput);
+    f.result(&conv, "c3", AiToolStatus::Ok, "the screen", None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(tool_message(&requests[1], "c3")["content"], "the screen");
+}
+
+#[tokio::test]
+async fn calls_stored_with_a_shared_id_run_each_with_its_own_arguments() {
+    let f = Fixture::new(Vec::new()).await;
+    // Stored before such calls got their results at once (or by another device).
+    let conv = {
+        let mut v = lock(&f.vault);
+        let conv = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "old".into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        append(&mut v, &conv, &AiEntry::user(1, "read both")).unwrap();
+        let skill = |name: &str| ToolCall {
+            id: "dup".into(),
+            name: "read_skill".into(),
+            arguments: json!({ "name": name }).to_string(),
+        };
+        let response = AssistantEntry {
+            tool_calls: vec![skill("first-skill"), skill("second-skill")],
+            finish: Finish::ToolCalls,
+            ..AssistantEntry::default()
+        };
+        append(&mut v, &conv, &AiEntry::assistant(2, response)).unwrap();
+        conv
+    };
+    let first = f.run(&conv, "dup", None, None).await.unwrap();
+    assert!(
+        view_content(&first).2.contains("\"first-skill\""),
+        "{first:?}"
+    );
+    let second = f.run(&conv, "dup", None, None).await.unwrap();
+    assert!(
+        view_content(&second).2.contains("\"second-skill\""),
+        "{second:?}"
+    );
+    let err = f.run(&conv, "dup", None, None).await.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidInput);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_call_of_a_server_deleted_elsewhere_does_not_run() {
+    use crate::mcp::tests::{put_server, set_enabled, stdio_server};
+
+    let f = Fixture::new(vec![
+        calls(&[("c1", "mcp__files__pid", json!({}))]),
+        answer("Done."),
+    ])
+    .await;
+    let files = put_server(&f.vault, stdio_server("files"));
+    set_enabled(&f.vault, &files, true);
+    let (started, sink) = f.send(None, "use files").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // A sync pull took the item away; the server keeps running until the next request.
+    lock(&f.vault).delete(&files).unwrap();
+    assert!(
+        crate::commands::mcp::tool_info(&lock(&f.vault), &f.mcp, &conv, "mcp__files__pid")
+            .is_none()
+    );
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(view_content(&c1).1, AiToolStatus::Error);
+    assert!(view_content(&c1).2.contains("was deleted"), "{c1:?}");
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.mcp.shutdown().await;
+}
+
+#[test]
+fn the_lock_cancels_provider_requests_outside_a_conversation() {
+    let manager = AiManager::default();
+    let op = manager.background_op();
+    drop(manager.background_op());
+    // A conversation's stop does not reach it.
+    let _ = manager.cancel("0190a0a0-0000-7000-8000-000000000000");
+    assert!(!op.token().is_cancelled());
+    let mut vault = Vault::open_in_memory().unwrap();
+    manager.stop_all(&mut vault);
+    assert!(op.token().is_cancelled());
+    drop(op);
+    assert!(super::guard(&manager.0.ops).is_empty());
 }

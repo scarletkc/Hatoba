@@ -86,6 +86,123 @@ fn stored_paths(v: &Vault, id: &str) -> Vec<String> {
     paths
 }
 
+/// `import_skill` with the token a preview of the same read showed.
+fn import_previewed(
+    v: &mut Vault,
+    import: SkillImport,
+    replace_id: Option<&str>,
+    rename: Option<&str>,
+) -> AppResult<SkillView> {
+    let token = preview(v, &import).token;
+    import_skill(v, import, &token, replace_id, rename)
+}
+
+#[test]
+fn an_import_saves_only_what_its_preview_showed() {
+    let mut v = vault();
+    let dir = skill_folder("toctou");
+    let shown = preview(&v, &read_source(&dir.0).unwrap());
+    // The same files read the same, whenever they are read.
+    assert_eq!(
+        shown.token,
+        preview(&v, &read_source(&dir.0).unwrap()).token
+    );
+    assert_eq!(shown.token.len(), 64);
+
+    // A file changed on disk after the preview: nothing is saved.
+    dir.write("references/tls.md", b"TLS notes, edited");
+    let err = import_skill(
+        &mut v,
+        read_source(&dir.0).unwrap(),
+        &shown.token,
+        None,
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidInput);
+    assert_eq!(err.field.as_deref(), Some("path"));
+    assert!(err.detail.contains("Preview it again"), "{}", err.detail);
+    assert!(v.skills().is_empty());
+
+    // A file added, or a skipped one changed into text, changes the token too.
+    let again = preview(&v, &read_source(&dir.0).unwrap());
+    assert_ne!(again.token, shown.token);
+    dir.write("references/more.md", b"More");
+    assert_ne!(
+        preview(&v, &read_source(&dir.0).unwrap()).token,
+        again.token
+    );
+
+    // Previewed again, it imports.
+    let now = preview(&v, &read_source(&dir.0).unwrap());
+    let view = import_skill(&mut v, read_source(&dir.0).unwrap(), &now.token, None, None).unwrap();
+    assert_eq!(view.files, ["references/more.md", "references/tls.md"]);
+}
+
+#[test]
+fn files_that_would_not_fit_a_sync_envelope_are_refused() {
+    let mut v = vault();
+    // Under 32 KB of raw bytes, but control characters take six bytes each once escaped.
+    let escaped = "\u{1b}[0m".repeat(7_000);
+    assert!(escaped.len() < 32 * 1024);
+    let mut edit = input("ansi-notes");
+    edit.files[0].content = escaped.clone();
+    let err = save_skill(&mut v, &edit).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidInput);
+    assert_eq!(err.field.as_deref(), Some("files"));
+    assert!(
+        err.detail
+            .starts_with("references/a.md is too large to sync"),
+        "{}",
+        err.detail
+    );
+
+    let mut edit = input("ansi-notes");
+    edit.body = "\"\\".repeat(12_000);
+    let err = save_skill(&mut v, &edit).unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("body"));
+    assert!(
+        err.detail.starts_with("The instructions are too large"),
+        "{}",
+        err.detail
+    );
+    assert!(v.skills().is_empty(), "nothing was saved");
+
+    // The same goes for an import, and for frontmatter that only an import brings.
+    let dir = TempDir::new("escaped");
+    dir.write(
+        "SKILL.md",
+        b"---\nname: ansi-notes\ndescription: Colors\n---\nBody\n",
+    );
+    dir.write("references/colors.md", escaped.as_bytes());
+    let import = read_source(&dir.0).unwrap();
+    assert!(preview(&v, &import).issues.is_empty());
+    let err = import_previewed(&mut v, import, None, None).unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("path"));
+    assert!(
+        err.detail.starts_with("references/colors.md is too large"),
+        "{}",
+        err.detail
+    );
+
+    let pkg = SkillPackage {
+        name: "wide".into(),
+        description: "Wide".into(),
+        frontmatter: [("notes".to_owned(), json!("\u{1}".repeat(8_000)))]
+            .into_iter()
+            .collect(),
+        body: "Body".into(),
+        files: Vec::new(),
+    };
+    assert_eq!(oversized(None, &pkg).unwrap(), Some(Oversized::Frontmatter));
+    // What fits is saved as before.
+    let ok = save_skill(&mut v, &input("plain")).unwrap();
+    assert_eq!(
+        oversized(Some(&ok.id), &package_of(&v, &ok.id).unwrap()).unwrap(),
+        None
+    );
+}
+
 #[test]
 fn a_folder_import_shows_every_file_then_saves_the_skill() {
     let mut v = vault();
@@ -110,7 +227,7 @@ fn a_folder_import_shows_every_file_then_saves_the_skill() {
     let picked = read_source(&dir.0.join("SKILL.md")).unwrap();
     assert_eq!(picked, import);
 
-    let view = import_skill(&mut v, import, None, None).unwrap();
+    let view = import_previewed(&mut v, import, None, None).unwrap();
     assert!(view.enabled);
     assert_eq!(view.files, ["references/tls.md"]);
     let skill = find_skill(&v, &view.id).unwrap();
@@ -133,15 +250,15 @@ fn a_folder_import_shows_every_file_then_saves_the_skill() {
         preview(&v, &again).existing_id.as_deref(),
         Some(view.id.as_str())
     );
-    let err = import_skill(&mut v, again.clone(), None, None).unwrap_err();
+    let err = import_previewed(&mut v, again.clone(), None, None).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("name"));
 
     // Rename: a second skill, with a valid name that is free.
-    let err = import_skill(&mut v, again.clone(), None, Some("Bad Name")).unwrap_err();
+    let err = import_previewed(&mut v, again.clone(), None, Some("Bad Name")).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("rename"));
-    let err = import_skill(&mut v, again.clone(), None, Some("nginx-debug")).unwrap_err();
+    let err = import_previewed(&mut v, again.clone(), None, Some("nginx-debug")).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("rename"));
-    let copy = import_skill(&mut v, again, None, Some(" nginx-copy ")).unwrap();
+    let copy = import_previewed(&mut v, again, None, Some(" nginx-copy ")).unwrap();
     assert_ne!(copy.id, view.id);
     assert_eq!(copy.name, "nginx-copy");
     assert_eq!(v.skills().len(), 2);
@@ -155,7 +272,7 @@ fn a_folder_import_shows_every_file_then_saves_the_skill() {
         b"---\nname: nginx-debug\ndescription: Debug nginx better\n---\nNew body\n",
     );
     let replaced =
-        import_skill(&mut v, read_source(&dir.0).unwrap(), Some(&view.id), None).unwrap();
+        import_previewed(&mut v, read_source(&dir.0).unwrap(), Some(&view.id), None).unwrap();
     assert_eq!(replaced.id, view.id);
     assert!(!replaced.enabled);
     assert_eq!(replaced.description, "Debug nginx better");
@@ -168,7 +285,7 @@ fn a_folder_import_shows_every_file_then_saves_the_skill() {
     assert_eq!(skill_detail(&v, &view.id).unwrap().body, "New body\n");
     assert_eq!(v.skills().len(), 2);
     assert_eq!(
-        import_skill(
+        import_previewed(
             &mut v,
             read_source(&dir.0).unwrap(),
             Some("0190a0a0-0000-7000-8000-000000000000"),
@@ -197,7 +314,7 @@ fn an_import_with_issues_is_refused_naming_the_problem() {
         i,
         SkillIssue::FileTooLarge { path, .. } if path == "references/huge.md"
     )));
-    let err = import_skill(&mut v, import, None, None).unwrap_err();
+    let err = import_previewed(&mut v, import, None, None).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("path"));
     assert!(err.detail.ends_with('.'), "{}", err.detail);
     assert!(v.skills().is_empty());
@@ -250,7 +367,7 @@ fn a_zip_imports_and_an_export_round_trips() {
     };
     let zip = dir.0.join("in.zip");
     hatoba_ai::skills::write_zip(&original, &zip).unwrap();
-    let view = import_skill(&mut v, read_source(&zip).unwrap(), None, None).unwrap();
+    let view = import_previewed(&mut v, read_source(&zip).unwrap(), None, None).unwrap();
     assert_eq!(view.files, ["references/a.md", "scripts/check.sh"]);
 
     let exported = package_of(&v, &view.id).unwrap();
@@ -336,7 +453,7 @@ fn saves_follow_the_import_rules_and_name_the_field() {
 fn an_edit_keeps_the_imported_frontmatter() {
     let mut v = vault();
     let dir = skill_folder("keep");
-    let view = import_skill(&mut v, read_source(&dir.0).unwrap(), None, None).unwrap();
+    let view = import_previewed(&mut v, read_source(&dir.0).unwrap(), None, None).unwrap();
     let mut edit = input("nginx-debug");
     edit.id = Some(view.id.clone());
     save_skill(&mut v, &edit).unwrap();
@@ -363,13 +480,13 @@ fn the_built_in_skills_name_is_reserved() {
     let shown = preview(&v, &import);
     assert!(shown.reserved_name);
     assert!(shown.issues.is_empty());
-    let err = import_skill(&mut v, import.clone(), None, None).unwrap_err();
+    let err = import_previewed(&mut v, import.clone(), None, None).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("name"));
-    let mine = import_skill(&mut v, import.clone(), None, Some("hatoba-notes")).unwrap();
+    let mine = import_previewed(&mut v, import.clone(), None, Some("hatoba-notes")).unwrap();
     assert_eq!(mine.name, "hatoba-notes");
     assert!(!preview(&v, &read_source(&skill_folder("free").0).unwrap()).reserved_name);
     let other = read_source(&skill_folder("other").0).unwrap();
-    let err = import_skill(&mut v, other, None, Some("hatoba")).unwrap_err();
+    let err = import_previewed(&mut v, other, None, Some("hatoba")).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("rename"));
 
     // One from an older build stays listed and can be renamed, not saved under the name.
@@ -388,7 +505,7 @@ fn the_built_in_skills_name_is_reserved() {
         preview(&v, &import).existing_id.as_deref(),
         Some(old.as_str())
     );
-    let err = import_skill(&mut v, import, Some(&old), None).unwrap_err();
+    let err = import_previewed(&mut v, import, Some(&old), None).unwrap_err();
     assert_eq!(err.field.as_deref(), Some("name"));
     let edit = SkillInput {
         id: Some(old.clone()),

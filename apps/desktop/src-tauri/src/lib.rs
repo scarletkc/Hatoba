@@ -5,6 +5,7 @@ mod ai;
 mod commands;
 mod convert;
 mod deploy;
+mod dropped;
 mod dto;
 mod error;
 mod lock;
@@ -143,6 +144,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_compact,
             ai_cmd::ai_search,
             ai_cmd::ai_edit_resend,
+            ai_cmd::ai_read_dropped_files,
             skills::skills_list,
             skills::skill_get,
             skills::skill_builtin_get,
@@ -211,11 +213,18 @@ pub fn run() {
             platform::window::show_main(&handle);
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(true) = event {
-                // §6.3: sync when the window regains focus.
+        .on_window_event(|window, event| match event {
+            // §6.3: sync when the window regains focus.
+            tauri::WindowEvent::Focused(true) => {
                 sync::trigger(window.app_handle(), sync::Trigger::Focus);
             }
+            // AI-35: the AI panel may read the files of the last drop, and no others.
+            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                if let Some(state) = window.app_handle().try_state::<state::AppState>() {
+                    state.dropped.record(paths);
+                }
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building Hatoba")

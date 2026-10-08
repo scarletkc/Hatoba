@@ -31,6 +31,7 @@ type AiApi = Pick<
   | "ai_compact"
   | "ai_search"
   | "ai_edit_resend"
+  | "ai_read_dropped_files"
 >;
 
 /** What the conversation mock reads from the settings and MCP mocks. */
@@ -62,6 +63,8 @@ interface Turn {
   context: AiTurnContext;
   ended: boolean;
   timers: Set<number>;
+  /** Pending `sleep`s, which end (with false) when the turn ends. */
+  sleepers: Set<() => void>;
   /** AI-22 ran once in this turn. */
   compacted: boolean;
 }
@@ -81,6 +84,8 @@ const DAY = 24 * HOUR;
  *                     from the extensions mock (`?mcp=demo`), preferring a server named in the message
  *                     ("mcp filesystem"); without one, a tool no server offers
  *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
+ *   "hidden"          run_command with several lines, a tab, an escape sequence and a right-to-left
+ *                     override, to see how the approval card shows them (AI-17)
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
  * Keywords come from the typed text. A message without one gets an answer about what it carries:
  * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
@@ -155,6 +160,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (turn.ended) return;
     turn.ended = true;
     turn.timers.forEach((t) => clearTimeout(t));
+    turn.sleepers.forEach((wake) => wake());
+    turn.sleepers.clear();
     turn.emit({ kind: "turn_ended", reason });
     if (turns.get(turn.convId) === turn) turns.delete(turn.convId);
   }
@@ -169,15 +176,18 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return cancelled;
   }
 
-  /** Resolves false once the turn has ended. */
+  /** Resolves false once the turn has ended, also when it ends while sleeping. */
   function sleep(turn: Turn, ms: number): Promise<boolean> {
     return new Promise((resolve) => {
       if (turn.ended) return resolve(false);
+      const wake = () => resolve(false);
       const t = window.setTimeout(() => {
         turn.timers.delete(t);
+        turn.sleepers.delete(wake);
         resolve(!turn.ended);
       }, ms);
       turn.timers.add(t);
+      turn.sleepers.add(wake);
     });
   }
 
@@ -279,6 +289,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
         if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
+        if (want("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
@@ -386,14 +397,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return Math.ceil(JSON.stringify(ctx).length / 4);
   }
 
-  /** AI-22: before a request that would pass 90% of the context window, compact first. */
-  async function autoCompact(c: Conv, turn: Turn): Promise<boolean> {
-    if (turn.compacted) return true;
+  /** AI-22: whether the context, with `extra` tokens of a new message, would pass 90% of the context window. */
+  async function compactionDue(c: Conv, turn: Turn, extra = 0): Promise<boolean> {
+    if (turn.compacted) return false;
     const providers = await deps.providers();
     const window = providers.find((p) => p.id === turn.context.provider_id)?.models.find((m) => m.id === turn.context.model_id)?.context_window ?? null;
-    const answered = contextOf(c).some((e) => e.role === "assistant");
-    const due = (flags.has("autocompact") && answered) || (!!window && contextTokens(c) > 0.9 * window);
-    if (!due) return true;
+    const ctx = contextOf(c);
+    const answered = ctx.some((e) => e.role === "assistant");
+    // Like Rust: nothing to compact, or just compacted.
+    if (!ctx.some((e) => e.role === "user" || e.role === "assistant") || ctx.at(-1)?.role === "summary") return false;
+    return (flags.has("autocompact") && answered) || (!!window && contextTokens(c) + extra > 0.9 * window);
+  }
+
+  /**
+   * AI-22 before a new message, as Rust does it: the summary is stored before the message (and sent on the
+   * turn's channel before `ai_send` returns), so the message stays in the context. False when the turn was
+   * stopped meanwhile: the message is then not stored.
+   */
+  async function compactBefore(c: Conv, turn: Turn, text: string): Promise<boolean> {
+    if (!(await compactionDue(c, turn, Math.ceil(text.length / 4)))) return !turn.ended;
+    return compactNow(c, turn);
+  }
+
+  /** AI-22: before a request that would pass 90% of the context window, compact first. */
+  async function autoCompact(c: Conv, turn: Turn): Promise<boolean> {
+    if (!(await compactionDue(c, turn))) return true;
+    return compactNow(c, turn);
+  }
+
+  async function compactNow(c: Conv, turn: Turn): Promise<boolean> {
     turn.compacted = true;
     if (!(await sleep(turn, 1400))) return false;
     const entry: AiEntryView = {
@@ -477,13 +509,31 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * cancelled results and `turn_ended`, and the new channel gets the cancelled results too, since
    * the panel stopped listening to the old one.
    */
-  function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void) {
+  function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void, go = true): Turn {
     const cancelled = stopTurn(c.view.id);
     c.runningUntil = 0;
-    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), compacted: false };
+    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), sleepers: new Set(), compacted: false };
     turns.set(c.view.id, turn);
     for (const entry of cancelled) turn.emit({ kind: "entry", entry });
+    if (go) begin(turn);
+    return turn;
+  }
+
+  /** The turn's first request. */
+  function begin(turn: Turn) {
     window.setTimeout(() => void respond(turn), 0);
+  }
+
+  /** The user's message after a compaction it waited for, unless the turn was stopped meanwhile (like Rust). */
+  async function storeMessage(c: Conv, turn: Turn, text: string): Promise<AiEntryView> {
+    if (!(await compactBefore(c, turn, text))) {
+      if (turns.get(c.view.id) === turn) turns.delete(c.view.id);
+      fail("cancelled", "the message was stopped before it was sent");
+    }
+    const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
+    c.entries.push(user_entry);
+    begin(turn);
+    return user_entry;
   }
 
   /** Like Rust: the call must belong to the newest response and have no result yet. */
@@ -558,7 +608,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       default: {
         // An MCP tool (AI-30): the server's text content, or an error result when no running server offers it.
         await wait(700);
-        const info = (await deps.mcp?.toolInfo(x.name).catch(() => null)) ?? null;
+        const info = (await deps.mcp?.toolInfo(c.view.id, x.name).catch(() => null)) ?? null;
         if (!info || turn?.context.disabled_mcp_servers.includes(info.server_id)) return { status: "error", content: `No running MCP server offers the tool ${x.name}.` };
         return {
           status: "ok",
@@ -737,11 +787,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           runningUntil: 0,
         };
       }
-      startTurn(c, input.context, onEvent);
+      const turn = startTurn(c, input.context, onEvent, false);
       convs.set(c.view.id, c);
       if (input.context.host_id && input.context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
-      const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text: input.text };
-      c.entries.push(user_entry);
+      const user_entry = await storeMessage(c, turn, input.text);
       return { conversation: view(c), user_entry };
     },
     ai_retry: async (id, context, onEvent) => {
@@ -818,12 +867,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         c.view = { ...c.view, context_start: summary?.entry_id ?? null };
       }
       c.view = { ...c.view, updated_at: Date.now() };
-      startTurn(c, context, onEvent);
+      const turn = startTurn(c, context, onEvent, false);
       if (context.host_id && context.host_id !== c.view.host_id) c.view = { ...c.view, host_id: context.host_id };
-      const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
-      c.entries.push(user_entry);
+      const user_entry = await storeMessage(c, turn, text);
       return { conversation: view(c), user_entry };
     },
+    // The browser reads dropped files itself (File API); there are no paths to read here.
+    ai_read_dropped_files: async (paths) => paths.map((p) => ({ status: "refused", name: p.split(/[\\/]/).pop() ?? p, reason: "unreadable" })),
   };
 }
 

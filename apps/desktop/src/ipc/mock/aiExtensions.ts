@@ -333,7 +333,19 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     }
   };
 
+  /** Like Rust's digest of what an import read (AI-27): the same files give the same token. */
+  const tokenOf = (preview: Omit<SkillImportPreview, "token">): string => {
+    let hash = 0x811c9dc5;
+    for (const ch of JSON.stringify({ ...preview, existing_id: null, reserved_name: false })) hash = Math.imul(hash ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+    return hash.toString(16).padStart(8, "0");
+  };
+
   const previewFor = (path: string): SkillImportPreview => {
+    const read = readPreview(path);
+    return { ...read, token: tokenOf(read) };
+  };
+
+  const readPreview = (path: string): Omit<SkillImportPreview, "token"> => {
     const lower = path.toLowerCase();
     if (lower.includes("empty")) {
       return { name: null, description: null, body: null, files: [], frontmatter_keys: [], skipped: [], issues: [{ kind: "missing_skill_md" }], existing_id: null, reserved_name: false };
@@ -590,9 +602,10 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       await wait(350);
       return structuredClone(previewFor(path));
     },
-    skill_import: async (path, replaceId, rename) => {
+    skill_import: async (path, token, replaceId, rename) => {
       await wait(300);
       const p = previewFor(path);
+      if (p.token !== token) fail("invalid_input", "The skill changed on disk after it was previewed. Preview it again.", "path");
       if (p.issues.length || p.name === null || p.description === null || p.body === null) fail("invalid_input", "the import has issues", "path");
       const name = rename ?? p.name;
       if (!NAME_RULE.test(name)) fail("invalid_input", "the new name is not valid", "rename");
@@ -689,7 +702,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       }
       if (e.state === "running") publish(e);
     },
-    mcp_tool_info: async (name): Promise<McpToolInfo | null> => {
+    // Like Rust without a recorded offer: the running servers' names (the mock's turns offer them all).
+    mcp_tool_info: async (_conversationId, name): Promise<McpToolInfo | null> => {
       for (const e of entries) {
         if (e.state !== "running") continue;
         const def = e.tools.find((d) => toolName(e.view.name, d.tool) === name);

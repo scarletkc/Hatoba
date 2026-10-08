@@ -9,7 +9,7 @@ import { useT } from "@/i18n";
 import type { AiPermissionMode, HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import { attachFiles, connectConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
+import { attachDroppedPaths, attachFiles, connectConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
 import { Composer } from "./Composer";
 import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
@@ -50,7 +50,10 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const ready = catalog.loaded && hasModels(catalog.providers);
   const busy = !!slot.turn || slot.remoteRunning;
   // AI-35: text files dropped on the panel go with the next message.
-  const drop = usePanelFileDrop(panelRef, ready, (files) => void attachFiles(slotId, files));
+  const drop = usePanelFileDrop(panelRef, ready, {
+    onFiles: (files) => void attachFiles(slotId, files),
+    onPaths: (paths) => void attachDroppedPaths(slotId, paths),
+  });
 
   const saveWidth = (width: number) => {
     const app = useApp.getState();

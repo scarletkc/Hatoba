@@ -1722,8 +1722,8 @@ async fn deleting_a_conversation_syncs_a_tombstone_for_every_part() {
 }
 
 #[tokio::test]
-async fn parts_left_by_a_concurrent_delete_can_be_cleaned_up() {
-    let (_server, clock, a, b) = two_devices().await;
+async fn parts_added_to_a_conversation_deleted_elsewhere_are_deleted_after_the_pull() {
+    let (server, clock, a, b) = two_devices().await;
     let conv = a.put(conversation("raced"));
     a.v().ai_append_entry(&conv, &user_entry(1, "old")).unwrap();
     converge(&a, &b).await;
@@ -1736,19 +1736,60 @@ async fn parts_left_by_a_concurrent_delete_can_be_cleaned_up() {
     b.v()
         .ai_append_entry(&conv, &user_entry(2, "late"))
         .unwrap();
-    converge(&a, &b).await;
+    let late: Vec<String> = parts_of(&b, &conv)
+        .into_iter()
+        .map(|(id, _)| id)
+        .filter(|id| server.item(id).is_none())
+        .collect();
+    assert_eq!(late.len(), 1);
 
+    // B's pull brings the conversation's tombstone, and the late part is deleted in the same
+    // round: its tombstone is what reaches the server.
+    b.sync().await;
+    assert!(parts_of(&b, &conv).is_empty());
+    let on_server = server.item(&late[0]).unwrap();
+    assert!(on_server.deleted && on_server.envelope.is_none());
+    converge(&a, &b).await;
     for dev in [&a, &b] {
         assert!(dev.v().get(&conv).is_none());
-        assert_eq!(
-            parts_of(dev, &conv).len(),
-            1,
-            "only the late entry's part is left"
-        );
-        dev.v().ai_delete_conversation(&conv).unwrap();
+        assert!(parts_of(dev, &conv).is_empty());
+        assert!(entries(dev, &conv).is_empty());
     }
+}
+
+#[tokio::test]
+async fn parts_whose_conversation_has_not_arrived_yet_are_kept() {
+    let (server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("paged"));
+    a.v()
+        .ai_append_entry(&conv, &user_entry(1, "first"))
+        .unwrap();
+    a.sync().await;
+    // The conversation changes again, so a pull reaches it after its part.
+    clock.advance(1_000);
+    a.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.title = "paged, renamed".into();
+        }
+    });
+    a.sync().await;
+
+    // B's pull stops after its first page: the part arrived, its conversation did not.
+    server.set_pull_page_cap(1);
+    let cloud = server.clone();
+    b.backend.on_next_pull(move || cloud.set_offline(true));
+    assert!(b.try_sync().await.is_err());
+    assert!(b.v().get(&conv).is_none());
+    assert_eq!(parts_of(&b, &conv).len(), 1);
+    // As after an unlock: the part stays, since its conversation may still come.
+    assert_eq!(b.v().ai_sweep_orphaned_parts().unwrap(), 0);
+    assert_eq!(parts_of(&b, &conv).len(), 1);
+    assert_eq!(b.pending(), 0);
+
+    server.set_offline(false);
     converge(&a, &b).await;
-    assert!(parts_of(&a, &conv).is_empty() && parts_of(&b, &conv).is_empty());
+    assert_eq!(entries(&b, &conv).len(), 1);
+    assert_eq!(entries(&b, &conv), entries(&a, &conv));
 }
 
 #[tokio::test]

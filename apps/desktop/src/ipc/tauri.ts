@@ -157,6 +157,7 @@ export function createTauriApi(): HatobaApi {
       channel.onmessage = onEvent;
       return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
     },
+    ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
 
     skills_list: () => call("skills_list"),
     skill_get: (id) => call("skill_get", { id }),
@@ -165,7 +166,7 @@ export function createTauriApi(): HatobaApi {
     skill_delete: (id) => call("skill_delete", { id }),
     skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),
     skill_import_preview: (path) => call("skill_import_preview", { path }),
-    skill_import: (path, replaceId, rename) => call("skill_import", { path, replaceId, rename }),
+    skill_import: (path, token, replaceId, rename) => call("skill_import", { path, token, replaceId, rename }),
     skill_export: (id, path) => call("skill_export", { id, path }),
 
     mcp_servers_list: () => call("mcp_servers_list"),
@@ -176,7 +177,7 @@ export function createTauriApi(): HatobaApi {
     mcp_server_start: (id) => call("mcp_server_start", { id }),
     mcp_server_stop: (id) => call("mcp_server_stop", { id }),
     mcp_set_always_allow: (serverId, tool, allow) => call("mcp_set_always_allow", { serverId, tool, allow }),
-    mcp_tool_info: (name) => call("mcp_tool_info", { name }),
+    mcp_tool_info: (conversationId, name) => call("mcp_tool_info", { conversationId, name }),
     mcp_import_preview: (json) => call("mcp_import_preview", { json }),
     mcp_import: (json) => call("mcp_import", { json }),
     mcp_export: () => call("mcp_export"),

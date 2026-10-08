@@ -1316,6 +1316,35 @@ pub enum SkillIssue {
     },
 }
 
+/// Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DroppedFileRefusal {
+    /// An image, which attachments do not take yet.
+    Image,
+    /// Over 256 KB.
+    TooLarge,
+    /// NUL bytes or invalid UTF-8.
+    Binary,
+    /// Not a file, gone, or not readable.
+    Unreadable,
+}
+
+/// A text file dropped on the AI panel (AI-35), named by its base name only, never its path (a
+/// path can name the local user).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum DroppedFile {
+    Ok {
+        name: String,
+        text: String,
+    },
+    Refused {
+        name: String,
+        reason: DroppedFileRefusal,
+    },
+}
+
 /// What an import would save, shown before saving (AI-27). Importable when `issues` is empty.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct SkillImportPreview {
@@ -1332,6 +1361,9 @@ pub struct SkillImportPreview {
     pub existing_id: Option<String>,
     /// The name is the built-in skill's (AI-34): the skill can be imported only under another.
     pub reserved_name: bool,
+    /// A digest of what was read, which `skill_import` takes back: it imports the source only if
+    /// it still reads the same, so what is saved is what this preview showed.
+    pub token: String,
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────

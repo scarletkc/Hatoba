@@ -14,8 +14,10 @@
 //!   back from the local database and decrypts it again.
 //! * Deleting a conversation or a skill tombstones everything that belongs to it (§6.5), and
 //!   editing a message to send it again (AI-26) tombstones that entry and every later one.
+//!   Parts that another device added to a conversation deleted here (or the other way round)
+//!   are tombstoned after each sync pull and unlock ([`Vault::ai_sweep_orphaned_parts`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use uuid::{Builder, Uuid};
 use zeroize::{Zeroize, Zeroizing};
@@ -287,6 +289,68 @@ impl Vault {
         self.message_headers(conversation_id)
             .map(|(_, m)| m.updated_at)
             .fold(conversation, i64::max)
+    }
+
+    /// [`ai_last_activity`](Self::ai_last_activity) of every conversation, by conversation id, in
+    /// one pass over the item map (a list would otherwise pass over every item per
+    /// conversation). Conversations that are not in the map are 0.
+    #[must_use]
+    pub fn ai_last_activities(&self) -> HashMap<String, i64> {
+        let mut last: HashMap<String, i64> = HashMap::new();
+        for (id, item) in self.items() {
+            let (conversation_id, at) = match item {
+                Item::AiConversation(c) => (id, c.updated_at),
+                Item::AiMessage(m) => (m.conversation_id.as_str(), m.updated_at),
+                _ => continue,
+            };
+            last.entry(conversation_id.to_owned())
+                .and_modify(|t| *t = (*t).max(at))
+                .or_insert(at);
+        }
+        last
+    }
+
+    /// Deletes the message parts whose conversation was deleted (its item is a tombstone), as
+    /// when another device deleted a conversation while this one added entries offline: the
+    /// tombstone arrived first, or the parts were written after it. Returns how many parts it
+    /// deleted, leaving tombstones that sync.
+    ///
+    /// Parts of a conversation this device has no row for at all are kept: a sync pull may bring
+    /// parts before their conversation (pages come in any order).
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_sweep_orphaned_parts(&mut self) -> Result<usize> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        let mut deleted: HashMap<&str, bool> = HashMap::new();
+        let mut orphans = Vec::new();
+        for (id, item) in self.items() {
+            let Some(m) = item.as_ai_message() else {
+                continue;
+            };
+            let conversation = m.conversation_id.as_str();
+            let gone = match deleted.get(conversation) {
+                Some(gone) => *gone,
+                None => {
+                    let gone = self.get(conversation).is_none()
+                        && self
+                            .store
+                            .item_row(conversation)?
+                            .is_some_and(|row| row.deleted);
+                    deleted.insert(conversation, gone);
+                    gone
+                }
+            };
+            if gone {
+                orphans.push(id.to_owned());
+            }
+        }
+        if !orphans.is_empty() {
+            self.tombstone(&orphans)?;
+        }
+        Ok(orphans.len())
     }
 
     /// Deletes a conversation and all of its message parts, leaving tombstones that sync.
@@ -1086,6 +1150,76 @@ mod tests {
             vault.ai_delete_conversation(&conv),
             Err(Error::ItemNotFound(_))
         ));
+    }
+
+    #[test]
+    fn sweeping_deletes_the_parts_of_deleted_conversations_only() {
+        let (mut vault, clock) = vault();
+        let deleted = conversation(&mut vault, "deleted");
+        let live = conversation(&mut vault, "live");
+        vault.ai_append_entry(&deleted, "{}").unwrap();
+        vault.ai_append_entry(&deleted, "{}").unwrap();
+        vault.ai_append_entry(&live, "{}").unwrap();
+        // A part of a conversation this device has no row for: it may still arrive.
+        let stray = vault
+            .put(
+                None,
+                Item::AiMessage(AiMessage {
+                    conversation_id: "0192f0aa-0000-7000-8000-00000000abcd".into(),
+                    entry_id: "0192f0aa-1111-7000-8000-000000000001".into(),
+                    part: 0,
+                    part_count: 1,
+                    data: "{}".into(),
+                    ..AiMessage::default()
+                }),
+            )
+            .unwrap();
+        // The conversation item goes (its tombstone came from another device); its parts stay.
+        clock.advance(1_000);
+        vault.delete(&deleted).unwrap();
+        let parts = |v: &Vault, c: &str| {
+            v.items()
+                .filter_map(|(id, i)| {
+                    i.as_ai_message()
+                        .filter(|m| m.conversation_id == c)
+                        .map(|_| id.to_owned())
+                })
+                .collect::<Vec<_>>()
+        };
+        let orphans = parts(&vault, &deleted);
+        assert_eq!(orphans.len(), 2);
+
+        assert_eq!(vault.ai_sweep_orphaned_parts().unwrap(), 2);
+        assert!(parts(&vault, &deleted).is_empty());
+        for id in &orphans {
+            let row = vault.store.item_row(id).unwrap().unwrap();
+            assert!(row.deleted && row.dirty && row.envelope.is_none(), "{id}");
+        }
+        assert_eq!(parts(&vault, &live).len(), 1);
+        assert!(vault.get(&stray).is_some());
+        assert_eq!(vault.ai_sweep_orphaned_parts().unwrap(), 0);
+        vault.lock();
+        assert!(matches!(
+            vault.ai_sweep_orphaned_parts(),
+            Err(Error::Locked)
+        ));
+    }
+
+    #[test]
+    fn last_activities_match_each_conversations_own_reading() {
+        let (mut vault, clock) = vault();
+        let busy = conversation(&mut vault, "busy");
+        let quiet = conversation(&mut vault, "quiet");
+        clock.advance(1_000);
+        vault.ai_append_entry(&busy, "{}").unwrap();
+        clock.advance(1_000);
+        vault.ai_append_entry(&busy, "{}").unwrap();
+        let all = vault.ai_last_activities();
+        for id in [&busy, &quiet] {
+            assert_eq!(all[id.as_str()], vault.ai_last_activity(id), "{id}");
+        }
+        assert!(all[busy.as_str()] > all[quiet.as_str()]);
+        assert!(!all.contains_key("unknown"));
     }
 
     #[test]

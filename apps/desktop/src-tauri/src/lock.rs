@@ -37,6 +37,10 @@ pub fn refresh_policy(state: &AppState) {
 /// tells the WebView. Live SSH sessions stay connected but masked unless the user chose otherwise.
 /// Every AI turn and tool stops first, so the assistant never acts behind the lock screen (§13.1),
 /// and every MCP server stops (AI-32).
+///
+/// What needs no waiting comes first: the lock screen, sync and the deployment tokens. Stopping
+/// the MCP servers can take seconds (a slow `stdio` server gets a grace period to exit), so it
+/// comes after them, alongside closing the SSH sessions.
 pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     let state = state(app);
     let was_unlocked = {
@@ -48,18 +52,20 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         vault.lock();
         was
     };
-    // AI-32: every MCP server stops, and `http` sessions close, with the vault.
-    state.mcp.stop_all(&state.vault).await;
-    sync::stop(app);
-    // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
-    state.deploy.clear();
-    if state.lock_policy.disconnect_on_lock.load(Ordering::Relaxed) {
-        state.ssh.disconnect_all().await;
-    }
     if was_unlocked {
         tracing::info!("vault locked ({reason:?})");
         let _ = VaultLockedEvent { reason }.emit(app);
     }
+    sync::stop(app);
+    // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
+    state.deploy.clear();
+    let disconnect = async {
+        if state.lock_policy.disconnect_on_lock.load(Ordering::Relaxed) {
+            state.ssh.disconnect_all().await;
+        }
+    };
+    // AI-32: every MCP server stops, and `http` sessions close, with the vault.
+    futures::join!(state.mcp.stop_all(&state.vault), disconnect);
 }
 
 /// Background watchers for idle timeout and system sleep.

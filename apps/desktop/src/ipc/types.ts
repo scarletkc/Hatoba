@@ -875,6 +875,8 @@ export interface SkillImportPreview {
   existing_id: string | null;
   /** The name is the built-in skill's (AI-34): the skill can be imported only under another. */
   reserved_name: boolean;
+  /** A digest of what was read, which `skill_import` takes back: it imports only what this preview showed. */
+  token: string;
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
@@ -972,6 +974,12 @@ export interface AiSearchHit {
   /** Text around the first match. */
   snippet: string;
 }
+
+/** Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons. */
+export type DroppedFileRefusal = "image" | "too_large" | "binary" | "unreadable";
+
+/** A text file dropped on the AI panel in the desktop app (AI-35), named by its base name only, never its path. */
+export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
 
 // ───────────────────────── Events (§10.2) ─────────────────────────
 

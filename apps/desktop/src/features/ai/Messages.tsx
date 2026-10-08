@@ -12,7 +12,7 @@ import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
 import { patchSlot, useAi, type Slot } from "./store";
-import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
+import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
@@ -602,6 +602,42 @@ function McpDetails({ mcp }: { mcp: McpToolInfo }) {
 }
 
 /**
+ * A call's input on the approval card (AI-17), all of it: no scroll fold, every line break marked (a final
+ * one presses Enter), the line count when there are several, and hidden characters (controls, bidirectional
+ * overrides) as escapes, with a note that there are some.
+ */
+function ShownInput({ text, command }: { text: string; command?: boolean }) {
+  const t = useT();
+  const shown = useMemo(() => shownText(text), [text]);
+  const multiline = shown.lines.length > 1;
+  return (
+    <>
+      {(multiline || shown.escaped) && (
+        <div className={s.inputNotes}>
+          {multiline && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.lines", { n: shown.lines.length })}</span>}
+          {shown.escaped && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.escaped")}</span>}
+        </div>
+      )}
+      <pre className={cx(s.pre, s.whole, command && s.command, "selectable")}>
+        {shown.lines.map((line, i) => (
+          <Fragment key={i}>
+            {line}
+            {i < shown.lines.length - 1 && (
+              <>
+                <span className={s.lineBreak} aria-hidden>
+                  ↵
+                </span>
+                {"\n"}
+              </>
+            )}
+          </Fragment>
+        ))}
+      </pre>
+    </>
+  );
+}
+
+/**
  * AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. An MCP call (AI-31)
  * shows its server, the tool's description and hints in place of the host, and offers Always allow.
  * Allow for this conversation (AI-19) is on every card.
@@ -710,13 +746,13 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
         <div className={s.approvalInput}>
           {kind === "run_command" && (
             <>
-              <pre className={cx(s.pre, s.command, "selectable")}>{str(args.command)}</pre>
+              <ShownInput text={str(args.command)} command />
               <div className={s.meta}>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 30 })}</div>
             </>
           )}
           {kind === "send_input" && (
             <>
-              <pre className={cx(s.pre, s.command, "selectable")}>{str(args.text) || " "}</pre>
+              <ShownInput text={str(args.text) || " "} command />
               <div className={s.meta}>
                 {args.key ? t("ai.approval.thenKey", { key: (SEND_KEYS as readonly string[]).includes(str(args.key)) ? t(KEY_LABEL[str(args.key) as SendKey]) : str(args.key) }) : t("ai.approval.noKey")}
                 {" · "}
@@ -726,14 +762,14 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           )}
           {kind === "fetch_url" && (
             <>
-              <pre className={cx(s.pre, s.command, "selectable")}>{str(args.url)}</pre>
+              <ShownInput text={str(args.url)} command />
               {args.offset !== undefined && <div className={s.meta}>{t("ai.approval.offset", { n: str(args.offset) })}</div>}
             </>
           )}
           {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && (
             <>
               {mcp && <div className={s.label}>{t("ai.approval.arguments")}</div>}
-              <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+              <ShownInput text={prettyArgs(call.arguments) || "{}"} />
             </>
           )}
         </div>
@@ -787,7 +823,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           </Button>
         </div>
       )}
-      {mode !== "reject" && (
+      {/* An MCP call whose tool is unknown cannot be allowed ahead: nothing names what it would reach. */}
+      {mode !== "reject" && (kind !== "mcp" || mcp) && (
         <div className={s.allowRow}>
           <LinkButton tone="muted" icon="chat-circle-dots" title={t("ai.approval.allowHereHint", { tool: label })} onClick={() => run("conversation")}>
             {t("ai.approval.allowHere")}

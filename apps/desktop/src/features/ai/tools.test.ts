@@ -3,7 +3,9 @@ import type { McpToolInfo } from "@/ipc/types";
 import {
   callSummary,
   exitStatusOf,
+  grantKey,
   keySequence,
+  mcpOffResult,
   mustAsk,
   needsApproval,
   needsSession,
@@ -11,10 +13,35 @@ import {
   parseReadTerminal,
   parseSendInput,
   runsInFrontend,
+  shownText,
   splitMcpName,
   toolKind,
   toolLabel,
 } from "./tools";
+
+describe("the approval card's view of an input (AI-17)", () => {
+  it("keeps plain text as it is, one entry per line", () => {
+    expect(shownText("df -h /")).toEqual({ lines: ["df -h /"], escaped: false });
+    expect(shownText("cd /srv\nmake deploy")).toEqual({ lines: ["cd /srv", "make deploy"], escaped: false });
+    // A final line break (it presses Enter) leaves an empty last line, so it can be marked.
+    expect(shownText("uptime\n").lines).toEqual(["uptime", ""]);
+    expect(shownText("日本語 é 😀").escaped).toBe(false);
+  });
+
+  it("shows control characters as escapes", () => {
+    expect(shownText("ls\tx")).toEqual({ lines: ["ls\\tx"], escaped: true });
+    expect(shownText("echo hi\r\nrm -rf ~").lines).toEqual(["echo hi\\r", "rm -rf ~"]);
+    expect(shownText("printf '\x1b[2J'").lines).toEqual(["printf '\\x1b[2J'"]);
+    expect(shownText("a\x00b\x7fc\x85").lines).toEqual(["a\\x00b\\x7fc\\x85"]);
+  });
+
+  it("shows bidirectional and zero-width characters as escapes", () => {
+    // `rm -rf /` written as `echo safe` with a right-to-left override.
+    expect(shownText("echo \u202e/ fr- mr").lines).toEqual(["echo \\u{202e}/ fr- mr"]);
+    expect(shownText("a\u200bb\u2066c\u2069d\ufeff").lines).toEqual(["a\\u{200b}b\\u{2066}c\\u{2069}d\\u{feff}"]);
+    expect(shownText("\u061c").escaped).toBe(true);
+  });
+});
 
 describe("tool kinds", () => {
   it("names built-in, MCP and unknown tools", () => {
@@ -145,8 +172,23 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: info(true, true) })).toBe(true);
   });
 
-  it("runs an MCP name no running server offers, so Rust answers it with an error", () => {
-    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: null })).toBe(false);
+  it("asks in both modes for an MCP call whose tool cannot be named", () => {
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: null })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: null })).toBe(true);
+  });
+
+  it("remembers Allow for this conversation per MCP server and tool, not per called name", () => {
+    expect(grantKey("run_command", "run_command", null)).toBe("run_command");
+    expect(grantKey("mcp", "mcp__github__list_issues", info(false, false))).toBe("mcp:s1:list_issues");
+    // The same name can mean another server in a later request (cleaned names collide, the tools menu
+    // changes the suffixes), and then it is another grant.
+    const other = { ...info(false, false), server_id: "s2" };
+    expect(grantKey("mcp", "mcp__github__list_issues", other)).toBe("mcp:s2:list_issues");
+    expect(grantKey("mcp", "mcp__github__list_issues", null)).toBeNull();
+  });
+
+  it("tells the model when a server was switched off during the turn (AI-30)", () => {
+    expect(mcpOffResult("github")).toBe('The MCP server "github" was switched off for this conversation, so the tool did not run.');
   });
 
   it("runs any tool allowed for this conversation without asking", () => {

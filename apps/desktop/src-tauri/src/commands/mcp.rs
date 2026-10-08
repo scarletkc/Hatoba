@@ -342,9 +342,16 @@ pub(crate) fn set_always_allow(
     device.save(v)
 }
 
-/// The tool behind a name the model called, for the approval card (AI-31).
-pub(crate) fn tool_info(v: &Vault, mcp: &McpManager, name: &str) -> Option<McpToolInfo> {
-    let tool = mcp.lookup(name)?;
+/// The tool behind a name the model called in a conversation, for the approval card (AI-31):
+/// resolved like the call itself (`McpManager::offered`), so the card names the server that runs
+/// it. `None` when the conversation's offer has no such tool, or its server was deleted.
+pub(crate) fn tool_info(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    name: &str,
+) -> Option<McpToolInfo> {
+    let tool = mcp.offered(conversation_id, name)?;
     let server = v.get(&tool.server_id).and_then(Item::as_mcp_server)?;
     let device = DeviceState::load(v);
     Some(McpToolInfo {
@@ -558,15 +565,17 @@ pub async fn mcp_set_always_allow(
     Ok(())
 }
 
-/// The MCP tool behind a name the model called: from the newest offer a request made with it,
-/// else from the running servers. Null when neither has it, or its server was deleted.
+/// The MCP tool behind a name the model called in the conversation: from the offer of the
+/// conversation's latest request, as `ai_tool_run` resolves it, else from the running servers.
+/// Null when neither has it, or its server was deleted; the panel then asks in either mode.
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_tool_info(
     state: State<'_, AppState>,
+    conversation_id: String,
     name: String,
 ) -> AppResult<Option<McpToolInfo>> {
-    state.with_unlocked(|v| Ok(tool_info(v, &state.mcp, &name)))
+    state.with_unlocked(|v| Ok(tool_info(v, &state.mcp, &conversation_id, &name)))
 }
 
 /// AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add.

@@ -35,6 +35,15 @@ const SKILL_MD: &str = "SKILL.md";
 /// What a name must be (AI-27), for messages.
 const NAME_RULE: &str = "Use 1 to 64 lowercase letters, digits and hyphens.";
 
+/// The most plaintext a skill or skill file item may have, as for a part of a conversation entry:
+/// its sync envelope (the item's JSON, encrypted and in base64) must stay under the Worker's
+/// 64 KB limit (§6.2). The 32 KB file limit counts raw bytes, which JSON escaping can more than
+/// double (a control character takes six bytes), so it does not bound the item by itself.
+const ITEM_MAX_BYTES: usize = hatoba_core::AI_PART_MAX_BYTES;
+
+/// A skill id as long as any the vault makes, to measure the items of a skill that has none yet.
+const PLACEHOLDER_ID: &str = "00000000-0000-7000-8000-000000000000";
+
 // ───────────────────────── issues ─────────────────────────
 
 fn issue_view(issue: &Issue) -> SkillIssue {
@@ -240,8 +249,75 @@ pub(crate) fn builtin_view(v: &Vault, version: &str) -> BuiltinSkillView {
     }
 }
 
+/// What [`store_skill`] would write that is too large to sync.
+#[derive(Debug, PartialEq, Eq)]
+enum Oversized {
+    /// The skill item: its frontmatter fields (the name and description have limits of their own).
+    Frontmatter,
+    /// A file, by path (`SKILL.md` for the instructions).
+    File(String),
+}
+
+impl Oversized {
+    /// The form field it belongs to.
+    fn field(&self) -> &'static str {
+        match self {
+            Self::Frontmatter => "body",
+            Self::File(path) if path == SKILL_MD => "body",
+            Self::File(_) => "files",
+        }
+    }
+
+    fn text(&self) -> String {
+        const WHY: &str = "Quotes, backslashes and control characters take more room once encoded.";
+        match self {
+            Self::Frontmatter => format!("The frontmatter of SKILL.md is too large to sync. {WHY}"),
+            Self::File(path) if path == SKILL_MD => {
+                format!("The instructions are too large to sync. {WHY}")
+            }
+            Self::File(path) => format!("{path} is too large to sync. {WHY}"),
+        }
+    }
+}
+
+/// The first item of `pkg`, stored under `id`, whose plaintext would pass [`ITEM_MAX_BYTES`].
+fn oversized(id: Option<&str>, pkg: &SkillPackage) -> AppResult<Option<Oversized>> {
+    let too_large =
+        |item: Item| -> AppResult<bool> { Ok(item.to_plaintext()?.len() > ITEM_MAX_BYTES) };
+    let skill = Item::Skill(Skill {
+        name: pkg.name.clone(),
+        description: pkg.description.clone(),
+        frontmatter: other_fields(pkg.frontmatter.clone()),
+        enabled: false,
+        // The widest number it can carry.
+        updated_at: i64::MIN,
+    });
+    if too_large(skill)? {
+        return Ok(Some(Oversized::Frontmatter));
+    }
+    let skill_id = id.unwrap_or(PLACEHOLDER_ID);
+    let files = std::iter::once((SKILL_MD, pkg.body.as_str())).chain(
+        pkg.files
+            .iter()
+            .map(|f| (f.path.as_str(), f.content.as_str())),
+    );
+    for (path, content) in files {
+        let file = Item::SkillFile(SkillFile {
+            skill_id: skill_id.to_owned(),
+            path: path.to_owned(),
+            content: content.to_owned(),
+            updated_at: i64::MIN,
+        });
+        if too_large(file)? {
+            return Ok(Some(Oversized::File(path.to_owned())));
+        }
+    }
+    Ok(None)
+}
+
 /// Stores a package as a skill and its files: under `id` (its fields and files replaced) or as a
-/// new skill. A file left out is deleted; an unchanged one is not written again.
+/// new skill. A file left out is deleted; an unchanged one is not written again. The caller
+/// checked [`oversized`].
 fn store_skill(
     v: &mut Vault,
     id: Option<&str>,
@@ -321,6 +397,9 @@ pub(crate) fn save_skill(v: &mut Vault, input: &SkillInput) -> AppResult<SkillVi
     if named(v, &pkg.name, input.id.as_deref()).is_some() {
         return Err(taken("name", &pkg.name));
     }
+    if let Some(too_large) = oversized(input.id.as_deref(), &pkg)? {
+        return Err(AppError::invalid(too_large.field(), too_large.text()));
+    }
     let id = store_skill(v, input.id.as_deref(), &pkg, input.enabled)?;
     Ok(skill_view(v, &id, &find_skill(v, &id)?))
 }
@@ -362,9 +441,49 @@ fn read_source(path: &Path) -> AppResult<SkillImport> {
     result.map_err(source_error)
 }
 
+/// A digest of everything an import read (AI-27): `skill_import` reads the source again and
+/// saves it only when the digest is the one its preview showed, so what is saved is what the
+/// user saw, even if the files changed on disk in between.
+pub(crate) fn import_token(import: &SkillImport) -> String {
+    fn put(bytes: &mut Vec<u8>, text: &str) {
+        bytes.extend_from_slice(&(text.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(text.as_bytes());
+    }
+    let mut bytes = Vec::new();
+    match &import.package {
+        Some(p) => {
+            put(&mut bytes, "package");
+            put(&mut bytes, &p.name);
+            put(&mut bytes, &p.description);
+            put(
+                &mut bytes,
+                &serde_json::to_string(&p.frontmatter).unwrap_or_default(),
+            );
+            put(&mut bytes, &p.body);
+            for file in &p.files {
+                put(&mut bytes, &file.path);
+                put(&mut bytes, &file.content);
+            }
+        }
+        None => put(&mut bytes, "none"),
+    }
+    put(&mut bytes, "skipped");
+    for skipped in &import.skipped {
+        put(&mut bytes, &skipped.path);
+    }
+    put(&mut bytes, "issues");
+    for issue in &import.issues {
+        put(&mut bytes, &issue_text(issue));
+    }
+    let token = hatoba_core::crypto::sha256_hex(&bytes);
+    zeroize::Zeroize::zeroize(&mut bytes);
+    token
+}
+
 pub(crate) fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
     let package = import.package.as_ref();
     SkillImportPreview {
+        token: import_token(import),
         name: package.map(|p| p.name.clone()),
         description: package.map(|p| p.description.clone()),
         body: package.map(|p| p.body.clone()),
@@ -394,15 +513,23 @@ pub(crate) fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
     }
 }
 
-/// `skill_import`: saves what the preview showed. `replace_id` keeps that skill's id and
-/// enabled state and rewrites its fields and files; `rename` saves under a new, valid name;
+/// `skill_import`: saves what the preview showed, `token` being the preview's
+/// ([`import_token`]); a source that changed since is refused. `replace_id` keeps that skill's id
+/// and enabled state and rewrites its fields and files; `rename` saves under a new, valid name;
 /// otherwise a taken name is refused.
 pub(crate) fn import_skill(
     v: &mut Vault,
     import: SkillImport,
+    token: &str,
     replace_id: Option<&str>,
     rename: Option<&str>,
 ) -> AppResult<SkillView> {
+    if import_token(&import) != token {
+        return Err(AppError::invalid(
+            "path",
+            "The skill changed on disk after it was previewed. Preview it again.",
+        ));
+    }
     if let Some(issue) = import.issues.first() {
         return Err(AppError::invalid("path", issue_text(issue)));
     }
@@ -431,6 +558,9 @@ pub(crate) fn import_skill(
     };
     if named(v, &pkg.name, replace_id).is_some() {
         return Err(taken(field, &pkg.name));
+    }
+    if let Some(too_large) = oversized(replace_id, &pkg)? {
+        return Err(AppError::invalid("path", too_large.text()));
     }
     let id = store_skill(v, replace_id, &pkg, enabled)?;
     Ok(skill_view(v, &id, &find_skill(v, &id)?))
@@ -517,21 +647,24 @@ pub async fn skill_import_preview(
     state.with_unlocked(|v| Ok(preview(v, &import)))
 }
 
-/// Imports what the preview showed, reading the path again. `replace_id` replaces that skill;
-/// `rename` saves it under a new name.
+/// Imports what the preview showed: reads the path again and refuses it when it no longer
+/// matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
+/// new name.
 #[tauri::command]
 #[specta::specta]
 pub async fn skill_import(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
+    token: String,
     replace_id: Option<String>,
     rename: Option<String>,
 ) -> AppResult<SkillView> {
     state.with_unlocked(|_| Ok(()))?;
     let import = blocking(move || read_source(Path::new(&path))).await?;
-    let view = state
-        .with_unlocked(|v| import_skill(v, import, replace_id.as_deref(), rename.as_deref()))?;
+    let view = state.with_unlocked(|v| {
+        import_skill(v, import, &token, replace_id.as_deref(), rename.as_deref())
+    })?;
     tracing::info!(skill_id = %view.id, files = view.files.len(), "skill imported");
     sync::local_change(&app);
     Ok(view)

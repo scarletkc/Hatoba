@@ -51,14 +51,30 @@ export interface AskInput {
 /**
  * §13.5 with AI-19 and AI-31. Allow for this conversation wins, since the user chose it on a card of
  * this very tool. An MCP tool asks in manual mode unless it is set to Always allow on this device, and
- * in bypass mode only when its server is set to Always ask. An MCP name that `mcp_tool_info` does not
- * know never asks: Rust answers it with an error result.
+ * in bypass mode only when its server is set to Always ask. An MCP call whose tool `mcp_tool_info`
+ * cannot name asks in both modes: nothing says which server it would reach.
  */
 export function mustAsk({ kind, mode, allowedHere, mcp }: AskInput): boolean {
   if (allowedHere) return false;
   if (kind !== "mcp") return needsApproval(kind, mode);
-  if (!mcp) return false;
+  if (!mcp) return true;
   return mode === "bypass" ? mcp.always_ask : !mcp.tool.always_allow;
+}
+
+/**
+ * What AI-19 Allow for this conversation remembers for a call: a built-in tool by name, an MCP tool by
+ * its server and the server's own tool name (the name the model calls depends on the servers a request
+ * offered, so it can mean another server later). Null for an MCP call whose tool is unknown, which
+ * cannot be allowed ahead.
+ */
+export function grantKey(kind: ToolKind, name: string, mcp: McpToolInfo | null | undefined): string | null {
+  if (kind !== "mcp") return name;
+  return mcp ? `mcp:${mcp.server_id}:${mcp.tool.tool}` : null;
+}
+
+/** The result of a call whose server was switched off in the tools menu during the turn (AI-30); the model reads it. */
+export function mcpOffResult(serverName: string): string {
+  return `The MCP server "${serverName}" was switched off for this conversation, so the tool did not run.`;
 }
 
 /** `mcp__server__tool` → `["server", "tool"]`. */
@@ -211,6 +227,38 @@ export function callSummary(name: string, json: string): string {
 function firstLine(s: string): string {
   const lines = s.split(/\r?\n/);
   return lines.length > 1 ? `${lines[0]} …` : lines[0];
+}
+
+/**
+ * Characters that are invisible or reorder what follows: C0 and C1 controls but the line break, and
+ * the bidirectional and zero-width format characters.
+ */
+const HIDDEN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f؜​-‏‪-‮⁠-⁩﻿]/g;
+
+const SHOWN: Record<string, string> = { "\t": "\\t", "\r": "\\r" };
+
+/** Text as the approval card shows it (AI-17): its lines, with hidden characters as visible escapes. */
+export interface ShownText {
+  /** The lines, split at line breaks; a final line break leaves an empty last line. */
+  lines: string[];
+  /** Some character was replaced by an escape. */
+  escaped: boolean;
+}
+
+/**
+ * The input of a call for the approval card, where nothing may hide: a tab, a carriage return or an
+ * escape sequence typed into the shell, or a bidirectional override that shows the text in another
+ * order than it runs, each shows as an escape (`\t`, `\r`, `\x1b`, `\u{202e}`), as command lines do in
+ * Settings → AI (`formatCommandLine`).
+ */
+export function shownText(text: string): ShownText {
+  let escaped = false;
+  const shown = text.replace(HIDDEN, (c) => {
+    escaped = true;
+    const code = c.charCodeAt(0);
+    return SHOWN[c] ?? (code <= 0xff ? `\\x${code.toString(16).padStart(2, "0")}` : `\\u{${code.toString(16)}}`);
+  });
+  return { lines: shown.split("\n"), escaped };
 }
 
 /** Arguments as indented JSON for display, or the raw text when they are not JSON. */

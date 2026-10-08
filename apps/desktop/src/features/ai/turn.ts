@@ -49,13 +49,36 @@ export function newTurn(): TurnState {
 
 const emptyLive = (): LiveResponse => ({ text: "", reasoning: "", toolCalls: [], usage: null });
 
-/** Adds an entry, or replaces the one with the same id (entries arrive both as events and as command results). */
+/** The id of the user's message the panel shows until `ai_send` / `ai_edit_resend` returns the stored entry. */
+export const LOCAL_ENTRY = "~local";
+
+/** An entry the panel shows before Rust stored it; it stays after every stored entry. */
+const isPending = (e: AiEntryView) => e.entry_id.startsWith("~");
+
+/**
+ * Adds an entry, or replaces the one with the same id (entries arrive both as events and as command
+ * results). A new entry goes where its id puts it: stored entries are ordered by `entry_id` (UUIDv7,
+ * §13.7), and what Rust stores before the user's pending message (a stopped turn's cancelled results, a
+ * summary of AI-22) comes before it, whichever reaches the panel first.
+ */
 export function upsertEntry(entries: AiEntryView[], entry: AiEntryView): AiEntryView[] {
   const i = entries.findIndex((e) => e.entry_id === entry.entry_id);
-  if (i < 0) return [...entries, entry];
-  const next = entries.slice();
-  next[i] = entry;
-  return next;
+  if (i >= 0) {
+    const next = entries.slice();
+    next[i] = entry;
+    return next;
+  }
+  if (isPending(entry)) return [...entries, entry];
+  const at = entries.findIndex((e) => isPending(e) || e.entry_id > entry.entry_id);
+  return at < 0 ? [...entries, entry] : [...entries.slice(0, at), entry, ...entries.slice(at)];
+}
+
+/** The stored user entry in place of the one shown while the command was on its way, in its stored order. */
+export function placeUserEntry(entries: AiEntryView[], entry: AiEntryView): AiEntryView[] {
+  return upsertEntry(
+    entries.filter((e) => e.entry_id !== LOCAL_ENTRY),
+    entry,
+  );
 }
 
 /** Applies one streamed event (§13.1, the IPC contract's turn protocol). */
@@ -139,13 +162,22 @@ export function laterMessages(entries: AiEntryView[], entryId: string): number {
   return i < 0 ? 0 : entries.slice(i + 1).filter((e) => e.role !== "tool").length;
 }
 
-/** The tool calls of the newest assistant entry that have no result yet, in order. */
+/**
+ * The tool calls of the newest assistant entry that have no result yet, in order. Results answer the
+ * calls with their id in order, as Rust pairs them, so of calls that share an id the first ones are
+ * answered first.
+ */
 export function unansweredCalls(entries: AiEntryView[]): AiToolCall[] {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
     if (e.role !== "assistant") continue;
-    const answered = new Set(entries.slice(i + 1).flatMap((x) => (x.role === "tool" ? [x.tool_call_id] : [])));
-    return e.tool_calls.filter((c) => !answered.has(c.id));
+    const results = new Map<string, number>();
+    for (const x of entries.slice(i + 1)) if (x.role === "tool") results.set(x.tool_call_id, (results.get(x.tool_call_id) ?? 0) + 1);
+    return e.tool_calls.filter((c) => {
+      const left = results.get(c.id) ?? 0;
+      if (left > 0) results.set(c.id, left - 1);
+      return left === 0;
+    });
   }
   return [];
 }

@@ -24,6 +24,7 @@ import type {
   DeployStart,
   DeployTarget,
   DeviceView,
+  DroppedFile,
   EventMap,
   FileEntry,
   ForwardInput,
@@ -248,6 +249,12 @@ export interface HatobaApi {
   ai_search(query: string): Promise<AiSearchHit[]>;
   /** AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and starts a turn. */
   ai_edit_resend(conversation_id: string, entry_id: string, text: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
+  /**
+   * AI-35, desktop app: reads text files dropped on the window, which its webview hands over as paths only.
+   * Only paths of the window's last drop, each once; any other path refuses the request. One result per path,
+   * in order, named by the file's base name.
+   */
+  ai_read_dropped_files(paths: string[]): Promise<DroppedFile[]>;
 
   // AI skills (§13.8)
   skills_list(): Promise<SkillView[]>;
@@ -260,8 +267,11 @@ export interface HatobaApi {
   skill_set_enabled(id: string, enabled: boolean): Promise<void>;
   /** Reads a folder or `.zip` the user picked; nothing is saved. */
   skill_import_preview(path: string): Promise<SkillImportPreview>;
-  /** Imports what the preview showed. `replace_id` replaces that skill; `rename` saves it under a new name. */
-  skill_import(path: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
+  /**
+   * Imports what the preview showed: reads the path again and refuses it (`invalid_input`) when it no longer
+   * matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a new name.
+   */
+  skill_import(path: string, token: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
   /** Writes the skill as a `.zip` to a path the user picked. */
   skill_export(id: string, path: string): Promise<void>;
 
@@ -278,11 +288,11 @@ export interface HatobaApi {
   /** AI-31 Always allow on this device: one tool (the server's own name), or every tool with `tool` null. */
   mcp_set_always_allow(server_id: string, tool: string | null, allow: boolean): Promise<void>;
   /**
-   * The MCP tool behind a name the model called: from the newest offer a request of this run of the app
-   * made with it (so it still answers after the server stopped), else from the running servers. Null
-   * when neither has it, or its server was deleted.
+   * The MCP tool behind a name the model called in the conversation, resolved as `ai_tool_run` resolves it:
+   * from the offer of the conversation's latest request (so it still answers after the server stopped),
+   * else from the running servers. Null when neither has it, or its server was deleted.
    */
-  mcp_tool_info(name: string): Promise<McpToolInfo | null>;
+  mcp_tool_info(conversation_id: string, name: string): Promise<McpToolInfo | null>;
   /** AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
   mcp_import_preview(json: string): Promise<McpImportPreview>;
   /** Adds every importable server; env and header values move into the vault. */

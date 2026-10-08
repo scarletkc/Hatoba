@@ -96,7 +96,8 @@ export function SkillImportDialog({
     setRejected(null);
     try {
       const replacing = clash && choice === "replace";
-      const skill = await api.skill_import(path, replacing ? preview.existing_id : null, renaming ? newName.trim() : null);
+      // The preview's token: Rust saves the files only if they still read as shown here (AI-27).
+      const skill = await api.skill_import(path, preview.token, replacing ? preview.existing_id : null, renaming ? newName.trim() : null);
       toast(t(replacing ? "aiSettings.skills.imp.replaced" : "aiSettings.skills.imp.done", { name: skill.name }), "success");
       onImported(skill);
       onClose();

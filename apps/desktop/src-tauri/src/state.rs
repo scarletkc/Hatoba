@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::ai::AiManager;
 use crate::deploy::Deployments;
+use crate::dropped::DroppedPaths;
 use crate::error::{AppError, AppResult};
 use crate::lock::LockPolicy;
 use crate::mcp::McpManager;
@@ -29,6 +30,8 @@ pub struct AppState {
     pub ai: AiManager,
     /// The MCP servers' connections and live state (§13.9); `ai` offers their tools.
     pub mcp: McpManager,
+    /// The paths of the window's last file drop, which the AI panel may read (AI-35).
+    pub dropped: DroppedPaths,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -45,6 +48,7 @@ impl AppState {
             deploy: Deployments::default(),
             ai: AiManager::with_mcp(mcp.clone()),
             mcp,
+            dropped: DroppedPaths::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

@@ -326,6 +326,23 @@
   color: var(--fg);
 }
 
+/* The approval card shows a call's whole input: nothing below a fold (AI-17). */
+.whole {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.lineBreak {
+  color: var(--fg3);
+  user-select: none;
+}
+
+.inputNotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 /* Approval card (AI-17) */
 .approval {
   gap: 9px;
