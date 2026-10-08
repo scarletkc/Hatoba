@@ -4,6 +4,7 @@
 //! * [`worker`]: HTTPS to the user's Cloudflare Worker (recommended).
 //! * [`d1`]: Cloudflare D1 REST API directly (P1).
 //! * [`deploy`]: deploying the Worker to the user's account through the Cloudflare API (P1).
+//! * [`compat`]: which Worker versions this build syncs with, and when it offers an upgrade.
 //! * [`engine`]: one pull/push round, conflict handling, tombstones.
 //! * [`conflict`]: the §6.4 rules as pure functions.
 //! * [`flows`]: enable sync, restore on a new device, sign in again, change password, recovery,
@@ -21,6 +22,7 @@ use crate::platform::{SecretStore, secret_keys};
 use crate::vault::Vault;
 
 pub mod backend;
+pub mod compat;
 pub mod conflict;
 pub mod d1;
 pub mod deploy;
@@ -42,6 +44,7 @@ pub use backend::{
     Change, DeviceLogin, KdfInfo, PullPage, PushResult, Recovered, RecoveryUpdate, RemoteDevice,
     RemoteItem, ServerInfo, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
+pub use compat::{MIN_WORKER_VERSION, WORKER_API, WorkerCompat, worker_compat};
 pub use conflict::{ConflictEntry, Resolution};
 pub use d1::D1Backend;
 pub use engine::{SyncEngine, SyncOptions, SyncReport};

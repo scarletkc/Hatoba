@@ -149,6 +149,12 @@ pub enum Error {
     /// A Worker the app does not recognize already has the chosen name.
     #[error("another Worker already has this name")]
     WorkerNameTaken,
+    /// An upgrade found no Hatoba Worker with a vault under the chosen name.
+    #[error("no Hatoba Worker with a vault has this name")]
+    WorkerNotFound,
+    /// An upgrade found a Worker newer than the bundled one, which it never replaces.
+    #[error("the Worker is newer than the one this app deploys")]
+    WorkerNewer,
 }
 
 impl Error {
@@ -195,6 +201,8 @@ impl Error {
             Self::SubdomainRequired => "subdomain_required",
             Self::SubdomainUnavailable => "subdomain_unavailable",
             Self::WorkerNameTaken => "worker_name_taken",
+            Self::WorkerNotFound => "worker_not_found",
+            Self::WorkerNewer => "worker_newer",
         }
     }
 

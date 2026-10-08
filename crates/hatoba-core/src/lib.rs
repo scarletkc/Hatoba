@@ -16,6 +16,7 @@
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
 //! | [`backup`] | encrypted backup export / import (VAULT-07) |
 //! | [`platform`] | injected capabilities (`SecretStore`, `DeviceInfo`) |
+//! | [`version`] | release versions of the app and the sync Worker |
 //!
 //! # Security conventions
 //!
@@ -43,6 +44,7 @@ pub mod recovery;
 pub mod store;
 pub mod sync;
 pub mod vault;
+pub mod version;
 
 pub use crypto::{Envelope, KdfParams, Key32};
 pub use error::{Error, Result};

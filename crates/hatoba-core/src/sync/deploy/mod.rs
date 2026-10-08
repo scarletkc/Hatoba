@@ -5,7 +5,8 @@
 //! database, uploads the Worker, sets its setup token, enables its workers.dev route, and waits
 //! for it to answer. Every step reads the current state before it writes, so running the steps
 //! again after a failure continues the deployment, and [`Deployment::remove_created`] deletes
-//! only what this deployment created.
+//! only what this deployment created. [`Deployment::upgrade`] runs the same steps to bring a
+//! Worker that already holds a vault up to the bundled version.
 //!
 //! The API token and the setup token stay inside the `Deployment` in zeroizing memory; nothing
 //! here logs them or a request body.
@@ -19,8 +20,9 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::error::{Error, Result};
-use crate::sync::backend::SyncBackend;
-use crate::sync::worker::WorkerBackend;
+use crate::sync::backend::{ServerInfo, SyncBackend};
+use crate::sync::compat::is_newer;
+use crate::sync::worker::{WorkerBackend, normalize_worker_url};
 
 pub mod bundle;
 mod cloudflare;
@@ -101,10 +103,11 @@ pub struct StepFailure {
     pub error: Error,
 }
 
-/// What [`Deployment::deploy`] ended with.
+/// What [`Deployment::deploy`] and [`Deployment::upgrade`] ended with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Outcome {
-    /// The Worker answers `/v1/health` with the bundled version and no vault.
+    /// The Worker answers `/v1/health` with the bundled version: with no vault after a
+    /// deployment, and with its vault after an upgrade.
     Ready,
     /// The Worker did not answer in time, usually while a new workers.dev subdomain's DNS
     /// propagates. [`Deployment::check_ready`] tries again.
@@ -160,6 +163,33 @@ impl Target {
             return Err(Error::InvalidItem("subdomain".into()));
         }
         Ok(())
+    }
+}
+
+/// The Worker an upgrade replaces (spec §6.7, Upgrades).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeTarget {
+    /// Cloudflare account ID.
+    pub account_id: String,
+    /// Worker name.
+    pub worker_name: String,
+    /// The Worker URL in the sync settings, which step 8 polls.
+    pub url: String,
+}
+
+impl UpgradeTarget {
+    /// Checks the names Cloudflare will accept, and returns the normalized URL.
+    ///
+    /// # Errors
+    /// [`Error::InvalidItem`] naming the field.
+    fn validate(&self) -> Result<String> {
+        if !is_identifier(&self.account_id) {
+            return Err(Error::InvalidItem("account_id".into()));
+        }
+        if !is_dns_label(&self.worker_name) {
+            return Err(Error::InvalidItem("worker_name".into()));
+        }
+        normalize_worker_url(&self.url).map_err(|_| Error::InvalidItem("url".into()))
     }
 }
 
@@ -223,6 +253,39 @@ impl DatabasePlan {
             Self::Create { name } | Self::Use { name, .. } | Self::Bound { name, .. } => name,
         }
     }
+}
+
+/// What step 2 of an upgrade found for the Worker name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UpgradeWorker {
+    /// A Hatoba Worker whose database, bound as `DB`, holds a vault: upgrade it.
+    Ready {
+        /// The database's ID.
+        database_id: String,
+        /// Its name.
+        database_name: String,
+    },
+    /// No Worker has the name.
+    Missing,
+    /// A Worker the app does not recognize.
+    Foreign,
+    /// A Hatoba Worker whose database holds no vault, or no longer exists.
+    NoVault,
+    /// The Worker reports a newer version than the bundled one, which the app never replaces.
+    Newer,
+}
+
+/// The plan step 2 of an upgrade picks before anything is written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeInspection {
+    /// What happens to the Worker.
+    pub worker: UpgradeWorker,
+    /// Bundled migrations the database has not applied yet.
+    pub migrations: usize,
+    /// The configured URL is the Worker's workers.dev URL, so step 7 runs.
+    pub route: bool,
+    /// The version the configured URL reports, when it answers.
+    pub version: Option<String>,
 }
 
 /// The plan step 2 picks before anything is written.
@@ -304,6 +367,8 @@ pub struct Deployment {
     polling: Polling,
     created: Created,
     deployed: Option<Deployed>,
+    /// Step 8 waits for a Worker with a vault: this is an upgrade.
+    upgrading: bool,
     setup_token: Option<Zeroizing<String>>,
 }
 
@@ -348,6 +413,7 @@ impl Deployment {
             polling: Polling::default(),
             created: Created::default(),
             deployed: None,
+            upgrading: false,
             setup_token: None,
         })
     }
@@ -373,6 +439,12 @@ impl Deployment {
     #[must_use]
     pub fn deployed(&self) -> Option<&Deployed> {
         self.deployed.as_ref()
+    }
+
+    /// Whether the steps ran as an [`upgrade`](Self::upgrade).
+    #[must_use]
+    pub fn is_upgrade(&self) -> bool {
+        self.upgrading
     }
 
     /// The setup token step 6 set, which the master password step passes to `/v1/setup`.
@@ -474,6 +546,98 @@ impl Deployment {
             .or_else(|| d1.get("id"))
             .and_then(Value::as_str)
             .map(str::to_owned)
+    }
+
+    /// Step 2 of an upgrade: requires a Hatoba Worker whose database holds a vault, and counts
+    /// the migrations step 4 will apply. Writes nothing.
+    ///
+    /// # Errors
+    /// [`Error::InvalidItem`] naming an invalid field; [`Error::CloudflarePermission`] naming the
+    /// missing permission; other API errors.
+    pub async fn inspect_upgrade(&self, target: &UpgradeTarget) -> Result<UpgradeInspection> {
+        let url = target.validate()?;
+        let account = target.account_id.as_str();
+        let name = target.worker_name.as_str();
+        let subdomain = self.api.subdomain(account).await?;
+        let route = subdomain
+            .is_some_and(|s| url.eq_ignore_ascii_case(&format!("https://{name}.{s}.workers.dev")));
+        let stop = |worker| UpgradeInspection {
+            worker,
+            migrations: 0,
+            route,
+            version: None,
+        };
+        let Some(settings) = self.api.script_settings(account, name).await? else {
+            return Ok(stop(UpgradeWorker::Missing));
+        };
+        let Some(id) = self.bound_database(&settings.bindings) else {
+            return Ok(stop(UpgradeWorker::Foreign));
+        };
+        let Some(db) = self.api.database(account, &id).await? else {
+            return Ok(stop(UpgradeWorker::NoVault));
+        };
+        if self.database_state(account, &db.uuid).await? != DatabaseState::HasVault {
+            return Ok(stop(UpgradeWorker::NoVault));
+        }
+        let applied = self.applied_migrations(account, &db.uuid).await?;
+        let migrations = self
+            .bundle
+            .migrations
+            .iter()
+            .filter(|m| !applied.contains(&m.name))
+            .count();
+        // A Worker that does not answer may be why the user upgrades, so only an answer with a
+        // newer version stops the upgrade.
+        let version = self.health_at(&url).await.map(|info| info.version);
+        let worker = if version
+            .as_deref()
+            .is_some_and(|v| is_newer(v, &self.bundle.version))
+        {
+            UpgradeWorker::Newer
+        } else {
+            UpgradeWorker::Ready {
+                database_id: db.uuid,
+                database_name: db.name,
+            }
+        };
+        Ok(UpgradeInspection {
+            worker,
+            migrations,
+            route,
+            version,
+        })
+    }
+
+    /// `/v1/health` of the Worker at `url` (or the test origin), when it answers as Hatoba's.
+    async fn health_at(&self, url: &str) -> Option<ServerInfo> {
+        let backend = WorkerBackend::new(self.worker_origin.as_deref().unwrap_or(url)).ok()?;
+        backend
+            .health()
+            .await
+            .ok()
+            .filter(|info| info.service == SERVICE_NAME)
+    }
+
+    /// The migrations `d1_migrations` lists, or none when the table does not exist.
+    async fn applied_migrations(&self, account: &str, database: &str) -> Result<Vec<String>> {
+        let table = self
+            .column(
+                account,
+                database,
+                &format!(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '{MIGRATIONS_TABLE}'"
+                ),
+            )
+            .await?;
+        if table.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.column(
+            account,
+            database,
+            &format!("SELECT name FROM \"{MIGRATIONS_TABLE}\" ORDER BY id"),
+        )
+        .await
     }
 
     /// The first of `{db}`, `{db}-2`, `{db}-3`, … that is free or holds nothing but an earlier
@@ -688,6 +852,84 @@ impl Deployment {
         }
     }
 
+    /// Upgrades a Worker that holds a vault to the bundled version (spec §6.7, Upgrades): step 2
+    /// requires a Hatoba Worker whose database holds a vault, step 4 applies the new migrations
+    /// before step 5 uploads the new code, step 7 runs only for the workers.dev URL, and step 8
+    /// polls the configured URL. Steps 3 and 6 never run, and the upload keeps the Worker's
+    /// secrets. Run it again after a failure to continue the upgrade.
+    ///
+    /// # Errors
+    /// The step that failed, with [`Error::WorkerNotFound`] or [`Error::WorkerNewer`] when step
+    /// 2 finds a Worker it must not upgrade, or the API error.
+    pub async fn upgrade(
+        &mut self,
+        target: &UpgradeTarget,
+        progress: &(dyn Fn(Step, StepStatus) + Send + Sync),
+    ) -> std::result::Result<Outcome, StepFailure> {
+        progress(Step::Inspect, StepStatus::Running);
+        let url = target.validate().map_err(at(Step::Inspect))?;
+        let inspection = self
+            .inspect_upgrade(target)
+            .await
+            .map_err(at(Step::Inspect))?;
+        let database_id = match inspection.worker {
+            UpgradeWorker::Ready { database_id, .. } => database_id,
+            UpgradeWorker::Newer => return Err(at(Step::Inspect)(Error::WorkerNewer)),
+            UpgradeWorker::Missing | UpgradeWorker::Foreign | UpgradeWorker::NoVault => {
+                return Err(at(Step::Inspect)(Error::WorkerNotFound));
+            }
+        };
+        progress(Step::Inspect, StepStatus::Done);
+        let account = target.account_id.clone();
+        let name = target.worker_name.clone();
+
+        progress(Step::Migrate, StepStatus::Running);
+        let applied = self
+            .migrate(&account, &database_id)
+            .await
+            .map_err(at(Step::Migrate))?;
+        progress(
+            Step::Migrate,
+            if applied == 0 {
+                StepStatus::Skipped
+            } else {
+                StepStatus::Done
+            },
+        );
+
+        progress(Step::Upload, StepStatus::Running);
+        self.api
+            .upload(&account, &name, &self.bundle, &database_id)
+            .await
+            .map_err(at(Step::Upload))?;
+        progress(Step::Upload, StepStatus::Done);
+
+        if inspection.route {
+            progress(Step::Route, StepStatus::Running);
+            self.api
+                .enable_route(&account, &name)
+                .await
+                .map_err(at(Step::Route))?;
+            progress(Step::Route, StepStatus::Done);
+        } else {
+            progress(Step::Route, StepStatus::Skipped);
+        }
+        self.upgrading = true;
+        self.deployed = Some(Deployed {
+            account_id: account,
+            worker_name: name,
+            url,
+        });
+
+        progress(Step::Wait, StepStatus::Running);
+        if self.check_ready().await.map_err(at(Step::Wait))? {
+            progress(Step::Wait, StepStatus::Done);
+            Ok(Outcome::Ready)
+        } else {
+            Ok(Outcome::Waiting)
+        }
+    }
+
     /// Step 4: applies the bundled migrations that `d1_migrations` does not list, each in one
     /// batch with its record, as `wrangler d1 migrations apply` does. Returns how many it applied.
     async fn migrate(&self, account: &str, database: &str) -> Result<usize> {
@@ -723,12 +965,15 @@ impl Deployment {
         Ok(count)
     }
 
-    /// Step 8: polls the Worker's `/v1/health` until it reports the bundled version with no
-    /// vault, for up to [`Polling::timeout`]. `false` means it has not answered yet.
+    /// Step 8: polls the Worker's `/v1/health` until it reports the bundled version, with no
+    /// vault after a deployment and with one after an upgrade, for up to [`Polling::timeout`].
+    /// `false` means it has not answered yet.
     ///
     /// # Errors
-    /// [`Error::RemoteInitialized`] when the Worker already holds a vault;
-    /// [`Error::Protocol`] before [`deploy`](Self::deploy) reached step 7.
+    /// [`Error::RemoteInitialized`] when a newly deployed Worker already holds a vault, and
+    /// [`Error::RemoteNotInitialized`] when an upgraded one no longer does;
+    /// [`Error::Protocol`] before [`deploy`](Self::deploy) or [`upgrade`](Self::upgrade) reached
+    /// step 8.
     pub async fn check_ready(&self) -> Result<bool> {
         let deployed = self
             .deployed
@@ -741,10 +986,11 @@ impl Deployment {
                 && info.service == SERVICE_NAME
                 && info.version == self.bundle.version
             {
-                if info.initialized {
-                    return Err(Error::RemoteInitialized);
-                }
-                return Ok(true);
+                return match (info.initialized, self.upgrading) {
+                    (true, false) => Err(Error::RemoteInitialized),
+                    (false, true) => Err(Error::RemoteNotInitialized),
+                    _ => Ok(true),
+                };
             }
             if tokio::time::Instant::now() + self.polling.interval > deadline {
                 return Ok(false);

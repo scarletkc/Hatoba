@@ -2,7 +2,8 @@
 //!
 //! `FakeCloudflare` keeps Workers, secrets, routes, and D1 databases in memory, and runs each D1
 //! query against a real SQLite database, so the migrations and checks the deployment sends are
-//! actually executed. The same server answers the deployed Worker's `/v1/health`.
+//! actually executed. The same server answers the deployed Worker's `/v1/health`, for upgrades
+//! too.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
@@ -20,24 +21,45 @@ const TOKEN: &str = "cf-deploy-token-for-tests";
 const API: &str = "/client/v4";
 const VERSION: &str = "0.3.0";
 const MIGRATION: &str = include_str!("../../../../../workers/sync/migrations/0001_init.sql");
+/// The bundle of the upgrade tests: the next Worker version, with one more migration.
+const NEXT_VERSION: &str = "0.4.0";
+const NEXT_MIGRATION: (&str, &str) = (
+    "0002_item_hints.sql",
+    "ALTER TABLE items ADD COLUMN hint TEXT;",
+);
 
-fn bundle() -> Arc<WorkerBundle> {
+fn bundle_of(version: &str, migrations: &[(&str, &str)]) -> Arc<WorkerBundle> {
+    let migrations: Vec<Value> = migrations
+        .iter()
+        .map(|(name, sql)| json!({ "name": name, "sql": sql }))
+        .collect();
     Arc::new(
         WorkerBundle::parse(
             &json!({
                 "format": 1,
-                "version": VERSION,
+                "version": version,
                 "name": "hatoba-sync",
                 "compatibility_date": "2026-09-01",
                 "compatibility_flags": [],
                 "module": { "name": "index.js", "content": "export default { fetch() {} };" },
-                "migrations": [{ "name": "0001_init.sql", "sql": MIGRATION }],
+                "migrations": migrations,
                 "d1": { "binding": "DB", "database_name": "hatoba" },
                 "ratelimit": { "name": "AUTH_LIMITER", "namespace_id": "1001", "limit": 10, "period": 60 },
             })
             .to_string(),
         )
         .unwrap(),
+    )
+}
+
+fn bundle() -> Arc<WorkerBundle> {
+    bundle_of(VERSION, &[("0001_init.sql", MIGRATION)])
+}
+
+fn next_bundle() -> Arc<WorkerBundle> {
+    bundle_of(
+        NEXT_VERSION,
+        &[("0001_init.sql", MIGRATION), NEXT_MIGRATION],
     )
 }
 
@@ -62,7 +84,9 @@ struct Script {
     bindings: Vec<Value>,
     secrets: BTreeSet<String>,
     route: bool,
-    /// Set by an upload through the app, as `/v1/health` would report it.
+    /// Reachable on a custom domain, without its workers.dev route.
+    custom_domain: bool,
+    /// What `/v1/health` reports: set by an upload, or by a test for an existing Worker.
     version: Option<String>,
 }
 
@@ -88,6 +112,10 @@ struct State {
     log: Vec<String>,
     /// The metadata part of the last upload.
     upload: Option<Value>,
+    /// The version an upload installs.
+    upload_version: String,
+    /// The migrations the uploaded Worker's database had applied when the upload arrived.
+    migrated_at_upload: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -197,7 +225,7 @@ impl State {
         let Some(script) = self
             .scripts
             .values()
-            .find(|s| s.route && s.version.is_some())
+            .find(|s| (s.route || s.custom_domain) && s.version.is_some())
         else {
             return ResponseTemplate::new(404);
         };
@@ -296,9 +324,19 @@ impl State {
             }
             ("PUT", ["accounts", ACCOUNT, "workers", "scripts", name]) => {
                 let metadata = upload_metadata(request);
+                let bound = metadata["bindings"][0]["database_id"].as_str().unwrap();
+                self.migrated_at_upload = self
+                    .database(bound)
+                    .and_then(|d| {
+                        let mut stmt = d.conn.prepare("SELECT name FROM d1_migrations").ok()?;
+                        let rows = stmt.query_map([], |r| r.get(0)).ok()?;
+                        Some(rows.map(Result::unwrap).collect())
+                    })
+                    .unwrap_or_default();
+                let version = self.upload_version.clone();
                 let script = self.scripts.entry((*name).to_owned()).or_default();
                 script.bindings = metadata["bindings"].as_array().unwrap().clone();
-                script.version = Some(VERSION.to_owned());
+                script.version = Some(version);
                 if !metadata["keep_bindings"]
                     .as_array()
                     .is_some_and(|k| k.contains(&json!("secret_text")))
@@ -444,6 +482,8 @@ impl Harness {
             next_id: 0,
             log: Vec::new(),
             upload: None,
+            upload_version: VERSION.into(),
+            migrated_at_upload: Vec::new(),
         })));
         let server = MockServer::start().await;
         Mock::given(wiremock::matchers::any())
@@ -458,11 +498,15 @@ impl Harness {
     }
 
     fn deployment(&self) -> Deployment {
+        self.deployment_of(bundle())
+    }
+
+    fn deployment_of(&self, bundle: Arc<WorkerBundle>) -> Deployment {
         let mut d = Deployment::with_endpoints(
             &format!("{}{API}", self.server.uri()),
             Some(&self.server.uri()),
             TOKEN,
-            bundle(),
+            bundle,
         )
         .unwrap();
         d.set_polling(Polling {
@@ -499,8 +543,46 @@ impl Harness {
         );
     }
 
+    /// A Worker that holds a vault and answers `/v1/health` with `version`, as a deployment
+    /// from an earlier app version leaves it, with a secret of the user's own.
+    fn add_synced_worker(&self, name: &str, version: &str) -> String {
+        let db = self.add_database("hatoba", &with_vault());
+        self.add_hatoba_worker(name, &db);
+        let mut st = self.state();
+        let script = st.scripts.get_mut(name).unwrap();
+        script.bindings[0] = json!({ "type": "d1", "name": "DB", "database_id": db });
+        script.route = true;
+        script.version = Some(version.into());
+        script.secrets.insert("OWN_SECRET".into());
+        st.upload_version = NEXT_VERSION.into();
+        db
+    }
+
+    fn upgrader(&self) -> Deployment {
+        self.deployment_of(next_bundle())
+    }
+
     fn log(&self) -> Vec<String> {
         self.state().log.clone()
+    }
+
+    /// `/v1/health` as the configured URL answers it.
+    async fn health(&self) -> ServerInfo {
+        WorkerBackend::new(&self.server.uri())
+            .unwrap()
+            .health()
+            .await
+            .unwrap()
+    }
+}
+
+const WORKERS_DEV: &str = "https://hatoba-sync.kc.workers.dev";
+
+fn upgrade_target(url: &str) -> UpgradeTarget {
+    UpgradeTarget {
+        account_id: ACCOUNT.into(),
+        worker_name: "hatoba-sync".into(),
+        url: url.into(),
     }
 }
 
@@ -1039,4 +1121,281 @@ async fn reused_resources_are_never_removed() {
     d.remove_created().await.unwrap();
     assert!(h.state().scripts.contains_key("hatoba-sync"));
     assert_eq!(h.state().databases.len(), 1);
+}
+
+// ---- upgrades --------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn upgrade_applies_the_new_migration_before_the_new_code() {
+    let h = Harness::new().await;
+    let db = h.add_synced_worker("hatoba-sync", VERSION);
+    let mut d = h.upgrader();
+
+    let plan = d
+        .inspect_upgrade(&upgrade_target(WORKERS_DEV))
+        .await
+        .unwrap();
+    assert_eq!(
+        plan,
+        UpgradeInspection {
+            worker: UpgradeWorker::Ready {
+                database_id: db.clone(),
+                database_name: "hatoba".into()
+            },
+            migrations: 1,
+            route: true,
+            version: Some(VERSION.into()),
+        }
+    );
+    assert!(
+        h.log()
+            .iter()
+            .all(|l| l.starts_with("GET ") || l.ends_with("/query"))
+    );
+
+    let (events, progress) = recorder();
+    assert_eq!(
+        d.upgrade(&upgrade_target(WORKERS_DEV), &progress)
+            .await
+            .unwrap(),
+        Outcome::Ready
+    );
+    use StepStatus::*;
+    assert_eq!(
+        *events.lock().unwrap(),
+        [
+            (Step::Inspect, Running),
+            (Step::Inspect, Done),
+            (Step::Migrate, Running),
+            (Step::Migrate, Done),
+            (Step::Upload, Running),
+            (Step::Upload, Done),
+            (Step::Route, Running),
+            (Step::Route, Done),
+            (Step::Wait, Running),
+            (Step::Wait, Done),
+        ],
+        "steps 3 and 6 never run"
+    );
+
+    let st = h.state();
+    assert_eq!(
+        st.migrated_at_upload,
+        ["0001_init.sql", NEXT_MIGRATION.0],
+        "the new code arrived after its migration"
+    );
+    assert_eq!(st.databases.len(), 1);
+    let conn = &st.databases[0].conn;
+    let vaults: i64 = conn
+        .query_row("SELECT COUNT(*) FROM meta WHERE id = 1", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(vaults, 1, "the vault is untouched");
+    conn.execute("UPDATE items SET hint = 'x'", []).unwrap();
+    let script = &st.scripts["hatoba-sync"];
+    assert_eq!(script.version.as_deref(), Some(NEXT_VERSION));
+    assert_eq!(
+        script.secrets,
+        BTreeSet::from(["OWN_SECRET".to_owned()]),
+        "the Worker keeps its secrets and gets no setup token"
+    );
+    assert_eq!(st.upload.clone().unwrap()["bindings"][0]["database_id"], db);
+    assert!(
+        !st.log
+            .iter()
+            .any(|l| l.ends_with("/d1/database") || l.contains("/secrets")),
+        "{:?}",
+        st.log
+    );
+    drop(st);
+
+    assert!(d.is_upgrade());
+    assert!(
+        d.created().is_empty(),
+        "an upgrade creates nothing to clean up"
+    );
+    assert!(d.setup_token().is_none());
+    assert_eq!(d.deployed().unwrap().url, WORKERS_DEV);
+}
+
+#[tokio::test]
+async fn retry_continues_a_failed_upgrade() {
+    let h = Harness::new().await;
+    h.add_synced_worker("hatoba-sync", VERSION);
+    let mut d = h.upgrader();
+    let (_, progress) = recorder();
+
+    h.state().fail_once = Some(format!(
+        "PUT /accounts/{ACCOUNT}/workers/scripts/hatoba-sync"
+    ));
+    let failure = d
+        .upgrade(&upgrade_target(WORKERS_DEV), &progress)
+        .await
+        .unwrap_err();
+    assert_eq!(failure.step, Step::Upload);
+    // The old code runs on the new migration in between, and still holds the vault.
+    let info = h.health().await;
+    assert_eq!((info.version.as_str(), info.initialized), (VERSION, true));
+
+    let (events, progress) = recorder();
+    assert_eq!(
+        d.upgrade(&upgrade_target(WORKERS_DEV), &progress)
+            .await
+            .unwrap(),
+        Outcome::Ready
+    );
+    let events = events.lock().unwrap();
+    assert!(events.contains(&(Step::Migrate, StepStatus::Skipped)));
+    assert!(events.contains(&(Step::Upload, StepStatus::Done)));
+    assert_eq!(h.health().await.version, NEXT_VERSION);
+}
+
+#[tokio::test]
+async fn upgrade_waits_for_the_new_version_and_checks_again() {
+    let h = Harness::new().await;
+    h.add_synced_worker("hatoba-sync", VERSION);
+    h.state().health = false;
+    let mut d = h.upgrader();
+    let (_, progress) = recorder();
+    assert_eq!(
+        d.upgrade(&upgrade_target(WORKERS_DEV), &progress)
+            .await
+            .unwrap(),
+        Outcome::Waiting
+    );
+    assert!(!d.check_ready().await.unwrap());
+    h.state().health = true;
+    assert!(d.check_ready().await.unwrap());
+}
+
+#[tokio::test]
+async fn upgrade_on_a_custom_domain_leaves_workers_dev_alone() {
+    let h = Harness::new().await;
+    h.add_synced_worker("hatoba-sync", VERSION);
+    {
+        let mut st = h.state();
+        let script = st.scripts.get_mut("hatoba-sync").unwrap();
+        script.route = false;
+        script.custom_domain = true;
+    }
+    let mut d = h.upgrader();
+    let target = upgrade_target("https://sync.example.com/");
+    assert!(!d.inspect_upgrade(&target).await.unwrap().route);
+
+    let (events, progress) = recorder();
+    assert_eq!(d.upgrade(&target, &progress).await.unwrap(), Outcome::Ready);
+    assert!(
+        events
+            .lock()
+            .unwrap()
+            .contains(&(Step::Route, StepStatus::Skipped))
+    );
+    assert!(!h.state().scripts["hatoba-sync"].route);
+    assert!(
+        !h.log()
+            .iter()
+            .any(|l| l.ends_with("/subdomain") && l.starts_with("POST"))
+    );
+    assert_eq!(d.deployed().unwrap().url, "https://sync.example.com");
+}
+
+#[tokio::test]
+async fn upgrade_requires_a_hatoba_worker_with_a_vault() {
+    let h = Harness::new().await;
+    let d = h.upgrader();
+    let target = upgrade_target(WORKERS_DEV);
+    let plan = |worker| UpgradeInspection {
+        worker,
+        migrations: 0,
+        route: true,
+        version: None,
+    };
+    assert_eq!(
+        d.inspect_upgrade(&target).await.unwrap(),
+        plan(UpgradeWorker::Missing)
+    );
+
+    // A Worker deployed but never set up holds no vault.
+    let empty = h.add_database("hatoba", &migrated());
+    h.add_hatoba_worker("hatoba-sync", &empty);
+    assert_eq!(
+        d.inspect_upgrade(&target).await.unwrap(),
+        plan(UpgradeWorker::NoVault)
+    );
+    h.state().databases.clear();
+    assert_eq!(
+        d.inspect_upgrade(&target).await.unwrap(),
+        plan(UpgradeWorker::NoVault)
+    );
+    h.state()
+        .scripts
+        .get_mut("hatoba-sync")
+        .unwrap()
+        .bindings
+        .clear();
+    assert_eq!(
+        d.inspect_upgrade(&target).await.unwrap(),
+        plan(UpgradeWorker::Foreign)
+    );
+
+    let mut d = h.upgrader();
+    let (_, progress) = recorder();
+    let failure = d.upgrade(&target, &progress).await.unwrap_err();
+    assert_eq!(failure.step, Step::Inspect);
+    assert!(matches!(failure.error, Error::WorkerNotFound));
+    assert!(
+        h.log()
+            .iter()
+            .all(|l| l.starts_with("GET ") || l.ends_with("/query"))
+    );
+}
+
+#[tokio::test]
+async fn upgrade_never_replaces_a_newer_worker() {
+    let h = Harness::new().await;
+    h.add_synced_worker("hatoba-sync", "0.5.0");
+    let mut d = h.upgrader();
+    let plan = d
+        .inspect_upgrade(&upgrade_target(WORKERS_DEV))
+        .await
+        .unwrap();
+    assert_eq!(
+        (plan.worker, plan.version.as_deref()),
+        (UpgradeWorker::Newer, Some("0.5.0"))
+    );
+    let (_, progress) = recorder();
+    let failure = d
+        .upgrade(&upgrade_target(WORKERS_DEV), &progress)
+        .await
+        .unwrap_err();
+    assert!(matches!(failure.error, Error::WorkerNewer));
+    assert!(!h.log().iter().any(|l| l.starts_with("PUT ")));
+}
+
+#[tokio::test]
+async fn upgrade_checks_its_target() {
+    let h = Harness::new().await;
+    let d = h.upgrader();
+    for (field, target) in [
+        (
+            "account_id",
+            UpgradeTarget {
+                account_id: "../x".into(),
+                ..upgrade_target(WORKERS_DEV)
+            },
+        ),
+        (
+            "worker_name",
+            UpgradeTarget {
+                worker_name: "Sync".into(),
+                ..upgrade_target(WORKERS_DEV)
+            },
+        ),
+        ("url", upgrade_target("http://sync.example.com")),
+    ] {
+        match d.inspect_upgrade(&target).await {
+            Err(Error::InvalidItem(f)) => assert_eq!(f, field),
+            other => panic!("{field}: {other:?}"),
+        }
+    }
+    assert!(h.log().is_empty());
 }
