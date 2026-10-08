@@ -58,7 +58,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | Flows A and B (§6.6) | ✅ | |
 | Flow C (§6.6) | ⬜ | P1 |
 | Device management | ✅ | |
-| Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it. Needs verification once the repository is public |
+| Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it, and the `deploy` script applies the D1 migrations. Needs a full run through the deploy flow |
 | In-app one-click deployment (§6.6) | ⬜ | P2 |
 | Tombstone purge (§6.5) | ⬜ | P2 |
 | Rollback detection (§4.4) | ⬜ | P2 |

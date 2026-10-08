@@ -10,12 +10,12 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run db:migrate:remote && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate:local": "wrangler d1 migrations apply hatoba --local",
-    "db:migrate:remote": "wrangler d1 migrations apply hatoba --remote"
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
     "hono": "^4.13.13"
@@ -26,5 +26,12 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.148.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SETUP_TOKEN": {
+        "description": "Replace the example value with a long random string, for example from `openssl rand -base64 32`, and save it in your password manager. Hatoba asks for it once, when the first device sets up sync."
+      }
+    }
   }
 }

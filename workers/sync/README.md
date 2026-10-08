@@ -6,14 +6,43 @@ This page covers deployment, upgrades, and maintenance. The API and server behav
 
 ## Before you start
 
-You need:
+You need a Cloudflare account. The free plan works, and personal use usually stays within its limits.
 
-- A Cloudflare account. The free plan works, and personal use usually stays within its limits.
-- Node.js **22 or later** (required by wrangler 4) and npm.
+There are two ways to deploy:
+
+- [One-click deploy](#one-click-deploy) from the browser. It also needs a GitHub or GitLab account, where Cloudflare creates your own copy of this directory.
+- [Deploy with wrangler](#deploy-with-wrangler) from a clone of this repository. It needs Node.js **22 or later** (required by wrangler 4) and npm.
+
+## Setup token
+
+Both ways ask for a setup token. It stops someone else from initializing a freshly deployed, unconfigured Worker before you do. It is a random string that only you know, so **use a strong random value**:
+
+```sh
+# macOS / Linux / Git Bash
+openssl rand -base64 32
+
+# Any system with Node installed
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+
+# Windows PowerShell (no openssl needed)
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+```
+
+Save the value in your password manager. You paste it into Hatoba once, when the first device sets up sync.
+
+## One-click deploy
+
+The **Deploy to Cloudflare** button in Hatoba's sync wizard opens the same page as this one:
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/scarletkc/Hatoba/tree/main/workers/sync)
+
+After you sign in to Cloudflare, it copies this directory into a new repository in your GitHub or GitLab account, creates the D1 database, applies the migrations, and deploys the Worker. Every later push to that repository deploys it again.
+
+On the setup page, replace the example value of **SETUP_TOKEN** with the [setup token](#setup-token) you generated. When the deployment finishes, find the Worker's URL on its page in the Cloudflare dashboard, [check the deployment](#check-the-deployment), and [connect Hatoba](#connect-hatoba).
+
+## Deploy with wrangler
 
 Run every command below in this directory (`workers/sync`). They work the same in Windows PowerShell and on macOS and Linux.
-
-## Deploy
 
 ### 1. Install dependencies and sign in
 
@@ -52,20 +81,7 @@ Without `--remote`, the migrations apply only to the local development database.
 
 ### 4. Set the setup token
 
-The setup token stops someone else from initializing a freshly deployed, unconfigured Worker before you do. It is a random string that only you know, so **use a strong random value**:
-
-```sh
-# macOS / Linux / Git Bash
-openssl rand -base64 32
-
-# Any system with Node installed
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-
-# Windows PowerShell (no openssl needed)
-$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
-```
-
-Save the value in your password manager (you paste it into Hatoba later), then store it as a Worker secret:
+Store the [setup token](#setup-token) you generated as a Worker secret:
 
 ```sh
 npx wrangler secret put SETUP_TOKEN
@@ -79,23 +95,27 @@ Paste the value when prompted. If wrangler says there is no Worker named hatoba-
 npx wrangler deploy
 ```
 
-The output includes the Worker's URL, such as `https://hatoba-sync.<your-subdomain>.workers.dev`. Check that the deployment works:
+The output includes the Worker's URL, such as `https://hatoba-sync.<your-subdomain>.workers.dev`.
+
+## Check the deployment
 
 ```sh
 curl https://hatoba-sync.<your-subdomain>.workers.dev/v1/health
 ```
 
-A JSON response with `service` set to `"hatoba-sync"` and `initialized` set to `false` means the Worker is deployed and not initialized yet. A `503 database_unavailable` means the `database_id` from step 2 is wrong or step 3 did not run.
+A JSON response with `service` set to `"hatoba-sync"` and `initialized` set to `false` means the Worker is deployed and not initialized yet. A `503 database_unavailable` means the Worker cannot reach a migrated database: with wrangler, the `database_id` from step 2 is wrong or step 3 did not run.
 
-### 6. Enable sync in Hatoba
+## Connect Hatoba
 
 1. In Hatoba, open **Cloud Sync** in the sidebar and choose **Deploy a Worker**.
-2. Enter the **Worker URL** from step 5 and the **Setup Token** from step 4, and select **Test Connection**.
+2. Enter the **Worker URL** and the **Setup Token**, and select **Test Connection**.
 3. Follow the wizard to set or enter the master password. The first device calls `/v1/setup` to initialize the vault, then signs in and pushes every item.
 
 To add another device, choose **Restore from Cloud** on its first launch. It needs only the Worker URL and the master password, **not** the setup token.
 
 ## Maintenance
+
+With a one-click deployment, run the wrangler commands below from a clone of your own repository, after `npm install` and `npx wrangler login`. If you gave the database a different name on the setup page, use that name instead of `hatoba`.
 
 ### After initialization (optional hardening)
 
@@ -107,12 +127,16 @@ npx wrangler secret delete SETUP_TOKEN
 
 ### Upgrade
 
+With wrangler, from your clone of this repository:
+
 ```sh
 git pull
 npm install
 npx wrangler d1 migrations apply hatoba --remote   # Applies only the new migrations
 npx wrangler deploy
 ```
+
+With a one-click deployment, copy the updated files from `workers/sync` in this repository into your own repository and push. The deployment that follows applies any new migrations before it deploys the Worker.
 
 ### Reset (discard the cloud vault)
 

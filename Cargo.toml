@@ -6,7 +6,7 @@ members = ["crates/hatoba-core", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/scarletkc/hatoba"
+repository = "https://github.com/scarletkc/Hatoba"
 rust-version = "1.90"
 
 [workspace.dependencies]
