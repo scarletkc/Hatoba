@@ -2398,6 +2398,43 @@ async fn calls_stored_with_a_shared_id_run_each_with_its_own_arguments() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_running_call_is_not_run_or_answered_again() {
+    use crate::mcp::tests::{put_server, set_enabled, stdio_server};
+
+    let f = Fixture::new(vec![
+        calls(&[("c1", "mcp__files__echo", json!({"text": "once"}))]),
+        answer("Done."),
+    ])
+    .await;
+    let files = put_server(&f.vault, stdio_server("files"));
+    set_enabled(&f.vault, &files, true);
+    let (started, sink) = f.send(None, "echo").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    // While the first run waits for the server, a second run of the call is refused before it
+    // runs anything, and so is a result from the panel.
+    let (first, (second, result)) = tokio::join!(f.run(&conv, "c1", None, None), async {
+        let second = f.run(&conv, "c1", None, None).await;
+        let result = f.result(&conv, "c1", AiToolStatus::Error, "The tool failed", None);
+        (second, result)
+    });
+    assert_eq!(
+        view_content(&first.unwrap()),
+        ("c1", AiToolStatus::Ok, "once")
+    );
+    for err in [second.unwrap_err(), result.unwrap_err()] {
+        assert_eq!(err.code, ErrorCode::InvalidInput);
+        assert_eq!(err.detail, "the tool call is already running");
+    }
+    // Once it finished, the call has its result.
+    let err = f.run(&conv, "c1", None, None).await.unwrap_err();
+    assert_eq!(err.detail, "the tool call already has a result");
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.mcp.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_call_of_a_server_deleted_elsewhere_does_not_run() {
     use crate::mcp::tests::{put_server, set_enabled, stdio_server};
 

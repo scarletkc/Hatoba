@@ -149,6 +149,8 @@ struct Inner {
 struct Op {
     /// `None` for work outside a conversation, which only the lock stops.
     conversation_id: Option<String>,
+    /// The tool call an `ai_tool_run` runs, which nothing else runs or answers meanwhile.
+    tool_call_id: Option<String>,
     cancel: CancellationToken,
 }
 
@@ -337,25 +339,57 @@ impl AiManager {
     /// Registers a tool or compaction of the conversation. Called under the vault guard that
     /// checked the call, so a stop either came first (and the check failed) or cancels it.
     fn start_op(&self, conversation_id: &str) -> OpGuard<'_> {
-        let cancel = self
-            .running(conversation_id)
-            .map_or_else(CancellationToken::new, |turn| turn.cancel.child_token());
-        self.register_op(Some(conversation_id), cancel)
+        let cancel = self.turn_token(conversation_id);
+        self.register_op(Some(conversation_id), None, cancel)
+    }
+
+    /// Registers the run of a tool call, like [`Self::start_op`]. Refused while the call runs
+    /// already, so that a call with side effects (`run_command`, an MCP tool) runs once: called
+    /// under the vault guard that checked the call, as is [`Self::call_running`].
+    fn start_call(&self, conversation_id: &str, tool_call_id: &str) -> AppResult<OpGuard<'_>> {
+        if self.call_running(conversation_id, tool_call_id) {
+            return Err(AppError::invalid(
+                "tool_call_id",
+                "the tool call is already running",
+            ));
+        }
+        let cancel = self.turn_token(conversation_id);
+        Ok(self.register_op(Some(conversation_id), Some(tool_call_id), cancel))
+    }
+
+    /// An `ai_tool_run` of the call has not finished.
+    fn call_running(&self, conversation_id: &str, tool_call_id: &str) -> bool {
+        guard(&self.0.ops).values().any(|op| {
+            op.conversation_id.as_deref() == Some(conversation_id)
+                && op.tool_call_id.as_deref() == Some(tool_call_id)
+        })
+    }
+
+    /// A token that a stop of the conversation's running turn cancels.
+    fn turn_token(&self, conversation_id: &str) -> CancellationToken {
+        self.running(conversation_id)
+            .map_or_else(CancellationToken::new, |turn| turn.cancel.child_token())
     }
 
     /// A provider or search request outside a conversation (a model list, a connection test):
     /// the lock cancels its token (§13.1). Call it under the vault guard that read the provider,
     /// so that a lock either came first or cancels the request.
     pub fn background_op(&self) -> OpGuard<'_> {
-        self.register_op(None, CancellationToken::new())
+        self.register_op(None, None, CancellationToken::new())
     }
 
-    fn register_op(&self, conversation_id: Option<&str>, cancel: CancellationToken) -> OpGuard<'_> {
+    fn register_op(
+        &self,
+        conversation_id: Option<&str>,
+        tool_call_id: Option<&str>,
+        cancel: CancellationToken,
+    ) -> OpGuard<'_> {
         let id = self.0.next_op.fetch_add(1, Ordering::Relaxed);
         guard(&self.0.ops).insert(
             id,
             Op {
                 conversation_id: conversation_id.map(str::to_owned),
+                tool_call_id: tool_call_id.map(str::to_owned),
                 cancel: cancel.clone(),
             },
         );
@@ -908,7 +942,8 @@ impl AiManager {
     // ---- tool results ----
 
     /// `ai_tool_result`: stores a result the frontend produced (`read_terminal`, `send_input`, a
-    /// rejection). The call must belong to the conversation's newest response and have no result.
+    /// rejection). The call must belong to the conversation's newest response, have no result,
+    /// and not be running in Rust.
     pub fn tool_result(
         &self,
         vault: &SharedVault,
@@ -931,6 +966,12 @@ impl AiManager {
             let mut v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
             open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
+            if self.call_running(conversation_id, tool_call_id) {
+                return Err(AppError::invalid(
+                    "tool_call_id",
+                    "the tool call is already running",
+                ));
+            }
             self.store_result(&mut v, conversation_id, tool_call_id, status, content)?
         };
         env.changed();
@@ -939,7 +980,7 @@ impl AiManager {
 
     /// `ai_tool_run`: runs a tool that runs in Rust and stores its result. Every failure of the
     /// tool itself is an `error` result; only a precondition (locked, unknown conversation or
-    /// call, a call that already has a result) rejects.
+    /// call, a call that already has a result or is running) rejects.
     pub async fn tool_run(
         &self,
         vault: &SharedVault,
@@ -953,6 +994,7 @@ impl AiManager {
             let v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
             let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
+            let op = self.start_call(conversation_id, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
             let job = if call.name.starts_with(MCP_PREFIX) {
                 Job::mcp(
@@ -964,7 +1006,7 @@ impl AiManager {
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
-            (job, self.start_op(conversation_id))
+            (job, op)
         };
         let (status, content) = job
             .run(
