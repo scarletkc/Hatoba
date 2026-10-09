@@ -13,7 +13,9 @@ use std::sync::Arc;
 
 use hatoba_core::model::{Host, HostAuth, Item, KeyAlgorithm, SshKey};
 use hatoba_core::platform::DeviceInfo;
-use hatoba_core::sync::{SharedVault, SyncBackend, SyncEngine, WorkerBackend, flows, share};
+use hatoba_core::sync::{
+    SharedVault, SyncBackend, SyncConfig, SyncEngine, WorkerBackend, flows, share,
+};
 use hatoba_core::vault::Vault;
 use zeroize::Zeroizing;
 
@@ -115,16 +117,33 @@ async fn two_devices_through_a_real_worker() {
     // Device B: flow B (restore from cloud).
     let b = share(Vault::open_in_memory().unwrap());
     let backend_b = Arc::new(WorkerBackend::new(&url).unwrap());
-    let wrong_pw =
-        flows::restore_from_cloud(&b, backend_b.as_ref(), "not-the-password", device("B")).await;
+    let config = SyncConfig::Worker {
+        url: backend_b.base_url().to_owned(),
+        deployment: None,
+    };
+    let wrong_pw = flows::restore_from_cloud(
+        &b,
+        backend_b.as_ref(),
+        "not-the-password",
+        device("B"),
+        &config,
+    )
+    .await;
     assert!(
         wrong_pw.is_err(),
         "restore with the wrong password must fail"
     );
     let b = share(Vault::open_in_memory().unwrap());
-    flows::restore_from_cloud(&b, backend_b.as_ref(), PASSWORD, device("Device B"))
-        .await
-        .expect("restore");
+    flows::restore_from_cloud(
+        &b,
+        backend_b.as_ref(),
+        PASSWORD,
+        device("Device B"),
+        &config,
+    )
+    .await
+    .expect("restore");
+    sync(&b, &backend_b).await;
     assert_eq!(host_port(&b, "prod-api"), Some(22));
     assert_eq!(b.lock().unwrap().keys().len(), 1);
     match &b

@@ -620,7 +620,8 @@ A failure after `/v1/setup` succeeded, including a lost response, leaves the rem
 
 1. On first launch, choose **Restore from Cloud** and enter the Worker URL.
 2. Call `/v1/prelogin` for the salt and parameters. The user enters the master password, and the client derives the keys and signs in.
-3. Pull the vault meta, decrypt vault_key, and then pull every item.
+3. Pull the vault meta, decrypt vault_key, and save the local vault together with the sync configuration and the session. From here on the device is a configured sync device.
+4. Pull every item in an ordinary sync round. If the pull is interrupted, the next round, including one after a restart, resumes from the saved cursor; the restore does not need to run again.
 
 **Flow C: connect an existing local vault to an initialized cloud vault (P1)**
 

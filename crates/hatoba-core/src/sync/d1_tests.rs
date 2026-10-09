@@ -781,6 +781,13 @@ fn device(
     (share(vault), backend(server))
 }
 
+fn config() -> SyncConfig {
+    SyncConfig::D1 {
+        account_id: "acc".into(),
+        database_id: "db".into(),
+    }
+}
+
 fn info(name: &str) -> DeviceInfo {
     DeviceInfo {
         name: name.into(),
@@ -817,7 +824,10 @@ async fn two_devices_sync_through_d1_direct_mode() {
     enable_sync(&a, &a_backend, PW, None, info("a"))
         .await
         .unwrap();
-    restore_from_cloud(&b, &b_backend, PW, info("b"))
+    restore_from_cloud(&b, &b_backend, PW, info("b"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&b, &b_backend, &SyncOptions::default())
         .await
         .unwrap();
     assert_eq!(names(&b), ["d1-host"]);
@@ -860,10 +870,13 @@ async fn two_devices_sync_through_d1_direct_mode() {
         .unwrap();
     let (c, c_backend) = device(&server, &clock, false);
     assert!(matches!(
-        restore_from_cloud(&c, &c_backend, PW, info("c")).await,
+        restore_from_cloud(&c, &c_backend, PW, info("c"), &config()).await,
         Err(Error::WrongPassword)
     ));
-    restore_from_cloud(&c, &c_backend, "new-d1-password", info("c"))
+    restore_from_cloud(&c, &c_backend, "new-d1-password", info("c"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&c, &c_backend, &SyncOptions::default())
         .await
         .unwrap();
     assert_eq!(names(&c), ["edited-on-b"]);
@@ -895,7 +908,10 @@ async fn direct_mode_push_conflict_triggers_the_engine_retry_path() {
     enable_sync(&a, &a_backend, PW, None, info("a"))
         .await
         .unwrap();
-    restore_from_cloud(&b, &b_backend, PW, info("b"))
+    restore_from_cloud(&b, &b_backend, PW, info("b"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&b, &b_backend, &SyncOptions::default())
         .await
         .unwrap();
 

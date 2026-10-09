@@ -154,10 +154,20 @@ async fn enable(dev: &Dev) -> Session {
         .unwrap()
 }
 
+fn config() -> SyncConfig {
+    SyncConfig::Worker {
+        url: "https://sync.example.workers.dev".into(),
+        deployment: None,
+    }
+}
+
+/// Flow B followed by the first sync round, as the app runs them.
 async fn restore(dev: &Dev) -> Session {
-    restore_from_cloud(&dev.vault, &dev.backend, PW, dev.info())
+    let session = restore_from_cloud(&dev.vault, &dev.backend, PW, dev.info(), &config())
         .await
-        .unwrap()
+        .unwrap();
+    dev.sync().await;
+    session
 }
 
 /// A and B both synced and holding the same data.
@@ -375,13 +385,13 @@ async fn enable_sync_still_rejects_another_vault_with_the_same_password() {
 async fn restore_errors() {
     let (server, clock, a, b) = world();
     // Nothing deployed yet.
-    let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info())
+    let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
         .await
         .unwrap_err();
     assert!(matches!(err, Error::RemoteNotInitialized));
     enable(&a).await;
 
-    let err = restore_from_cloud(&b.vault, &b.backend, "wrong password", b.info())
+    let err = restore_from_cloud(&b.vault, &b.backend, "wrong password", b.info(), &config())
         .await
         .unwrap_err();
     assert!(matches!(err, Error::WrongPassword));
@@ -392,11 +402,91 @@ async fn restore_errors() {
 
     restore(&b).await;
     // Restoring over an existing vault is refused.
-    let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info())
+    let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
         .await
         .unwrap_err();
     assert!(matches!(err, Error::VaultAlreadyInitialized));
     let _ = (server, clock);
+}
+
+#[tokio::test]
+async fn restore_sets_up_sync_before_the_first_pull() {
+    let (server, _clock, a, b) = world();
+    for i in 0..5 {
+        a.put(host(&format!("bulk-{i}")));
+    }
+    enable(&a).await;
+    restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
+        .await
+        .unwrap();
+    // Installed and configured, but nothing pulled yet.
+    assert!(b.v().status().unlocked);
+    assert_eq!(b.v().sync_config().unwrap(), Some(config()));
+    assert!(b.names().is_empty());
+
+    // The network drops before the first page arrives: the next round simply starts over.
+    server.set_offline(true);
+    assert!(matches!(b.try_sync().await, Err(Error::Offline)));
+    server.set_offline(false);
+    b.sync().await;
+    assert_eq!(a.snapshot(), b.snapshot());
+}
+
+#[tokio::test]
+async fn interrupted_first_pull_resumes_after_a_restart() {
+    let (server, clock, a, _b) = world();
+    for i in 0..7 {
+        a.put(host(&format!("bulk-{i}")));
+    }
+    enable(&a).await;
+    server.set_pull_page_cap(3);
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("vault.db");
+    let b = Dev {
+        vault: share(Vault::open(&path).unwrap().with_clock(clock.clone())),
+        backend: FakeBackend::new(&server),
+        clock: clock.clone(),
+        name: "device-b",
+    };
+    restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
+        .await
+        .unwrap();
+    // The first page is answered, then the network drops.
+    let offline = Arc::clone(&server);
+    b.backend.on_next_pull(move || offline.set_offline(true));
+    assert!(matches!(b.try_sync().await, Err(Error::Offline)));
+    let cursor = b.v().sync_cursor();
+    assert!(
+        cursor > 0 && cursor < server.current_seq(),
+        "cursor {cursor}"
+    );
+    let first_page = b.v().items().count();
+    assert_eq!(first_page, 3);
+
+    // The app restarts: the same database, unlocked with the master password, and the session
+    // the app kept in the credential store (here: the same backend).
+    let Dev { vault, backend, .. } = b;
+    drop(vault);
+    server.set_offline(false);
+    let mut reopened = Vault::open(&path).unwrap().with_clock(clock.clone());
+    assert!(reopened.status().initialized);
+    assert_eq!(reopened.sync_config().unwrap(), Some(config()));
+    reopened.unlock(PW).unwrap();
+    let b = Dev {
+        vault: share(reopened),
+        backend,
+        clock: clock.clone(),
+        name: "device-b",
+    };
+    let report = b.sync().await;
+    assert_eq!(
+        report.pulled,
+        u32::try_from(server.item_count() - first_page).unwrap(),
+        "only the items after the saved cursor"
+    );
+    assert_eq!(a.snapshot(), b.snapshot());
+    assert_eq!(b.v().sync_cursor(), server.current_seq());
 }
 
 #[tokio::test]
@@ -420,7 +510,7 @@ async fn restore_rejects_weakened_kdf_parameters_before_deriving_anything() {
     })
     .await
     .unwrap();
-    let err = restore_from_cloud(&b.vault, &evil, PW, b.info())
+    let err = restore_from_cloud(&b.vault, &evil, PW, b.info(), &config())
         .await
         .unwrap_err();
     assert!(matches!(err, Error::WeakKdfParams(_)), "got {err:?}");
@@ -446,7 +536,7 @@ async fn restore_rejects_weakened_kdf_parameters_before_deriving_anything() {
         })
         .await
         .unwrap();
-    let err = restore_from_cloud(&b.vault, &evil2, PW, b.info())
+    let err = restore_from_cloud(&b.vault, &evil2, PW, b.info(), &config())
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Format(_)));
@@ -1199,12 +1289,19 @@ async fn password_change_revokes_other_devices_and_they_adopt_the_new_password()
     // And a brand-new device can only join with the new password.
     let c = device(&server, &clock, "device-c", false);
     assert!(matches!(
-        restore_from_cloud(&c.vault, &c.backend, PW, c.info()).await,
+        restore_from_cloud(&c.vault, &c.backend, PW, c.info(), &config()).await,
         Err(Error::WrongPassword)
     ));
-    restore_from_cloud(&c.vault, &c.backend, "the new password", c.info())
-        .await
-        .unwrap();
+    restore_from_cloud(
+        &c.vault,
+        &c.backend,
+        "the new password",
+        c.info(),
+        &config(),
+    )
+    .await
+    .unwrap();
+    c.sync().await;
     assert!(c.find("after-change").is_some());
 }
 
@@ -1509,7 +1606,7 @@ async fn flows_are_send_so_no_mutex_guard_can_live_across_an_await() {
     let opts = SyncOptions::default();
     assert_send(&sync_round(vault, backend, &opts));
     assert_send(&enable_sync(vault, backend, PW, None, a.info()));
-    assert_send(&restore_from_cloud(vault, backend, PW, a.info()));
+    assert_send(&restore_from_cloud(vault, backend, PW, a.info(), &config()));
     assert_send(&sign_in(vault, backend, PW, a.info()));
     assert_send(&change_password_remote(vault, backend, PW, "x"));
     assert_send(&rotate_recovery_remote(vault, backend, PW));

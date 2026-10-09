@@ -32,7 +32,7 @@ use crate::sync::backend::{
     DeviceLogin, RecoveryUpdate, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
 use crate::sync::engine::{SyncOptions, sync_round};
-use crate::sync::{SharedVault, lock_vault};
+use crate::sync::{SharedVault, SyncConfig, lock_vault};
 use crate::vault::{PasswordChange, Vault};
 
 /// Runs CPU-heavy work (Argon2) off the async executor.
@@ -219,11 +219,13 @@ async fn authenticate(
 /// Flow B: sets up this (empty) device from an existing remote vault.
 ///
 /// Derives keys from the remote's salt and the master password, logs in, unwraps the vault key
-/// with `enc_key`, writes the vault metadata locally under a new device id, pulls everything and
-/// leaves the vault unlocked. The local master password becomes the remote one.
+/// with `enc_key`, and writes the vault metadata locally under a new device id together with
+/// `config`, in one transaction. The vault is left unlocked and the local master password becomes
+/// the remote one.
 ///
-/// If the final pull fails (for example the network drops) the error is returned but the local
-/// vault already exists; check `Vault::status` and call `sync` again to finish.
+/// Items are not pulled here: the caller stores the returned session and then runs an ordinary
+/// sync round. Once this returns, the device is a configured sync device, so an interrupted
+/// first pull resumes from the saved cursor on the next round, also after a restart.
 ///
 /// # Errors
 /// [`Error::VaultAlreadyInitialized`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
@@ -233,6 +235,7 @@ pub async fn restore_from_cloud(
     backend: &dyn SyncBackend,
     password: &str,
     device: DeviceInfo,
+    config: &SyncConfig,
 ) -> Result<Session> {
     with_vault(vault, |v| {
         if v.status().initialized {
@@ -244,9 +247,8 @@ pub async fn restore_from_cloud(
     let device_id = new_id();
     let auth = authenticate(backend, password, &device_id, &device).await?;
     with_vault(vault, |v| {
-        v.install_remote_vault(&auth.meta, auth.vault_key, &device_id)
+        v.install_remote_vault(&auth.meta, auth.vault_key, &device_id, Some(config))
     })?;
-    sync_round(vault, backend, &SyncOptions::default()).await?;
     Ok(auth.session)
 }
 
@@ -426,7 +428,7 @@ pub async fn recover_remote(
                 recovery_vault_key: recovered.recovery_vault_key.clone(),
                 seq: 0,
             };
-            v.install_remote_vault(&meta, vault_key.clone(), &device_id)
+            v.install_remote_vault(&meta, vault_key.clone(), &device_id, None)
         }
     })?;
 
