@@ -3,7 +3,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { hostById } from "@/app/data";
+import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
@@ -290,6 +290,8 @@ export class LiveSession {
     this.sent = sentSize;
     bySession.set(sid, this);
     this.setStatus("connected");
+    // Last connected time and server OS; a quick connection records neither.
+    if (this.hostId) void useVaultData.getState().reloadHosts().catch(() => {});
     void syncActiveForwards(sid); // auto-start forwards (FWD-02) may be running already
     this.sendResize(); // the view may have been resized while connecting
     const early = earlyEvents.get(sid);

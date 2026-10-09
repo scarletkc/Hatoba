@@ -58,6 +58,13 @@
   animation: spin 1.1s linear infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spin i {
+    animation-duration: 1.1s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

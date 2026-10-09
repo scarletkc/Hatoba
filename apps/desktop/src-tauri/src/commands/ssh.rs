@@ -97,10 +97,6 @@ pub async fn ssh_connect(
     })?;
     let (live, events) =
         open_terminal(&app, &state, cfg, &session_id, Some(&host_id), &options).await?;
-    // HOST-06: device-local, never synced.
-    if let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(&host_id, now_ms())?)) {
-        tracing::debug!("last-connected not recorded: {}", e.detail);
-    }
     crate::commands::forwards::start_auto(&app, &session_id, &live, &host_id).await;
     pump(
         app,
@@ -178,6 +174,19 @@ async fn open_terminal(
     };
     let live = Arc::new(LiveSession::new(session.clone(), shell));
     state.ssh.insert(session_id.to_owned(), live.clone());
+    // HOST-06, HOST-11: device-local, never synced. A quick connection has no host to record on.
+    if let Some(host_id) = host_id {
+        let os = session.server_os().map(hatoba_ssh::ServerOs::as_str);
+        if let Err(e) = state.with_unlocked(|v| {
+            v.set_last_connected(host_id, now_ms())?;
+            Ok(v.set_host_os(host_id, os)?)
+        }) {
+            tracing::debug!(
+                "last-connected time and server OS not recorded: {}",
+                e.detail
+            );
+        }
+    }
     let latency = session.latency_ms();
     emit_state(app, session_id, host_id, SessionState::Connected, |e| {
         e.latency_ms = Some(latency)

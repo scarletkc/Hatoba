@@ -88,6 +88,14 @@
   --tag-7: oklch(0.66 0.01 260);
   --tag-8: oklch(0.7 0.12 340);
 
+  /* Server OS logos (HOST-11): the Simple Icons brand colors, and Windows blue */
+  --os-ubuntu: #e95420;
+  --os-debian: #a81d33;
+  --os-raspbian: #a22846;
+  --os-freebsd: #ab2b28;
+  --os-netbsd: #ff6600;
+  --os-windows: #0078d4;
+
   /* Windows caption buttons */
   --caption-hover: rgba(0, 0, 0, 0.06);
   --caption-close: #c42b1c;
@@ -125,6 +133,11 @@
   --scrim: rgba(0, 0, 0, 0.4);
   --term: #0d0e10;
   --caption-hover: rgba(255, 255, 255, 0.08);
+  /* The darker brand colors, lightened to stay visible on dark and selected rows */
+  --os-debian: #e85d67;
+  --os-raspbian: #e16379;
+  --os-freebsd: #e66259;
+  --os-windows: #3395f4;
 
   color-scheme: dark;
 }

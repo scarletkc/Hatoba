@@ -64,12 +64,14 @@ function host(
     ai_notes: "",
     updated_at: ago(3 * DAY),
     last_connected_at: last,
+    os: null,
     ...extra,
   };
 }
 
 export const HOSTS: HostView[] = [
   host("h-api-tokyo", "prod-api-tokyo", "deploy", "43.206.118.27", 22, "g-tokyo", ["production", "api"], ago(2 * MIN), {
+    os: "ubuntu",
     favorite: true,
     key_id: "k-deploy",
     note: zh
@@ -77,10 +79,12 @@ export const HOSTS: HostView[] = [
       : "Primary API node, deployed via GitHub Actions. Post in #ops before restarting api.service.",
   }),
   host("h-bastion", "bastion-tokyo", "ops", "bastion.tky.example.net", 2222, "g-tokyo", ["production", "edge"], ago(2 * MIN), {
+    os: "debian",
     favorite: true,
     key_id: "k-bastion",
   }),
   host("h-db-osaka-01", "db-osaka-01", "postgres", "10.24.3.11", 22, "g-osaka", ["production", "database"], ago(18 * MIN), {
+    os: "debian",
     favorite: true,
     key_id: "k-dbops",
     jump_host_id: "h-bastion",
@@ -90,9 +94,11 @@ export const HOSTS: HostView[] = [
       : "PostgreSQL 16 primary, data in /srv/pgdata. Don’t restart postgresql during business hours (09:00–19:00).",
   }),
   host("h-api-tokyo-02", "prod-api-tokyo-02", "deploy", "43.206.118.31", 22, "g-tokyo", ["production", "api"], ago(40 * MIN), {
+    os: "ubuntu",
     key_id: "k-deploy",
   }),
   host("h-staging-web", "staging-web-02", "ubuntu", "172.31.40.8", 22, "g-staging", ["staging"], ago(70 * MIN), {
+    os: "ubuntu",
     key_id: "k-deploy",
   }),
   host("h-db-osaka-02", "db-osaka-02", "postgres", "10.24.3.12", 22, "g-osaka", ["production", "database"], ago(DAY + 2 * MIN), {
@@ -100,18 +106,22 @@ export const HOSTS: HostView[] = [
     jump_host_id: "h-bastion",
   }),
   host("h-staging-worker", "staging-worker-01", "ubuntu", "172.31.40.15", 22, "g-staging", ["staging"], at(10, 5), {
+    os: "ubuntu",
     key_id: "k-deploy",
   }),
   host("h-ci", "ci-runner-01", "runner", "192.168.50.21", 22, "g-infra", ["ci"], at(10, 3), {
+    os: "windows",
     auth_kind: "password",
     has_password: true,
   }),
   host("h-edge-sg", "edge-sg-cache", "root", "159.89.204.73", 22, "g-infra", ["edge"], at(9, 24), { auth_kind: "ask" }),
   host("h-nas", "homelab-nas", "admin", "nas.local", 22, "g-home", ["personal"], at(9, 12), {
+    os: "freebsd",
     favorite: true,
     key_id: "k-homelab",
   }),
   host("h-pihole", "pi-hole", "pi", "192.168.1.53", 22, "g-home", ["personal"], at(8, 30), {
+    os: "raspbian",
     auth_kind: "password",
     has_password: true,
   }),

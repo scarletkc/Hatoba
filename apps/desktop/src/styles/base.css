@@ -123,11 +123,14 @@ input[list]::-webkit-calendar-picker-indicator {
   line-height: 1;
 }
 
+/* One run, or a looping animation would repeat every 0.01ms and flicker. Spinners opt back in where
+ * they are defined: a still one reads as stuck. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

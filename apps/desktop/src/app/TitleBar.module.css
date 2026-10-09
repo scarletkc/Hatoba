@@ -51,13 +51,6 @@
   flex: none;
 }
 
-.tabDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-}
-
 .tabLabel {
   white-space: nowrap;
   overflow: hidden;

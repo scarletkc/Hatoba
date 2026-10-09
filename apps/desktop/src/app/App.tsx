@@ -15,6 +15,7 @@ import { closeSessionTab } from "@/features/terminal/connect";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
+import { ContextMenuHost } from "./ContextMenu";
 import { useVaultData } from "./data";
 import { useShortcuts, type ShortcutAction } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
@@ -31,6 +32,7 @@ export function App() {
   const phase = useApp((st) => st.phase);
   const settingsOpen = useApp((st) => st.settingsOpen);
   const hasSessions = useTabs((st) => st.tabs.length > 0);
+  const platform = useApp((st) => st.info.platform);
 
   useGlobalEvents();
   useAiLifecycle();
@@ -44,6 +46,7 @@ export function App() {
         <Onboarding />
         <ConfirmHost />
         <ToastHost />
+        <ContextMenuHost platform={platform} />
       </>
     );
 
@@ -61,6 +64,7 @@ export function App() {
       {!locked && <SessionDialogs />}
       <ConfirmHost />
       <ToastHost />
+      <ContextMenuHost platform={platform} />
     </>
   );
 }

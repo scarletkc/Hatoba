@@ -14,7 +14,7 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp, type HostFilter } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
+import { Button, Icon, LinkButton } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
@@ -25,6 +25,7 @@ import { cx } from "@/lib/cx";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
 import { ImportSshDialog } from "./ImportSshDialog";
+import { OsIcon } from "./OsIcon";
 import { formatTarget, parseQuickConnect, sameTarget, savedHostFor, type QuickProblem, type TypedTarget } from "./quickConnect";
 import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
@@ -517,6 +518,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           ref={sortButton}
           trailingIcon="caret-down"
           aria-haspopup="menu"
+          aria-expanded={!!sortMenu.anchor}
           aria-label={t("hosts.sort")}
           onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
         >
@@ -657,7 +659,7 @@ const HostRow = memo(function HostRow({
       onContextMenu={(e) => onContext(e, host)}
     >
       <div className={s.nameCell}>
-        <StatusDot color={dot} />
+        <OsIcon os={host.os} badge={dot} />
         <span className={s.name}>{host.name}</span>
         {host.favorite && <Icon name="star" fill className={s.fav} />}
       </div>
@@ -733,13 +735,14 @@ function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, o
       onClick={() => onSelect(item.id)}
       onDoubleClick={() => onConnect(item.id)}
     >
-      <div className={s.quickCell}>
+      <div className={s.nameCell}>
         <Icon name={recent ? "clock-counter-clockwise" : "terminal-window"} className={s.quickIcon} />
         <span className={s.name}>{connectLabel}</span>
-        <span className={s.addrCell}>
-          <TargetText target={item.target} />
-        </span>
       </div>
+      <div className={s.addrCell}>
+        <TargetText target={item.target} />
+      </div>
+      <div className={s.tags} />
       <div className={cx(s.last, s.quickHint)}>
         <span>{hint}</span>
         {recent && (

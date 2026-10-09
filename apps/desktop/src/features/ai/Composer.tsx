@@ -246,6 +246,7 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
         type="button"
         className={s.model}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         aria-label={t("ai.model")}
         title={title}
         disabled={entries.length === 0}
@@ -290,6 +291,8 @@ function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: Mete
         type="button"
         className={cx(s.meter, m.warn && s.meterWarn)}
         title={title}
+        aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         aria-label={`${t("ai.meter")}: ${detail}`}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >

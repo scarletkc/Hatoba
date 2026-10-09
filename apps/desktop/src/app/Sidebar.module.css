@@ -264,6 +264,13 @@
   animation: spin 1.2s linear infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 1.2s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

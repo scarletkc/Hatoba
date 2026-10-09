@@ -25,6 +25,8 @@ interface Props {
   /** Forwards running on this session (FWD-01); shown as a count on the button. */
   forwardCount: number;
   forwardsOpen: boolean;
+  /** The menu of the ⋯ button is open. */
+  moreOpen: boolean;
   findHint: string;
   onFind(): void;
   onForwards(button: HTMLElement): void;
@@ -43,6 +45,7 @@ export function StatusBar({
   forwards,
   forwardCount,
   forwardsOpen,
+  moreOpen,
   findHint,
   onFind,
   onForwards,
@@ -99,7 +102,9 @@ export function StatusBar({
         icon="dots-three"
         size={16}
         label={t("terminal.more")}
+        active={moreOpen}
         aria-haspopup="menu"
+        aria-expanded={moreOpen}
         onClick={(e) => onMore(e.currentTarget)}
       />
     </div>

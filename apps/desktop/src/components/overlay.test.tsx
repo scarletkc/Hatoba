@@ -1,7 +1,7 @@
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirm, ConfirmHost, Menu, Modal, setOverlaysLocked } from "./overlay";
+import { confirm, ConfirmHost, Menu, Modal, setOverlaysLocked, useMenu } from "./overlay";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -132,6 +132,45 @@ describe("Menu", () => {
     click(document.querySelector("[role=menu] > [role=menuitemradio]"));
     expect(onSelect).toHaveBeenCalledTimes(2);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens above its button, not over it, when it doesn't fit below", () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 200, height: 120 } as DOMRect);
+    try {
+      render(<Menu anchor={{ x: 0, y: window.innerHeight - 20, above: 600 }} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
+      expect((document.querySelector("[role=menu]") as HTMLElement).style.top).toBe("480px");
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("closes when its button is pressed again", () => {
+    function Trigger() {
+      const menu = useMenu();
+      return (
+        <>
+          <button type="button" id="trigger" onClick={(e) => menu.openBelow(e.currentTarget)}>
+            Open
+          </button>
+          {menu.anchor && <Menu anchor={menu.anchor} onClose={menu.close} entries={[{ label: "Item", onSelect: () => {} }]} />}
+        </>
+      );
+    }
+    render(<Trigger />);
+    const trigger = document.getElementById("trigger")!;
+    const press = () =>
+      act(() => {
+        trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        trigger.click();
+      });
+    press();
+    expect(document.querySelector("[role=menu]")).not.toBeNull();
+    press();
+    expect(document.querySelector("[role=menu]")).toBeNull();
+    press();
+    expect(document.querySelector("[role=menu]")).not.toBeNull();
+    act(() => void document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    expect(document.querySelector("[role=menu]")).toBeNull();
   });
 });
 

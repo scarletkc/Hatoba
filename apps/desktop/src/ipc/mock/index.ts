@@ -298,6 +298,7 @@ export function createMockApi(): HatobaApi {
         ai_notes: input.ai_notes,
         updated_at: Date.now(),
         last_connected_at: existing?.last_connected_at ?? null,
+        os: existing?.os ?? null,
       };
       hosts = existing ? hosts.map((h) => (h.id === view.id ? view : h)) : [...hosts, view];
       touch();
@@ -310,7 +311,7 @@ export function createMockApi(): HatobaApi {
     host_duplicate: async (hid) => {
       const h = hosts.find((x) => x.id === hid);
       if (!h) fail("not_found");
-      const copy = { ...h, id: id("h"), name: `${h.name}-copy`, favorite: false, last_connected_at: null };
+      const copy = { ...h, id: id("h"), name: `${h.name}-copy`, favorite: false, last_connected_at: null, os: null };
       hosts = [...hosts, copy];
       touch();
       return copy;
@@ -351,7 +352,7 @@ export function createMockApi(): HatobaApi {
     ],
     ssh_config_import: async (aliases) => {
       await delay(300);
-      aliases.forEach((a) => hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, key_id: null, auth_kind: "ask" }));
+      aliases.forEach((a) => hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask" }));
       touch();
       return { hosts_created: aliases.length, keys_imported: 0, warnings: [] };
     },

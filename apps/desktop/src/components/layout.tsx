@@ -20,8 +20,7 @@ export function PageHeader({
     <div className={l.pageHeader}>
       <div className={l.pageTitle}>{title}</div>
       {count !== undefined && <div className={l.pageCount}>{count}</div>}
-      <div className={l.spacer} />
-      {children}
+      {children && <div className={l.pageActions}>{children}</div>}
     </div>
   );
 }
@@ -41,7 +40,7 @@ export const SearchField = forwardRef<
   }
 >(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup }, ref) {
   return (
-    <label className={l.search} style={{ width }}>
+    <label className={l.search} style={{ flexBasis: width }}>
       <Icon name="magnifying-glass" />
       <input
         ref={ref}

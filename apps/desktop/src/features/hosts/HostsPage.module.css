@@ -3,11 +3,34 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 
 /* Shared by the column header and every row (design §01: name · address · tags · last connected · action). */
 .cols {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.1fr) 104px 64px;
+}
+
+/* A narrow page (beside the AI panel, or in a small window) drops the tags, then the last connection
+ * time, so the name keeps its room. */
+@container (max-width: 680px) {
+  .cols {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 104px 64px;
+  }
+
+  .cols > :nth-child(3) {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
+  .cols {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px;
+  }
+
+  .cols > :nth-child(4) {
+    display: none;
+  }
 }
 
 .scroll {
@@ -148,19 +171,19 @@
 }
 
 /* Quick connect (HOST-12): the search field's recent targets, and Connect rows for unsaved targets. */
+/* Takes the search field's place in the header, so it shrinks the way the field does on its own. */
 .searchWrap {
   position: relative;
-}
-
-.quickCell {
-  grid-column: 1 / 4;
   display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
+  flex: 0 1 300px;
+  min-width: 80px;
 }
 
+/* As wide as a host row's OS icon, so the labels line up. */
 .quickIcon {
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
   font-size: 14px;
   color: var(--fg2);
   flex: none;
@@ -221,6 +244,7 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
+  min-width: 260px;
   z-index: 20;
   padding: 5px;
   border-radius: 9px;

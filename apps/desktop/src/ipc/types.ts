@@ -128,6 +128,8 @@ export interface HostView {
   updated_at: number;
   /** Device-local, never synced (HOST-06). */
   last_connected_at: number | null;
+  /** The server's OS from its SSH identification string, such as `ubuntu`; device-local, never synced (HOST-11). */
+  os: string | null;
 }
 
 export interface HostInput {

@@ -21,6 +21,7 @@ pub mod keys;
 mod net;
 mod ppk;
 pub mod probe;
+mod server_os;
 pub mod session;
 pub mod sftp;
 pub mod shell;
@@ -35,6 +36,7 @@ pub use keys::{
     parse_private_key, try_fingerprint_sha256,
 };
 pub use probe::tcp_probe;
+pub use server_os::{ServerOs, server_os};
 pub use session::{
     AuthMethod, ConnectConfig, ExecOutput, JumpHop, ShellEvent, ShellHandle, ShellOptions,
     SshSession, connect,

@@ -20,7 +20,8 @@
   background: color-mix(in srgb, var(--btn) 92%, var(--fg) 8%);
 }
 
-.button:active:not(:disabled) {
+.button:active:not(:disabled),
+.button[aria-expanded="true"]:not(.primary, .danger) {
   background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
 }
 
@@ -337,6 +338,11 @@
   opacity: 0.45;
 }
 
+/* Its menu is open. */
+.popup[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
+}
+
 .popupLabel {
   flex: 1;
   min-width: 0;
@@ -395,6 +401,14 @@
 .spinner {
   display: inline-block;
   animation: spin 0.9s linear infinite;
+}
+
+/* Keeps turning with reduced motion, as macOS's spinner does (base.css). */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 @keyframes spin {

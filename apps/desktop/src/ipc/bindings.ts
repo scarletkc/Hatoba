@@ -797,6 +797,11 @@ export type HostView = {
 	ai_notes: string,
 	updated_at: number,
 	last_connected_at: number | null,
+	/**
+	 *  The server's operating system from its SSH identification string on the last connection
+	 *  from this device, such as `ubuntu` (HOST-11). Device-local, like `last_connected_at`.
+	 */
+	os: string | null,
 };
 
 export type ImportResult = {
