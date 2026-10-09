@@ -776,31 +776,49 @@ fn folders_nested_too_deep_are_reported() {
     assert!(matches!(&import.issues[0], SkillIssue::UnsafePath(p) if deep.starts_with(p.as_str())));
 }
 
-fn make_symlink(target: &Path, link: &Path) -> bool {
+fn make_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
-    let result = std::os::unix::fs::symlink(target, link);
+    {
+        std::os::unix::fs::symlink(target, link)
+    }
     #[cfg(windows)]
-    let result = if target.is_dir() {
-        std::os::windows::fs::symlink_dir(target, link)
-    } else {
-        std::os::windows::fs::symlink_file(target, link)
-    };
+    {
+        if target.is_dir() {
+            std::os::windows::fs::symlink_dir(target, link)
+        } else {
+            std::os::windows::fs::symlink_file(target, link)
+        }
+    }
     #[cfg(not(any(unix, windows)))]
-    let result: std::io::Result<()> = Err(std::io::ErrorKind::Unsupported.into());
-    result.is_ok()
+    {
+        Err(std::io::ErrorKind::Unsupported.into())
+    }
+}
+
+// Windows without Developer Mode cannot create symbolic links, so tests that need one are skipped;
+// in CI they must run, so the failure is reported instead.
+fn symlink_or_skip(target: &Path, link: &Path) -> bool {
+    match make_symlink(target, link) {
+        Ok(()) => true,
+        Err(err) if std::env::var_os("CI").is_some() => {
+            panic!("cannot create the symbolic link {}: {err}", link.display())
+        }
+        Err(err) => {
+            eprintln!("symbolic links cannot be created here ({err}); skipping");
+            false
+        }
+    }
 }
 
 #[test]
 fn symbolic_links_are_not_followed() {
     let outside = folder(&[("secret.txt", b"top secret\n"), ("dir/more.txt", b"more\n")]);
     let dir = folder(&[("SKILL.md", GOOD.as_bytes()), ("references/a.md", b"a\n")]);
-    let file_link = make_symlink(
+    if !symlink_or_skip(
         &outside.path().join("secret.txt"),
         &dir.path().join("references/link.md"),
-    );
-    let dir_link = make_symlink(outside.path(), &dir.path().join("linked-dir"));
-    if !file_link && !dir_link {
-        eprintln!("symbolic links cannot be created here; skipping");
+    ) || !symlink_or_skip(outside.path(), &dir.path().join("linked-dir"))
+    {
         return;
     }
     let import = read_folder(dir.path()).unwrap();
@@ -813,11 +831,10 @@ fn symbolic_links_are_not_followed() {
 fn a_symbolic_link_as_skill_md_is_not_a_skill() {
     let outside = folder(&[("SKILL.md", GOOD.as_bytes())]);
     let dir = folder(&[("references/a.md", b"a\n")]);
-    if !make_symlink(
+    if !symlink_or_skip(
         &outside.path().join("SKILL.md"),
         &dir.path().join("SKILL.md"),
     ) {
-        eprintln!("symbolic links cannot be created here; skipping");
         return;
     }
     let import = read_folder(dir.path()).unwrap();
