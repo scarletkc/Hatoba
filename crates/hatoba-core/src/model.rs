@@ -145,6 +145,9 @@ pub const MAX_HOST_ENV_VARS: usize = 64;
 pub const MAX_ENV_NAME_CHARS: usize = 128;
 /// The longest environment variable value, in characters (SSH-14).
 pub const MAX_ENV_VALUE_CHARS: usize = 4_096;
+/// The most UTF-8 bytes a host's variable names and values take together (SSH-14). With
+/// control characters ruled out, their JSON stays well within [`MAX_ITEM_PLAINTEXT_BYTES`].
+pub const MAX_HOST_ENV_BYTES: usize = 16 * 1024;
 
 /// Why a host's environment variables can't be saved (SSH-14).
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -166,16 +169,19 @@ pub enum EnvVarError {
     /// Two variables have the same name (names are case-sensitive).
     #[error("{0} is set more than once")]
     NameDuplicate(String),
-    /// The value has a NUL, CR or LF.
-    #[error("the value of {0} can't contain line breaks or NUL characters")]
+    /// The value has a control character other than tab, such as a line break.
+    #[error("the value of {0} can't contain line breaks or other control characters")]
     ValueInvalid(String),
     /// The value is longer than [`MAX_ENV_VALUE_CHARS`].
     #[error("the value of {0} is longer than {MAX_ENV_VALUE_CHARS} characters")]
     ValueTooLong(String),
+    /// The names and values take more than [`MAX_HOST_ENV_BYTES`] together.
+    #[error("the environment variables take more than {MAX_HOST_ENV_BYTES} bytes together")]
+    TooLarge,
 }
 
 /// Checks one variable: a name of ASCII letters, digits and `_` that does not start with a digit,
-/// and a value without NUL, CR or LF, each within its limit.
+/// and a value without control characters other than tab, each within its limit.
 pub fn check_env_var(var: &EnvVar) -> std::result::Result<(), EnvVarError> {
     let name = var.name.as_str();
     if name.is_empty() {
@@ -189,7 +195,7 @@ pub fn check_env_var(var: &EnvVar) -> std::result::Result<(), EnvVarError> {
     if !valid {
         return Err(EnvVarError::NameInvalid(name.to_owned()));
     }
-    if var.value.contains(['\0', '\r', '\n']) {
+    if var.value.chars().any(|c| c.is_control() && c != '\t') {
         return Err(EnvVarError::ValueInvalid(name.to_owned()));
     }
     if var.value.chars().count() > MAX_ENV_VALUE_CHARS {
@@ -198,8 +204,8 @@ pub fn check_env_var(var: &EnvVar) -> std::result::Result<(), EnvVarError> {
     Ok(())
 }
 
-/// Checks a host's variables: each as in [`check_env_var`], no name twice, and at most
-/// [`MAX_HOST_ENV_VARS`] of them.
+/// Checks a host's variables: each as in [`check_env_var`], no name twice, at most
+/// [`MAX_HOST_ENV_VARS`] of them, and at most [`MAX_HOST_ENV_BYTES`] together.
 pub fn check_host_env(vars: &[EnvVar]) -> std::result::Result<(), EnvVarError> {
     if vars.len() > MAX_HOST_ENV_VARS {
         return Err(EnvVarError::TooMany);
@@ -210,8 +216,22 @@ pub fn check_host_env(vars: &[EnvVar]) -> std::result::Result<(), EnvVarError> {
             return Err(EnvVarError::NameDuplicate(var.name.clone()));
         }
     }
+    if env_bytes(vars) > MAX_HOST_ENV_BYTES {
+        return Err(EnvVarError::TooLarge);
+    }
     Ok(())
 }
+
+/// The UTF-8 bytes of the names and values together, as [`MAX_HOST_ENV_BYTES`] counts them.
+#[must_use]
+pub fn env_bytes(vars: &[EnvVar]) -> usize {
+    vars.iter().map(|v| v.name.len() + v.value.len()).sum()
+}
+
+/// The most plaintext bytes (the item's JSON) an item may hold, so that its envelope stays under
+/// the 64 KiB that the sync Worker and D1 accept (§6.2); the same budget as
+/// [`AI_PART_MAX_BYTES`](crate::AI_PART_MAX_BYTES). Larger items are refused when saved.
+pub const MAX_ITEM_PLAINTEXT_BYTES: usize = 40 * 1024;
 
 impl Default for Host {
     fn default() -> Self {
@@ -1311,6 +1331,16 @@ impl Item {
         }
     }
 
+    /// The length of [`to_plaintext`](Self::to_plaintext), measured without building it.
+    ///
+    /// # Errors
+    /// [`Error::Json`] if serialisation fails (cannot happen for these types in practice).
+    pub fn plaintext_len(&self) -> Result<usize> {
+        let mut counter = ByteCounter(0);
+        serde_json::to_writer(&mut counter, self)?;
+        Ok(counter.0)
+    }
+
     /// Serialises to the plaintext JSON that gets sealed. The buffer is wiped on drop.
     ///
     /// # Errors
@@ -1465,7 +1495,7 @@ mod tests {
             one(&"N".repeat(MAX_ENV_NAME_CHARS + 1), ""),
             Err(EnvVarError::NameTooLong)
         );
-        for bad in ["a\nb", "a\rb", "a\0b"] {
+        for bad in ["a\nb", "a\rb", "a\0b", "a\x1bb", "a\x7fb", "a\u{85}b"] {
             assert_eq!(one("V", bad), Err(EnvVarError::ValueInvalid("V".into())));
         }
         assert_eq!(one("V", "\ttab is fine"), Ok(()));
@@ -1488,6 +1518,46 @@ mod tests {
             .collect();
         assert_eq!(check_host_env(&many[..MAX_HOST_ENV_VARS]), Ok(()));
         assert_eq!(check_host_env(&many), Err(EnvVarError::TooMany));
+
+        // Names and values together, in UTF-8 bytes.
+        let full = MAX_ENV_VALUE_CHARS;
+        let mut big = vec![
+            EnvVar::new("A", "x".repeat(full)),
+            EnvVar::new("B", "x".repeat(full)),
+            EnvVar::new("C", "x".repeat(full)),
+            EnvVar::new("D", "x".repeat(MAX_HOST_ENV_BYTES - 3 * full - 4)),
+        ];
+        assert_eq!(env_bytes(&big), MAX_HOST_ENV_BYTES);
+        assert_eq!(check_host_env(&big), Ok(()));
+        big[3].value.push('x');
+        assert_eq!(check_host_env(&big), Err(EnvVarError::TooLarge));
+        assert_eq!(
+            check_host_env(&[EnvVar::new("V", "値".repeat(MAX_HOST_ENV_BYTES / 3))]),
+            Err(EnvVarError::ValueTooLong("V".into()))
+        );
+    }
+
+    #[test]
+    fn the_largest_host_env_fits_an_item() {
+        // SSH-14: a host whose variables use the whole budget, with the escaping that costs most
+        // (every value byte a quote), still fits the plaintext a synced item may have.
+        let quotes = "\"".repeat(MAX_ENV_VALUE_CHARS);
+        let mut env: Vec<EnvVar> = (0..4)
+            .map(|i| EnvVar::new(format!("N{i}"), quotes.clone()))
+            .collect();
+        env.extend((4..MAX_HOST_ENV_VARS).map(|i| EnvVar::new(format!("N{i}"), "")));
+        while env_bytes(&env) > MAX_HOST_ENV_BYTES {
+            env[3].value.pop();
+        }
+        assert_eq!(check_host_env(&env), Ok(()));
+        let item = Item::Host(Host {
+            ai_notes: "日".repeat(MAX_HOST_AI_NOTES_CHARS),
+            env,
+            ..sample_host()
+        });
+        let len = item.plaintext_len().unwrap();
+        assert_eq!(len, item.to_plaintext().unwrap().len());
+        assert!(len <= MAX_ITEM_PLAINTEXT_BYTES, "{len}");
     }
 
     #[test]

@@ -12,6 +12,8 @@ export const ENV_MAX_VARS = 64;
 export const ENV_NAME_MAX_CHARS = 128;
 /** The longest value, in characters. */
 export const ENV_VALUE_MAX_CHARS = 4_096;
+/** The most UTF-8 bytes the names and values take together. */
+export const ENV_MAX_BYTES = 16 * 1024;
 
 export interface EnvRow {
   uid: number;
@@ -36,7 +38,8 @@ export const isBlankEnvRow = (row: EnvRow): boolean => row.name.trim() === "" &&
 
 // What a POSIX shell accepts as a variable name.
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const BAD_VALUE = /[\0\r\n]/;
+// Control characters other than tab, as Rust's `char::is_control` sees them.
+const BAD_VALUE = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/;
 
 /**
  * The problems of each row (null when it is fine), index for index with `rows`. Blank rows are fine. Names are
@@ -57,6 +60,14 @@ export function validateEnvRows(rows: readonly EnvRow[]): (EnvRowProblem | null)
     else if (charCount(row.value) > ENV_VALUE_MAX_CHARS) problem.value = "tooLong";
     return Object.keys(problem).length ? problem : null;
   });
+}
+
+const utf8 = new TextEncoder();
+
+/** Whether the rows that are kept take more than `ENV_MAX_BYTES` together, counted as Rust counts them. */
+export function envTooLarge(rows: readonly EnvRow[]): boolean {
+  const bytes = envInput(rows).reduce((sum, v) => sum + utf8.encode(v.name).length + utf8.encode(v.value).length, 0);
+  return bytes > ENV_MAX_BYTES;
 }
 
 /** The `env` of `HostInput`: names trimmed, values as typed, blank rows dropped. */

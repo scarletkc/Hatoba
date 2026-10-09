@@ -12,7 +12,7 @@ import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
-import { envInput, envRows, validateEnvRows, type EnvRow } from "./envVars";
+import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
 import { ForwardsSection } from "./ForwardsSection";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
@@ -113,7 +113,8 @@ export function HostEditPage({
   const passwordRef = useRef<HTMLInputElement>(null);
 
   const envProblems = validateEnvRows(form.env);
-  const envBlocked = envProblems.some(Boolean);
+  const envLarge = envTooLarge(form.env);
+  const envBlocked = envProblems.some(Boolean) || envLarge;
   const hasSavedPassword = !!host?.has_password;
   const showSaved = form.authKind === "password" && hasSavedPassword && !form.replacing;
 
@@ -186,6 +187,7 @@ export function HostEditPage({
       const ae = toAppError(err);
       const field = ae.code === "invalid_input" && ae.field ? BACKEND_FIELDS[ae.field] : undefined;
       if (field) showErrors({ [field]: errorMessage(t, err) });
+      else if (ae.code === "invalid_input" && ae.field === "host") toast(t("hosts.err.tooLarge"), "error");
       else toast(errorMessage(t, err, { host: form.address, port: Number(form.port) }), "error");
       setSaving(false);
     }
@@ -501,6 +503,7 @@ export function HostEditPage({
           <EnvVarsSection
             rows={form.env}
             problems={envProblems}
+            tooLarge={envLarge}
             showEmpty={submitted}
             error={errors.env}
             onChange={(env) => patch({ env }, "env")}

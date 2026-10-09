@@ -3,7 +3,15 @@ import { IconButton, LinkButton, TextField } from "@/components/controls";
 import { Group, Section } from "@/components/layout";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
-import { ENV_MAX_VARS, ENV_NAME_MAX_CHARS, ENV_VALUE_MAX_CHARS, newEnvRow, type EnvRow, type EnvRowProblem } from "./envVars";
+import {
+  ENV_MAX_BYTES,
+  ENV_MAX_VARS,
+  ENV_NAME_MAX_CHARS,
+  ENV_VALUE_MAX_CHARS,
+  newEnvRow,
+  type EnvRow,
+  type EnvRowProblem,
+} from "./envVars";
 import s from "./EnvVarsSection.module.css";
 
 /** Id of the field the host editor focuses when a variable keeps the form from saving. */
@@ -16,6 +24,7 @@ export const ENV_FOCUS_ID = "host-env";
 export function EnvVarsSection({
   rows,
   problems,
+  tooLarge,
   showEmpty,
   error,
   onChange,
@@ -23,6 +32,8 @@ export function EnvVarsSection({
   rows: EnvRow[];
   /** Index for index with `rows`. */
   problems: (EnvRowProblem | null)[];
+  /** The names and values take more than `ENV_MAX_BYTES` together. */
+  tooLarge: boolean;
   showEmpty: boolean;
   /** What the backend refused, if it did. */
   error?: string | null;
@@ -111,9 +122,9 @@ export function EnvVarsSection({
           {full && <span className={s.muted}>{t("hosts.env.full", { max: ENV_MAX_VARS })}</span>}
         </div>
       </Group>
-      {error && (
+      {(error || tooLarge) && (
         <div className={s.error} role="alert">
-          {error}
+          {error || t("hosts.env.err.tooLarge", { max: `${ENV_MAX_BYTES / 1024} KB` })}
         </div>
       )}
       <div className={s.hint}>{t("hosts.env.hint")}</div>

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ENV_MAX_BYTES,
   ENV_NAME_MAX_CHARS,
   ENV_VALUE_MAX_CHARS,
   envInput,
   envRows,
+  envTooLarge,
   isBlankEnvRow,
   newEnvRow,
   validateEnvRows,
@@ -36,10 +38,23 @@ describe("env rows (SSH-14)", () => {
     expect(validateEnvRows([row("N".repeat(ENV_NAME_MAX_CHARS))])).toEqual([null]);
     expect(validateEnvRows([row("N".repeat(ENV_NAME_MAX_CHARS + 1))])).toEqual([{ name: "tooLong" }]);
     expect(validateEnvRows([row("A", "1"), row("B"), row(" A ", "2")])).toEqual([null, null, { name: "duplicate" }]);
-    for (const bad of ["a\nb", "a\rb", "a\0b"]) expect(validateEnvRows([row("V", bad)])).toEqual([{ value: "invalid" }]);
+    for (const bad of ["a\nb", "a\rb", "a\0b", "a\x1bb", "a\x7fb", "a\u0085b"])
+      expect(validateEnvRows([row("V", bad)])).toEqual([{ value: "invalid" }]);
+    expect(validateEnvRows([row("V", "a\tb")])).toEqual([null]);
     expect(validateEnvRows([row("V", "値".repeat(ENV_VALUE_MAX_CHARS))])).toEqual([null]);
     expect(validateEnvRows([row("V", "値".repeat(ENV_VALUE_MAX_CHARS + 1))])).toEqual([{ value: "tooLong" }]);
     expect(validateEnvRows([row("1", "\n")])).toEqual([{ name: "invalid", value: "invalid" }]);
+  });
+
+  it("counts names and values together in UTF-8 bytes, as Rust does", () => {
+    const value = (n: number) => "x".repeat(n);
+    const rows = [row("A", value(4_096)), row("B", value(4_096)), row("C", value(4_096)), row("D", value(ENV_MAX_BYTES - 3 * 4_096 - 4))];
+    expect(envTooLarge(rows)).toBe(false);
+    rows[3].value += "x";
+    expect(envTooLarge(rows)).toBe(true);
+    // 3 bytes per character, and blank rows don't count.
+    expect(envTooLarge([row("V", "値".repeat(4_096)), row("W", "値".repeat(1_364)), row("", "")])).toBe(false);
+    expect(envTooLarge([row("V", "値".repeat(4_096)), row("W", "値".repeat(1_365))])).toBe(true);
   });
 
   it("ignores and drops blank rows", () => {

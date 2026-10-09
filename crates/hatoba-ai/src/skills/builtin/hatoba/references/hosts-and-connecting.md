@@ -143,7 +143,7 @@ When the vault has no hosts yet, the empty host list offers **Import SSH Config*
 - The server sets only the names its sshd `AcceptEnv` setting lists and ignores the rest; the shell still starts, without them. Many servers (Debian and Ubuntu by default) accept only `LANG` and `LC_*`. To use other names, the server's administrator adds them to `AcceptEnv` in `/etc/ssh/sshd_config` and reloads sshd. Running `env` or `echo $NAME` in the terminal shows what arrived.
 - Hatoba sends `LANG=C.UTF-8` by default; a host's `LANG` replaces it. `TERM` sets the terminal type instead (`xterm-256color` by default) and needs no `AcceptEnv`.
 - Only the terminal's shell gets them. SFTP, the resource usage readout and the AI assistant's commands run without them.
-- A name uses letters, digits and `_`, doesn't start with a digit, is case-sensitive, and appears once per host. A value can't contain a line break. A host can have at most 64 variables.
+- A name uses letters, digits and `_`, doesn't start with a digit, is case-sensitive, and appears once per host. A value can't contain a line break or another control character. A host can have at most 64 variables, 16 KB of names and values together.
 
 ## Connecting, host keys and prompts
 

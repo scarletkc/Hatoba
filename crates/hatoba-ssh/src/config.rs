@@ -318,8 +318,11 @@ fn split_directive(line: &str) -> Option<(String, Vec<String>)> {
     Some((keyword.to_owned(), tokenize(rest)))
 }
 
-/// Whitespace-separated arguments with `"double"` and `'single'` quote
-/// support; an unquoted token starting with `#` begins a comment.
+/// Whitespace-separated arguments, split as OpenSSH's `argv_split` does:
+/// `"double"` and `'single'` quotes group words, and a backslash escapes a
+/// quote or a backslash anywhere and a space outside quotes. Any other
+/// backslash is kept, so Windows paths survive. An unquoted token starting
+/// with `#` begins a comment.
 fn tokenize(s: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut chars = s.chars().peekable();
@@ -333,19 +336,18 @@ fn tokenize(s: &str) -> Vec<String> {
         let mut token = String::new();
         let mut quote: Option<char> = None;
         while let Some(&c) = chars.peek() {
-            if quote == Some(c) {
+            if c == '\\' {
+                chars.next();
+                let unquoted = quote.is_none();
+                let escaped =
+                    chars.next_if(|n| matches!(n, '"' | '\'' | '\\') || (*n == ' ' && unquoted));
+                token.push(escaped.unwrap_or('\\'));
+            } else if quote == Some(c) {
                 quote = None;
                 chars.next();
             } else if quote.is_none() && matches!(c, '"' | '\'') {
                 quote = Some(c);
                 chars.next();
-            } else if c == '\\' && quote.is_some() {
-                chars.next();
-                if let Some(escaped) = chars.next_if(|n| matches!(n, '"' | '\'' | '\\')) {
-                    token.push(escaped);
-                } else {
-                    token.push('\\');
-                }
             } else if c.is_whitespace() && quote.is_none() {
                 break;
             } else {
@@ -518,6 +520,32 @@ mod tests {
         let hosts = parse("Host 'my box'\n  User \"o'neil\"\n");
         assert_eq!(hosts[0].alias, "my box");
         assert_eq!(hosts[0].user.as_deref(), Some("o'neil"));
+    }
+
+    #[test]
+    fn unquoted_backslashes_escape_like_openssh() {
+        // `\ `, `\"`, `\'` and `\\` are escapes outside quotes; other backslashes stay.
+        let hosts = parse(concat!(
+            "Host app\n",
+            "  SetEnv GREETING=hello\\ world QUOTE=a\\\"b APOS=it\\'s SLASH=a\\\\b TAB=a\\tb\n",
+            "  User o\\'neil\n",
+            "  IdentityFile C:\\Users\\me\\.ssh\\id_ed25519\n",
+        ));
+        assert_eq!(
+            hosts[0].set_env,
+            [
+                ("GREETING".to_owned(), "hello world".to_owned()),
+                ("QUOTE".to_owned(), "a\"b".to_owned()),
+                ("APOS".to_owned(), "it's".to_owned()),
+                ("SLASH".to_owned(), "a\\b".to_owned()),
+                ("TAB".to_owned(), "a\\tb".to_owned()),
+            ]
+        );
+        assert_eq!(hosts[0].user.as_deref(), Some("o'neil"));
+        assert_eq!(hosts[0].identity_files, ["C:\\Users\\me\\.ssh\\id_ed25519"]);
+        // Inside quotes a backslash before a space is kept.
+        let hosts = parse("Host app\n  SetEnv \"A=x\\ y\"\n");
+        assert_eq!(hosts[0].set_env, [("A".to_owned(), "x\\ y".to_owned())]);
     }
 
     #[test]
