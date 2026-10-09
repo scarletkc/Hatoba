@@ -48,7 +48,7 @@ export function createTauriApi(): HatobaApi {
     tags_list: () => call("tags_list"),
     hosts_probe: (ids) => call("hosts_probe", { ids }),
     ssh_config_preview: () => call("ssh_config_preview"),
-    ssh_config_import: (aliases) => call("ssh_config_import", { aliases }),
+    ssh_config_import: (aliases, importKeys) => call("ssh_config_import", { aliases, importKeys }),
 
     keys_list: () => call("keys_list"),
     key_import: (input) => call("key_import", { input }),

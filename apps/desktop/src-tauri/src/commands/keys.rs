@@ -1,18 +1,53 @@
 //! Key vault (spec §8.3): import, generate, rename, delete, copy public key, deploy (ssh-copy-id).
 
+use std::io::Read;
+use std::path::Path;
+
 use hatoba_core::model::{HostAuth, Item, KeyAlgorithm as CoreAlg, SshKey};
 use hatoba_ssh::{GenerateKind, KeyAlgorithm as SshAlg, ParsedKey};
 use tauri::{AppHandle, State};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::convert::key_view;
 use crate::dto::{GenerateAlgorithm, KeyGenerateInput, KeyImportInput, KeyView};
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, KeyParseErrorKind};
 use crate::state::{AppState, blocking, now_ms};
 use crate::{ssh, sync};
 
 /// Private key files are small; anything larger is not a key (and must not be slurped into memory).
-const MAX_KEY_FILE: u64 = 256 * 1024;
+const MAX_KEY_FILE: usize = 256 * 1024;
+
+/// Reads a private key file to import, for the Keys page and for `~/.ssh/config` alike. At most
+/// [`MAX_KEY_FILE`] bytes are read, whatever size the file reports, into one buffer that never
+/// grows (so no copy is left behind in freed memory) and is wiped when dropped. Call it off the
+/// async runtime and without the vault lock: the file may be slow to read.
+pub(crate) fn read_key_file(path: &Path) -> AppResult<Zeroizing<String>> {
+    let not_text = || {
+        AppError::key(
+            KeyParseErrorKind::UnsupportedFormat,
+            "file is not a text key file",
+        )
+    };
+    let file = std::fs::File::open(path)?;
+    // One byte over the limit tells a file of exactly the limit from a larger one.
+    let mut bytes = Zeroizing::new(Vec::with_capacity(MAX_KEY_FILE + 1));
+    file.take(MAX_KEY_FILE as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| not_text())?;
+    if bytes.len() > MAX_KEY_FILE {
+        return Err(AppError::key(
+            KeyParseErrorKind::UnsupportedFormat,
+            "file is too large to be a private key",
+        ));
+    }
+    match String::from_utf8(std::mem::take(&mut *bytes)) {
+        Ok(text) => Ok(Zeroizing::new(text)),
+        Err(e) => {
+            e.into_bytes().zeroize();
+            Err(not_text())
+        }
+    }
+}
 
 pub fn core_algorithm(alg: SshAlg) -> CoreAlg {
     match alg {
@@ -88,40 +123,34 @@ pub async fn key_import(
     state: State<'_, AppState>,
     input: KeyImportInput,
 ) -> AppResult<KeyView> {
-    let text = match (&input.path, &input.private_key) {
-        (Some(path), _) => {
-            let meta = std::fs::metadata(path)?;
-            if meta.len() > MAX_KEY_FILE {
-                return Err(AppError::key(
-                    crate::error::KeyParseErrorKind::UnsupportedFormat,
-                    "file is too large to be a private key",
-                ));
-            }
-            Zeroizing::new(std::fs::read_to_string(path).map_err(|_| {
-                AppError::key(
-                    crate::error::KeyParseErrorKind::UnsupportedFormat,
-                    "file is not a text key file",
-                )
-            })?)
-        }
-        (None, Some(text)) => Zeroizing::new(text.clone()),
-        (None, None) => {
-            return Err(AppError::invalid(
-                "private_key",
-                "paste a key or choose a file",
-            ));
-        }
-    };
-    let passphrase = input.passphrase.filter(|p| !p.is_empty());
+    let KeyImportInput {
+        name,
+        private_key,
+        path,
+        passphrase,
+    } = input;
+    // Pasted text is wiped like file contents, without another copy.
+    let pasted = private_key.map(Zeroizing::new);
+    let passphrase = passphrase.filter(|p| !p.is_empty());
     let pw = passphrase.clone().map(Zeroizing::new);
     let parsed = blocking(move || {
+        let text = match (path, pasted) {
+            (Some(path), _) => read_key_file(Path::new(&path))?,
+            (None, Some(text)) => text,
+            (None, None) => {
+                return Err(AppError::invalid(
+                    "private_key",
+                    "paste a key or choose a file",
+                ));
+            }
+        };
         Ok(hatoba_ssh::parse_private_key(
             &text,
             pw.as_deref().map(String::as_str),
         )?)
     })
     .await?;
-    let view = store_parsed(&state, &input.name, parsed, passphrase)?;
+    let view = store_parsed(&state, &name, parsed, passphrase)?;
     sync::local_change(&app);
     Ok(view)
 }
@@ -248,5 +277,35 @@ pub async fn key_deploy(
             crate::error::SshErrorKind::Other,
             format!("remote command exited with status {status}"),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_files_are_read_up_to_the_limit() {
+        let dir = std::env::temp_dir().join(format!(
+            "hatoba-key-file-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, bytes: &[u8]| {
+            let path = dir.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        };
+
+        let at_limit = write("at-limit", &vec![b'k'; MAX_KEY_FILE]);
+        assert_eq!(read_key_file(&at_limit).unwrap().len(), MAX_KEY_FILE);
+        let over = read_key_file(&write("over", &vec![b'k'; MAX_KEY_FILE + 1])).unwrap_err();
+        assert_eq!(over.detail, "file is too large to be a private key");
+        let binary = read_key_file(&write("binary", &[0xff, 0xfe, 0x00])).unwrap_err();
+        assert_eq!(binary.detail, "file is not a text key file");
+        assert!(read_key_file(&dir.join("missing")).is_err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

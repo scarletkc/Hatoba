@@ -1,10 +1,12 @@
 //! Hosts, groups, tags, reachability probes and `~/.ssh/config` import (spec §8.2, SSH-11).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
 use std::time::Duration;
 
 use hatoba_core::model::{Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
 use hatoba_core::vault::Vault;
+use hatoba_ssh::{ParsedKey, SshConfigHost};
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
@@ -14,7 +16,7 @@ use crate::dto::{
     SshConfigCandidate, TagCount,
 };
 use crate::error::{AppError, AppResult};
-use crate::state::{AppState, now_ms};
+use crate::state::{AppState, blocking, now_ms};
 use crate::sync;
 
 fn find_host(vault: &Vault, id: &str) -> AppResult<Host> {
@@ -381,7 +383,7 @@ fn ssh_config_path() -> Option<std::path::PathBuf> {
     dirs::home_dir().map(|h| h.join(".ssh").join("config"))
 }
 
-fn read_ssh_config() -> AppResult<Vec<hatoba_ssh::SshConfigHost>> {
+fn read_ssh_config() -> AppResult<Vec<SshConfigHost>> {
     let path = ssh_config_path().ok_or_else(|| AppError::not_found("home directory"))?;
     let text = std::fs::read_to_string(&path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
@@ -406,7 +408,14 @@ fn default_user() -> String {
 #[tauri::command]
 #[specta::specta]
 pub fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfigCandidate>> {
-    let entries = read_ssh_config()?;
+    // Which identity files exist is checked before the vault is locked.
+    let entries: Vec<(SshConfigHost, Option<String>)> = read_ssh_config()?
+        .into_iter()
+        .map(|e| {
+            let found = identity_path(&e);
+            (e, found)
+        })
+        .collect();
     state.with_unlocked(|v| {
         let names: HashSet<String> = v
             .hosts()
@@ -415,12 +424,13 @@ pub fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfig
             .collect();
         Ok(entries
             .into_iter()
-            .map(|e| SshConfigCandidate {
+            .map(|(e, found)| SshConfigCandidate {
                 exists: names.contains(&e.alias.to_lowercase()),
                 address: e.hostname.clone().unwrap_or_else(|| e.alias.clone()),
                 port: e.port.unwrap_or(22),
                 username: e.user.clone().unwrap_or_else(default_user),
-                identity_file: e.identity_files.first().cloned(),
+                identity_file_found: found.is_some(),
+                identity_file: found.or_else(|| e.identity_files.first().cloned()),
                 proxy_jump: e.proxy_jump.clone(),
                 alias: e.alias,
             })
@@ -428,106 +438,166 @@ pub fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfig
     })
 }
 
-/// SSH-11: creates hosts (and imports unencrypted identity files as keys) for the chosen aliases.
+/// The identity file an entry signs in with: the first `IdentityFile` that exists.
+fn identity_path(entry: &SshConfigHost) -> Option<String> {
+    entry
+        .identity_files
+        .iter()
+        .find(|p| Path::new(p).is_file())
+        .cloned()
+}
+
+/// SSH-11: creates hosts for the chosen aliases. With `import_keys` it also imports the
+/// unencrypted identity files they use as keys; without it no private key file is read, and
+/// those hosts ask how to sign in.
 #[tauri::command]
 #[specta::specta]
-pub fn ssh_config_import(
+pub async fn ssh_config_import(
     app: AppHandle,
     state: State<'_, AppState>,
     aliases: Vec<String>,
+    import_keys: bool,
 ) -> AppResult<ImportResult> {
-    let entries = read_ssh_config()?;
-    let wanted: HashSet<&str> = aliases.iter().map(String::as_str).collect();
-    let result = state.with_unlocked(|v| {
-        let mut result = ImportResult {
-            hosts_created: 0,
-            keys_imported: 0,
-            warnings: Vec::new(),
-        };
-        let mut created: Vec<(String, hatoba_ssh::SshConfigHost)> = Vec::new();
-        for entry in entries
-            .into_iter()
-            .filter(|e| wanted.contains(e.alias.as_str()))
-        {
-            let auth = match entry
-                .identity_files
-                .iter()
-                .find(|p| std::path::Path::new(p).is_file())
-            {
-                Some(path) => match import_identity(v, path) {
+    let wanted: HashSet<String> = aliases.into_iter().collect();
+    let (entries, identities) =
+        blocking(move || Ok(prepare_import(read_ssh_config()?, &wanted, import_keys))).await?;
+    let result = state.with_unlocked(|v| import_hosts(v, entries, identities))?;
+    sync::local_change(&app);
+    Ok(result)
+}
+
+/// The identity files an import reads, by path: the parsed key, or why it cannot be imported.
+type Identities = HashMap<String, Result<ParsedKey, String>>;
+
+/// The first step of an import, before the vault is locked: picks the chosen entries and, with
+/// `import_keys`, the identity file of each, then reads and parses each file once.
+fn prepare_import(
+    entries: Vec<SshConfigHost>,
+    wanted: &HashSet<String>,
+    import_keys: bool,
+) -> (Vec<(SshConfigHost, Option<String>)>, Identities) {
+    let entries: Vec<(SshConfigHost, Option<String>)> = entries
+        .into_iter()
+        .filter(|e| wanted.contains(&e.alias))
+        .map(|e| {
+            let path = import_keys.then(|| identity_path(&e)).flatten();
+            (e, path)
+        })
+        .collect();
+    let mut identities = Identities::new();
+    for path in entries.iter().filter_map(|(_, path)| path.as_ref()) {
+        if !identities.contains_key(path) {
+            identities.insert(path.clone(), read_identity(path));
+        }
+    }
+    (entries, identities)
+}
+
+/// The second step, with the vault locked: saves the keys and creates the hosts.
+fn import_hosts(
+    v: &mut Vault,
+    entries: Vec<(SshConfigHost, Option<String>)>,
+    mut identities: Identities,
+) -> AppResult<ImportResult> {
+    let mut result = ImportResult {
+        hosts_created: 0,
+        keys_imported: 0,
+        warnings: Vec::new(),
+    };
+    let mut created: Vec<(String, SshConfigHost)> = Vec::new();
+    for (entry, path) in entries {
+        let auth = match path.and_then(|p| identities.get_mut(&p).map(|slot| (p, slot))) {
+            None => HostAuth::Ask,
+            Some((path, slot)) => {
+                let saved = match slot {
+                    Ok(parsed) => store_identity(v, &path, parsed),
+                    Err(reason) => Err(reason.clone()),
+                };
+                match saved {
                     Ok((key_id, fresh)) => {
                         result.keys_imported += u32::from(fresh);
                         HostAuth::Key { key_id }
                     }
                     Err(reason) => {
                         result.warnings.push(format!("{}: {reason}", entry.alias));
+                        // Hosts that share the file get the same warning.
+                        *slot = Err(reason);
                         HostAuth::Ask
                     }
-                },
-                None => HostAuth::Ask,
-            };
-            let host = Host {
-                name: entry.alias.clone(),
-                address: entry
-                    .hostname
-                    .clone()
-                    .unwrap_or_else(|| entry.alias.clone()),
-                port: entry.port.unwrap_or(22),
-                username: entry.user.clone().unwrap_or_else(default_user),
-                auth,
-                ..Host::default()
-            };
-            let id = v.put(None, Item::Host(host))?;
-            result.hosts_created += 1;
-            created.push((id, entry));
-        }
-        // Resolve ProxyJump (first hop) against hosts by name, now that all are created.
-        let by_name: BTreeMap<String, String> = v
-            .hosts()
-            .into_iter()
-            .map(|(id, h)| (h.name.to_lowercase(), id))
-            .collect();
-        for (id, entry) in created {
-            let Some(jump) = entry.proxy_jump.as_deref() else {
-                continue;
-            };
-            let first = jump.split(',').next().unwrap_or_default();
-            let alias = first
-                .rsplit('@')
-                .next()
-                .unwrap_or(first)
-                .split(':')
-                .next()
-                .unwrap_or_default()
-                .to_lowercase();
-            match by_name.get(&alias) {
-                Some(jump_id) if *jump_id != id => {
-                    if let Some(mut host) = v.get(&id).and_then(Item::as_host).cloned() {
-                        host.jump_host_id = Some(jump_id.clone());
-                        v.put(Some(&id), Item::Host(host))?;
-                    }
                 }
-                _ => result.warnings.push(format!(
-                    "{}: ProxyJump {jump} was not imported",
-                    entry.alias
-                )),
             }
+        };
+        let host = Host {
+            name: entry.alias.clone(),
+            address: entry
+                .hostname
+                .clone()
+                .unwrap_or_else(|| entry.alias.clone()),
+            port: entry.port.unwrap_or(22),
+            username: entry.user.clone().unwrap_or_else(default_user),
+            auth,
+            ..Host::default()
+        };
+        let id = v.put(None, Item::Host(host))?;
+        result.hosts_created += 1;
+        created.push((id, entry));
+    }
+    // Resolve ProxyJump (first hop) against hosts by name, now that all are created.
+    let by_name: BTreeMap<String, String> = v
+        .hosts()
+        .into_iter()
+        .map(|(id, h)| (h.name.to_lowercase(), id))
+        .collect();
+    for (id, entry) in created {
+        let Some(jump) = entry.proxy_jump.as_deref() else {
+            continue;
+        };
+        let first = jump.split(',').next().unwrap_or_default();
+        let alias = first
+            .rsplit('@')
+            .next()
+            .unwrap_or(first)
+            .split(':')
+            .next()
+            .unwrap_or_default()
+            .to_lowercase();
+        match by_name.get(&alias) {
+            Some(jump_id) if *jump_id != id => {
+                if let Some(mut host) = v.get(&id).and_then(Item::as_host).cloned() {
+                    host.jump_host_id = Some(jump_id.clone());
+                    v.put(Some(&id), Item::Host(host))?;
+                }
+            }
+            _ => result.warnings.push(format!(
+                "{}: ProxyJump {jump} was not imported",
+                entry.alias
+            )),
         }
-        Ok(result)
-    })?;
-    sync::local_change(&app);
+    }
     Ok(result)
 }
 
-/// Imports an identity file referenced by ssh config. Reuses an existing key with the same fingerprint.
-fn import_identity(v: &mut Vault, path: &str) -> Result<(String, bool), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("can't read {path}: {e}"))?;
-    let parsed = hatoba_ssh::parse_private_key(&text, None).map_err(|e| match e {
+/// Reads and parses an identity file referenced by ssh config, with the Keys page's size limit
+/// and wiping. Passphrase-protected keys are left to the Keys page.
+fn read_identity(path: &str) -> Result<ParsedKey, String> {
+    let text = crate::commands::keys::read_key_file(Path::new(path))
+        .map_err(|e| format!("can't read {path}: {}", e.detail))?;
+    hatoba_ssh::parse_private_key(&text, None).map_err(|e| match e {
         hatoba_ssh::KeyError::PassphraseRequired => {
             format!("{path} is passphrase-protected; import it from the Keys page")
         }
         other => format!("{path}: {other}"),
-    })?;
+    })
+}
+
+/// Saves a parsed identity file as a key, or reuses the key with the same fingerprint. The
+/// private key moves into the vault item rather than being copied; a later host with the same
+/// file finds the saved key by its fingerprint.
+fn store_identity(
+    v: &mut Vault,
+    path: &str,
+    parsed: &mut ParsedKey,
+) -> Result<(String, bool), String> {
     if let Some((id, _)) = v
         .keys()
         .into_iter()
@@ -535,14 +605,14 @@ fn import_identity(v: &mut Vault, path: &str) -> Result<(String, bool), String> 
     {
         return Ok((id, false));
     }
-    let name = std::path::Path::new(path)
+    let name = Path::new(path)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let key = SshKey {
         name,
         algorithm: crate::commands::keys::core_algorithm(parsed.algorithm),
-        private_key: parsed.openssh_private.clone(),
+        private_key: std::mem::take(&mut parsed.openssh_private),
         passphrase: None,
         public_key: parsed.public_openssh.clone(),
         fingerprint: parsed.fingerprint.clone(),
@@ -585,9 +655,189 @@ pub fn host_copy_password(app: AppHandle, state: State<'_, AppState>, id: String
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use hatoba_core::KdfParams;
+    use hatoba_ssh::GenerateKind;
 
     use super::*;
+
+    fn unlocked_vault() -> Vault {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+            .unwrap();
+        v
+    }
+
+    /// A fresh directory for synthetic key files, removed when dropped.
+    struct KeyDir(PathBuf);
+
+    impl KeyDir {
+        fn new() -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "hatoba-ssh-import-{}-{}",
+                std::process::id(),
+                uuid::Uuid::now_v7()
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+
+        fn file(&self, name: &str, text: &str) -> String {
+            let path = self.0.join(name);
+            std::fs::write(&path, text).unwrap();
+            path.to_string_lossy().into_owned()
+        }
+
+        /// A newly generated Ed25519 key, and its fingerprint.
+        fn key(&self, name: &str, passphrase: Option<&str>) -> (String, String) {
+            let key = hatoba_ssh::generate_key(GenerateKind::Ed25519, name, passphrase).unwrap();
+            (self.file(name, &key.openssh_private), key.fingerprint)
+        }
+    }
+
+    impl Drop for KeyDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn entry(alias: &str, identity_files: &[&str]) -> SshConfigHost {
+        SshConfigHost {
+            alias: alias.into(),
+            hostname: Some(format!("{alias}.example.org")),
+            user: Some("ops".into()),
+            port: None,
+            identity_files: identity_files.iter().map(|p| (*p).to_owned()).collect(),
+            proxy_jump: None,
+        }
+    }
+
+    fn import(
+        v: &mut Vault,
+        entries: Vec<SshConfigHost>,
+        aliases: &[&str],
+        import_keys: bool,
+    ) -> ImportResult {
+        let wanted = aliases.iter().map(|a| (*a).to_owned()).collect();
+        let (entries, identities) = prepare_import(entries, &wanted, import_keys);
+        import_hosts(v, entries, identities).unwrap()
+    }
+
+    fn auth_of(v: &Vault, alias: &str) -> HostAuth {
+        v.hosts()
+            .into_iter()
+            .find(|(_, h)| h.name == alias)
+            .map(|(_, h)| h.auth)
+            .unwrap()
+    }
+
+    #[test]
+    fn hosts_import_without_their_keys_unless_asked() {
+        let dir = KeyDir::new();
+        let (path, _) = dir.key("id_ed25519", None);
+        let mut v = unlocked_vault();
+
+        let (entries, identities) = prepare_import(
+            vec![entry("web", &[&path])],
+            &HashSet::from(["web".into()]),
+            false,
+        );
+        assert_eq!(entries[0].1, None, "no identity file is chosen");
+        assert!(identities.is_empty(), "no key file is read");
+        let result = import_hosts(&mut v, entries, identities).unwrap();
+
+        assert_eq!((result.hosts_created, result.keys_imported), (1, 0));
+        assert!(result.warnings.is_empty());
+        assert!(v.keys().is_empty());
+        assert!(matches!(auth_of(&v, "web"), HostAuth::Ask));
+    }
+
+    #[test]
+    fn keys_import_once_and_reuse_keys_already_in_the_vault() {
+        let dir = KeyDir::new();
+        let (shared, shared_fp) = dir.key("id_shared", None);
+        let (existing, existing_fp) = dir.key("id_existing", None);
+        let mut v = unlocked_vault();
+        // The vault already holds the second key, under another name.
+        let parsed = read_identity(&existing).unwrap();
+        v.put(
+            None,
+            Item::Key(SshKey {
+                name: "already here".into(),
+                private_key: parsed.openssh_private.clone(),
+                fingerprint: parsed.fingerprint.clone(),
+                ..SshKey::default()
+            }),
+        )
+        .unwrap();
+        let missing = dir.0.join("id_missing").to_string_lossy().into_owned();
+
+        let result = import(
+            &mut v,
+            vec![
+                entry("a", &[&missing, &shared]),
+                entry("b", &[&shared]),
+                entry("c", &[&existing]),
+                entry("skipped", &[&shared]),
+            ],
+            &["a", "b", "c"],
+            true,
+        );
+
+        assert_eq!((result.hosts_created, result.keys_imported), (3, 1));
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let keys = v.keys();
+        assert_eq!(keys.len(), 2);
+        let id_of = |fp: &str| {
+            keys.iter()
+                .find(|(_, k)| k.fingerprint == fp)
+                .unwrap()
+                .0
+                .clone()
+        };
+        let (shared_id, existing_id) = (id_of(&shared_fp), id_of(&existing_fp));
+        let saved = &keys.iter().find(|(id, _)| *id == shared_id).unwrap().1;
+        assert_eq!(saved.name, "id_shared");
+        assert!(saved.private_key.contains("OPENSSH PRIVATE KEY"));
+        for (alias, key) in [("a", &shared_id), ("b", &shared_id), ("c", &existing_id)] {
+            assert!(
+                matches!(auth_of(&v, alias), HostAuth::Key { key_id } if key_id == *key),
+                "{alias}"
+            );
+        }
+    }
+
+    #[test]
+    fn unreadable_keys_become_warnings_and_their_hosts_ask() {
+        let dir = KeyDir::new();
+        let (locked, _) = dir.key("id_locked", Some("synthetic passphrase"));
+        let big = dir.file("id_big", &"A".repeat(256 * 1024 + 1));
+        let not_a_key = dir.file("id_text", "not a key\n");
+        let mut v = unlocked_vault();
+
+        let result = import(
+            &mut v,
+            vec![
+                entry("locked", &[&locked]),
+                entry("locked-too", &[&locked]),
+                entry("big", &[&big]),
+                entry("text", &[&not_a_key]),
+            ],
+            &["locked", "locked-too", "big", "text"],
+            true,
+        );
+
+        assert_eq!((result.hosts_created, result.keys_imported), (4, 0));
+        let warnings = result.warnings.join("\n");
+        assert_eq!(result.warnings.len(), 4, "{warnings}");
+        assert!(warnings.contains("passphrase-protected"), "{warnings}");
+        assert!(warnings.contains("too large"), "{warnings}");
+        for alias in ["locked", "locked-too", "big", "text"] {
+            assert!(matches!(auth_of(&v, alias), HostAuth::Ask), "{alias}");
+        }
+        assert!(v.keys().is_empty());
+    }
 
     fn input(ai_notes: String) -> HostInput {
         HostInput {

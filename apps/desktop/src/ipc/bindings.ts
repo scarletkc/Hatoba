@@ -70,8 +70,12 @@ export const commands = {
 	/**  HOST-10: TCP connect only (no authentication), 3 s timeout, probed concurrently. */
 	hostsProbe: (ids: string[]) => __TAURI_INVOKE<ProbeResult[]>("hosts_probe", { ids }),
 	sshConfigPreview: () => __TAURI_INVOKE<SshConfigCandidate[]>("ssh_config_preview"),
-	/**  SSH-11: creates hosts (and imports unencrypted identity files as keys) for the chosen aliases. */
-	sshConfigImport: (aliases: string[]) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases }),
+	/**
+	 *  SSH-11: creates hosts for the chosen aliases. With `import_keys` it also imports the
+	 *  unencrypted identity files they use as keys; without it no private key file is read, and
+	 *  those hosts ask how to sign in.
+	 */
+	sshConfigImport: (aliases: string[], importKeys: boolean) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases, importKeys }),
 	keysList: () => __TAURI_INVOKE<KeyView[]>("keys_list"),
 	/**  KEY-01 / WIN-09: OpenSSH, PEM and PuTTY .ppk, from a file or pasted text, with clear errors. */
 	keyImport: (input: KeyImportInput) => __TAURI_INVOKE<KeyView>("key_import", { input }),
@@ -1166,7 +1170,13 @@ export type SshConfigCandidate = {
 	address: string,
 	port: number,
 	username: string,
+	/**
+	 *  The `IdentityFile` an import with keys reads: the first one that exists, otherwise the
+	 *  first one listed.
+	 */
 	identity_file: string | null,
+	/**  Whether `identity_file` exists, so that importing keys would read it. */
+	identity_file_found: boolean,
 	proxy_jump: string | null,
 	exists: boolean,
 };

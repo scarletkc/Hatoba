@@ -70,6 +70,9 @@ export default defineMessages({
     "hosts.import.submit": "导入 {n} 台",
     "hosts.import.done": "已导入 {n} 台主机",
     "hosts.import.warnings": "导入时有 {n} 条提示，部分设置可能没有生效。",
+    "hosts.import.keys": "同时导入 {n} 个私钥",
+    "hosts.import.keysNote": "Hatoba 会读取下列文件，把私钥用主密码加密后存入保险库；开启云同步时，私钥会加密同步到你的其他设备。保险库中已有的密钥会直接复用；有口令保护的私钥会跳过，请到密钥库页面导入。不勾选时，这些主机的认证方式为“每次询问”。",
+    "hosts.import.keyMissing": "找不到 {path}",
 
     "hosts.edit.sec.basic": "基本信息",
     "hosts.edit.sec.auth": "认证",
@@ -224,6 +227,10 @@ export default defineMessages({
     "hosts.import.done_one": "Imported 1 host",
     "hosts.import.warnings": "The import raised {n} warnings; some settings may not have been applied.",
     "hosts.import.warnings_one": "The import raised 1 warning; some settings may not have been applied.",
+    "hosts.import.keys": "Also import {n} private keys",
+    "hosts.import.keys_one": "Also import 1 private key",
+    "hosts.import.keysNote": "Hatoba reads the files below and stores the keys in the vault, encrypted with your master password. With Cloud Sync on, they sync to your other devices, still encrypted. A key already in the vault is reused. Passphrase-protected keys are skipped; import them from Keys. When this is off, these hosts use Ask Each Time.",
+    "hosts.import.keyMissing": "{path} not found",
 
     "hosts.edit.sec.basic": "General",
     "hosts.edit.sec.auth": "Authentication",
@@ -374,6 +381,9 @@ export default defineMessages({
     "hosts.import.submit": "{n} 台をインポート",
     "hosts.import.done": "{n} 台のホストをインポートしました",
     "hosts.import.warnings": "インポート中に {n} 件の警告がありました。一部の設定が反映されていない可能性があります。",
+    "hosts.import.keys": "{n} 個の秘密鍵もインポート",
+    "hosts.import.keysNote": "Hatoba は下のファイルを読み込み、秘密鍵をマスターパスワードで暗号化して保管庫に保存します。クラウド同期がオンなら、暗号化したまま他のデバイスにも同期されます。保管庫にすでにある鍵はそのまま使われます。パスフレーズで保護された鍵はスキップされるので、「鍵」ページからインポートしてください。オフのままにすると、これらのホストの認証は「毎回入力」になります。",
+    "hosts.import.keyMissing": "{path} が見つかりません",
 
     "hosts.edit.sec.basic": "基本情報",
     "hosts.edit.sec.auth": "認証",

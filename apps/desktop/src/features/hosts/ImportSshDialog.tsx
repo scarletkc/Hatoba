@@ -7,9 +7,16 @@ import { FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SshConfigCandidate } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import s from "./ImportSshDialog.module.css";
 
-/** SSH-11: preview `~/.ssh/config`, let the user pick hosts, import them. */
+/** The last segment of a path, for `/` and `\` alike. */
+const fileName = (path: string) => path.split(/[\\/]/).pop() || path;
+
+/**
+ * SSH-11: preview `~/.ssh/config`, let the user pick hosts, import them. Their private keys are imported only when the
+ * user ticks the separate option, which lists the files it reads.
+ */
 export function ImportSshDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
@@ -17,6 +24,7 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
   const [items, setItems] = useState<SshConfigCandidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [importKeys, setImportKeys] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -45,11 +53,16 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
     });
 
   const allPicked = useMemo(() => !!items && items.length > 0 && items.every((c) => picked.has(c.alias)), [items, picked]);
+  // The key files that importing keys reads: those of the ticked hosts, once each.
+  const keyFiles = useMemo(
+    () => [...new Set((items ?? []).filter((c) => picked.has(c.alias) && c.identity_file_found).flatMap((c) => c.identity_file ?? []))],
+    [items, picked],
+  );
 
   const submit = async () => {
     setBusy(true);
     try {
-      const result = await api.ssh_config_import([...picked]);
+      const result = await api.ssh_config_import([...picked], importKeys && keyFiles.length > 0);
       await useVaultData.getState().reload();
       toast(t("hosts.import.done", { n: result.hosts_created }), "success");
       if (result.warnings.length > 0) toast(t("hosts.import.warnings", { n: result.warnings.length }));
@@ -111,10 +124,32 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
                   {c.proxy_jump}
                 </span>
               )}
+              {c.identity_file && (
+                <span
+                  className={cx(s.via, !c.identity_file_found && s.missing)}
+                  title={c.identity_file_found ? c.identity_file : t("hosts.import.keyMissing", { path: c.identity_file })}
+                >
+                  <Icon name="key" />
+                  {fileName(c.identity_file)}
+                </span>
+              )}
               <span className={s.spacer} />
               {c.exists && <span className={s.exists}>{t("hosts.import.exists")}</span>}
             </div>
           ))}
+        </div>
+      )}
+      {keyFiles.length > 0 && (
+        <div className={s.keys}>
+          <Checkbox checked={importKeys} onChange={setImportKeys}>
+            {t("hosts.import.keys", { n: keyFiles.length })}
+          </Checkbox>
+          <p className={s.keysNote}>{t("hosts.import.keysNote")}</p>
+          <ul className={s.keyFiles}>
+            {keyFiles.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
         </div>
       )}
     </Sheet>

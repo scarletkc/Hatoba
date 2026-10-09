@@ -180,7 +180,10 @@ export interface SshConfigCandidate {
   address: string;
   port: number;
   username: string;
+  /** The IdentityFile an import with keys reads: the first that exists, otherwise the first listed. */
   identity_file: string | null;
+  /** `identity_file` exists, so importing keys would read it. */
+  identity_file_found: boolean;
   proxy_jump: string | null;
   /** A host with the same name already exists. */
   exists: boolean;

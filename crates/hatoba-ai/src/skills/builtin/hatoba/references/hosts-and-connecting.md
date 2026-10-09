@@ -67,6 +67,8 @@ Typing `user@host`, `user@host:port` or an ssh command such as `ssh -p 2222 depl
 
 When the vault has no hosts yet, the empty host list offers **Import SSH Config**. It reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), lists the `Host` entries, and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. A ProxyJump is kept when its first hop names a host that exists in Hatoba (otherwise the import warns); ProxyCommand is not supported. The button is not shown once the vault has hosts, so import before adding hosts, or add hosts by hand. Importing PuTTY sessions is not supported.
 
+Each entry shows the file name of its `IdentityFile` (struck through when the file is missing). Private keys are imported only when you tick the checkbox under the list, which names every file it reads; it is off by default. The keys are stored in the vault, encrypted, and sync with it when Cloud Sync is on. A key already in the vault is reused, and a passphrase-protected key is skipped with a warning (import it on the Keys page). Without the checkbox, the hosts use **Ask Each Time**.
+
 | en | zh-CN | ja |
 |---|---|---|
 | Import SSH Config | 从 SSH 配置导入 | SSH 設定からインポート |

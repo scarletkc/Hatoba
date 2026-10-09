@@ -4,6 +4,8 @@
   box-shadow: inset 0 0 0 0.5px var(--line);
   max-height: 300px;
   overflow-y: auto;
+  /* With the key option below, the sheet scrolls rather than squeezing the list. */
+  flex-shrink: 0;
 }
 
 .item {
@@ -21,6 +23,7 @@
 
 .alias {
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .target {
@@ -43,6 +46,11 @@
   font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
+}
+
+.missing {
+  color: var(--fg3);
+  text-decoration: line-through;
 }
 
 .spacer {
@@ -80,4 +88,34 @@
 
 .error i {
   margin-top: 1px;
+}
+
+.keys {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.keysNote {
+  margin: 0;
+  color: var(--fg2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.keyFiles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  max-width: 100%;
+}
+
+.keyFiles li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
