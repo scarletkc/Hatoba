@@ -12,6 +12,8 @@ export interface SessionInfo {
   /** Connection attempts made in this tab (retries show in the error card). */
   attempts: number;
   sftpOpen: boolean;
+  /** A quick connection's tab shows the server's resource usage (TERM-12); a saved host keeps this itself. */
+  statsOn: boolean;
   /** Bumped to ask the view to open its find bar (Ctrl+Shift+F while the terminal has focus). */
   findTick: number;
 }
@@ -23,6 +25,7 @@ export const EMPTY_INFO: SessionInfo = {
   reason: null,
   attempts: 0,
   sftpOpen: false,
+  statsOn: false,
   findTick: 0,
 };
 

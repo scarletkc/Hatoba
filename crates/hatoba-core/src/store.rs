@@ -171,7 +171,10 @@ const MIGRATIONS: &[&str] = &[
 /// schema: a new version would stop devices on older builds from joining the vault, for data
 /// that never leaves this device. Older builds name the columns they read and write, so they
 /// leave these alone.
-const LOCAL_COLUMNS: &[(&str, &str, &str)] = &[("local_state", "os", "TEXT")];
+const LOCAL_COLUMNS: &[(&str, &str, &str)] = &[
+    ("local_state", "os", "TEXT"),
+    ("local_state", "show_stats", "INTEGER"),
+];
 
 const ITEM_COLUMNS: &str = "id, envelope, revision, deleted, dirty, updated_at";
 
@@ -447,6 +450,30 @@ pub trait StoreOps {
             "INSERT INTO local_state (item_id, os) VALUES (?1, ?2) \
              ON CONFLICT(item_id) DO UPDATE SET os = excluded.os",
             params![item_id, os],
+        )?;
+        Ok(())
+    }
+
+    /// Whether a host's terminals show the server's resource usage (TERM-12). Device-local.
+    fn host_show_stats(&self, item_id: &str) -> Result<bool> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT show_stats FROM local_state WHERE item_id = ?1",
+                [item_id],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten()
+            .is_some_and(|v| v != 0))
+    }
+
+    /// Turns the resource usage of a host's terminals on or off (device-local, never synced).
+    fn set_host_show_stats(&self, item_id: &str, on: bool) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO local_state (item_id, show_stats) VALUES (?1, ?2) \
+             ON CONFLICT(item_id) DO UPDATE SET show_stats = excluded.show_stats",
+            params![item_id, i64::from(on)],
         )?;
         Ok(())
     }
@@ -819,6 +846,14 @@ mod tests {
         assert_eq!(store.host_os("h").unwrap(), None);
         store.set_host_os("other", Some("ubuntu")).unwrap();
         assert_eq!(store.last_connected("other").unwrap(), None);
+        assert!(!store.host_show_stats("h").unwrap());
+        store.set_host_show_stats("h", true).unwrap();
+        assert!(store.host_show_stats("h").unwrap());
+        assert_eq!(store.last_connected("h").unwrap(), Some(300));
+        store.set_host_show_stats("h", false).unwrap();
+        assert!(!store.host_show_stats("h").unwrap());
+        assert!(!store.host_show_stats("other").unwrap());
+        assert!(!store.host_show_stats("missing").unwrap());
         assert!(store.item_rows().unwrap().is_empty());
     }
 
@@ -844,15 +879,18 @@ mod tests {
         let store = Store::open(&path).unwrap();
         assert_eq!(store.last_connected("h").unwrap(), Some(100));
         assert_eq!(store.host_os("h").unwrap(), None);
+        assert!(!store.host_show_stats("h").unwrap());
         store.set_host_os("h", Some("freebsd")).unwrap();
+        store.set_host_show_stats("h", true).unwrap();
         assert_eq!(
             store.get_meta(meta::SCHEMA_VERSION).unwrap().as_deref(),
             Some("1")
         );
         drop(store);
-        // Opening again finds the column and keeps its value.
+        // Opening again finds the columns and keeps their values.
         let store = Store::open(&path).unwrap();
         assert_eq!(store.host_os("h").unwrap().as_deref(), Some("freebsd"));
+        assert!(store.host_show_stats("h").unwrap());
     }
 
     #[cfg(unix)]

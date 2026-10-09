@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
-import type { AiTurnEvent, DeployProgress, UpdateProgress } from "./types";
+import type { AiTurnEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -40,6 +40,7 @@ export function createTauriApi(): HatobaApi {
     host_delete: (id) => call("host_delete", { id }),
     host_duplicate: (id) => call("host_duplicate", { id }),
     host_set_favorite: (id, favorite) => call("host_set_favorite", { id, favorite }),
+    host_set_show_stats: (id, on) => call("host_set_show_stats", { id, on }),
     host_copy_password: (id) => call("host_copy_password", { id }),
     groups_list: () => call("groups_list"),
     group_save: (input) => call("group_save", { input }),
@@ -72,6 +73,12 @@ export function createTauriApi(): HatobaApi {
     ssh_write: (sessionId, data) => call("ssh_write", { sessionId, data }),
     ssh_resize: (sessionId, cols, rows) => call("ssh_resize", { sessionId, cols, rows }),
     ssh_disconnect: (sessionId) => call("ssh_disconnect", { sessionId }),
+    ssh_stats_start: (sessionId, onEvent) => {
+      const channel = new Channel<StatsEvent>();
+      channel.onmessage = onEvent;
+      return call("ssh_stats_start", { sessionId, channel });
+    },
+    ssh_stats_stop: (sessionId, statsId) => call("ssh_stats_stop", { sessionId, statsId }),
     ssh_test: (input) => call("ssh_test", { input }),
     hostkey_respond: (requestId, accept) => call("hostkey_respond", { requestId, accept }),
     auth_prompt_respond: (requestId, answers) => call("auth_prompt_respond", { requestId, answers }),

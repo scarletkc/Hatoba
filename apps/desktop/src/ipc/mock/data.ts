@@ -10,6 +10,7 @@ import type {
   KeyView,
   LocalPrefs,
   QuickTarget,
+  ServerStatsView,
   SettingsView,
   SyncStatus,
 } from "../types";
@@ -66,6 +67,7 @@ function host(
     updated_at: ago(3 * DAY),
     last_connected_at: last,
     os: null,
+    show_stats: false,
     ...extra,
   };
 }
@@ -73,6 +75,7 @@ function host(
 export const HOSTS: HostView[] = [
   host("h-api-tokyo", "prod-api-tokyo", "deploy", "43.206.118.27", 22, "g-tokyo", ["production", "api"], ago(2 * MIN), {
     os: "ubuntu",
+    show_stats: true,
     favorite: true,
     key_id: "k-deploy",
     note: zh
@@ -245,7 +248,7 @@ export const PREFS: LocalPrefs = {
   ai_panel_width: 380,
 };
 
-/** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs dist` writes. */
+/** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */
 export const AVAILABLE_UPDATE: AvailableUpdate = {
   version: "0.2.0",
   notes: [
@@ -350,5 +353,43 @@ function file(dir: string, f: { name: string; dir?: boolean; size?: number; date
     size: f.size ?? 4096,
     modified: at(m, d),
     permissions: f.dir ? "drwxr-xr-x" : f.name.startsWith(".env") ? "-rw-------" : "-rw-r--r--",
+  };
+}
+
+const GIB = 1024 ** 3;
+
+/** A random walk of a 4-CPU, 8 GB Linux server's resource usage, one reading per call (TERM-12). */
+export function mockStats(): (first: boolean) => ServerStatsView {
+  const walk = (v: number, step: number, min: number, max: number) => Math.min(max, Math.max(min, v + (Math.random() - 0.5) * step));
+  let cpu = 18;
+  let mem = 0.46;
+  let rx = 180_000;
+  let tx = 42_000;
+  let uptime = 12 * 86_400 + 3 * 3600 + 17 * 60;
+  return (first) => {
+    cpu = walk(cpu, 16, 2, 97);
+    mem = walk(mem, 0.012, 0.38, 0.62);
+    rx = walk(rx, 120_000, 8_000, 900_000);
+    tx = walk(tx, 30_000, 2_000, 200_000);
+    if (!first) uptime += 2;
+    // Now and then a download: a burst of traffic and CPU.
+    const burst = Math.random() < 0.08;
+    const load = (cpu / 100) * 4;
+    return {
+      cpu_percent: first ? null : Math.round((burst ? Math.min(99, cpu + 35) : cpu) * 10) / 10,
+      cpus: 4,
+      load: [Math.round(load * 100) / 100, Math.round(load * 80) / 100, Math.round(load * 60) / 100],
+      mem_total: 8 * GIB,
+      mem_used: Math.round(mem * 8 * GIB),
+      swap_total: 2 * GIB,
+      swap_used: Math.round(0.06 * GIB),
+      net_rx_rate: first ? null : Math.round(burst ? rx * 9 : rx),
+      net_tx_rate: first ? null : Math.round(tx),
+      net_interfaces: ["eth0"],
+      disk_total: 80 * GIB,
+      disk_used: 31 * GIB,
+      disk_available: 45 * GIB,
+      uptime_secs: uptime,
+    };
   };
 }

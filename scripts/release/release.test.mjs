@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -9,6 +9,7 @@ import {
   LATEST,
   TAURI_CONFIG,
   allowsOnlyMain,
+  assembleRelease,
   ciCovers,
   collectDist,
   composeNotes,
@@ -59,7 +60,8 @@ test("composes the note, install instructions, and a changelog grouped by type",
   repo.note("0.2.0", "## Version display\n\nThe settings show the version.\n");
 
   const notes = composeNotes("0.2.0", REPOSITORY, repo.root);
-  assert.ok(notes.startsWith("## Version display\n\nThe settings show the version.\n\n## Install\n\nDownload `Hatoba_0.2.0_x64-setup.exe`"));
+  assert.ok(notes.startsWith("## Version display\n\nThe settings show the version.\n\n## Install\n\n**Windows:** download `Hatoba_0.2.0_x64-setup.exe`"), notes);
+  assert.ok(notes.includes("`sudo apt install ./Hatoba_0.2.0_amd64.deb`") && notes.includes("`chmod +x Hatoba_0.2.0_amd64.AppImage`"), notes);
   const features = notes.indexOf("### Features\n\n- **desktop:** show the app version (#7)\n");
   const fixes = notes.indexOf("### Fixes\n\n- keep the active tab (#8)\n");
   const performance = notes.indexOf(`### Performance\n\n- **ssh:** render output in batches (${perf.slice(0, 7)}`);
@@ -154,47 +156,84 @@ const INSTALLER = "Hatoba 0.2.0 installer stand-in\n";
 const OTHER_PUBKEY =
   "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzRjZFMzFCMjA5M0U4QTAKUldTZzZKTWdHK1AyOC9SWm5TRFcyQk01WjZGMmVhdGw5M2x4YUJYd3NJWkR2eHdUVGRyWkFCZkwK";
 
-/** A bundle directory as `tauri build` leaves it, and release notes as the notes command writes them. */
+const BUNDLES = ["nsis", "deb", "appimage"];
+
+/**
+ * Tauri's bundle directory as `tauri build` leaves it on each platform, with every installer
+ * signed. The fixture signature covers only INSTALLER, so each installer is a copy of it.
+ */
 function bundled(t, version, { installer = INSTALLER, signature = SIGNATURE } = {}) {
   const root = mkdtempSync(join(tmpdir(), "hatoba-dist-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const bundle = join(root, "nsis");
-  mkdirSync(bundle);
-  writeFileSync(join(bundle, installerName(version)), installer);
-  if (signature !== null) writeFileSync(join(bundle, signatureName(version)), signature);
+  const bundle = join(root, "bundle");
+  for (const type of BUNDLES) {
+    mkdirSync(join(bundle, type), { recursive: true });
+    writeFileSync(join(bundle, type, installerName(type, version)), installer);
+    if (signature !== null) writeFileSync(join(bundle, type, signatureName(type, version)), signature);
+  }
+  return { bundle, output: join(root, "dist") };
+}
+
+const dist = (version, platform, { bundle, output }, pubkey = PUBKEY) => collectDist(version, platform, bundle, output, { pubkey });
+
+/** Release notes as the notes command writes them. */
+function releaseNotes(t, version) {
   const repo = repository(t);
   repo.commit("Initial commit");
   repo.run("tag", "v0.1.0");
   repo.commit("feat(sync): send only what changed (#7)");
   repo.note(version, "## Faster sync\n\nSync sends only what changed.\n");
-  const notes = composeNotes(version, REPOSITORY, repo.root);
-  return { bundle, output: join(root, "dist"), notes };
+  return composeNotes(version, REPOSITORY, repo.root);
 }
 
-const dist = (version, { bundle, output, notes }, pubkey = PUBKEY) =>
-  collectDist(version, bundle, output, { notes, repository: REPOSITORY, pubkey, now: new Date("2026-10-09T08:30:15.123Z") });
+const assemble = (version, output, notes) =>
+  assembleRelease(version, output, { notes, repository: REPOSITORY, now: new Date("2026-10-09T08:30:15.123Z") });
 
-test("collects the installer, its updater signature and checksum, and writes latest.json", (t) => {
+test("collects each platform's installers with their updater signatures", (t) => {
   const release = bundled(t, "0.2.0");
-  assert.deepEqual(dist("0.2.0", release), ["Hatoba_0.2.0_x64-setup.exe", "Hatoba_0.2.0_x64-setup.exe.sig", CHECKSUMS, LATEST]);
+  assert.deepEqual(dist("0.2.0", "windows", release), ["Hatoba_0.2.0_x64-setup.exe", "Hatoba_0.2.0_x64-setup.exe.sig"]);
+  assert.deepEqual(readdirSync(release.output).sort(), ["Hatoba_0.2.0_x64-setup.exe", "Hatoba_0.2.0_x64-setup.exe.sig"]);
+  const linux = ["Hatoba_0.2.0_amd64.deb", "Hatoba_0.2.0_amd64.deb.sig", "Hatoba_0.2.0_amd64.AppImage", "Hatoba_0.2.0_amd64.AppImage.sig"];
+  assert.deepEqual(dist("0.2.0", "linux", release), linux);
+  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_amd64.AppImage"), "utf8"), INSTALLER);
+  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_amd64.AppImage.sig"), "utf8"), SIGNATURE);
+  assert.throws(() => dist("0.2.0", "macos", release), /Unknown platform 'macos'\. Use windows or linux\./);
+});
+
+test("writes the checksums and latest.json of every installer", (t) => {
+  const release = bundled(t, "0.2.0");
+  dist("0.2.0", "windows", release);
+  dist("0.2.0", "linux", release);
+  const notes = releaseNotes(t, "0.2.0");
+  const installers = ["Hatoba_0.2.0_x64-setup.exe", "Hatoba_0.2.0_amd64.deb", "Hatoba_0.2.0_amd64.AppImage"];
+  assert.deepEqual(assemble("0.2.0", release.output, notes), [...installers.flatMap((name) => [name, `${name}.sig`]), CHECKSUMS, LATEST]);
   const hash = createHash("sha256").update(INSTALLER).digest("hex");
-  assert.equal(readFileSync(join(release.output, CHECKSUMS), "utf8"), `${hash}  Hatoba_0.2.0_x64-setup.exe\n`);
-  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_x64-setup.exe.sig"), "utf8"), SIGNATURE);
+  assert.equal(readFileSync(join(release.output, CHECKSUMS), "utf8"), installers.map((name) => `${hash}  ${name}\n`).join(""));
   const latest = JSON.parse(readFileSync(join(release.output, LATEST), "utf8"));
+  const download = (name) => ({ signature: SIGNATURE, url: `https://github.com/${REPOSITORY}/releases/download/v0.2.0/${name}` });
   assert.deepEqual(latest, {
     version: "0.2.0",
-    notes: updateNotes(release.notes, "0.2.0", REPOSITORY),
+    notes: updateNotes(notes, "0.2.0", REPOSITORY),
     pub_date: "2026-10-09T08:30:15Z",
     platforms: {
-      "windows-x86_64": {
-        signature: SIGNATURE,
-        url: `https://github.com/${REPOSITORY}/releases/download/v0.2.0/Hatoba_0.2.0_x64-setup.exe`,
-      },
+      "windows-x86_64": download("Hatoba_0.2.0_x64-setup.exe"),
+      "linux-x86_64-deb": download("Hatoba_0.2.0_amd64.deb"),
+      "linux-x86_64-appimage": download("Hatoba_0.2.0_amd64.AppImage"),
     },
   });
   assert.ok(latest.notes.startsWith("## Faster sync\n\nSync sends only what changed.\n\n## Changelog\n\n"), latest.notes);
   assert.ok(latest.notes.includes(`- **sync:** send only what changed ([#7](https://github.com/${REPOSITORY}/pull/7))\n`), latest.notes);
   assert.ok(!latest.notes.includes("## Install") && !latest.notes.includes("SmartScreen"), latest.notes);
+});
+
+test("refuses to assemble a release without every platform's files", (t) => {
+  const release = bundled(t, "0.2.0");
+  dist("0.2.0", "windows", release);
+  assert.throws(
+    () => assemble("0.2.0", release.output, releaseNotes(t, "0.2.0")),
+    /Missing release files in .*: Hatoba_0\.2\.0_amd64\.deb, Hatoba_0\.2\.0_amd64\.deb\.sig, Hatoba_0\.2\.0_amd64\.AppImage, Hatoba_0\.2\.0_amd64\.AppImage\.sig\. Collect them with the dist command of each platform\./,
+  );
+  assert.ok(!existsSync(join(release.output, LATEST)) && !existsSync(join(release.output, CHECKSUMS)));
 });
 
 test("leaves only the install section out of the updater's notes", (t) => {
@@ -239,18 +278,23 @@ test("accepts a signing environment only when main alone can use it", () => {
 
 test("refuses a bundle without the installer or its updater signature", (t) => {
   const release = bundled(t, "0.2.0", { signature: null });
-  writeFileSync(join(release.bundle, "Hatoba_0.2.0-rc.1_x64-setup.exe"), "old");
-  assert.throws(() => dist("0.2.1", release), /Hatoba_0\.2\.1_x64-setup\.exe in .*found Hatoba_0\.2\.0-rc\.1_x64-setup\.exe, Hatoba_0\.2\.0_x64-setup\.exe/);
-  assert.throws(() => dist("0.2.0", release), /Expected the updater signature Hatoba_0\.2\.0_x64-setup\.exe\.sig .*TAURI_SIGNING_PRIVATE_KEY/);
+  writeFileSync(join(release.bundle, "nsis", "Hatoba_0.2.0-rc.1_x64-setup.exe"), "old");
+  assert.throws(() => dist("0.2.1", "windows", release), /Hatoba_0\.2\.1_x64-setup\.exe in .*found Hatoba_0\.2\.0-rc\.1_x64-setup\.exe, Hatoba_0\.2\.0_x64-setup\.exe/);
+  assert.throws(() => dist("0.2.0", "windows", release), /Expected the updater signature Hatoba_0\.2\.0_x64-setup\.exe\.sig .*TAURI_SIGNING_PRIVATE_KEY/);
   assert.ok(!existsSync(release.output));
+
+  const linux = bundled(t, "0.2.0");
+  rmSync(join(linux.bundle, "appimage", "Hatoba_0.2.0_amd64.AppImage.sig"));
+  assert.throws(() => dist("0.2.0", "linux", linux), /Expected the updater signature Hatoba_0\.2\.0_amd64\.AppImage\.sig/);
+  assert.ok(!existsSync(linux.output), "nothing is copied while a file is missing");
 });
 
 test("refuses a signature that installed apps would refuse", (t) => {
-  assert.throws(() => dist("0.2.0", bundled(t, "0.2.0"), OTHER_PUBKEY), /signed with another key .*release-signing/);
-  assert.throws(() => dist("0.2.0", bundled(t, "0.2.0", { installer: "tampered" })), /does not match the installer/);
-  assert.throws(() => dist("0.2.0", bundled(t, "0.2.0", { signature: "bm90IGEgc2lnbmF0dXJl" })), /not a minisign signature/);
+  assert.throws(() => dist("0.2.0", "windows", bundled(t, "0.2.0"), OTHER_PUBKEY), /signed with another key .*release-signing/);
+  assert.throws(() => dist("0.2.0", "linux", bundled(t, "0.2.0", { installer: "tampered" })), /does not match the installer/);
+  assert.throws(() => dist("0.2.0", "windows", bundled(t, "0.2.0", { signature: "bm90IGEgc2lnbmF0dXJl" })), /not a minisign signature/);
   // The fixture was signed for 0.2.0.
-  assert.throws(() => dist("0.3.0", bundled(t, "0.3.0")), /made for version 0\.2\.0, not 0\.3\.0/);
+  assert.throws(() => dist("0.3.0", "linux", bundled(t, "0.3.0")), /Hatoba_0\.3\.0_amd64\.deb\.sig was made for version 0\.2\.0, not 0\.3\.0/);
 });
 
 test("checks the signature the way the updater does", () => {

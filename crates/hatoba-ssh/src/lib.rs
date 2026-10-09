@@ -3,8 +3,8 @@
 //! The crate is platform independent and has no dependency on Tauri. The
 //! entry point is [`connect`], which returns an [`SshSession`] from which
 //! shells ([`SshSession::open_shell`]), SFTP clients ([`SshSession::sftp`]),
-//! local port forwards ([`SshSession::local_forward`]) and one-off commands
-//! ([`SshSession::exec`]) are opened.
+//! local port forwards ([`SshSession::local_forward`]), resource usage sampling
+//! ([`SshSession::open_stats`]) and one-off commands ([`SshSession::exec`]) are opened.
 //!
 //! Secrets (passwords, private keys, passphrases) are wrapped in
 //! [`zeroize::Zeroizing`] and are never logged; neither is terminal content.
@@ -25,6 +25,7 @@ mod server_os;
 pub mod session;
 pub mod sftp;
 pub mod shell;
+pub mod stats;
 
 pub use config::{SshConfigHost, parse_ssh_config, parse_ssh_config_with_home};
 pub use error::{SshError, SshErrorKind};
@@ -38,7 +39,7 @@ pub use keys::{
 pub use probe::tcp_probe;
 pub use server_os::{ServerOs, server_os};
 pub use session::{
-    AuthMethod, ConnectConfig, ExecOutput, JumpHop, ShellEvent, ShellHandle, ShellOptions,
-    SshSession, connect,
+    AuthMethod, ConnectConfig, ExecOutput, JumpHop, ServerStats, ShellEvent, ShellHandle,
+    ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
 };
 pub use sftp::{FileEntry, SftpClient, TransferDirection, TransferProgress};

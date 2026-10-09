@@ -21,6 +21,8 @@ use crate::server_os::{ServerOs, server_os};
 use crate::sftp::SftpClient;
 use crate::shell;
 pub use crate::shell::{ShellEvent, ShellHandle, ShellOptions};
+use crate::stats;
+pub use crate::stats::{ServerStats, StatsEvent, StatsHandle};
 
 /// Upper bound for output collected by [`SshSession::exec_output`].
 const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;
@@ -539,6 +541,25 @@ impl SshSession {
     ) -> Result<(ShellHandle, mpsc::Receiver<ShellEvent>), SshError> {
         let channel = self.open_channel().await?;
         shell::start(self, channel, opts).await
+    }
+
+    /// Starts sampling the server's resource usage from `/proc` every `interval` (whole
+    /// seconds, 1 to 60) on a new exec channel (TERM-12). A server whose identification string
+    /// names a system other than Linux gets [`StatsEvent::Unsupported`] without anything being
+    /// run on it.
+    pub async fn open_stats(
+        &self,
+        interval: Duration,
+    ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
+        match self.server_os() {
+            Some(os @ (ServerOs::FreeBsd | ServerOs::NetBsd | ServerOs::Windows)) => {
+                Ok(stats::unsupported(os.name()))
+            }
+            _ => {
+                let channel = self.open_channel().await?;
+                stats::start(self, channel, interval).await
+            }
+        }
     }
 
     /// Starts the `sftp` subsystem on a new channel of this connection.

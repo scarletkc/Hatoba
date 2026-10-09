@@ -1,13 +1,15 @@
 import "@xterm/xterm/css/xterm.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useVaultData } from "@/app/data";
+import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import type { SessionTab } from "@/app/tabs";
-import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
+import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
+import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { editSessionHost, reconnectSession, saveTargetAsHost } from "./connect";
@@ -17,6 +19,8 @@ import { FindBar } from "./FindBar";
 import { patchInfo, useSessionInfo } from "./info";
 import { ConnectingOverlay, DisconnectedBanner, ErrorCard } from "./Overlays";
 import { ensureSession, type LiveSession } from "./session";
+import { clearStats, startStats, stopStats, useDocumentVisible, useSessionStats } from "./stats";
+import { StatsPopover } from "./StatsPopover";
 import { StatusBar } from "./StatusBar";
 import { useTermSettings, useTerminalChrome } from "./theme";
 import s from "./TerminalView.module.css";
@@ -31,6 +35,8 @@ export function TerminalView({ tab, active }: { tab: SessionTab; active: boolean
 function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boolean; session: LiveSession }) {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
+  const unlocked = useApp((st) => st.phase === "unlocked");
+  const visible = useDocumentVisible();
   const info = useSessionInfo(tab.id);
   const host = useVaultData((st) => (tab.hostId ? st.hosts.find((h) => h.id === tab.hostId) : undefined));
   // A quick connection (HOST-12) whose target has been saved as a host since.
@@ -44,6 +50,8 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
   const forwardsMenu = useMenu();
   const forwardRuns = useForwardRuns(tab.sessionId);
+  const statsMenu = useMenu();
+  const stats = useSessionStats(tab.sessionId);
 
   // The xterm instance lives in the session registry; React only gives it a place in the DOM.
   useLayoutEffect(() => {
@@ -73,9 +81,40 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
 
   const connected = tab.status === "connected";
   const closeForwards = forwardsMenu.close;
+  const closeStats = statsMenu.close;
   useEffect(() => {
-    if (!active || !connected) closeForwards(); // a popover must not outlive its tab being visible / connected
-  }, [active, connected, closeForwards]);
+    // A popover must not outlive its tab being visible / connected.
+    if (!active || !connected) {
+      closeForwards();
+      closeStats();
+    }
+  }, [active, connected, closeForwards, closeStats]);
+
+  // TERM-12: a saved host remembers the switch on this device; a quick connection keeps it for the tab.
+  const statsOn = host ? host.show_stats : info.statsOn;
+  const setStatsOn = (on: boolean) => {
+    if (!host) {
+      patchInfo(tab.id, { statsOn: on });
+      return;
+    }
+    api
+      .host_set_show_stats(host.id, on)
+      .then(() => useVaultData.getState().reloadHosts())
+      .catch((e: unknown) => toast(errorMessage(t, e), "error"));
+  };
+  // Sampled only while someone can see it: the tab in front, the window shown, the vault unlocked.
+  const sampling = statsOn && connected && active && visible && unlocked;
+  const sessionId = tab.sessionId;
+  useEffect(() => {
+    if (!sampling || !sessionId) return;
+    startStats(sessionId);
+    return () => stopStats(sessionId);
+  }, [sampling, sessionId]);
+  useEffect(() => {
+    return () => {
+      if (sessionId) clearStats(sessionId);
+    };
+  }, [sessionId]);
   const target = host ? `${host.username}@${host.address}:${host.port}` : tab.target ? formatTarget(tab.target) : null;
   const quickTarget = tab.target;
 
@@ -173,8 +212,16 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         forwardCount={countRunning(forwardRuns)}
         forwardsOpen={!!forwardsMenu.anchor}
         moreOpen={!!menu.anchor?.trigger}
+        statsOn={statsOn}
+        stats={stats}
+        statsOpen={!!statsMenu.anchor}
         findHint={shortcutLabel(platform, "Ctrl+Shift+F", "⌘F")}
         onFind={() => (findOpen ? closeFind() : setFindOpen(true))}
+        onShowStats={() => {
+          setStatsOn(true);
+          session.focus();
+        }}
+        onStats={(button) => (statsMenu.anchor ? statsMenu.close() : statsMenu.openBelow(button, true))}
         onForwards={(button) => (forwardsMenu.anchor ? forwardsMenu.close() : forwardsMenu.openBelow(button, true))}
         onToggleSftp={() => {
           patchInfo(tab.id, { sftpOpen: !info.sftpOpen });
@@ -221,6 +268,18 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             if (restoreFocus) session.focus();
           }}
           onManage={() => editSessionHost(tab.hostId)}
+        />
+      )}
+      {statsMenu.anchor && statsOn && connected && (
+        <StatsPopover
+          anchor={statsMenu.anchor}
+          stats={stats}
+          onRetry={() => sessionId && startStats(sessionId)}
+          onHide={() => setStatsOn(false)}
+          onClose={(restoreFocus) => {
+            statsMenu.close();
+            if (restoreFocus) session.focus();
+          }}
         />
       )}
       {menu.anchor && <Menu anchor={menu.anchor} entries={menuEntries} onClose={menu.close} minWidth={168} />}

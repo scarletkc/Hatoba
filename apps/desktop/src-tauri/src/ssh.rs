@@ -9,7 +9,7 @@ use hatoba_core::model::{Host, HostAuth, Item, KnownHost};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{
     AuthMethod, ConnectConfig, ForwardHandle, HostKeyInfo, HostKeyVerifier, JumpHop,
-    KeyboardInteractive, PromptRequest, SftpClient, ShellHandle, SshSession,
+    KeyboardInteractive, PromptRequest, SftpClient, ShellHandle, SshSession, StatsHandle,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -31,6 +31,8 @@ pub struct LiveSession {
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
     pub forwards: Mutex<HashMap<String, ForwardHandle>>,
+    /// Resource usage sampling while the terminal shows it (TERM-12), with the id of its start.
+    stats: Mutex<Option<(u64, StatsHandle)>>,
 }
 
 impl LiveSession {
@@ -40,6 +42,24 @@ impl LiveSession {
             shell,
             sftp: OnceCell::new(),
             forwards: Mutex::new(HashMap::new()),
+            stats: Mutex::new(None),
+        }
+    }
+
+    /// Keeps the sampling started as `id` in place of an earlier one, which stops. Starts can
+    /// finish out of order: one that a later start already replaced is dropped, and so stops.
+    pub fn set_stats(&self, id: u64, handle: StatsHandle) {
+        let mut stats = lock(&self.stats);
+        if stats.as_ref().is_none_or(|(current, _)| *current < id) {
+            *stats = Some((id, handle));
+        }
+    }
+
+    /// Stops the sampling started as `id`, unless a later one replaced it.
+    pub fn stop_stats(&self, id: u64) {
+        let mut stats = lock(&self.stats);
+        if stats.as_ref().is_some_and(|(current, _)| *current == id) {
+            *stats = None;
         }
     }
 
@@ -70,11 +90,12 @@ impl LiveSession {
             .collect()
     }
 
-    /// Stops forwards and closes the shell and connection.
+    /// Stops forwards and sampling, and closes the shell and connection.
     pub async fn close(&self) {
         for (_, handle) in lock(&self.forwards).drain() {
             handle.stop();
         }
+        lock(&self.stats).take();
         self.shell.close().await;
         self.session.disconnect().await;
     }

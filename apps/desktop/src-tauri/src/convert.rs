@@ -2,8 +2,9 @@
 
 use hatoba_core::model::{Group, Host, HostAuth, KeyAlgorithm as CoreAlg, SshKey};
 use hatoba_core::vault::Vault;
+use hatoba_ssh::ServerStats;
 
-use crate::dto::{AuthKind, GroupView, HostView, KeyAlgorithm, KeyView};
+use crate::dto::{AuthKind, GroupView, HostView, KeyAlgorithm, KeyView, ServerStatsView};
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
     let (auth_kind, has_password, key_id) = match &host.auth {
@@ -30,6 +31,26 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         updated_at: host.updated_at,
         last_connected_at: vault.last_connected(id),
         os: vault.host_os(id),
+        show_stats: vault.host_show_stats(id),
+    }
+}
+
+pub fn stats_view(stats: ServerStats) -> ServerStatsView {
+    ServerStatsView {
+        cpu_percent: stats.cpu_percent,
+        cpus: stats.cpus,
+        load: stats.load,
+        mem_total: stats.mem_total,
+        mem_used: stats.mem_used,
+        swap_total: stats.swap_total,
+        swap_used: stats.swap_used,
+        net_rx_rate: stats.net_rx_rate,
+        net_tx_rate: stats.net_tx_rate,
+        net_interfaces: stats.net_interfaces,
+        disk_total: stats.disk_total,
+        disk_used: stats.disk_used,
+        disk_available: stats.disk_available,
+        uptime_secs: stats.uptime_secs,
     }
 }
 

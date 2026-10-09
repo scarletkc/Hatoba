@@ -23,6 +23,16 @@ impl ServerOs {
             Self::Windows => "windows",
         }
     }
+
+    /// The system's name as `uname -s` spells it, such as `FreeBSD`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ubuntu | Self::Debian | Self::Raspbian => "Linux",
+            Self::FreeBsd => "FreeBSD",
+            Self::NetBsd => "NetBSD",
+            Self::Windows => "Windows",
+        }
+    }
 }
 
 /// Comment prefixes that OS packages of OpenSSH append to the version, checked in order.

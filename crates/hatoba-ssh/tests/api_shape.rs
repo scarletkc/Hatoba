@@ -3,7 +3,7 @@
 
 use hatoba_ssh::{
     ConnectConfig, FileEntry, ForwardHandle, HostKeyInfo, ParsedKey, SftpClient, ShellEvent,
-    ShellHandle, SshError, SshSession,
+    ShellHandle, SshError, SshSession, StatsEvent, StatsHandle,
 };
 
 fn send_sync<T: Send + Sync>() {}
@@ -22,6 +22,8 @@ fn handles_are_send_sync_clone() {
     send_sync::<FileEntry>();
     send_sync::<ParsedKey>();
     send::<ShellEvent>();
+    send_sync::<StatsHandle>();
+    send::<StatsEvent>();
     clone::<SshSession>();
     clone::<ShellHandle>();
     clone::<SftpClient>();
@@ -38,6 +40,7 @@ fn futures_are_send() {
         assert_send(&s.exec("true", None));
         assert_send(&s.open_shell(Default::default()));
         assert_send(&s.sftp());
+        assert_send(&s.open_stats(std::time::Duration::from_secs(2)));
         assert_send(&s.disconnect());
         assert_send(&s.closed());
         assert_send(&sftp.list("/"));

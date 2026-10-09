@@ -238,6 +238,16 @@ pub fn host_set_favorite(
     Ok(())
 }
 
+/// Turns the resource usage in a host's terminals on or off on this device (TERM-12).
+#[tauri::command]
+#[specta::specta]
+pub fn host_set_show_stats(state: State<'_, AppState>, id: String, on: bool) -> AppResult<()> {
+    state.with_unlocked(|v| {
+        find_host(v, &id)?;
+        Ok(v.set_host_show_stats(&id, on)?)
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn groups_list(state: State<'_, AppState>) -> AppResult<Vec<GroupView>> {

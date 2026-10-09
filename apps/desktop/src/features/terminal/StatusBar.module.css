@@ -1,4 +1,5 @@
 .bar {
+  container-type: inline-size;
   height: 36px;
   flex: none;
   display: flex;
@@ -100,4 +101,72 @@
   line-height: 13px;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* Resource usage readout (TERM-12): fixed-width figures so the bar does not jitter each reading. */
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg2);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.stats:hover {
+  background: var(--fill);
+}
+
+.statsOpen,
+.statsOpen:hover {
+  background: var(--fill2);
+}
+
+.stats i {
+  color: var(--fg);
+}
+
+.stats .statsFailed {
+  color: var(--red);
+}
+
+.statsText {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.statsText b {
+  display: inline-block;
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pct {
+  min-width: 3.4ch;
+}
+
+/* Left-aligned so the arrow stays next to its figure; the room for the longest one is kept after it. */
+.statsText .rate {
+  min-width: 8.5ch;
+  text-align: left;
+}
+
+@container (max-width: 760px) {
+  .statsNet {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
+  .statsText {
+    display: none;
+  }
 }

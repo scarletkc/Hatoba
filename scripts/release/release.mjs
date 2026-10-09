@@ -7,14 +7,15 @@
 //   gate                             Require a CI pass, an approval-gated release environment, and a
 //                                    signing environment limited to selected branches
 //   notes --output FILE              Write the release notes
-//   dist --bundle DIR --notes FILE --output DIR
-//                                    Collect the installer, its updater signature, and its checksum
-//                                    from the NSIS bundle, and write the updater's latest.json
-//   publish --notes FILE --dist DIR  Create the GitHub Release, or upload the files it is missing
+//   dist --platform NAME --bundle DIR --output DIR
+//                                    Collect the platform's installers and their updater signatures
+//                                    from Tauri's bundle directory
+//   publish --notes FILE --dist DIR  Write the checksums and the updater's latest.json, then create
+//                                    the GitHub Release or upload the files it is missing
 import { execFileSync } from "node:child_process";
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { NOTES_DIR, ROOT, VERSION, compareVersions, isPrerelease, readVersion } from "./version.mjs";
@@ -29,14 +30,25 @@ export const LATEST = "latest.json";
 /** Holds the public key that installed apps check updates against. */
 export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 
-/** Tauri names the NSIS installer <productName>_<version>_<arch>-setup.exe. */
-export function installerName(version) {
-  return `Hatoba_${version}_x64-setup.exe`;
+/**
+ * The installers of a release, by Tauri bundle type: the name passed to `tauri build --bundles` and
+ * the directory under target/release/bundle that holds the installer. Each platform's build job in
+ * release.yml builds the bundle types of its platform. `updater` is the key of the installer in
+ * latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then for `<os>-<arch>`.
+ */
+export const INSTALLERS = {
+  nsis: { platform: "windows", updater: "windows-x86_64", name: (version) => `Hatoba_${version}_x64-setup.exe` },
+  deb: { platform: "linux", updater: "linux-x86_64-deb", name: (version) => `Hatoba_${version}_amd64.deb` },
+  appimage: { platform: "linux", updater: "linux-x86_64-appimage", name: (version) => `Hatoba_${version}_amd64.AppImage` },
+};
+
+export function installerName(bundle, version) {
+  return INSTALLERS[bundle].name(version);
 }
 
 /** The updater signature that `tauri build` writes next to the installer. */
-export function signatureName(version) {
-  return `${installerName(version)}.sig`;
+export function signatureName(bundle, version) {
+  return `${installerName(bundle, version)}.sig`;
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -190,9 +202,12 @@ function changelog(previous, tag, repository, root) {
 }
 
 function installSection(version) {
+  const [nsis, deb, appimage] = ["nsis", "deb", "appimage"].map((bundle) => installerName(bundle, version));
   return [
     "## Install",
-    `Download \`${installerName(version)}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**. \`${CHECKSUMS}\` has its SHA-256 checksum.`,
+    `**Windows:** download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
+    `**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
+    `\`${CHECKSUMS}\` has the SHA-256 checksum of each file.`,
   ].join("\n\n");
 }
 
@@ -303,42 +318,76 @@ export function updateNotes(notes, version, repository) {
     .replace(/\(#(\d+)\)$/gm, `([#$1](https://github.com/${repository}/pull/$1))`);
 }
 
+/** The bundle types that the build job of `platform` builds. */
+function bundlesOf(platform) {
+  const bundles = Object.keys(INSTALLERS).filter((bundle) => INSTALLERS[bundle].platform === platform);
+  if (bundles.length === 0) {
+    const platforms = [...new Set(Object.values(INSTALLERS).map((installer) => installer.platform))];
+    throw new Error(`Unknown platform '${platform}'. Use ${platforms.join(" or ")}.`);
+  }
+  return bundles;
+}
+
 /**
- * Copies the installer and its updater signature out of the NSIS bundle directory, checks the
- * signature as installed apps will, and writes the installer's checksum and the updater's
- * latest.json next to them. `notes` is the text the notes command wrote.
+ * Copies the installers of `platform` and their updater signatures out of `bundles`, Tauri's bundle
+ * directory (target/release/bundle), into `output`, after checking each signature as installed apps
+ * will. Copies nothing when an installer or a signature is missing or refused.
  */
-export function collectDist(version, bundle, output, { notes, repository, pubkey, now = new Date() }) {
-  const name = installerName(version);
-  const sig = signatureName(version);
-  if (!existsSync(join(bundle, name))) {
-    const found = existsSync(bundle) ? readdirSync(bundle).filter((file) => file.endsWith(".exe")) : [];
-    throw new Error(`Expected the installer ${name} in ${bundle}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
+export function collectDist(version, platform, bundles, output, { pubkey }) {
+  const files = bundlesOf(platform).flatMap((bundle) => {
+    const dir = join(bundles, bundle);
+    const name = installerName(bundle, version);
+    const sig = signatureName(bundle, version);
+    if (!existsSync(join(dir, name))) {
+      const found = existsSync(dir) ? readdirSync(dir).filter((file) => file.endsWith(extname(name))) : [];
+      throw new Error(`Expected the installer ${name} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
+    }
+    if (!existsSync(join(dir, sig))) {
+      throw new Error(
+        `Expected the updater signature ${sig} in ${dir}. \`pnpm tauri build\` writes it when TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set, as docs/releasing.md describes.`,
+      );
+    }
+    const signed = verifyUpdaterSignature(readFileSync(join(dir, name)), readFileSync(join(dir, sig), "utf8").trim(), pubkey);
+    if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
+    return [name, sig].map((file) => ({ from: join(dir, file), name: file }));
+  });
+  mkdirSync(output, { recursive: true });
+  for (const { from, name } of files) copyFileSync(from, join(output, name));
+  return files.map(({ name }) => name);
+}
+
+/**
+ * Writes the checksums of every installer and the updater's latest.json into `dist`, which holds
+ * what the dist command collected on each platform, and returns the files of the release in the
+ * order it lists them. `notes` is the text the notes command wrote.
+ */
+export function assembleRelease(version, dist, { notes, repository, now = new Date() }) {
+  const bundles = Object.keys(INSTALLERS);
+  const files = bundles.flatMap((bundle) => [installerName(bundle, version), signatureName(bundle, version)]);
+  const absent = files.filter((name) => !existsSync(join(dist, name)));
+  if (absent.length > 0) {
+    throw new Error(`Missing release files in ${dist}: ${absent.join(", ")}. Collect them with the dist command of each platform.`);
   }
-  if (!existsSync(join(bundle, sig))) {
-    throw new Error(
-      `Expected the updater signature ${sig} in ${bundle}. \`pnpm tauri build\` writes it when TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set, as docs/releasing.md describes.`,
-    );
-  }
-  const installer = readFileSync(join(bundle, name));
-  const signature = readFileSync(join(bundle, sig), "utf8").trim();
-  const signed = verifyUpdaterSignature(installer, signature, pubkey);
-  if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
+  const checksums = bundles.map((bundle) => {
+    const name = installerName(bundle, version);
+    return `${createHash("sha256").update(readFileSync(join(dist, name))).digest("hex")}  ${name}\n`;
+  });
+  writeFileSync(join(dist, CHECKSUMS), checksums.join(""));
+  const platforms = bundles.map((bundle) => [
+    INSTALLERS[bundle].updater,
+    {
+      signature: readFileSync(join(dist, signatureName(bundle, version)), "utf8").trim(),
+      url: `https://github.com/${repository}/releases/download/v${version}/${installerName(bundle, version)}`,
+    },
+  ]);
   const latest = {
     version,
     notes: updateNotes(notes, version, repository),
     pub_date: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
-    platforms: {
-      "windows-x86_64": { signature, url: `https://github.com/${repository}/releases/download/v${version}/${name}` },
-    },
+    platforms: Object.fromEntries(platforms),
   };
-  mkdirSync(output, { recursive: true });
-  copyFileSync(join(bundle, name), join(output, name));
-  copyFileSync(join(bundle, sig), join(output, sig));
-  const hash = createHash("sha256").update(installer).digest("hex");
-  writeFileSync(join(output, CHECKSUMS), `${hash}  ${name}\n`);
-  writeFileSync(join(output, LATEST), `${JSON.stringify(latest, null, 2)}\n`);
-  return [name, sig, CHECKSUMS, LATEST];
+  writeFileSync(join(dist, LATEST), `${JSON.stringify(latest, null, 2)}\n`);
+  return [...files, CHECKSUMS, LATEST];
 }
 
 function run(command, args, root) {
@@ -349,9 +398,7 @@ function run(command, args, root) {
 async function publish(version, repository, notes, dist, root = ROOT) {
   const { tag, sha } = releaseTarget(version, root);
   if (!existsSync(notes)) throw new Error(`${notes} does not exist; write it with the notes command.`);
-  const assets = [installerName(version), signatureName(version), CHECKSUMS, LATEST].map((name) => join(dist, name));
-  const absent = assets.filter((path) => !existsSync(path));
-  if (absent.length > 0) throw new Error(`Missing release files: ${absent.join(", ")}. Collect them with the dist command.`);
+  const assets = assembleRelease(version, dist, { notes: readFileSync(notes, "utf8"), repository }).map((name) => join(dist, name));
   const prerelease = isPrerelease(version);
   // The list includes drafts, which have no tag yet and so are not found by tag.
   const existing = (await github(`${repository}/releases?per_page=100`)).find((release) => release.tag_name === tag);
@@ -383,7 +430,13 @@ async function main() {
   const [command, ...args] = process.argv.slice(2);
   const { values } = parseArgs({
     args,
-    options: { output: { type: "string" }, bundle: { type: "string" }, notes: { type: "string" }, dist: { type: "string" } },
+    options: {
+      output: { type: "string" },
+      platform: { type: "string" },
+      bundle: { type: "string" },
+      notes: { type: "string" },
+      dist: { type: "string" },
+    },
   });
   const option = (name) => {
     if (!values[name]) throw new Error(`${command} needs --${name}.`);
@@ -414,8 +467,7 @@ async function main() {
     }
     case "dist": {
       const output = option("output");
-      const notes = readFileSync(option("notes"), "utf8");
-      const files = collectDist(version, option("bundle"), output, { notes, repository, pubkey: updaterPubkey() });
+      const files = collectDist(version, option("platform"), option("bundle"), output, { pubkey: updaterPubkey() });
       console.log(`Collected ${files.join(", ")} in ${output}`);
       break;
     }

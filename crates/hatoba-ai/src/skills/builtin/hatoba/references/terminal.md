@@ -13,16 +13,42 @@ The bar above the terminal shows the connection state, the target `user@host:por
 | Connection failed | 连接失败 | 接続に失敗 |
 | Disconnected | 已断开 | 切断済み |
 | via | 经由 | 経由: |
+| Show Resource Usage | 显示资源占用 | リソース使用状況を表示 |
 | Find in terminal | 在终端中查找 | ターミナル内を検索 |
 | Port Forwarding | 端口转发 | ポートフォワーディング |
 | SFTP | SFTP | SFTP |
 | Show or hide the SFTP file panel | 显示或隐藏 SFTP 文件面板 | SFTP ファイルパネルを表示/非表示 |
 | More actions | 更多操作 | その他の操作 |
 
+- **Show Resource Usage** turns on the resource usage readout described below. It is enabled only when connected.
 - **Find in terminal** opens the find bar.
 - **Port Forwarding** (a badge shows how many forwards run) opens the forwards popover; see `references/port-forwarding.md`. It is enabled only when connected.
 - **SFTP** shows or hides the file panel beside the terminal; see `references/sftp.md`. It is enabled only when connected.
 - **More actions** (the … button) opens the tab menu below.
+
+## Resource usage
+
+For a Linux server, the status bar can show CPU, memory and network rates (↓ received, ↑ sent). It is off until **Show Resource Usage** turns it on, and the choice is remembered for the host on this device; a quick connection keeps it only for its tab. A narrow window drops the rates, then everything but the gauge icon.
+
+Clicking the readout opens a popover: CPU over the last 3 minutes with the number of cores and the load averages, memory and swap, network rates over the last 3 minutes with the interfaces counted (those of the default route), the disk usage of `/`, and the uptime. Pointing at a chart (or the arrow keys once it has focus) shows every value as it was at that moment. A meter turns orange at 80% and red at 95%. **Hide Resource Usage** at the bottom turns it off for the host.
+
+Hatoba reads `/proc` on the server every 2 seconds over the tab's own connection, by running `sh` on a separate channel; nothing is installed, and the process shows on the server (for example in `ps`) while the readout is sampled. Sampling pauses while the tab is in the background, the window is minimized, or the vault is locked, and a pause shows as a gap in the charts. The first reading after a pause has no CPU or network rate yet ("—"); the next one, 2 seconds later, does.
+
+- FreeBSD, NetBSD, macOS, Windows and other systems show "Resource usage is available only for Linux servers." with the system's name when known.
+- If the readings stop (for example the server refused to run the command, or `sh` exited), the popover shows the reason and **Retry**.
+- In a container, `/proc` describes the host machine, so CPU and memory are the host's, not the container's.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Resource Usage | 资源占用 | リソース使用状況 |
+| Hide Resource Usage | 隐藏资源占用 | リソース使用状況を非表示 |
+| Memory | 内存 | メモリ |
+| Swap | 交换空间 | スワップ |
+| No swap | 无交换空间 | スワップなし |
+| Network | 网络 | ネットワーク |
+| Disk | 磁盘 | ディスク |
+| Reading… | 正在读取… | 読み取り中… |
+| Resource usage is available only for Linux servers. | 资源占用只支持 Linux 服务器。 | リソース使用状況は Linux サーバーでのみ表示できます。 |
 
 ## Menus
 

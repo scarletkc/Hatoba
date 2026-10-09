@@ -1,6 +1,6 @@
 # Release Hatoba
 
-A release publishes one commit on `main` as a GitHub Release with the Windows installer. The [Release workflow](../.github/workflows/release.yml) builds and signs the installer, waits for a maintainer to approve, and then tags the commit `vX.Y.Z` and publishes the release, from which installed apps update themselves. The scripts in [`scripts/release`](../scripts/release) prepare the version and run each step of the workflow. Run them from the repository root with Node.js 22 or later.
+A release publishes one commit on `main` as a GitHub Release with the Windows installer and the Linux packages. The [Release workflow](../.github/workflows/release.yml) builds and signs them, waits for a maintainer to approve, and then tags the commit `vX.Y.Z` and publishes the release, from which installed apps update themselves. The scripts in [`scripts/release`](../scripts/release) prepare the version and run each step of the workflow. Run them from the repository root with Node.js 22 or later.
 
 ## Set up the release environment
 
@@ -21,7 +21,7 @@ Installed apps install an update only when its installer is signed by the update
    ```
 
 2. Back up `hatoba-updater.key` and its password offline. GitHub never shows a secret again after you save it, so the backup is the only copy.
-3. In the repository's **Settings → Environments**, create an environment named `release-signing`. Leave **Required reviewers** off: the build job that uses it runs before the approval in the `release` environment. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
+3. In the repository's **Settings → Environments**, create an environment named `release-signing`. Leave **Required reviewers** off: the build jobs that use it run before the approval in the `release` environment. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
 4. Add two environment secrets to `release-signing`: `TAURI_SIGNING_PRIVATE_KEY` with the contents of `hatoba-updater.key`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` with its password.
 5. Set `plugins.updater.pubkey` in `tauri.conf.json` to the contents of `hatoba-updater.key.pub`, and merge that change to `main`.
 
@@ -68,17 +68,19 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
    - the `release` environment requires a reviewer, and the `release-signing` environment allows deployments only from `main`
 
    It then writes the release notes to the run summary.
-3. **Build (Windows)** builds the installer and signs it with the update signing key, checks the signature against the public key in `tauri.conf.json`, and uploads the `hatoba-windows` artifact: `Hatoba_X.Y.Z_x64-setup.exe`, its signature `Hatoba_X.Y.Z_x64-setup.exe.sig`, `SHA256SUMS.txt`, and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer.
-4. **Publish** waits for approval. Read the notes in the run summary, and run the manual Windows checks in [§12 Testing](hatoba-spec.md#12-testing) with the installer from the artifact. Approve the deployment to publish, or reject it to stop without publishing.
+3. Two jobs build the installers, sign each with the update signing key, and check each signature against the public key in `tauri.conf.json`. Each job uploads its installers and their `.sig` signatures as an artifact. `INSTALLERS` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) names the files.
+   - **Build (Windows)** uploads `Hatoba_X.Y.Z_x64-setup.exe` as the `hatoba-windows` artifact.
+   - **Build (Linux)** builds on Ubuntu 22.04, so that the packages run on systems with glibc 2.35 or later, and uploads `Hatoba_X.Y.Z_amd64.deb` and `Hatoba_X.Y.Z_amd64.AppImage` as the `hatoba-linux` artifact.
+4. **Publish** waits for approval. Read the notes in the run summary, and run the manual checks in [§12 Testing](hatoba-spec.md#12-testing) with the installers from the artifacts. Approve the deployment to publish, or reject it to stop without publishing.
 
-Publishing tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with those four files. A prerelease is marked as a pre-release and never becomes the latest release. Installed stable versions read `latest.json` from the latest release, so they update only to stable releases. Installed prereleases look through the list of releases for the newest one with a `latest.json`, so they update to the next prerelease as well. Either finds a release as soon as it is published.
+Publishing writes `SHA256SUMS.txt` with the checksum of each installer and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer for their platform and package type. It then tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with the installers, their signatures, and those two files. A prerelease is marked as a pre-release and never becomes the latest release. Installed stable versions read `latest.json` from the latest release, so they update only to stable releases. Installed prereleases look through the list of releases for the newest one with a `latest.json`, so they update to the next prerelease as well. Either finds a release as soon as it is published.
 
 ## Release notes
 
 `composeNotes` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) builds the release notes from:
 
 1. The note in `docs/release-notes/X.Y.Z.md`, when there is one.
-2. Install instructions for the installer.
+2. Install instructions for each installer.
 3. A changelog of the commits since the previous release, with a link to the full diff. Breaking changes, features, fixes, and performance improvements each have a section, sorted by the commits' Conventional Commits headers. The other commits are folded under **Other changes**.
 
 `latest.json` carries the same notes without the install instructions and with each pull request number at the end of a line as a link, and **Settings → About** shows them with the update.

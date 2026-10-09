@@ -32,10 +32,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "deb", "appimage"],
     "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
+    "longDescription": "Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them between your devices, and puts an AI assistant beside each terminal. The sync backend is a Worker and a D1 database that you deploy to your own Cloudflare account.",
     "copyright": "© 2026 ScarletKc · MIT License",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "windows": {
