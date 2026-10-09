@@ -1,4 +1,5 @@
 import type { ProxyKind } from "@/ipc/types";
+import type { KeyDraft } from "./aiLogic";
 
 /** The port a new proxy of each kind starts with. */
 export const DEFAULT_PORT: Record<ProxyKind, number> = { socks5: 1080, http: 8080 };
@@ -50,6 +51,24 @@ export function parseProxyUrl(text: string): ParsedProxyUrl | null {
     username: decode(m[2]),
     password: decode(m[3]),
   };
+}
+
+/**
+ * The sign-in a proxy URL stands for. The URL says all of it: without a password it removes a saved
+ * one, so the old password never goes to the proxy the URL names.
+ */
+export function signInFromUrl(url: ParsedProxyUrl, hasSaved: boolean): { username: string; password: KeyDraft } {
+  return {
+    username: url.username,
+    password: url.password ? { mode: "replace", value: url.password } : { mode: hasSaved ? "clear" : "keep", value: "" },
+  };
+}
+
+/** `ProxyInput.password`: null keeps the saved password, a typed one replaces it, "" removes it. */
+export function passwordForInput(draft: KeyDraft, hasSaved: boolean): string | null {
+  const typed = draft.mode === "replace" ? draft.value : "";
+  if (typed) return typed;
+  return hasSaved && draft.mode !== "clear" ? null : "";
 }
 
 export type ProxyField = "name" | "address" | "port" | "username" | "password";

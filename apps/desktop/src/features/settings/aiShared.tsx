@@ -41,6 +41,7 @@ export function SavedKeyField({
   allowClear = true,
   newPlaceholder,
   keepLabel,
+  clearedLabel,
   ariaLabel,
 }: {
   id?: string;
@@ -54,6 +55,8 @@ export function SavedKeyField({
   /** Replaces the API key wording where the field holds another secret, such as an environment variable's value. */
   newPlaceholder?: string;
   keepLabel?: string;
+  /** Replaces the API key wording of the cleared state. */
+  clearedLabel?: string;
   /** Names the field when no label points at it. */
   ariaLabel?: string;
 }) {
@@ -90,7 +93,7 @@ export function SavedKeyField({
       <div className={s.savedRow}>
         <div className={s.savedField}>
           <Icon name="trash" />
-          {t("aiSettings.f.apiKeyCleared")}
+          {clearedLabel ?? t("aiSettings.f.apiKeyCleared")}
         </div>
         <LinkButton onClick={() => onChange({ mode: "keep", value: "" })}>{t("aiSettings.f.apiKeyUndo")}</LinkButton>
       </div>

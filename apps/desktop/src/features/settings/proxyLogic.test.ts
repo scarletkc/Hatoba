@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authority, parseProxyUrl, proxySummary, validateProxy, type ProxyFormValues } from "./proxyLogic";
+import { authority, parseProxyUrl, passwordForInput, proxySummary, signInFromUrl, validateProxy, type ProxyFormValues } from "./proxyLogic";
 
 describe("parseProxyUrl", () => {
   it("reads SOCKS5 and HTTP URLs with and without credentials", () => {
@@ -27,6 +27,31 @@ describe("parseProxyUrl", () => {
     expect(parseProxyUrl("socks4://127.0.0.1:1080")).toBeNull();
     expect(parseProxyUrl("socks5://host:70000")).toBeNull();
     expect(parseProxyUrl("http://host:3128/path")).toBeNull();
+  });
+});
+
+describe("signInFromUrl", () => {
+  const url = (text: string) => parseProxyUrl(text)!;
+
+  it("never keeps a saved password for a URL without one", () => {
+    expect(signInFromUrl(url("http://new-proxy:3128"), true)).toEqual({ username: "", password: { mode: "clear", value: "" } });
+    expect(signInFromUrl(url("http://bob:@new-proxy:3128"), true)).toEqual({ username: "bob", password: { mode: "clear", value: "" } });
+    expect(signInFromUrl(url("http://bob@new-proxy:3128"), false)).toEqual({ username: "bob", password: { mode: "keep", value: "" } });
+  });
+
+  it("takes the password the URL has", () => {
+    expect(signInFromUrl(url("socks5://bob:pw@p:1080"), true)).toEqual({ username: "bob", password: { mode: "replace", value: "pw" } });
+  });
+});
+
+describe("passwordForInput", () => {
+  it("keeps, replaces or removes the saved password", () => {
+    expect(passwordForInput({ mode: "keep", value: "" }, true)).toBeNull();
+    // Replace clicked but nothing typed keeps it, as on the host editor.
+    expect(passwordForInput({ mode: "replace", value: "" }, true)).toBeNull();
+    expect(passwordForInput({ mode: "replace", value: "new" }, true)).toBe("new");
+    expect(passwordForInput({ mode: "clear", value: "" }, true)).toBe("");
+    expect(passwordForInput({ mode: "keep", value: "" }, false)).toBe("");
   });
 });
 

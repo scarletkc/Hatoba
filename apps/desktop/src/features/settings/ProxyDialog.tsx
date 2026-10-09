@@ -8,7 +8,16 @@ import { api, toAppError } from "@/ipc/api";
 import type { ProxyInput, ProxyKind, ProxyView } from "@/ipc/types";
 import type { KeyDraft } from "./aiLogic";
 import { SavedKeyField } from "./aiShared";
-import { DEFAULT_PORT, KIND_LABEL, parseProxyUrl, validateProxy, type ProxyField, type ProxyFormValues } from "./proxyLogic";
+import {
+  DEFAULT_PORT,
+  KIND_LABEL,
+  parseProxyUrl,
+  passwordForInput,
+  signInFromUrl,
+  validateProxy,
+  type ProxyField,
+  type ProxyFormValues,
+} from "./proxyLogic";
 import s from "./ProxyDialog.module.css";
 
 interface Form extends Omit<ProxyFormValues, "password"> {
@@ -73,8 +82,7 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
         kind: url.kind,
         address: url.address,
         port: url.port !== null ? String(url.port) : form.port,
-        ...(url.username ? { username: url.username } : {}),
-        ...(url.password ? { password: { mode: "replace" as const, value: url.password } } : {}),
+        ...signInFromUrl(url, hasSaved),
       },
       "address",
       "port",
@@ -91,8 +99,7 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
     address: form.address.trim(),
     port: Number(form.port),
     username: form.username.trim(),
-    // null keeps the saved password; a password typed over it replaces it.
-    password: typedPassword ? typedPassword : hasSaved ? null : "",
+    password: passwordForInput(form.password, hasSaved),
   });
 
   const save = async () => {
@@ -227,6 +234,7 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
                 placeholder={t("settings.proxy.f.passwordPlaceholder")}
                 newPlaceholder={t("settings.proxy.f.passwordNew")}
                 keepLabel={t("settings.proxy.f.keepPassword")}
+                clearedLabel={t("settings.proxy.f.passwordCleared")}
                 onChange={(password) => patch({ password }, "password")}
               />
             </FormRow>

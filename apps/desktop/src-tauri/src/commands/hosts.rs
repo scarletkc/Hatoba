@@ -362,6 +362,25 @@ pub fn tags_list(state: State<'_, AppState>) -> AppResult<Vec<TagCount>> {
     })
 }
 
+/// Where a host probe connects: the address, the port, and the proxy on the way.
+type ProbeTarget = (String, u16, Option<hatoba_ssh::ProxyConfig>);
+
+/// The probe target of each existing host among `ids`. SSH-13: the probe goes through the proxy
+/// the connection would use, never around it, so a host whose proxy was deleted gets `None` and
+/// is reported offline (the list keeps the last result of a host it is not told about).
+fn probe_targets(v: &Vault, ids: &[String]) -> Vec<(String, Option<ProbeTarget>)> {
+    ids.iter()
+        .take(500)
+        .filter_map(|id| {
+            let h = v.get(id).and_then(Item::as_host)?;
+            let target = crate::ssh::connection_proxy(v, h)
+                .ok()
+                .map(|proxy| (h.address.clone(), h.port, proxy));
+            Some((id.clone(), target))
+        })
+        .collect()
+}
+
 /// HOST-10: TCP connect only (no authentication), 3 s timeout, probed concurrently.
 #[tauri::command]
 #[specta::specta]
@@ -369,33 +388,21 @@ pub async fn hosts_probe(
     state: State<'_, AppState>,
     ids: Vec<String>,
 ) -> AppResult<Vec<ProbeResult>> {
-    type Target = (String, String, u16, Option<hatoba_ssh::ProxyConfig>);
-    let targets: Vec<Target> = state.with_unlocked(|v| {
-        Ok(ids
-            .iter()
-            .take(500)
-            .filter_map(|id| {
-                let h = v.get(id).and_then(Item::as_host)?;
-                // SSH-13: through the proxy the connection would use, never around it. A host
-                // whose proxy was deleted is not probed.
-                let proxy = crate::ssh::connection_proxy(v, h).ok()?;
-                Some((id.clone(), h.address.clone(), h.port, proxy))
-            })
-            .collect())
-    })?;
-    let probes = targets
-        .into_iter()
-        .map(|(id, host, port, proxy)| async move {
-            // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
-            let latency =
-                hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3))
-                    .await;
-            ProbeResult {
-                id,
-                online: latency.is_some(),
-                latency_ms: latency,
+    let targets = state.with_unlocked(|v| Ok(probe_targets(v, &ids)))?;
+    let probes = targets.into_iter().map(|(id, target)| async move {
+        // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
+        let latency = match target {
+            Some((host, port, proxy)) => {
+                hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3)).await
             }
-        });
+            None => None,
+        };
+        ProbeResult {
+            id,
+            online: latency.is_some(),
+            latency_ms: latency,
+        }
+    });
     Ok(futures::future::join_all(probes).await)
 }
 
@@ -637,6 +644,30 @@ mod tests {
             note: String::new(),
             ai_notes,
         }
+    }
+
+    #[test]
+    fn hosts_whose_proxy_was_deleted_are_still_reported() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+            .unwrap();
+        let host = host_from_input(&input(String::new()), None, &v).unwrap();
+        let id = v.put(None, Item::Host(host)).unwrap();
+        // This device's default proxy was deleted on another device.
+        v.set_local_prefs(r#"{"default_proxy_id":"gone"}"#).unwrap();
+        let ids = vec![id.clone(), "no-such-host".to_owned()];
+        let targets = probe_targets(&v, &ids);
+        assert_eq!(targets.len(), 1, "unknown ids are skipped");
+        assert_eq!(targets[0].0, id);
+        assert!(targets[0].1.is_none(), "no probe around a deleted proxy");
+
+        v.set_local_prefs(r#"{"default_proxy_id":null}"#).unwrap();
+        let targets = probe_targets(&v, &ids);
+        let (address, port, proxy) = targets[0].1.clone().unwrap();
+        assert_eq!(
+            (address.as_str(), port, proxy.is_none()),
+            ("10.0.0.5", 22, true)
+        );
     }
 
     #[test]
