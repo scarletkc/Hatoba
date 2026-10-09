@@ -1,13 +1,17 @@
-//! Signed updates (spec §11). The Tauri updater reads `latest.json` from the endpoint in
-//! tauri.conf.json, which the newest stable GitHub release carries, and installs the installer it
-//! names only when the installer's signature matches the public key there.
+//! Signed updates (spec §11). Every GitHub release carries a `latest.json`, from which the Tauri
+//! updater installs the installer it names, and only when the installer's signature matches the
+//! public key in tauri.conf.json. A stable version reads `latest.json` from the endpoint there,
+//! which is the latest stable release; a prerelease version reads it from the newest release,
+//! prereleases included.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, Once};
 use std::time::{Duration, Instant};
 
+use hatoba_core::version::Version;
+use serde::Deserialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, Url};
 use tauri_plugin_updater::{Error as UpdaterError, Update, Updater, UpdaterExt};
 
 use crate::dto::{AvailableUpdate, UpdateCheck, UpdateProgress};
@@ -16,6 +20,13 @@ use crate::state::AppState;
 
 /// The release page of version X.Y.Z is this followed by X.Y.Z.
 const RELEASE_PAGE: &str = "https://github.com/scarletkc/Hatoba/releases/tag/v";
+/// Where a prerelease version finds the newest release.
+const GITHUB: Releases<'static> = Releases {
+    api: "https://api.github.com/repos/scarletkc/Hatoba/releases?per_page=20",
+    downloads: "https://github.com/scarletkc/Hatoba/releases/download/",
+};
+/// A page of releases with their notes stays far below this.
+const MAX_RELEASES_BYTES: usize = 4 * 1024 * 1024;
 const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// The installer download has no overall time limit; it fails when no data arrives for this long.
@@ -36,18 +47,42 @@ impl Updates {
     }
 }
 
+struct Releases<'a> {
+    /// GitHub's list of releases. Drafts are not listed without a token.
+    api: &'a str,
+    /// Release assets download from here; a `latest.json` anywhere else is ignored.
+    downloads: &'a str,
+}
+
 /// Checks for a release newer than the running version and keeps it for [`install`].
 pub async fn check<R: Runtime>(app: &AppHandle<R>, updates: &Updates) -> AppResult<UpdateCheck> {
-    let found = match updater(app)?.check().await {
-        Ok(found) => found,
-        Err(UpdaterError::ReleaseNotFound) => {
-            no_release(app).await?;
-            None
-        }
-        Err(err) => return Err(classify(err)),
+    check_with(app, updates, &GITHUB).await
+}
+
+async fn check_with<R: Runtime>(
+    app: &AppHandle<R>,
+    updates: &Updates,
+    releases: &Releases<'_>,
+) -> AppResult<UpdateCheck> {
+    let current = &app.package_info().version;
+    let endpoint = if current.pre.is_empty() {
+        Some(configured_endpoint(app)?)
+    } else {
+        newest_manifest(releases).await?
+    };
+    let found = match endpoint {
+        None => None,
+        Some(endpoint) => match updater(app, endpoint.clone())?.check().await {
+            Ok(found) => found,
+            Err(UpdaterError::ReleaseNotFound) => {
+                no_release(endpoint).await?;
+                None
+            }
+            Err(err) => return Err(classify(err)),
+        },
     };
     let check = UpdateCheck {
-        current_version: app.package_info().version.to_string(),
+        current_version: current.to_string(),
         update: found.as_ref().map(describe),
     };
     *updates.found() = found;
@@ -82,8 +117,10 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     app.restart()
 }
 
-fn updater<R: Runtime>(app: &AppHandle<R>) -> AppResult<Updater> {
+fn updater<R: Runtime>(app: &AppHandle<R>, endpoint: Url) -> AppResult<Updater> {
     app.updater_builder()
+        .endpoints(vec![endpoint])
+        .map_err(classify)?
         .timeout(CHECK_TIMEOUT)
         .configure_client(|client| {
             client
@@ -148,9 +185,7 @@ impl Drop for Installing<'_> {
 /// The updater reports every answer without a release the same way, so this asks the endpoint
 /// again for its status. GitHub answers 404 until a stable release with `latest.json` exists,
 /// which means there is nothing newer; any other status is an error.
-async fn no_release<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
-    let endpoint =
-        endpoint(app).ok_or_else(|| AppError::internal("no update endpoint is configured"))?;
+async fn no_release(endpoint: Url) -> AppResult<()> {
     let resp = client()?
         .get(endpoint)
         .send()
@@ -165,13 +200,73 @@ async fn no_release<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
 }
 
 /// The first endpoint in the updater's configuration.
-fn endpoint<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    let updater = app.config().plugins.0.get("updater")?;
-    updater
-        .get("endpoints")?
-        .get(0)?
-        .as_str()
-        .map(str::to_owned)
+fn configured_endpoint<R: Runtime>(app: &AppHandle<R>) -> AppResult<Url> {
+    let endpoint = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|updater| updater.get("endpoints")?.get(0)?.as_str())
+        .ok_or_else(|| AppError::internal("no update endpoint is configured"))?;
+    endpoint
+        .parse()
+        .map_err(|_| AppError::internal(format!("'{endpoint}' is not an update endpoint")))
+}
+
+#[derive(Deserialize)]
+struct Release {
+    tag_name: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    assets: Vec<Asset>,
+}
+
+#[derive(Deserialize)]
+struct Asset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// The `latest.json` of the newest release, prereleases included, or `None` when no release
+/// carries one.
+async fn newest_manifest(releases: &Releases<'_>) -> AppResult<Option<Url>> {
+    let mut resp = client()?
+        .get(releases.api)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .map_err(|e| unreachable(&e))?;
+    let status = resp.status().as_u16();
+    if status != 200 {
+        return Err(AppError::internal(format!("GitHub answered HTTP {status}")));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| unreachable(&e))? {
+        if body.len() + chunk.len() > MAX_RELEASES_BYTES {
+            return Err(AppError::internal("GitHub's list of releases is too large"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let list: Vec<Release> = serde_json::from_slice(&body)
+        .map_err(|_| AppError::internal("GitHub's list of releases could not be read"))?;
+    Ok(pick_manifest(&list, releases.downloads))
+}
+
+fn pick_manifest(list: &[Release], downloads: &str) -> Option<Url> {
+    list.iter()
+        .filter(|release| !release.draft)
+        .filter_map(|release| {
+            let tag = &release.tag_name;
+            let version = Version::parse(tag.strip_prefix('v').unwrap_or(tag))?;
+            let manifest = release.assets.iter().find(|asset| {
+                asset.name == "latest.json" && asset.browser_download_url.starts_with(downloads)
+            })?;
+            Some((version, &manifest.browser_download_url))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .and_then(|(_, url)| url.parse().ok())
 }
 
 fn client() -> AppResult<reqwest::Client> {
@@ -238,7 +333,12 @@ mod tests {
     /// An app at version 0.1.0 whose updater reads `endpoint`, configured like tauri.conf.json
     /// apart from the test key and the plain-HTTP endpoint.
     fn app(endpoint: &str) -> tauri::App<MockRuntime> {
+        app_at("0.1.0", endpoint)
+    }
+
+    fn app_at(version: &str, endpoint: &str) -> tauri::App<MockRuntime> {
         let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context.package_info_mut().version = version.parse().unwrap();
         context.config_mut().plugins.0.insert(
             "updater".into(),
             json!({
@@ -461,5 +561,140 @@ mod tests {
         assert!(Installing::start(&flag).is_err());
         drop(first);
         assert!(Installing::start(&flag).is_ok());
+    }
+
+    /// GitHub's list of releases as `api` on `server`, each release with the given assets.
+    async fn list_releases(server: &MockServer, releases: Value) {
+        Mock::given(method("GET"))
+            .and(path("/releases"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(releases))
+            .mount(server)
+            .await;
+    }
+
+    fn release(server: &MockServer, tag: &str, manifest: Option<&str>) -> Value {
+        let assets: Vec<Value> = manifest
+            .map(|name| json!({ "name": "latest.json", "browser_download_url": format!("{}/{name}", server.uri()) }))
+            .into_iter()
+            .collect();
+        json!({ "tag_name": tag, "draft": false, "prerelease": tag.contains('-'), "assets": assets })
+    }
+
+    async fn serve_manifest(server: &MockServer, name: &str, version: &str) {
+        Mock::given(method("GET"))
+            .and(path(format!("/{name}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(manifest(server, version)))
+            .mount(server)
+            .await;
+    }
+
+    async fn check_prerelease(server: &MockServer, version: &str) -> AppResult<UpdateCheck> {
+        // The configured endpoint answers 404, so a result can only come from the list.
+        let app = app_at(version, &format!("{}/configured/latest.json", server.uri()));
+        let api = format!("{}/releases", server.uri());
+        let downloads = format!("{}/", server.uri());
+        let releases = Releases {
+            api: &api,
+            downloads: &downloads,
+        };
+        check_with(app.handle(), &Updates::default(), &releases).await
+    }
+
+    #[tokio::test]
+    async fn a_prerelease_follows_the_newest_release_with_an_update_manifest() {
+        let server = MockServer::start().await;
+        let mut draft = release(&server, "v0.4.0", Some("draft.json"));
+        draft["draft"] = json!(true);
+        list_releases(
+            &server,
+            json!([
+                draft,
+                release(&server, "v0.3.0-alpha.1", None),
+                release(&server, "v0.1.0", Some("stable.json")),
+                release(&server, "v0.2.0-beta.1", Some("beta.json")),
+                release(&server, "nightly", Some("nightly.json")),
+            ]),
+        )
+        .await;
+        serve_manifest(&server, "beta.json", "0.2.0-beta.1").await;
+
+        let found = check_prerelease(&server, "0.2.0-alpha.1").await.unwrap();
+        assert_eq!(found.current_version, "0.2.0-alpha.1");
+        assert_eq!(found.update.unwrap().version, "0.2.0-beta.1");
+    }
+
+    #[tokio::test]
+    async fn a_prerelease_moves_to_the_final_release() {
+        let server = MockServer::start().await;
+        list_releases(
+            &server,
+            json!([
+                release(&server, "v0.2.0-rc.2", Some("rc.json")),
+                release(&server, "v0.2.0", Some("final.json")),
+            ]),
+        )
+        .await;
+        serve_manifest(&server, "final.json", "0.2.0").await;
+
+        let found = check_prerelease(&server, "0.2.0-rc.1").await.unwrap();
+        assert_eq!(found.update.unwrap().version, "0.2.0");
+    }
+
+    #[tokio::test]
+    async fn a_prerelease_is_up_to_date_without_a_release_manifest_from_the_repository() {
+        let server = MockServer::start().await;
+        let mut elsewhere = release(&server, "v0.3.0", None);
+        elsewhere["assets"] = json!([
+            { "name": "latest.json", "browser_download_url": "https://example.com/latest.json" }
+        ]);
+        list_releases(
+            &server,
+            json!([release(&server, "v0.1.0-alpha.1", None), elsewhere]),
+        )
+        .await;
+
+        let found = check_prerelease(&server, "0.1.0-alpha.1").await.unwrap();
+        assert_eq!(found.update, None);
+    }
+
+    #[tokio::test]
+    async fn a_stable_version_never_asks_for_prereleases() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/releases"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .expect(0)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/configured/latest.json"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let found = check_prerelease(&server, "0.1.0").await.unwrap();
+        assert_eq!(found.update, None);
+    }
+
+    #[tokio::test]
+    async fn a_failed_list_of_releases_is_an_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/releases"))
+            .respond_with(ResponseTemplate::new(403).set_body_string("rate limited"))
+            .mount(&server)
+            .await;
+        let err = check_prerelease(&server, "0.2.0-alpha.1")
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal);
+        assert!(err.detail.contains("403"), "{}", err.detail);
+
+        server.reset().await;
+        list_releases(&server, json!({ "message": "Not Found" })).await;
+        let err = check_prerelease(&server, "0.2.0-alpha.1")
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal);
     }
 }

@@ -86,7 +86,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | NSIS installer | ✅ | Built by the `rust-windows` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests). Unsigned |
 | GitHub Releases | 🟡 | The [Release workflow](../.github/workflows/release.yml) publishes the installer after approval; [Release Hatoba](releasing.md) has the steps |
 | Authenticode code signing | Not planned | A certificate is impractical to obtain ([§11](hatoba-spec.md#11-non-functional-requirements)), so SmartScreen warns on the first install |
-| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater; unit tests run against a mock endpoint. Not yet tried against a published release |
+| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. Not yet tried against a published release |
 | Star prompt and **Report a Problem** (§9) | 🟡 | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form not yet tried on GitHub |
 | Signed updates through the Tauri updater | 🟡 | **Download and Install** in Settings → About. Tried end to end on Windows with a local endpoint ([Signed updates](development.md#signed-updates)). Needs the update signing key and its public key ([Set up update signing](releasing.md#set-up-update-signing)), then a stable release to try it against |
 

@@ -81,7 +81,7 @@ Linux only. See [Run the end-to-end smoke test](../apps/desktop/e2e/README.md).
 
 ### Signed updates
 
-The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mock endpoint. To try an update end to end on Windows without publishing a release, install a test build and serve it a newer one from this machine. The test builds have their own name, identifier, and executable, so they install next to Hatoba without touching it or its vault.
+The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mock endpoint and a mock list of releases. To try an update end to end on Windows without publishing a release, install a test build and serve it a newer one from this machine. The test builds have their own name, identifier, and executable, so they install next to Hatoba without touching it or its vault.
 
 1. Generate a throwaway key outside the repository:
 
@@ -96,6 +96,7 @@ The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mo
      "productName": "Hatoba Update Test",
      "mainBinaryName": "HatobaUpdateTest",
      "identifier": "app.hatoba.updatetest",
+     "version": "1.0.0",
      "plugins": {
        "updater": {
          "pubkey": "<contents of test.key.pub>",
@@ -106,7 +107,7 @@ The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mo
    }
    ```
 
-   Write `<dir>/new.json` with the same contents and a `"version"` higher than the one in `Cargo.toml`.
+   Write `<dir>/new.json` with the same contents and `"version": "1.0.1"`. Both versions are stable ones: a prerelease version looks for updates in the GitHub releases instead of the configured endpoint.
 
 3. Build each version, and copy its installer and `.sig` out of `target/release/bundle/nsis` before the next build:
 
@@ -119,7 +120,7 @@ The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mo
 4. Run the older installer, then serve the newer one:
 
    ```sh
-   node scripts/release/serve-update.mjs --installer "<dir>/Hatoba Update Test_<version>_x64-setup.exe" --pubkey <dir>/test.key.pub
+   node scripts/release/serve-update.mjs --installer "<dir>/Hatoba Update Test_1.0.1_x64-setup.exe" --pubkey <dir>/test.key.pub
    ```
 
 5. Open **Hatoba Update Test**, create a vault, and in **Settings → About** choose **Check for Updates**, then **Download and Install**. Hatoba closes, the installer shows its progress, and the new version opens.

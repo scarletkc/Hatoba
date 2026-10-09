@@ -71,7 +71,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
 3. **Build (Windows)** builds the installer and signs it with the update signing key, checks the signature against the public key in `tauri.conf.json`, and uploads the `hatoba-windows` artifact: `Hatoba_X.Y.Z_x64-setup.exe`, its signature `Hatoba_X.Y.Z_x64-setup.exe.sig`, `SHA256SUMS.txt`, and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer.
 4. **Publish** waits for approval. Read the notes in the run summary, and run the manual Windows checks in [§12 Testing](hatoba-spec.md#12-testing) with the installer from the artifact. Approve the deployment to publish, or reject it to stop without publishing.
 
-Publishing tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with those four files. Installed apps read `latest.json` from the latest release, so they find a stable release as soon as it is published. A prerelease is marked as a pre-release and never becomes the latest release, so installed apps never update to it.
+Publishing tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with those four files. A prerelease is marked as a pre-release and never becomes the latest release. Installed stable versions read `latest.json` from the latest release, so they update only to stable releases. Installed prereleases look through the list of releases for the newest one with a `latest.json`, so they update to the next prerelease as well. Either finds a release as soon as it is published.
 
 ## Release notes
 

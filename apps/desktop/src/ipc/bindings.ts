@@ -16,8 +16,8 @@ export const commands = {
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
 	/**
-	 *  Asks the update endpoint whether a newer version exists (Settings → About). Runs only when
-	 *  the user checks, or after unlock when they turned on the automatic check.
+	 *  Asks GitHub whether a newer version exists (Settings → About). Runs only when the user
+	 *  checks, or after unlock when they turned on the automatic check.
 	 */
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**

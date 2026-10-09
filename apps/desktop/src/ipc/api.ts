@@ -77,7 +77,7 @@ export type Unlisten = () => void;
  */
 export interface HatobaApi {
   app_info(): Promise<AppInfo>;
-  /** Asks the update endpoint for a newer release. Before the first stable release, Hatoba is up to date. */
+  /** Asks for a newer release (spec §11). Without a release that carries update information, Hatoba is up to date. */
   update_check(): Promise<UpdateCheck>;
   /**
    * Downloads the update the last check found, checks its signature, and installs it. Hatoba then

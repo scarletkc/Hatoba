@@ -332,7 +332,7 @@ async function publish(version, repository, notes, dist, root = ROOT) {
   // The list includes drafts, which have no tag yet and so are not found by tag.
   const existing = (await github(`${repository}/releases?per_page=100`)).find((release) => release.tag_name === tag);
   if (!existing) {
-    // A prerelease never becomes the latest release, whose latest.json installed apps read.
+    // A prerelease never becomes the latest release, whose latest.json installed stable versions read.
     const flags = prerelease ? ["--prerelease", "--latest=false"] : [];
     run("gh", ["release", "create", tag, ...assets, "--repo", repository, "--target", sha, "--title", `Hatoba ${tag}`, "--notes-file", notes, ...flags], root);
     return;
