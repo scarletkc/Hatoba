@@ -6,6 +6,7 @@
 
 **Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account**
 
+[![Release](https://img.shields.io/github/v/release/scarletkc/Hatoba?include_prereleases&sort=semver&label=release&logo=github)](https://github.com/scarletkc/Hatoba/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/scarletkc/Hatoba/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/scarletkc/Hatoba/actions/workflows/ci.yml)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![Sync](https://img.shields.io/badge/sync-Cloudflare%20Workers%20%2B%20D1-F38020?logo=cloudflare&logoColor=white)](workers/sync/README.md)
@@ -57,6 +58,16 @@ account.
   OpenAI-compatible or Anthropic API key, supports skills and MCP servers, and
   takes terminal selections, connection errors, long pastes, and text files as
   attachments. Conversations sync with the rest of the vault.
+
+## Download
+
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20x64-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4=)](https://github.com/scarletkc/Hatoba/releases)
+
+Download `Hatoba_<version>_x64-setup.exe` from
+[Releases](https://github.com/scarletkc/Hatoba/releases) and run it. It installs
+for the current user without administrator rights, and each release's notes
+cover what changed and how to install it. Builds for macOS and Linux will
+follow; until then, [build from source](#build-from-source).
 
 ## Screenshots
 
