@@ -56,13 +56,28 @@ struct Releases<'a> {
 
 /// Checks for a release newer than the running version and keeps it for [`install`].
 pub async fn check<R: Runtime>(app: &AppHandle<R>, updates: &Updates) -> AppResult<UpdateCheck> {
-    check_with(app, updates, &GITHUB).await
+    check_with(app, updates, &GITHUB, before_exit(app)).await
+}
+
+/// Runs when the installer is about to start and Hatoba to exit: on Windows, after the download
+/// passed its signature check and was unpacked, so a failed install leaves the MCP servers
+/// running. The exit skips RunEvent::Exit, which otherwise stops their child processes.
+fn before_exit<R: Runtime>(app: &AppHandle<R>) -> impl Fn() + Send + Sync + 'static {
+    let app = app.clone();
+    move || {
+        if let Some(state) = app.try_state::<AppState>() {
+            // Each stop is reported, in case the installer then fails to start.
+            tauri::async_runtime::block_on(state.mcp.stop_all(&state.vault));
+        }
+        app.cleanup_before_exit();
+    }
 }
 
 async fn check_with<R: Runtime>(
     app: &AppHandle<R>,
     updates: &Updates,
     releases: &Releases<'_>,
+    before_exit: impl Fn() + Send + Sync + 'static,
 ) -> AppResult<UpdateCheck> {
     let current = &app.package_info().version;
     let endpoint = if current.pre.is_empty() {
@@ -72,7 +87,7 @@ async fn check_with<R: Runtime>(
     };
     let found = match endpoint {
         None => None,
-        Some(endpoint) => match updater(app, endpoint.clone())?.check().await {
+        Some(endpoint) => match updater(app, endpoint.clone(), before_exit)?.check().await {
             Ok(found) => found,
             Err(UpdaterError::ReleaseNotFound) => {
                 no_release(endpoint).await?;
@@ -104,9 +119,6 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     })
     .await?;
     let _ = progress.send(UpdateProgress::Installing);
-    // The updater exits without RunEvent::Exit, which is where the MCP servers' child processes
-    // are otherwise stopped.
-    state.mcp.shutdown().await;
     tracing::info!("installing Hatoba {}", update.version);
     tauri::async_runtime::spawn_blocking(move || update.install(bytes))
         .await
@@ -117,10 +129,15 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     app.restart()
 }
 
-fn updater<R: Runtime>(app: &AppHandle<R>, endpoint: Url) -> AppResult<Updater> {
+fn updater<R: Runtime>(
+    app: &AppHandle<R>,
+    endpoint: Url,
+    before_exit: impl Fn() + Send + Sync + 'static,
+) -> AppResult<Updater> {
     app.updater_builder()
         .endpoints(vec![endpoint])
         .map_err(classify)?
+        .on_before_exit(before_exit)
         .timeout(CHECK_TIMEOUT)
         .configure_client(|client| {
             client
@@ -392,6 +409,37 @@ mod tests {
         check(app.handle(), updates).await
     }
 
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn a_download_that_cannot_be_unpacked_leaves_the_app_running() {
+        use std::sync::Arc;
+
+        let server = MockServer::start().await;
+        let latest = manifest(&server, "0.2.0");
+        serve(
+            &server,
+            ResponseTemplate::new(200).set_body_json(latest),
+            INSTALLER,
+        )
+        .await;
+        let app = app(&format!("{}/latest.json", server.uri()));
+        let exited = Arc::new(AtomicBool::new(false));
+        let hook = Arc::clone(&exited);
+        let updates = Updates::default();
+        check_with(app.handle(), &updates, &GITHUB, move || {
+            hook.store(true, Ordering::SeqCst)
+        })
+        .await
+        .unwrap();
+
+        // Not an installer, so unpacking fails before the hook, and before the updater would
+        // start the installer and exit this process.
+        let update = updates.found().clone().unwrap();
+        let err = update.install(INSTALLER).map_err(classify).unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal);
+        assert!(!exited.load(Ordering::SeqCst));
+    }
+
     #[tokio::test]
     async fn a_newer_signed_release_is_offered_and_downloads() {
         let server = MockServer::start().await;
@@ -555,6 +603,18 @@ mod tests {
     }
 
     #[test]
+    fn the_exit_hook_can_wait_for_async_work() {
+        // `install` runs the updater on a blocking thread of Tauri's runtime, and the hook blocks
+        // there until the MCP servers have stopped.
+        let stopped = tauri::async_runtime::block_on(async {
+            tauri::async_runtime::spawn_blocking(|| tauri::async_runtime::block_on(async { true }))
+                .await
+                .unwrap()
+        });
+        assert!(stopped);
+    }
+
+    #[test]
     fn one_install_at_a_time() {
         let flag = AtomicBool::new(false);
         let first = Installing::start(&flag).unwrap();
@@ -597,7 +657,7 @@ mod tests {
             api: &api,
             downloads: &downloads,
         };
-        check_with(app.handle(), &Updates::default(), &releases).await
+        check_with(app.handle(), &Updates::default(), &releases, || {}).await
     }
 
     #[tokio::test]
