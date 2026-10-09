@@ -930,6 +930,21 @@ impl Vault {
         self.store.last_connected(host_id).ok().flatten()
     }
 
+    /// Records the operating system a host's server reported, or clears it with `None`
+    /// (HOST-11). Device-local; never synced.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_host_os(&mut self, host_id: &str, os: Option<&str>) -> Result<()> {
+        self.store.set_host_os(host_id, os)
+    }
+
+    /// The operating system a host's server reported on its last connection from this device.
+    #[must_use]
+    pub fn host_os(&self, host_id: &str) -> Option<String> {
+        self.store.host_os(host_id).ok().flatten()
+    }
+
     /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while locked.
     ///
     /// # Errors
@@ -1864,6 +1879,26 @@ mod tests {
         assert_eq!(vault.worker_update_dismissed().as_deref(), Some("0.3.0"));
         // last_connected is not an item and never dirties anything.
         assert_eq!(vault.pending_count(), 2);
+    }
+
+    #[test]
+    fn host_os_is_device_local() {
+        let (mut vault, _clock, _code) = created();
+        let id = vault.put(None, host("h")).unwrap();
+        let row = vault.store.item_row(&id).unwrap();
+        let pending = vault.pending_count();
+        assert_eq!(vault.host_os(&id), None);
+        vault.set_last_connected(&id, 123).unwrap();
+        vault.set_host_os(&id, Some("ubuntu")).unwrap();
+        assert_eq!(vault.host_os(&id).as_deref(), Some("ubuntu"));
+        // The host item, its `updated_at` included, is untouched, so nothing is left to sync.
+        assert_eq!(vault.store.item_row(&id).unwrap(), row);
+        assert_eq!(vault.pending_count(), pending);
+        vault.lock();
+        assert_eq!(vault.host_os(&id).as_deref(), Some("ubuntu"));
+        vault.set_host_os(&id, None).unwrap();
+        assert_eq!(vault.host_os(&id), None);
+        assert_eq!(vault.last_connected(&id), Some(123));
     }
 
     #[test]
