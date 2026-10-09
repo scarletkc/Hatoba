@@ -291,6 +291,72 @@ fn enablement_and_always_allow_are_device_local() {
     assert_eq!(servers_list(&v).len(), 1);
 }
 
+#[test]
+fn a_command_line_changed_on_another_device_is_off_here_until_turned_on() {
+    let mut v = vault();
+    let input = stdio("files", vec![secret("TOKEN", Some(ENV_VALUE))]);
+    let id = save_server(&mut v, &input, None).unwrap().view.id;
+    set_always_allow(&mut v, &id, None, true).unwrap();
+    let view = |v: &Vault| servers_list(v).into_iter().find(|s| s.id == id).unwrap();
+    let on = |v: &Vault| {
+        let view = view(v);
+        view.enabled && view.always_allow
+    };
+
+    // Edited here, where the form shows the new command line: still on, still allowed.
+    let mut edit = stdio("files", Vec::new());
+    edit.id = Some(id.clone());
+    edit.transport = McpTransportInput::Stdio {
+        command: "uvx".into(),
+        args: vec!["mcp-files".into()],
+        env: vec![secret("TOKEN", None)],
+    };
+    save_server(&mut v, &edit, None).unwrap();
+    assert!(on(&v));
+
+    let sync = |v: &mut Vault, transport: McpTransport| {
+        let mut server = find_server(v, &id).unwrap();
+        server.transport = transport;
+        v.put(Some(&id), Item::McpServer(server)).unwrap();
+    };
+    let synced = |command: &str, args: &[&str], env: &[(&str, &str)]| McpTransport::Stdio {
+        command: command.into(),
+        args: args.iter().map(|a| (*a).to_owned()).collect(),
+        env: env
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), Zeroizing::new((*v).to_owned())))
+            .collect(),
+    };
+    // A new environment value from another device leaves the command line as it was.
+    sync(
+        &mut v,
+        synced("uvx", &["mcp-files"], &[("TOKEN", "rotated")]),
+    );
+    assert!(on(&v));
+
+    // Another command, other arguments or other environment names: off here, with no Always
+    // allow, until turned on here again.
+    for changed in [
+        synced("sh", &["mcp-files"], &[("TOKEN", "rotated")]),
+        synced("uvx", &["mcp-files", "--all"], &[("TOKEN", "rotated")]),
+        synced(
+            "uvx",
+            &["mcp-files"],
+            &[("TOKEN", "rotated"), ("EXTRA", "x")],
+        ),
+    ] {
+        set_enabled(&mut v, &id, true).unwrap();
+        set_always_allow(&mut v, &id, None, true).unwrap();
+        set_always_allow(&mut v, &id, Some("read"), true).unwrap();
+        sync(&mut v, changed);
+        let off = view(&v);
+        assert!(!off.enabled && !off.always_allow && off.always_allow_tools.is_empty());
+    }
+    set_enabled(&mut v, &id, true).unwrap();
+    let back = view(&v);
+    assert!(back.enabled && !back.always_allow && back.always_allow_tools.is_empty());
+}
+
 const IMPORT: &str = r#"{
   "mcpServers": {
     "files": {"command": "npx", "args": ["-y", "server-files"], "env": {"TOKEN": "env-value-NEVER-SHOWN"}},

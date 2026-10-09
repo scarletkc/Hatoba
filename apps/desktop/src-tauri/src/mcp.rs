@@ -4,7 +4,9 @@
 //! - [`DeviceState`]: whether a server is enabled on this device and what it always allows
 //!   (AI-29, AI-31), stored in the vault's device-local meta, readable while locked. A server
 //!   with no entry is enabled iff it uses `http`, so a `stdio` server that arrives from another
-//!   device stays off until the user turns it on here.
+//!   device stays off until the user turns it on here. What this device chose for a `stdio`
+//!   server holds for the command line it was chosen for: one changed on another device is off
+//!   here again, with no Always allow, until the user turns it on here.
 //! - [`McpManager`]: one entry per server started since unlock. A server starts when a request
 //!   needs its tools ([`McpManager::offer`]) or when the user starts it, lists its tools once,
 //!   and lists them again before the next request after `tools/list_changed`. Its state
@@ -91,12 +93,27 @@ pub struct DeviceServer {
     pub always_allow: bool,
     /// These tools (the server's own names) run without asking in manual mode.
     pub always_allow_tools: Vec<String>,
+    /// [`stdio_fingerprint`] of the command line this entry was chosen for; `None` for `http`.
+    pub stdio: Option<String>,
+}
+
+/// What identifies a `stdio` server's command line: a hash of the command, the arguments and
+/// the environment names. Environment values are secrets and the device state is not encrypted,
+/// so they are left out. `None` for `http`.
+pub fn stdio_fingerprint(transport: &McpTransport) -> Option<String> {
+    let McpTransport::Stdio { command, args, env } = transport else {
+        return None;
+    };
+    let names: Vec<&String> = env.keys().collect();
+    let encoded = serde_json::to_vec(&(command, args, names)).unwrap_or_default();
+    Some(hatoba_core::crypto::sha256_hex(&encoded))
 }
 
 impl DeviceState {
-    /// The stored state; an unreadable one counts as empty.
+    /// The stored state; an unreadable one counts as empty. While unlocked, the entry of a
+    /// `stdio` server whose command line is not the one it was chosen for counts as absent.
     pub fn load(v: &Vault) -> Self {
-        match v.mcp_device_state() {
+        let mut state = match v.mcp_device_state() {
             Ok(Some(json)) => serde_json::from_str(&json).unwrap_or_else(|_| {
                 tracing::warn!("the MCP device state is unreadable; starting from defaults");
                 Self::default()
@@ -106,7 +123,20 @@ impl DeviceState {
                 tracing::warn!("could not read the MCP device state");
                 Self::default()
             }
+        };
+        for (id, server) in v.mcp_servers() {
+            let Some(fingerprint) = stdio_fingerprint(&server.transport) else {
+                continue;
+            };
+            if state
+                .servers
+                .get(&id)
+                .is_some_and(|s| s.stdio.as_ref() != Some(&fingerprint))
+            {
+                state.servers.remove(&id);
+            }
         }
+        state
     }
 
     pub fn save(&self, v: &mut Vault) -> AppResult<()> {
@@ -120,8 +150,19 @@ impl DeviceState {
         self.servers.get(id).cloned().unwrap_or_default()
     }
 
-    pub fn server_mut(&mut self, id: &str) -> &mut DeviceServer {
-        self.servers.entry(id.to_owned()).or_default()
+    /// The entry of a server, to change: what it holds is chosen for `transport`.
+    pub fn server_mut(&mut self, id: &str, transport: &McpTransport) -> &mut DeviceServer {
+        let here = self.servers.entry(id.to_owned()).or_default();
+        here.stdio = stdio_fingerprint(transport);
+        here
+    }
+
+    /// Keeps the entry of a server that is edited on this device, where the form showed the new
+    /// command line (AI-29), chosen for its new transport.
+    pub fn edited(&mut self, id: &str, transport: &McpTransport) {
+        if self.servers.contains_key(id) {
+            self.server_mut(id, transport);
+        }
     }
 
     pub fn remove(&mut self, id: &str) {
@@ -579,7 +620,7 @@ impl McpManager {
         context: &AiTurnContext,
         cancel: &CancellationToken,
     ) -> Offer {
-        let (wanted, live) = {
+        let (wanted, live, off) = {
             let v = guard(vault);
             if !v.is_unlocked() {
                 return Offer::default();
@@ -587,21 +628,21 @@ impl McpManager {
             let device = DeviceState::load(&v);
             let servers = v.mcp_servers();
             let live: Vec<String> = servers.iter().map(|(id, _)| id.clone()).collect();
-            let mut wanted: Vec<(String, String, McpTransportConfig)> = servers
-                .into_iter()
-                .filter(|(id, s)| {
-                    device.enabled(id, &s.transport)
-                        && !context.disabled_mcp_servers.iter().any(|d| d == id)
-                })
-                .map(|(id, s)| {
+            let mut wanted: Vec<(String, String, McpTransportConfig)> = Vec::new();
+            let mut off = Vec::new();
+            for (id, s) in servers {
+                if !device.enabled(&id, &s.transport) {
+                    off.push(id);
+                } else if !context.disabled_mcp_servers.contains(&id) {
                     let config = transport_config(&s.transport);
-                    (id, s.name, config)
-                })
-                .collect();
+                    wanted.push((id, s.name, config));
+                }
+            }
             wanted.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-            (wanted, live)
+            (wanted, live, off)
         };
         self.prune(vault, &live);
+        self.stop_off(vault, &off);
         let lists = join_all(
             wanted
                 .iter()
@@ -637,6 +678,32 @@ impl McpManager {
                     conn.shutdown().await;
                 }
                 tracing::info!(server_id = %id, "MCP server stopped: it was deleted");
+                manager.emit(&vault, &id);
+            });
+        }
+    }
+
+    /// Stops the servers that run although they are off on this device: a `stdio` server whose
+    /// command line changed on another device (the switch already stops one turned off here).
+    fn stop_off(&self, vault: &SharedVault, off: &[String]) {
+        for id in off {
+            let Some(server) = self.existing(id) else {
+                continue;
+            };
+            let conn = {
+                let mut s = guard(&server.state);
+                if s.phase == McpServerState::Stopped {
+                    continue;
+                }
+                s.halt().conn
+            };
+            server.settled.notify_waiters();
+            let (manager, vault, id) = (self.clone(), Arc::clone(vault), id.clone());
+            spawn(async move {
+                if let Some(conn) = conn {
+                    conn.shutdown().await;
+                }
+                tracing::info!(server_id = %id, "MCP server stopped: it is off on this device");
                 manager.emit(&vault, &id);
             });
         }

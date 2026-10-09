@@ -263,7 +263,7 @@ pub(crate) struct Saved {
 }
 
 /// Stores a server from the form; `url` is checked already. A server created here is enabled on
-/// this device (AI-29).
+/// this device (AI-29); one edited here keeps what this device chose for it.
 pub(crate) fn save_server(
     v: &mut Vault,
     input: &McpServerInput,
@@ -282,6 +282,8 @@ pub(crate) fn save_server(
     let changed = existing
         .as_ref()
         .is_none_or(|s| s.name != name || s.transport != transport);
+    // Read before the new transport is stored, which the entry was not chosen for yet.
+    let mut device = DeviceState::load(v);
     let id = v.put(
         input.id.as_deref(),
         Item::McpServer(McpServer {
@@ -291,12 +293,16 @@ pub(crate) fn save_server(
             updated_at: 0,
         }),
     )?;
-    let mut device = DeviceState::load(v);
+    let server = find_server(v, &id)?;
+    let before = device.clone();
     if input.id.is_none() {
-        device.server_mut(&id).enabled = Some(true);
+        device.server_mut(&id, &server.transport).enabled = Some(true);
+    } else {
+        device.edited(&id, &server.transport);
+    }
+    if device != before {
         device.save(v)?;
     }
-    let server = find_server(v, &id)?;
     Ok(Saved {
         view: server_view(&id, &server, &device),
         changed,
@@ -313,9 +319,9 @@ pub(crate) fn delete_server(v: &mut Vault, id: &str) -> AppResult<()> {
 }
 
 pub(crate) fn set_enabled(v: &mut Vault, id: &str, enabled: bool) -> AppResult<()> {
-    find_server(v, id)?;
+    let server = find_server(v, id)?;
     let mut device = DeviceState::load(v);
-    device.server_mut(id).enabled = Some(enabled);
+    device.server_mut(id, &server.transport).enabled = Some(enabled);
     device.save(v)
 }
 
@@ -326,9 +332,9 @@ pub(crate) fn set_always_allow(
     tool: Option<&str>,
     allow: bool,
 ) -> AppResult<()> {
-    find_server(v, id)?;
+    let server = find_server(v, id)?;
     let mut device = DeviceState::load(v);
-    let here = device.server_mut(id);
+    let here = device.server_mut(id, &server.transport);
     match tool.map(str::trim) {
         None => here.always_allow = allow,
         Some("") => return Err(AppError::invalid("tool", "The tool name is empty.")),
@@ -421,16 +427,17 @@ pub(crate) fn import_servers(v: &mut Vault, report: ImportReport) -> AppResult<V
     let mut ids = Vec::with_capacity(report.servers.len());
     for server in report.servers {
         let name = free_name(v, &server.name);
+        let transport = core_transport(server.transport);
         let id = v.put(
             None,
             Item::McpServer(McpServer {
                 name,
-                transport: core_transport(server.transport),
+                transport: transport.clone(),
                 always_ask: false,
                 updated_at: 0,
             }),
         )?;
-        device.server_mut(&id).enabled = Some(true);
+        device.server_mut(&id, &transport).enabled = Some(true);
         ids.push(id);
     }
     device.save(v)?;

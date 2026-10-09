@@ -142,7 +142,7 @@ Without a search provider the assistant has no web search tool. In Settings → 
 - Command servers are started like a shell would: `npx` finds `npx.cmd` on Windows. Put only the program in **Command** and each argument on its own row; if the whole command line was pasted, use **Split Into Arguments**. A missing program or a wrong `PATH` is the usual cause of a failed start.
 - An HTTP server needs HTTPS (plain HTTP only for local and private addresses). Servers that need OAuth sign-in are not supported; use a token in **Headers** if the service allows it.
 - Servers start when a conversation first needs their tools and stop on quit or lock; after unlocking they start again when needed. A server switched off for this device, or for the conversation in the **MCP tools** menu, offers no tools.
-- A server added on another device arrives off if it is a Command server; switch it on here after checking the command.
+- A server added on another device arrives off if it is a Command server, and a Command server turns off here when its command, arguments or environment variable names change on another device (its **Always allow** is cleared too); switch it on here after checking the command.
 
 ## Still not solved
 
