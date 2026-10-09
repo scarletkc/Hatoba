@@ -116,7 +116,8 @@ pnpm install
 pnpm tauri dev
 ```
 
-On Windows, `pnpm tauri build` produces the NSIS installer. The
+On Windows, `pnpm tauri build --no-sign` produces the NSIS installer, without
+the update signature that only release builds carry. The
 [development guide](docs/development.md) covers the browser-only frontend,
 tests, and the generated TypeScript bindings.
 

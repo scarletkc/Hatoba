@@ -2,13 +2,17 @@
 // The Release workflow (.github/workflows/release.yml) runs each command, and docs/releasing.md
 // describes the steps.
 // Usage: node scripts/release/release.mjs <command> [options]
-//   check                            Check the version files, the release tag, and the release note
-//   gate                             Require a CI pass and an approval-gated release environment
+//   check                            Check the version files, the release tag, the release note, and
+//                                    the updater's public key
+//   gate                             Require a CI pass, an approval-gated release environment, and a
+//                                    signing environment limited to selected branches
 //   notes --output FILE              Write the release notes
-//   dist --bundle DIR --output DIR   Collect the installer and its checksum from the NSIS bundle
+//   dist --bundle DIR --notes FILE --output DIR
+//                                    Collect the installer, its updater signature, and its checksum
+//                                    from the NSIS bundle, and write the updater's latest.json
 //   publish --notes FILE --dist DIR  Create the GitHub Release, or upload the files it is missing
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,11 +21,76 @@ import { NOTES_DIR, ROOT, VERSION, compareVersions, isPrerelease, readVersion } 
 
 /** Keep in sync with the environment of the publish job in release.yml. */
 export const ENVIRONMENT = "release";
+/** Keep in sync with the environment of the build job in release.yml, which holds the update signing key. */
+export const SIGNING_ENVIRONMENT = "release-signing";
 export const CHECKSUMS = "SHA256SUMS.txt";
+/** The update manifest that installed apps read from the latest stable release (spec §11). */
+export const LATEST = "latest.json";
+/** Holds the public key that installed apps check updates against. */
+export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 
 /** Tauri names the NSIS installer <productName>_<version>_<arch>-setup.exe. */
 export function installerName(version) {
   return `Hatoba_${version}_x64-setup.exe`;
+}
+
+/** The updater signature that `tauri build` writes next to the installer. */
+export function signatureName(version) {
+  return `${installerName(version)}.sig`;
+}
+
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+const TRUSTED_COMMENT = "trusted comment: ";
+
+/** Tauri stores minisign keys and signatures base64-encoded; each decodes to minisign's text lines. */
+function minisignLines(text) {
+  return Buffer.from(text.trim(), "base64").toString("utf8").split("\n");
+}
+
+function parsePublicKey(pubkey) {
+  const [comment, line] = minisignLines(pubkey);
+  const bytes = Buffer.from(line ?? "", "base64");
+  if (!comment?.startsWith("untrusted comment:") || bytes.length !== 42 || bytes.subarray(0, 2).toString() !== "Ed") {
+    throw new Error(`plugins.updater.pubkey in ${TAURI_CONFIG} is not a minisign public key. Set it to the contents of the .pub file that \`pnpm tauri signer generate\` wrote.`);
+  }
+  const key = createPublicKey({ key: Buffer.concat([ED25519_SPKI_PREFIX, bytes.subarray(10)]), format: "der", type: "spki" });
+  return { id: bytes.subarray(2, 10), key };
+}
+
+/** Returns the updater's public key from tauri.conf.json, and refuses an empty or malformed one. */
+export function updaterPubkey(root = ROOT) {
+  const config = JSON.parse(readFileSync(join(root, TAURI_CONFIG), "utf8"));
+  const pubkey = config.plugins?.updater?.pubkey ?? "";
+  if (!pubkey) {
+    throw new Error(`plugins.updater.pubkey in ${TAURI_CONFIG} is empty. Set it to the public key of the update signing key, as docs/releasing.md describes.`);
+  }
+  parsePublicKey(pubkey);
+  return pubkey;
+}
+
+/**
+ * Checks a Tauri updater signature of `data` against `pubkey` as installed apps do, and returns the
+ * version the signature was made for, or null when it names none.
+ */
+export function verifyUpdaterSignature(data, signature, pubkey) {
+  const { id, key } = parsePublicKey(pubkey);
+  const [, line, trustedLine, globalLine] = minisignLines(signature);
+  const bytes = Buffer.from(line ?? "", "base64");
+  if (bytes.length !== 74 || !trustedLine?.startsWith(TRUSTED_COMMENT)) throw new Error("The updater signature is not a minisign signature.");
+  if (!bytes.subarray(2, 10).equals(id)) {
+    throw new Error(
+      `The installer was signed with another key than the one in ${TAURI_CONFIG}, so installed apps would refuse the update. Check that TAURI_SIGNING_PRIVATE_KEY in the ${SIGNING_ENVIRONMENT} environment belongs to that public key.`,
+    );
+  }
+  // "ED" signs the BLAKE2b-512 hash of the file, "Ed" the file itself.
+  const message = bytes.subarray(0, 2).toString() === "ED" ? createHash("blake2b512").update(data).digest() : data;
+  const signed = bytes.subarray(10);
+  const trusted = trustedLine.slice(TRUSTED_COMMENT.length);
+  const global = Buffer.from(globalLine ?? "", "base64");
+  if (!verify(null, message, key, signed) || !verify(null, Buffer.concat([signed, Buffer.from(trusted)]), key, global)) {
+    throw new Error("The updater signature does not match the installer.");
+  }
+  return trusted.split("\t").find((field) => field.startsWith("version:"))?.slice("version:".length) ?? null;
 }
 
 export function git(args, root = ROOT) {
@@ -193,20 +262,59 @@ async function gate(repository, root = ROOT) {
     );
   }
   console.log(`Publishing waits for approval in the ${ENVIRONMENT} environment.`);
+  const signing = await github(`${repository}/environments/${SIGNING_ENVIRONMENT}`, { allowMissing: true });
+  if (!signing?.deployment_branch_policy) {
+    throw new Error(
+      `The ${SIGNING_ENVIRONMENT} environment must exist and allow only selected branches, because its secrets sign updates. Set it up as docs/releasing.md describes, then rerun this workflow.`,
+    );
+  }
+  console.log(`The build signs updates with the secrets of the ${SIGNING_ENVIRONMENT} environment.`);
 }
 
-/** Copies the installer out of the NSIS bundle directory and writes its checksum next to it. */
-export function collectDist(version, bundle, output) {
+/** The release notes without the install instructions, which describe the manual download, for the updater. */
+export function updateNotes(notes, version) {
+  const install = installSection(version);
+  const at = notes.indexOf(install);
+  if (at === -1) throw new Error(`The release notes have no install section for ${version}. Write them with the notes command.`);
+  return [notes.slice(0, at).trimEnd(), notes.slice(at + install.length).trim()].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Copies the installer and its updater signature out of the NSIS bundle directory, checks the
+ * signature as installed apps will, and writes the installer's checksum and the updater's
+ * latest.json next to them. `notes` is the text the notes command wrote.
+ */
+export function collectDist(version, bundle, output, { notes, repository, pubkey, now = new Date() }) {
   const name = installerName(version);
+  const sig = signatureName(version);
   if (!existsSync(join(bundle, name))) {
     const found = existsSync(bundle) ? readdirSync(bundle).filter((file) => file.endsWith(".exe")) : [];
     throw new Error(`Expected the installer ${name} in ${bundle}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
   }
+  if (!existsSync(join(bundle, sig))) {
+    throw new Error(
+      `Expected the updater signature ${sig} in ${bundle}. \`pnpm tauri build\` writes it when TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set, as docs/releasing.md describes.`,
+    );
+  }
+  const installer = readFileSync(join(bundle, name));
+  const signature = readFileSync(join(bundle, sig), "utf8").trim();
+  const signed = verifyUpdaterSignature(installer, signature, pubkey);
+  if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
+  const latest = {
+    version,
+    notes: updateNotes(notes, version),
+    pub_date: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    platforms: {
+      "windows-x86_64": { signature, url: `https://github.com/${repository}/releases/download/v${version}/${name}` },
+    },
+  };
   mkdirSync(output, { recursive: true });
   copyFileSync(join(bundle, name), join(output, name));
-  const hash = createHash("sha256").update(readFileSync(join(output, name))).digest("hex");
+  copyFileSync(join(bundle, sig), join(output, sig));
+  const hash = createHash("sha256").update(installer).digest("hex");
   writeFileSync(join(output, CHECKSUMS), `${hash}  ${name}\n`);
-  return [name, CHECKSUMS];
+  writeFileSync(join(output, LATEST), `${JSON.stringify(latest, null, 2)}\n`);
+  return [name, sig, CHECKSUMS, LATEST];
 }
 
 function run(command, args, root) {
@@ -217,14 +325,14 @@ function run(command, args, root) {
 async function publish(version, repository, notes, dist, root = ROOT) {
   const { tag, sha } = releaseTarget(version, root);
   if (!existsSync(notes)) throw new Error(`${notes} does not exist; write it with the notes command.`);
-  const assets = [installerName(version), CHECKSUMS].map((name) => join(dist, name));
+  const assets = [installerName(version), signatureName(version), CHECKSUMS, LATEST].map((name) => join(dist, name));
   const absent = assets.filter((path) => !existsSync(path));
   if (absent.length > 0) throw new Error(`Missing release files: ${absent.join(", ")}. Collect them with the dist command.`);
   const prerelease = isPrerelease(version);
   // The list includes drafts, which have no tag yet and so are not found by tag.
   const existing = (await github(`${repository}/releases?per_page=100`)).find((release) => release.tag_name === tag);
   if (!existing) {
-    // A prerelease never becomes the latest release, which update checks read.
+    // A prerelease never becomes the latest release, whose latest.json installed apps read.
     const flags = prerelease ? ["--prerelease", "--latest=false"] : [];
     run("gh", ["release", "create", tag, ...assets, "--repo", repository, "--target", sha, "--title", `Hatoba ${tag}`, "--notes-file", notes, ...flags], root);
     return;
@@ -264,6 +372,7 @@ async function main() {
     case "check": {
       const { tag, sha } = releaseTarget(version);
       composeNotes(version, repository);
+      updaterPubkey();
       const previous = previousRelease(version);
       const source = previous ? `changes since ${previous}` : `notes only from ${NOTES_DIR}/${version}.md`;
       console.log(`Ready to release Hatoba ${tag} from ${sha.slice(0, 7)}, with ${source}.`);
@@ -281,7 +390,9 @@ async function main() {
     }
     case "dist": {
       const output = option("output");
-      console.log(`Collected ${collectDist(version, option("bundle"), output).join(" and ")} in ${output}`);
+      const notes = readFileSync(option("notes"), "utf8");
+      const files = collectDist(version, option("bundle"), output, { notes, repository, pubkey: updaterPubkey() });
+      console.log(`Collected ${files.join(", ")} in ${output}`);
       break;
     }
     case "publish":

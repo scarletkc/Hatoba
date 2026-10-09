@@ -79,6 +79,52 @@ Local `wrangler dev` has no `CF-Connecting-IP` header, so all requests share one
 
 Linux only. See [Run the end-to-end smoke test](../apps/desktop/e2e/README.md).
 
+### Signed updates
+
+The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mock endpoint. To try an update end to end on Windows without publishing a release, install a test build and serve it a newer one from this machine. The test builds have their own name, identifier, and executable, so they install next to Hatoba without touching it or its vault.
+
+1. Generate a throwaway key outside the repository:
+
+   ```sh
+   pnpm tauri signer generate --ci -p test -w <dir>/test.key
+   ```
+
+2. Write `<dir>/old.json`, with the contents of `<dir>/test.key.pub` as `pubkey`:
+
+   ```json
+   {
+     "productName": "Hatoba Update Test",
+     "mainBinaryName": "HatobaUpdateTest",
+     "identifier": "app.hatoba.updatetest",
+     "plugins": {
+       "updater": {
+         "pubkey": "<contents of test.key.pub>",
+         "endpoints": ["http://127.0.0.1:18765/latest.json"],
+         "dangerousInsecureTransportProtocol": true
+       }
+     }
+   }
+   ```
+
+   Write `<dir>/new.json` with the same contents and a `"version"` higher than the one in `Cargo.toml`.
+
+3. Build each version, and copy its installer and `.sig` out of `target/release/bundle/nsis` before the next build:
+
+   ```sh
+   export TAURI_SIGNING_PRIVATE_KEY=<dir>/test.key TAURI_SIGNING_PRIVATE_KEY_PASSWORD=test
+   pnpm tauri build --bundles nsis --config <dir>/old.json
+   pnpm tauri build --bundles nsis --config <dir>/new.json
+   ```
+
+4. Run the older installer, then serve the newer one:
+
+   ```sh
+   node scripts/release/serve-update.mjs --installer "<dir>/Hatoba Update Test_<version>_x64-setup.exe" --pubkey <dir>/test.key.pub
+   ```
+
+5. Open **Hatoba Update Test**, create a vault, and in **Settings → About** choose **Check for Updates**, then **Download and Install**. Hatoba closes, the installer shows its progress, and the new version opens.
+6. Uninstall **Hatoba Update Test** in the Windows settings, delete `%LOCALAPPDATA%\app.hatoba.updatetest`, and delete the throwaway key.
+
 ## Update the TypeScript bindings
 
 After changing a Rust command, event, or DTO, regenerate `apps/desktop/src/ipc/bindings.ts`:

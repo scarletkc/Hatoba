@@ -49,6 +49,9 @@ jobs:
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 90
+    # Holds the update signing key. It allows only main and has no required reviewers, because this
+    # job runs before the approval that the publish job waits for.
+    environment: release-signing
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,7 +65,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build --bundles nsis
-      - run: node scripts/release/release.mjs dist --bundle target/release/bundle/nsis --output dist
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes
+      - run: node scripts/release/release.mjs dist --bundle target/release/bundle/nsis --notes release-notes/release-notes.md --output dist
       - uses: actions/upload-artifact@v4
         with:
           name: hatoba-windows
