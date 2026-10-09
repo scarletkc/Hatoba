@@ -1,6 +1,6 @@
 {
   "name": "@hatoba/sync-worker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "End-to-end encrypted sync Worker for Hatoba (Cloudflare Workers + D1)",
   "license": "MIT",

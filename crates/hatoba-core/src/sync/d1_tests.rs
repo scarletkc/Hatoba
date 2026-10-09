@@ -3,6 +3,7 @@
 //! The stand-in (`FakeD1`) answers `POST …/d1/database/{id}/query` by executing the SQL against a
 //! real SQLite database, so the statements `D1Backend` sends are actually run, not just matched.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use rusqlite::types::{Value as SqlValue, ValueRef};
@@ -28,6 +29,8 @@ const PW: &str = "d1-test-password";
 struct FakeD1 {
     db: Mutex<rusqlite::Connection>,
     statements: Mutex<Vec<String>>,
+    /// Holds back the `meta.seq` catch-up at the end of a push, as if it had not run yet.
+    hold_meta_catch_up: AtomicBool,
 }
 
 impl FakeD1 {
@@ -35,6 +38,7 @@ impl FakeD1 {
         Arc::new(Self {
             db: Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
             statements: Mutex::new(Vec::new()),
+            hold_meta_catch_up: AtomicBool::new(false),
         })
     }
 
@@ -120,6 +124,14 @@ impl Respond for Responder {
             .map(to_sql)
             .collect();
         self.0.statements.lock().unwrap().push(sql.clone());
+        if self.0.hold_meta_catch_up.load(Ordering::SeqCst)
+            && sql.starts_with("UPDATE meta SET seq")
+        {
+            return ResponseTemplate::new(200).set_body_json(json!({
+                "success": true, "errors": [], "messages": [],
+                "result": [{ "results": [], "success": true, "meta": { "changes": 0, "duration": 0.1 } }]
+            }));
+        }
 
         let db = self.0.db.lock().unwrap();
         let mut stmt = match db.prepare(&sql) {
@@ -439,6 +451,85 @@ async fn push_uses_optimistic_concurrency_and_monotonic_seq() {
     );
 
     // seq values are unique and strictly increasing in commit order.
+    assert_eq!(
+        fake.scalar("SELECT COUNT(*) = COUNT(DISTINCT seq) FROM items")
+            .unwrap(),
+        "1"
+    );
+}
+
+/// One change written the way the sync Worker writes it (`applyChange` in
+/// `workers/sync/src/routes/items.ts`): bump `meta.seq`, then insert at it, in one transaction.
+fn worker_insert(fake: &FakeD1, id: &str) -> u64 {
+    let mut db = fake.db.lock().unwrap();
+    let tx = db.transaction().unwrap();
+    tx.execute(
+        "UPDATE meta SET seq = MAX(seq, (SELECT COALESCE(MAX(seq), 0) FROM items)) + 1 WHERE id = 1",
+        [],
+    )
+    .unwrap();
+    let seq: i64 = tx
+        .query_row(
+            "INSERT INTO items (id, envelope, revision, seq, deleted, updated_at) \
+             VALUES (?1, 'env', 1, (SELECT seq FROM meta WHERE id = 1), 0, 0) \
+             ON CONFLICT(id) DO NOTHING RETURNING seq",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    tx.commit().unwrap();
+    u64::try_from(seq).unwrap()
+}
+
+#[tokio::test]
+async fn direct_mode_and_worker_writes_never_share_a_seq() {
+    let (server, fake) = start().await;
+    let b = backend(&server);
+    b.setup(init(&random_key().unwrap(), &random_key().unwrap()))
+        .await
+        .unwrap();
+
+    // A direct-mode write lands, but its `meta.seq` catch-up has not run yet.
+    fake.hold_meta_catch_up.store(true, Ordering::SeqCst);
+    b.push(vec![change("a", 0, Some("env-a"), 1)])
+        .await
+        .unwrap();
+    fake.hold_meta_catch_up.store(false, Ordering::SeqCst);
+    assert_eq!(fake.scalar("SELECT seq FROM meta").unwrap(), "0");
+
+    // Another device pulls it and moves its cursor past it.
+    let page = b.pull(0, 100).await.unwrap();
+    assert_eq!(page.items.len(), 1);
+    let cursor = page.next_since;
+
+    // A device on the Worker writes next: its change must sort after the cursor.
+    let seq = worker_insert(&fake, "b");
+    assert!(seq > cursor, "worker seq {seq} reused cursor {cursor}");
+    let page = b.pull(cursor, 100).await.unwrap();
+    assert_eq!(
+        page.items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+        ["b"]
+    );
+    let cursor = page.next_since;
+
+    // The Worker used up a seq on a lost race, so `meta.seq` is ahead of every item.
+    fake.db
+        .lock()
+        .unwrap()
+        .execute("UPDATE meta SET seq = seq + 1 WHERE id = 1", [])
+        .unwrap();
+    let r = b
+        .push(vec![change("c", 0, Some("env-c"), 2)])
+        .await
+        .unwrap();
+    let PushResult::Ok { seq, .. } = r[0] else {
+        panic!("expected ok, got {r:?}")
+    };
+    assert_eq!(
+        seq,
+        cursor + 2,
+        "a direct-mode write skips the seq the Worker used up"
+    );
     assert_eq!(
         fake.scalar("SELECT COUNT(*) = COUNT(DISTINCT seq) FROM items")
             .unwrap(),
@@ -781,6 +872,13 @@ fn device(
     (share(vault), backend(server))
 }
 
+fn config() -> SyncConfig {
+    SyncConfig::D1 {
+        account_id: "acc".into(),
+        database_id: "db".into(),
+    }
+}
+
 fn info(name: &str) -> DeviceInfo {
     DeviceInfo {
         name: name.into(),
@@ -817,7 +915,10 @@ async fn two_devices_sync_through_d1_direct_mode() {
     enable_sync(&a, &a_backend, PW, None, info("a"))
         .await
         .unwrap();
-    restore_from_cloud(&b, &b_backend, PW, info("b"))
+    restore_from_cloud(&b, &b_backend, PW, info("b"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&b, &b_backend, &SyncOptions::default())
         .await
         .unwrap();
     assert_eq!(names(&b), ["d1-host"]);
@@ -860,10 +961,13 @@ async fn two_devices_sync_through_d1_direct_mode() {
         .unwrap();
     let (c, c_backend) = device(&server, &clock, false);
     assert!(matches!(
-        restore_from_cloud(&c, &c_backend, PW, info("c")).await,
+        restore_from_cloud(&c, &c_backend, PW, info("c"), &config()).await,
         Err(Error::WrongPassword)
     ));
-    restore_from_cloud(&c, &c_backend, "new-d1-password", info("c"))
+    restore_from_cloud(&c, &c_backend, "new-d1-password", info("c"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&c, &c_backend, &SyncOptions::default())
         .await
         .unwrap();
     assert_eq!(names(&c), ["edited-on-b"]);
@@ -895,7 +999,10 @@ async fn direct_mode_push_conflict_triggers_the_engine_retry_path() {
     enable_sync(&a, &a_backend, PW, None, info("a"))
         .await
         .unwrap();
-    restore_from_cloud(&b, &b_backend, PW, info("b"))
+    restore_from_cloud(&b, &b_backend, PW, info("b"), &config())
+        .await
+        .unwrap();
+    engine::sync_round(&b, &b_backend, &SyncOptions::default())
         .await
         .unwrap();
 

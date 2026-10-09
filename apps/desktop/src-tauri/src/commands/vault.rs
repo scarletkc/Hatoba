@@ -240,10 +240,14 @@ pub async fn vault_restore_from_cloud(
         backend.as_ref(),
         &password,
         sync::device_info(),
+        &cfg,
     )
     .await?;
     persist(&state, &cfg, &config, &session)?;
     state.sync.set_backend(Some(Arc::clone(&backend)));
+    // The first pull is an ordinary round: if it fails, the sync status shows why and the
+    // scheduler resumes from the saved cursor, so the restore itself has succeeded.
+    let _ = sync::run_round(&app).await;
     after_unlock(&app, &state);
     Ok(())
 }

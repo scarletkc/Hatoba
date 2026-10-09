@@ -3,7 +3,7 @@
 export const SERVICE_NAME = "hatoba-sync";
 export const API_VERSION = 1;
 /** Keep in sync with package.json (enforced by a test). */
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
