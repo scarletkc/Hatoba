@@ -198,9 +198,7 @@ pub(crate) async fn tcp_connect(
 }
 
 /// Connects to the first of `addrs` that accepts, as [`tcp_connect`] does after resolving.
-pub(crate) async fn connect_first(
-    addrs: &[SocketAddr],
-) -> Result<(TcpStream, Duration), SshError> {
+pub(crate) async fn connect_first(addrs: &[SocketAddr]) -> Result<(TcpStream, Duration), SshError> {
     let Some(last) = addrs.len().checked_sub(1) else {
         return Err(SshError::other("no address to connect to"));
     };

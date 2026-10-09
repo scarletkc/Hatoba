@@ -56,7 +56,7 @@ considered.
   logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`.
 - **Connection or authentication problem**: also the SSH server and its
   version, the authentication method, and whether the connection goes through
-  ProxyJump or ssh-agent.
+  ProxyJump, a SOCKS5 or HTTP proxy, or ssh-agent.
 - **Sync problem**: also whether you sync through a Worker or directly to D1,
   and for a Worker, the `version` that its `/v1/health` endpoint reports.
 - **Change to security, encryption, data formats, or the sync protocol**: the

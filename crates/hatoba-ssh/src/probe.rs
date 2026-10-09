@@ -42,7 +42,9 @@ pub async fn tcp_probe_via(
     let attempt = async {
         let started = Instant::now();
         let mut stream = proxy::reach(proxy).await.ok()?;
-        proxy::handshake(&mut stream, proxy, host, port).await.ok()?;
+        proxy::handshake(&mut stream, proxy, host, port)
+            .await
+            .ok()?;
         let mut first = [0u8; 1];
         (stream.read(&mut first).await.ok()? == 1).then(|| ceil_ms(started.elapsed()))
     };

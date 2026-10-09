@@ -23,13 +23,14 @@ Host: <name> (<address>:<port>)
 User: <user>
 Auth: password | key | ask | agent
 Jump host: <name>
+Proxy: socks5 | http <address>:<port> [(device default)]
 Error: ETIMEDOUT (ssh/timeout)
 Detail: <technical sentence>
 Attempts: <n>
 Time: <ISO time>
 ```
 
-`Error:` has the code and, in brackets, the error class and SSH kind. `Detail:` is the useful part; for a chain of jump hosts it starts with `hop i/N (host:port):`. Read the kind first, then the detail. A failed tab has no connected terminal, so the assistant cannot run commands on the host or read its screen; it can explain the error, say what to check, and name the Hatoba setting to change (**Address**, **Port**, **Method**, **Jump Host**, the key). It should not ask for passwords or keys.
+`Proxy:` names the proxy in use (`deleted` when it no longer exists). `Error:` has the code and, in brackets, the error class and SSH kind. `Detail:` is the useful part; for a chain of jump hosts it starts with `hop i/N (host:port):`. Read the kind first, then the detail. A failed tab has no connected terminal, so the assistant cannot run commands on the host or read its screen; it can explain the error, say what to check, and name the Hatoba setting to change (**Address**, **Port**, **Method**, **Jump Host**, **Proxy**, the key). It should not ask for passwords or keys.
 
 ## Each kind of failure
 
@@ -37,7 +38,7 @@ Messages that contain the host, port or seconds are paraphrased. "Edit" means **
 
 | Kind (code) | Meaning and typical detail | What to check, and where |
 |---|---|---|
-| `dns` (ENOTFOUND) | "Can’t find the host …". Detail: `cannot resolve <host>: …` | A typo in **Address**; a name that only resolves on a VPN or company DNS; DNS down. Edit the address, try the IP, connect the VPN. For a host behind a jump host the jump host resolves the name, so DNS problems there show as `channel` |
+| `dns` (ENOTFOUND) | "Can’t find the host …". Detail: `cannot resolve <host>: …` | A typo in **Address**; a name that only resolves on a VPN or company DNS; DNS down. Edit the address, try the IP, connect the VPN. For a host behind a jump host the jump host resolves the name, so DNS problems there show as `channel`; through a proxy the proxy resolves it |
 | `refused` (ECONNREFUSED) | "<host>:<port> refused the connection". Detail: `connect to <ip:port>: …refused` | sshd is not running, or **Port** is wrong (default 22; a server may listen on another port), or a firewall rejects it. Edit the port; start sshd |
 | `timeout` (ETIMEDOUT) | "<host>:<port> didn’t respond within 15 seconds". Detail: `timed out after 15 s while <phase>` where the phase is resolving the host name, establishing the TCP connection, the SSH handshake, authentication, or opening the tunnel channel | TCP phase: host down, wrong IP, or a firewall or cloud security group drops the port; try another network. Handshake: something other than sshd answers, or the server is overloaded. Authentication: very slow login (PAM, reverse DNS on the server). The limit applies to each hop; time spent in host key or verification-code dialogs does not count |
 | `unreachable` (ENETUNREACH) | "The network can’t reach <host>". Detail ends with `Network is unreachable` or `No route to host` | This PC has no route: network off, VPN down, an IPv6-only address without IPv6, or a private address from outside its network |
@@ -50,6 +51,10 @@ Messages that contain the host, port or seconds are paraphrased. "Edit" means **
 | `channel` (ECHANNEL) | See the labels below. Detail: `server refused to open the channel: …`, or `jump host could not open a tunnel to <host>:<port>` | Session limit (`MaxSessions`) or a user whose session is refused. With a jump host: the jump host forbids forwarding (`AllowTcpForwarding no`), or cannot reach the target |
 | `sftp` (ESFTP) | See the labels below | The SFTP subsystem is disabled on the server, or a file operation failed; see `references/sftp.md` |
 | `cancelled` (ECANCELED) | See the labels below | The connection was cancelled (a tab closed or a prompt cancelled). Nothing to fix |
+| `proxy_unreachable` (EPROXY) | See the labels below. Detail: `cannot reach the proxy <address:port>: …`, or `timed out … while connecting to the proxy` | The proxy is not running, or its **Address** or **Port** (Settings → Proxies) is wrong. Start or fix it, or choose **No proxy** |
+| `proxy_auth` (EPROXYAUTH) | See the labels below. Detail: `the proxy … requires a username and password`, `… rejected the username or password`, or `(HTTP 407)` | Set or fix the proxy's **Username** and **Password** in Settings → Proxies |
+| `proxy` (EPROXY) | "The proxy couldn’t connect to <host>:<port>…". Detail: `did not answer as a SOCKS5 proxy`, `closed the connection during the … handshake`, `not allowed by its rules`, `(HTTP 403)`, `(HTTP 502)`, or `closed before the SSH handshake finished` | The wrong **Type** (SOCKS5 and HTTP often use different ports), the proxy's rules block the server, or the proxy cannot reach it |
+| `proxy_missing` (EPROXY) | See the labels below. Detail: `the host's proxy was deleted` or `this device's default proxy was deleted` | Choose another **Proxy** in the host editor, or another default in Settings → Proxies |
 | `other` (EFAILED) | See the labels below. Detail examples: `ssh-agent is not available (is the "OpenSSH Authentication Agent" service running?)` | **SSH Agent** on Windows needs that service running; elsewhere `SSH_AUTH_SOCK` must point at an agent |
 
 | en | zh-CN | ja |
@@ -64,6 +69,9 @@ Messages that contain the host, port or seconds are paraphrased. "Edit" means **
 | The SFTP subsystem isn’t available. | SFTP 子系统不可用。 | SFTP サブシステムを利用できません。 |
 | The connection was cancelled. | 连接已取消。 | 接続をキャンセルしました。 |
 | The connection failed. | 连接失败。 | 接続に失敗しました。 |
+| Can’t reach the proxy. Check that it’s running and that its address and port are right. | 无法连接到代理。请确认代理正在运行，并且地址和端口正确。 | プロキシに接続できません。プロキシが動いているか、アドレスとポートが正しいか確認してください。 |
+| The proxy asks for a username and password, or didn’t accept the saved ones. | 代理要求用户名和密码，或者不接受已保存的用户名和密码。 | プロキシがユーザー名とパスワードを求めているか、保存されたものを受け入れませんでした。 |
+| The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies. | 这个连接使用的代理已被删除。请在主机设置或“设置 → 代理”中另选一个。 | この接続で使うプロキシは削除されています。ホストの設定か「設定 → プロキシ」で別のものを選んでください。 |
 
 Non-SSH reasons on the card: **Please check your input.** with code INVALID_INPUT means the host settings are unusable (the Detail says which, for example a deleted key or a missing password); "The vault is locked." means unlock first.
 
@@ -99,7 +107,11 @@ Set it in the host editor: **Organization & Network** → **Jump Host**, then pi
 - Each hop has its own host key prompt (first connection, or changed key) and may ask for a verification code.
 - If a jump host's connection dies later, the disconnect reason reads "the connection through jump host … was lost". The status bar shows "via" and the jump host's name.
 - To isolate a problem, connect to the jump host alone, then use **Test Connection** on the final host.
-- Not supported: HTTP or SOCKS proxies, and `ProxyCommand`. Use a jump host, or a system VPN or tunnel. Importing an SSH config keeps `ProxyJump` only when its first hop names a host that exists in Hatoba; otherwise the import warns.
+- Not supported: `ProxyCommand`. Use a jump host, a proxy (below), or a system VPN or tunnel. Importing an SSH config keeps `ProxyJump` only when its first hop names a host that exists in Hatoba; otherwise the import warns.
+
+## Proxies
+
+The choices are in `references/hosts-and-connecting.md`. Only the first hop (the host, or its outermost jump host) goes through the proxy, and the proxy resolves the server's name. `refused`, `unreachable` or `timeout` with the Detail `the proxy could not connect to …` happened on the proxy's side. **Device default** follows each device's own choice. Through a proxy, the status bar's latency is an SSH keepalive round trip. To isolate a problem, set **Proxy** to **No proxy** and use **Test Connection** when the server is reachable directly.
 
 ## Host key prompts and changes
 

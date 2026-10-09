@@ -187,17 +187,22 @@ mod tests {
     #[test]
     fn proxy_input_is_checked_and_the_password_kept() {
         let proxy = proxy_from_input(&input(ProxyKind::Socks5, "alice", Some("pw")), None).unwrap();
-        assert_eq!((proxy.name.as_str(), proxy.address.as_str()), ("Office", "::1"));
+        assert_eq!(
+            (proxy.name.as_str(), proxy.address.as_str()),
+            ("Office", "::1")
+        );
         assert_eq!(proxy.password.as_str(), "pw");
 
         // HOST-08: no password in the input keeps the saved one; an empty one removes it.
-        let kept = proxy_from_input(&input(ProxyKind::Socks5, "alice", None), Some(&proxy)).unwrap();
+        let kept =
+            proxy_from_input(&input(ProxyKind::Socks5, "alice", None), Some(&proxy)).unwrap();
         assert_eq!(kept.password.as_str(), "pw");
         let cleared =
             proxy_from_input(&input(ProxyKind::Socks5, "alice", Some("")), Some(&proxy)).unwrap();
         assert!(cleared.password.is_empty());
         // Without a username there is nothing to sign in with.
-        let anonymous = proxy_from_input(&input(ProxyKind::Socks5, "", None), Some(&proxy)).unwrap();
+        let anonymous =
+            proxy_from_input(&input(ProxyKind::Socks5, "", None), Some(&proxy)).unwrap();
         assert!(anonymous.password.is_empty());
 
         let err = proxy_from_input(&input(ProxyKind::Http, "a:b", None), None).unwrap_err();
@@ -242,7 +247,13 @@ mod tests {
 
         remove(&mut v, &id).unwrap();
         assert!(v.get(&id).is_none());
-        let proxy_of = |host_id: &str| v.get(host_id).and_then(Item::as_host).unwrap().proxy.clone();
+        let proxy_of = |host_id: &str| {
+            v.get(host_id)
+                .and_then(Item::as_host)
+                .unwrap()
+                .proxy
+                .clone()
+        };
         assert_eq!(proxy_of(&uses), HostProxy::DeviceDefault);
         assert_eq!(proxy_of(&keeps).proxy_id(), Some(other.as_str()));
         assert_eq!(device_default(&v), None);
@@ -250,6 +261,9 @@ mod tests {
         let prefs = LocalPrefs::from_stored(&v.local_prefs().unwrap().unwrap());
         assert_eq!(prefs.language, crate::dto::Language::Ja);
 
-        assert_eq!(remove(&mut v, &id).unwrap_err().code, crate::error::ErrorCode::NotFound);
+        assert_eq!(
+            remove(&mut v, &id).unwrap_err().code,
+            crate::error::ErrorCode::NotFound
+        );
     }
 }

@@ -144,24 +144,30 @@ export function HostEditPage({
     return e;
   };
 
-  const toInput = (): HostInput => ({
-    id: hostId,
-    name: form.name.trim(),
-    address: form.address.trim(),
-    port: Number(form.port),
-    username: form.username.trim(),
-    auth_kind: form.authKind,
-    password: form.authKind === "password" && form.password ? form.password : null,
-    key_id: form.authKind === "key" ? form.keyId : null,
-    group_id: form.groupId,
-    tags: form.tags,
-    favorite: form.favorite,
-    jump_host_id: form.jumpHostId,
-    proxy_mode: form.proxyMode,
-    proxy_id: form.proxyMode === "proxy" ? form.proxyId : null,
-    note: form.note,
-    ai_notes: form.aiNotes,
-  });
+  const toInput = (): HostInput => {
+    // Behind a jump host the picker is disabled, so a deleted proxy there goes back to the
+    // device default instead of blocking the save.
+    const proxyGone = form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId);
+    const proxyMode = proxyGone && form.jumpHostId ? "device_default" : form.proxyMode;
+    return {
+      id: hostId,
+      name: form.name.trim(),
+      address: form.address.trim(),
+      port: Number(form.port),
+      username: form.username.trim(),
+      auth_kind: form.authKind,
+      password: form.authKind === "password" && form.password ? form.password : null,
+      key_id: form.authKind === "key" ? form.keyId : null,
+      group_id: form.groupId,
+      tags: form.tags,
+      favorite: form.favorite,
+      jump_host_id: form.jumpHostId,
+      proxy_mode: proxyMode,
+      proxy_id: proxyMode === "proxy" ? form.proxyId : null,
+      note: form.note,
+      ai_notes: form.aiNotes,
+    };
+  };
 
   const showErrors = (e: Errors) => {
     setErrors(e);

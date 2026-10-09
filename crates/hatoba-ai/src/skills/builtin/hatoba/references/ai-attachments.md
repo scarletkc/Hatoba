@@ -26,7 +26,7 @@ Text selected in the tab's terminal appears as a chip above the input while the 
 
 When a connection fails, the card over the terminal has **Copy Diagnostics**, **Ask AI**, **Edit Host** and **Retry**. **Ask AI** opens the AI panel on that tab and does three things:
 
-- It attaches the connection diagnostics as a chip titled "Connection diagnostics · <host>". They hold the host's name, address and port, user name, authentication kind, jump host, error kind and detail, the number of attempts and the time, and never a password, key or passphrase. Like a selection, a very long text is cut.
+- It attaches the connection diagnostics as a chip titled "Connection diagnostics · <host>". They hold the host's name, address and port, user name, authentication kind, jump host, proxy, error kind and detail, the number of attempts and the time, and never a password, key or passphrase. Like a selection, a very long text is cut.
 - It puts a suggested question in the input, selected, so typing replaces it. This happens only when the input was empty; a draft you already wrote stays.
 - It sends nothing. Hover or click the chip to preview exactly what will be sent; × (**Don’t Attach the Diagnostics**) leaves it out. They stay on the tab until they are sent or removed.
 

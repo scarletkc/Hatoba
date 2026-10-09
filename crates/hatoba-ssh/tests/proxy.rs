@@ -178,7 +178,9 @@ async fn serve_http(
         );
         if !head.contains(&want) {
             return client
-                .write_all(b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n")
+                .write_all(
+                    b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+                )
                 .await;
         }
     }
@@ -235,13 +237,22 @@ async fn socks5_carries_the_session_and_resolves_the_name() {
     let server = server().await;
     let proxy = start_proxy(socks(None), Some(server.port)).await;
     let verifier = Verifier::accepting();
-    let session = connect(config(server.port, proxy.config(ProxyKind::Socks5, None)), verifier.clone())
-        .await
-        .expect("connected through the proxy");
-    assert_eq!(proxy.targets(), vec![format!("{SERVER_NAME}:{}", server.port)]);
+    let session = connect(
+        config(server.port, proxy.config(ProxyKind::Socks5, None)),
+        verifier.clone(),
+    )
+    .await
+    .expect("connected through the proxy");
+    assert_eq!(
+        proxy.targets(),
+        vec![format!("{SERVER_NAME}:{}", server.port)]
+    );
     // The host key is checked for the server, not the proxy.
     let calls = verifier.calls();
-    assert_eq!((calls[0].0.as_str(), calls[0].1), (SERVER_NAME, server.port));
+    assert_eq!(
+        (calls[0].0.as_str(), calls[0].1),
+        (SERVER_NAME, server.port)
+    );
     assert!(session.latency_ms() >= 1);
     session.disconnect().await;
 }
@@ -261,7 +272,10 @@ async fn proxy_credentials() {
         session.disconnect().await;
 
         let err = connect(
-            config(server.port, proxy.config(behaviour.kind, Some(("proxyuser", "wrong")))),
+            config(
+                server.port,
+                proxy.config(behaviour.kind, Some(("proxyuser", "wrong"))),
+            ),
             Verifier::accepting(),
         )
         .await
@@ -291,7 +305,10 @@ async fn http_connect_carries_the_session() {
     )
     .await
     .expect("connected through the HTTP proxy");
-    assert_eq!(proxy.targets(), vec![format!("{SERVER_NAME}:{}", server.port)]);
+    assert_eq!(
+        proxy.targets(),
+        vec![format!("{SERVER_NAME}:{}", server.port)]
+    );
     session.disconnect().await;
 }
 
@@ -336,7 +353,10 @@ async fn unreachable_servers_and_proxies() {
     .await
     .unwrap_err();
     assert_eq!(err.kind, SshErrorKind::Proxy, "{err}");
-    assert!(err.message.contains("closed before the SSH handshake"), "{err}");
+    assert!(
+        err.message.contains("closed before the SSH handshake"),
+        "{err}"
+    );
 
     // No proxy listening.
     let nothing = ProxyConfig::new(ProxyKind::Socks5, "127.0.0.1", free_port());
@@ -362,9 +382,17 @@ async fn probes_go_through_the_proxy_and_wait_for_the_server() {
     let timeout = Duration::from_secs(3);
     let proxy = start_proxy(socks(None), Some(server.port)).await;
     let cfg = proxy.config(ProxyKind::Socks5, None);
-    assert!(tcp_probe_via(Some(&cfg), SERVER_NAME, server.port, timeout).await.is_some());
+    assert!(
+        tcp_probe_via(Some(&cfg), SERVER_NAME, server.port, timeout)
+            .await
+            .is_some()
+    );
     // Without the proxy the name does not resolve.
-    assert!(tcp_probe_via(None, SERVER_NAME, server.port, timeout).await.is_none());
+    assert!(
+        tcp_probe_via(None, SERVER_NAME, server.port, timeout)
+            .await
+            .is_none()
+    );
 
     // A proxy that confirms at once does not make a missing server look online.
     let eager = start_proxy(
@@ -376,6 +404,14 @@ async fn probes_go_through_the_proxy_and_wait_for_the_server() {
     )
     .await;
     let cfg = eager.config(ProxyKind::Socks5, None);
-    assert!(tcp_probe_via(Some(&cfg), SERVER_NAME, free_port(), timeout).await.is_none());
-    assert!(tcp_probe_via(Some(&cfg), SERVER_NAME, server.port, timeout).await.is_some());
+    assert!(
+        tcp_probe_via(Some(&cfg), SERVER_NAME, free_port(), timeout)
+            .await
+            .is_none()
+    );
+    assert!(
+        tcp_probe_via(Some(&cfg), SERVER_NAME, server.port, timeout)
+            .await
+            .is_some()
+    );
 }

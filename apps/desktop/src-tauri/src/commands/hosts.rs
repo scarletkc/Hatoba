@@ -3,9 +3,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use hatoba_core::model::{
-    Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_CHARS, SshKey,
-};
+use hatoba_core::model::{Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -385,16 +383,19 @@ pub async fn hosts_probe(
             })
             .collect())
     })?;
-    let probes = targets.into_iter().map(|(id, host, port, proxy)| async move {
-        // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
-        let latency =
-            hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3)).await;
-        ProbeResult {
-            id,
-            online: latency.is_some(),
-            latency_ms: latency,
-        }
-    });
+    let probes = targets
+        .into_iter()
+        .map(|(id, host, port, proxy)| async move {
+            // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
+            let latency =
+                hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3))
+                    .await;
+            ProbeResult {
+                id,
+                online: latency.is_some(),
+                latency_ms: latency,
+            }
+        });
     Ok(futures::future::join_all(probes).await)
 }
 

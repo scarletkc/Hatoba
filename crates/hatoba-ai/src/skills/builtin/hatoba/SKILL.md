@@ -17,7 +17,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - Tab bar (top, merged with the title bar). The first tab is the home tab. It shows the page chosen in the sidebar: the host list, the host editor, Keys or Cloud Sync. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs. Then **New Tab** (+), which goes to the host list and focuses the search box, and the AI button (sparkle). Windows and Linux show their own minimize, maximize and close buttons here; macOS uses its native window buttons.
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding**, **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
-- Settings. A window with the tabs General, Appearance, Terminal, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
+- Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
 Labels (the exact strings in each language):
@@ -55,6 +55,7 @@ Labels (the exact strings in each language):
 | General | 通用 | 一般 |
 | Appearance | 外观 | 外観 |
 | Terminal | 终端 | ターミナル |
+| Proxies | 代理 | プロキシ |
 | Security | 安全 | セキュリティ |
 | AI | AI | AI |
 | About | 关于 | 情報 |
@@ -65,7 +66,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 
 | File | Read it when the question is about |
 |---|---|
-| `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, importing an SSH config, host key prompts, connecting and reconnecting |
+| `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, importing an SSH config, host key prompts, connecting and reconnecting |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
@@ -78,8 +79,8 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/ai-instructions.md` | Custom Instructions in Settings → AI and a host's AI Notes: what they are for, limits, saving and sync, how the assistant follows them |
 | `references/ai-settings.md` | Settings → AI: providers and models (including each model's thinking levels), web search, default model and thinking level, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
-| `references/settings.md` | General, Appearance, Security and About settings, language, update check, Report a Problem, and which settings sync |
-| `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, …), jump hosts, host key prompts, keepalive and the disconnect banner, and how to read the diagnostics that **Ask AI** attaches |
+| `references/settings.md` | General, Appearance, Proxies, Security and About settings, language, update check, Report a Problem, and which settings sync |
+| `references/troubleshooting-connections.md` | A failed or dropped SSH connection: every error kind (dns, refused, timeout, authentication, host key, proxy, …), jump hosts, proxies, host key prompts, keepalive and the disconnect banner, and how to read the diagnostics that **Ask AI** attaches |
 | `references/troubleshooting.md` | Key, master password, recovery, SFTP and other error messages |
 | `references/troubleshooting-sync.md` | Sync and Cloudflare errors and what to do |
 | `references/troubleshooting-ai.md` | AI provider, search and MCP errors and what to do |
@@ -103,7 +104,7 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - A bug: **Report a Problem** in Settings → About (the star card in the sidebar has it too). It opens GitHub's bug report form with the Hatoba version and the operating system filled in.
 - A feature request: https://github.com/scarletkc/Hatoba/issues/new?template=feature_request.yml (the "Suggest a feature" form: the problem, where it happens, what happens if nothing changes, a proposed solution).
 - A security vulnerability: report it privately at https://github.com/scarletkc/Hatoba/security/advisories/new, not as a public issue.
-- Offer to draft the text: what happened, the steps, what was expected, the version (Settings → About) and OS, and for a connection or sync problem the SSH server, the authentication method, ProxyJump or ssh-agent, or whether sync uses a Worker or direct D1. Remind the user to leave out host names, addresses, keys, passwords, tokens, recovery codes and other secrets, and to read any logs before pasting them (on Windows they are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`). The user submits the report; never submit anything on their behalf.
+- Offer to draft the text: what happened, the steps, what was expected, the version (Settings → About) and OS, and for a connection or sync problem the SSH server, the authentication method, ProxyJump, a proxy or ssh-agent, or whether sync uses a Worker or direct D1. Remind the user to leave out host names, addresses, keys, passwords, tokens, recovery codes and other secrets, and to read any logs before pasting them (on Windows they are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`). The user submits the report; never submit anything on their behalf.
 
 *Newer information.* This skill describes the build it ships with. When the user asks about the latest version, recent changes, or whether a feature exists in a newer release, use `fetch_url` (when offered; in manual approval mode it asks first) or `web_search` on these pages:
 
@@ -126,4 +127,4 @@ Labels used above:
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, installing updates from inside the app (updates are downloaded from GitHub Releases), team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, installing updates from inside the app (updates are downloaded from GitHub Releases), team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).

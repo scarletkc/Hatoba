@@ -18,8 +18,8 @@ mod sync;
 mod update;
 
 use commands::{
-    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, mcp as mcp_cmd, proxies,
-    quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
+    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, mcp as mcp_cmd, proxies, quick,
+    settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};

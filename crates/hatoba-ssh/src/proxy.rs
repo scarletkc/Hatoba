@@ -111,7 +111,9 @@ pub(crate) async fn reach(proxy: &ProxyConfig) -> Result<TcpStream, SshError> {
             format!("cannot reach the proxy {}: {}", proxy.label(), e.message),
         )
     };
-    let addrs = resolve(&proxy.host, proxy.port).await.map_err(unreachable)?;
+    let addrs = resolve(&proxy.host, proxy.port)
+        .await
+        .map_err(unreachable)?;
     let (stream, _) = connect_first(&addrs).await.map_err(unreachable)?;
     Ok(stream)
 }
@@ -278,9 +280,7 @@ where
         None => {
             let name = host.as_bytes();
             let Some(len) = u8::try_from(name.len()).ok().filter(|l| *l > 0) else {
-                return Err(proxy_error(
-                    "SOCKS5 host names are 1 to 255 bytes long",
-                ));
+                return Err(proxy_error("SOCKS5 host names are 1 to 255 bytes long"));
             };
             request.push(3);
             request.push(len);
@@ -360,17 +360,15 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     if host.is_empty() || host.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return Err(proxy_error("the server address cannot be sent to an HTTP proxy"));
+        return Err(proxy_error(
+            "the server address cannot be sent to an HTTP proxy",
+        ));
     }
     let target = authority(host, port);
-    let mut request = Zeroizing::new(format!(
-        "CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n"
-    ));
+    let mut request = Zeroizing::new(format!("CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n"));
     if !proxy.username.is_empty() {
         if proxy.username.contains(':') {
-            return Err(auth_error(
-                "HTTP proxy usernames cannot contain a colon",
-            ));
+            return Err(auth_error("HTTP proxy usernames cannot contain a colon"));
         }
         let credentials = Zeroizing::new(format!("{}:{}", proxy.username, *proxy.password));
         let encoded = Zeroizing::new(BASE64.encode(credentials.as_bytes()));
@@ -434,9 +432,7 @@ fn parse_status(head: &[u8]) -> Option<u16> {
         return None;
     }
     let code = parts.next()?;
-    (code.len() == 3)
-        .then(|| code.parse().ok())
-        .flatten()
+    (code.len() == 3).then(|| code.parse().ok()).flatten()
 }
 
 #[cfg(test)]
@@ -460,7 +456,12 @@ mod tests {
     }
 
     /// Runs the handshake against `server`, which plays the proxy on the other end of a pipe.
-    async fn run<F, Fut>(proxy: ProxyConfig, host: &str, port: u16, server: F) -> Result<Vec<u8>, SshError>
+    async fn run<F, Fut>(
+        proxy: ProxyConfig,
+        host: &str,
+        port: u16,
+        server: F,
+    ) -> Result<Vec<u8>, SshError>
     where
         F: FnOnce(tokio::io::DuplexStream) -> Fut,
         Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -495,7 +496,9 @@ mod tests {
             want.extend_from_slice(&22u16.to_be_bytes());
             expect(&mut far, &want).await;
             // Bound address as a domain name, then the server's banner right behind it.
-            far.write_all(&[5, 0, 0, 3, 3, b'a', b'b', b'c', 0, 80]).await.unwrap();
+            far.write_all(&[5, 0, 0, 3, 3, b'a', b'b', b'c', 0, 80])
+                .await
+                .unwrap();
             far.write_all(b"SSH-2.0-test\r\n").await.unwrap();
         })
         .await
@@ -505,14 +508,21 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_with_auth_and_ip_targets() {
-        run(socks("alice", "s3cret"), "10.0.0.7", 2222, |mut far| async move {
-            expect(&mut far, &[5, 2, 0, 2]).await;
-            far.write_all(&[5, 2]).await.unwrap();
-            expect(&mut far, b"\x01\x05alice\x06s3cret").await;
-            far.write_all(&[1, 0]).await.unwrap();
-            expect(&mut far, &[5, 1, 0, 1, 10, 0, 0, 7, 0x08, 0xae]).await;
-            far.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await.unwrap();
-        })
+        run(
+            socks("alice", "s3cret"),
+            "10.0.0.7",
+            2222,
+            |mut far| async move {
+                expect(&mut far, &[5, 2, 0, 2]).await;
+                far.write_all(&[5, 2]).await.unwrap();
+                expect(&mut far, b"\x01\x05alice\x06s3cret").await;
+                far.write_all(&[1, 0]).await.unwrap();
+                expect(&mut far, &[5, 1, 0, 1, 10, 0, 0, 7, 0x08, 0xae]).await;
+                far.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0])
+                    .await
+                    .unwrap();
+            },
+        )
         .await
         .unwrap();
 
@@ -520,7 +530,12 @@ mod tests {
             expect(&mut far, &[5, 1, 0]).await;
             far.write_all(&[5, 0]).await.unwrap();
             let mut want = vec![5, 1, 0, 4];
-            want.extend_from_slice(&"2001:db8::1".parse::<std::net::Ipv6Addr>().unwrap().octets());
+            want.extend_from_slice(
+                &"2001:db8::1"
+                    .parse::<std::net::Ipv6Addr>()
+                    .unwrap()
+                    .octets(),
+            );
             want.extend_from_slice(&22u16.to_be_bytes());
             expect(&mut far, &want).await;
             let mut reply = vec![5, 0, 0, 4];
@@ -544,7 +559,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::ProxyAuth);
         assert!(err.message.contains("rejected"), "{err}");
-        assert!(!err.message.contains("wrong"), "no password in messages: {err}");
+        assert!(
+            !err.message.contains("wrong"),
+            "no password in messages: {err}"
+        );
 
         let err = run(socks("", ""), "h", 22, |mut far| async move {
             expect(&mut far, &[5, 1, 0]).await;
@@ -564,13 +582,20 @@ mod tests {
             (0x05, SshErrorKind::Refused),
             (0x06, SshErrorKind::Timeout),
         ] {
-            let err = run(socks("", ""), "db.internal", 22, move |mut far| async move {
-                expect(&mut far, &[5, 1, 0]).await;
-                far.write_all(&[5, 0]).await.unwrap();
-                let mut buf = vec![0u8; 7 + "db.internal".len()];
-                far.read_exact(&mut buf).await.unwrap();
-                far.write_all(&[5, code, 0, 1, 0, 0, 0, 0, 0, 0]).await.unwrap();
-            })
+            let err = run(
+                socks("", ""),
+                "db.internal",
+                22,
+                move |mut far| async move {
+                    expect(&mut far, &[5, 1, 0]).await;
+                    far.write_all(&[5, 0]).await.unwrap();
+                    let mut buf = vec![0u8; 7 + "db.internal".len()];
+                    far.read_exact(&mut buf).await.unwrap();
+                    far.write_all(&[5, code, 0, 1, 0, 0, 0, 0, 0, 0])
+                        .await
+                        .unwrap();
+                },
+            )
             .await
             .unwrap_err();
             assert_eq!(err.kind, kind, "{code:#04x}: {err}");
@@ -584,12 +609,17 @@ mod tests {
         let err = run(socks("", ""), "h", 22, |mut far| async move {
             let mut buf = [0u8; 3];
             far.read_exact(&mut buf).await.unwrap();
-            far.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n").await.unwrap();
+            far.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                .await
+                .unwrap();
         })
         .await
         .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::Proxy);
-        assert!(err.message.contains("did not answer as a SOCKS5 proxy"), "{err}");
+        assert!(
+            err.message.contains("did not answer as a SOCKS5 proxy"),
+            "{err}"
+        );
 
         // A SOCKS5 proxy configured as HTTP hangs up on the request.
         let err = run(http("", ""), "h", 22, |far| async move { drop(far) })
@@ -633,7 +663,11 @@ mod tests {
     #[tokio::test]
     async fn http_connect_status_codes() {
         for (status, kind, needle) in [
-            ("407 Proxy Authentication Required", SshErrorKind::ProxyAuth, "requires a username"),
+            (
+                "407 Proxy Authentication Required",
+                SshErrorKind::ProxyAuth,
+                "requires a username",
+            ),
             ("403 Forbidden", SshErrorKind::Proxy, "HTTP 403"),
             ("502 Bad Gateway", SshErrorKind::Proxy, "HTTP 502"),
             ("504 Gateway Timeout", SshErrorKind::Timeout, "HTTP 504"),
@@ -654,10 +688,14 @@ mod tests {
 
     #[tokio::test]
     async fn http_connect_rejects_bad_input_and_endless_heads() {
-        let err = run(http("", ""), "h\r\nX: y", 22, |_| async {}).await.unwrap_err();
+        let err = run(http("", ""), "h\r\nX: y", 22, |_| async {})
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::Proxy);
 
-        let err = run(http("a:b", ""), "h", 22, |_| async {}).await.unwrap_err();
+        let err = run(http("a:b", ""), "h", 22, |_| async {})
+            .await
+            .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::ProxyAuth);
 
         let err = run(http("", ""), "h", 22, |mut far| async move {
