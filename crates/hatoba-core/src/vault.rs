@@ -945,6 +945,22 @@ impl Vault {
         self.store.host_os(host_id).ok().flatten()
     }
 
+    /// Turns the resource usage in a host's terminals on or off (TERM-12). Device-local; never
+    /// synced.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_host_show_stats(&mut self, host_id: &str, on: bool) -> Result<()> {
+        self.store.set_host_show_stats(host_id, on)
+    }
+
+    /// Whether a host's terminals show the server's resource usage on this device. Off until
+    /// turned on.
+    #[must_use]
+    pub fn host_show_stats(&self, host_id: &str) -> bool {
+        self.store.host_show_stats(host_id).unwrap_or(false)
+    }
+
     /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while locked.
     ///
     /// # Errors
@@ -1962,6 +1978,22 @@ mod tests {
         vault.set_host_os(&id, None).unwrap();
         assert_eq!(vault.host_os(&id), None);
         assert_eq!(vault.last_connected(&id), Some(123));
+    }
+
+    #[test]
+    fn show_stats_is_device_local_and_off_by_default() {
+        let (mut vault, _clock, _code) = created();
+        let id = vault.put(None, host("h")).unwrap();
+        let row = vault.store.item_row(&id).unwrap();
+        let pending = vault.pending_count();
+        assert!(!vault.host_show_stats(&id));
+        vault.set_host_show_stats(&id, true).unwrap();
+        assert!(vault.host_show_stats(&id));
+        // The host item is untouched, so nothing is left to sync.
+        assert_eq!(vault.store.item_row(&id).unwrap(), row);
+        assert_eq!(vault.pending_count(), pending);
+        vault.set_host_show_stats(&id, false).unwrap();
+        assert!(!vault.host_show_stats(&id));
     }
 
     #[test]

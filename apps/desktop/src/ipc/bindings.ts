@@ -56,6 +56,8 @@ export const commands = {
 	hostDelete: (id: string) => __TAURI_INVOKE<null>("host_delete", { id }),
 	hostDuplicate: (id: string) => __TAURI_INVOKE<HostView>("host_duplicate", { id }),
 	hostSetFavorite: (id: string, favorite: boolean) => __TAURI_INVOKE<null>("host_set_favorite", { id, favorite }),
+	/**  Turns the resource usage in a host's terminals on or off on this device (TERM-12). */
+	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
 	/**
 	 *  SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
 	 *  and clears it after 30 s if the clipboard still holds it.
@@ -99,6 +101,13 @@ export const commands = {
 	sshWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("ssh_write", { sessionId, data }),
 	sshResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("ssh_resize", { sessionId, cols, rows }),
 	sshDisconnect: (sessionId: string) => __TAURI_INVOKE<null>("ssh_disconnect", { sessionId }),
+	/**
+	 *  Starts reading the server's resource usage for the terminal's status bar (TERM-12), in
+	 *  place of a sampling already running on the session. Readings stream on `channel` until
+	 *  `ssh_stats_stop`, the end of the session, or the WebView dropping the channel.
+	 */
+	sshStatsStart: (sessionId: string, channel: Channel<StatsEvent>) => __TAURI_INVOKE<null>("ssh_stats_start", { sessionId, channel }),
+	sshStatsStop: (sessionId: string) => __TAURI_INVOKE<void>("ssh_stats_stop", { sessionId }),
 	/**  "Test connection" in the host editor: connect, authenticate, verify the host key, disconnect. */
 	sshTest: (input: HostInput) => __TAURI_INVOKE<TestResult>("ssh_test", { input }),
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),
@@ -825,6 +834,11 @@ export type HostView = {
 	 *  from this device, such as `ubuntu` (HOST-11). Device-local, like `last_connected_at`.
 	 */
 	os: string | null,
+	/**
+	 *  The host's terminals show the server's resource usage on this device (TERM-12).
+	 *  Device-local, like `last_connected_at`, and off until turned on.
+	 */
+	show_stats: boolean,
 };
 
 export type ImportResult = {
@@ -1030,6 +1044,34 @@ export type SearchProviderView = {
 	updated_at: number,
 };
 
+/**
+ *  One reading of a server's resource usage (TERM-12). Sizes are in bytes and rates in bytes
+ *  per second; what the server did not report is `None`.
+ */
+export type ServerStatsView = {
+	/**  Busy share of all CPUs since the previous reading, 0 to 100; `None` in the first one. */
+	cpu_percent: number | null,
+	cpus: number | null,
+	/**  Load averages over 1, 5 and 15 minutes. */
+	load: [(number | null), (number | null), (number | null)] | null,
+	mem_total: number | null,
+	/**  The total less what the kernel counts as available. */
+	mem_used: number | null,
+	/**  Zero when the server has no swap. */
+	swap_total: number | null,
+	swap_used: number | null,
+	net_rx_rate: number | null,
+	net_tx_rate: number | null,
+	/**  The interfaces the rates count: those of the default routes, or else all but loopback. */
+	net_interfaces: string[],
+	/**  The root filesystem. */
+	disk_total: number | null,
+	disk_used: number | null,
+	/**  Space left for unprivileged users, as `df` counts it. */
+	disk_available: number | null,
+	uptime_secs: number | null,
+};
+
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";
 
 export type SessionStateEvent = {
@@ -1130,6 +1172,18 @@ export type StarPrompt = {
 	/**  The user starred the repository, opened the bug report form, or closed the prompt. */
 	done: boolean,
 };
+
+/**  Streamed on the channel of `ssh_stats_start` (TERM-12). */
+export type StatsEvent = 
+/**  A reading, one per interval. */
+{ kind: "stats"; stats: ServerStatsView } | 
+/**
+ *  The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
+ *  or empty when unknown.
+ */
+{ kind: "unsupported"; system: string } | 
+/**  Sampling stopped on its own (the script failed or the connection ended); the last event. */
+{ kind: "ended"; error: AppError };
 
 export type SyncConfigInput = { kind: "worker"; url: string; setup_token: string | null } | { kind: "d1"; account_id: string; database_id: string; api_token: string };
 

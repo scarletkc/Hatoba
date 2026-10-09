@@ -95,6 +95,10 @@
   --os-netbsd: #ff6600;
   --os-windows: #0078d4;
 
+  /* Resource usage charts (TERM-12): received in the accent, sent in this purple; the pair passes
+     the color-vision checks against the popover on both themes */
+  --chart-tx: oklch(0.58 0.15 315);
+
   /* Windows caption buttons */
   --caption-hover: rgba(0, 0, 0, 0.06);
   --caption-close: #c42b1c;
@@ -137,6 +141,7 @@
   --os-raspbian: #e16379;
   --os-freebsd: #e66259;
   --os-windows: #3395f4;
+  --chart-tx: oklch(0.63 0.15 315);
 
   color-scheme: dark;
 }

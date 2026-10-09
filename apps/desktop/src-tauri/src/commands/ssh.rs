@@ -1,6 +1,8 @@
-//! Terminal sessions (spec §7.1, §7.2, §10.3), including quick connect (HOST-12).
+//! Terminal sessions (spec §7.1, §7.2, §10.3), including quick connect (HOST-12) and the
+//! server's resource usage (TERM-12).
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use hatoba_core::model::Item;
 use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
@@ -12,8 +14,9 @@ use zeroize::Zeroizing;
 
 use crate::commands::hosts::host_from_input;
 use crate::commands::quick;
+use crate::convert::stats_view;
 use crate::dto::{
-    ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, TestResult,
+    ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, StatsEvent, TestResult,
 };
 use crate::error::{AppError, AppResult};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with};
@@ -25,6 +28,8 @@ const FRAME_ERROR: u8 = 2;
 /// The session id, sent before connecting: the tab can then answer the session's host-key and
 /// login prompts for itself if it closes while they are open.
 const FRAME_SESSION: u8 = 3;
+/// How often the status bar's resource usage is read (TERM-12).
+const STATS_INTERVAL: Duration = Duration::from_secs(2);
 
 /// One terminal frame on the per-session channel: tag byte + payload. Sent through Tauri's raw
 /// binary IPC path (an `ArrayBuffer` in the WebView), never as a JSON number array (§10.3).
@@ -283,6 +288,45 @@ pub async fn ssh_resize(
         .resize(cols.clamp(10, 1000), rows.clamp(2, 500))
         .await;
     Ok(())
+}
+
+/// Starts reading the server's resource usage for the terminal's status bar (TERM-12), in
+/// place of a sampling already running on the session. Readings stream on `channel` until
+/// `ssh_stats_stop`, the end of the session, or the WebView dropping the channel.
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_stats_start(
+    state: State<'_, AppState>,
+    session_id: String,
+    channel: Channel<StatsEvent>,
+) -> AppResult<()> {
+    let live = state.ssh.get(&session_id)?;
+    let (handle, mut events) = live.session.open_stats(STATS_INTERVAL).await?;
+    live.set_stats(handle);
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = events.recv().await {
+            let event = match event {
+                hatoba_ssh::StatsEvent::Stats(stats) => StatsEvent::Stats {
+                    stats: stats_view(*stats),
+                },
+                hatoba_ssh::StatsEvent::Unsupported(system) => StatsEvent::Unsupported { system },
+                hatoba_ssh::StatsEvent::Ended(err) => StatsEvent::Ended { error: err.into() },
+            };
+            // Dropping `events` once the WebView is gone stops the sampling.
+            if channel.send(event).is_err() {
+                break;
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn ssh_stats_stop(state: State<'_, AppState>, session_id: String) {
+    if let Ok(live) = state.ssh.get(&session_id) {
+        live.stop_stats();
+    }
 }
 
 #[tauri::command]

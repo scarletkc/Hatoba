@@ -1,0 +1,37 @@
+/* Resource usage charts (TERM-12): 2px lines, a recessive baseline, a ringed dot on the reading shown. */
+
+.chart {
+  display: block;
+  overflow: visible;
+  cursor: crosshair;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.chart:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.baseline {
+  stroke: var(--line2);
+  stroke-width: 1;
+}
+
+.hairline {
+  stroke: var(--fg3);
+  stroke-width: 1;
+}
+
+.line {
+  fill: none;
+  stroke: var(--spark-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dot {
+  fill: var(--spark-dot);
+  stroke: var(--sheet);
+  stroke-width: 2;
+}

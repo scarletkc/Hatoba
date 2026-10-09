@@ -20,6 +20,7 @@ import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
+import { mockStats } from "./data";
 import { FakeShell } from "./shell";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
@@ -94,6 +95,12 @@ export function createMockApi(): HatobaApi {
   let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null = null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
+  /** TERM-12: the mock resource usage of each session that shows it. */
+  const statsTimers = new Map<string, ReturnType<typeof setInterval>>();
+  const stopStats = (sid: string) => {
+    clearInterval(statsTimers.get(sid));
+    statsTimers.delete(sid);
+  };
   let seq = 0;
 
   function makeSync(): SyncStatus {
@@ -316,6 +323,7 @@ export function createMockApi(): HatobaApi {
         updated_at: Date.now(),
         last_connected_at: existing?.last_connected_at ?? null,
         os: existing?.os ?? null,
+        show_stats: existing?.show_stats ?? false,
       };
       hosts = existing ? hosts.map((h) => (h.id === view.id ? view : h)) : [...hosts, view];
       touch();
@@ -328,7 +336,7 @@ export function createMockApi(): HatobaApi {
     host_duplicate: async (hid) => {
       const h = hosts.find((x) => x.id === hid);
       if (!h) fail("not_found");
-      const copy = { ...h, id: id("h"), name: `${h.name}-copy`, favorite: false, last_connected_at: null, os: null };
+      const copy = { ...h, id: id("h"), name: `${h.name}-copy`, favorite: false, last_connected_at: null, os: null, show_stats: false };
       hosts = [...hosts, copy];
       touch();
       return copy;
@@ -336,6 +344,10 @@ export function createMockApi(): HatobaApi {
     host_set_favorite: async (hid, favorite) => {
       hosts = hosts.map((h) => (h.id === hid ? { ...h, favorite } : h));
       touch();
+    },
+    host_set_show_stats: async (hid, on) => {
+      needUnlocked();
+      hosts = hosts.map((h) => (h.id === hid ? { ...h, show_stats: on } : h));
     },
     host_copy_password: async () => {},
     groups_list: async () => groups.map((g) => ({ ...g })),
@@ -479,6 +491,7 @@ export function createMockApi(): HatobaApi {
         state("disconnected", { exit_status: 0 });
         shells.delete(sid);
         dropSessionForwards(sid);
+        stopStats(sid);
       };
       // FWD-02: like the real backend, auto-start forwards come up with the connection and are announced
       // by events that can fire before the UI has the session id.
@@ -554,6 +567,7 @@ export function createMockApi(): HatobaApi {
         onFrame(frame(FRAME_CLOSED, new TextEncoder().encode("exit")));
         state("disconnected", { exit_status: 0 });
         shells.delete(sid);
+        stopStats(sid);
       };
       return sid;
     },
@@ -574,7 +588,24 @@ export function createMockApi(): HatobaApi {
       shells.get(sid)?.stop();
       shells.delete(sid);
       dropSessionForwards(sid);
+      stopStats(sid);
     },
+    ssh_stats_start: async (sid, onEvent) => {
+      const shell = shells.get(sid) ?? fail("not_found", "session");
+      stopStats(sid);
+      await delay(300);
+      if (shell.os === "freebsd" || shell.os === "windows") {
+        onEvent({ kind: "unsupported", system: shell.os === "freebsd" ? "FreeBSD" : "Windows" });
+        return;
+      }
+      const sample = mockStats();
+      onEvent({ kind: "stats", stats: sample(true) });
+      statsTimers.set(
+        sid,
+        setInterval(() => onEvent({ kind: "stats", stats: sample(false) }), 2000),
+      );
+    },
+    ssh_stats_stop: async (sid) => stopStats(sid),
     ssh_test: async (input) => {
       await delay(800);
       if (input.address === "172.31.40.8")

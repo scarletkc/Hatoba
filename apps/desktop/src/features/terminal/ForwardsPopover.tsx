@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
-import { toast, useOverlaysLocked, type MenuAnchor } from "@/components/overlay";
+import { toast, type MenuAnchor } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardView } from "@/ipc/types";
@@ -15,6 +15,7 @@ import {
   useForwardRuns,
   type ForwardRun,
 } from "./forwards";
+import { useStatusPopover } from "./popover";
 import s from "./ForwardsPopover.module.css";
 
 const hostPort = (host: string, port: number | string) => `${host.includes(":") ? `[${host}]` : host}:${port}`;
@@ -43,12 +44,8 @@ export function ForwardsPopover({
   const [saved, setSaved] = useState<ForwardView[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
-  const [pos, setPos] = useState({ left: anchor.x, top: anchor.y });
-  const locked = useOverlaysLocked();
-
-  useEffect(() => {
-    if (locked) onClose(false);
-  }, [locked, onClose]);
+  // Re-measured as rows appear.
+  const { pos, locked } = useStatusPopover(ref, anchor, onClose, "[data-forwards-trigger]", [saved, loadFailed, runs]);
 
   // Always read the list fresh: forwards are edited in the host editor, not here.
   useEffect(() => {
@@ -61,41 +58,6 @@ export function ForwardsPopover({
       live = false;
     };
   }, [hostId]);
-
-  // Same placement rule as `Menu`: below the button, kept inside the window; re-measured as rows appear.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
-    let top = anchor.y;
-    left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, anchor.y - r.height - 8);
-    setPos({ left, top });
-  }, [anchor.x, anchor.y, anchor.alignRight, saved, loadFailed, runs]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Element;
-      // The status bar button toggles the popover itself; closing here would make its click reopen it.
-      if (ref.current && !ref.current.contains(target) && !target.closest?.("[data-forwards-trigger]")) onClose(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose(true);
-      }
-    };
-    const close = () => onClose(false);
-    window.addEventListener("mousedown", onDown, true);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", onDown, true);
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("blur", close);
-    };
-  }, [onClose]);
 
   const setBusyFor = (id: string, on: boolean) =>
     setBusy((b) => {

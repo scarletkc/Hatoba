@@ -64,6 +64,9 @@ pub struct HostView {
     /// The server's operating system from its SSH identification string on the last connection
     /// from this device, such as `ubuntu` (HOST-11). Device-local, like `last_connected_at`.
     pub os: Option<String>,
+    /// The host's terminals show the server's resource usage on this device (TERM-12).
+    /// Device-local, like `last_connected_at`, and off until turned on.
+    pub show_stats: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -271,6 +274,46 @@ pub struct TestResult {
     pub latency_ms: Option<u32>,
     pub host_key_verified: bool,
     pub error: Option<crate::error::AppError>,
+}
+
+/// One reading of a server's resource usage (TERM-12). Sizes are in bytes and rates in bytes
+/// per second; what the server did not report is `None`.
+#[derive(Debug, Clone, Serialize, Type, PartialEq)]
+pub struct ServerStatsView {
+    /// Busy share of all CPUs since the previous reading, 0 to 100; `None` in the first one.
+    pub cpu_percent: Option<f64>,
+    pub cpus: Option<u32>,
+    /// Load averages over 1, 5 and 15 minutes.
+    pub load: Option<[f64; 3]>,
+    pub mem_total: Option<u64>,
+    /// The total less what the kernel counts as available.
+    pub mem_used: Option<u64>,
+    /// Zero when the server has no swap.
+    pub swap_total: Option<u64>,
+    pub swap_used: Option<u64>,
+    pub net_rx_rate: Option<u64>,
+    pub net_tx_rate: Option<u64>,
+    /// The interfaces the rates count: those of the default routes, or else all but loopback.
+    pub net_interfaces: Vec<String>,
+    /// The root filesystem.
+    pub disk_total: Option<u64>,
+    pub disk_used: Option<u64>,
+    /// Space left for unprivileged users, as `df` counts it.
+    pub disk_available: Option<u64>,
+    pub uptime_secs: Option<u64>,
+}
+
+/// Streamed on the channel of `ssh_stats_start` (TERM-12).
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StatsEvent {
+    /// A reading, one per interval.
+    Stats { stats: ServerStatsView },
+    /// The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
+    /// or empty when unknown.
+    Unsupported { system: String },
+    /// Sampling stopped on its own (the script failed or the connection ended); the last event.
+    Ended { error: crate::error::AppError },
 }
 
 // ───────────────────────── SFTP ─────────────────────────

@@ -28,6 +28,8 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.HostKeyPrompt, Ui.HostKeyPrompt>>,
   Check<Assignable<Rust.AuthPrompt, Ui.AuthPrompt>>,
   Check<Assignable<Rust.TestResult, Ui.TestResult>>,
+  Check<Assignable<Rust.ServerStatsView, Ui.ServerStatsView>>,
+  Check<Assignable<Rust.StatsEvent, Ui.StatsEvent>>,
   Check<Assignable<Rust.FileEntry, Ui.FileEntry>>,
   Check<Assignable<Rust.TransferProgressEvent, Ui.TransferProgressEvent>>,
   Check<Assignable<Rust.SyncStatus, Ui.SyncStatus>>,

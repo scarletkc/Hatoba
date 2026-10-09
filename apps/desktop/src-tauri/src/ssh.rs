@@ -9,7 +9,7 @@ use hatoba_core::model::{Host, HostAuth, Item, KnownHost};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{
     AuthMethod, ConnectConfig, ForwardHandle, HostKeyInfo, HostKeyVerifier, JumpHop,
-    KeyboardInteractive, PromptRequest, SftpClient, ShellHandle, SshSession,
+    KeyboardInteractive, PromptRequest, SftpClient, ShellHandle, SshSession, StatsHandle,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -31,6 +31,8 @@ pub struct LiveSession {
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
     pub forwards: Mutex<HashMap<String, ForwardHandle>>,
+    /// Resource usage sampling while the terminal shows it (TERM-12).
+    stats: Mutex<Option<StatsHandle>>,
 }
 
 impl LiveSession {
@@ -40,7 +42,17 @@ impl LiveSession {
             shell,
             sftp: OnceCell::new(),
             forwards: Mutex::new(HashMap::new()),
+            stats: Mutex::new(None),
         }
+    }
+
+    /// Keeps `handle` as the session's sampling; the one it replaces stops.
+    pub fn set_stats(&self, handle: StatsHandle) {
+        lock(&self.stats).replace(handle);
+    }
+
+    pub fn stop_stats(&self) {
+        lock(&self.stats).take();
     }
 
     pub fn add_forward(&self, id: &str, handle: ForwardHandle) {
@@ -70,11 +82,12 @@ impl LiveSession {
             .collect()
     }
 
-    /// Stops forwards and closes the shell and connection.
+    /// Stops forwards and sampling, and closes the shell and connection.
     pub async fn close(&self) {
         for (_, handle) in lock(&self.forwards).drain() {
             handle.stop();
         }
+        self.stop_stats();
         self.shell.close().await;
         self.session.disconnect().await;
     }

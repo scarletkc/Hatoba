@@ -132,6 +132,8 @@ export interface HostView {
   last_connected_at: number | null;
   /** The server's OS from its SSH identification string, such as `ubuntu`; device-local, never synced (HOST-11). */
   os: string | null;
+  /** The host's terminals show the server's resource usage; device-local, never synced, off until turned on (TERM-12). */
+  show_stats: boolean;
 }
 
 export interface HostInput {
@@ -299,6 +301,39 @@ export interface TestResult {
   host_key_verified: boolean;
   error: AppError | null;
 }
+
+/** One reading of a server's resource usage (TERM-12). Sizes in bytes, rates in bytes per second. */
+export interface ServerStatsView {
+  /** Busy share of all CPUs since the previous reading, 0–100; `null` in the first one. */
+  cpu_percent: number | null;
+  cpus: number | null;
+  /** Load averages over 1, 5 and 15 minutes. */
+  load: [number | null, number | null, number | null] | null;
+  mem_total: number | null;
+  /** The total less what the kernel counts as available. */
+  mem_used: number | null;
+  /** 0 when the server has no swap. */
+  swap_total: number | null;
+  swap_used: number | null;
+  net_rx_rate: number | null;
+  net_tx_rate: number | null;
+  /** The interfaces the rates count: those of the default routes, or else all but loopback. */
+  net_interfaces: string[];
+  /** The root filesystem. */
+  disk_total: number | null;
+  disk_used: number | null;
+  /** Space left for unprivileged users, as `df` counts it. */
+  disk_available: number | null;
+  uptime_secs: number | null;
+}
+
+/** Streamed on the channel of `ssh_stats_start` (TERM-12). `unsupported` and `ended` come last. */
+export type StatsEvent =
+  | { kind: "stats"; stats: ServerStatsView }
+  /** The server does not run Linux; `system` is its name, such as `FreeBSD`, or empty. */
+  | { kind: "unsupported"; system: string }
+  /** Sampling stopped on its own: the script failed or the connection ended. */
+  | { kind: "ended"; error: AppError };
 
 /**
  * Terminal output arrives on a per-session Tauri Channel as raw bytes (ArrayBuffer), §10.3.

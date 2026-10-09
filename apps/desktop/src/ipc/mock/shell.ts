@@ -20,6 +20,11 @@ export class FakeShell {
     private out: (bytes: Uint8Array) => void,
   ) {}
 
+  /** The server OS the host recorded (HOST-11), for the mock resource usage (TERM-12). */
+  get os(): string | null {
+    return this.host.os;
+  }
+
   private write(s: string) {
     if (!this.stopped) this.out(this.enc.encode(s));
   }
