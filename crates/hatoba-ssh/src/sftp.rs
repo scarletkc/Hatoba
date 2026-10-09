@@ -2,7 +2,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use russh_sftp::client::{Config as SftpConfig, SftpSession};
 use russh_sftp::protocol::OpenFlags;
@@ -22,6 +23,8 @@ const S_IFMT: u32 = 0o170_000;
 const S_IFDIR: u32 = 0o040_000;
 const S_IFLNK: u32 = 0o120_000;
 const S_IFREG: u32 = 0o100_000;
+/// Attempts at finding an unused temporary file name before giving up.
+const PART_ATTEMPTS: u32 = 16;
 
 type SftpError = russh_sftp::client::error::Error;
 
@@ -260,8 +263,10 @@ impl SftpClient {
 
     /// Downloads `remote` to `local`.
     ///
-    /// Data is written to `<local>.part` and renamed on success; the partial
-    /// file is deleted on failure or cancellation. `progress` is called at most
+    /// Data is written to a new `<local>.<token>.part` file and renamed on
+    /// success; the partial file is deleted on failure or cancellation. The
+    /// temporary file is created exclusively, so an existing file is never
+    /// overwritten or deleted in its place. `progress` is called at most
     /// about ten times per second plus once at the end.
     pub async fn download(
         &self,
@@ -281,10 +286,27 @@ impl SftpClient {
                 format!("download {remote}: is a directory"),
             ));
         }
-        let part = part_path(local);
+        if cancel.is_cancelled() {
+            return Err(SshError::cancelled());
+        }
+        let mut source = self
+            .sftp
+            .open(remote)
+            .await
+            .map_err(|e| self.err("open", remote, e))?;
+        let (part, target) = create_local_part(local).await?;
         let result = self
-            .download_to(remote, &part, meta.size.unwrap_or(0), &progress, &cancel)
+            .download_to(
+                remote,
+                &mut source,
+                &part,
+                target,
+                meta.size.unwrap_or(0),
+                &progress,
+                &cancel,
+            )
             .await;
+        let _ = source.close().await;
         match result {
             Ok(()) => tokio::fs::rename(&part, local).await.map_err(|e| {
                 let _ = std::fs::remove_file(&part);
@@ -297,22 +319,17 @@ impl SftpClient {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn download_to(
         &self,
         remote: &str,
+        source: &mut russh_sftp::client::fs::File,
         part: &Path,
+        mut target: tokio::fs::File,
         total: u64,
         progress: &(impl Fn(TransferProgress) + Send + Sync),
         cancel: &CancellationToken,
     ) -> Result<(), SshError> {
-        let mut source = self
-            .sftp
-            .open(remote)
-            .await
-            .map_err(|e| self.err("open", remote, e))?;
-        let mut target = tokio::fs::File::create(part)
-            .await
-            .map_err(|e| SshError::io_context(&format!("create {}", part.display()), &e))?;
         let mut tracker = Tracker::new(total);
         let mut buf = vec![0u8; CHUNK];
         loop {
@@ -335,16 +352,17 @@ impl SftpClient {
             .await
             .map_err(|e| SshError::io_context(&format!("write {}", part.display()), &e))?;
         drop(target);
-        let _ = source.close().await;
         tracker.finish(progress);
         Ok(())
     }
 
     /// Uploads `local` to `remote`.
     ///
-    /// Data is written to `<remote>.part` and renamed on success so an
-    /// interrupted upload never clobbers an existing file; the partial file is
-    /// deleted on failure or cancellation.
+    /// Data is written to a new `<remote>.<token>.part` file and renamed on
+    /// success so an interrupted upload never clobbers an existing file; the
+    /// partial file is deleted on failure or cancellation. The temporary file
+    /// is created exclusively, so an existing file is never overwritten or
+    /// deleted in its place.
     pub async fn upload(
         &self,
         local: &Path,
@@ -361,9 +379,12 @@ impl SftpClient {
                 format!("{} is not a regular file", local.display()),
             ));
         }
-        let part = format!("{remote}.part");
+        let source = tokio::fs::File::open(local)
+            .await
+            .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
+        let (part, target) = self.create_remote_part(remote).await?;
         let result = self
-            .upload_to(local, &part, meta.len(), &progress, &cancel)
+            .upload_to(local, source, &part, target, meta.len(), &progress, &cancel)
             .await;
         match result {
             Ok(()) => self.replace(&part, remote).await,
@@ -374,25 +395,46 @@ impl SftpClient {
         }
     }
 
+    /// Creates a new, empty temporary file next to `remote` that no other
+    /// file or transfer is using.
+    async fn create_remote_part(
+        &self,
+        remote: &str,
+    ) -> Result<(String, russh_sftp::client::fs::File), SshError> {
+        let mut last = None;
+        for _ in 0..PART_ATTEMPTS {
+            let part = format!("{remote}.{}.part", part_token());
+            // EXCLUDE (O_EXCL) fails on any existing entry, including a symlink.
+            match self
+                .sftp
+                .open_with_flags(
+                    part.as_str(),
+                    OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+                )
+                .await
+            {
+                Ok(file) => return Ok((part, file)),
+                // SFTP v3 has no "already exists" status, so look for the entry.
+                Err(e) if self.sftp.symlink_metadata(part.as_str()).await.is_ok() => {
+                    last = Some(self.err("create", &part, e));
+                }
+                Err(e) => return Err(self.err("create", &part, e)),
+            }
+        }
+        Err(last.expect("at least one attempt"))
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn upload_to(
         &self,
         local: &Path,
+        mut source: tokio::fs::File,
         part: &str,
+        mut target: russh_sftp::client::fs::File,
         total: u64,
         progress: &(impl Fn(TransferProgress) + Send + Sync),
         cancel: &CancellationToken,
     ) -> Result<(), SshError> {
-        let mut source = tokio::fs::File::open(local)
-            .await
-            .map_err(|e| SshError::io_context(&format!("open {}", local.display()), &e))?;
-        let mut target = self
-            .sftp
-            .open_with_flags(
-                part,
-                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
-            )
-            .await
-            .map_err(|e| self.err("create", part, e))?;
         let mut tracker = Tracker::new(total);
         let mut buf = vec![0u8; CHUNK];
         loop {
@@ -526,10 +568,58 @@ impl Tracker {
     }
 }
 
-fn part_path(local: &Path) -> PathBuf {
+/// Creates a new, empty temporary file next to `local` that no other file or
+/// transfer is using.
+async fn create_local_part(local: &Path) -> Result<(PathBuf, tokio::fs::File), SshError> {
+    let mut last = None;
+    for _ in 0..PART_ATTEMPTS {
+        let part = part_path(local, &part_token());
+        // `create_new` (O_EXCL) fails on any existing entry, including a symlink.
+        match tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&part)
+            .await
+        {
+            Ok(file) => return Ok((part, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some((part, e)),
+            Err(e) => {
+                return Err(SshError::io_context(
+                    &format!("create {}", part.display()),
+                    &e,
+                ));
+            }
+        }
+    }
+    let (part, e) = last.expect("at least one attempt");
+    Err(SshError::io_context(
+        &format!("create {}", part.display()),
+        &e,
+    ))
+}
+
+fn part_path(local: &Path, token: &str) -> PathBuf {
     let mut name = local.as_os_str().to_owned();
-    name.push(".part");
+    name.push(format!(".{token}.part"));
     PathBuf::from(name)
+}
+
+/// A short token that differs between transfers, so that transfers to the same
+/// destination use different temporary files. Exclusive creation, not this
+/// token, is what keeps existing files safe.
+fn part_token() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64);
+    let count = COUNTER.fetch_add(1, Ordering::Relaxed);
+    // SplitMix64 finalizer over the time, process id and counter.
+    let mut x =
+        nanos ^ (u64::from(std::process::id()) << 32) ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^= x >> 31;
+    format!("{:08x}", x as u32)
 }
 
 /// Joins a remote directory and a file name with exactly one `/`.
@@ -605,8 +695,25 @@ mod tests {
     #[test]
     fn part_file_name_appends_suffix() {
         assert_eq!(
-            part_path(Path::new("/tmp/file.txt")),
-            PathBuf::from("/tmp/file.txt.part")
+            part_path(Path::new("/tmp/file.txt"), "0123abcd"),
+            PathBuf::from("/tmp/file.txt.0123abcd.part")
         );
+    }
+
+    #[test]
+    fn part_tokens_differ() {
+        let tokens: std::collections::HashSet<_> = (0..1000).map(|_| part_token()).collect();
+        assert_eq!(tokens.len(), 1000);
+        assert!(tokens.iter().all(|t| t.len() == 8));
+    }
+
+    #[tokio::test]
+    async fn local_part_never_reuses_an_existing_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let local = dir.path().join("report.txt");
+        let (a, _fa) = create_local_part(&local).await.unwrap();
+        let (b, _fb) = create_local_part(&local).await.unwrap();
+        assert_ne!(a, b);
+        assert!(a.exists() && b.exists());
     }
 }
