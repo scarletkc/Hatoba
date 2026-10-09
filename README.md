@@ -141,6 +141,7 @@ connecting Hatoba, and covers upgrades, resets, and backups.
 - [End-to-end smoke test](apps/desktop/e2e/README.md): driving the real app against a real OpenSSH server
 - [Design](docs/design/README.md): design files, porting conventions, and deviations from the design
 - [Contributing](CONTRIBUTING.md): issues, branches, commits, and pull requests
+- [Security policy](SECURITY.md): reporting a vulnerability privately
 
 ## License
 

@@ -9,11 +9,9 @@ and prepare releases.
 
 ## Report vulnerabilities privately
 
-Do not open a public issue for a security vulnerability. Report it through
-[private vulnerability reporting](https://github.com/scarletkc/Hatoba/security/advisories/new)
-instead. This covers anything that exposes passwords, keys, or other vault data
-beyond what the [security model](docs/hatoba-spec.md#4-security-model-and-encryption)
-allows.
+Do not open a public issue for a security vulnerability. The
+[security policy](SECURITY.md) explains how to report one privately and what
+counts as one.
 
 ## Start with an issue
 
