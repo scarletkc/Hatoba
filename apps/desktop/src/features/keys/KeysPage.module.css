@@ -3,6 +3,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 
 .emptyWrap {
@@ -24,6 +25,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 
 /* Table: 名称 | 类型 | 指纹 | 创建 | 使用中 (design §04) */
@@ -33,6 +35,32 @@
   grid-template-columns: minmax(0, 1.1fr) 88px minmax(0, 1.5fr) 78px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+}
+
+/* A narrow list (beside the AI panel, or in a small window) drops the creation date and the hosts,
+ * then everything but the name, which the detail panel shows anyway. */
+@container (max-width: 520px) {
+  .head,
+  .row {
+    grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
+  }
+
+  .head > :nth-child(n + 4),
+  .row > :nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@container (max-width: 320px) {
+  .head,
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .head > :nth-child(n + 2),
+  .row > :nth-child(n + 2) {
+    display: none;
+  }
 }
 
 .head {
@@ -158,6 +186,13 @@
   display: flex;
   flex-direction: column;
   border-left: 0.5px solid var(--line);
+}
+
+/* A narrow page gives the list more of the room. */
+@container (max-width: 680px) {
+  .panel {
+    width: 250px;
+  }
 }
 
 .panelScroll {
