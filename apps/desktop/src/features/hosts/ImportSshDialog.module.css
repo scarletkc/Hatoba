@@ -53,6 +53,16 @@
   text-decoration: line-through;
 }
 
+/* SSH-13: a ProxyCommand that the import leaves out. */
+.skipped {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  color: var(--orange);
+  white-space: nowrap;
+}
+
 .spacer {
   flex: 1;
 }

@@ -8,6 +8,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  ProxyView,
   QuickTarget,
   SshErrorKind,
   StarPrompt,
@@ -32,6 +33,9 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
   unreachable: (a, p) => `connect to ${a}:${p}: network is unreachable`,
   auth_failed: () => "authentication failed: no method succeeded (tried publickey, password)",
   disconnected: () => "the server closed the connection during the handshake",
+  proxy_unreachable: () => "cannot reach the proxy 127.0.0.1:7890: connect to 127.0.0.1:7890: connection refused",
+  proxy_auth: () => "the proxy proxy.corp.example.com:3128 rejected the username or password (HTTP 407)",
+  proxy: (a, p) => `the proxy could not connect to ${a}:${p}: connection not allowed by its rules (0x02)`,
 };
 
 /**
@@ -42,7 +46,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
- *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected
+ *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -75,6 +79,7 @@ export function createMockApi(): HatobaApi {
   let hosts: HostView[] = demo === "empty" ? [] : D.HOSTS.map((h) => ({ ...h }));
   let groups: GroupView[] = demo === "empty" ? [] : D.GROUPS.map((g) => ({ ...g }));
   let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
+  let proxies: ProxyView[] = demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p }));
   let settings = structuredClone(D.SETTINGS);
   let prefs: LocalPrefs = loadPrefs();
   const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
@@ -152,6 +157,12 @@ export function createMockApi(): HatobaApi {
 
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const id = (p: string) => `${p}-${Date.now().toString(36)}-${(++seq).toString(36)}`;
+
+  function proxyViews(): ProxyView[] {
+    return proxies
+      .map((p) => ({ ...p, host_ids: hosts.filter((h) => h.proxy_mode === "proxy" && h.proxy_id === p.id).map((h) => h.id) }))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  }
 
   function keyViews(): KeyView[] {
     return keys.map((k) => ({ ...k, used_by: hosts.filter((h) => h.auth_kind === "key" && h.key_id === k.id).map((h) => h.id) }));
@@ -306,6 +317,8 @@ export function createMockApi(): HatobaApi {
       if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
       if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
+      if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
+        fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));
       if (env.length > ENV_MAX_VARS || validateEnvRows(envRows(env)).some(Boolean) || envTooLarge(envRows(env)) || env.some((v) => !v.name))
         fail("invalid_input", "invalid environment variables", { field: "env" });
@@ -323,6 +336,8 @@ export function createMockApi(): HatobaApi {
         tags: input.tags,
         favorite: input.favorite,
         jump_host_id: input.jump_host_id,
+        proxy_mode: input.proxy_mode,
+        proxy_id: input.proxy_mode === "proxy" ? input.proxy_id : null,
         note: input.note,
         ai_notes: input.ai_notes,
         env,
@@ -381,16 +396,62 @@ export function createMockApi(): HatobaApi {
       });
     },
     ssh_config_preview: async () => [
-      { alias: "github-runner", address: "10.0.4.20", port: 22, username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, exists: false },
-      { alias: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, exists: true },
-      { alias: "minecraft", address: "mc.example.org", port: 22, username: "mc", identity_file: "~/.ssh/mc_rsa", identity_file_found: false, proxy_jump: "bastion-tokyo", exists: false },
-      { alias: "build-arm", address: "10.0.4.31", port: 22, username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true, proxy_jump: null, exists: false },
+      { alias: "github-runner", address: "10.0.4.20", port: 22, username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
+      { alias: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: true },
+      { alias: "minecraft", address: "mc.example.org", port: 22, username: "mc", identity_file: "~/.ssh/mc_rsa", identity_file_found: false, proxy_jump: "bastion-tokyo", proxy_command: null, exists: false },
+      { alias: "build-arm", address: "10.0.4.31", port: 22, username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
+      { alias: "lab-gpu", address: "gpu.lab.internal", port: 22, username: "kc", identity_file: null, identity_file_found: false, proxy_jump: null, proxy_command: "nc -X 5 -x 127.0.0.1:7890 %h %p", exists: false },
     ],
     ssh_config_import: async (aliases, keyFiles) => {
       await delay(300);
-      aliases.forEach((a) => hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask" }));
+      aliases.forEach((a) =>
+        hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask", proxy_mode: "device_default", proxy_id: null }),
+      );
       touch();
-      return { hosts_created: aliases.length, keys_imported: keyFiles.length, warnings: [] };
+      const warnings = aliases.includes("lab-gpu") ? ["lab-gpu: ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p was not imported; set a proxy or jump host for it"] : [];
+      return { hosts_created: aliases.length, keys_imported: keyFiles.length, warnings };
+    },
+
+    proxies_list: async () => {
+      needUnlocked();
+      return proxyViews();
+    },
+    proxy_save: async (input) => {
+      needUnlocked();
+      if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
+      const address = input.address.trim().replace(/^\[(.*)\]$/, "$1");
+      if (!address) fail("invalid_input", "address is required", { field: "address" });
+      if (/\s/.test(address)) fail("invalid_input", "address is not a valid host name or IP", { field: "address" });
+      if (!input.port) fail("invalid_input", "port must be between 1 and 65535", { field: "port" });
+      const username = input.username.trim();
+      if (input.kind === "http" && username.includes(":"))
+        fail("invalid_input", "an HTTP proxy username can't contain a colon", { field: "username" });
+      const existing = input.id ? proxies.find((p) => p.id === input.id) : undefined;
+      if (input.id && !existing) fail("not_found");
+      const view: ProxyView = {
+        id: existing?.id ?? id("p"),
+        name: input.name.trim(),
+        kind: input.kind,
+        address,
+        port: input.port,
+        username,
+        has_password: !!username && (input.password !== null ? input.password.length > 0 : !!existing?.has_password),
+        host_ids: [],
+        updated_at: Date.now(),
+      };
+      proxies = existing ? proxies.map((p) => (p.id === view.id ? view : p)) : [...proxies, view];
+      touch();
+      return proxyViews().find((p) => p.id === view.id)!;
+    },
+    proxy_delete: async (pid) => {
+      if (!proxies.some((p) => p.id === pid)) fail("not_found");
+      proxies = proxies.filter((p) => p.id !== pid);
+      hosts = hosts.map((h) => (h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h));
+      if (prefs.default_proxy_id === pid) {
+        prefs = { ...prefs, default_proxy_id: null };
+        localStorage.setItem("hatoba.mock.prefs", JSON.stringify(prefs));
+      }
+      touch();
     },
 
     keys_list: async () => {

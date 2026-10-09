@@ -1,11 +1,15 @@
 //! Model → DTO conversions. This is the boundary where secret fields are dropped (spec §10.1).
 
-use hatoba_core::model::{Group, Host, HostAuth, KeyAlgorithm as CoreAlg, SshKey};
+use hatoba_core::model::{
+    Group, Host, HostAuth, HostProxy, KeyAlgorithm as CoreAlg, Proxy, ProxyKind as CoreProxyKind,
+    SshKey,
+};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
 use crate::dto::{
-    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, ServerStatsView,
+    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, ProxyKind, ProxyMode,
+    ProxyView, ServerStatsView,
 };
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
@@ -14,6 +18,11 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         HostAuth::Key { key_id } => (AuthKind::Key, false, Some(key_id.clone())),
         HostAuth::Agent => (AuthKind::Agent, false, None),
         HostAuth::Ask => (AuthKind::Ask, false, None),
+    };
+    let (proxy_mode, proxy_id) = match &host.proxy {
+        HostProxy::DeviceDefault => (ProxyMode::DeviceDefault, None),
+        HostProxy::Direct => (ProxyMode::Direct, None),
+        HostProxy::Proxy { proxy_id } => (ProxyMode::Proxy, Some(proxy_id.clone())),
     };
     HostView {
         id: id.to_owned(),
@@ -28,6 +37,8 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         tags: host.tags.clone(),
         favorite: host.favorite,
         jump_host_id: host.jump_host_id.clone(),
+        proxy_mode,
+        proxy_id,
         note: host.note.clone(),
         ai_notes: host.ai_notes.clone(),
         updated_at: host.updated_at,
@@ -42,6 +53,28 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
                 value: v.value.clone(),
             })
             .collect(),
+    }
+}
+
+pub fn proxy_view(id: &str, proxy: &Proxy, vault: &Vault) -> ProxyView {
+    ProxyView {
+        id: id.to_owned(),
+        name: proxy.name.clone(),
+        kind: match proxy.kind {
+            CoreProxyKind::Socks5 => ProxyKind::Socks5,
+            CoreProxyKind::Http => ProxyKind::Http,
+        },
+        address: proxy.address.clone(),
+        port: proxy.port,
+        username: proxy.username.clone(),
+        has_password: !proxy.password.is_empty(),
+        host_ids: vault
+            .hosts()
+            .into_iter()
+            .filter(|(_, h)| h.proxy.proxy_id() == Some(id))
+            .map(|(host_id, _)| host_id)
+            .collect(),
+        updated_at: proxy.updated_at,
     }
 }
 

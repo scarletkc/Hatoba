@@ -1,7 +1,8 @@
 //! `~/.ssh/config` import (SSH-11).
 //!
 //! Only the options Hatoba can map onto a host entry are understood: `Host`,
-//! `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `SetEnv`. Lookup
+//! `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `SetEnv`.
+//! `ProxyCommand` is read only so the import can say it was left out. Lookup
 //! follows OpenSSH semantics: blocks are evaluated in file order and the first
 //! value obtained for an option wins (`IdentityFile` accumulates, and the first
 //! `SetEnv` line that applies wins as a whole).
@@ -27,6 +28,9 @@ pub struct SshConfigHost {
     pub identity_files: Vec<String>,
     /// Raw `ProxyJump` value, e.g. `user@bastion:2222,other`.
     pub proxy_jump: Option<String>,
+    /// Raw `ProxyCommand` value, e.g. `nc -X 5 -x proxy:1080 %h %p`. Never set together with
+    /// `proxy_jump`.
+    pub proxy_command: Option<String>,
     /// `SetEnv` variables as name and value, in order. Names are not checked;
     /// arguments without `=` are dropped.
     pub set_env: Vec<(String, String)>,
@@ -42,8 +46,16 @@ struct Block {
     user: Option<String>,
     port: Option<u16>,
     identity_files: Vec<String>,
-    proxy_jump: Option<String>,
+    /// `ProxyJump` and `ProxyCommand` lines in file order, because which one applies depends on
+    /// their order (see [`resolve_proxy`]).
+    proxy: Vec<ProxyDirective>,
     set_env: Option<Vec<(String, String)>>,
+}
+
+#[derive(Debug)]
+enum ProxyDirective {
+    Jump(String),
+    Command(String),
 }
 
 /// Parses SSH config text, expanding `~` / `%d` using the current user's home
@@ -105,6 +117,12 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                 let Some(block) = blocks.last_mut() else {
                     continue;
                 };
+                if kw == "proxycommand" {
+                    if !args.is_empty() {
+                        block.proxy.push(ProxyDirective::Command(args.join(" ")));
+                    }
+                    continue;
+                }
                 if kw == "setenv" {
                     if block.set_env.is_none() {
                         block.set_env = parse_set_env(args);
@@ -126,7 +144,7 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                     }
                     ("identityfile", Some(v)) => block.identity_files.push(v),
                     ("proxyjump", Some(v)) => {
-                        block.proxy_jump.get_or_insert(v);
+                        block.proxy.push(ProxyDirective::Jump(v));
                     }
                     _ => {}
                 }
@@ -134,6 +152,38 @@ fn parse_blocks(text: &str) -> Vec<Block> {
         }
     }
     blocks
+}
+
+/// `ProxyJump` and `ProxyCommand` as OpenSSH reads them (`readconf.c`, `parse_jump`): the first
+/// `ProxyCommand` applies; a `ProxyJump` to a host applies only before any `ProxyCommand` or other
+/// `ProxyJump`, and then sets the command to `none`, which blocks later ones; `ProxyJump none`
+/// takes the jump slot without blocking a later `ProxyCommand`; `none` clears.
+fn resolve_proxy<'a>(
+    directives: impl Iterator<Item = &'a ProxyDirective>,
+) -> (Option<String>, Option<String>) {
+    let mut jump: Option<&str> = None;
+    let mut command: Option<&str> = None;
+    for directive in directives {
+        match directive {
+            ProxyDirective::Command(v) => {
+                command.get_or_insert(v);
+            }
+            ProxyDirective::Jump(v) if v.eq_ignore_ascii_case("none") => {
+                jump.get_or_insert(v);
+            }
+            ProxyDirective::Jump(v) => {
+                if command.is_none() && jump.is_none() {
+                    jump = Some(v);
+                    command = Some("none");
+                }
+            }
+        }
+    }
+    let set = |v: Option<&str>| {
+        v.filter(|v| !v.eq_ignore_ascii_case("none"))
+            .map(str::to_owned)
+    };
+    (set(jump), set(command))
 }
 
 /// The `NAME=value` arguments of one `SetEnv` line; `None` when it has none.
@@ -156,14 +206,15 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
         alias: alias.to_owned(),
         ..SshConfigHost::default()
     };
-    // Tracks "set" separately from the value so `ProxyJump none` still wins.
-    let mut proxy_set = false;
     let mut env_set = false;
-
-    for block in blocks
+    let applying: Vec<&Block> = blocks
         .iter()
         .filter(|b| !b.ignored && block_applies(b, alias))
-    {
+        .collect();
+    (host.proxy_jump, host.proxy_command) =
+        resolve_proxy(applying.iter().flat_map(|b| b.proxy.iter()));
+
+    for block in applying {
         if host.hostname.is_none() {
             host.hostname = block.hostname.clone();
         }
@@ -175,10 +226,6 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
         }
         host.identity_files
             .extend(block.identity_files.iter().cloned());
-        if !proxy_set && let Some(pj) = &block.proxy_jump {
-            proxy_set = true;
-            host.proxy_jump = (!pj.eq_ignore_ascii_case("none")).then(|| pj.clone());
-        }
         if !env_set && let Some(vars) = &block.set_env {
             env_set = true;
             host.set_env = vars.clone();
@@ -474,6 +521,41 @@ mod tests {
             Some("user@bastion:2222,other")
         );
         assert_eq!(hosts[1].proxy_jump, None);
+    }
+
+    #[test]
+    fn proxy_command_and_proxy_jump_follow_openssh_order() {
+        let hosts = parse(concat!(
+            "Host socks\n  ProxyCommand nc -X 5 -x proxy.example.com:1080 %h %p\n",
+            "Host jumped\n  ProxyJump bastion\n",
+            "Host off\n  ProxyCommand none\n",
+            "Host command-first\n  ProxyCommand nc %h %p\n  ProxyJump bastion\n",
+            "Host jump-first\n  ProxyJump bastion\n  ProxyCommand nc %h %p\n",
+            "Host jump-none\n  ProxyJump none\n  ProxyCommand nc -x proxy:1080 %h %p\n",
+            "Host jump-none-only\n  ProxyJump none\n",
+            "Host command-none\n  ProxyCommand none\n  ProxyJump bastion\n",
+            "Host *\n  ProxyCommand connect -H proxy:3128 %h %p\n",
+        ));
+        let pair = |i: usize| {
+            (
+                hosts[i].proxy_jump.as_deref(),
+                hosts[i].proxy_command.as_deref(),
+            )
+        };
+        assert_eq!(
+            pair(0),
+            (None, Some("nc -X 5 -x proxy.example.com:1080 %h %p"))
+        );
+        // A jump host blocks every later ProxyCommand, the default's included.
+        assert_eq!(pair(1), (Some("bastion"), None));
+        assert_eq!(pair(2), (None, None));
+        assert_eq!(pair(3), (None, Some("nc %h %p")));
+        assert_eq!(pair(4), (Some("bastion"), None));
+        // `ProxyJump none` does not hide a later ProxyCommand, in the same block or the default.
+        assert_eq!(pair(5), (None, Some("nc -x proxy:1080 %h %p")));
+        assert_eq!(pair(6), (None, Some("connect -H proxy:3128 %h %p")));
+        // `ProxyCommand none` blocks a later ProxyJump and then clears itself.
+        assert_eq!(pair(7), (None, None));
     }
 
     #[test]

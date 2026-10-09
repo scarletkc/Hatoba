@@ -5,8 +5,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use hatoba_core::model::{
-    EnvVar, EnvVarError, Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, MAX_HOST_ENV_BYTES,
-    MAX_HOST_ENV_VARS, MAX_ITEM_PLAINTEXT_BYTES, SshKey, check_env_var, check_host_env,
+    EnvVar, EnvVarError, Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_CHARS,
+    MAX_HOST_ENV_BYTES, MAX_HOST_ENV_VARS, MAX_ITEM_PLAINTEXT_BYTES, SshKey, check_env_var,
+    check_host_env,
 };
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{ParsedKey, SshConfigHost};
@@ -15,7 +16,7 @@ use zeroize::Zeroizing;
 
 use crate::convert::{group_view, host_view};
 use crate::dto::{
-    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult,
+    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult, ProxyMode,
     SshConfigCandidate, TagCount,
 };
 use crate::error::{AppError, AppResult};
@@ -87,6 +88,20 @@ pub fn host_from_input(
     {
         return Err(AppError::invalid("group_id", "group not found"));
     }
+    let proxy = match input.proxy_mode {
+        ProxyMode::DeviceDefault => HostProxy::DeviceDefault,
+        ProxyMode::Direct => HostProxy::Direct,
+        ProxyMode::Proxy => {
+            let proxy_id = input
+                .proxy_id
+                .clone()
+                .ok_or_else(|| AppError::invalid("proxy_id", "choose a proxy"))?;
+            if vault.get(&proxy_id).and_then(Item::as_proxy).is_none() {
+                return Err(AppError::invalid("proxy_id", "proxy not found"));
+            }
+            HostProxy::Proxy { proxy_id }
+        }
+    };
     let auth = match input.auth_kind {
         AuthKind::Password => match (&input.password, existing.map(|h| &h.auth)) {
             (Some(pw), _) => HostAuth::Password {
@@ -130,6 +145,7 @@ pub fn host_from_input(
         tags,
         favorite: input.favorite,
         jump_host_id: input.jump_host_id.clone(),
+        proxy,
         note: input.note.clone(),
         ai_notes: input.ai_notes.clone(),
         updated_at: 0,
@@ -372,6 +388,25 @@ pub fn tags_list(state: State<'_, AppState>) -> AppResult<Vec<TagCount>> {
     })
 }
 
+/// Where a host probe connects: the address, the port, and the proxy on the way.
+type ProbeTarget = (String, u16, Option<hatoba_ssh::ProxyConfig>);
+
+/// The probe target of each existing host among `ids`. SSH-13: the probe goes through the proxy
+/// the connection would use, never around it, so a host whose proxy was deleted gets `None` and
+/// is reported offline (the list keeps the last result of a host it is not told about).
+fn probe_targets(v: &Vault, ids: &[String]) -> Vec<(String, Option<ProbeTarget>)> {
+    ids.iter()
+        .take(500)
+        .filter_map(|id| {
+            let h = v.get(id).and_then(Item::as_host)?;
+            let target = crate::ssh::connection_proxy(v, h)
+                .ok()
+                .map(|proxy| (h.address.clone(), h.port, proxy));
+            Some((id.clone(), target))
+        })
+        .collect()
+}
+
 /// HOST-10: TCP connect only (no authentication), 3 s timeout, probed concurrently.
 #[tauri::command]
 #[specta::specta]
@@ -379,20 +414,15 @@ pub async fn hosts_probe(
     state: State<'_, AppState>,
     ids: Vec<String>,
 ) -> AppResult<Vec<ProbeResult>> {
-    let targets: Vec<(String, String, u16)> = state.with_unlocked(|v| {
-        Ok(ids
-            .iter()
-            .take(500)
-            .filter_map(|id| {
-                v.get(id)
-                    .and_then(Item::as_host)
-                    .map(|h| (id.clone(), h.address.clone(), h.port))
-            })
-            .collect())
-    })?;
-    let probes = targets.into_iter().map(|(id, host, port)| async move {
+    let targets = state.with_unlocked(|v| Ok(probe_targets(v, &ids)))?;
+    let probes = targets.into_iter().map(|(id, target)| async move {
         // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
-        let latency = hatoba_ssh::tcp_probe(&host, port, Duration::from_secs(3)).await;
+        let latency = match target {
+            Some((host, port, proxy)) => {
+                hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3)).await
+            }
+            None => None,
+        };
         ProbeResult {
             id,
             online: latency.is_some(),
@@ -459,6 +489,7 @@ pub async fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<Ssh
                 identity_file_found: found.is_some(),
                 identity_file: found.or_else(|| e.identity_files.first().cloned()),
                 proxy_jump: e.proxy_jump.clone(),
+                proxy_command: e.proxy_command.clone(),
                 alias: e.alias,
             })
             .collect())
@@ -576,6 +607,12 @@ fn import_hosts(
             env: import_env(&entry.alias, &entry.set_env, &mut result.warnings),
             ..Host::default()
         };
+        if let Some(command) = &entry.proxy_command {
+            result.warnings.push(format!(
+                "{}: ProxyCommand {command} was not imported; set a proxy or jump host for it",
+                entry.alias
+            ));
+        }
         let id = v.put(None, Item::Host(host))?;
         result.hosts_created += 1;
         created.push((id, entry));
@@ -781,6 +818,7 @@ mod tests {
             port: None,
             identity_files: identity_files.iter().map(|p| (*p).to_owned()).collect(),
             proxy_jump: None,
+            proxy_command: None,
             set_env: Vec::new(),
         }
     }
@@ -953,6 +991,8 @@ mod tests {
             tags: Vec::new(),
             favorite: false,
             jump_host_id: None,
+            proxy_mode: ProxyMode::DeviceDefault,
+            proxy_id: None,
             note: String::new(),
             ai_notes,
             env: Vec::new(),
@@ -970,6 +1010,28 @@ mod tests {
                 .collect(),
             ..input(String::new())
         }
+    }
+
+    #[test]
+    fn hosts_whose_proxy_was_deleted_are_still_reported() {
+        let mut v = vault();
+        let host = host_from_input(&input(String::new()), None, &v).unwrap();
+        let id = v.put(None, Item::Host(host)).unwrap();
+        // This device's default proxy was deleted on another device.
+        v.set_local_prefs(r#"{"default_proxy_id":"gone"}"#).unwrap();
+        let ids = vec![id.clone(), "no-such-host".to_owned()];
+        let targets = probe_targets(&v, &ids);
+        assert_eq!(targets.len(), 1, "unknown ids are skipped");
+        assert_eq!(targets[0].0, id);
+        assert!(targets[0].1.is_none(), "no probe around a deleted proxy");
+
+        v.set_local_prefs(r#"{"default_proxy_id":null}"#).unwrap();
+        let targets = probe_targets(&v, &ids);
+        let (address, port, proxy) = targets[0].1.clone().unwrap();
+        assert_eq!(
+            (address.as_str(), port, proxy.is_none()),
+            ("10.0.0.5", 22, true)
+        );
     }
 
     #[test]

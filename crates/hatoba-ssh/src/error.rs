@@ -40,6 +40,13 @@ pub enum SshErrorKind {
     Sftp,
     /// The operation was cancelled by the caller.
     Cancelled,
+    /// The proxy could not be reached (DNS, refused, unreachable or no answer in time).
+    ProxyUnreachable,
+    /// The proxy wants a username and password, or did not accept them.
+    ProxyAuth,
+    /// The proxy answered but did not open the connection to the server (its rules, an
+    /// unexpected answer, or a closed connection during the handshake).
+    Proxy,
     /// Anything else.
     Other,
 }
@@ -61,6 +68,9 @@ impl SshErrorKind {
             Self::Channel => "channel",
             Self::Sftp => "sftp",
             Self::Cancelled => "cancelled",
+            Self::ProxyUnreachable => "proxy_unreachable",
+            Self::ProxyAuth => "proxy_auth",
+            Self::Proxy => "proxy",
             Self::Other => "other",
         }
     }
@@ -81,6 +91,9 @@ impl SshErrorKind {
             Self::Channel => "SSH channel error",
             Self::Sftp => "SFTP error",
             Self::Cancelled => "cancelled",
+            Self::ProxyUnreachable => "proxy unreachable",
+            Self::ProxyAuth => "proxy authentication failed",
+            Self::Proxy => "proxy error",
             Self::Other => "error",
         }
     }

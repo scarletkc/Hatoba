@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS). It is a window over the app with six tabs. Changes apply at once; there is no Save button. Esc or the close button closes it. Terminal settings are in `references/terminal.md` and AI settings in `references/ai-settings.md`.
+Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS). It is a window over the app with seven tabs. Changes apply at once; there is no Save button. Esc or the close button closes it. Terminal settings are in `references/terminal.md` and AI settings in `references/ai-settings.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -8,6 +8,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | General | 通用 | 一般 |
 | Appearance | 外观 | 外観 |
 | Terminal | 终端 | ターミナル |
+| Proxies | 代理 | プロキシ |
 | Security | 安全 | セキュリティ |
 | AI | AI | AI |
 | About | 关于 | 情報 |
@@ -26,7 +27,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 
 - **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default) or **Show context menu**.
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
-- **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot.
+- **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.
 
 ## Appearance
@@ -52,6 +53,24 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 - **Terminal Colors**: **Always Dark** (default) or **Match Appearance**.
 - **List Density**: **Regular** or **Compact** rows in lists.
 - **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
+
+## Proxies
+
+SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is in `references/hosts-and-connecting.md`.
+
+- **Default proxy on this device**: **No proxy** or a saved proxy. Hosts whose proxy is **Device default**, and quick connections, use it. The choice stays on this device and does not sync, so a proxy that runs on this computer (such as Clash on 127.0.0.1) can be the default here and not on the others.
+- **Saved Proxies** lists each proxy with its type, address and the number of hosts that name it; the device's default has a **Default** badge. Click a row to edit it; the trash icon deletes it after showing which hosts switch to the device default. Proxies sync with their usernames and passwords, encrypted like the rest of the vault.
+- **Add Proxy** asks for **Name**, **Type** (SOCKS5 or HTTP; an HTTP proxy must support CONNECT), **Address** and **Port**, and a **Username** and **Password** when the proxy needs a sign-in. Pasting a proxy URL such as `socks5://127.0.0.1:7890` or `http://user:pass@proxy.example.com:3128` into **Address** fills in the other fields. A saved password shows **Saved** and can be replaced but not viewed. SOCKS5 and HTTP send the proxy's username and password to the proxy in the clear.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Default proxy on this device | 这台设备的默认代理 | このデバイスの既定のプロキシ |
+| No proxy | 不使用代理 | プロキシなし |
+| Saved Proxies | 已保存的代理 | 保存したプロキシ |
+| Add Proxy | 添加代理 | プロキシを追加 |
+| Edit Proxy | 编辑代理 | プロキシを編集 |
+| Type | 类型 | 種類 |
+| Default | 默认 | 既定 |
 
 ## Security
 
@@ -101,4 +120,4 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), Auto-Lock, Disconnect all sessions when locked, the default AI model, the search provider, the built-in skill's switch | Language, appearance, list density, host reachability, the update check switch, the AI permission mode, the tool call limit, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), Auto-Lock, Disconnect all sessions when locked, the default AI model, the search provider, the built-in skill's switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the update check switch, the AI permission mode, the tool call limit, the AI panel width and whether it is open, MCP on/off and Always allow |

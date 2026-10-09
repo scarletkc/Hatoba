@@ -7,6 +7,7 @@ pub mod forwards;
 pub mod hosts;
 pub mod keys;
 pub mod mcp;
+pub mod proxies;
 pub mod quick;
 pub mod settings;
 pub mod sftp;

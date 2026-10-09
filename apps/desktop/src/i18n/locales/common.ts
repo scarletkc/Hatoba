@@ -134,6 +134,10 @@ export default defineMessages({
     "ssh.err.channel": "无法打开会话通道。",
     "ssh.err.sftp": "SFTP 子系统不可用。",
     "ssh.err.cancelled": "连接已取消。",
+    "ssh.err.proxy_unreachable": "无法连接到代理。请确认代理正在运行，并且地址和端口正确。",
+    "ssh.err.proxy_auth": "代理要求用户名和密码，或者不接受已保存的用户名和密码。",
+    "ssh.err.proxy": "代理无法连接到 {host}:{port}。请检查代理的类型和规则。",
+    "ssh.err.proxy_missing": "这个连接使用的代理已被删除。请在主机设置或“设置 → 代理”中另选一个。",
     "ssh.err.other": "连接失败。",
 
     "key.err.unsupported_format": "不支持的私钥格式。请使用 OpenSSH、PEM 或 PuTTY (.ppk) 格式。",
@@ -281,6 +285,10 @@ export default defineMessages({
     "ssh.err.channel": "Couldn’t open a session channel.",
     "ssh.err.sftp": "The SFTP subsystem isn’t available.",
     "ssh.err.cancelled": "The connection was cancelled.",
+    "ssh.err.proxy_unreachable": "Can’t reach the proxy. Check that it’s running and that its address and port are right.",
+    "ssh.err.proxy_auth": "The proxy asks for a username and password, or didn’t accept the saved ones.",
+    "ssh.err.proxy": "The proxy couldn’t connect to {host}:{port}. Check the proxy’s type and rules.",
+    "ssh.err.proxy_missing": "The proxy this connection uses was deleted. Choose another one in the host’s settings or in Settings → Proxies.",
     "ssh.err.other": "The connection failed.",
 
     "key.err.unsupported_format": "Unsupported private key format. Use OpenSSH, PEM or PuTTY (.ppk).",
@@ -424,6 +432,10 @@ export default defineMessages({
     "ssh.err.io": "ネットワークの読み書きエラー。",
     "ssh.err.channel": "セッションチャネルを開けませんでした。",
     "ssh.err.sftp": "SFTP サブシステムを利用できません。",
+    "ssh.err.proxy_unreachable": "プロキシに接続できません。プロキシが動いているか、アドレスとポートが正しいか確認してください。",
+    "ssh.err.proxy_auth": "プロキシがユーザー名とパスワードを求めているか、保存されたものを受け入れませんでした。",
+    "ssh.err.proxy": "プロキシから {host}:{port} に接続できませんでした。プロキシの種類とルールを確認してください。",
+    "ssh.err.proxy_missing": "この接続で使うプロキシは削除されています。ホストの設定か「設定 → プロキシ」で別のものを選んでください。",
     "ssh.err.cancelled": "接続をキャンセルしました。",
     "ssh.err.other": "接続に失敗しました。",
 

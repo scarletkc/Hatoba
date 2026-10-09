@@ -15,6 +15,10 @@ use crate::error::{SshError, SshErrorKind, classify_io};
 pub(crate) enum Phase {
     Dns,
     Tcp,
+    /// Resolving and connecting to the proxy.
+    Proxy,
+    /// The proxy is opening the connection to the server.
+    ProxyTunnel,
     Handshake,
     Auth,
     Channel,
@@ -25,9 +29,20 @@ impl Phase {
         match self {
             Phase::Dns => "resolving the host name",
             Phase::Tcp => "establishing the TCP connection",
+            Phase::Proxy => "connecting to the proxy",
+            Phase::ProxyTunnel => "waiting for the proxy to connect to the server",
             Phase::Handshake => "the SSH handshake",
             Phase::Auth => "authentication",
             Phase::Channel => "opening the tunnel channel",
+        }
+    }
+
+    /// The kind of a timeout in this phase: the proxy itself not answering is told apart from
+    /// the server not answering.
+    fn timeout_kind(self) -> SshErrorKind {
+        match self {
+            Phase::Proxy => SshErrorKind::ProxyUnreachable,
+            _ => SshErrorKind::Timeout,
         }
     }
 }
@@ -120,7 +135,7 @@ impl ConnectClock {
             let remaining = budget.saturating_sub(elapsed);
             if remaining.is_zero() && !paused {
                 return Err(SshError::new(
-                    SshErrorKind::Timeout,
+                    phase.timeout_kind(),
                     format!(
                         "timed out after {} s while {}",
                         budget.as_secs_f32().round() as u64,
@@ -179,9 +194,15 @@ pub(crate) async fn tcp_connect(
     clock.set_phase(Phase::Dns);
     let addrs = resolve(host, port).await?;
     clock.set_phase(Phase::Tcp);
+    connect_first(&addrs).await
+}
 
+/// Connects to the first of `addrs` that accepts, as [`tcp_connect`] does after resolving.
+pub(crate) async fn connect_first(addrs: &[SocketAddr]) -> Result<(TcpStream, Duration), SshError> {
+    let Some(last) = addrs.len().checked_sub(1) else {
+        return Err(SshError::other("no address to connect to"));
+    };
     let mut best: Option<SshError> = None;
-    let last = addrs.len() - 1;
     for (i, addr) in addrs.iter().enumerate() {
         let started = Instant::now();
         let attempt = TcpStream::connect(addr);

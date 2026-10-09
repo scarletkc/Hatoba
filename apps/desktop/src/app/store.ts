@@ -26,7 +26,7 @@ export type Page =
 
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
-export type SettingsTab = "general" | "appearance" | "terminal" | "security" | "ai" | "about";
+export type SettingsTab = "general" | "appearance" | "terminal" | "proxies" | "security" | "ai" | "about";
 
 export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
@@ -39,6 +39,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   ai_tool_call_limit: 25,
   ai_panel_open: false,
   ai_panel_width: 380,
+  default_proxy_id: null,
 };
 
 interface AppState {
