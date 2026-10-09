@@ -13,7 +13,7 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp, type HostFilter } from "@/app/store";
 import { useTabs, type TabStatus } from "@/app/tabs";
-import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
+import { Button, Icon, LinkButton } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { connectHost } from "@/features/terminal/connect";
@@ -24,6 +24,7 @@ import { cx } from "@/lib/cx";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
 import { ImportSshDialog } from "./ImportSshDialog";
+import { OsIcon } from "./OsIcon";
 import { buildHostIndex, searchHosts } from "./search";
 import { useHostsUi, type HostSort } from "./ui";
 import s from "./HostsPage.module.css";
@@ -380,6 +381,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           ref={sortButton}
           trailingIcon="caret-down"
           aria-haspopup="menu"
+          aria-expanded={!!sortMenu.anchor}
           aria-label={t("hosts.sort")}
           onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
         >
@@ -506,7 +508,7 @@ const HostRow = memo(function HostRow({
       onContextMenu={(e) => onContext(e, host)}
     >
       <div className={s.nameCell}>
-        <StatusDot color={dot} />
+        <OsIcon os={host.os} badge={dot} />
         <span className={s.name}>{host.name}</span>
         {host.favorite && <Icon name="star" fill className={s.fav} />}
       </div>

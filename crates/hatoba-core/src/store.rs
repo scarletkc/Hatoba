@@ -162,6 +162,14 @@ const MIGRATIONS: &[&str] = &[
      );",
 ];
 
+/// Device-local columns added after their table shipped, as `(table, column, type)`.
+///
+/// They are added in place of a migration because `SCHEMA_VERSION` is also the synced vault's
+/// schema: a new version would stop devices on older builds from joining the vault, for data
+/// that never leaves this device. Older builds name the columns they read and write, so they
+/// leave these alone.
+const LOCAL_COLUMNS: &[(&str, &str, &str)] = &[("local_state", "os", "TEXT")];
+
 const ITEM_COLUMNS: &str = "id, envelope, revision, deleted, dirty, updated_at";
 
 fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<ItemRow> {
@@ -416,6 +424,29 @@ pub trait StoreOps {
         )?;
         Ok(())
     }
+
+    /// Device-local server OS id of a host (HOST-11).
+    fn host_os(&self, item_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT os FROM local_state WHERE item_id = ?1",
+                [item_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
+    /// Sets or clears the device-local server OS id of a host (never synced).
+    fn set_host_os(&self, item_id: &str, os: Option<&str>) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO local_state (item_id, os) VALUES (?1, ?2) \
+             ON CONFLICT(item_id) DO UPDATE SET os = excluded.os",
+            params![item_id, os],
+        )?;
+        Ok(())
+    }
 }
 
 /// The open database.
@@ -494,7 +525,23 @@ impl Store {
                 tx.set_meta(meta::SCHEMA_VERSION, &(step + 1).to_string())
             })?;
         }
-        Ok(())
+        // Checked inside the write lock, so a second process opening the file waits and then
+        // finds the column instead of adding it twice.
+        self.transaction(|tx| {
+            for (table, column, kind) in LOCAL_COLUMNS {
+                let present: bool = tx.conn().query_row(
+                    "SELECT EXISTS (SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)",
+                    [table, column],
+                    |r| r.get(0),
+                )?;
+                if !present {
+                    tx.conn().execute_batch(&format!(
+                        "ALTER TABLE {table} ADD COLUMN {column} {kind}"
+                    ))?;
+                }
+            }
+            Ok(())
+        })
     }
 
     /// Runs `f` in one immediate transaction: all of its writes commit together or not at all.
@@ -759,7 +806,50 @@ mod tests {
         store.set_last_connected("h", 100).unwrap();
         store.set_last_connected("h", 200).unwrap();
         assert_eq!(store.last_connected("h").unwrap(), Some(200));
+        assert_eq!(store.host_os("h").unwrap(), None);
+        store.set_host_os("h", Some("debian")).unwrap();
+        assert_eq!(store.host_os("h").unwrap().as_deref(), Some("debian"));
+        assert_eq!(store.last_connected("h").unwrap(), Some(200));
+        store.set_last_connected("h", 300).unwrap();
+        assert_eq!(store.host_os("h").unwrap().as_deref(), Some("debian"));
+        store.set_host_os("h", None).unwrap();
+        assert_eq!(store.host_os("h").unwrap(), None);
+        store.set_host_os("other", Some("ubuntu")).unwrap();
+        assert_eq!(store.last_connected("other").unwrap(), None);
         assert!(store.item_rows().unwrap().is_empty());
+    }
+
+    #[test]
+    fn local_columns_are_added_without_a_schema_bump() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v.db");
+        // A database written by a build from before the `os` column.
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO meta (key, value) VALUES ('schema_version', '1');",
+        )
+        .unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.execute(
+            "INSERT INTO local_state (item_id, last_connected_at) VALUES ('h', 100)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.last_connected("h").unwrap(), Some(100));
+        assert_eq!(store.host_os("h").unwrap(), None);
+        store.set_host_os("h", Some("freebsd")).unwrap();
+        assert_eq!(
+            store.get_meta(meta::SCHEMA_VERSION).unwrap().as_deref(),
+            Some("1")
+        );
+        drop(store);
+        // Opening again finds the column and keeps its value.
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.host_os("h").unwrap().as_deref(), Some("freebsd"));
     }
 
     #[cfg(unix)]

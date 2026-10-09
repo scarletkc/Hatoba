@@ -68,6 +68,7 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
             ref={langButton}
             type="button"
             aria-haspopup="menu"
+            aria-expanded={!!langMenu.anchor}
             aria-label={t("settings.language")}
             className={cx(controlStyles.popup, s.langButton)}
             onClick={() => langButton.current && langMenu.openBelow(langButton.current, true)}

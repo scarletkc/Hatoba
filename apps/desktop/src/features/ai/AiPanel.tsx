@@ -21,6 +21,8 @@ import s from "./AiPanel.module.css";
 export const PANEL_DEFAULT_WIDTH = 380;
 const PANEL_MIN = 300;
 const PANEL_MAX = 900;
+/** Room the page or terminal keeps beside the panel (`.panel`'s max-width). */
+const CONTENT_MIN = 480;
 
 const clampWidth = (w: number) => Math.round(Math.min(PANEL_MAX, Math.max(PANEL_MIN, w)));
 
@@ -67,11 +69,14 @@ export function AiPanel({ slotId }: { slotId: string }) {
     const handle = e.currentTarget;
     const startX = e.clientX;
     const startWidth = panelRef.current?.getBoundingClientRect().width ?? prefWidth;
-    let width = clampWidth(startWidth);
+    // Saves only the width the panel can show, so it doesn't grow wider than it was dragged later.
+    const room = (panelRef.current?.parentElement?.clientWidth ?? Infinity) - CONTENT_MIN;
+    const fit = (w: number) => clampWidth(Math.min(w, room));
+    let width = fit(startWidth);
     handle.setPointerCapture(e.pointerId);
     document.documentElement.classList.add(s.resizing);
     const move = (ev: globalThis.PointerEvent) => {
-      width = clampWidth(startWidth + (startX - ev.clientX));
+      width = fit(startWidth + (startX - ev.clientX));
       setDragWidth(width);
     };
     const end = () => {
@@ -220,6 +225,7 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
         type="button"
         className={cx(s.mode, mode === "bypass" && s.modeBypass)}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         aria-label={`${t("ai.mode")}: ${label}`}
         title={`${t("ai.mode")}: ${label}`}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}

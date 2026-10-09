@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/controls";
 import { AiPanelButton } from "@/features/ai/AiPanel";
 import { slotActivity, useAi } from "@/features/ai/store";
+import { OsIcon } from "@/features/hosts/OsIcon";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
 import { cx } from "@/lib/cx";
+import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabs, type TabStatus } from "./tabs";
 import s from "./TitleBar.module.css";
@@ -84,6 +86,12 @@ const STATUS_DOT: Record<TabStatus, string> = {
   disconnected: "var(--fg3)",
 };
 
+/** HOST-11: the tab host's OS, with the session status as the badge. */
+function TabOsIcon({ hostId, status }: { hostId: string; status: TabStatus }) {
+  const os = useVaultData((st) => st.hosts.find((h) => h.id === hostId)?.os ?? null);
+  return <OsIcon os={os} badge={STATUS_DOT[status]} />;
+}
+
 /** AI-07: a tab whose conversation is running a turn, or waiting for approval or Continue. */
 function AiActivity({ slotId }: { slotId: string }) {
   const t = useT();
@@ -143,7 +151,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
             }}
             title={tab.title}
           >
-            <span className={s.tabDot} style={{ background: STATUS_DOT[tab.status] }} />
+            <TabOsIcon hostId={tab.hostId} status={tab.status} />
             <span className={s.tabLabel}>{tab.title}</span>
             <AiActivity slotId={tab.id} />
             <span

@@ -461,6 +461,7 @@ function EffortCell({ id, efforts, onChange }: { id: string; efforts: AiEffort[]
         className={cx(controlStyles.popup, s.effort)}
         aria-label={t("aiSettings.models.effort.label", { id })}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         title={text}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >

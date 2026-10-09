@@ -160,6 +160,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         sftpOpen={info.sftpOpen}
         forwardCount={countRunning(forwardRuns)}
         forwardsOpen={!!forwardsMenu.anchor}
+        moreOpen={!!menu.anchor?.trigger}
         findHint={shortcutLabel(platform, "Ctrl+Shift+F", "⌘F")}
         onFind={() => (findOpen ? closeFind() : setFindOpen(true))}
         onForwards={(button) => (forwardsMenu.anchor ? forwardsMenu.close() : forwardsMenu.openBelow(button, true))}

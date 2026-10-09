@@ -61,6 +61,9 @@ pub struct HostView {
     pub ai_notes: String,
     pub updated_at: i64,
     pub last_connected_at: Option<i64>,
+    /// The server's operating system from its SSH identification string on the last connection
+    /// from this device, such as `ubuntu` (HOST-11). Device-local, like `last_connected_at`.
+    pub os: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]

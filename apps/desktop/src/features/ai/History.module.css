@@ -214,7 +214,8 @@
 }
 
 .row:hover .more,
-.more:focus-visible {
+.more:focus-visible,
+.more[aria-expanded="true"] {
   visibility: visible;
 }
 

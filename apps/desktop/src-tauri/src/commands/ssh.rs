@@ -123,9 +123,16 @@ pub async fn ssh_connect(
 
     let live = Arc::new(LiveSession::new(session.clone(), shell));
     state.ssh.insert(session_id.clone(), live.clone());
-    // HOST-06: device-local, never synced.
-    if let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(&host_id, now_ms())?)) {
-        tracing::debug!("last-connected not recorded: {}", e.detail);
+    // HOST-06, HOST-11: device-local, never synced.
+    let os = session.server_os().map(hatoba_ssh::ServerOs::as_str);
+    if let Err(e) = state.with_unlocked(|v| {
+        v.set_last_connected(&host_id, now_ms())?;
+        Ok(v.set_host_os(&host_id, os)?)
+    }) {
+        tracing::debug!(
+            "last-connected time and server OS not recorded: {}",
+            e.detail
+        );
     }
     let latency = session.latency_ms();
     emit_state(&app, &session_id, &host_id, SessionState::Connected, |e| {

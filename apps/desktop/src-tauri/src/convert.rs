@@ -29,6 +29,7 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         ai_notes: host.ai_notes.clone(),
         updated_at: host.updated_at,
         last_connected_at: vault.last_connected(id),
+        os: vault.host_os(id),
     }
 }
 

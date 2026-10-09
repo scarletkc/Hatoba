@@ -68,7 +68,8 @@
   font-size: var(--text-sm);
 }
 
-.model:hover:not(:disabled) {
+.model:hover:not(:disabled),
+.model[aria-expanded="true"] {
   background: var(--fill);
   color: var(--fg);
 }
@@ -122,7 +123,8 @@
   flex: none;
 }
 
-.meter:hover {
+.meter:hover,
+.meter[aria-expanded="true"] {
   background: var(--fill);
 }
 

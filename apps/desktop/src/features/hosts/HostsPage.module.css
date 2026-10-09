@@ -3,11 +3,34 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
 }
 
 /* Shared by the column header and every row (design §01: name · address · tags · last connected · action). */
 .cols {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.1fr) 104px 64px;
+}
+
+/* A narrow page (beside the AI panel, or in a small window) drops the tags, then the last connection
+ * time, so the name keeps its room. */
+@container (max-width: 680px) {
+  .cols {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) 104px 64px;
+  }
+
+  .cols > :nth-child(3) {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
+  .cols {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px;
+  }
+
+  .cols > :nth-child(4) {
+    display: none;
+  }
 }
 
 .scroll {

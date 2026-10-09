@@ -132,7 +132,8 @@
   min-height: 16px;
   margin: -4px 0 -4px;
   font-size: var(--text-sm);
-  line-height: 1.35;
+  /* Exactly the reserved height: 1.35 made the line 16.2px and nudged the link below. */
+  line-height: 16px;
   color: var(--red);
   text-align: center;
 }

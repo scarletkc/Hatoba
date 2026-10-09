@@ -50,6 +50,8 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
   const [renaming, setRenaming] = useState<string | null>(null);
   const menu = useMenu();
   const [menuEntries, setMenuEntries] = useState<MenuEntry[]>([]);
+  /** The row whose ⋯ button opened the menu. */
+  const [menuRow, setMenuRow] = useState<string | null>(null);
   const list = useMemo(() => (history ? sortConversations(history) : null), [history]);
   const [query, setQuery] = useState("");
   const [search, retrySearch] = useSearch(query);
@@ -91,6 +93,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
       { kind: "separator" },
       { label: t("ai.history.delete"), icon: "trash", danger: true, onSelect: () => void remove(c) },
     ]);
+    setMenuRow(anchor ? c.id : null);
     if (anchor) menu.openBelow(anchor, true);
     else menu.openAt({ x: e.clientX, y: e.clientY });
   };
@@ -131,6 +134,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
           )}
           {list?.map((c) => {
             const host = hosts.find((h) => h.id === c.host_id);
+            const menuOpen = !!menu.anchor?.trigger && menuRow === c.id;
             return (
               <div
                 key={c.id}
@@ -171,6 +175,9 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                   icon="dots-three"
                   label={t("ai.history.more")}
                   className={s.more}
+                  active={menuOpen}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
                   onClick={(e) => showMenu(e, c, e.currentTarget)}
                 />
               </div>

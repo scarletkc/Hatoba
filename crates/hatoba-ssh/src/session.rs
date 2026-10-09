@@ -17,6 +17,7 @@ use crate::handler::{ClientHandler, CloseReason, SessionShared};
 use crate::hostkey::HostKeyVerifier;
 use crate::interactive::KeyboardInteractive;
 use crate::net::{ConnectClock, Phase, ceil_ms, tcp_connect};
+use crate::server_os::{ServerOs, server_os};
 use crate::sftp::SftpClient;
 use crate::shell;
 pub use crate::shell::{ShellEvent, ShellHandle, ShellOptions};
@@ -432,6 +433,12 @@ impl SshSession {
     /// 255 characters. `None` when nothing printable was sent.
     pub fn server_id(&self) -> Option<&str> {
         self.inner.shared.server_id()
+    }
+
+    /// The server's operating system, as far as [`server_id`](Self::server_id) tells (see
+    /// [`server_os()`]).
+    pub fn server_os(&self) -> Option<ServerOs> {
+        self.server_id().and_then(server_os)
     }
 
     /// `true` once the connection has ended for any reason.
