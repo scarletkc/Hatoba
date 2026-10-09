@@ -108,6 +108,8 @@ const DAY = 24 * HOUR;
  *   autocompact every turn of a conversation that has an answer compacts it first (AI-22)
  *   effortfail every request that carries a thinking level is refused for it and goes again
  *              without it, so the panel says the level was not used (AI-05)
+ *   showcase   in a connected tab, any message gets the scripted nginx 502 fix that the README
+ *              screenshots and demo video show: two commands, a fix, `curl` typed into the shell, a summary
  *   noprovider (Settings → AI mock) no provider is configured
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
  * Like Rust, a message that moves the conversation to another host (AI-09) or goes to another model
@@ -258,6 +260,51 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return call("mcp__github__list_issues", { repo: "scarletkc/Hatoba", state: "open" });
   }
 
+  /** `?ai=showcase`: step `step` (the replies so far in this turn) of the scripted nginx 502 fix. */
+  function showcase(step: number): Plan {
+    if (step === 0)
+      return {
+        reasoning: zh
+          ? "502 说明 nginx 连不上上游。先看 nginx 的错误日志，再看 API 实际监听的端口。"
+          : "A 502 means nginx could not get a response from the upstream. Check nginx’s error log, then the port the API actually listens on.",
+        text: zh ? "我先看 nginx 的错误日志和 API 监听的端口。" : "Let me check nginx’s error log and the port the API listens on.",
+        calls: [
+          call("run_command", { command: "sudo tail -n 3 /var/log/nginx/error.log", timeout_seconds: 30 }),
+          call("run_command", { command: "sudo ss -ltnp | grep api", timeout_seconds: 30 }),
+        ],
+        finish: "tool_calls",
+      };
+    if (step === 1)
+      return {
+        reasoning: zh ? "nginx 连的是 8081，API 监听的是 8080。改 upstream，测试配置后重新加载。" : "nginx connects to 8081, but the API listens on 8080. Fix the upstream, test the config, then reload.",
+        text: zh
+          ? "找到了：nginx 把请求转发到 `127.0.0.1:8081`，但 `api` 监听的是 `127.0.0.1:8080`。我把 upstream 改成 8080，测试配置后重新加载 nginx。"
+          : "Found it: nginx forwards to `127.0.0.1:8081`, but `api` listens on `127.0.0.1:8080`. I’ll point the upstream at 8080, test the config, and reload nginx.",
+        calls: [
+          call("run_command", {
+            command: "sudo sed -i 's/127.0.0.1:8081/127.0.0.1:8080/' /etc/nginx/conf.d/api.conf && sudo nginx -t && sudo systemctl reload nginx",
+            timeout_seconds: 30,
+          }),
+        ],
+        finish: "tool_calls",
+      };
+    if (step === 2)
+      return {
+        reasoning: "",
+        text: zh ? "nginx 已重新加载。我在你的终端里验证一下。" : "nginx reloaded. I’ll verify it from your shell.",
+        calls: [call("send_input", { text: "curl -sI http://localhost/v1/hosts", key: "enter", wait_seconds: 3 })],
+        finish: "tool_calls",
+      };
+    return {
+      reasoning: "",
+      text: zh
+        ? "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```"
+        : "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+      calls: [],
+      finish: "stop",
+    };
+  }
+
   async function plan(c: Conv, turn: Turn): Promise<Plan> {
     const user = lastUser(c);
     const since = c.entries.slice(user.index + 1);
@@ -288,6 +335,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         finish: "tool_calls",
       };
     }
+
+    if (flags.has("showcase") && terminal) return showcase(since.filter((e) => e.role === "assistant").length);
 
     if (results.length === 0 && callsSoFar === 0) {
       const calls: AiToolCall[] = [];
@@ -610,6 +659,21 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return { status: 0, stdout: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   49G   23G   24G  48% /", stderr: "" };
     if (/uptime/.test(command)) return { status: 0, stdout: " 09:41:12 up 41 days,  3:12,  1 user,  load average: 0.21, 0.18, 0.12", stderr: "" };
     if (/sleep/.test(command)) return { status: 0, stdout: "done", stderr: "" };
+    // `?ai=showcase`
+    if (/nginx\/error\.log/.test(command))
+      return {
+        status: 0,
+        stdout: [41, 43, 46]
+          .map(
+            (s) =>
+              `2026/10/08 09:38:${s} [error] 812#812: *4821${s % 10} connect() failed (111: Connection refused) while connecting to upstream, client: 10.0.0.4, server: api.example.net, request: "GET /v1/hosts HTTP/1.1", upstream: "http://127.0.0.1:8081/v1/hosts"`,
+          )
+          .join("\n"),
+        stderr: "",
+      };
+    if (/\bss -ltnp\b/.test(command)) return { status: 0, stdout: `LISTEN 0      4096      127.0.0.1:8080      0.0.0.0:*    users:(("api",pid=48211,fd=9))`, stderr: "" };
+    if (/nginx -t/.test(command))
+      return { status: 0, stdout: "", stderr: "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful" };
     return { status: 0, stdout: `(demo output of \`${command}\`)`, stderr: "" };
   }
 

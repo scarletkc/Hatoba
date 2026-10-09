@@ -120,6 +120,18 @@ export class FakeShell {
       case "uname":
         this.write("Linux prod-api-tokyo 6.8.0-45-generic #45-Ubuntu SMP x86_64 GNU/Linux\r\n");
         return;
+      case "curl":
+        this.write(
+          [
+            `HTTP/1.1 ${G}200 OK${X}`,
+            "Server: nginx/1.24.0 (Ubuntu)",
+            "Date: Thu, 08 Oct 2026 00:42:07 GMT",
+            "Content-Type: application/json",
+            "Content-Length: 2817",
+            "",
+          ].join("\r\n"),
+        );
+        return;
       case "cjk":
         this.write("中文宽字符测试：波止場 · 日本語テスト · 한국어\r\n");
         return;

@@ -11,6 +11,10 @@
 [![Sync](https://img.shields.io/badge/sync-Cloudflare%20Workers%20%2B%20D1-F38020?logo=cloudflare&logoColor=white)](workers/sync/README.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
+<img src="docs/media/hatoba-demo.webp" alt="The AI assistant finds and fixes an nginx 502 on a server, then Hatoba deploys its sync Worker to Cloudflare" width="880" />
+
+[Watch the demo with sound (MP4)](docs/media/hatoba-demo.mp4)
+
 </div>
 
 Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them
@@ -53,6 +57,26 @@ account.
   OpenAI-compatible or Anthropic API key, supports skills and MCP servers, and
   takes terminal selections, connection errors, long pastes, and text files as
   attachments. Conversations sync with the rest of the vault.
+
+## Screenshots
+
+### AI assistant
+
+The assistant reads the terminal, finds the cause, and fixes it. Each command
+waits for your approval, and you can edit it before it runs.
+
+![The AI assistant beside a terminal, after fixing an nginx 502 and checking the result with curl](docs/media/ai-assistant.png)
+
+![An approval card for a command the assistant wants to run](docs/media/ai-approval.png)
+
+### Cloud sync
+
+Hatoba deploys the sync Worker and its D1 database to your Cloudflare account,
+then keeps every device in sync.
+
+![The Cloud Sync page with the connection, the device list, and the encryption notice](docs/media/sync.png)
+
+![The sync Worker deployed from Hatoba, with each deployment step checked](docs/media/sync-deploy.png)
 
 ## Security
 
