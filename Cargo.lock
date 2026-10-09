@@ -2228,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-ai"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytes",
  "encoding_rs",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-core"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2282,7 +2282,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-desktop"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2321,7 +2321,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-ssh"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "aes 0.9.3",
  "async-trait",
