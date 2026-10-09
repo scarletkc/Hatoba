@@ -398,11 +398,11 @@ The local database is `vault.db` in the app's local data directory, with SQLite'
 
 The database holds device-local data (the device ID, the sync cursor, the local preferences, and `local_state`), so it must not live in a directory that roams with the user profile. On Windows that rules out `%APPDATA%`: roaming profiles copy it to other machines, which would then share one device ID, and it is often redirected to a network share, where SQLite's WAL is unreliable.
 
-`MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
+`MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, `LOCAL_COLUMNS` in the same file adds device-local columns without changing the schema version (which the synced vault shares), and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
 
 - `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on.
 - `items`: one row per item. `envelope` holds only the §4.2 envelope and becomes NULL after deletion (a tombstone). `revision` is the version the server has confirmed, 0 for items that were never synced. `dirty` marks local changes that have not been pushed yet.
-- `local_state`: device-local data that is not synced, such as the last connection time.
+- `local_state`: device-local data that is not synced, such as the last connection time and the server's OS (HOST-11).
 - `conflict_log`: conflicts resolved automatically under §6.4, kept for item-by-item review and restore.
 
 The sync session token and the Cloudflare API token of D1 direct mode live in the system credential store (Windows Credential Manager). They are never written to SQLite and never synced. The API token for in-app deployment and the setup token the app generates are not stored anywhere (§6.7). For a Worker the app deployed, the sync backend setting in `meta` also records the account ID and the Worker name, which are not secrets and only fill in the upgrade form.
@@ -857,6 +857,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | HOST-04 | Favorites | P0 |
 | HOST-05 | Search: fuzzy matching on name, address, user name, and tags. See WIN-04 for the shortcut | P0 |
 | HOST-06 | Show the last connection time (device-local data) | P0 |
+| HOST-11 | Show the server's operating system as an icon before the host name, in the host list and on session tabs, with the status dot (HOST-10 in the list, the session state on a tab) as a badge in its bottom-right corner. The OS comes only from the identification string the server sends in the SSH version exchange, such as `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5`; no command is run on the server. It is recorded each time a terminal session connects, as device-local data like HOST-06, so it never changes the host's `updated_at` or syncs. `ServerOs` in `crates/hatoba-ssh/src/server_os.rs` lists the systems recognized; any other server gets a generic server icon | P1 |
 | HOST-07 | Connect with a double-click or Enter | P0 |
 | HOST-08 | On the host edit page, a saved password shows only **Saved** and can be replaced but not viewed | P0 |
 | HOST-09 | Duplicate a host | P1 |

@@ -13,6 +13,8 @@ interface VaultData {
   tags: TagCount[];
   keys: KeyView[];
   reload(): Promise<void>;
+  /** Re-reads only the hosts, for the device-local fields a connection updates (HOST-06, HOST-11). */
+  reloadHosts(): Promise<void>;
   clear(): void;
 }
 
@@ -31,6 +33,7 @@ export const useVaultData = create<VaultData>((set) => ({
     ]);
     set({ loaded: true, hosts, groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)), tags, keys });
   },
+  reloadHosts: async () => set({ hosts: await api.hosts_list() }),
   clear: () => set({ loaded: false, hosts: [], groups: [], tags: [], keys: [] }),
 }));
 
