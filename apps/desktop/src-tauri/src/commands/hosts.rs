@@ -530,8 +530,9 @@ pub async fn ssh_config_import(
 type Identities = HashMap<String, Result<ParsedKey, String>>;
 
 /// The first step of an import, before the vault is locked: picks the chosen entries and, when
-/// key files were confirmed, the identity file of each. Each confirmed file is read and parsed
-/// once; any other file is left unread.
+/// key files were confirmed, the identity file of each: the first one that exists, or else a
+/// confirmed one that has gone since the preview, so the host gets a warning rather than
+/// silently none. Each confirmed file is read and parsed once; any other file is left unread.
 fn prepare_import(
     entries: Vec<SshConfigHost>,
     wanted: &HashSet<String>,
@@ -541,7 +542,16 @@ fn prepare_import(
         .into_iter()
         .filter(|e| wanted.contains(&e.alias))
         .map(|e| {
-            let path = (!confirmed.is_empty()).then(|| identity_path(&e)).flatten();
+            let path = if confirmed.is_empty() {
+                None
+            } else {
+                identity_path(&e).or_else(|| {
+                    e.identity_files
+                        .iter()
+                        .find(|p| confirmed.contains(*p))
+                        .cloned()
+                })
+            };
             (e, path)
         })
         .collect();
@@ -956,24 +966,45 @@ mod tests {
         let (listed, _) = dir.key("id_listed", None);
         // Missing when the preview ran, so not in the list, and created before the import.
         let (appeared, _) = dir.key("id_appeared", None);
+        // In the list, and deleted before the import.
+        let (gone, _) = dir.key("id_gone", None);
+        std::fs::remove_file(&gone).unwrap();
         let mut v = vault();
 
         let result = import(
             &mut v,
-            vec![entry("listed", &[&listed]), entry("appeared", &[&appeared])],
-            &["listed", "appeared"],
-            &[&listed],
+            vec![
+                entry("listed", &[&listed]),
+                entry("appeared", &[&appeared]),
+                entry("gone", &[&gone]),
+            ],
+            &["listed", "appeared", "gone"],
+            &[&listed, &gone],
         );
 
-        assert_eq!((result.hosts_created, result.keys_imported), (2, 1));
-        assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+        assert_eq!((result.hosts_created, result.keys_imported), (3, 1));
+        assert_eq!(result.warnings.len(), 2, "{:?}", result.warnings);
+        let warning = |alias: &str| {
+            result
+                .warnings
+                .iter()
+                .find(|w| w.starts_with(&format!("{alias}: ")))
+                .cloned()
+                .unwrap_or_default()
+        };
         assert!(
-            result.warnings[0].contains("was not among the confirmed key files"),
+            warning("appeared").contains("was not among the confirmed key files"),
+            "{:?}",
+            result.warnings
+        );
+        assert!(
+            warning("gone").contains("can't read"),
             "{:?}",
             result.warnings
         );
         assert!(matches!(auth_of(&v, "listed"), HostAuth::Key { .. }));
         assert!(matches!(auth_of(&v, "appeared"), HostAuth::Ask));
+        assert!(matches!(auth_of(&v, "gone"), HostAuth::Ask));
         assert_eq!(v.keys().len(), 1);
     }
 
