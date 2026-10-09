@@ -134,7 +134,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hatoba/desktop build
-      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-desktop
+      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-desktop
       # The release profile (fat LTO, one codegen unit) is a second full build, so PRs skip it.
       # Only the Release workflow has the update signing key.
       - name: Build NSIS installer
