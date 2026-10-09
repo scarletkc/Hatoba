@@ -22,6 +22,11 @@ export default defineMessages({
     "btn.later": "稍后处理",
     "btn.ok": "好",
 
+    "edit.cut": "剪切",
+    "edit.copy": "复制",
+    "edit.paste": "粘贴",
+    "edit.selectAll": "全选",
+
     "field.show": "显示",
     "field.hide": "隐藏",
     "field.removeTag": "移除标签 {name}",
@@ -158,6 +163,11 @@ export default defineMessages({
     "btn.remove": "Remove",
     "btn.later": "Later",
     "btn.ok": "OK",
+
+    "edit.cut": "Cut",
+    "edit.copy": "Copy",
+    "edit.paste": "Paste",
+    "edit.selectAll": "Select All",
 
     "field.show": "Show",
     "field.hide": "Hide",
@@ -300,6 +310,11 @@ export default defineMessages({
     "btn.remove": "削除",
     "btn.later": "後で",
     "btn.ok": "OK",
+
+    "edit.cut": "切り取り",
+    "edit.copy": "コピー",
+    "edit.paste": "貼り付け",
+    "edit.selectAll": "すべて選択",
 
     "field.show": "表示",
     "field.hide": "非表示",

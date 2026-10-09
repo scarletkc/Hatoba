@@ -80,18 +80,21 @@ export function Menu({
   entries,
   onClose,
   minWidth,
+  whileLocked,
 }: {
   anchor: MenuAnchor;
   entries: MenuEntry[];
   onClose: () => void;
   minWidth?: number;
+  /** Also shows over the lock screen: only for a menu that shows nothing from the vault. */
+  whileLocked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: anchor.x, top: anchor.y });
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
-  const locked = useOverlaysLocked();
+  const locked = useOverlaysLocked() && !whileLocked;
 
   useEffect(() => {
     if (locked) onClose();
