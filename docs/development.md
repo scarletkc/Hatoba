@@ -100,6 +100,16 @@ node scripts/ci/worker-version.mjs             # Compare with where the branch l
 
 The Sync Worker job in CI runs the same check against the base branch, and fails when the Worker changed but its version did not.
 
+## Keep the built-in skill current
+
+The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.
+
+- Each file stays under 15,000 characters, because `read_skill` shortens a longer file.
+- Quote UI labels in tables headed `| en | zh-CN | ja |`, copied character for character from the message tables in `apps/desktop/src/i18n/locales`, and only from messages without `{placeholders}`.
+- `{{HATOBA_VERSION}}` in `SKILL.md` is a placeholder that the app replaces with the running version.
+
+`apps/desktop/src/i18n/hatobaSkill.test.ts` runs with `pnpm test`. It checks every table row against the message tables, the frontmatter, the size limit, and the links between the files.
+
 ## Checks before committing
 
 CI also runs format and lint checks:

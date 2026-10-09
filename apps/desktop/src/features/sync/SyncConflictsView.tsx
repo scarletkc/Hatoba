@@ -18,10 +18,20 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   forward: "arrows-left-right",
   snippet: "terminal-window",
   settings: "gear",
+  ai_provider: "sparkle",
+  search_provider: "magnifying-glass",
+  ai_conversation: "chat-circle-text",
+  ai_message: "chat-text",
+  skill: "book-open",
+  skill_file: "file-text",
+  mcp_server: "plugs",
 };
 
 /** Fields whose values read better in the monospace face (as in the design). */
-const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint"]);
+const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path"]);
+
+/** Fields the backend sends as "true" or "false". */
+const BOOL_FIELDS = new Set(["pinned", "enabled", "always_ask"]);
 
 interface Row {
   field: string;
@@ -74,6 +84,7 @@ function ConflictCard({
       const label = t(key);
       return { text: label === key ? v : label, dim: false };
     }
+    if (BOOL_FIELDS.has(field) && (v === "true" || v === "false")) return { text: t(`sync.value.${v}`), dim: false };
     if (v === null || v === "") return { text: deleted ? "—" : t("sync.cf.none"), dim: true };
     return { text: v, dim: false };
   };

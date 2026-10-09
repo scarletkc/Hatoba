@@ -1,13 +1,16 @@
 //! Hatoba desktop shell: Tauri commands, events and channels on top of `hatoba-core` (vault,
 //! crypto, sync) and `hatoba-ssh` (sessions, SFTP). The WebView never receives secrets (spec §3.2).
 
+mod ai;
 mod commands;
 mod convert;
 mod deploy;
+mod dropped;
 mod dto;
 mod error;
 mod lock;
 mod logging;
+mod mcp;
 mod platform;
 mod ssh;
 mod state;
@@ -15,8 +18,8 @@ mod sync;
 mod update;
 
 use commands::{
-    app, deploy as deploy_cmd, forwards, hosts, keys, settings, sftp, ssh as ssh_cmd,
-    sync as sync_cmd, vault,
+    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, mcp as mcp_cmd, settings, sftp,
+    skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -117,6 +120,52 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             settings::prefs_save,
             settings::star_prompt_get,
             settings::star_prompt_done,
+            ai_cmd::ai_providers_list,
+            ai_cmd::ai_provider_save,
+            ai_cmd::ai_provider_delete,
+            ai_cmd::ai_provider_models,
+            ai_cmd::ai_provider_test,
+            ai_cmd::search_providers_list,
+            ai_cmd::search_provider_save,
+            ai_cmd::search_provider_delete,
+            ai_cmd::search_provider_test,
+            ai_cmd::ai_settings_get,
+            ai_cmd::ai_settings_save,
+            ai_cmd::ai_conversations_list,
+            ai_cmd::ai_conversation_get,
+            ai_cmd::ai_conversation_rename,
+            ai_cmd::ai_conversation_pin,
+            ai_cmd::ai_conversation_delete,
+            ai_cmd::ai_send,
+            ai_cmd::ai_retry,
+            ai_cmd::ai_tool_result,
+            ai_cmd::ai_tool_run,
+            ai_cmd::ai_stop,
+            ai_cmd::ai_compact,
+            ai_cmd::ai_search,
+            ai_cmd::ai_edit_resend,
+            ai_cmd::ai_read_dropped_files,
+            skills::skills_list,
+            skills::skill_get,
+            skills::skill_builtin_get,
+            skills::skill_save,
+            skills::skill_delete,
+            skills::skill_set_enabled,
+            skills::skill_import_preview,
+            skills::skill_import,
+            skills::skill_export,
+            mcp_cmd::mcp_servers_list,
+            mcp_cmd::mcp_server_save,
+            mcp_cmd::mcp_server_delete,
+            mcp_cmd::mcp_server_set_enabled,
+            mcp_cmd::mcp_server_status,
+            mcp_cmd::mcp_server_start,
+            mcp_cmd::mcp_server_stop,
+            mcp_cmd::mcp_set_always_allow,
+            mcp_cmd::mcp_tool_info,
+            mcp_cmd::mcp_import_preview,
+            mcp_cmd::mcp_import,
+            mcp_cmd::mcp_export,
         ])
         .events(collect_events![
             dto::VaultLockedEvent,
@@ -126,6 +175,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::SessionStateEvent,
             dto::TransferProgressEvent,
             dto::ForwardStatusEvent,
+            dto::McpServerStatus,
         ])
 }
 
@@ -154,20 +204,38 @@ pub fn run() {
             let vault = hatoba_core::vault::Vault::open(&data_dir.join("vault.db"))?;
             let (_window, mica) = platform::window::create_main_window(&handle)?;
             app.manage(state::AppState::new(vault, mica));
+            app.state::<state::AppState>()
+                .mcp
+                .set_events(std::sync::Arc::new(mcp_cmd::AppMcpEvents(handle.clone())));
 
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());
             platform::window::show_main(&handle);
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(true) = event {
-                // §6.3: sync when the window regains focus.
+        .on_window_event(|window, event| match event {
+            // §6.3: sync when the window regains focus.
+            tauri::WindowEvent::Focused(true) => {
                 sync::trigger(window.app_handle(), sync::Trigger::Focus);
             }
+            // AI-35: the AI panel may read the files of the last drop, and no others.
+            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                if let Some(state) = window.app_handle().try_state::<state::AppState>() {
+                    state.dropped.record(paths);
+                }
+            }
+            _ => {}
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Hatoba");
+        .build(tauri::generate_context!())
+        .expect("error while building Hatoba")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event
+                && let Some(state) = app.try_state::<state::AppState>()
+            {
+                // AI-32: MCP servers stop when the app quits.
+                tauri::async_runtime::block_on(state.mcp.shutdown());
+            }
+        });
 }
 
 #[cfg(test)]

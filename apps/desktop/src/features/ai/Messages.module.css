@@ -1,0 +1,626 @@
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 14px 18px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* AI-21: entries before context_start stay visible but are not sent. */
+.outside {
+  opacity: 0.5;
+}
+
+.contextDivider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.contextDivider::before,
+.contextDivider::after {
+  content: "";
+  flex: 1;
+  height: 0.5px;
+  background: var(--line2);
+}
+
+/* AI-05, AI-09: a note Hatoba stored before a message, as a line across the conversation. */
+.noteDivider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.noteDivider::before,
+.noteDivider::after {
+  content: "";
+  flex: 1 1 16px;
+  min-width: 16px;
+  height: 0.5px;
+  background: var(--line2);
+}
+
+.noteText {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.userRow {
+  display: flex;
+  justify-content: flex-end;
+  padding-left: 32px;
+}
+
+.user {
+  max-width: 100%;
+  padding: 7px 11px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--accenttint);
+  font-size: var(--text-md);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.userPending {
+  opacity: 0.7;
+}
+
+/* AI-26: Edit sits left of the user's message and shows on hover; with it the row needs less padding. */
+.userRow:has(.editButton) {
+  align-items: flex-start;
+  gap: 4px;
+  padding-left: 4px;
+}
+
+.editButton {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 3px;
+  color: var(--fg2);
+  visibility: hidden;
+}
+
+.userRow:hover .editButton,
+.editButton:focus-visible {
+  visibility: visible;
+}
+
+/* The message with a terminal selection card above it (AI-10); an open card takes the row's width. */
+.userStack {
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.userStack:has(> [data-selection-open="true"]) {
+  flex: 1 1 auto;
+}
+
+.editAttachment {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.editMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-left: 32px;
+}
+
+/* Two classes: it overrides `.input` and `.textarea` below. */
+.editMessage .editInput {
+  min-height: 34px;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  resize: none;
+}
+
+/* AI-24: a search hit's entry, highlighted for a moment after it scrolls into view. */
+.flash {
+  border-radius: 8px;
+  animation: flash 2.4s ease-out;
+}
+
+@keyframes flash {
+  0%,
+  40% {
+    background-color: var(--accenttint);
+    box-shadow: 0 0 0 6px var(--accenttint);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+.assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.muted {
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+/* Reasoning (AI-06) and the compaction summary (AI-21) */
+.reasoning,
+.summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.reasoningHead,
+.summaryHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px 0 5px;
+  margin-left: -5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+  font-size: var(--text-sm);
+}
+
+.reasoningHead:hover,
+.summaryHead:hover {
+  background: var(--fill);
+}
+
+.reasoningBody {
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line2);
+  color: var(--fg2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.summary {
+  padding: 8px 10px;
+  border-radius: var(--radius-panel);
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.summaryBody {
+  align-self: stretch;
+}
+
+/* Tool calls */
+.tool {
+  display: flex;
+  flex-direction: column;
+  border-radius: 9px;
+  background: var(--group);
+  box-shadow: inset 0 0 0 0.5px var(--line2);
+  min-width: 0;
+}
+
+.toolAttention {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 55%, transparent);
+}
+
+.toolHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 9px 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  min-width: 0;
+}
+
+.toolHead:hover {
+  background: var(--fill);
+}
+
+.toolIcon {
+  flex: none;
+  color: var(--fg2);
+}
+
+.toolName {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.toolSummary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg2);
+}
+
+.toolCaret {
+  flex: none;
+  color: var(--fg3);
+}
+
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--fill);
+  color: var(--fg2);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.chipOk {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.chipBad {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.chipWarn {
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 13%, transparent);
+}
+
+.toolBody {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 10px 10px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pre {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: var(--win);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+  cursor: text;
+}
+
+.output {
+  max-height: 320px;
+}
+
+.command {
+  font-size: 12px;
+  color: var(--fg);
+}
+
+/* The approval card shows a call's whole input: nothing below a fold (AI-17). */
+.whole {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.lineBreak {
+  color: var(--fg3);
+  user-select: none;
+}
+
+.inputNotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* Approval card (AI-17) */
+.approval {
+  gap: 9px;
+  padding: 10px 11px 11px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 60%, transparent), 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: color-mix(in srgb, var(--orange) 5%, var(--win));
+}
+
+.approvalHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.approvalHost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.hostName {
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hostTarget {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.approvalInput {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.meta {
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gap {
+  flex: 1;
+}
+
+.rejectLink {
+  font-size: var(--text-sm);
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  height: var(--field-height);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--field);
+  box-shadow: 0 0 0 0.5px var(--fieldline);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.input:focus {
+  box-shadow: var(--focus-ring);
+}
+
+/* The ring above marks focus; the global :focus-visible outline would add a square one. */
+.input:focus-visible {
+  outline: none;
+}
+
+.textarea {
+  height: auto;
+  padding: 6px 8px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.number {
+  width: 64px;
+  flex: none;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.fieldError {
+  font-size: var(--text-xs);
+  color: var(--red);
+}
+
+.rejectRow {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* AI-19 and AI-31: run now and stop asking, for this conversation or on this device. */
+.allowRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: -2px;
+}
+
+.allowRow button {
+  font-size: var(--text-xs);
+}
+
+/* MCP approval card (AI-31) */
+.mcpTitle {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.description {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 6px 9px;
+  border-radius: var(--radius-md);
+  background: var(--win);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rejectRow .input {
+  font-family: var(--font-sans);
+}
+
+/* The tool call limit (AI-18) */
+.cardFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.cardText {
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  line-height: 1.5;
+}
+
+/* Status lines and banners */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--fg2) 0%, var(--fg3) 40%, var(--fg2) 80%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.bannerWarn {
+  background: color-mix(in srgb, var(--orange) 9%, transparent);
+}
+
+.bannerWarn .bannerIcon {
+  color: var(--orange);
+}
+
+.bannerError {
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.bannerError .bannerIcon {
+  color: var(--red);
+}
+
+.bannerIcon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.bannerMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.bannerDetail {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}

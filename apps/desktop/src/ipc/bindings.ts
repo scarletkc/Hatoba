@@ -169,10 +169,113 @@ export const commands = {
 	starPromptGet: () => __TAURI_INVOKE<StarPrompt>("star_prompt_get"),
 	/**  The user starred, opened the bug report form, or closed the prompt: it never shows again. */
 	starPromptDone: () => __TAURI_INVOKE<null>("star_prompt_done"),
+	aiProvidersList: () => __TAURI_INVOKE<AiProviderView[]>("ai_providers_list"),
+	aiProviderSave: (input: AiProviderInput) => __TAURI_INVOKE<AiProviderView>("ai_provider_save", { input }),
+	aiProviderDelete: (id: string) => __TAURI_INVOKE<null>("ai_provider_delete", { id }),
+	/**  AI-03: the model list of a saved or unsaved provider. */
+	aiProviderModels: (input: AiProviderInput) => __TAURI_INVOKE<AiModel[]>("ai_provider_models", { input }),
+	/**  AI-04: a minimal request to the first model, or the model list when there is none. */
+	aiProviderTest: (input: AiProviderInput) => __TAURI_INVOKE<AiTestResult>("ai_provider_test", { input }),
+	searchProvidersList: () => __TAURI_INVOKE<SearchProviderView[]>("search_providers_list"),
+	searchProviderSave: (input: SearchProviderInput) => __TAURI_INVOKE<SearchProviderView>("search_provider_save", { input }),
+	searchProviderDelete: (id: string) => __TAURI_INVOKE<null>("search_provider_delete", { id }),
+	/**  A real query through a saved or unsaved search provider. */
+	searchProviderTest: (input: SearchProviderInput) => __TAURI_INVOKE<AiTestResult>("search_provider_test", { input }),
+	aiSettingsGet: () => __TAURI_INVOKE<AiSettingsView>("ai_settings_get"),
+	aiSettingsSave: (settings: AiSettingsView) => __TAURI_INVOKE<null>("ai_settings_save", { settings }),
+	/**  Every conversation, unsorted; the panel sorts by `last_activity`, pinned first. */
+	aiConversationsList: () => __TAURI_INVOKE<AiConversationView[]>("ai_conversations_list"),
+	aiConversationGet: (id: string) => __TAURI_INVOKE<AiConversationDetail>("ai_conversation_get", { id }),
+	aiConversationRename: (id: string, title: string) => __TAURI_INVOKE<AiConversationView>("ai_conversation_rename", { id, title }),
+	aiConversationPin: (id: string, pinned: boolean) => __TAURI_INVOKE<AiConversationView>("ai_conversation_pin", { id, pinned }),
+	aiConversationDelete: (id: string) => __TAURI_INVOKE<null>("ai_conversation_delete", { id }),
+	/**
+	 *  Stores the user's message and starts a turn; its events stream on `channel` until
+	 *  `turn_ended`.
+	 */
+	aiSend: (input: AiSendInput, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_send", { input, channel }),
+	/**  Retry after an error: the next request from the stored conversation, on a new channel. */
+	aiRetry: (conversationId: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<null>("ai_retry", { conversationId, context, channel }),
+	/**  Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
+	aiToolResult: (conversationId: string, toolCallId: string, result: AiToolResultInput) => __TAURI_INVOKE<AiEntryView>("ai_tool_result", { conversationId, toolCallId, result }),
+	/**
+	 *  Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`,
+	 *  `read_skill`, MCP tools) and stores its result.
+	 */
+	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiEntryView>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
+	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
+	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
+	aiCompact: (conversationId: string, context: AiTurnContext) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context }),
+	/**  AI-24: conversations whose title or message text contains `query`, ignoring case. */
+	aiSearch: (query: string) => __TAURI_INVOKE<AiSearchHit[]>("ai_search", { query }),
+	/**
+	 *  AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and
+	 *  starts a turn whose events stream on `channel`, like `ai_send`.
+	 */
+	aiEditResend: (conversationId: string, entryId: string, text: string, context: AiTurnContext, channel: Channel<AiTurnEvent>) => __TAURI_INVOKE<AiSendStarted>("ai_edit_resend", { conversationId, entryId, text, context, channel }),
+	/**
+	 *  AI-35: text files dropped on the panel in the desktop app, whose webview hands the WebView
+	 *  only their paths. Reads only paths of the window's last drop, each once
+	 *  (`crate::dropped`); with any other path, nothing is read. One result per path, in order,
+	 *  naming the file by its base name. The per-message total stays the panel's to check.
+	 */
+	aiReadDroppedFiles: (paths: string[]) => __TAURI_INVOKE<DroppedFile[]>("ai_read_dropped_files", { paths }),
+	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
+	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
+	/**  The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
+	skillBuiltinGet: () => __TAURI_INVOKE<BuiltinSkillView>("skill_builtin_get"),
+	/**  Validates like an import (AI-27); rejects with `invalid_input` naming the field. */
+	skillSave: (input: SkillInput) => __TAURI_INVOKE<SkillView>("skill_save", { input }),
+	skillDelete: (id: string) => __TAURI_INVOKE<null>("skill_delete", { id }),
+	skillSetEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<null>("skill_set_enabled", { id, enabled }),
+	/**  Reads a folder or `.zip` the user picked; nothing is saved. */
+	skillImportPreview: (path: string) => __TAURI_INVOKE<SkillImportPreview>("skill_import_preview", { path }),
+	/**
+	 *  Imports what the preview showed: reads the path again and refuses it when it no longer
+	 *  matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
+	 *  new name.
+	 */
+	skillImport: (path: string, token: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, token, replaceId, rename }),
+	/**  Writes the skill as a `.zip` to a path the user picked. */
+	skillExport: (id: string, path: string) => __TAURI_INVOKE<null>("skill_export", { id, path }),
+	mcpServersList: () => __TAURI_INVOKE<McpServerView[]>("mcp_servers_list"),
+	/**  Saves a server; a running one restarts when its name or transport changed. */
+	mcpServerSave: (input: McpServerInput) => __TAURI_INVOKE<McpServerView>("mcp_server_save", { input }),
+	mcpServerDelete: (id: string) => __TAURI_INVOKE<null>("mcp_server_delete", { id }),
+	/**  On this device only (AI-29). Disabling stops a running server. */
+	mcpServerSetEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<null>("mcp_server_set_enabled", { id, enabled }),
+	mcpServerStatus: (id: string) => __TAURI_INVOKE<McpServerStatus>("mcp_server_status", { id }),
+	/**  Starts (or restarts) the server now and lists its tools. */
+	mcpServerStart: (id: string) => __TAURI_INVOKE<McpServerStatus>("mcp_server_start", { id }),
+	mcpServerStop: (id: string) => __TAURI_INVOKE<null>("mcp_server_stop", { id }),
+	/**
+	 *  AI-31 Always allow on this device: one tool (the server's own name), or every tool with `tool`
+	 *  null.
+	 */
+	mcpSetAlwaysAllow: (serverId: string, tool: string | null, allow: boolean) => __TAURI_INVOKE<null>("mcp_set_always_allow", { serverId, tool, allow }),
+	/**
+	 *  The MCP tool behind a name the model called in the conversation: from the offer of the
+	 *  conversation's latest request, as `ai_tool_run` resolves it, else from the running servers.
+	 *  Null when neither has it, or its server was deleted; the panel then asks in either mode.
+	 */
+	mcpToolInfo: (conversationId: string, name: string) => __TAURI_INVOKE<{
+	server_id: string,
+	server_name: string,
+	always_ask: boolean,
+	tool: McpToolView,
+} | null>("mcp_tool_info", { conversationId, name }),
+	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
+	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
+	/**  Adds every importable server; env and header values move into the vault. */
+	mcpImport: (json: string) => __TAURI_INVOKE<McpServerView[]>("mcp_import", { json }),
+	/**  `mcpServers` JSON with placeholders in place of env and header values. */
+	mcpExport: () => __TAURI_INVOKE<string>("mcp_export"),
 };
 
 /** Events */
 export const events = {
+	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -183,6 +286,190 @@ export const events = {
 };
 
 /* Types */
+export type AiAuthHeader = "x-api-key" | "authorization";
+
+export type AiConversationDetail = {
+	conversation: AiConversationView,
+	entries: AiEntryView[],
+	/**  A turn of this conversation is running (its events go to the channel that started it). */
+	running: boolean,
+};
+
+export type AiConversationView = {
+	id: string,
+	title: string,
+	/**  The host the conversation last worked on. */
+	host_id: string | null,
+	pinned: boolean,
+	/**  `entry_id` where the context sent to the model starts (AI-21). */
+	context_start: string | null,
+	/**  The thinking level its last message was sent with (AI-05); `None` is Default. */
+	effort: AiEffort | null,
+	created_at: number,
+	updated_at: number,
+	/**  The newest entry or conversation change, for sorting history (AI-23). */
+	last_activity: number,
+};
+
+/**  A thinking level (AI-05), lowest first. Where one is optional, `None` is Default. */
+export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/**  A stored conversation entry (§13.7), without the provider's raw message. */
+export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
+
+export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
+
+/**  A model of a provider (AI-03). Token limits are `None` when unknown. */
+export type AiModel = {
+	id: string,
+	name: string,
+	context_window: number | null,
+	max_output_tokens: number | null,
+	/**
+	 *  The thinking levels the model accepts, lowest first (AI-05); empty for none, `None` when
+	 *  unknown (the panel then offers Low to High).
+	 */
+	efforts: AiEffort[] | null,
+	/**  Whether the model supports adaptive thinking (Anthropic's model list), `None` when unknown. */
+	adaptive_thinking: boolean | null,
+};
+
+export type AiModelRef = {
+	provider_id: string,
+	model_id: string,
+};
+
+export type AiPermissionMode = "manual" | "bypass";
+
+export type AiProtocol = "chat_completions" | "anthropic";
+
+export type AiProviderInput = {
+	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */
+	id: string | null,
+	name: string,
+	protocol: AiProtocol,
+	base_url: string,
+	/**  `None` keeps the saved key (as HOST-08 does for passwords); `""` clears it. */
+	api_key: string | null,
+	auth_header: AiAuthHeader,
+	models: AiModel[],
+};
+
+/**  AI-01. The API key never reaches the WebView: only whether one is saved. */
+export type AiProviderView = {
+	id: string,
+	name: string,
+	protocol: AiProtocol,
+	base_url: string,
+	has_api_key: boolean,
+	/**  Only used by `anthropic`. */
+	auth_header: AiAuthHeader,
+	models: AiModel[],
+	updated_at: number,
+};
+
+export type AiSearchHit = {
+	conversation_id: string,
+	/**  The first matching entry, or `None` when only the title matched. */
+	entry_id: string | null,
+	/**  Text around the first match. */
+	snippet: string,
+};
+
+export type AiSendInput = {
+	/**  `None` starts a new conversation, stored with this first message (AI-07). */
+	conversation_id: string | null,
+	text: string,
+	context: AiTurnContext,
+};
+
+export type AiSendStarted = {
+	conversation: AiConversationView,
+	user_entry: AiEntryView,
+};
+
+/**  The synced `Settings.ai` (§5.1). */
+export type AiSettingsView = {
+	default_model: AiModelRef | null,
+	/**  The thinking level new conversations start with (AI-05); `None` is Default. */
+	default_effort: AiEffort | null,
+	search_provider_id: string | null,
+	/**  The built-in `hatoba` skill is offered (AI-34). */
+	builtin_skill_enabled: boolean,
+	/**  Sent with every request, at most 4,000 characters (AI-36). */
+	custom_instructions: string,
+};
+
+/**  AI-04 Test Connection, also used for the search provider test. */
+export type AiTestFailure = "auth" | "network" | "unknown_model" | "invalid_url" | "other";
+
+export type AiTestResult = {
+	ok: boolean,
+	failure: AiTestFailure | null,
+	status: number | null,
+	/**  The provider's own message, when it sent one. */
+	message: string | null,
+};
+
+export type AiToolCall = {
+	id: string,
+	name: string,
+	/**  JSON text. */
+	arguments: string,
+};
+
+/**  A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17). */
+export type AiToolResultInput = {
+	status: AiToolStatus,
+	content: string,
+	/**  AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
+	edited_arguments: string | null,
+};
+
+export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";
+
+/**  What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
+export type AiTurnContext = {
+	provider_id: string,
+	model_id: string,
+	/**
+	 *  The thinking level (AI-05); `None` is Default. Requests send the highest level the model
+	 *  offers that is not above it, and the conversation keeps it for its next message.
+	 */
+	effort: AiEffort | null,
+	/**  The tab's host; the next message moves the conversation to it (AI-09). */
+	host_id: string | null,
+	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
+	tab: boolean,
+	/**
+	 *  The tab's SSH session while it is connected, whose server's identification string the
+	 *  system prompt states (§13.1).
+	 */
+	session_id: string | null,
+	/**  MCP servers switched off for this conversation (AI-30, P2). */
+	disabled_mcp_servers: string[],
+};
+
+export type AiTurnEndReason = "completed" | "length" | "refused" | "stopped" | "error";
+
+/**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
+export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
+/**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
+{ kind: "entry"; entry: AiEntryView } | 
+/**  One response finished. With `tool_calls`, Rust waits for every call's result. */
+{ kind: "done"; finish: AiFinish } | { kind: "error"; status: number | null; message: string } | 
+/**
+ *  The provider refused the thinking level, so the request was sent again without it and the
+ *  model answers at its default depth (AI-05).
+ */
+{ kind: "effort_ignored" } | { kind: "turn_ended"; reason: AiTurnEndReason };
+
+export type AiUsage = {
+	input_tokens: number,
+	output_tokens: number,
+	estimated: boolean,
+};
+
 export type AppError = {
 	code: ErrorCode,
 	detail: string,
@@ -192,6 +479,8 @@ export type AppError = {
 	key_kind: KeyParseErrorKind | null,
 	permission: CloudflarePermission | null,
 	cf_code: number | null,
+	/**  `ai`: the HTTP status the provider answered with. */
+	http_status: number | null,
 };
 
 export type AppInfo = {
@@ -215,6 +504,18 @@ export type AuthPrompt = {
 export type AuthPromptField = {
 	prompt: string,
 	echo: boolean,
+};
+
+/**  The built-in `hatoba` skill (AI-34), read-only. */
+export type BuiltinSkillView = {
+	name: string,
+	description: string,
+	/**  `Settings.ai.builtin_skill_enabled`. */
+	enabled: boolean,
+	/**  `SKILL.md` without its frontmatter, with the app's version filled in. */
+	body: string,
+	/**  The files besides `SKILL.md`, sorted by path. */
+	files: SkillFileView[],
 };
 
 export type CloudflareAccount = {
@@ -332,6 +633,23 @@ export type DeviceView = {
 	current: boolean,
 };
 
+/**
+ *  A text file dropped on the AI panel (AI-35), named by its base name only, never its path (a
+ *  path can name the local user).
+ */
+export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
+
+/**  Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons. */
+export type DroppedFileRefusal = 
+/**  An image, which attachments do not take yet. */
+"image" | 
+/**  Over 256 KB. */
+"too_large" | 
+/**  NUL bytes or invalid UTF-8. */
+"binary" | 
+/**  Not a file, gone, or not readable. */
+"unreadable";
+
 export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  In-app deployment (§6.7): Cloudflare rejected the API token. */
 "cloudflare_token" | 
@@ -344,7 +662,12 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  An upgrade found a Worker newer than the one this build deploys. */
 "worker_newer" | 
 /**  This build does not embed the Worker, so it cannot deploy it. */
-"no_worker_bundle" | "cancelled" | "io" | "internal";
+"no_worker_bundle" | 
+/**
+ *  AI assistant (§13): a model provider or search provider failed. `http_status` has the
+ *  status it answered with, when it answered; `detail` is its own message.
+ */
+"ai" | "cancelled" | "io" | "internal";
 
 export type FileEntry = {
 	name: string,
@@ -420,6 +743,8 @@ export type HostInput = {
 	favorite: boolean,
 	jump_host_id: string | null,
 	note: string,
+	/**  At most 2,000 characters (AI-37). */
+	ai_notes: string,
 };
 
 export type HostKeyPrompt = {
@@ -450,6 +775,8 @@ export type HostView = {
 	favorite: boolean,
 	jump_host_id: string | null,
 	note: string,
+	/**  What the AI assistant is told about the host (AI-37). */
+	ai_notes: string,
 	updated_at: number,
 	last_connected_at: number | null,
 };
@@ -460,7 +787,7 @@ export type ImportResult = {
 	warnings: string[],
 };
 
-export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "settings";
+export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings";
 
 export type KeyAlgorithm = "ed25519" | "ecdsa" | "rsa";
 
@@ -507,9 +834,114 @@ export type LocalPrefs = {
 	 *  the device unless the user asks for it (spec §11, no telemetry).
 	 */
 	auto_update_check: boolean,
+	/**  AI-16: the permission mode new conversations start in on this device. */
+	ai_permission_mode: AiPermissionMode,
+	/**  AI-16: the user confirmed the first switch to bypass on this device. */
+	ai_bypass_confirmed: boolean,
+	/**  AI-18: a turn pauses after this many tool calls. */
+	ai_tool_call_limit: number,
+	/**  The AI panel is open (§9). */
+	ai_panel_open: boolean,
+	/**  The AI panel's width in CSS pixels. */
+	ai_panel_width: number,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
+
+export type McpImportPreview = {
+	servers: McpImportServer[],
+	/**  Entries that cannot be imported, such as an `sse` server, with the reason. */
+	skipped: McpImportSkipped[],
+};
+
+export type McpImportServer = {
+	name: string,
+	transport: McpTransportView,
+	/**  A saved server has this name; the import adds a numeric suffix. */
+	exists: boolean,
+};
+
+export type McpImportSkipped = {
+	name: string,
+	reason: string,
+};
+
+export type McpSecretInput = {
+	key: string,
+	/**  `None` keeps the saved value for this key. */
+	value: string | null,
+};
+
+export type McpServerInput = {
+	/**  `None` creates a server. */
+	id: string | null,
+	name: string,
+	transport: McpTransportInput,
+	always_ask: boolean,
+};
+
+export type McpServerState = "stopped" | "starting" | "running" | "failed";
+
+/**
+ *  A server's live state (AI-32), also pushed as `ai://mcp-status` on every change. The stderr
+ *  lines stay in memory and are never logged.
+ */
+export type McpServerStatus = {
+	server_id: string,
+	state: McpServerState,
+	error: string | null,
+	/**  The last stderr lines of a `stdio` server, kept in memory only (AI-32). */
+	stderr: string[],
+	/**  The tools from the last successful listing. */
+	tools: McpToolView[],
+};
+
+export type McpServerView = {
+	id: string,
+	name: string,
+	transport: McpTransportView,
+	/**  Ask even in bypass mode. Synced (AI-31). */
+	always_ask: boolean,
+	/**  Enabled on this device; a server from another device starts enabled only for `http`. */
+	enabled: boolean,
+	/**  On this device, every tool of the server runs without asking in manual mode (AI-31). */
+	always_allow: boolean,
+	/**  On this device, these tools (the server's own names) run without asking in manual mode. */
+	always_allow_tools: string[],
+	updated_at: number,
+};
+
+/**  Shown on the approval card; never changes whether a call asks (AI-31). */
+export type McpToolAnnotations = {
+	title: string | null,
+	read_only_hint: boolean | null,
+	destructive_hint: boolean | null,
+	idempotent_hint: boolean | null,
+	open_world_hint: boolean | null,
+};
+
+/**  The MCP tool behind a name the model called, for the approval card (AI-31). */
+export type McpToolInfo = {
+	server_id: string,
+	server_name: string,
+	always_ask: boolean,
+	tool: McpToolView,
+};
+
+export type McpToolView = {
+	/**  The name offered to the model, `mcp__<server>__<tool>` after cleaning (AI-30). */
+	name: string,
+	/**  The server's own tool name. */
+	tool: string,
+	description: string,
+	annotations: McpToolAnnotations,
+	/**  Always allow on this device (per tool, or because the whole server is). */
+	always_allow: boolean,
+};
+
+export type McpTransportInput = { kind: "stdio"; command: string; args: string[]; env: McpSecretInput[] } | { kind: "http"; url: string; headers: McpSecretInput[] };
+
+export type McpTransportView = { kind: "stdio"; command: string; args: string[]; env_keys: string[] } | { kind: "http"; url: string; header_keys: string[] };
 
 export type Platform = "windows" | "macos" | "linux";
 
@@ -520,6 +952,26 @@ export type ProbeResult = {
 };
 
 export type RightClick = "copy_paste" | "menu";
+
+export type SearchKind = "brave" | "tavily" | "searxng";
+
+export type SearchProviderInput = {
+	id: string | null,
+	kind: SearchKind,
+	base_url: string | null,
+	/**  `None` keeps the saved key; `""` clears it. */
+	api_key: string | null,
+};
+
+/**  The backend of `web_search` (AI-14). */
+export type SearchProviderView = {
+	id: string,
+	kind: SearchKind,
+	/**  The instance URL for SearXNG, `None` otherwise. */
+	base_url: string | null,
+	has_api_key: boolean,
+	updated_at: number,
+};
 
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";
 
@@ -536,6 +988,69 @@ export type SettingsView = {
 	terminal: TerminalSettings,
 	auto_lock_minutes: number,
 	lock_disconnects_sessions: boolean,
+};
+
+export type SkillDetail = {
+	skill: SkillView,
+	/**  `SKILL.md` without its frontmatter. */
+	body: string,
+	files: SkillFileView[],
+	/**  Other frontmatter fields, kept for export. They change nothing (AI-27). */
+	frontmatter_keys: string[],
+};
+
+export type SkillFileView = {
+	/**  Relative path with forward slashes, such as `references/nginx.md`. Never `SKILL.md`. */
+	path: string,
+	content: string,
+};
+
+/**  What an import would save, shown before saving (AI-27). Importable when `issues` is empty. */
+export type SkillImportPreview = {
+	/**  `None` when `SKILL.md` is missing or unreadable. */
+	name: string | null,
+	description: string | null,
+	body: string | null,
+	files: SkillFileView[],
+	frontmatter_keys: string[],
+	/**  Files that are not UTF-8 text, which the import skips. */
+	skipped: string[],
+	issues: SkillIssue[],
+	/**  A saved skill with the same name, which the user may replace (or rename the new one). */
+	existing_id: string | null,
+	/**  The name is the built-in skill's (AI-34): the skill can be imported only under another. */
+	reserved_name: boolean,
+	/**
+	 *  A digest of what was read, which `skill_import` takes back: it imports the source only if
+	 *  it still reads the same, so what is saved is what this preview showed.
+	 */
+	token: string,
+};
+
+export type SkillInput = {
+	/**  `None` creates a skill. */
+	id: string | null,
+	name: string,
+	description: string,
+	enabled: boolean,
+	body: string,
+	/**  Every file besides `SKILL.md`; a saved file left out is deleted. */
+	files: SkillFileView[],
+};
+
+/**  Why a skill cannot be imported or saved (AI-27). */
+export type SkillIssue = { kind: "missing_skill_md" } | { kind: "invalid_frontmatter"; detail: string } | { kind: "invalid_name"; name: string } | { kind: "missing_description" } | { kind: "description_too_long"; chars: number } | { kind: "file_too_large"; path: string; size: number } | { kind: "unsafe_path"; path: string } | { kind: "too_many_files"; count: number } | 
+/**  More than 5 MB in total. */
+{ kind: "too_large"; bytes: number };
+
+export type SkillView = {
+	id: string,
+	name: string,
+	description: string,
+	enabled: boolean,
+	/**  Paths of the files besides `SKILL.md`, sorted. */
+	files: string[],
+	updated_at: number,
 };
 
 export type SshConfigCandidate = {

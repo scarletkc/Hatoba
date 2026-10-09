@@ -1,0 +1,8 @@
+data: {"id":"cmpl-local","object":"chat.completion.chunk","created":1759900003,"model":"qwen3:8b","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}
+
+data: {"id":"cmpl-local","object":"chat.completion.chunk","created":1759900003,"model":"qwen3:8b","choices":[{"index":0,"delta":{"role":"assistant","content":" there"},"finish_reason":null}]}
+
+data: {"id":"cmpl-local","object":"chat.completion.chunk","created":1759900003,"model":"qwen3:8b","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"stop"}]}
+
+data: [DONE]
+

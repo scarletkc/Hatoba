@@ -8,13 +8,27 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  SshErrorKind,
   StarPrompt,
   SyncStatus,
   VaultStatus,
 } from "../types";
 import { FRAME_CLOSED, FRAME_DATA } from "../types";
+import { createAiMock } from "./ai";
+import { createAiExtensionsMock } from "./aiExtensions";
+import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
 import { FakeShell } from "./shell";
+
+/** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
+const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> & Record<"timeout", (address: string, port: number) => string> = {
+  timeout: (a, p) => `connect to ${a}:${p}: operation timed out`,
+  refused: (a, p) => `connect to ${a}:${p}: connection refused`,
+  dns: (a) => `failed to lookup address information: ${a}: nodename nor servname provided, or not known`,
+  unreachable: (a, p) => `connect to ${a}:${p}: network is unreachable`,
+  auth_failed: () => "authentication failed: no method succeeded (tried publickey, password)",
+  disconnected: () => "the server closed the connection during the handshake",
+};
 
 /**
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
@@ -24,6 +38,9 @@ import { FakeShell } from "./shell";
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
+ *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected
+ * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
+ * SSH error kind (`?ssh=fail` or another value: a timeout), so the error card shows (SSH-05).
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * The in-app deployment accepts any API token of 20 or more characters.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
@@ -40,6 +57,7 @@ export function createMockApi(): HatobaApi {
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
   const deployDemo = q.get("deploy");
+  const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
@@ -142,7 +160,20 @@ export function createMockApi(): HatobaApi {
 
   const recovery = "K7QF-2M9X-PL4D-8WRT-H3ZN-6VBE-Q1MA-7TCY";
 
+  const aiSettings = createAiSettingsMock();
+  const aiExtensions = createAiExtensionsMock((event, payload) => emit(event, payload), {
+    version,
+    builtinEnabled: async () => (await aiSettings.ai_settings_get()).builtin_skill_enabled,
+  });
   return {
+    ...aiSettings,
+    ...aiExtensions,
+    ...createAiMock({
+      providers: aiSettings.ai_providers_list,
+      settings: aiSettings.ai_settings_get,
+      hosts: async () => hosts,
+      mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
+    }),
     app_info: async () => {
       const p = q.get("platform");
       const platform = p === "macos" || p === "linux" || p === "windows" ? p : "windows";
@@ -243,6 +274,7 @@ export function createMockApi(): HatobaApi {
       needUnlocked();
       if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
+      if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
@@ -258,6 +290,7 @@ export function createMockApi(): HatobaApi {
         favorite: input.favorite,
         jump_host_id: input.jump_host_id,
         note: input.note,
+        ai_notes: input.ai_notes,
         updated_at: Date.now(),
         last_connected_at: existing?.last_connected_at ?? null,
       };
@@ -374,14 +407,16 @@ export function createMockApi(): HatobaApi {
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", { session_id: sid, host_id: hostId, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
       setTimeout(() => state("connecting"), 0);
-      if (D.FAILING_HOSTS.has(hostId)) {
+      if (D.FAILING_HOSTS.has(hostId) || sshDemo) {
         const enc = new TextEncoder();
         for (let i = 1; i <= 3; i++) {
           await delay(350);
           onFrame(frame(FRAME_DATA, enc.encode(`\x1b[90mConnecting to ${h.address}:${h.port} (attempt ${i})…\x1b[0m\r\n`)));
         }
         await delay(400);
-        const error: AppError = { code: "ssh", detail: `connect to ${h.address}:${h.port}: operation timed out`, ssh_kind: "timeout" };
+        const kind = sshDemo && sshDemo in SSH_DEMO_DETAIL ? (sshDemo as SshErrorKind) : "timeout";
+        const detail = (SSH_DEMO_DETAIL[kind] ?? SSH_DEMO_DETAIL.timeout)(h.address, h.port);
+        const error: AppError = { code: "ssh", detail, ssh_kind: kind };
         setTimeout(() => state("failed", { error }), 0);
         throw error;
       }

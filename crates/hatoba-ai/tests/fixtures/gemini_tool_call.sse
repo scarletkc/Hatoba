@@ -1,0 +1,4 @@
+data: {"choices":[{"delta":{"content":"","role":"assistant","tool_calls":[{"extra_content":{"google":{"thought_signature":"CsQBAdHtim9wF2kJ4n0Qx7bVv1u8Zl3r=="}},"function":{"arguments":"{\"url\":\"https://nginx.org/en/docs/\"}","name":"fetch_url"},"id":"function-call-17598","type":"function"}]},"finish_reason":"stop","index":0}],"created":1759900002,"id":"Kq3iaOv4","model":"gemini-2.5-pro","object":"chat.completion.chunk","usage":{"completion_tokens":31,"prompt_tokens":950,"total_tokens":1101,"completion_tokens_details":{"reasoning_tokens":120}}}
+
+data: [DONE]
+

@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
-import type { DeployProgress } from "./types";
+import type { AiTurnEvent, DeployProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -118,6 +118,69 @@ export function createTauriApi(): HatobaApi {
     prefs_save: (prefs) => call("prefs_save", { prefs }),
     star_prompt_get: () => call("star_prompt_get"),
     star_prompt_done: () => call("star_prompt_done"),
+
+    ai_providers_list: () => call("ai_providers_list"),
+    ai_provider_save: (input) => call("ai_provider_save", { input }),
+    ai_provider_delete: (id) => call("ai_provider_delete", { id }),
+    ai_provider_models: (input) => call("ai_provider_models", { input }),
+    ai_provider_test: (input) => call("ai_provider_test", { input }),
+    search_providers_list: () => call("search_providers_list"),
+    search_provider_save: (input) => call("search_provider_save", { input }),
+    search_provider_delete: (id) => call("search_provider_delete", { id }),
+    search_provider_test: (input) => call("search_provider_test", { input }),
+    ai_settings_get: () => call("ai_settings_get"),
+    ai_settings_save: (settings) => call("ai_settings_save", { settings }),
+    ai_conversations_list: () => call("ai_conversations_list"),
+    ai_conversation_get: (id) => call("ai_conversation_get", { id }),
+    ai_conversation_rename: (id, title) => call("ai_conversation_rename", { id, title }),
+    ai_conversation_pin: (id, pinned) => call("ai_conversation_pin", { id, pinned }),
+    ai_conversation_delete: (id) => call("ai_conversation_delete", { id }),
+    ai_send: (input, onEvent) => {
+      const channel = new Channel<AiTurnEvent>();
+      channel.onmessage = onEvent;
+      return call("ai_send", { input, channel });
+    },
+    ai_retry: (conversationId, context, onEvent) => {
+      const channel = new Channel<AiTurnEvent>();
+      channel.onmessage = onEvent;
+      return call("ai_retry", { conversationId, context, channel });
+    },
+    ai_tool_result: (conversationId, toolCallId, result) => call("ai_tool_result", { conversationId, toolCallId, result }),
+    ai_tool_run: (conversationId, toolCallId, sessionId, editedArguments) =>
+      call("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+    ai_stop: (conversationId) => call("ai_stop", { conversationId }),
+    ai_compact: (conversationId, context) => call("ai_compact", { conversationId, context }),
+
+    ai_search: (query) => call("ai_search", { query }),
+    ai_edit_resend: (conversationId, entryId, text, context, onEvent) => {
+      const channel = new Channel<AiTurnEvent>();
+      channel.onmessage = onEvent;
+      return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
+    },
+    ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
+
+    skills_list: () => call("skills_list"),
+    skill_get: (id) => call("skill_get", { id }),
+    skill_builtin_get: () => call("skill_builtin_get"),
+    skill_save: (input) => call("skill_save", { input }),
+    skill_delete: (id) => call("skill_delete", { id }),
+    skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),
+    skill_import_preview: (path) => call("skill_import_preview", { path }),
+    skill_import: (path, token, replaceId, rename) => call("skill_import", { path, token, replaceId, rename }),
+    skill_export: (id, path) => call("skill_export", { id, path }),
+
+    mcp_servers_list: () => call("mcp_servers_list"),
+    mcp_server_save: (input) => call("mcp_server_save", { input }),
+    mcp_server_delete: (id) => call("mcp_server_delete", { id }),
+    mcp_server_set_enabled: (id, enabled) => call("mcp_server_set_enabled", { id, enabled }),
+    mcp_server_status: (id) => call("mcp_server_status", { id }),
+    mcp_server_start: (id) => call("mcp_server_start", { id }),
+    mcp_server_stop: (id) => call("mcp_server_stop", { id }),
+    mcp_set_always_allow: (serverId, tool, allow) => call("mcp_set_always_allow", { serverId, tool, allow }),
+    mcp_tool_info: (conversationId, name) => call("mcp_tool_info", { conversationId, name }),
+    mcp_import_preview: (json) => call("mcp_import_preview", { json }),
+    mcp_import: (json) => call("mcp_import", { json }),
+    mcp_export: () => call("mcp_export"),
 
     window_snap_overlay: () => call("window_snap_overlay"),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),

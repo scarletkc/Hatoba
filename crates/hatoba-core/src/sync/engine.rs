@@ -142,6 +142,16 @@ pub async fn sync_round(
     })?;
     let mut report = SyncReport::default();
     pull_all(vault, backend, options, &mut report).await?;
+    // Message parts of conversations deleted on either side, so their tombstones go out with
+    // this round's push (§13.7). A failure here leaves the parts for the next round.
+    with_vault(vault, |v| {
+        match v.ai_sweep_orphaned_parts() {
+            Ok(0) => {}
+            Ok(parts) => tracing::info!(parts, "deleted message parts of deleted conversations"),
+            Err(e) => tracing::warn!("could not delete orphaned message parts: {e}"),
+        }
+        Ok(())
+    })?;
     push_all(vault, backend, options, &mut report).await?;
     with_vault(vault, |v| {
         let now = v.clock.now_ms();

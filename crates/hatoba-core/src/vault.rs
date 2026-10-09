@@ -26,7 +26,7 @@ use crate::model::{
     Group, Host, Item, KnownHost, PortForward, RightClick, SETTINGS_ID, Settings, SshKey, new_id,
 };
 use crate::recovery::RecoveryCode;
-use crate::store::{ItemRow, Store, StoreOps, meta};
+use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
 use crate::sync::SyncConfig;
 use crate::sync::backend::VaultMeta;
 use crate::sync::conflict::{ConflictEntry, Resolution};
@@ -186,9 +186,9 @@ pub(crate) struct SyncCtx<'a> {
 }
 
 impl SyncCtx<'_> {
-    /// Re-reads one row and brings the decrypted cache in line with it. Rows that are
-    /// tombstones leave the cache; rows that cannot be decrypted are logged (id only) and
-    /// skipped, which is reported as `false`.
+    /// Re-reads one row and brings the decrypted cache in line with it (a message part without
+    /// its `data`, see [`decode_row`]). Rows that are tombstones leave the cache; rows that
+    /// cannot be decrypted are logged (id only) and skipped, which is reported as `false`.
     pub(crate) fn refresh(&mut self, id: &str) -> Result<bool> {
         match self.store.item_row(id)? {
             Some(row) => match decode_row(self.key, &row) {
@@ -212,12 +212,17 @@ impl SyncCtx<'_> {
     }
 }
 
-/// Decrypts a row. `Ok(None)` for tombstones.
+/// Decrypts a row into the form the item map holds. `Ok(None)` for tombstones.
+///
+/// A conversation message part comes back without its `data` (spec §13.7); opening the
+/// conversation reads it again from the store ([`Vault::ai_entries`]).
 pub(crate) fn decode_row(key: &[u8; 32], row: &ItemRow) -> Result<Option<Item>> {
     let Some(env) = row.envelope.as_deref().filter(|_| !row.deleted) else {
         return Ok(None);
     };
-    decode_envelope(key, &row.id, env).map(Some)
+    let mut item = decode_envelope(key, &row.id, env)?;
+    item.strip_message_data();
+    Ok(Some(item))
 }
 
 /// Decrypts one item envelope (JSON text) for the item with the given id.
@@ -752,6 +757,7 @@ impl Vault {
     /// Inserts or updates an item and returns its id. `updated_at` is set to now (and always
     /// strictly newer than the version it replaces), the item is sealed and marked dirty.
     /// `id = None` allocates a fresh UUIDv7 (the settings item always uses [`SETTINGS_ID`]).
+    /// The item map keeps a message part without its `data`, so it is wiped from `item` here.
     ///
     /// # Errors
     /// [`Error::Locked`]; [`Error::InvalidItem`] for a malformed id or a settings/id mismatch.
@@ -786,6 +792,8 @@ impl Vault {
             dirty: true,
             updated_at,
         })?;
+        // A message part keeps only its header in memory.
+        item.strip_message_data();
         unlocked.items.insert(id.clone(), item);
         Ok(id)
     }
@@ -819,7 +827,7 @@ impl Vault {
         Ok(())
     }
 
-    fn collect<T>(&self, pick: impl Fn(&Item) -> Option<&T>) -> Vec<(String, T)>
+    pub(crate) fn collect<T>(&self, pick: impl Fn(&Item) -> Option<&T>) -> Vec<(String, T)>
     where
         T: Clone,
     {
@@ -953,6 +961,23 @@ impl Vault {
     /// Storage errors.
     pub fn set_star_prompt(&mut self, json: &str) -> Result<()> {
         self.store.set_meta(meta::STAR_PROMPT, json)
+    }
+
+    /// The device-local state of the MCP servers (plaintext JSON owned by the shell): which are
+    /// enabled on this device and what they always allow (spec §13.9). Works while locked.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn mcp_device_state(&self) -> Result<Option<String>> {
+        self.store.get_meta(meta::MCP_DEVICE_STATE)
+    }
+
+    /// Stores the device-local MCP server state. Works while locked. Must not contain secrets.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_mcp_device_state(&mut self, json: &str) -> Result<()> {
+        self.store.set_meta(meta::MCP_DEVICE_STATE, json)
     }
 
     // ---- backup ----
@@ -1160,37 +1185,18 @@ impl Vault {
     // ---- conflict log ----
 
     /// Conflicts resolved automatically, newest first, with both versions decrypted (P1 UI).
+    /// A message part is returned without its `data`.
     ///
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn conflicts(&self, unreviewed_only: bool) -> Result<Vec<ConflictEntry>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let decode = |envelope: &Option<String>, item_id: &str| -> Option<Item> {
-            let env = envelope.as_deref()?;
-            let plain =
-                crypto::open_json(&unlocked.vault_key, item_aad(item_id).as_bytes(), env).ok()?;
-            Item::from_plaintext(&plain).ok()
-        };
-        let mut out = Vec::new();
-        for row in self.store.conflicts(unreviewed_only)? {
-            let Some(resolution) = Resolution::parse(&row.resolution) else {
-                continue;
-            };
-            out.push(ConflictEntry {
-                id: row.id,
-                local: decode(&row.local_envelope, &row.item_id),
-                remote: decode(&row.remote_envelope, &row.item_id),
-                item_id: row.item_id,
-                resolution,
-                local_deleted: row.local_deleted,
-                remote_deleted: row.remote_deleted,
-                local_updated_at: row.local_updated_at,
-                remote_updated_at: row.remote_updated_at,
-                created_at: row.created_at,
-                reviewed: row.reviewed,
-            });
-        }
-        Ok(out)
+        Ok(self
+            .store
+            .conflicts(unreviewed_only)?
+            .into_iter()
+            .filter_map(|row| conflict_entry(&unlocked.vault_key, row, false))
+            .collect())
     }
 
     /// Number of conflicts the user has not reviewed.
@@ -1215,10 +1221,12 @@ impl Vault {
     /// [`Error::Locked`]; [`Error::ItemNotFound`] for an unknown conflict; [`Error::Decrypt`]
     /// if the losing version can no longer be read.
     pub fn restore_conflict_loser(&mut self, id: i64) -> Result<String> {
-        let entries = self.conflicts(false)?;
-        let entry = entries
-            .into_iter()
-            .find(|e| e.id == id)
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        // Only here is a message part's `data` kept: restoring has to write it back.
+        let entry = self
+            .store
+            .conflict(id)?
+            .and_then(|row| conflict_entry(&unlocked.vault_key, row, true))
             .ok_or_else(|| Error::ItemNotFound(format!("conflict {id}")))?;
         let (loser, loser_deleted) = if entry.resolution.local_won() {
             (entry.remote, entry.remote_deleted)
@@ -1237,6 +1245,38 @@ impl Vault {
         self.store.mark_conflict_reviewed(id)?;
         Ok(entry.item_id)
     }
+}
+
+/// Decrypts both sides of a logged conflict. `None` for a row whose resolution this build does
+/// not know. A side that cannot be read is `None` in the entry.
+fn conflict_entry(
+    key: &[u8; 32],
+    row: ConflictRow,
+    keep_message_data: bool,
+) -> Option<ConflictEntry> {
+    let resolution = Resolution::parse(&row.resolution)?;
+    let decode = |envelope: &Option<String>| -> Option<Item> {
+        let env = envelope.as_deref()?;
+        let plain = crypto::open_json(key, item_aad(&row.item_id).as_bytes(), env).ok()?;
+        let mut item = Item::from_plaintext(&plain).ok()?;
+        if !keep_message_data {
+            item.strip_message_data();
+        }
+        Some(item)
+    };
+    Some(ConflictEntry {
+        id: row.id,
+        local: decode(&row.local_envelope),
+        remote: decode(&row.remote_envelope),
+        item_id: row.item_id,
+        resolution,
+        local_deleted: row.local_deleted,
+        remote_deleted: row.remote_deleted,
+        local_updated_at: row.local_updated_at,
+        remote_updated_at: row.remote_updated_at,
+        created_at: row.created_at,
+        reviewed: row.reviewed,
+    })
 }
 
 /// A recovery rotation computed but not yet applied.
@@ -1812,6 +1852,12 @@ mod tests {
         assert_eq!(
             vault.star_prompt().unwrap().as_deref(),
             Some(r#"{"done":true}"#)
+        );
+        assert_eq!(vault.mcp_device_state().unwrap(), None);
+        vault.set_mcp_device_state(r#"{"servers":{}}"#).unwrap();
+        assert_eq!(
+            vault.mcp_device_state().unwrap().as_deref(),
+            Some(r#"{"servers":{}}"#)
         );
         assert_eq!(vault.worker_update_dismissed(), None);
         vault.set_worker_update_dismissed("0.3.0").unwrap();

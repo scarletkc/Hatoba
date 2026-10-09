@@ -2,7 +2,7 @@
   "name": "hatoba",
   "private": true,
   "version": "0.1.0",
-  "description": "Open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account",
+  "description": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
   "license": "MIT",
   "packageManager": "pnpm@10.18.3",
   "scripts": {

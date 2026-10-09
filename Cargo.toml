@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/hatoba-core", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
+members = ["crates/hatoba-ai", "crates/hatoba-core", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,6 +10,7 @@ repository = "https://github.com/scarletkc/Hatoba"
 rust-version = "1.90"
 
 [workspace.dependencies]
+hatoba-ai = { path = "crates/hatoba-ai" }
 hatoba-core = { path = "crates/hatoba-core" }
 hatoba-ssh = { path = "crates/hatoba-ssh" }
 tokio = { version = "1.47", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs"] }

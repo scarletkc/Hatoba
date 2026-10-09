@@ -1,7 +1,7 @@
 //! The local SQLite store (spec §5.2).
 //!
 //! The database holds only ciphertext (plus a few non-secret counters and the opaque
-//! `local_prefs` and `star_prompt` strings). `secure_delete` is on so freed pages do not keep old rows around.
+//! `local_prefs`, `star_prompt` and `mcp_device_state` strings). `secure_delete` is on so freed pages do not keep old rows around.
 //!
 //! All row-level operations live on the [`StoreOps`] trait, implemented by both [`Store`]
 //! (auto-commit) and [`StoreTx`] (inside a transaction opened with [`Store::transaction`]).
@@ -48,6 +48,9 @@ pub mod meta {
     pub const LOCAL_PREFS: &str = "local_prefs";
     /// Opaque plaintext JSON of the device-local star prompt state.
     pub const STAR_PROMPT: &str = "star_prompt";
+    /// Opaque plaintext JSON of the device-local MCP server state: whether each server is
+    /// enabled on this device and what it always allows (spec §13.9). Never holds a secret.
+    pub const MCP_DEVICE_STATE: &str = "mcp_device_state";
     /// Envelope JSON: `recovery_auth` sealed under the vault key, so sync setup can upload it.
     pub const RECOVERY_AUTH_SEALED: &str = "recovery_auth_sealed";
     /// Envelope JSON: a constant sealed under the vault key, to verify a candidate vault key.

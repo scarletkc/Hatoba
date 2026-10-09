@@ -7,9 +7,12 @@ use std::time::Instant;
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
+use crate::ai::AiManager;
 use crate::deploy::Deployments;
+use crate::dropped::DroppedPaths;
 use crate::error::{AppError, AppResult};
 use crate::lock::LockPolicy;
+use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
@@ -23,6 +26,12 @@ pub struct AppState {
     pub sync: SyncController,
     /// The in-app deployment in progress (§6.7).
     pub deploy: Deployments,
+    /// The AI assistant's running turns and tools (§13.1).
+    pub ai: AiManager,
+    /// The MCP servers' connections and live state (§13.9); `ai` offers their tools.
+    pub mcp: McpManager,
+    /// The paths of the window's last file drop, which the AI panel may read (AI-35).
+    pub dropped: DroppedPaths,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -30,12 +39,16 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(vault: Vault, mica: bool) -> Self {
+        let mcp = McpManager::default();
         Self {
             vault: Arc::new(Mutex::new(vault)),
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),
+            ai: AiManager::with_mcp(mcp.clone()),
+            mcp,
+            dropped: DroppedPaths::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

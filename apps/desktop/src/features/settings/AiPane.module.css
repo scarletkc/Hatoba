@@ -1,0 +1,210 @@
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 24px;
+}
+
+.sectionHint {
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+/* Lets the hover of the first and last row follow the group's rounded corners. */
+.clip {
+  overflow: hidden;
+}
+
+/* Loading and load-failed rows */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 14px;
+  color: var(--fg2);
+}
+
+.status i {
+  flex: none;
+}
+
+.statusText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* No providers yet */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 26px 32px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--fill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  color: var(--fg2);
+  font-size: 22px;
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.emptyBody {
+  max-width: 400px;
+  margin: 4px 0 16px;
+  color: var(--fg2);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Provider rows */
+.provider {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.providerMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 6px 9px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.providerMain:hover {
+  background: var(--fill);
+}
+
+.providerIcon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--accenttint);
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.providerText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.providerName {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providerMeta {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.providerMeta > * {
+  flex: none;
+}
+
+.providerMeta > .providerHost {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.dot {
+  color: var(--fg3);
+}
+
+.warn {
+  color: var(--orange);
+}
+
+.providerCaret {
+  flex: none;
+  font-size: 12px;
+  color: var(--fg3);
+}
+
+.providerDelete {
+  flex: none;
+  color: var(--fg2);
+}
+
+/* A field with a hint under it */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldHint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+/* Test and Save of the search provider */
+.searchActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px 12px;
+}
+
+.searchButtons {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.limitField {
+  width: 76px;
+}

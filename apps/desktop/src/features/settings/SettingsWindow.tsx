@@ -8,6 +8,7 @@ import { api } from "@/ipc/api";
 import type { SettingsView, TerminalSettings } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { AboutPane } from "./AboutPane";
+import { AiPane } from "./AiPane";
 import { AppearancePane } from "./AppearancePane";
 import { GeneralPane } from "./GeneralPane";
 import { SecurityPane } from "./SecurityPane";
@@ -19,6 +20,7 @@ const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
   { id: "appearance", icon: "paint-brush", label: "settings.tab.appearance" },
   { id: "terminal", icon: "terminal-window", label: "settings.tab.terminal" },
   { id: "security", icon: "lock-key", label: "settings.tab.security" },
+  { id: "ai", icon: "sparkle", label: "aiSettings.tab" },
   { id: "about", icon: "info", label: "settings.tab.about" },
 ];
 
@@ -26,7 +28,7 @@ let lastTab: SettingsTab = "general";
 
 /**
  * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
- * About for the version and the update check.
+ * AI for the assistant (spec §13) and About for the version and the update check.
  */
 export function SettingsWindow({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -138,6 +140,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "security" && <SecurityPane {...pane} />}
+          {tab === "ai" && <AiPane />}
           {tab === "about" && <AboutPane />}
         </div>
       </div>

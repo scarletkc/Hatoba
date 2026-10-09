@@ -36,6 +36,8 @@ export type ErrorCode =
   | "worker_not_found"
   | "worker_newer"
   | "no_worker_bundle"
+  /** AI assistant (§13): a model provider, search provider or fetched page failed; see `http_status`. */
+  | "ai"
   | "cancelled"
   | "io"
   | "internal";
@@ -79,6 +81,8 @@ export interface AppError {
   permission?: CloudflarePermission | null;
   /** `cloudflare`: Cloudflare's numeric error code, when it sent one. */
   cf_code?: number | null;
+  /** `ai`: the HTTP status the provider answered with, when it answered. */
+  http_status?: number | null;
 }
 
 export type CloudflarePermission = "workers_scripts" | "d1";
@@ -119,6 +123,8 @@ export interface HostView {
   favorite: boolean;
   jump_host_id: string | null;
   note: string;
+  /** What the AI assistant is told about the host, in its system prompt (AI-37). */
+  ai_notes: string;
   updated_at: number;
   /** Device-local, never synced (HOST-06). */
   last_connected_at: number | null;
@@ -140,6 +146,8 @@ export interface HostInput {
   favorite: boolean;
   jump_host_id: string | null;
   note: string;
+  /** At most 2,000 characters (AI-37). */
+  ai_notes: string;
 }
 
 export interface GroupView {
@@ -505,10 +513,26 @@ export interface ConflictField {
   remote: string | null;
 }
 
+export type ItemType =
+  | "host"
+  | "group"
+  | "key"
+  | "known_host"
+  | "forward"
+  | "snippet"
+  | "settings"
+  | "ai_provider"
+  | "search_provider"
+  | "ai_conversation"
+  | "ai_message"
+  | "skill"
+  | "skill_file"
+  | "mcp_server";
+
 export interface ConflictView {
   id: number;
   item_id: string;
-  item_type: "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "settings";
+  item_type: ItemType;
   item_name: string;
   resolution: ConflictResolution;
   local_updated_at: number | null;
@@ -552,6 +576,16 @@ export interface LocalPrefs {
   host_probe: boolean;
   /** Check GitHub Releases once after unlock. Off by default (no telemetry, spec §11). */
   auto_update_check: boolean;
+  /** AI-16: the permission mode new conversations start in on this device. */
+  ai_permission_mode: AiPermissionMode;
+  /** AI-16: the user confirmed the first switch to bypass on this device. */
+  ai_bypass_confirmed: boolean;
+  /** AI-18: a turn pauses after this many tool calls (25 by default). */
+  ai_tool_call_limit: number;
+  /** The AI panel is open (§9). */
+  ai_panel_open: boolean;
+  /** The AI panel's width in CSS pixels. */
+  ai_panel_width: number;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -579,6 +613,397 @@ export interface UpdateCheck {
   update_available: boolean;
 }
 
+// ───────────────────────── AI assistant (§13) ─────────────────────────
+
+export type AiProtocol = "chat_completions" | "anthropic";
+export type AiAuthHeader = "x-api-key" | "authorization";
+
+/** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
+export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** A model of a provider (AI-03). Token limits are null when unknown. */
+export interface AiModel {
+  id: string;
+  name: string;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  /** The thinking levels the model accepts, lowest first (AI-05): [] for none, null when unknown (Low to High are offered). */
+  efforts: AiEffort[] | null;
+  /** Whether the model supports adaptive thinking (Anthropic's model list), null when unknown. */
+  adaptive_thinking: boolean | null;
+}
+
+/** AI-01. The API key never reaches the WebView: only whether one is saved. */
+export interface AiProviderView {
+  id: string;
+  name: string;
+  protocol: AiProtocol;
+  base_url: string;
+  has_api_key: boolean;
+  /** Only used by `anthropic`. */
+  auth_header: AiAuthHeader;
+  models: AiModel[];
+  updated_at: number;
+}
+
+export interface AiProviderInput {
+  /** null creates a provider. With an id, a null `api_key` keeps (or tests with) the saved key. */
+  id: string | null;
+  name: string;
+  protocol: AiProtocol;
+  base_url: string;
+  /** null keeps the saved key (as HOST-08 does for passwords); "" clears it. Sent one way to Rust. */
+  api_key: string | null;
+  auth_header: AiAuthHeader;
+  models: AiModel[];
+}
+
+/** AI-04 Test Connection, also used for the search provider test. */
+export type AiTestFailure = "auth" | "network" | "unknown_model" | "invalid_url" | "other";
+
+export interface AiTestResult {
+  ok: boolean;
+  failure: AiTestFailure | null;
+  status: number | null;
+  /** The provider's own message, when it sent one. */
+  message: string | null;
+}
+
+export type SearchKind = "brave" | "tavily" | "searxng";
+
+/** The backend of `web_search` (AI-14). */
+export interface SearchProviderView {
+  id: string;
+  kind: SearchKind;
+  /** The instance URL for searxng, null otherwise. */
+  base_url: string | null;
+  has_api_key: boolean;
+  updated_at: number;
+}
+
+export interface SearchProviderInput {
+  id: string | null;
+  kind: SearchKind;
+  base_url: string | null;
+  /** null keeps the saved key; "" clears it. */
+  api_key: string | null;
+}
+
+export interface AiModelRef {
+  provider_id: string;
+  model_id: string;
+}
+
+/** The synced `Settings.ai` (§5.1). */
+export interface AiSettingsView {
+  default_model: AiModelRef | null;
+  /** The thinking level new conversations start with (AI-05); null is Default. */
+  default_effort: AiEffort | null;
+  search_provider_id: string | null;
+  /** The built-in `hatoba` skill is offered (AI-34). */
+  builtin_skill_enabled: boolean;
+  /** Sent with every request, at most 4,000 characters (AI-36). */
+  custom_instructions: string;
+}
+
+export type AiPermissionMode = "manual" | "bypass";
+
+export interface AiConversationView {
+  id: string;
+  title: string;
+  /** The host the conversation last worked on. */
+  host_id: string | null;
+  pinned: boolean;
+  /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
+  context_start: string | null;
+  /** The thinking level its last message was sent with (AI-05); null is Default. */
+  effort: AiEffort | null;
+  created_at: number;
+  updated_at: number;
+  /** The newest entry or conversation change, for sorting history (AI-23). */
+  last_activity: number;
+}
+
+export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
+export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";
+
+export interface AiToolCall {
+  id: string;
+  name: string;
+  /** JSON text. */
+  arguments: string;
+}
+
+export interface AiUsage {
+  input_tokens: number;
+  output_tokens: number;
+  estimated: boolean;
+}
+
+/** A stored conversation entry (§13.7), without the provider's raw message. */
+export type AiEntryView =
+  | { role: "user"; entry_id: string; created_at: number; text: string }
+  | {
+      role: "assistant";
+      entry_id: string;
+      created_at: number;
+      provider_id: string;
+      model_id: string;
+      text: string;
+      reasoning: string | null;
+      tool_calls: AiToolCall[];
+      finish: AiFinish;
+      usage: AiUsage | null;
+    }
+  | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string }
+  | { role: "summary"; entry_id: string; created_at: number; text: string };
+
+export interface AiConversationDetail {
+  conversation: AiConversationView;
+  entries: AiEntryView[];
+  /** A turn of this conversation is running in Rust (its events go to the channel that started it). */
+  running: boolean;
+}
+
+/** What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
+export interface AiTurnContext {
+  provider_id: string;
+  model_id: string;
+  /** The thinking level (AI-05); null is Default. Rust sends the highest level the model offers that is not above it. */
+  effort: AiEffort | null;
+  /** The tab's host; the next message moves the conversation to it (AI-09). */
+  host_id: string | null;
+  /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
+  tab: boolean;
+  /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */
+  session_id: string | null;
+  /** MCP servers switched off for this conversation in the tools menu (AI-30, P2). */
+  disabled_mcp_servers: string[];
+}
+
+export interface AiSendInput {
+  /** null starts a new conversation, stored with this first message (AI-07). */
+  conversation_id: string | null;
+  text: string;
+  context: AiTurnContext;
+}
+
+export interface AiSendStarted {
+  conversation: AiConversationView;
+  user_entry: AiEntryView;
+}
+
+export type AiTurnEndReason = "completed" | "length" | "refused" | "stopped" | "error";
+
+/** Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
+export type AiTurnEvent =
+  | { kind: "request_started" }
+  | { kind: "text"; delta: string }
+  | { kind: "reasoning"; delta: string }
+  | { kind: "tool_call"; id: string; name: string; arguments: string }
+  | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean }
+  /** An entry was stored: the assistant response, a tool result, or a cancelled result. */
+  | { kind: "entry"; entry: AiEntryView }
+  /** One response finished. With `tool_calls`, Rust waits for every call's result. A stored `summary`
+   * entry means `context_start` moved to it (AI-21, or automatic compaction before a request, AI-22). */
+  | { kind: "done"; finish: AiFinish }
+  | { kind: "error"; status: number | null; message: string }
+  /** The provider refused the thinking level: the request went again without it, at the model's default depth (AI-05). */
+  | { kind: "effort_ignored" }
+  | { kind: "turn_ended"; reason: AiTurnEndReason };
+
+/** A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17). */
+export interface AiToolResultInput {
+  status: AiToolStatus;
+  content: string;
+  /** AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
+  edited_arguments: string | null;
+}
+
+// ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
+
+export interface SkillFileView {
+  /** Relative path with forward slashes, such as `references/nginx.md`. Never `SKILL.md`. */
+  path: string;
+  content: string;
+}
+
+export interface SkillView {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  /** Paths of the files besides SKILL.md. */
+  files: string[];
+  updated_at: number;
+}
+
+export interface SkillDetail {
+  skill: SkillView;
+  /** SKILL.md without its frontmatter. */
+  body: string;
+  files: SkillFileView[];
+  /** Other frontmatter fields, kept for export. They change nothing, so `allowed-tools` does not change approvals (AI-27). */
+  frontmatter_keys: string[];
+}
+
+/** The built-in `hatoba` skill (AI-34), read-only. */
+export interface BuiltinSkillView {
+  name: string;
+  description: string;
+  /** `Settings.ai.builtin_skill_enabled`. */
+  enabled: boolean;
+  /** SKILL.md without its frontmatter, with the app's version filled in. */
+  body: string;
+  /** The files besides SKILL.md, sorted by path. */
+  files: SkillFileView[];
+}
+
+export interface SkillInput {
+  /** null creates a skill. */
+  id: string | null;
+  name: string;
+  description: string;
+  enabled: boolean;
+  body: string;
+  /** Every file besides SKILL.md; a saved file left out is deleted. */
+  files: SkillFileView[];
+}
+
+/** Why a skill cannot be imported or saved (AI-27). */
+export type SkillIssue =
+  | { kind: "missing_skill_md" }
+  | { kind: "invalid_frontmatter"; detail: string }
+  | { kind: "invalid_name"; name: string }
+  | { kind: "missing_description" }
+  | { kind: "description_too_long"; chars: number }
+  | { kind: "file_too_large"; path: string; size: number }
+  | { kind: "unsafe_path"; path: string }
+  | { kind: "too_many_files"; count: number }
+  /** More than 5 MB in total. */
+  | { kind: "too_large"; bytes: number };
+
+/** What an import would save, shown before saving (AI-27). Importable when `issues` is empty. */
+export interface SkillImportPreview {
+  /** null when SKILL.md is missing or unreadable. */
+  name: string | null;
+  description: string | null;
+  body: string | null;
+  files: SkillFileView[];
+  frontmatter_keys: string[];
+  /** Files that are not UTF-8 text, which the import skips. */
+  skipped: string[];
+  issues: SkillIssue[];
+  /** A saved skill with the same name, which the user may replace (or rename the new one). */
+  existing_id: string | null;
+  /** The name is the built-in skill's (AI-34): the skill can be imported only under another. */
+  reserved_name: boolean;
+  /** A digest of what was read, which `skill_import` takes back: it imports only what this preview showed. */
+  token: string;
+}
+
+// ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
+
+/** Environment and header values never reach the WebView, only their names (AI-29). */
+export type McpTransportView =
+  | { kind: "stdio"; command: string; args: string[]; env_keys: string[] }
+  | { kind: "http"; url: string; header_keys: string[] };
+
+export interface McpServerView {
+  id: string;
+  name: string;
+  transport: McpTransportView;
+  /** Ask even in bypass mode. Synced (AI-31). */
+  always_ask: boolean;
+  /** Enabled on this device; a server from another device starts enabled only for `http` (AI-29). */
+  enabled: boolean;
+  /** On this device, every tool of the server runs without asking in manual mode (AI-31). */
+  always_allow: boolean;
+  /** On this device, these tools (the server's own names) run without asking in manual mode. */
+  always_allow_tools: string[];
+  updated_at: number;
+}
+
+export interface McpSecretInput {
+  key: string;
+  /** null keeps the saved value for this key. Sent one way to Rust. */
+  value: string | null;
+}
+
+export type McpTransportInput =
+  | { kind: "stdio"; command: string; args: string[]; env: McpSecretInput[] }
+  | { kind: "http"; url: string; headers: McpSecretInput[] };
+
+export interface McpServerInput {
+  /** null creates a server. */
+  id: string | null;
+  name: string;
+  transport: McpTransportInput;
+  always_ask: boolean;
+}
+
+export type McpServerState = "stopped" | "starting" | "running" | "failed";
+
+/** Shown on the approval card; never changes whether a call asks (AI-31). */
+export interface McpToolAnnotations {
+  title: string | null;
+  read_only_hint: boolean | null;
+  destructive_hint: boolean | null;
+  idempotent_hint: boolean | null;
+  open_world_hint: boolean | null;
+}
+
+export interface McpToolView {
+  /** The name offered to the model, `mcp__<server>__<tool>` after cleaning (AI-30). */
+  name: string;
+  /** The server's own tool name. */
+  tool: string;
+  description: string;
+  annotations: McpToolAnnotations;
+  /** Always allow on this device (per tool, or because the whole server is). */
+  always_allow: boolean;
+}
+
+export interface McpServerStatus {
+  server_id: string;
+  state: McpServerState;
+  error: string | null;
+  /** The last stderr lines of a `stdio` server, kept in memory only (AI-32). */
+  stderr: string[];
+  /** The tools from the last successful listing. */
+  tools: McpToolView[];
+}
+
+/** The MCP tool behind a name the model called, for the approval card (AI-31). */
+export interface McpToolInfo {
+  server_id: string;
+  server_name: string;
+  always_ask: boolean;
+  tool: McpToolView;
+}
+
+export interface McpImportPreview {
+  servers: { name: string; transport: McpTransportView; exists: boolean }[];
+  /** Entries that cannot be imported, such as an `sse` server, with the reason. */
+  skipped: { name: string; reason: string }[];
+}
+
+// ───────────────────────── AI assistant: history search (AI-24) ─────────────────────────
+
+export interface AiSearchHit {
+  conversation_id: string;
+  /** The first matching entry, or null when only the title matched. */
+  entry_id: string | null;
+  /** Text around the first match. */
+  snippet: string;
+}
+
+/** Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons. */
+export type DroppedFileRefusal = "image" | "too_large" | "binary" | "unreadable";
+
+/** A text file dropped on the AI panel in the desktop app (AI-35), named by its base name only, never its path. */
+export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
+
 // ───────────────────────── Events (§10.2) ─────────────────────────
 
 export interface VaultLockedEvent {
@@ -593,4 +1018,6 @@ export interface EventMap {
   "ssh://state": SessionStateEvent;
   "transfer://progress": TransferProgressEvent;
   "ssh://forward": ForwardStatusEvent;
+  /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
+  "ai://mcp-status": McpServerStatus;
 }

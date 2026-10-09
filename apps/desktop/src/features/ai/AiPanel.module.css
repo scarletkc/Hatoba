@@ -1,0 +1,235 @@
+/* The AI panel, styled like the SFTP panel (a right-side panel of the design's terminal page). */
+.panel {
+  position: relative;
+  flex: none;
+  min-width: min(300px, 100%);
+  max-width: calc(100% - 240px);
+  display: flex;
+  flex-direction: column;
+  background: var(--win);
+  border-left: 0.5px solid var(--line2);
+  color: var(--fg);
+}
+
+.resize {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize:hover,
+.resize:active {
+  background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 4px, transparent 4px);
+  opacity: 0.6;
+}
+
+/* While resizing: keep the cursor and stop text selection everywhere. */
+.resizing,
+.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.header {
+  height: 36px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 12px;
+  border-bottom: 0.5px solid var(--line);
+  min-width: 0;
+}
+
+.headerIcon {
+  flex: none;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.host {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.iconBtn {
+  width: 26px;
+  height: 26px;
+  color: var(--fg2);
+}
+
+.mode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 26px;
+  padding: 0 6px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.mode:hover {
+  background: var(--fill);
+}
+
+.modeBypass,
+.modeBypass:hover {
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
+  color: var(--orange);
+}
+
+.notices {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--fg2);
+  background: var(--group);
+}
+
+.notice + .notice {
+  border-top: 0.5px solid var(--line);
+}
+
+.noticeWarn {
+  background: color-mix(in srgb, var(--orange) 8%, var(--win));
+}
+
+.noticeWarn .noticeIcon {
+  color: var(--orange);
+}
+
+.noticeIcon {
+  flex: none;
+  display: inline-flex;
+}
+
+.noticeText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  border-radius: var(--radius-panel);
+  background: var(--accenttint);
+  color: var(--accent);
+}
+
+.emptyTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.emptyBody {
+  max-width: 300px;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+.emptyNote {
+  max-width: 300px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--fg3);
+  text-wrap: pretty;
+}
+
+.empty :global(button) {
+  margin-top: 6px;
+}
+
+/* AI-35: the drop target while text files are dragged over the panel. */
+.drop {
+  position: absolute;
+  z-index: 30;
+  inset: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--accent) 8%, var(--win));
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  pointer-events: none;
+}

@@ -4,7 +4,7 @@
 
 # Hatoba
 
-**Open-source desktop SSH client with end-to-end encrypted sync through your own Cloudflare account**
+**Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/scarletkc/Hatoba/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](https://github.com/scarletkc/Hatoba/actions/workflows/ci.yml)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
@@ -13,9 +13,10 @@
 
 </div>
 
-Hatoba keeps your hosts, keys, and terminal sessions in one place and syncs
-them between your devices. The sync backend is a Worker and a D1 database that
-you deploy to your own Cloudflare account.
+Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them
+between your devices, and puts an AI assistant beside each terminal. The sync
+backend is a Worker and a D1 database that you deploy to your own Cloudflare
+account.
 
 - **No Hatoba server.** Sync runs entirely in your Cloudflare account, so
   nobody else holds your data.
@@ -46,6 +47,12 @@ you deploy to your own Cloudflare account.
 - **Cloud sync**: through your Worker or directly to D1, with incremental
   sync, automatic conflict resolution you can review item by item, and a
   device list with revocation.
+- **AI assistant**: a panel beside each terminal that reads the screen, runs
+  commands, and types into the shell with your approval (or without it, in
+  bypass mode), and can search the web and read pages. It uses your own
+  OpenAI-compatible or Anthropic API key, supports skills and MCP servers, and
+  takes terminal selections, connection errors, long pastes, and text files as
+  attachments. Conversations sync with the rest of the vault.
 
 ## Security
 
@@ -56,6 +63,11 @@ or any plaintext. If you forget the master password and lose the recovery code,
 your data cannot be recovered. The
 [security model](docs/hatoba-spec.md#4-security-model-and-encryption) describes
 the key hierarchy and the threat model.
+
+The AI assistant sends the model provider your messages, their attachments,
+and what its tools read. Host addresses, passwords, and keys reach the provider
+only when they appear on the screen, in a tool result, or in an attachment you
+send.
 
 ## Build from source
 

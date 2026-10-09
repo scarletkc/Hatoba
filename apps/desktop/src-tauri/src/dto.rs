@@ -5,8 +5,11 @@
 //! Inputs may carry secrets one way (WebView → Rust), e.g. a new host password; they are never
 //! echoed back.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use zeroize::Zeroize;
 
 // ───────────────────────── Vault ─────────────────────────
 
@@ -54,6 +57,8 @@ pub struct HostView {
     pub favorite: bool,
     pub jump_host_id: Option<String>,
     pub note: String,
+    /// What the AI assistant is told about the host (AI-37).
+    pub ai_notes: String,
     pub updated_at: i64,
     pub last_connected_at: Option<i64>,
 }
@@ -74,6 +79,8 @@ pub struct HostInput {
     pub favorite: bool,
     pub jump_host_id: Option<String>,
     pub note: String,
+    /// At most 2,000 characters (AI-37).
+    pub ai_notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -424,6 +431,13 @@ pub enum ItemType {
     KnownHost,
     Forward,
     Snippet,
+    AiProvider,
+    SearchProvider,
+    AiConversation,
+    AiMessage,
+    Skill,
+    SkillFile,
+    McpServer,
     Settings,
 }
 
@@ -676,6 +690,16 @@ pub struct LocalPrefs {
     /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
     /// the device unless the user asks for it (spec §11, no telemetry).
     pub auto_update_check: bool,
+    /// AI-16: the permission mode new conversations start in on this device.
+    pub ai_permission_mode: AiPermissionMode,
+    /// AI-16: the user confirmed the first switch to bypass on this device.
+    pub ai_bypass_confirmed: bool,
+    /// AI-18: a turn pauses after this many tool calls.
+    pub ai_tool_call_limit: u32,
+    /// The AI panel is open (§9).
+    pub ai_panel_open: bool,
+    /// The AI panel's width in CSS pixels.
+    pub ai_panel_width: u32,
 }
 
 impl Default for LocalPrefs {
@@ -686,6 +710,11 @@ impl Default for LocalPrefs {
             density: Density::Regular,
             host_probe: true,
             auto_update_check: false,
+            ai_permission_mode: AiPermissionMode::Manual,
+            ai_bypass_confirmed: false,
+            ai_tool_call_limit: 25,
+            ai_panel_open: false,
+            ai_panel_width: 380,
         }
     }
 }
@@ -808,9 +837,752 @@ pub struct ForwardStatusEvent {
     pub error: Option<String>,
 }
 
+// ───────────────────────── AI assistant (§13) ─────────────────────────
+//
+// API keys travel one way, WebView → Rust: views say only `has_api_key`, and the inputs that
+// carry a key print it redacted and wipe it when dropped. Conversation content (messages, tool
+// inputs and results) is never logged (SEC-04), so the inputs that carry it print only lengths.
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProtocol {
+    ChatCompletions,
+    Anthropic,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub enum AiAuthHeader {
+    #[serde(rename = "x-api-key")]
+    XApiKey,
+    #[serde(rename = "authorization")]
+    Authorization,
+}
+
+/// A thinking level (AI-05), lowest first. Where one is optional, `None` is Default.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum AiEffort {
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+}
+
+/// A model of a provider (AI-03). Token limits are `None` when unknown.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiModel {
+    pub id: String,
+    pub name: String,
+    pub context_window: Option<u64>,
+    pub max_output_tokens: Option<u64>,
+    /// The thinking levels the model accepts, lowest first (AI-05); empty for none, `None` when
+    /// unknown (the panel then offers Low to High).
+    pub efforts: Option<Vec<AiEffort>>,
+    /// Whether the model supports adaptive thinking (Anthropic's model list), `None` when unknown.
+    pub adaptive_thinking: Option<bool>,
+}
+
+/// AI-01. The API key never reaches the WebView: only whether one is saved.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiProviderView {
+    pub id: String,
+    pub name: String,
+    pub protocol: AiProtocol,
+    pub base_url: String,
+    pub has_api_key: bool,
+    /// Only used by `anthropic`.
+    pub auth_header: AiAuthHeader,
+    pub models: Vec<AiModel>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct AiProviderInput {
+    /// `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one.
+    pub id: Option<String>,
+    pub name: String,
+    pub protocol: AiProtocol,
+    pub base_url: String,
+    /// `None` keeps the saved key (as HOST-08 does for passwords); `""` clears it.
+    pub api_key: Option<String>,
+    pub auth_header: AiAuthHeader,
+    pub models: Vec<AiModel>,
+}
+
+impl fmt::Debug for AiProviderInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiProviderInput")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("protocol", &self.protocol)
+            .field("base_url", &self.base_url)
+            .field("api_key", &redacted(self.api_key.as_deref()))
+            .field("auth_header", &self.auth_header)
+            .field("models", &self.models)
+            .finish()
+    }
+}
+
+impl Drop for AiProviderInput {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+    }
+}
+
+/// AI-04 Test Connection, also used for the search provider test.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTestFailure {
+    Auth,
+    Network,
+    UnknownModel,
+    InvalidUrl,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiTestResult {
+    pub ok: bool,
+    pub failure: Option<AiTestFailure>,
+    pub status: Option<u16>,
+    /// The provider's own message, when it sent one.
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchKind {
+    Brave,
+    Tavily,
+    Searxng,
+}
+
+/// The backend of `web_search` (AI-14).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SearchProviderView {
+    pub id: String,
+    pub kind: SearchKind,
+    /// The instance URL for SearXNG, `None` otherwise.
+    pub base_url: Option<String>,
+    pub has_api_key: bool,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct SearchProviderInput {
+    pub id: Option<String>,
+    pub kind: SearchKind,
+    pub base_url: Option<String>,
+    /// `None` keeps the saved key; `""` clears it.
+    pub api_key: Option<String>,
+}
+
+impl fmt::Debug for SearchProviderInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SearchProviderInput")
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .field("base_url", &self.base_url)
+            .field("api_key", &redacted(self.api_key.as_deref()))
+            .finish()
+    }
+}
+
+impl Drop for SearchProviderInput {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+    }
+}
+
+/// How an optional secret prints: whether it is there, never what it is.
+fn redacted(secret: Option<&str>) -> &'static str {
+    match secret {
+        None => "<keep>",
+        Some("") => "<empty>",
+        Some(_) => "<redacted>",
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiModelRef {
+    pub provider_id: String,
+    pub model_id: String,
+}
+
+/// The synced `Settings.ai` (§5.1).
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiSettingsView {
+    pub default_model: Option<AiModelRef>,
+    /// The thinking level new conversations start with (AI-05); `None` is Default.
+    pub default_effort: Option<AiEffort>,
+    pub search_provider_id: Option<String>,
+    /// The built-in `hatoba` skill is offered (AI-34).
+    pub builtin_skill_enabled: bool,
+    /// Sent with every request, at most 4,000 characters (AI-36).
+    pub custom_instructions: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiPermissionMode {
+    Manual,
+    Bypass,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiConversationView {
+    pub id: String,
+    pub title: String,
+    /// The host the conversation last worked on.
+    pub host_id: Option<String>,
+    pub pinned: bool,
+    /// `entry_id` where the context sent to the model starts (AI-21).
+    pub context_start: Option<String>,
+    /// The thinking level its last message was sent with (AI-05); `None` is Default.
+    pub effort: Option<AiEffort>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    /// The newest entry or conversation change, for sorting history (AI-23).
+    pub last_activity: i64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFinish {
+    Stop,
+    ToolCalls,
+    Length,
+    Refused,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiToolStatus {
+    Ok,
+    Error,
+    Rejected,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiToolCall {
+    pub id: String,
+    pub name: String,
+    /// JSON text.
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+pub struct AiUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub estimated: bool,
+}
+
+/// A stored conversation entry (§13.7), without the provider's raw message.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "role", rename_all = "snake_case")]
+pub enum AiEntryView {
+    User {
+        entry_id: String,
+        created_at: i64,
+        text: String,
+    },
+    Assistant {
+        entry_id: String,
+        created_at: i64,
+        provider_id: String,
+        model_id: String,
+        text: String,
+        reasoning: Option<String>,
+        tool_calls: Vec<AiToolCall>,
+        finish: AiFinish,
+        usage: Option<AiUsage>,
+    },
+    Tool {
+        entry_id: String,
+        created_at: i64,
+        tool_call_id: String,
+        status: AiToolStatus,
+        content: String,
+    },
+    Summary {
+        entry_id: String,
+        created_at: i64,
+        text: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiConversationDetail {
+    pub conversation: AiConversationView,
+    pub entries: Vec<AiEntryView>,
+    /// A turn of this conversation is running (its events go to the channel that started it).
+    pub running: bool,
+}
+
+/// What a request is made with. The frontend owns the tab, so it says what the turn may act on.
+#[derive(Debug, Clone, Deserialize, Type, PartialEq, Eq)]
+pub struct AiTurnContext {
+    pub provider_id: String,
+    pub model_id: String,
+    /// The thinking level (AI-05); `None` is Default. Requests send the highest level the model
+    /// offers that is not above it, and the conversation keeps it for its next message.
+    pub effort: Option<AiEffort>,
+    /// The tab's host; the next message moves the conversation to it (AI-09).
+    pub host_id: Option<String>,
+    /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
+    pub tab: bool,
+    /// The tab's SSH session while it is connected, whose server's identification string the
+    /// system prompt states (§13.1).
+    pub session_id: Option<String>,
+    /// MCP servers switched off for this conversation (AI-30, P2).
+    pub disabled_mcp_servers: Vec<String>,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct AiSendInput {
+    /// `None` starts a new conversation, stored with this first message (AI-07).
+    pub conversation_id: Option<String>,
+    pub text: String,
+    pub context: AiTurnContext,
+}
+
+impl fmt::Debug for AiSendInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiSendInput")
+            .field("conversation_id", &self.conversation_id)
+            .field(
+                "text",
+                &format_args!("<{} chars>", self.text.chars().count()),
+            )
+            .field("context", &self.context)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiSendStarted {
+    pub conversation: AiConversationView,
+    pub user_entry: AiEntryView,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTurnEndReason {
+    Completed,
+    Length,
+    Refused,
+    Stopped,
+    Error,
+}
+
+/// Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AiTurnEvent {
+    RequestStarted,
+    Text {
+        delta: String,
+    },
+    Reasoning {
+        delta: String,
+    },
+    ToolCall {
+        id: String,
+        name: String,
+        arguments: String,
+    },
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+        estimated: bool,
+    },
+    /// An entry was stored: the assistant response, a tool result, or a cancelled result.
+    Entry {
+        entry: AiEntryView,
+    },
+    /// One response finished. With `tool_calls`, Rust waits for every call's result.
+    Done {
+        finish: AiFinish,
+    },
+    Error {
+        status: Option<u16>,
+        message: String,
+    },
+    /// The provider refused the thinking level, so the request was sent again without it and the
+    /// model answers at its default depth (AI-05).
+    EffortIgnored,
+    TurnEnded {
+        reason: AiTurnEndReason,
+    },
+}
+
+/// A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17).
+#[derive(Clone, Deserialize, Type)]
+pub struct AiToolResultInput {
+    pub status: AiToolStatus,
+    pub content: String,
+    /// AI-17 Edit: the arguments the user changed the call to, so the result tells the model.
+    pub edited_arguments: Option<String>,
+}
+
+impl fmt::Debug for AiToolResultInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiToolResultInput")
+            .field("status", &self.status)
+            .field(
+                "content",
+                &format_args!("<{} chars>", self.content.chars().count()),
+            )
+            .field("edited", &self.edited_arguments.is_some())
+            .finish()
+    }
+}
+
+// ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
+//
+// Skill text reaches the model as instructions; it is never logged (SEC-04), so the types that
+// carry it print only sizes.
+
+#[derive(Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct SkillFileView {
+    /// Relative path with forward slashes, such as `references/nginx.md`. Never `SKILL.md`.
+    pub path: String,
+    pub content: String,
+}
+
+impl fmt::Debug for SkillFileView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SkillFileView")
+            .field("path", &self.path)
+            .field("content", &format_args!("<{} bytes>", self.content.len()))
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct SkillView {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    /// Paths of the files besides `SKILL.md`, sorted.
+    pub files: Vec<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SkillDetail {
+    pub skill: SkillView,
+    /// `SKILL.md` without its frontmatter.
+    pub body: String,
+    pub files: Vec<SkillFileView>,
+    /// Other frontmatter fields, kept for export. They change nothing (AI-27).
+    pub frontmatter_keys: Vec<String>,
+}
+
+/// The built-in `hatoba` skill (AI-34), read-only.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct BuiltinSkillView {
+    pub name: String,
+    pub description: String,
+    /// `Settings.ai.builtin_skill_enabled`.
+    pub enabled: bool,
+    /// `SKILL.md` without its frontmatter, with the app's version filled in.
+    pub body: String,
+    /// The files besides `SKILL.md`, sorted by path.
+    pub files: Vec<SkillFileView>,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct SkillInput {
+    /// `None` creates a skill.
+    pub id: Option<String>,
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    pub body: String,
+    /// Every file besides `SKILL.md`; a saved file left out is deleted.
+    pub files: Vec<SkillFileView>,
+}
+
+impl fmt::Debug for SkillInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SkillInput")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("enabled", &self.enabled)
+            .field("body", &format_args!("<{} bytes>", self.body.len()))
+            .field("files", &self.files)
+            .finish()
+    }
+}
+
+/// Why a skill cannot be imported or saved (AI-27).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SkillIssue {
+    MissingSkillMd,
+    InvalidFrontmatter {
+        detail: String,
+    },
+    InvalidName {
+        name: String,
+    },
+    MissingDescription,
+    DescriptionTooLong {
+        chars: u64,
+    },
+    FileTooLarge {
+        path: String,
+        size: u64,
+    },
+    UnsafePath {
+        path: String,
+    },
+    TooManyFiles {
+        count: u64,
+    },
+    /// More than 5 MB in total.
+    TooLarge {
+        bytes: u64,
+    },
+}
+
+/// Why a file dropped on the AI panel is not attached (AI-35): the panel's own reasons.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DroppedFileRefusal {
+    /// An image, which attachments do not take yet.
+    Image,
+    /// Over 256 KB.
+    TooLarge,
+    /// NUL bytes or invalid UTF-8.
+    Binary,
+    /// Not a file, gone, or not readable.
+    Unreadable,
+}
+
+/// A text file dropped on the AI panel (AI-35), named by its base name only, never its path (a
+/// path can name the local user).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum DroppedFile {
+    Ok {
+        name: String,
+        text: String,
+    },
+    Refused {
+        name: String,
+        reason: DroppedFileRefusal,
+    },
+}
+
+/// What an import would save, shown before saving (AI-27). Importable when `issues` is empty.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SkillImportPreview {
+    /// `None` when `SKILL.md` is missing or unreadable.
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub body: Option<String>,
+    pub files: Vec<SkillFileView>,
+    pub frontmatter_keys: Vec<String>,
+    /// Files that are not UTF-8 text, which the import skips.
+    pub skipped: Vec<String>,
+    pub issues: Vec<SkillIssue>,
+    /// A saved skill with the same name, which the user may replace (or rename the new one).
+    pub existing_id: Option<String>,
+    /// The name is the built-in skill's (AI-34): the skill can be imported only under another.
+    pub reserved_name: bool,
+    /// A digest of what was read, which `skill_import` takes back: it imports the source only if
+    /// it still reads the same, so what is saved is what this preview showed.
+    pub token: String,
+}
+
+// ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
+//
+// Environment and header values travel one way, WebView → Rust, like API keys: views carry
+// only their names, and the inputs that carry them print them redacted and wipe them when
+// dropped (AI-29).
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpTransportView {
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env_keys: Vec<String>,
+    },
+    Http {
+        url: String,
+        header_keys: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpServerView {
+    pub id: String,
+    pub name: String,
+    pub transport: McpTransportView,
+    /// Ask even in bypass mode. Synced (AI-31).
+    pub always_ask: bool,
+    /// Enabled on this device; a server from another device starts enabled only for `http`.
+    pub enabled: bool,
+    /// On this device, every tool of the server runs without asking in manual mode (AI-31).
+    pub always_allow: bool,
+    /// On this device, these tools (the server's own names) run without asking in manual mode.
+    pub always_allow_tools: Vec<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Type)]
+pub struct McpSecretInput {
+    pub key: String,
+    /// `None` keeps the saved value for this key.
+    pub value: Option<String>,
+}
+
+impl fmt::Debug for McpSecretInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpSecretInput")
+            .field("key", &self.key)
+            .field("value", &redacted(self.value.as_deref()))
+            .finish()
+    }
+}
+
+impl Drop for McpSecretInput {
+    fn drop(&mut self) {
+        self.value.zeroize();
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum McpTransportInput {
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env: Vec<McpSecretInput>,
+    },
+    Http {
+        url: String,
+        headers: Vec<McpSecretInput>,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct McpServerInput {
+    /// `None` creates a server.
+    pub id: Option<String>,
+    pub name: String,
+    pub transport: McpTransportInput,
+    pub always_ask: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum McpServerState {
+    Stopped,
+    Starting,
+    Running,
+    Failed,
+}
+
+/// Shown on the approval card; never changes whether a call asks (AI-31).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq, Default)]
+pub struct McpToolAnnotations {
+    pub title: Option<String>,
+    pub read_only_hint: Option<bool>,
+    pub destructive_hint: Option<bool>,
+    pub idempotent_hint: Option<bool>,
+    pub open_world_hint: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpToolView {
+    /// The name offered to the model, `mcp__<server>__<tool>` after cleaning (AI-30).
+    pub name: String,
+    /// The server's own tool name.
+    pub tool: String,
+    pub description: String,
+    pub annotations: McpToolAnnotations,
+    /// Always allow on this device (per tool, or because the whole server is).
+    pub always_allow: bool,
+}
+
+/// A server's live state (AI-32), also pushed as `ai://mcp-status` on every change. The stderr
+/// lines stay in memory and are never logged.
+#[derive(Clone, Serialize, Type, PartialEq, Eq, tauri_specta::Event)]
+#[tauri_specta(event_name = "ai://mcp-status")]
+pub struct McpServerStatus {
+    pub server_id: String,
+    pub state: McpServerState,
+    pub error: Option<String>,
+    /// The last stderr lines of a `stdio` server, kept in memory only (AI-32).
+    pub stderr: Vec<String>,
+    /// The tools from the last successful listing.
+    pub tools: Vec<McpToolView>,
+}
+
+impl fmt::Debug for McpServerStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpServerStatus")
+            .field("server_id", &self.server_id)
+            .field("state", &self.state)
+            .field("error", &self.error.is_some())
+            .field("stderr", &format_args!("<{} lines>", self.stderr.len()))
+            .field("tools", &self.tools.len())
+            .finish()
+    }
+}
+
+/// The MCP tool behind a name the model called, for the approval card (AI-31).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpToolInfo {
+    pub server_id: String,
+    pub server_name: String,
+    pub always_ask: bool,
+    pub tool: McpToolView,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportServer {
+    pub name: String,
+    pub transport: McpTransportView,
+    /// A saved server has this name; the import adds a numeric suffix.
+    pub exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportSkipped {
+    pub name: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct McpImportPreview {
+    pub servers: Vec<McpImportServer>,
+    /// Entries that cannot be imported, such as an `sse` server, with the reason.
+    pub skipped: Vec<McpImportSkipped>,
+}
+
+// ───────────────────────── AI assistant: history search (AI-24) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiSearchHit {
+    pub conversation_id: String,
+    /// The first matching entry, or `None` when only the title matched.
+    pub entry_id: Option<String>,
+    /// Text around the first match.
+    pub snippet: String,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::LocalPrefs;
+    use super::{AiPermissionMode, LocalPrefs};
 
     #[test]
     fn prefs_from_an_older_version_leave_the_update_check_off() {
@@ -819,5 +1591,29 @@ mod tests {
         assert!(!prefs.host_probe);
         let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":true}"#);
         assert!(prefs.auto_update_check);
+    }
+
+    #[test]
+    fn ai_prefs_default_to_manual_and_unknown_values_fall_back() {
+        let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
+        assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
+        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (25, 380));
+
+        let prefs = LocalPrefs::from_stored(
+            r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
+                "ai_panel_open":true,"ai_panel_width":520}"#,
+        );
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
+        assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
+        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (40, 520));
+
+        // A mode a newer build added, or a broken value, is read as the default.
+        let prefs = LocalPrefs::from_stored(
+            r#"{"ai_permission_mode":"auto","ai_tool_call_limit":-1,"host_probe":false}"#,
+        );
+        assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
+        assert_eq!(prefs.ai_tool_call_limit, 25);
+        assert!(!prefs.host_probe);
     }
 }

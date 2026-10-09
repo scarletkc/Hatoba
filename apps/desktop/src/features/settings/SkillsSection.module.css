@@ -1,0 +1,455 @@
+.headButtons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Skill rows */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 6px 10px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.main:hover {
+  background: var(--fill);
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--accenttint);
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: var(--text-xs);
+  color: var(--fg3);
+}
+
+.reservedNote {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--orange);
+}
+
+/* A skill that is off keeps its row, but reads as inactive. */
+.off .icon {
+  background: var(--fill);
+  color: var(--fg3);
+}
+
+.off .name,
+.off .description {
+  color: var(--fg2);
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg2);
+}
+
+/* ───────── Skill dialog ───────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+.counter {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.counterOver {
+  color: var(--red);
+}
+
+.problem {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin-top: 2px;
+  color: var(--fg2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Text areas draw their own focus ring, so the global outline of :focus-visible must not show inside them. */
+.plain:focus-visible,
+.code:focus-visible {
+  outline: none;
+}
+
+.plain[aria-invalid="true"],
+.code[aria-invalid="true"] {
+  box-shadow: var(--error-ring);
+}
+
+/* A text area that holds code or Markdown. */
+.code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+
+.body {
+  min-height: 180px;
+}
+
+.filesBar {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.filesBar .hint {
+  flex: 1;
+  padding-top: 3px;
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+}
+
+.file {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.fileHead {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.fileToggle {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+  font-size: 12px;
+}
+
+.fileToggle:hover {
+  background: var(--fill);
+}
+
+.fileToggle i {
+  transition: transform 0.12s ease;
+}
+
+.fileOpen i {
+  transform: rotate(90deg);
+}
+
+.size {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.fileBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 30px;
+}
+
+.fileEmpty {
+  padding: 14px;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  text-align: center;
+}
+
+.note {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0;
+  color: var(--fg2);
+}
+
+.loadFailed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+/* ───────── Import preview ───────── */
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.summaryName {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.summaryDescription {
+  line-height: 1.5;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.issues {
+  display: flex;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  line-height: 1.5;
+}
+
+.issues > i {
+  margin-top: 2px;
+  flex: none;
+  font-size: 15px;
+  color: var(--red);
+}
+
+.issuesTitle {
+  font-weight: 600;
+}
+
+.issuesList {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.blockBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+}
+
+.blockHead {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 12px 4px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.blockHead:hover {
+  background: var(--fill);
+}
+
+.blockPath {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blockOpen .fileToggle i {
+  transform: rotate(90deg);
+}
+
+/* The file's text, as it will be saved. */
+.content {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 14px 12px;
+  border-top: 0.5px solid var(--line);
+  background: var(--field);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contentEmpty {
+  color: var(--fg3);
+}
+
+.skippedList {
+  margin: 0;
+  padding: 10px 14px 10px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.clash {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.clashTitle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choiceLabel {
+  font-weight: 500;
+}
+
+.rename {
+  padding-left: 26px;
+}
+
+.radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.radioDot {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--field);
+  box-shadow: inset 0 0 0 0.5px var(--fieldline);
+}
+
+.radioDotOn {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 4.5px var(--accent), inset 0 0 0 9px var(--win);
+}

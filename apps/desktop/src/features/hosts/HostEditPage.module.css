@@ -136,6 +136,20 @@
   line-height: 1.45;
 }
 
+/* AI-37: the hint above the AI notes and the privacy note below them. */
+.aiNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aiPrivacy {
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg2);
+}
+
 .warn {
   display: flex;
   align-items: center;

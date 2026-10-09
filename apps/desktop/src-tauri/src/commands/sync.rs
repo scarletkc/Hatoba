@@ -287,6 +287,13 @@ fn item_type(item: Option<&Item>) -> ItemType {
         Some(Item::KnownHost(_)) => ItemType::KnownHost,
         Some(Item::Forward(_)) => ItemType::Forward,
         Some(Item::Snippet(_)) => ItemType::Snippet,
+        Some(Item::AiProvider(_)) => ItemType::AiProvider,
+        Some(Item::SearchProvider(_)) => ItemType::SearchProvider,
+        Some(Item::AiConversation(_)) => ItemType::AiConversation,
+        Some(Item::AiMessage(_)) => ItemType::AiMessage,
+        Some(Item::Skill(_)) => ItemType::Skill,
+        Some(Item::SkillFile(_)) => ItemType::SkillFile,
+        Some(Item::McpServer(_)) => ItemType::McpServer,
         Some(Item::Settings(_)) => ItemType::Settings,
     }
 }
@@ -318,6 +325,7 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ),
             ("tags", h.tags.join(", ")),
             ("note", h.note.clone()),
+            ("ai_notes", h.ai_notes.clone()),
         ],
         Item::Group(g) => vec![("name", g.name.clone())],
         Item::Key(k) => vec![
@@ -327,6 +335,24 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
         Item::KnownHost(k) => vec![("fingerprint", k.fingerprint.clone())],
         Item::Forward(f) => vec![("bind_port", f.bind_port.to_string())],
         Item::Snippet(s) => vec![("name", s.name.clone())],
+        // Never the API key, env or header values, or message data.
+        Item::AiProvider(p) => vec![
+            ("name", p.name.clone()),
+            ("base_url", p.base_url.clone()),
+            ("protocol", p.protocol.as_str().to_owned()),
+        ],
+        Item::SearchProvider(s) => vec![("kind", s.kind.as_str().to_owned())],
+        Item::AiConversation(c) => {
+            vec![("title", c.title.clone()), ("pinned", c.pinned.to_string())]
+        }
+        Item::AiMessage(_) => vec![],
+        Item::Skill(s) => vec![("name", s.name.clone()), ("enabled", s.enabled.to_string())],
+        Item::SkillFile(f) => vec![("path", f.path.clone())],
+        Item::McpServer(m) => vec![
+            ("name", m.name.clone()),
+            ("transport", m.transport.kind_str().to_owned()),
+            ("always_ask", m.always_ask.to_string()),
+        ],
         Item::Settings(_) => vec![],
     }
 }

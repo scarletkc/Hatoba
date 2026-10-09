@@ -26,6 +26,7 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         favorite: host.favorite,
         jump_host_id: host.jump_host_id.clone(),
         note: host.note.clone(),
+        ai_notes: host.ai_notes.clone(),
         updated_at: host.updated_at,
         last_connected_at: vault.last_connected(id),
     }

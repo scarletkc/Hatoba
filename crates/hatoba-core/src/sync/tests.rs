@@ -10,7 +10,10 @@ use super::fake::{FakeBackend, FakeServer, SETUP_TOKEN};
 use super::*;
 use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
-use crate::model::{Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey, new_id};
+use crate::model::{
+    AiConversation, AiEffort, AiMessage, Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey,
+    new_id,
+};
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
 use crate::store::StoreOps;
@@ -1747,4 +1750,313 @@ async fn restoring_a_losing_deletion_deletes_the_item_again() {
     assert!(b.v().get(&seed).is_none());
     converge(&a, &b).await;
     assert!(a.v().get(&seed).is_none());
+}
+
+// ---- AI conversations (spec §13.7) --------------------------------------------------------
+
+fn conversation(title: &str) -> Item {
+    Item::AiConversation(AiConversation {
+        title: title.into(),
+        ..AiConversation::default()
+    })
+}
+
+fn user_entry(n: usize, text: &str) -> String {
+    serde_json::to_string(&serde_json::json!({"created_at": n, "role": "user", "text": text}))
+        .unwrap()
+}
+
+/// A conversation's entries as `(entry_id, json)`.
+fn entries(dev: &Dev, conversation_id: &str) -> Vec<(String, String)> {
+    dev.v()
+        .ai_entries(conversation_id)
+        .unwrap()
+        .into_iter()
+        .map(|e| (e.entry_id, e.json.as_str().to_owned()))
+        .collect()
+}
+
+/// Ids of the message items the device holds for a conversation, with their cached `data`.
+fn parts_of(dev: &Dev, conversation_id: &str) -> Vec<(String, String)> {
+    dev.v()
+        .items()
+        .filter_map(|(id, item)| {
+            item.as_ai_message()
+                .filter(|m| m.conversation_id == conversation_id)
+                .map(|m| (id.to_owned(), m.data.clone()))
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn entries_that_two_devices_append_merge_in_entry_id_order() {
+    let (_server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("shared"));
+    converge(&a, &b).await;
+    assert!(b.v().get(&conv).is_some());
+
+    // Both devices append while offline from each other; the shared clock fixes the order of the
+    // entry ids. One entry is far bigger than a part.
+    let big = user_entry(4, &"a \"quoted\" 日本語 😀\n".repeat(9_000));
+    assert!(big.len() > 200 * 1024);
+    let script = [
+        (&a, user_entry(1, "a1")),
+        (&b, user_entry(2, "b1")),
+        (&a, user_entry(3, "a2")),
+        (&b, big),
+        (&a, user_entry(5, "a3")),
+        (&b, user_entry(6, "b2")),
+    ];
+    let mut expected = Vec::new();
+    for (dev, json) in script {
+        clock.advance(10);
+        let id = dev.v().ai_append_entry(&conv, &json).unwrap();
+        expected.push((id, json));
+    }
+    assert!(expected.windows(2).all(|w| w[0].0 < w[1].0));
+    assert_eq!(entries(&a, &conv).len(), 3, "a sees only its own entries");
+    assert_eq!(entries(&b, &conv).len(), 3, "b sees only its own entries");
+
+    converge(&a, &b).await;
+    assert_eq!(entries(&a, &conv), expected);
+    assert_eq!(entries(&b, &conv), expected);
+    // The big entry travelled as several parts, and nobody keeps message data in memory.
+    assert!(parts_of(&a, &conv).len() >= 3 + 5);
+    for dev in [&a, &b] {
+        assert!(parts_of(dev, &conv).iter().all(|(_, data)| data.is_empty()));
+        assert_eq!(dev.pending(), 0);
+    }
+
+    // The next entry from either side sorts after everything merged so far.
+    clock.advance(10);
+    let next = b.v().ai_append_entry(&conv, &user_entry(7, "b3")).unwrap();
+    assert!(next > expected.last().unwrap().0);
+    converge(&a, &b).await;
+    assert_eq!(entries(&a, &conv).last().unwrap().0, next);
+    assert_eq!(entries(&a, &conv), entries(&b, &conv));
+}
+
+#[tokio::test]
+async fn a_conversations_thinking_level_syncs_with_it() {
+    let (_server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("levels"));
+    converge(&a, &b).await;
+    let effort = |dev: &Dev| {
+        dev.v()
+            .get(&conv)
+            .unwrap()
+            .as_ai_conversation()
+            .unwrap()
+            .effort
+    };
+    // AI-05: a conversation without a stored level is Default.
+    assert_eq!(effort(&b), None);
+
+    clock.advance(1_000);
+    a.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.effort = Some(AiEffort::Max);
+        }
+    });
+    converge(&a, &b).await;
+    assert_eq!(effort(&b), Some(AiEffort::Max));
+
+    // The newer change wins (§6.4), back to Default included.
+    clock.advance(1_000);
+    b.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.effort = None;
+        }
+    });
+    converge(&a, &b).await;
+    assert_eq!(effort(&a), None);
+    assert_eq!(effort(&b), None);
+}
+
+#[tokio::test]
+async fn a_restored_device_keeps_headers_in_memory_and_reads_entries_from_its_store() {
+    let (server, clock, a, b) = world();
+    let conv = a.put(conversation("history"));
+    let mut expected = Vec::new();
+    for (n, text) in [
+        (1, "first".to_owned()),
+        (2, "x\"y 日".repeat(20_000)),
+        (3, "last".to_owned()),
+    ] {
+        clock.advance(10);
+        let json = user_entry(n, &text);
+        let id = a.v().ai_append_entry(&conv, &json).unwrap();
+        expected.push((id, json));
+    }
+    enable(&a).await;
+    // The server holds ciphertext only.
+    assert!(!server.dump().contains("first"));
+
+    restore(&b).await;
+    assert_eq!(entries(&b, &conv), expected);
+    let parts = parts_of(&b, &conv);
+    assert!(parts.len() > 3, "{} parts", parts.len());
+    assert!(
+        parts.iter().all(|(_, data)| data.is_empty()),
+        "after a sync pull"
+    );
+    assert_eq!(a.snapshot(), b.snapshot());
+
+    // And after a restart.
+    b.v().lock();
+    b.v().unlock(PW).unwrap();
+    assert!(parts_of(&b, &conv).iter().all(|(_, data)| data.is_empty()));
+    assert_eq!(entries(&b, &conv), expected);
+}
+
+#[tokio::test]
+async fn deleting_a_conversation_syncs_a_tombstone_for_every_part() {
+    let (server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("doomed"));
+    let keep = a.put(conversation("kept"));
+    for (n, text) in [
+        (1, "one".to_owned()),
+        (2, "z\"".repeat(30_000)),
+        (3, "three".to_owned()),
+    ] {
+        clock.advance(10);
+        a.v().ai_append_entry(&conv, &user_entry(n, &text)).unwrap();
+    }
+    a.v()
+        .ai_append_entry(&keep, &user_entry(4, "stays"))
+        .unwrap();
+    converge(&a, &b).await;
+    let mut ids: Vec<String> = parts_of(&b, &conv).into_iter().map(|(id, _)| id).collect();
+    assert!(ids.len() >= 4, "{} parts", ids.len());
+    ids.push(conv.clone());
+
+    clock.advance(1_000);
+    a.v().ai_delete_conversation(&conv).unwrap();
+    converge(&a, &b).await;
+    for id in &ids {
+        let on_server = server.item(id).unwrap();
+        assert!(on_server.deleted && on_server.envelope.is_none(), "{id}");
+        assert!(b.v().get(id).is_none(), "{id}");
+    }
+    assert!(entries(&b, &conv).is_empty());
+    assert_eq!(entries(&b, &keep).len(), 1);
+    assert_eq!(entries(&a, &keep), entries(&b, &keep));
+}
+
+#[tokio::test]
+async fn parts_added_to_a_conversation_deleted_elsewhere_are_deleted_after_the_pull() {
+    let (server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("raced"));
+    a.v().ai_append_entry(&conv, &user_entry(1, "old")).unwrap();
+    converge(&a, &b).await;
+
+    clock.advance(1_000);
+    a.v().ai_delete_conversation(&conv).unwrap();
+    a.sync().await;
+    // B has not heard yet and adds an entry.
+    clock.advance(1_000);
+    b.v()
+        .ai_append_entry(&conv, &user_entry(2, "late"))
+        .unwrap();
+    let late: Vec<String> = parts_of(&b, &conv)
+        .into_iter()
+        .map(|(id, _)| id)
+        .filter(|id| server.item(id).is_none())
+        .collect();
+    assert_eq!(late.len(), 1);
+
+    // B's pull brings the conversation's tombstone, and the late part is deleted in the same
+    // round: its tombstone is what reaches the server.
+    b.sync().await;
+    assert!(parts_of(&b, &conv).is_empty());
+    let on_server = server.item(&late[0]).unwrap();
+    assert!(on_server.deleted && on_server.envelope.is_none());
+    converge(&a, &b).await;
+    for dev in [&a, &b] {
+        assert!(dev.v().get(&conv).is_none());
+        assert!(parts_of(dev, &conv).is_empty());
+        assert!(entries(dev, &conv).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn parts_whose_conversation_has_not_arrived_yet_are_kept() {
+    let (server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("paged"));
+    a.v()
+        .ai_append_entry(&conv, &user_entry(1, "first"))
+        .unwrap();
+    a.sync().await;
+    // The conversation changes again, so a pull reaches it after its part.
+    clock.advance(1_000);
+    a.edit(&conv, |item| {
+        if let Item::AiConversation(c) = item {
+            c.title = "paged, renamed".into();
+        }
+    });
+    a.sync().await;
+
+    // B's pull stops after its first page: the part arrived, its conversation did not.
+    server.set_pull_page_cap(1);
+    let cloud = server.clone();
+    b.backend.on_next_pull(move || cloud.set_offline(true));
+    assert!(b.try_sync().await.is_err());
+    assert!(b.v().get(&conv).is_none());
+    assert_eq!(parts_of(&b, &conv).len(), 1);
+    // As after an unlock: the part stays, since its conversation may still come.
+    assert_eq!(b.v().ai_sweep_orphaned_parts().unwrap(), 0);
+    assert_eq!(parts_of(&b, &conv).len(), 1);
+    assert_eq!(b.pending(), 0);
+
+    server.set_offline(false);
+    converge(&a, &b).await;
+    assert_eq!(entries(&b, &conv).len(), 1);
+    assert_eq!(entries(&b, &conv), entries(&a, &conv));
+}
+
+#[tokio::test]
+async fn a_message_part_in_the_conflict_log_has_no_data_and_restoring_it_keeps_its_data() {
+    let (_server, clock, a, b) = two_devices().await;
+    let conv = a.put(conversation("c"));
+    converge(&a, &b).await;
+
+    // Entries never change, so this takes an id written twice: the same item on both devices.
+    let id = new_id();
+    let part = |data: &str| {
+        Item::AiMessage(AiMessage {
+            conversation_id: conv.clone(),
+            entry_id: "0192f0aa-1111-7000-8000-000000000001".into(),
+            part: 0,
+            part_count: 1,
+            data: data.into(),
+            ..AiMessage::default()
+        })
+    };
+    clock.advance(1_000);
+    a.v().put(Some(&id), part("from-a")).unwrap();
+    clock.advance(1_000);
+    b.v().put(Some(&id), part("from-b")).unwrap();
+    a.sync().await;
+    let report = b.sync().await;
+    assert_eq!(report.conflicts_resolved, 1);
+
+    let entry = b.v().conflicts(false).unwrap().remove(0);
+    assert_eq!(entry.resolution, Resolution::LocalWins);
+    for side in [&entry.local, &entry.remote] {
+        let message = side.as_ref().unwrap().as_ai_message().unwrap();
+        assert_eq!(message.entry_id, "0192f0aa-1111-7000-8000-000000000001");
+        assert_eq!(message.data, "", "the conflict view carries no data");
+    }
+    assert_eq!(entries(&b, &conv)[0].1, "from-b");
+
+    clock.advance(1_000);
+    b.v().restore_conflict_loser(entry.id).unwrap();
+    assert_eq!(
+        entries(&b, &conv)[0].1,
+        "from-a",
+        "restoring writes the data back"
+    );
+    assert!(parts_of(&b, &conv).iter().all(|(_, data)| data.is_empty()));
+    converge(&a, &b).await;
+    assert_eq!(entries(&a, &conv)[0].1, "from-a");
 }

@@ -1,0 +1,45 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.input {
+  min-height: 96px;
+}
+
+/* The text area draws its own focus ring, so the global outline of :focus-visible must not show on it. */
+.input:focus-visible {
+  outline: none;
+}
+
+.input[aria-invalid="true"] {
+  box-shadow: var(--error-ring);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 0 4px;
+}
+
+.problem {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--red);
+}
+
+.size {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  font-variant-numeric: tabular-nums;
+}
+
+.over {
+  color: var(--red);
+}

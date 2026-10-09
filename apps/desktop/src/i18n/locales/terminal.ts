@@ -34,6 +34,7 @@ export default defineMessages({
     "terminal.menu.clear": "清除回滚缓冲",
     "terminal.menu.selectAll": "全选",
     "terminal.menu.find": "查找…",
+    "terminal.menu.askAi": "询问 AI",
     "terminal.menu.editHost": "编辑主机",
 
     // connection states
@@ -44,6 +45,7 @@ export default defineMessages({
     "terminal.err.copyDiag": "复制诊断信息",
     "terminal.err.diagCopied": "诊断信息已复制",
     "terminal.err.editHost": "编辑主机",
+    "terminal.err.askAi": "询问 AI",
     "terminal.disconnected": "连接已断开",
     "terminal.disconnectedReason": "连接已断开（{reason}）",
     "terminal.reconnect": "重新连接",
@@ -167,6 +169,7 @@ export default defineMessages({
     "terminal.menu.clear": "Clear Scrollback",
     "terminal.menu.selectAll": "Select All",
     "terminal.menu.find": "Find…",
+    "terminal.menu.askAi": "Ask AI",
     "terminal.menu.editHost": "Edit Host",
 
     "terminal.connectingTo": "Connecting to {host}…",
@@ -177,6 +180,7 @@ export default defineMessages({
     "terminal.err.copyDiag": "Copy Diagnostics",
     "terminal.err.diagCopied": "Diagnostics copied",
     "terminal.err.editHost": "Edit Host",
+    "terminal.err.askAi": "Ask AI",
     "terminal.disconnected": "Connection closed",
     "terminal.disconnectedReason": "Connection closed ({reason})",
     "terminal.reconnect": "Reconnect",
@@ -294,6 +298,7 @@ export default defineMessages({
     "terminal.menu.clear": "スクロールバックを消去",
     "terminal.menu.selectAll": "すべて選択",
     "terminal.menu.find": "検索…",
+    "terminal.menu.askAi": "AI に質問",
     "terminal.menu.editHost": "ホストを編集",
 
     "terminal.connectingTo": "{host} に接続中…",
@@ -303,6 +308,7 @@ export default defineMessages({
     "terminal.err.copyDiag": "診断情報をコピー",
     "terminal.err.diagCopied": "診断情報をコピーしました",
     "terminal.err.editHost": "ホストを編集",
+    "terminal.err.askAi": "AI に質問",
     "terminal.disconnected": "接続が切断されました",
     "terminal.disconnectedReason": "接続が切断されました（{reason}）",
     "terminal.reconnect": "再接続",

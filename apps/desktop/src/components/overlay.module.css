@@ -90,6 +90,60 @@
   color: var(--fg2);
 }
 
+/* A row of options under a label (MenuChoice), lined up with the item labels. */
+.menuChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px 6px 5px 26px;
+  border-radius: var(--radius-sm);
+}
+
+.menuChoiceFocused {
+  background: var(--fill);
+}
+
+.menuChoiceFocused .menuChoiceOptions {
+  background: var(--fill2);
+}
+
+.menuChoiceLabel {
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.menuChoiceOptions {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--fill);
+}
+
+.menuChoiceOption {
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.menuChoiceOption:hover {
+  color: var(--fg);
+}
+
+.menuChoiceOn {
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--segon);
+  box-shadow: var(--shadow-seg);
+}
+
 /* Modal backdrop */
 .backdrop {
   position: fixed;

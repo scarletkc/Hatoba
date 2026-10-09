@@ -1,7 +1,9 @@
-//! The russh client handler: host key verification and disconnect tracking.
+//! The russh client handler: host key verification, the server's identification string and
+//! disconnect tracking.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
+use russh::Names;
 use russh::client::{self, DisconnectReason};
 use russh::keys::PublicKeyOrCertificate;
 use tokio::sync::watch;
@@ -53,6 +55,8 @@ pub(crate) enum CloseReason {
 pub(crate) struct SessionShared {
     closed_tx: watch::Sender<bool>,
     reason: Mutex<Option<CloseReason>>,
+    /// The identification string the server sent in the version exchange, cleaned.
+    server_id: OnceLock<String>,
 }
 
 impl SessionShared {
@@ -60,7 +64,20 @@ impl SessionShared {
         Arc::new(Self {
             closed_tx: watch::Sender::new(false),
             reason: Mutex::new(None),
+            server_id: OnceLock::new(),
         })
+    }
+
+    /// Records the server's identification string. It never changes, so the first one stays.
+    pub(crate) fn set_server_id(&self, raw: &[u8]) {
+        let id = clean_server_id(raw);
+        if !id.is_empty() {
+            let _ = self.server_id.set(id);
+        }
+    }
+
+    pub(crate) fn server_id(&self) -> Option<&str> {
+        self.server_id.get().map(String::as_str)
     }
 
     /// Records why the connection ended (first reason wins) and wakes watchers.
@@ -93,6 +110,20 @@ impl SessionShared {
 /// Strips control characters and caps the length of server-provided text.
 fn sanitize(text: &str) -> String {
     text.chars().filter(|c| !c.is_control()).take(200).collect()
+}
+
+/// Longest identification string kept: RFC 4253 §4.2 allows 255 characters with the CR LF.
+pub(crate) const MAX_SERVER_ID_CHARS: usize = 255;
+
+/// The server's identification string as text: invalid UTF-8 replaced, control characters
+/// dropped, at most [`MAX_SERVER_ID_CHARS`] characters, and surrounding whitespace trimmed.
+fn clean_server_id(raw: &[u8]) -> String {
+    let id: String = String::from_utf8_lossy(raw)
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(MAX_SERVER_ID_CHARS)
+        .collect();
+    id.trim().to_owned()
 }
 
 pub(crate) struct ClientHandler {
@@ -138,6 +169,18 @@ impl client::Handler for ClientHandler {
         }
     }
 
+    /// Runs after every key exchange, the first one right after the version exchange, so the
+    /// session knows the server's identification string before authentication starts.
+    async fn kex_done(
+        &mut self,
+        _shared_secret: Option<&[u8]>,
+        _names: &Names,
+        session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        self.shared.set_server_id(session.remote_sshid());
+        Ok(())
+    }
+
     async fn disconnected(
         &mut self,
         reason: DisconnectReason<Self::Error>,
@@ -165,5 +208,36 @@ impl client::Handler for ClientHandler {
                 Err(e)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn server_ids_are_cleaned_and_capped() {
+        assert_eq!(
+            clean_server_id(b"SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5"),
+            "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5"
+        );
+        assert_eq!(clean_server_id(b" SSH-2.0-x\r\n"), "SSH-2.0-x");
+        assert_eq!(
+            clean_server_id(b"SSH-2.0-\x1b[31mred\xff"),
+            "SSH-2.0-[31mred\u{fffd}"
+        );
+        let long = format!("SSH-2.0-{}", "a".repeat(400));
+        assert_eq!(
+            clean_server_id(long.as_bytes()).chars().count(),
+            MAX_SERVER_ID_CHARS
+        );
+
+        let shared = SessionShared::new();
+        assert_eq!(shared.server_id(), None);
+        shared.set_server_id(b"\r\n");
+        assert_eq!(shared.server_id(), None, "nothing printable is no id");
+        shared.set_server_id(b"SSH-2.0-first");
+        shared.set_server_id(b"SSH-2.0-second");
+        assert_eq!(shared.server_id(), Some("SSH-2.0-first"));
     }
 }

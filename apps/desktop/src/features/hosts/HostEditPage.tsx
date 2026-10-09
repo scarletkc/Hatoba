@@ -5,6 +5,8 @@ import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, TextField } from "@/components/controls";
 import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
 import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
+import { InstructionsField } from "@/features/ai/InstructionsField";
+import { charCount, HOST_NOTES_MAX_CHARS } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView } from "@/ipc/types";
@@ -27,10 +29,12 @@ interface Form {
   tags: string[];
   jumpHostId: string | null;
   note: string;
+  /** What the AI assistant is told about the host (AI-37). */
+  aiNotes: string;
   favorite: boolean;
 }
 
-type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump";
+type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump" | "aiNotes";
 type Errors = Partial<Record<FieldKey, string>>;
 
 type TestState =
@@ -47,6 +51,7 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   password: "password",
   key_id: "key",
   jump_host_id: "jump",
+  ai_notes: "aiNotes",
 };
 
 function initialForm(host: HostView | undefined, groupId: string | null): Form {
@@ -63,6 +68,7 @@ function initialForm(host: HostView | undefined, groupId: string | null): Form {
     tags: host?.tags ?? [],
     jumpHostId: host?.jump_host_id ?? null,
     note: host?.note ?? "",
+    aiNotes: host?.ai_notes ?? "",
     favorite: host?.favorite ?? false,
   };
 }
@@ -111,6 +117,8 @@ export function HostEditPage({ hostId, groupId, back }: { hostId: string | null;
       if (form.jumpHostId === hostId) e.jump = t("hosts.err.jumpSelf");
       else if (hostId && jumpChainReaches(hosts, form.jumpHostId, hostId)) e.jump = t("hosts.err.jumpLoop");
     }
+    // The field says so itself; this only keeps the form from saving.
+    if (charCount(form.aiNotes) > HOST_NOTES_MAX_CHARS) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_CHARS.toLocaleString(t.locale) });
     return e;
   };
 
@@ -128,12 +136,13 @@ export function HostEditPage({ hostId, groupId, back }: { hostId: string | null;
     favorite: form.favorite,
     jump_host_id: form.jumpHostId,
     note: form.note,
+    ai_notes: form.aiNotes,
   });
 
   const showErrors = (e: Errors) => {
     setErrors(e);
     setUserTouched(true);
-    const first = (["name", "address", "port"] as const).find((k) => e[k]);
+    const first = (["name", "address", "port", "aiNotes"] as const).find((k) => e[k]);
     if (first) document.getElementById(`host-${first}`)?.focus();
   };
 
@@ -158,7 +167,7 @@ export function HostEditPage({ hostId, groupId, back }: { hostId: string | null;
 
   const runTest = async () => {
     const e = validate();
-    if (e.address || e.port || e.key || e.name) return showErrors(e);
+    if (e.address || e.port || e.key || e.name || e.aiNotes) return showErrors(e);
     setTest({ state: "running" });
     try {
       const r = await api.ssh_test(toInput());
@@ -470,6 +479,23 @@ export function HostEditPage({ hostId, groupId, back }: { hostId: string | null;
               rows={3}
               onChange={(e) => patch({ note: e.target.value })}
             />
+          </Section>
+
+          <Section title={t("hosts.edit.sec.ai")}>
+            <div className={s.aiNotes}>
+              <span className={s.hint}>{t("hosts.f.aiNotesHint")}</span>
+              <InstructionsField
+                id="host-aiNotes"
+                label={t("hosts.f.aiNotes")}
+                value={form.aiNotes}
+                max={HOST_NOTES_MAX_CHARS}
+                rows={4}
+                placeholder={t("hosts.f.aiNotesPlaceholder")}
+                error={errors.aiNotes}
+                onChange={(aiNotes) => patch({ aiNotes }, "aiNotes")}
+              />
+              <span className={s.aiPrivacy}>{t("hosts.f.aiNotesPrivacy")}</span>
+            </div>
           </Section>
 
           <div className={s.footer}>

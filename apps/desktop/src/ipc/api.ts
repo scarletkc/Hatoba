@@ -1,6 +1,21 @@
 import type {
+  AiConversationDetail,
+  AiConversationView,
+  AiEntryView,
+  AiModel,
+  AiProviderInput,
+  AiProviderView,
+  AiSendInput,
+  AiSendStarted,
+  AiSettingsView,
+  AiTestResult,
+  AiToolResultInput,
+  AiTurnContext,
+  AiTurnEvent,
+  AiSearchHit,
   AppError,
   AppInfo,
+  BuiltinSkillView,
   ConflictView,
   ConnectOptions,
   DeployOutcome,
@@ -9,6 +24,7 @@ import type {
   DeployStart,
   DeployTarget,
   DeviceView,
+  DroppedFile,
   EventMap,
   FileEntry,
   ForwardInput,
@@ -22,8 +38,19 @@ import type {
   KeyImportInput,
   KeyView,
   LocalPrefs,
+  McpImportPreview,
+  McpServerInput,
+  McpServerStatus,
+  McpServerView,
+  McpToolInfo,
   ProbeResult,
+  SearchProviderInput,
+  SearchProviderView,
   SettingsView,
+  SkillDetail,
+  SkillImportPreview,
+  SkillInput,
+  SkillView,
   SshConfigCandidate,
   StarPrompt,
   SyncConfigInput,
@@ -181,6 +208,97 @@ export interface HatobaApi {
   star_prompt_get(): Promise<StarPrompt>;
   /** The prompt never shows again. */
   star_prompt_done(): Promise<void>;
+
+  // AI assistant (§13)
+  /** AI-01: providers. API keys go one way to Rust and never come back. */
+  ai_providers_list(): Promise<AiProviderView[]>;
+  ai_provider_save(input: AiProviderInput): Promise<AiProviderView>;
+  ai_provider_delete(id: string): Promise<void>;
+  /** AI-03: the provider's model list, for a saved or unsaved provider. Rejects with `ai`. */
+  ai_provider_models(input: AiProviderInput): Promise<AiModel[]>;
+  /** AI-04: a minimal request to the first model, or the model list when there is none. */
+  ai_provider_test(input: AiProviderInput): Promise<AiTestResult>;
+  /** AI-14: the search providers behind `web_search`. */
+  search_providers_list(): Promise<SearchProviderView[]>;
+  search_provider_save(input: SearchProviderInput): Promise<SearchProviderView>;
+  search_provider_delete(id: string): Promise<void>;
+  search_provider_test(input: SearchProviderInput): Promise<AiTestResult>;
+  /** The synced default model and search provider. */
+  ai_settings_get(): Promise<AiSettingsView>;
+  ai_settings_save(settings: AiSettingsView): Promise<void>;
+  /** AI-23: every conversation, unsorted. */
+  ai_conversations_list(): Promise<AiConversationView[]>;
+  ai_conversation_get(id: string): Promise<AiConversationDetail>;
+  ai_conversation_rename(id: string, title: string): Promise<AiConversationView>;
+  ai_conversation_pin(id: string, pinned: boolean): Promise<AiConversationView>;
+  ai_conversation_delete(id: string): Promise<void>;
+  /** Stores the user's message and starts a turn; events stream to `onEvent` until `turn_ended` (§13.1). */
+  ai_send(input: AiSendInput, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
+  /** Retry after an error: sends the next request from the stored conversation on a new channel. */
+  ai_retry(conversation_id: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<void>;
+  /** Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
+  ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
+  /** Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`, ...) and stores its result. */
+  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiEntryView>;
+  /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
+  ai_stop(conversation_id: string): Promise<void>;
+  /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
+  ai_compact(conversation_id: string, context: AiTurnContext): Promise<AiEntryView>;
+
+  /** AI-24: conversations whose title or message text contains `query` (case-insensitive). */
+  ai_search(query: string): Promise<AiSearchHit[]>;
+  /** AI-26: replaces the user's message `entry_id` with `text`, deletes every entry after it, and starts a turn. */
+  ai_edit_resend(conversation_id: string, entry_id: string, text: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
+  /**
+   * AI-35, desktop app: reads text files dropped on the window, which its webview hands over as paths only.
+   * Only paths of the window's last drop, each once; any other path refuses the request. One result per path,
+   * in order, named by the file's base name.
+   */
+  ai_read_dropped_files(paths: string[]): Promise<DroppedFile[]>;
+
+  // AI skills (§13.8)
+  skills_list(): Promise<SkillView[]>;
+  skill_get(id: string): Promise<SkillDetail>;
+  /** The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
+  skill_builtin_get(): Promise<BuiltinSkillView>;
+  /** Validates like an import (AI-27); rejects with `invalid_input` naming the field, also for the reserved name `hatoba`. */
+  skill_save(input: SkillInput): Promise<SkillView>;
+  skill_delete(id: string): Promise<void>;
+  skill_set_enabled(id: string, enabled: boolean): Promise<void>;
+  /** Reads a folder or `.zip` the user picked; nothing is saved. */
+  skill_import_preview(path: string): Promise<SkillImportPreview>;
+  /**
+   * Imports what the preview showed: reads the path again and refuses it (`invalid_input`) when it no longer
+   * matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a new name.
+   */
+  skill_import(path: string, token: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
+  /** Writes the skill as a `.zip` to a path the user picked. */
+  skill_export(id: string, path: string): Promise<void>;
+
+  // MCP servers (§13.9)
+  mcp_servers_list(): Promise<McpServerView[]>;
+  mcp_server_save(input: McpServerInput): Promise<McpServerView>;
+  mcp_server_delete(id: string): Promise<void>;
+  /** On this device only (AI-29). */
+  mcp_server_set_enabled(id: string, enabled: boolean): Promise<void>;
+  mcp_server_status(id: string): Promise<McpServerStatus>;
+  /** Starts (or restarts) the server now and lists its tools. */
+  mcp_server_start(id: string): Promise<McpServerStatus>;
+  mcp_server_stop(id: string): Promise<void>;
+  /** AI-31 Always allow on this device: one tool (the server's own name), or every tool with `tool` null. */
+  mcp_set_always_allow(server_id: string, tool: string | null, allow: boolean): Promise<void>;
+  /**
+   * The MCP tool behind a name the model called in the conversation, resolved as `ai_tool_run` resolves it:
+   * from the offer of the conversation's latest request (so it still answers after the server stopped),
+   * else from the running servers. Null when neither has it, or its server was deleted.
+   */
+  mcp_tool_info(conversation_id: string, name: string): Promise<McpToolInfo | null>;
+  /** AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
+  mcp_import_preview(json: string): Promise<McpImportPreview>;
+  /** Adds every importable server; env and header values move into the vault. */
+  mcp_import(json: string): Promise<McpServerView[]>;
+  /** `mcpServers` JSON with placeholders in place of env and header values. */
+  mcp_export(): Promise<string>;
 
   // window (Windows custom title bar, WIN-01)
   window_snap_overlay(): Promise<void>;
