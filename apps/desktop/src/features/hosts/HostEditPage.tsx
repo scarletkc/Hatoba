@@ -297,8 +297,10 @@ export function HostEditPage({
   // SSH-13: one value per choice, so the picker can hold "a saved proxy" as well.
   const proxyValue = form.proxyMode === "proxy" ? `proxy:${form.proxyId ?? ""}` : form.proxyMode;
   const defaultProxy = proxies.find((p) => p.id === defaultProxyId);
+  // A default deleted on another device stays set here, and connecting fails rather than going direct.
+  const defaultHint = defaultProxy?.name ?? t(defaultProxyId ? "hosts.f.proxyDeleted" : "hosts.f.proxyDirect");
   const proxyOptions: SelectOption<string>[] = [
-    { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultProxy?.name ?? t("hosts.f.proxyDirect") },
+    { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultHint },
     { value: "direct", label: t("hosts.f.proxyDirect") },
     ...proxies.map((p) => ({ value: `proxy:${p.id}`, label: p.name, hint: proxySummary(p) })),
     ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId) ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }] : []),
