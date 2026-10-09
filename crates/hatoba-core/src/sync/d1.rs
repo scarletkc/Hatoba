@@ -21,10 +21,11 @@
 //!   the end of each push.
 //!
 //! The Cloudflare API token usually grants edit access to *every* D1 database on the account;
-//! the UI must say so. The token is held only in memory here and stored by the shell in the OS
-//! credential store.
+//! the UI must say so. The token is held only in memory here, until
+//! [`forget_credentials`](SyncBackend::forget_credentials) wipes it, and stored by the shell in
+//! the OS credential store.
 
-use std::sync::RwLock;
+use std::sync::{PoisonError, RwLock};
 
 use async_trait::async_trait;
 use reqwest::{Method, StatusCode};
@@ -211,7 +212,8 @@ fn map_cf_errors(status: StatusCode, errors: &[CfError], body: &[u8], retry: Opt
 struct Api {
     client: reqwest::Client,
     base: String,
-    token: Zeroizing<String>,
+    /// `None` once forgotten.
+    token: RwLock<Option<Zeroizing<String>>>,
 }
 
 impl Api {
@@ -231,8 +233,13 @@ impl Api {
         Ok(Self {
             client: build_client(is_loopback_host(host))?,
             base,
-            token: Zeroizing::new(token.trim().to_owned()),
+            token: RwLock::new(Some(Zeroizing::new(token.trim().to_owned()))),
         })
+    }
+
+    /// Wipes the token; every later call fails with [`Error::Unauthorized`].
+    fn forget(&self) {
+        *self.token.write().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// Sends a request and decodes Cloudflare's `{success, errors, result}` envelope.
@@ -242,9 +249,12 @@ impl Api {
         path: &str,
         body: Option<Value>,
     ) -> Result<T> {
-        let mut auth =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", self.token.as_str()))
-                .map_err(|_| Error::Unauthorized)?;
+        let mut auth = {
+            let token = self.token.read().unwrap_or_else(PoisonError::into_inner);
+            let token = token.as_ref().ok_or(Error::Unauthorized)?;
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", token.as_str()))
+                .map_err(|_| Error::Unauthorized)?
+        };
         auth.set_sensitive(true);
         let mut req = self
             .client
@@ -743,5 +753,10 @@ impl SyncBackend for D1Backend {
         if let Ok(mut guard) = self.session.write() {
             *guard = session;
         }
+    }
+
+    fn forget_credentials(&self) {
+        self.api.forget();
+        self.set_session(None);
     }
 }

@@ -15,6 +15,10 @@
 //! reads or writes locally, and unlocks *before* any network `await`, so the UI thread is never
 //! blocked on I/O and the guard is never held across a suspension point.
 //!
+//! **Cancellation:** every vault step first checks [`SyncOptions::cancel`] under the lock, and
+//! every request is dropped as soon as the token is cancelled. A cancelled round therefore stops
+//! between two complete local steps, exactly like a round whose network failed there.
+//!
 //! **Cursor discipline:** `sync_cursor` only ever advances from *pulled* sequence numbers. The
 //! `seq` returned for our own pushes is deliberately ignored: another device may have written
 //! items with a lower `seq` between our pull and our push, and jumping past them would lose them.
@@ -29,7 +33,7 @@ use crate::model::{Item, new_id};
 use crate::store::{ItemRow, NewConflict, StoreOps, StoreTx, meta};
 use crate::sync::backend::{Change, MAX_CHANGES_PER_PUSH, PushResult, RemoteItem, SyncBackend};
 use crate::sync::conflict::{DEFAULT_CONFLICT_SUFFIX, Decision, Side, conflict_copy, decide};
-use crate::sync::{SharedVault, lock_vault};
+use crate::sync::{CancelToken, SharedVault, lock_vault};
 use crate::vault::{SyncCtx, Vault, decode_envelope, seal_item};
 
 /// Items requested per pull page.
@@ -43,12 +47,15 @@ pub struct SyncOptions {
     /// Appended to the name of a preserved key conflict copy. The desktop app passes the
     /// localized "（冲突副本）".
     pub conflict_suffix: String,
+    /// Stops the round (see [`CancelToken`]). The default token is never cancelled.
+    pub cancel: CancelToken,
 }
 
 impl Default for SyncOptions {
     fn default() -> Self {
         Self {
             conflict_suffix: DEFAULT_CONFLICT_SUFFIX.to_owned(),
+            cancel: CancelToken::new(),
         }
     }
 }
@@ -95,6 +102,13 @@ impl SyncEngine {
         self
     }
 
+    /// Stops the engine's rounds once `cancel` is cancelled.
+    #[must_use]
+    pub fn with_cancel(mut self, cancel: CancelToken) -> Self {
+        self.options.cancel = cancel;
+        self
+    }
+
     /// The vault this engine syncs.
     #[must_use]
     pub fn vault(&self) -> &SharedVault {
@@ -110,17 +124,26 @@ impl SyncEngine {
     /// Runs one sync round.
     ///
     /// # Errors
-    /// [`Error::Locked`] if the vault is locked; transport errors ([`Error::Offline`],
-    /// [`Error::Unauthorized`], …). Local state is consistent after any failure and the next round
-    /// resumes where this one stopped.
+    /// [`Error::Locked`] if the vault is locked; [`Error::Cancelled`] once the round's token is
+    /// cancelled; transport errors ([`Error::Offline`], [`Error::Unauthorized`], …). Local state
+    /// is consistent after any failure and the next round resumes where this one stopped.
     pub async fn sync(&self) -> Result<SyncReport> {
         sync_round(&self.vault, self.backend.as_ref(), &self.options).await
     }
 }
 
-/// Runs `f` with the vault locked. The guard never escapes, so it can never cross an `await`.
-fn with_vault<T>(vault: &SharedVault, f: impl FnOnce(&mut Vault) -> Result<T>) -> Result<T> {
+/// Runs `f` with the vault locked, unless the round is cancelled. The token is checked under
+/// the lock, so a round cancelled before the shell clears or replaces the sync state can no
+/// longer see or overwrite it. The guard never escapes, so it can never cross an `await`.
+fn with_vault<T>(
+    vault: &SharedVault,
+    cancel: &CancelToken,
+    f: impl FnOnce(&mut Vault) -> Result<T>,
+) -> Result<T> {
     let mut guard = lock_vault(vault)?;
+    if cancel.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
     f(&mut guard)
 }
 
@@ -133,7 +156,8 @@ pub async fn sync_round(
     backend: &dyn SyncBackend,
     options: &SyncOptions,
 ) -> Result<SyncReport> {
-    with_vault(vault, |v| {
+    let cancel = &options.cancel;
+    with_vault(vault, cancel, |v| {
         if v.is_unlocked() {
             Ok(())
         } else {
@@ -144,7 +168,7 @@ pub async fn sync_round(
     pull_all(vault, backend, options, &mut report).await?;
     // Message parts of conversations deleted on either side, so their tombstones go out with
     // this round's push (§13.7). A failure here leaves the parts for the next round.
-    with_vault(vault, |v| {
+    with_vault(vault, cancel, |v| {
         match v.ai_sweep_orphaned_parts() {
             Ok(0) => {}
             Ok(parts) => tracing::info!(parts, "deleted message parts of deleted conversations"),
@@ -153,7 +177,7 @@ pub async fn sync_round(
         Ok(())
     })?;
     push_all(vault, backend, options, &mut report).await?;
-    with_vault(vault, |v| {
+    with_vault(vault, cancel, |v| {
         let now = v.clock.now_ms();
         v.store.set_meta(meta::SYNC_LAST_AT, &now.to_string())?;
         report.pending_after = v.pending_count();
@@ -178,12 +202,13 @@ async fn pull_all(
     options: &SyncOptions,
     report: &mut SyncReport,
 ) -> Result<()> {
+    let cancel = &options.cancel;
     loop {
-        let since = with_vault(vault, |v| Ok(v.sync_cursor()))?;
-        let page = backend.pull(since, PULL_PAGE_SIZE).await?;
+        let since = with_vault(vault, cancel, |v| Ok(v.sync_cursor()))?;
+        let page = cancel.guard(backend.pull(since, PULL_PAGE_SIZE)).await?;
         let has_more = page.has_more;
         let next = page.next_since;
-        with_vault(vault, |v| {
+        with_vault(vault, cancel, |v| {
             let mut ctx = v.sync_ctx()?;
             apply_pull_page(&mut ctx, &page.items, next, options, report)
         })?;
@@ -450,10 +475,11 @@ async fn push_all(
     options: &SyncOptions,
     report: &mut SyncReport,
 ) -> Result<()> {
+    let cancel = &options.cancel;
     // How often each item has been pushed this round; bounds retries and conflict ping-pong.
     let mut attempts: HashMap<String, u8> = HashMap::new();
     loop {
-        let batch: Vec<ItemRow> = with_vault(vault, |v| {
+        let batch: Vec<ItemRow> = with_vault(vault, cancel, |v| {
             Ok(v.store
                 .dirty_rows()?
                 .into_iter()
@@ -467,8 +493,10 @@ async fn push_all(
             for row in chunk {
                 *attempts.entry(row.id.clone()).or_default() += 1;
             }
-            let results = backend.push(chunk.iter().map(to_change).collect()).await?;
-            let given_up = with_vault(vault, |v| {
+            let results = cancel
+                .guard(backend.push(chunk.iter().map(to_change).collect()))
+                .await?;
+            let given_up = with_vault(vault, cancel, |v| {
                 let mut ctx = v.sync_ctx()?;
                 apply_push_results(&mut ctx, chunk, &results, options, report)
             })?;

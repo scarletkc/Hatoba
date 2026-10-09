@@ -210,6 +210,7 @@ impl From<hatoba_core::Error> for AppError {
             E::WorkerNameTaken => Self::new(ErrorCode::WorkerNameTaken, detail),
             E::WorkerNotFound => Self::new(ErrorCode::WorkerNotFound, detail),
             E::WorkerNewer => Self::new(ErrorCode::WorkerNewer, detail),
+            E::Cancelled => Self::new(ErrorCode::Cancelled, detail),
             E::SyncNotConfigured
             | E::Server(_)
             | E::Protocol(_)

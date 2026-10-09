@@ -2,6 +2,12 @@
 //! and on demand. Failures never affect local use; transient ones retry with exponential backoff.
 //! In Worker mode, the first round after unlock reads `/v1/health` and pauses sync while the
 //! Worker's version needs an update (spec §6.7, Upgrades).
+//!
+//! Every backend the controller installs starts a new *connection* with its own generation and
+//! [`CancelToken`]. Installing another backend, or none, ends the previous connection: its rounds
+//! stop at their next step without touching the vault, its status updates are ignored, and a
+//! replaced backend forgets its credentials. Disconnecting also waits for the running round to
+//! stop before the saved settings are cleared.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,8 +15,8 @@ use std::time::Duration;
 use hatoba_core::model::Item;
 use hatoba_core::platform::{SecretStore, secret_keys};
 use hatoba_core::sync::{
-    Backoff, D1Backend, SyncBackend, SyncConfig, SyncEngine, WorkerBackend, WorkerCompat,
-    load_session, worker_compat,
+    Backoff, CancelToken, D1Backend, SyncBackend, SyncConfig, SyncEngine, WorkerBackend,
+    WorkerCompat, load_session, worker_compat,
 };
 use tauri::AppHandle;
 use tauri_specta::Event;
@@ -40,12 +46,24 @@ struct WorkerCheck {
 
 struct Inner {
     backend: Option<Arc<dyn SyncBackend>>,
+    /// Counts connections; every `set_backend` starts a new one.
+    generation: u64,
+    /// Cancelled when the current connection ends.
+    cancel: CancelToken,
     state: SyncState,
     message: Option<String>,
     auto: bool,
     pending_trigger: Option<Trigger>,
     /// Worker mode: the last `/v1/health` reading since the backend was set.
     worker: Option<WorkerCheck>,
+}
+
+/// The backend of one connection, as a round captures it when it starts.
+#[derive(Clone)]
+struct Connection {
+    backend: Arc<dyn SyncBackend>,
+    generation: u64,
+    cancel: CancelToken,
 }
 
 pub struct SyncController {
@@ -60,6 +78,8 @@ impl Default for SyncController {
         Self {
             inner: Mutex::new(Inner {
                 backend: None,
+                generation: 0,
+                cancel: CancelToken::new(),
                 state: SyncState::Off,
                 message: None,
                 auto: true,
@@ -86,16 +106,74 @@ impl SyncController {
             .ok_or_else(|| AppError::new(crate::error::ErrorCode::Sync, "sync is not configured"))
     }
 
+    /// The current connection, if sync has a backend.
+    fn connection(&self) -> Option<Connection> {
+        let inner = self.inner();
+        inner.backend.as_ref().map(|backend| Connection {
+            backend: Arc::clone(backend),
+            generation: inner.generation,
+            cancel: inner.cancel.clone(),
+        })
+    }
+
+    /// Starts a new connection with `backend`, or none, and ends the previous one. A backend
+    /// that is replaced rather than installed again (as signing in again does) forgets its
+    /// credentials, so a round still holding it cannot authenticate.
     pub fn set_backend(&self, backend: Option<Arc<dyn SyncBackend>>) {
-        let mut inner = self.inner();
-        inner.state = if backend.is_some() {
-            SyncState::Idle
-        } else {
-            SyncState::Off
+        let replaced = {
+            let mut inner = self.inner();
+            inner.cancel.cancel();
+            inner.cancel = CancelToken::new();
+            inner.generation += 1;
+            inner.state = if backend.is_some() {
+                SyncState::Idle
+            } else {
+                SyncState::Off
+            };
+            inner.message = None;
+            inner.worker = None;
+            let old = std::mem::replace(&mut inner.backend, backend);
+            old.filter(|old| {
+                !inner
+                    .backend
+                    .as_ref()
+                    .is_some_and(|new| Arc::ptr_eq(old, new))
+            })
         };
-        inner.message = None;
-        inner.backend = backend;
-        inner.worker = None;
+        if let Some(old) = replaced {
+            old.forget_credentials();
+        }
+    }
+
+    /// Ends the connection, as `set_backend(None)`, and waits until its round, if one is
+    /// running, has stopped. The guard keeps the next round from starting while the caller
+    /// clears the saved sync settings.
+    pub async fn end_connection(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.set_backend(None);
+        self.round.lock().await
+    }
+
+    /// Whether `conn` is still the current connection.
+    fn is_current(&self, conn: &Connection) -> bool {
+        self.inner().generation == conn.generation
+    }
+
+    /// Runs `f` on the controller state if `conn` is still the current connection. Returns
+    /// whether it ran: an ended connection's rounds never change the status of the next one.
+    fn update_for(&self, conn: &Connection, f: impl FnOnce(&mut Inner)) -> bool {
+        let mut inner = self.inner();
+        let current = inner.generation == conn.generation;
+        if current {
+            f(&mut inner);
+        }
+        current
+    }
+
+    fn set_state_for(&self, conn: &Connection, state: SyncState, message: Option<String>) -> bool {
+        self.update_for(conn, |inner| {
+            inner.state = state;
+            inner.message = message;
+        })
     }
 
     pub fn set_auto(&self, auto: bool) {
@@ -104,12 +182,6 @@ impl SyncController {
 
     pub fn auto(&self) -> bool {
         self.inner().auto
-    }
-
-    fn set_state(&self, state: SyncState, message: Option<String>) {
-        let mut inner = self.inner();
-        inner.state = state;
-        inner.message = message;
     }
 
     /// Whether the Worker's version pauses sync.
@@ -133,16 +205,19 @@ fn worker_mode(st: &AppState) -> bool {
     )
 }
 
-/// Reads the Worker's `/v1/health` and records how it compares with this build. A Worker that
-/// does not answer keeps the last reading; the sync round reports the failure.
-async fn read_worker_health(st: &AppState, backend: &dyn SyncBackend) {
-    match backend.health().await {
+/// Reads the Worker's `/v1/health` and records how it compares with this build, unless the
+/// connection ended meanwhile. A Worker that does not answer keeps the last reading; the sync
+/// round reports the failure.
+async fn read_worker_health(st: &AppState, conn: &Connection) {
+    match conn.cancel.guard(conn.backend.health()).await {
         Ok(info) => {
             let compat = worker_compat(&info, bundled_version().as_deref());
             tracing::info!(version = %info.version, api = info.api, ?compat, "worker health");
-            st.sync.inner().worker = Some(WorkerCheck {
-                compat,
-                version: info.version,
+            st.sync.update_for(conn, |inner| {
+                inner.worker = Some(WorkerCheck {
+                    compat,
+                    version: info.version,
+                });
             });
         }
         Err(e) => tracing::info!("worker health check failed: {}", e.code()),
@@ -153,7 +228,7 @@ async fn read_worker_health(st: &AppState, backend: &dyn SyncBackend) {
 /// finished, and pauses or resumes sync to match.
 pub async fn recheck_worker(app: &AppHandle) {
     let st = state(app);
-    let Some(backend) = st.sync.backend() else {
+    let Some(conn) = st.sync.connection() else {
         return;
     };
     if !worker_mode(&st) {
@@ -162,16 +237,13 @@ pub async fn recheck_worker(app: &AppHandle) {
     let resumed = {
         let _guard = st.sync.round.lock().await;
         let was_paused = st.sync.paused();
-        read_worker_health(&st, backend.as_ref()).await;
+        read_worker_health(&st, &conn).await;
         match (was_paused, st.sync.paused()) {
             (false, true) => {
-                st.sync.set_state(SyncState::Paused, None);
+                st.sync.set_state_for(&conn, SyncState::Paused, None);
                 false
             }
-            (true, false) => {
-                st.sync.set_state(SyncState::Idle, None);
-                true
-            }
+            (true, false) => st.sync.set_state_for(&conn, SyncState::Idle, None),
             _ => false,
         }
     };
@@ -224,13 +296,14 @@ pub fn on_unlock(app: &AppHandle) {
     let configured = config.is_some();
     st.sync.set_backend(backend);
     if configured && st.sync.backend().is_none() {
-        st.sync.set_state(SyncState::AuthFailed, None);
+        st.sync.inner().state = SyncState::AuthFailed;
     }
     emit_status(app);
     trigger(app, Trigger::Unlock);
 }
 
-/// Stops syncing (on lock). The backend is rebuilt on the next unlock.
+/// Stops syncing (on lock), and the backend forgets its credentials. It is rebuilt from the
+/// credential store on the next unlock.
 pub fn stop(app: &AppHandle) {
     state(app).sync.set_backend(None);
     emit_status(app);
@@ -371,34 +444,39 @@ fn sys_locale() -> String {
         .to_lowercase()
 }
 
-/// Runs one sync round now. Errors are reflected in the status and returned.
+/// Runs one sync round now. Errors are reflected in the status and returned. A round whose
+/// connection ends before or while it runs stops and returns `Ok`, leaving the status alone.
 pub async fn run_round(app: &AppHandle) -> AppResult<()> {
     let st = state(app);
-    let Some(backend) = st.sync.backend() else {
+    let Some(conn) = st.sync.connection() else {
         return Ok(());
     };
     if !st.vault().is_unlocked() {
         return Ok(());
     }
     let _guard = st.sync.round.lock().await;
-    st.sync.set_state(SyncState::Syncing, None);
+    // The connection may have ended while this round waited for the previous one.
+    if !st.sync.set_state_for(&conn, SyncState::Syncing, None) {
+        return Ok(());
+    }
     emit_status(app);
     if worker_mode(&st) {
         // The first round after unlock reads /v1/health, and so does every round while the
         // Worker's version pauses sync, so an upgrade from another device resumes it.
         let unread = st.sync.inner().worker.is_none();
         if unread || st.sync.paused() {
-            read_worker_health(&st, backend.as_ref()).await;
+            read_worker_health(&st, &conn).await;
         }
         if st.sync.paused() {
             // Local changes stay pending and go out after the update.
-            st.sync.set_state(SyncState::Paused, None);
+            st.sync.set_state_for(&conn, SyncState::Paused, None);
             emit_status(app);
             return Ok(());
         }
     }
-    let engine =
-        SyncEngine::new(st.vault.clone(), backend).with_conflict_suffix(conflict_suffix(app));
+    let engine = SyncEngine::new(st.vault.clone(), Arc::clone(&conn.backend))
+        .with_conflict_suffix(conflict_suffix(app))
+        .with_cancel(conn.cancel.clone());
     // Pulled settings take effect now, not at the next local save or unlock.
     let result = lock::refresh_after_sync(&st, engine.sync()).await;
     let outcome = match result {
@@ -409,8 +487,14 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
                 conflicts = report.conflicts_resolved,
                 "sync round done"
             );
-            st.sync.set_state(SyncState::Idle, None);
-            adopt_legacy_prefs(app);
+            if st.sync.set_state_for(&conn, SyncState::Idle, None) {
+                adopt_legacy_prefs(app);
+            }
+            Ok(())
+        }
+        // Whatever stopped the round belongs to the connection that ended, not to the next one.
+        Err(e) if !st.sync.is_current(&conn) => {
+            tracing::info!("sync round stopped, its connection ended: {}", e.code());
             Ok(())
         }
         Err(e) => {
@@ -422,7 +506,8 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
                 _ => SyncState::Error,
             };
             tracing::warn!("sync round failed: {}", err.detail);
-            st.sync.set_state(state, Some(err.detail.clone()));
+            st.sync
+                .set_state_for(&conn, state, Some(err.detail.clone()));
             Err(err)
         }
     };
@@ -514,5 +599,126 @@ pub fn device_info() -> hatoba_core::platform::DeviceInfo {
 impl AppState {
     pub fn sync_configured(&self) -> bool {
         self.vault().sync_config().ok().flatten().is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use hatoba_core::sync::{Session, SyncBackend, WorkerBackend};
+    use tokio::sync::Notify;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use zeroize::Zeroizing;
+
+    use super::SyncController;
+    use crate::dto::SyncState;
+
+    /// A Worker that answers the device list, so a request shows whether a backend can still
+    /// authenticate.
+    async fn worker() -> MockServer {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/devices"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "devices": [] })),
+            )
+            .mount(&server)
+            .await;
+        server
+    }
+
+    fn signed_in(server: &MockServer) -> Arc<dyn SyncBackend> {
+        let backend = WorkerBackend::new(&server.uri()).unwrap();
+        backend.set_session(Some(Session {
+            token: Zeroizing::new("session-token-for-tests".into()),
+            expires_at: i64::MAX,
+        }));
+        Arc::new(backend)
+    }
+
+    #[tokio::test]
+    async fn a_new_connection_ends_the_previous_one() {
+        let server = worker().await;
+        let sync = SyncController::default();
+        let first = signed_in(&server);
+        sync.set_backend(Some(Arc::clone(&first)));
+        let old = sync.connection().unwrap();
+
+        // Signing in again installs the same backend, which keeps its new session.
+        sync.set_backend(Some(Arc::clone(&first)));
+        assert!(old.cancel.is_cancelled());
+        assert!(!sync.is_current(&old));
+        first.devices().await.unwrap();
+
+        // Another backend replaces it, and it forgets its credentials.
+        let current = sync.connection().unwrap();
+        sync.set_backend(Some(signed_in(&server)));
+        assert!(current.cancel.is_cancelled());
+        assert!(matches!(
+            first.devices().await,
+            Err(hatoba_core::Error::Unauthorized)
+        ));
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn an_ended_connection_cannot_change_the_status() {
+        let server = worker().await;
+        let sync = SyncController::default();
+        sync.set_backend(Some(signed_in(&server)));
+        let old = sync.connection().unwrap();
+
+        sync.set_backend(None);
+        assert!(!sync.set_state_for(&old, SyncState::AuthFailed, Some("expired".into())));
+        assert_eq!(sync.inner().state, SyncState::Off);
+
+        sync.set_backend(Some(signed_in(&server)));
+        assert!(!sync.set_state_for(&old, SyncState::Error, Some("old round".into())));
+        assert_eq!(sync.inner().state, SyncState::Idle);
+        assert!(sync.inner().message.is_none());
+        let current = sync.connection().unwrap();
+        assert!(sync.set_state_for(&current, SyncState::Syncing, None));
+        assert_eq!(sync.inner().state, SyncState::Syncing);
+    }
+
+    #[tokio::test]
+    async fn ending_the_connection_waits_for_its_round_to_stop() {
+        let server = worker().await;
+        let sync = Arc::new(SyncController::default());
+        let backend = signed_in(&server);
+        sync.set_backend(Some(Arc::clone(&backend)));
+        let conn = sync.connection().unwrap();
+        let (running, stopped) = (Arc::new(Notify::new()), Arc::new(AtomicBool::new(false)));
+
+        // A round that holds the round lock until its connection is cancelled.
+        let round = tokio::spawn({
+            let (sync, running, stopped) = (
+                Arc::clone(&sync),
+                Arc::clone(&running),
+                Arc::clone(&stopped),
+            );
+            async move {
+                let _guard = sync.round.lock().await;
+                running.notify_one();
+                conn.cancel.cancelled().await;
+                tokio::task::yield_now().await;
+                stopped.store(true, Ordering::SeqCst);
+            }
+        });
+        running.notified().await;
+
+        let guard = sync.end_connection().await;
+        assert!(stopped.load(Ordering::SeqCst), "the round stopped first");
+        assert!(sync.connection().is_none());
+        assert_eq!(sync.inner().state, SyncState::Off);
+        assert!(matches!(
+            backend.devices().await,
+            Err(hatoba_core::Error::Unauthorized)
+        ));
+        drop(guard);
+        round.await.unwrap();
     }
 }

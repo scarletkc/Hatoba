@@ -7,7 +7,8 @@
 //! a password change revokes, and restricted recovery sessions.
 //!
 //! Test hooks: take the server offline, run code in the middle of a push (to edit locally while
-//! a push is in flight), inject raw rows, and lose a push response after the server applied it.
+//! a push is in flight), inject raw rows, lose a push response after the server applied it, and
+//! hold a pull that never answers.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
@@ -220,6 +221,7 @@ pub(crate) struct FakeBackend {
     session: RwLock<Option<Session>>,
     during_push: Mutex<Option<PushHook>>,
     after_pull: Mutex<Option<PushHook>>,
+    stall_pull: Mutex<Option<Arc<tokio::sync::Notify>>>,
     clock: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 
@@ -230,6 +232,7 @@ impl FakeBackend {
             session: RwLock::new(None),
             during_push: Mutex::new(None),
             after_pull: Mutex::new(None),
+            stall_pull: Mutex::new(None),
             clock: Arc::new(|| 1_700_000_000_000),
         }
     }
@@ -244,6 +247,14 @@ impl FakeBackend {
     /// between the engine's pull and its push).
     pub(crate) fn on_next_pull(&self, hook: impl Fn() + Send + Sync + 'static) {
         *self.after_pull.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    /// Makes the next pull hang until it is dropped, like a server that never answers. The
+    /// returned notifier fires once the pull is waiting.
+    pub(crate) fn stall_next_pull(&self) -> Arc<tokio::sync::Notify> {
+        let waiting = Arc::new(tokio::sync::Notify::new());
+        *self.stall_pull.lock().unwrap() = Some(Arc::clone(&waiting));
+        waiting
     }
 
     pub(crate) fn clear_push_hook(&self) {
@@ -416,6 +427,11 @@ impl SyncBackend for FakeBackend {
     }
 
     async fn pull(&self, since_seq: u64, limit: u32) -> Result<PullPage> {
+        let stall = self.stall_pull.lock().unwrap().take();
+        if let Some(waiting) = stall {
+            waiting.notify_one();
+            std::future::pending::<()>().await;
+        }
         self.authenticate(false)?;
         self.server.take_failure("pull")?;
         let page = {

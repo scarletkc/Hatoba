@@ -230,15 +230,20 @@ pub fn sync_set_auto(app: AppHandle, state: State<'_, AppState>, enabled: bool) 
 }
 
 /// Stops syncing on this device. Local data and the remote copy are both kept.
+///
+/// The connection ends first, and its running round stops before the saved settings are
+/// cleared, so no round writes sync state after this returns or into a connection set up later
+/// (spec §6.3). Sync stays stopped on this device even if clearing a setting fails.
 #[tauri::command]
 #[specta::specta]
-pub fn sync_disconnect(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    clear_session(state.secrets.as_ref())?;
-    state.secrets.delete(secret_keys::D1_API_TOKEN)?;
-    state.vault().set_sync_config(None)?;
-    state.sync.set_backend(None);
+pub async fn sync_disconnect(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let round = state.sync.end_connection().await;
+    let cleared = clear_session(state.secrets.as_ref())
+        .and_then(|()| state.secrets.delete(secret_keys::D1_API_TOKEN))
+        .and_then(|()| state.vault().set_sync_config(None));
+    drop(round);
     sync::emit_status(&app);
-    Ok(())
+    cleared.map_err(AppError::from)
 }
 
 #[tauri::command]

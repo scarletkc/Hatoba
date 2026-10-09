@@ -816,6 +816,7 @@ async fn localized_conflict_suffix_is_used() {
     a.sync().await;
     let opts = SyncOptions {
         conflict_suffix: "（冲突副本）".into(),
+        ..SyncOptions::default()
     };
     sync_round(&b.vault, &b.backend, &opts).await.unwrap();
     assert!(
@@ -1259,6 +1260,133 @@ async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_ed
     assert_eq!(s.auto_lock_minutes, 42);
     // B wrote on top of A's version, so nothing had to be resolved.
     assert!(b.v().conflicts(false).unwrap().is_empty());
+}
+
+// ---- cancellation (disconnecting or replacing the connection) -------------------------------
+
+/// A round's view of the local sync state, which a cancelled round must leave alone.
+fn sync_state(dev: &Dev) -> (u64, Option<i64>, u64) {
+    let v = dev.v();
+    (v.sync_cursor(), v.sync_last_at(), v.pending_count())
+}
+
+#[tokio::test]
+async fn a_cancelled_round_sends_nothing_and_leaves_the_vault_alone() {
+    let (server, clock, a, b) = two_devices().await;
+    clock.advance(1000);
+    b.put(host("from-b"));
+    b.sync().await;
+    a.put(host("from-a"));
+    let before = sync_state(&a);
+    let (pulls, pushes) = (server.pull_calls(), server.push_calls());
+
+    let options = SyncOptions::default();
+    options.cancel.cancel();
+    let result = sync_round(&a.vault, &a.backend, &options).await;
+
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert_eq!((server.pull_calls(), server.push_calls()), (pulls, pushes));
+    assert_eq!(sync_state(&a), before);
+    assert_eq!(a.find("from-b"), None);
+}
+
+#[tokio::test]
+async fn cancelling_drops_the_pull_in_flight() {
+    let (_server, clock, a, b) = two_devices().await;
+    clock.advance(1000);
+    b.put(host("from-b"));
+    b.sync().await;
+    let before = sync_state(&a);
+
+    let options = SyncOptions::default();
+    let waiting = a.backend.stall_next_pull();
+    let (result, ()) = tokio::join!(sync_round(&a.vault, &a.backend, &options), async {
+        waiting.notified().await;
+        options.cancel.cancel();
+    });
+
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert_eq!(sync_state(&a), before);
+    assert_eq!(a.find("from-b"), None);
+    // A round with a live token resumes from the last completed step.
+    a.sync().await;
+    assert!(a.find("from-b").is_some());
+}
+
+#[tokio::test]
+async fn a_round_cancelled_before_its_pull_returns_never_writes_the_next_connections_state() {
+    let (_server, clock, a, b) = two_devices().await;
+    clock.advance(1000);
+    b.put(host("from-b"));
+    b.sync().await;
+    a.put(host("from-a"));
+
+    // The pull's answer arrives after the app disconnected (cancel first, then clear the sync
+    // state under the vault lock) and reconnected.
+    let options = SyncOptions::default();
+    let (cancel, vault) = (options.cancel.clone(), Arc::clone(&a.vault));
+    a.backend.on_next_pull(move || {
+        cancel.cancel();
+        let mut v = vault.lock().unwrap();
+        v.set_sync_config(None).unwrap();
+        v.set_sync_config(Some(&config())).unwrap();
+    });
+    let result = sync_round(&a.vault, &a.backend, &options).await;
+
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert_eq!(
+        sync_state(&a),
+        (0, None, 1),
+        "the cursor and timestamp stay as the new connection left them"
+    );
+    assert_eq!(
+        a.find("from-b"),
+        None,
+        "the old round's page is not applied"
+    );
+    // The new connection's first round starts from scratch and loses nothing.
+    let report = a.sync().await;
+    assert_eq!(report.pending_after, 0);
+    converge(&a, &b).await;
+    assert!(b.find("from-a").is_some());
+}
+
+#[tokio::test]
+async fn cancelling_during_a_push_drops_its_results_and_the_remaining_chunks() {
+    let (server, _clock, a, _b) = two_devices().await;
+    for i in 0..150 {
+        a.put(host(&format!("many-{i}")));
+    }
+    let (items, pushes) = (server.item_count(), server.push_calls());
+    let last_at = a.v().sync_last_at();
+
+    // The server applies the first chunk, and the app disconnects before the answer arrives.
+    let options = SyncOptions::default();
+    let cancel = options.cancel.clone();
+    a.backend.on_push(move || cancel.cancel());
+    let result = sync_round(&a.vault, &a.backend, &options).await;
+    a.backend.clear_push_hook();
+
+    assert!(matches!(result, Err(Error::Cancelled)), "{result:?}");
+    assert_eq!(
+        server.push_calls() - pushes,
+        1,
+        "the second chunk is never sent"
+    );
+    assert_eq!(server.item_count(), items + 100);
+    assert_eq!(
+        a.pending(),
+        150,
+        "results that arrive after cancelling are dropped"
+    );
+    assert_eq!(a.v().sync_last_at(), last_at);
+
+    // As after a lost response: the next round adopts what the server applied, without a
+    // conflict, and sends the rest.
+    let report = a.sync().await;
+    assert_eq!((report.conflicts_resolved, report.pending_after), (0, 0));
+    assert_eq!(a.v().unreviewed_conflict_count(), 0);
+    assert_eq!(server.item_count(), items + 150);
 }
 
 // ---- password change, recovery, devices -----------------------------------------------------

@@ -73,6 +73,61 @@ pub fn lock_vault(vault: &SharedVault) -> Result<MutexGuard<'_, Vault>> {
     vault.lock().map_err(|_| Error::Poisoned)
 }
 
+/// Stops the sync rounds of one connection (spec §6.3). The shell gives each connection its own
+/// token and cancels it when it disconnects sync, replaces the backend or locks the vault.
+///
+/// A cancelled round abandons the request in flight, sends no further request and returns
+/// [`Error::Cancelled`] at its next vault step without touching the vault. The engine checks
+/// the token while it holds the vault lock, so a shell that cancels first and then changes the
+/// sync state under that lock never has it overwritten by the old round. A request already sent
+/// may still reach the server; its result is dropped, as if the response had been lost.
+#[derive(Clone, Debug)]
+pub struct CancelToken(Arc<tokio::sync::watch::Sender<bool>>);
+
+impl Default for CancelToken {
+    fn default() -> Self {
+        Self(Arc::new(tokio::sync::watch::Sender::new(false)))
+    }
+}
+
+impl CancelToken {
+    /// A token that is not cancelled.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Cancels every round that holds this token. Calling it again does nothing.
+    pub fn cancel(&self) {
+        self.0.send_replace(true);
+    }
+
+    /// Whether [`cancel`](Self::cancel) has been called.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        *self.0.borrow()
+    }
+
+    /// Resolves once the token is cancelled.
+    pub async fn cancelled(&self) {
+        let mut rx = self.0.subscribe();
+        // `self` keeps the sender alive, so this returns only once the token is cancelled.
+        let _ = rx.wait_for(|cancelled| *cancelled).await;
+    }
+
+    /// Runs `call`, or drops it with [`Error::Cancelled`] once the token is cancelled.
+    ///
+    /// # Errors
+    /// [`Error::Cancelled`], or the error of `call`.
+    pub async fn guard<T>(&self, call: impl Future<Output = Result<T>>) -> Result<T> {
+        tokio::select! {
+            biased;
+            () = self.cancelled() => Err(Error::Cancelled),
+            result = call => result,
+        }
+    }
+}
+
 /// Which backend this device syncs with. Contains no secrets (the session token and the
 /// Cloudflare API token live in the OS credential store).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

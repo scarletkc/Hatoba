@@ -144,7 +144,13 @@ export const commands = {
 	/**  Hides "Worker update available" until the app bundles a newer Worker version. */
 	syncDismissWorkerUpdate: () => __TAURI_INVOKE<null>("sync_dismiss_worker_update"),
 	syncSetAuto: (enabled: boolean) => __TAURI_INVOKE<void>("sync_set_auto", { enabled }),
-	/**  Stops syncing on this device. Local data and the remote copy are both kept. */
+	/**
+	 *  Stops syncing on this device. Local data and the remote copy are both kept.
+	 * 
+	 *  The connection ends first, and its running round stops before the saved settings are
+	 *  cleared, so no round writes sync state after this returns or into a connection set up later
+	 *  (spec §6.3). Sync stays stopped on this device even if clearing a setting fails.
+	 */
 	syncDisconnect: () => __TAURI_INVOKE<null>("sync_disconnect"),
 	syncDevices: () => __TAURI_INVOKE<DeviceView[]>("sync_devices"),
 	syncRevokeDevice: (deviceId: string) => __TAURI_INVOKE<null>("sync_revoke_device", { deviceId }),

@@ -649,6 +649,31 @@ async fn device_management_is_unsupported_in_direct_mode() {
     ));
 }
 
+#[tokio::test]
+async fn forgotten_credentials_stop_every_query_before_it_is_sent() {
+    let (server, fake) = start().await;
+    let b = backend(&server);
+    b.setup(init(&[1; 32], &[2; 32])).await.unwrap();
+    b.login(&[1; 32], &login_info()).await.unwrap();
+    let sent = server.received_requests().await.unwrap().len();
+
+    b.forget_credentials();
+    assert!(matches!(b.pull(0, 10).await, Err(Error::Unauthorized)));
+    assert!(matches!(
+        b.push(vec![change("h1", 0, Some("{}"), 1)]).await,
+        Err(Error::Unauthorized)
+    ));
+    assert!(matches!(
+        b.login(&[1; 32], &login_info()).await,
+        Err(Error::Unauthorized)
+    ));
+    assert_eq!(server.received_requests().await.unwrap().len(), sent);
+    assert_eq!(
+        fake.scalar("SELECT COUNT(*) FROM items").as_deref(),
+        Some("0")
+    );
+}
+
 // ---- error mapping and wizard helpers -------------------------------------------------------
 
 #[tokio::test]

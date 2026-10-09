@@ -279,4 +279,12 @@ pub trait SyncBackend: Send + Sync {
     async fn revoke_device(&self, device_id: &str) -> Result<()>;
     /// Installs (or clears) the session used for authenticated calls.
     fn set_session(&self, session: Option<Session>);
+    /// Forgets every credential held in memory: the session and, in direct D1 mode, the
+    /// Cloudflare API token. Later authenticated calls fail with
+    /// [`Error::Unauthorized`](crate::Error::Unauthorized) without sending a request. The shell
+    /// calls this when it disconnects sync, replaces the backend or locks the vault, so that a
+    /// round still holding the backend cannot authenticate.
+    fn forget_credentials(&self) {
+        self.set_session(None);
+    }
 }

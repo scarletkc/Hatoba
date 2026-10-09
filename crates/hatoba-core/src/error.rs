@@ -124,6 +124,10 @@ pub enum Error {
     /// The backend does not implement this operation (e.g. device list in D1 direct mode).
     #[error("not supported by this sync backend")]
     Unsupported,
+    /// The sync round stopped because the shell disconnected or replaced its connection. Nothing
+    /// failed: the vault holds what the round's last completed step wrote.
+    #[error("sync round cancelled")]
+    Cancelled,
 
     // ---- in-app deployment (§6.7) ----------------------------------------------------------
     /// Cloudflare rejected the API token: invalid, expired, or disabled.
@@ -195,6 +199,7 @@ impl Error {
             Self::InvalidUrl(_) => "invalid_url",
             Self::D1Permission => "d1_permission",
             Self::Unsupported => "unsupported",
+            Self::Cancelled => "cancelled",
             Self::CloudflareToken => "cloudflare_token",
             Self::CloudflarePermission(_) => "cloudflare_permission",
             Self::Cloudflare { .. } => "cloudflare",

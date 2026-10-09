@@ -712,6 +712,17 @@ async fn bearer_header_is_marked_sensitive_and_base_path_is_kept() {
     b.fetch_vault().await.unwrap();
 }
 
+#[tokio::test]
+async fn forgotten_credentials_stop_authenticated_calls_before_any_request() {
+    let server = MockServer::start().await;
+    let b = signed_in(&server);
+    b.forget_credentials();
+    assert!(matches!(b.pull(0, 10).await, Err(Error::Unauthorized)));
+    assert!(matches!(b.fetch_vault().await, Err(Error::Unauthorized)));
+    assert!(matches!(b.devices().await, Err(Error::Unauthorized)));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
 #[test]
 fn rejects_unsafe_urls_at_construction() {
     assert!(matches!(
