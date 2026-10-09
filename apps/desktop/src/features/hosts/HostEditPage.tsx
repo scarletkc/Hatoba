@@ -12,6 +12,8 @@ import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
+import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
+import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
 import { ForwardsSection } from "./ForwardsSection";
 import { useHostsUi } from "./ui";
 import s from "./HostEditPage.module.css";
@@ -36,9 +38,11 @@ interface Form {
   /** What the AI assistant is told about the host (AI-37). */
   aiNotes: string;
   favorite: boolean;
+  /** Environment variables sent when a terminal opens (SSH-14). */
+  env: EnvRow[];
 }
 
-type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump" | "proxy" | "aiNotes";
+type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump" | "proxy" | "aiNotes" | "env";
 type Errors = Partial<Record<FieldKey, string>>;
 
 type TestState =
@@ -57,6 +61,7 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   jump_host_id: "jump",
   proxy_id: "proxy",
   ai_notes: "aiNotes",
+  env: "env",
 };
 
 function initialForm(host: HostView | undefined, groupId: string | null, prefill: QuickTarget | undefined): Form {
@@ -77,6 +82,7 @@ function initialForm(host: HostView | undefined, groupId: string | null, prefill
     note: host?.note ?? "",
     aiNotes: host?.ai_notes ?? "",
     favorite: host?.favorite ?? false,
+    env: envRows(host?.env ?? []),
   };
 }
 
@@ -109,10 +115,15 @@ export function HostEditPage({
   const [form, setForm] = useState<Form>(() => initialForm(host, groupId, prefill));
   const [errors, setErrors] = useState<Errors>({});
   const [userTouched, setUserTouched] = useState(false);
+  // Save or Test Connection was tried: empty required fields show as problems from now on.
+  const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [test, setTest] = useState<TestState>({ state: "idle" });
   const passwordRef = useRef<HTMLInputElement>(null);
 
+  const envProblems = validateEnvRows(form.env);
+  const envLarge = envTooLarge(form.env);
+  const envBlocked = envProblems.some(Boolean) || envLarge;
   const hasSavedPassword = !!host?.has_password;
   const showSaved = form.authKind === "password" && hasSavedPassword && !form.replacing;
 
@@ -166,20 +177,25 @@ export function HostEditPage({
       proxy_id: proxyMode === "proxy" ? form.proxyId : null,
       note: form.note,
       ai_notes: form.aiNotes,
+      env: envInput(form.env),
     };
   };
 
   const showErrors = (e: Errors) => {
     setErrors(e);
     setUserTouched(true);
-    const first = (["name", "address", "port", "aiNotes"] as const).find((k) => e[k]);
+    setSubmitted(true);
+    const first = (["name", "address", "port"] as const).find((k) => e[k]);
     if (first) document.getElementById(`host-${first}`)?.focus();
+    // After the render that shows the rows' problems, so the field to focus has its id.
+    else if (envBlocked || e.env) requestAnimationFrame(() => document.getElementById(ENV_FOCUS_ID)?.focus());
+    else if (e.aiNotes) document.getElementById("host-aiNotes")?.focus();
   };
 
   const save = async () => {
     if (saving) return;
     const e = validate();
-    if (Object.values(e).some(Boolean)) return showErrors(e);
+    if (Object.values(e).some(Boolean) || envBlocked) return showErrors(e);
     setSaving(true);
     try {
       const saved = await api.host_save(toInput());
@@ -190,6 +206,7 @@ export function HostEditPage({
       const ae = toAppError(err);
       const field = ae.code === "invalid_input" && ae.field ? BACKEND_FIELDS[ae.field] : undefined;
       if (field) showErrors({ [field]: errorMessage(t, err) });
+      else if (ae.code === "invalid_input" && ae.field === "host") toast(t("hosts.err.tooLarge"), "error");
       else toast(errorMessage(t, err, { host: form.address, port: Number(form.port) }), "error");
       setSaving(false);
     }
@@ -197,7 +214,7 @@ export function HostEditPage({
 
   const runTest = async () => {
     const e = validate();
-    if (e.address || e.port || e.key || e.name || e.proxy || e.aiNotes) return showErrors(e);
+    if (e.address || e.port || e.key || e.name || e.proxy || e.aiNotes || envBlocked) return showErrors(e);
     setTest({ state: "running" });
     try {
       const r = await api.ssh_test(toInput());
@@ -536,6 +553,15 @@ export function HostEditPage({
           </Section>
 
           <ForwardsSection hostId={hostId} />
+
+          <EnvVarsSection
+            rows={form.env}
+            problems={envProblems}
+            tooLarge={envLarge}
+            showEmpty={submitted}
+            error={errors.env}
+            onChange={(env) => patch({ env }, "env")}
+          />
 
           <Section title={t("hosts.edit.sec.note")}>
             <TextArea

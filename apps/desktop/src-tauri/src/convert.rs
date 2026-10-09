@@ -8,8 +8,8 @@ use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
 use crate::dto::{
-    AuthKind, GroupView, HostView, KeyAlgorithm, KeyView, ProxyKind, ProxyMode, ProxyView,
-    ServerStatsView,
+    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, ProxyKind, ProxyMode,
+    ProxyView, ServerStatsView,
 };
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
@@ -45,6 +45,14 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         last_connected_at: vault.last_connected(id),
         os: vault.host_os(id),
         show_stats: vault.host_show_stats(id),
+        env: host
+            .env
+            .iter()
+            .map(|v| HostEnvVar {
+                name: v.name.clone(),
+                value: v.value.clone(),
+            })
+            .collect(),
     }
 }
 

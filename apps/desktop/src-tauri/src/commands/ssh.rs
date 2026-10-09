@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use hatoba_core::model::{HostProxy, Item};
+use hatoba_core::model::{Host, HostProxy, Item};
 use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tauri::{AppHandle, State};
@@ -99,16 +99,25 @@ pub async fn ssh_connect(
 ) -> AppResult<String> {
     let session_id = uuid::Uuid::now_v7().to_string();
     let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
-    let cfg = state.with_unlocked(|v| {
+    let (cfg, env) = state.with_unlocked(|v| {
         let host = v
             .get(&host_id)
             .and_then(Item::as_host)
             .cloned()
             .ok_or_else(|| AppError::not_found("host"))?;
-        build_config(v, &host, Some(&host_id), Some(&overrides(&options)))
+        let cfg = build_config(v, &host, Some(&host_id), Some(&overrides(&options)))?;
+        Ok((cfg, host_env(&host)))
     })?;
-    let (live, events) =
-        open_terminal(&app, &state, cfg, &session_id, Some(&host_id), &options).await?;
+    let (live, events) = open_terminal(
+        &app,
+        &state,
+        cfg,
+        env,
+        &session_id,
+        Some(&host_id),
+        &options,
+    )
+    .await?;
     crate::commands::forwards::start_auto(&app, &session_id, &live, &host_id).await;
     pump(
         app,
@@ -146,7 +155,8 @@ pub async fn ssh_connect_target(
         AuthMethod::AgentThenAsk,
     );
     cfg.proxy = proxy;
-    let (live, events) = open_terminal(&app, &state, cfg, &session_id, None, &options).await?;
+    let (live, events) =
+        open_terminal(&app, &state, cfg, Vec::new(), &session_id, None, &options).await?;
     if let Err(e) = state.with_unlocked(|v| quick::remember(v, &target)) {
         tracing::debug!("recent target not recorded: {}", e.detail);
     }
@@ -154,12 +164,23 @@ pub async fn ssh_connect_target(
     Ok(session_id)
 }
 
-/// Connects, opens the shell and registers the session, reporting each step as an
-/// `ssh://state` event.
+/// The variables a host's shell asks the server to set (SSH-14). Only the terminal's shell gets
+/// them; the commands Hatoba runs itself (resource usage, the AI's `run_command`, key deployment)
+/// and SFTP run in the server's default environment.
+fn host_env(host: &Host) -> Vec<(String, String)> {
+    host.env
+        .iter()
+        .map(|v| (v.name.clone(), v.value.clone()))
+        .collect()
+}
+
+/// Connects, opens the shell with the host's environment variables after the defaults, and
+/// registers the session, reporting each step as an `ssh://state` event.
 async fn open_terminal(
     app: &AppHandle,
     state: &AppState,
     cfg: ConnectConfig,
+    env: Vec<(String, String)>,
     session_id: &str,
     host_id: Option<&str>,
     options: &ConnectOptions,
@@ -178,7 +199,8 @@ async fn open_terminal(
         cols: options.cols.clamp(10, 1000),
         rows: options.rows.clamp(2, 500),
         ..ShellOptions::default()
-    };
+    }
+    .with_env(env);
     let (shell, events) = match session.open_shell(shell_opts).await {
         Ok(v) => v,
         Err(e) => {

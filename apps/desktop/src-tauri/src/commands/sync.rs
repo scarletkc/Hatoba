@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use hatoba_core::model::{HostAuth, HostProxy, Item};
+use hatoba_core::model::{EnvVar, HostAuth, HostProxy, Item};
 use hatoba_core::platform::{SecretStore, secret_keys};
 use hatoba_core::sync::{
     ConflictEntry, D1Backend, Resolution, SyncBackend, SyncConfig, WorkerBackend, clear_session,
@@ -335,6 +335,7 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("tags", h.tags.join(", ")),
             ("note", h.note.clone()),
             ("ai_notes", h.ai_notes.clone()),
+            ("env", env_summary(&h.env)),
         ],
         Item::Group(g) => vec![("name", g.name.clone())],
         Item::Key(k) => vec![
@@ -372,6 +373,15 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
         ],
         Item::Settings(_) => vec![],
     }
+}
+
+/// A host's environment variables on one line, each value quoted and escaped, so two different
+/// lists never read the same (SSH-14).
+fn env_summary(env: &[EnvVar]) -> String {
+    env.iter()
+        .map(|v| format!("{}={:?}", v.name, v.value))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn conflict_view(c: &ConflictEntry, hosts: &dyn Fn(&str) -> Option<String>) -> ConflictView {
@@ -485,4 +495,45 @@ pub fn sync_conflict_resolve(
         sync::emit_status(&app);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use hatoba_core::model::Host;
+
+    use super::*;
+
+    fn host_with(env: Vec<EnvVar>) -> Option<Item> {
+        Some(Item::Host(Host {
+            name: "app".into(),
+            env,
+            ..Host::default()
+        }))
+    }
+
+    #[test]
+    fn env_conflicts_show_even_when_the_values_look_alike() {
+        // SSH-14: one variable whose value holds ", B=" is not the same as two variables.
+        let entry = ConflictEntry {
+            id: 1,
+            item_id: "h".into(),
+            resolution: Resolution::RemoteWins,
+            local: host_with(vec![EnvVar::new("A", "x, B=y")]),
+            remote: host_with(vec![EnvVar::new("A", "x"), EnvVar::new("B", "y")]),
+            local_deleted: false,
+            remote_deleted: false,
+            local_updated_at: Some(1),
+            remote_updated_at: Some(2),
+            created_at: 3,
+            reviewed: false,
+        };
+        let view = conflict_view(&entry, &|_| None);
+        let env = view
+            .fields
+            .iter()
+            .find(|f| f.field == "env")
+            .expect("the env row is shown");
+        assert_eq!(env.local.as_deref(), Some(r#"A="x, B=y""#));
+        assert_eq!(env.remote.as_deref(), Some(r#"A="x", B="y""#));
+    }
 }

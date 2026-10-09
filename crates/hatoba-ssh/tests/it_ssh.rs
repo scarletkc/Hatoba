@@ -314,6 +314,30 @@ async fn shell_round_trip_resize_and_exit() {
 }
 
 #[tokio::test]
+async fn shell_gets_host_env_and_ignores_refused_variables() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    // SSH-14: the test server accepts LANG and HATOBA_*; NOT_ACCEPTED is refused, which must not
+    // keep the shell from starting.
+    let opts = ShellOptions::default().with_env([
+        ("HATOBA_GREETING".to_owned(), "hello world=1".to_owned()),
+        ("NOT_ACCEPTED".to_owned(), "x".to_owned()),
+        ("LANG".to_owned(), "C".to_owned()),
+        ("TERM".to_owned(), "vt100".to_owned()),
+    ]);
+    let (shell, mut rx) = session.open_shell(opts).await.unwrap();
+    shell
+        .write(b"echo \"[G=$HATOBA_GREETING] [N=$NOT_ACCEPTED] [L=$LANG] [T=$TERM]\"\n".to_vec())
+        .await
+        .unwrap();
+    read_until(&mut rx, Duration::from_secs(10), |o| {
+        contains(o, "[G=hello world=1] [N=] [L=C] [T=vt100]")
+    })
+    .await;
+    shell.close().await;
+}
+
+#[tokio::test]
 async fn shell_output_is_batched_in_chunks_of_at_most_32k() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;

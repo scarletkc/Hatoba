@@ -148,6 +148,8 @@ export interface HostView {
   os: string | null;
   /** The host's terminals show the server's resource usage; device-local, never synced, off until turned on (TERM-12). */
   show_stats: boolean;
+  /** Environment variables the terminal asks the server to set (SSH-14). */
+  env: HostEnvVar[];
 }
 
 export interface HostInput {
@@ -171,6 +173,14 @@ export interface HostInput {
   note: string;
   /** At most 2,000 characters (AI-37). */
   ai_notes: string;
+  /** Checked as in `features/hosts/envVars.ts` (SSH-14). */
+  env: HostEnvVar[];
+}
+
+/** One of a host's environment variables (SSH-14). */
+export interface HostEnvVar {
+  name: string;
+  value: string;
 }
 
 export interface GroupView {

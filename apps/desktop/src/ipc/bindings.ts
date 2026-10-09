@@ -783,6 +783,12 @@ export type GroupView = {
 	sort: number,
 };
 
+/**  One of a host's environment variables (SSH-14). */
+export type HostEnvVar = {
+	name: string,
+	value: string,
+};
+
 export type HostInput = {
 	id: string | null,
 	name: string,
@@ -803,6 +809,8 @@ export type HostInput = {
 	note: string,
 	/**  At most 2,000 characters (AI-37). */
 	ai_notes: string,
+	/**  Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14). */
+	env: HostEnvVar[],
 };
 
 export type HostKeyPrompt = {
@@ -851,6 +859,8 @@ export type HostView = {
 	 *  Device-local, like `last_connected_at`, and off until turned on.
 	 */
 	show_stats: boolean,
+	/**  Environment variables the terminal asks the server to set (SSH-14). */
+	env: HostEnvVar[],
 };
 
 export type ImportResult = {

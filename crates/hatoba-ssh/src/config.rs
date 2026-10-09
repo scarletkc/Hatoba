@@ -1,10 +1,11 @@
 //! `~/.ssh/config` import (SSH-11).
 //!
 //! Only the options Hatoba can map onto a host entry are understood: `Host`,
-//! `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump`. `ProxyCommand` is
-//! read only so the import can say it was left out. Lookup follows
-//! OpenSSH semantics: blocks are evaluated in file order and the first value
-//! obtained for an option wins (`IdentityFile` accumulates).
+//! `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `SetEnv`.
+//! `ProxyCommand` is read only so the import can say it was left out. Lookup
+//! follows OpenSSH semantics: blocks are evaluated in file order and the first
+//! value obtained for an option wins (`IdentityFile` accumulates, and the first
+//! `SetEnv` line that applies wins as a whole).
 //! `Match` blocks and `Include` are ignored.
 
 use std::path::PathBuf;
@@ -30,6 +31,9 @@ pub struct SshConfigHost {
     /// Raw `ProxyCommand` value, e.g. `nc -X 5 -x proxy:1080 %h %p`. When both are set (a
     /// `ProxyJump` before a `ProxyCommand`), OpenSSH refuses to connect.
     pub proxy_command: Option<String>,
+    /// `SetEnv` variables as name and value, in order. Names are not checked;
+    /// arguments without `=` are dropped.
+    pub set_env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -45,6 +49,7 @@ struct Block {
     /// `ProxyJump` and `ProxyCommand` lines in file order, because which one applies depends on
     /// their order (see [`resolve_proxy`]).
     proxy: Vec<ProxyDirective>,
+    set_env: Option<Vec<(String, String)>>,
 }
 
 #[derive(Debug)]
@@ -118,6 +123,12 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                     }
                     continue;
                 }
+                if kw == "setenv" {
+                    if block.set_env.is_none() {
+                        block.set_env = parse_set_env(args);
+                    }
+                    continue;
+                }
                 let first = args.into_iter().next();
                 match (kw, first) {
                     ("hostname", Some(v)) => {
@@ -173,11 +184,27 @@ fn resolve_proxy<'a>(
     (set(jump), set(command))
 }
 
+/// The `NAME=value` arguments of one `SetEnv` line; `None` when it has none.
+/// A name given twice keeps its first value, as in OpenSSH.
+fn parse_set_env(args: Vec<String>) -> Option<Vec<(String, String)>> {
+    let mut vars: Vec<(String, String)> = Vec::new();
+    for arg in args {
+        let Some((name, value)) = arg.split_once('=') else {
+            continue;
+        };
+        if !vars.iter().any(|(n, _)| n == name) {
+            vars.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    (!vars.is_empty()).then_some(vars)
+}
+
 fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfigHost {
     let mut host = SshConfigHost {
         alias: alias.to_owned(),
         ..SshConfigHost::default()
     };
+    let mut env_set = false;
     let applying: Vec<&Block> = blocks
         .iter()
         .filter(|b| !b.ignored && block_applies(b, alias))
@@ -197,6 +224,10 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
         }
         host.identity_files
             .extend(block.identity_files.iter().cloned());
+        if !env_set && let Some(vars) = &block.set_env {
+            env_set = true;
+            host.set_env = vars.clone();
+        }
     }
 
     // `%h` inside HostName itself refers to the alias typed by the user.
@@ -332,8 +363,11 @@ fn split_directive(line: &str) -> Option<(String, Vec<String>)> {
     Some((keyword.to_owned(), tokenize(rest)))
 }
 
-/// Whitespace-separated arguments with `"double quote"` support; an unquoted
-/// token starting with `#` begins a comment.
+/// Whitespace-separated arguments, split as OpenSSH's `argv_split` does:
+/// `"double"` and `'single'` quotes group words, and a backslash escapes a
+/// quote or a backslash anywhere and a space outside quotes. Any other
+/// backslash is kept, so Windows paths survive. An unquoted token starting
+/// with `#` begins a comment.
 fn tokenize(s: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut chars = s.chars().peekable();
@@ -345,19 +379,21 @@ fn tokenize(s: &str) -> Vec<String> {
             _ => {}
         }
         let mut token = String::new();
-        let mut in_quotes = false;
+        let mut quote: Option<char> = None;
         while let Some(&c) = chars.peek() {
-            if c == '"' {
-                in_quotes = !in_quotes;
+            if c == '\\' {
                 chars.next();
-            } else if c == '\\' && in_quotes {
+                let unquoted = quote.is_none();
+                let escaped =
+                    chars.next_if(|n| matches!(n, '"' | '\'' | '\\') || (*n == ' ' && unquoted));
+                token.push(escaped.unwrap_or('\\'));
+            } else if quote == Some(c) {
+                quote = None;
                 chars.next();
-                if let Some(escaped) = chars.next_if(|n| *n == '"' || *n == '\\') {
-                    token.push(escaped);
-                } else {
-                    token.push('\\');
-                }
-            } else if c.is_whitespace() && !in_quotes {
+            } else if quote.is_none() && matches!(c, '"' | '\'') {
+                quote = Some(c);
+                chars.next();
+            } else if c.is_whitespace() && quote.is_none() {
                 break;
             } else {
                 token.push(c);
@@ -522,6 +558,78 @@ mod tests {
         assert_eq!(pair(6), (None, Some("connect -H proxy:3128 %h %p")));
         // `ProxyCommand none` blocks a later ProxyJump and then clears itself.
         assert_eq!(pair(7), (None, None));
+    }
+
+    #[test]
+    fn set_env_takes_several_quoted_variables() {
+        let hosts = parse(
+            "Host app\n  SetEnv TZ=Asia/Tokyo GREETING=\"hello world\" 'QUOTED=it''s' EMPTY= NOEQUALS LANG=ja_JP.UTF-8 TZ=UTC\n",
+        );
+        assert_eq!(
+            hosts[0].set_env,
+            [
+                ("TZ".to_owned(), "Asia/Tokyo".to_owned()),
+                ("GREETING".to_owned(), "hello world".to_owned()),
+                ("QUOTED".to_owned(), "its".to_owned()),
+                ("EMPTY".to_owned(), String::new()),
+                ("LANG".to_owned(), "ja_JP.UTF-8".to_owned()),
+            ]
+        );
+        let hosts = parse("Host app\n  SetEnv=A=\"x=y\" # comment\n");
+        assert_eq!(hosts[0].set_env, [("A".to_owned(), "x=y".to_owned())]);
+    }
+
+    #[test]
+    fn first_set_env_line_that_applies_wins_whole() {
+        // OpenSSH: the first SetEnv obtained is used as a whole; later lines don't add to it.
+        let hosts = parse(
+            "Host web\n  SetEnv A=1\n  SetEnv B=2\nHost db\n  SetEnv NOEQUALS\nHost *\n  SetEnv A=star C=3\nHost plain\n",
+        );
+        let by_alias = |a: &str| &hosts.iter().find(|h| h.alias == a).unwrap().set_env;
+        assert_eq!(*by_alias("web"), [("A".to_owned(), "1".to_owned())]);
+        // A line without any NAME=value sets nothing, so the defaults apply.
+        assert_eq!(
+            *by_alias("db"),
+            [
+                ("A".to_owned(), "star".to_owned()),
+                ("C".to_owned(), "3".to_owned())
+            ]
+        );
+        assert_eq!(by_alias("plain").len(), 2);
+        assert!(parse("Host none\n").pop().unwrap().set_env.is_empty());
+    }
+
+    #[test]
+    fn single_quotes_group_words() {
+        let hosts = parse("Host 'my box'\n  User \"o'neil\"\n");
+        assert_eq!(hosts[0].alias, "my box");
+        assert_eq!(hosts[0].user.as_deref(), Some("o'neil"));
+    }
+
+    #[test]
+    fn unquoted_backslashes_escape_like_openssh() {
+        // `\ `, `\"`, `\'` and `\\` are escapes outside quotes; other backslashes stay.
+        let hosts = parse(concat!(
+            "Host app\n",
+            "  SetEnv GREETING=hello\\ world QUOTE=a\\\"b APOS=it\\'s SLASH=a\\\\b TAB=a\\tb\n",
+            "  User o\\'neil\n",
+            "  IdentityFile C:\\Users\\me\\.ssh\\id_ed25519\n",
+        ));
+        assert_eq!(
+            hosts[0].set_env,
+            [
+                ("GREETING".to_owned(), "hello world".to_owned()),
+                ("QUOTE".to_owned(), "a\"b".to_owned()),
+                ("APOS".to_owned(), "it's".to_owned()),
+                ("SLASH".to_owned(), "a\\b".to_owned()),
+                ("TAB".to_owned(), "a\\tb".to_owned()),
+            ]
+        );
+        assert_eq!(hosts[0].user.as_deref(), Some("o'neil"));
+        assert_eq!(hosts[0].identity_files, ["C:\\Users\\me\\.ssh\\id_ed25519"]);
+        // Inside quotes a backslash before a space is kept.
+        let hosts = parse("Host app\n  SetEnv \"A=x\\ y\"\n");
+        assert_eq!(hosts[0].set_env, [("A".to_owned(), "x\\ y".to_owned())]);
     }
 
     #[test]
