@@ -308,6 +308,7 @@ function ModelSelect({
         type="button"
         aria-label={t("aiSettings.default.row")}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         disabled={choices.length === 0}
         className={controlStyles.popup}
         style={{ minWidth: 260, maxWidth: 320 }}

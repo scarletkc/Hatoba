@@ -220,6 +220,7 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
         type="button"
         className={cx(s.mode, mode === "bypass" && s.modeBypass)}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         aria-label={`${t("ai.mode")}: ${label}`}
         title={`${t("ai.mode")}: ${label}`}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}

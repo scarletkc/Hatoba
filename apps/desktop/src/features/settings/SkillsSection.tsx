@@ -137,6 +137,7 @@ export function SkillsSection({ builtin }: { builtin: BuiltinSwitch | null }) {
               size="sm"
               icon="download-simple"
               aria-haspopup="menu"
+              aria-expanded={!!importMenu.anchor}
               onClick={() => importButton.current && importMenu.openBelow(importButton.current, true)}
             >
               {t("aiSettings.skills.import")}

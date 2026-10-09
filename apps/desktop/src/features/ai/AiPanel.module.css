@@ -107,9 +107,20 @@
   background: var(--fill);
 }
 
+/* Its menu is open. */
+.mode[aria-expanded="true"] {
+  background: var(--fill);
+  color: var(--fg);
+}
+
 .modeBypass,
 .modeBypass:hover {
   background: color-mix(in srgb, var(--orange) 15%, transparent);
+  color: var(--orange);
+}
+
+.modeBypass[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--orange) 24%, transparent);
   color: var(--orange);
 }
 

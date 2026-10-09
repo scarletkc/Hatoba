@@ -380,6 +380,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           ref={sortButton}
           trailingIcon="caret-down"
           aria-haspopup="menu"
+          aria-expanded={!!sortMenu.anchor}
           aria-label={t("hosts.sort")}
           onClick={() => sortButton.current && sortMenu.openBelow(sortButton.current, true)}
         >

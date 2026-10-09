@@ -68,6 +68,10 @@ export interface MenuAnchor {
   y: number;
   /** Align the menu's right edge to x instead of its left edge. */
   alignRight?: boolean;
+  /** Where the menu's bottom edge goes when it doesn't fit below: above the button it opened from, not over it. */
+  above?: number;
+  /** The button it opened from. Pressing it again closes the menu through the button's own click. */
+  trigger?: HTMLElement;
 }
 
 /** Floating menu (the design's language picker look). Closes on outside click / Escape. */
@@ -100,13 +104,14 @@ export function Menu({
     let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
     let top = anchor.y;
     left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, anchor.y - r.height - 8);
+    if (top + r.height > window.innerHeight - 8) top = Math.max(8, (anchor.above ?? anchor.y - 8) - r.height);
     setPos({ left, top });
-  }, [anchor.x, anchor.y, anchor.alignRight]);
+  }, [anchor.x, anchor.y, anchor.alignRight, anchor.above]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (ref.current && !ref.current.contains(target) && !anchor.trigger?.contains(target)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -145,7 +150,7 @@ export function Menu({
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("blur", onClose);
     };
-  }, [entries, focus, items, onClose]);
+  }, [entries, focus, items, onClose, anchor.trigger]);
 
   if (locked) return null;
   return createPortal(
@@ -210,13 +215,18 @@ export function Menu({
   );
 }
 
-/** State helper for menus anchored to a button or a right-click position. */
+/**
+ * State helper for menus anchored to a button or a right-click position. `openBelow` on the button
+ * whose menu is open closes it, so the button toggles its menu.
+ */
 export function useMenu() {
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
   const openAt = useCallback((a: MenuAnchor) => setAnchor(a), []);
   const openBelow = useCallback((el: HTMLElement, alignRight = false) => {
     const r = el.getBoundingClientRect();
-    setAnchor({ x: alignRight ? r.right : r.left, y: r.bottom + 4, alignRight });
+    setAnchor((cur) =>
+      cur?.trigger === el ? null : { x: alignRight ? r.right : r.left, y: r.bottom + 4, above: r.top - 4, alignRight, trigger: el },
+    );
   }, []);
   const close = useCallback(() => setAnchor(null), []);
   return { anchor, openAt, openBelow, close };
@@ -264,6 +274,7 @@ export function PopupSelect<V>({
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
         disabled={disabled}
         className={controlStyles.popup}
         style={{ minWidth }}

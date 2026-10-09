@@ -20,7 +20,8 @@
   background: color-mix(in srgb, var(--btn) 92%, var(--fg) 8%);
 }
 
-.button:active:not(:disabled) {
+.button:active:not(:disabled),
+.button[aria-expanded="true"]:not(.primary, .danger) {
   background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
 }
 
@@ -335,6 +336,11 @@
 
 .popup:disabled {
   opacity: 0.45;
+}
+
+/* Its menu is open. */
+.popup[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--btn) 86%, var(--fg) 14%);
 }
 
 .popupLabel {
