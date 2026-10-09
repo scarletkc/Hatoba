@@ -9,7 +9,8 @@ import { InstructionsField } from "@/features/ai/InstructionsField";
 import { charCount, HOST_NOTES_MAX_CHARS } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AuthKind, HostInput, HostView, KeyView, QuickTarget } from "@/ipc/types";
+import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
+import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
 import { ForwardsSection } from "./ForwardsSection";
 import { useHostsUi } from "./ui";
@@ -28,13 +29,16 @@ interface Form {
   groupId: string | null;
   tags: string[];
   jumpHostId: string | null;
+  /** SSH-13: with a jump host, the jump host's choice applies instead. */
+  proxyMode: ProxyMode;
+  proxyId: string | null;
   note: string;
   /** What the AI assistant is told about the host (AI-37). */
   aiNotes: string;
   favorite: boolean;
 }
 
-type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump" | "aiNotes";
+type FieldKey = "name" | "address" | "port" | "username" | "password" | "key" | "jump" | "proxy" | "aiNotes";
 type Errors = Partial<Record<FieldKey, string>>;
 
 type TestState =
@@ -51,6 +55,7 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   password: "password",
   key_id: "key",
   jump_host_id: "jump",
+  proxy_id: "proxy",
   ai_notes: "aiNotes",
 };
 
@@ -67,6 +72,8 @@ function initialForm(host: HostView | undefined, groupId: string | null, prefill
     groupId: host ? host.group_id : groupId,
     tags: host?.tags ?? [],
     jumpHostId: host?.jump_host_id ?? null,
+    proxyMode: host?.proxy_mode ?? "device_default",
+    proxyId: host?.proxy_id ?? null,
     note: host?.note ?? "",
     aiNotes: host?.ai_notes ?? "",
     favorite: host?.favorite ?? false,
@@ -94,6 +101,8 @@ export function HostEditPage({
   const hosts = useVaultData((st) => st.hosts);
   const groups = useVaultData((st) => st.groups);
   const keys = useVaultData((st) => st.keys);
+  const proxies = useVaultData((st) => st.proxies);
+  const defaultProxyId = useApp((st) => st.prefs.default_proxy_id);
   const tagList = useVaultData((st) => st.tags);
 
   const host = useMemo(() => hosts.find((h) => h.id === hostId), [hosts, hostId]);
@@ -111,7 +120,7 @@ export function HostEditPage({
     setForm((f) => ({ ...f, ...p }));
     if (field) setErrors((e) => (e[field] ? { ...e, [field]: undefined } : e));
     // A test result describes the old connection settings.
-    if (Object.keys(p).some((k) => ["address", "port", "username", "authKind", "password", "keyId", "jumpHostId", "replacing"].includes(k)))
+    if (Object.keys(p).some((k) => ["address", "port", "username", "authKind", "password", "keyId", "jumpHostId", "proxyMode", "proxyId", "replacing"].includes(k)))
       setTest({ state: "idle" });
   };
 
@@ -128,6 +137,8 @@ export function HostEditPage({
       if (form.jumpHostId === hostId) e.jump = t("hosts.err.jumpSelf");
       else if (hostId && jumpChainReaches(hosts, form.jumpHostId, hostId)) e.jump = t("hosts.err.jumpLoop");
     }
+    // Ignored behind a jump host, so it only matters without one.
+    if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
     // The field says so itself; this only keeps the form from saving.
     if (charCount(form.aiNotes) > HOST_NOTES_MAX_CHARS) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_CHARS.toLocaleString(t.locale) });
     return e;
@@ -146,6 +157,8 @@ export function HostEditPage({
     tags: form.tags,
     favorite: form.favorite,
     jump_host_id: form.jumpHostId,
+    proxy_mode: form.proxyMode,
+    proxy_id: form.proxyMode === "proxy" ? form.proxyId : null,
     note: form.note,
     ai_notes: form.aiNotes,
   });
@@ -178,7 +191,7 @@ export function HostEditPage({
 
   const runTest = async () => {
     const e = validate();
-    if (e.address || e.port || e.key || e.name || e.aiNotes) return showErrors(e);
+    if (e.address || e.port || e.key || e.name || e.proxy || e.aiNotes) return showErrors(e);
     setTest({ state: "running" });
     try {
       const r = await api.ssh_test(toInput());
@@ -257,6 +270,20 @@ export function HostEditPage({
     ],
     [hosts, hostId, t],
   );
+
+  // SSH-13: one value per choice, so the picker can hold "a saved proxy" as well.
+  const proxyValue = form.proxyMode === "proxy" ? `proxy:${form.proxyId ?? ""}` : form.proxyMode;
+  const defaultProxy = proxies.find((p) => p.id === defaultProxyId);
+  const proxyOptions: SelectOption<string>[] = [
+    { value: "device_default", label: t("hosts.f.proxyDefault"), hint: defaultProxy?.name ?? t("hosts.f.proxyDirect") },
+    { value: "direct", label: t("hosts.f.proxyDirect") },
+    ...proxies.map((p) => ({ value: `proxy:${p.id}`, label: p.name, hint: proxySummary(p) })),
+    ...(form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId) ? [{ value: proxyValue, label: t("hosts.f.proxyDeleted") }] : []),
+  ];
+  const setProxy = (value: string) =>
+    value.startsWith("proxy:")
+      ? patch({ proxyMode: "proxy", proxyId: value.slice("proxy:".length) }, "proxy")
+      : patch({ proxyMode: value as ProxyMode, proxyId: null }, "proxy");
 
   if (hostId && !host) {
     return (
@@ -476,6 +503,27 @@ export function HostEditPage({
                     onChange={(jumpHostId) => patch({ jumpHostId }, "jump")}
                   />
                   <span className={s.jumpHint}>{t("hosts.f.jumpHint")}</span>
+                </div>
+              </FormRow>
+              <FormRow label={t("hosts.f.proxy")} top error={errors.proxy}>
+                <div className={s.jump}>
+                  <div className={s.keyRow}>
+                    <div className={s.fill}>
+                      <PopupSelect<string>
+                        ariaLabel={t("hosts.f.proxy")}
+                        icon="globe"
+                        value={proxyValue}
+                        options={proxyOptions}
+                        // The device default names the proxy it stands for; a saved proxy's name is enough.
+                        showHint={form.proxyMode === "device_default"}
+                        disabled={!!form.jumpHostId}
+                        minWidth={340}
+                        onChange={setProxy}
+                      />
+                    </div>
+                    <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
+                  </div>
+                  <span className={s.jumpHint}>{form.jumpHostId ? t("hosts.f.proxyJumpHint") : t("hosts.f.proxyHint")}</span>
                 </div>
               </FormRow>
             </Group>

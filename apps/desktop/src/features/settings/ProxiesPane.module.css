@@ -1,0 +1,116 @@
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 24px;
+}
+
+.sectionHint {
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+/* Lets the hover of the first and last row follow the group's rounded corners. */
+.clip {
+  overflow: hidden;
+}
+
+/* One saved proxy, laid out like an AI provider row. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 6px 9px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.main:hover {
+  background: var(--fill);
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--accenttint);
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.meta > * {
+  flex: none;
+}
+
+.meta > .where {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.dot {
+  color: var(--fg3);
+}
+
+.caret {
+  flex: none;
+  font-size: 12px;
+  color: var(--fg3);
+}
+
+.delete {
+  flex: none;
+  color: var(--fg2);
+}

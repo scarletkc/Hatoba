@@ -17,6 +17,7 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   known_host: "fingerprint",
   forward: "arrows-left-right",
   snippet: "terminal-window",
+  proxy: "globe",
   settings: "gear",
   ai_provider: "sparkle",
   search_provider: "magnifying-glass",
@@ -85,6 +86,8 @@ function ConflictCard({
       return { text: label === key ? v : label, dim: false };
     }
     if (BOOL_FIELDS.has(field) && (v === "true" || v === "false")) return { text: t(`sync.value.${v}`), dim: false };
+    // A host's proxy (SSH-13) is a proxy's name, or one of these two.
+    if (field === "proxy" && (v === "device_default" || v === "direct")) return { text: t(`sync.value.proxy.${v}`), dim: false };
     if (v === null || v === "") return { text: deleted ? "—" : t("sync.cf.none"), dim: true };
     return { text: v, dim: false };
   };

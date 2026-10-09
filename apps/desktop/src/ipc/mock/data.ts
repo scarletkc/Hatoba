@@ -9,6 +9,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  ProxyView,
   QuickTarget,
   ServerStatsView,
   SettingsView,
@@ -62,6 +63,8 @@ function host(
     tags,
     favorite: false,
     jump_host_id: null,
+    proxy_mode: "device_default",
+    proxy_id: null,
     note: "",
     ai_notes: "",
     updated_at: ago(3 * DAY),
@@ -118,7 +121,11 @@ export const HOSTS: HostView[] = [
     auth_kind: "password",
     has_password: true,
   }),
-  host("h-edge-sg", "edge-sg-cache", "root", "159.89.204.73", 22, "g-infra", ["edge"], at(9, 24), { auth_kind: "ask" }),
+  host("h-edge-sg", "edge-sg-cache", "root", "159.89.204.73", 22, "g-infra", ["edge"], at(9, 24), {
+    auth_kind: "ask",
+    proxy_mode: "proxy",
+    proxy_id: "p-office",
+  }),
   host("h-nas", "homelab-nas", "admin", "nas.local", 22, "g-home", ["personal"], at(9, 12), {
     os: "freebsd",
     favorite: true,
@@ -129,6 +136,32 @@ export const HOSTS: HostView[] = [
     auth_kind: "password",
     has_password: true,
   }),
+];
+
+/** Saved proxies (SSH-13); `host_ids` is filled in from the hosts. */
+export const PROXIES: ProxyView[] = [
+  {
+    id: "p-clash",
+    name: "Clash",
+    kind: "socks5",
+    address: "127.0.0.1",
+    port: 7890,
+    username: "",
+    has_password: false,
+    host_ids: [],
+    updated_at: ago(5 * DAY),
+  },
+  {
+    id: "p-office",
+    name: zh ? "办公室代理" : "Office proxy",
+    kind: "http",
+    address: "proxy.corp.example.com",
+    port: 3128,
+    username: "kc",
+    has_password: true,
+    host_ids: [],
+    updated_at: ago(12 * DAY),
+  },
 ];
 
 /** TCP probe results (HOST-10). staging-web-02 times out. */
@@ -246,6 +279,7 @@ export const PREFS: LocalPrefs = {
   ai_tool_call_limit: 25,
   ai_panel_open: false,
   ai_panel_width: 380,
+  default_proxy_id: null,
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

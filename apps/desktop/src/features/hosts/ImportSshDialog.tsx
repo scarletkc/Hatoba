@@ -111,6 +111,12 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
                   {c.proxy_jump}
                 </span>
               )}
+              {c.proxy_command && (
+                <span className={s.skipped} title={`ProxyCommand ${c.proxy_command}`}>
+                  <Icon name="warning" />
+                  {t("hosts.import.proxyCommand")}
+                </span>
+              )}
               <span className={s.spacer} />
               {c.exists && <span className={s.exists}>{t("hosts.import.exists")}</span>}
             </div>

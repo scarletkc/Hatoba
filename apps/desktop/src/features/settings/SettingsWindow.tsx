@@ -11,6 +11,7 @@ import { AboutPane } from "./AboutPane";
 import { AiPane } from "./AiPane";
 import { AppearancePane } from "./AppearancePane";
 import { GeneralPane } from "./GeneralPane";
+import { ProxiesPane } from "./ProxiesPane";
 import { SecurityPane } from "./SecurityPane";
 import { TerminalPane } from "./TerminalPane";
 import s from "./SettingsWindow.module.css";
@@ -19,6 +20,7 @@ const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
   { id: "general", icon: "gear-six", label: "settings.tab.general" },
   { id: "appearance", icon: "paint-brush", label: "settings.tab.appearance" },
   { id: "terminal", icon: "terminal-window", label: "settings.tab.terminal" },
+  { id: "proxies", icon: "globe", label: "settings.tab.proxies" },
   { id: "security", icon: "lock-key", label: "settings.tab.security" },
   { id: "ai", icon: "sparkle", label: "aiSettings.tab" },
   { id: "about", icon: "info", label: "settings.tab.about" },
@@ -28,7 +30,8 @@ let lastTab: SettingsTab = "general";
 
 /**
  * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
- * AI for the assistant (spec §13) and About for the version and the update check.
+ * Proxies for SSH connections (SSH-13), AI for the assistant (spec §13) and About for the version and the
+ * update check.
  */
 export function SettingsWindow({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -139,6 +142,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           {tab === "general" && <GeneralPane {...pane} />}
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
+          {tab === "proxies" && <ProxiesPane />}
           {tab === "security" && <SecurityPane {...pane} />}
           {tab === "ai" && <AiPane />}
           {tab === "about" && <AboutPane />}
