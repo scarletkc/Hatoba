@@ -1,5 +1,6 @@
 //! [`McpConnection`]: one MCP session over `rmcp`, with the stdio child or the HTTP session.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
@@ -10,15 +11,17 @@ use reqwest::header::{HeaderName, HeaderValue};
 use rmcp::model::{
     CallToolRequest, CallToolRequestParams, CancelledNotificationParam, ClientCapabilities,
     ClientConfig, ClientRequest, CustomResult, ErrorData, Implementation, InitializeRequestParams,
-    ListToolsRequest, PaginatedRequestParams, ProtocolVersion, ServerResult, Tool,
+    JsonRpcMessage, JsonRpcNotification, ListToolsRequest, PaginatedRequestParams, ProtocolVersion,
+    ServerNotification, ServerResult, Tool,
 };
 use rmcp::service::{
-    ClientInitializeError, NotificationContext, PeerRequestOptions, RunningService,
+    ClientInitializeError, PeerRequestOptions, RunningService, RxJsonRpcMessage, TxJsonRpcMessage,
 };
-use rmcp::transport::StreamableHttpClientTransport;
+use rmcp::transport::async_rw::AsyncRwTransport;
 use rmcp::transport::streamable_http_client::{
     StreamableHttpClientTransportConfig, StreamableHttpError,
 };
+use rmcp::transport::{StreamableHttpClientTransport, Transport};
 use rmcp::{ClientHandler, Peer, RoleClient, ServiceError};
 use serde_json::{Map, Value};
 use tokio_util::sync::CancellationToken;
@@ -52,10 +55,8 @@ const RESERVED_HEADERS: [&str; 9] = [
     "transfer-encoding",
 ];
 
-/// The client side of the session: declares no capability and records `tools/list_changed`.
-struct Handler {
-    tools_changed: Arc<AtomicBool>,
-}
+/// The client side of the session: declares no capability.
+struct Handler;
 
 impl ClientHandler for Handler {
     fn get_info(&self) -> ClientConfig {
@@ -68,9 +69,45 @@ impl ClientHandler for Handler {
         )
         .with_protocol_version(ProtocolVersion::LATEST_WITH_INITIALIZE)
     }
+}
 
-    async fn on_tool_list_changed(&self, _context: NotificationContext<RoleClient>) {
-        self.tools_changed.store(true, Ordering::SeqCst);
+/// A transport that records `tools/list_changed` as the message is read. The SDK runs
+/// notification handlers in tasks of their own, so one could set the flag only after the
+/// answer that followed the notification was returned, and the next request would miss the
+/// change (AI-30). Messages are read in order, so here the flag is set before that answer is.
+struct Watched<T> {
+    inner: T,
+    tools_changed: Arc<AtomicBool>,
+}
+
+impl<T: Transport<RoleClient>> Transport<RoleClient> for Watched<T> {
+    type Error = T::Error;
+
+    fn name() -> Cow<'static, str> {
+        T::name()
+    }
+
+    fn send(
+        &mut self,
+        item: TxJsonRpcMessage<RoleClient>,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'static {
+        self.inner.send(item)
+    }
+
+    async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
+        let message = self.inner.receive().await;
+        if let Some(JsonRpcMessage::Notification(JsonRpcNotification {
+            notification: ServerNotification::ToolListChangedNotification(_),
+            ..
+        })) = &message
+        {
+            self.tools_changed.store(true, Ordering::SeqCst);
+        }
+        message
+    }
+
+    fn close(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        self.inner.close()
     }
 }
 
@@ -401,10 +438,11 @@ async fn connect_stdio(
         stdio::capture_stderr(pipe, stderr.clone());
     }
     let tools_changed = Arc::new(AtomicBool::new(false));
-    let handler = Handler {
+    let transport = Watched {
+        inner: AsyncRwTransport::new_client(stdout, stdin),
         tools_changed: tools_changed.clone(),
     };
-    let started = tokio::time::timeout(timeout, rmcp::serve_client(handler, (stdout, stdin))).await;
+    let started = tokio::time::timeout(timeout, rmcp::serve_client(Handler, transport)).await;
     match started {
         Ok(Ok(service)) => Ok(McpConnection::new(
             Kind::Stdio,
@@ -477,10 +515,11 @@ async fn connect_http(
     let transport =
         StreamableHttpClientTransport::with_client(client_for(http, &url).into_owned(), config);
     let tools_changed = Arc::new(AtomicBool::new(false));
-    let handler = Handler {
+    let transport = Watched {
+        inner: transport,
         tools_changed: tools_changed.clone(),
     };
-    match tokio::time::timeout(timeout, rmcp::serve_client(handler, transport)).await {
+    match tokio::time::timeout(timeout, rmcp::serve_client(Handler, transport)).await {
         Ok(Ok(service)) => Ok(McpConnection::new(
             Kind::Http,
             service,
