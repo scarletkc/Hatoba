@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
-import { toast, type MenuAnchor } from "@/components/overlay";
+import { toast, useOverlaysLocked, type MenuAnchor } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { ForwardView } from "@/ipc/types";
@@ -44,6 +44,11 @@ export function ForwardsPopover({
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [pos, setPos] = useState({ left: anchor.x, top: anchor.y });
+  const locked = useOverlaysLocked();
+
+  useEffect(() => {
+    if (locked) onClose(false);
+  }, [locked, onClose]);
 
   // Always read the list fresh: forwards are edited in the host editor, not here.
   useEffect(() => {
@@ -132,6 +137,7 @@ export function ForwardsPopover({
     }
   };
 
+  if (locked) return null;
   return createPortal(
     <div ref={ref} role="dialog" aria-label={t("terminal.fwd")} className={s.popover} style={pos}>
       <div className={s.header}>{t("terminal.fwd")}</div>

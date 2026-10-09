@@ -162,7 +162,7 @@ each item → AES-256-GCM(vault_key)
 |---|---|---|
 | SEC-01 | After unlock, vault_key and decrypted items live only in Rust memory and are cleared with zeroize on lock | P0 |
 | SEC-02 | Auto-lock: idle timeout (15 minutes by default, configurable), system sleep, and manual lock (Ctrl+Shift+L) | P0 |
-| SEC-03 | By default, established SSH sessions stay connected while locked, and the UI is covered. A setting disconnects them on lock instead | P0 |
+| SEC-03 | By default, established SSH sessions stay connected while locked, and the UI is covered: open dialogs are hidden, pending confirmations are cancelled, and sessions take no input until unlocked. A setting disconnects them on lock instead | P0 |
 | SEC-04 | Logs must never contain passwords, private keys, the vault key, session tokens, terminal content, AI provider API keys, MCP server environment and header values, MCP server stderr, or AI conversation content (messages, tool inputs, and tool results) | P0 |
 | SEC-05 | Tauri hardening: CSP `default-src 'self'`, no remote content, least-privilege capabilities, devtools disabled in release builds, and no shell plugin | P0 |
 | SEC-06 | Increasing delay after repeated local unlock failures: no delay for the first 3, then doubling each time up to 5 minutes (`unlock_delay_ms` in `crates/hatoba-core/src/vault.rs`). The failure count is persisted and survives an app restart. Argon2id does not run during the delay | P0 |

@@ -178,6 +178,10 @@ pub async fn ssh_write(
     session_id: String,
     data: String,
 ) -> AppResult<()> {
+    // SEC-03: sessions stay connected behind the lock screen, but take no input until unlocked.
+    if !state.vault().is_unlocked() {
+        return Err(AppError::locked());
+    }
     let live = state.ssh.get(&session_id)?;
     live.shell.write(data.into_bytes()).await?;
     Ok(())
