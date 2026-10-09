@@ -4,10 +4,12 @@ import { formatBytes, translate, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, ServerStatsView } from "@/ipc/types";
 
-/** Readings kept for the popover's charts: 3 minutes at one every 2 seconds (TERM-12). */
-export const STATS_HISTORY = 90;
-/** After a longer pause (the tab was in the background), the charts start over. */
-const STALE_MS = 10_000;
+/** How often a reading arrives (TERM-12). */
+const STATS_INTERVAL_MS = 2000;
+/** The time the popover's charts span, and so how long readings are kept. */
+export const STATS_WINDOW_MS = 180_000;
+/** Readings further apart than this (sampling paused while the tab was in the background) are not joined in the charts. */
+export const STATS_GAP_MS = 3 * STATS_INTERVAL_MS;
 
 export interface StatsReading extends ServerStatsView {
   /** When the reading arrived, Unix ms. */
@@ -22,7 +24,7 @@ export type StatsState =
 
 export interface SessionStats {
   state: StatsState;
-  /** Oldest first, at most {@link STATS_HISTORY}. */
+  /** Oldest first, from the last {@link STATS_WINDOW_MS}. */
   history: StatsReading[];
 }
 
@@ -46,11 +48,14 @@ function update(sessionId: string, fn: (s: SessionStats) => SessionStats) {
   });
 }
 
-/** Adds a reading, keeping the last {@link STATS_HISTORY}. */
+/** The readings of the {@link STATS_WINDOW_MS} up to `now` (none from after it, should the clock have gone back). */
+function recent(history: StatsReading[], now: number): StatsReading[] {
+  return history.filter((r) => r.at <= now && r.at >= now - STATS_WINDOW_MS);
+}
+
+/** Adds a reading, dropping those it leaves out of the window. */
 export function appendReading(history: StatsReading[], reading: StatsReading): StatsReading[] {
-  const next = history.length >= STATS_HISTORY ? history.slice(history.length - STATS_HISTORY + 1) : history.slice();
-  next.push(reading);
-  return next;
+  return [...recent(history, reading.at), reading];
 }
 
 /** Starts sampling a session's resource usage. A server already found not to run Linux is not asked again. */
@@ -58,9 +63,8 @@ export function startStats(sessionId: string, now = Date.now()) {
   const current = useStatsStore.getState().bySession[sessionId];
   if (current?.state.kind === "unsupported") return;
   const gen = bump(sessionId);
-  const last = current?.history.at(-1);
-  const history = last && now - last.at < STALE_MS ? current.history : [];
-  update(sessionId, () => ({ state: { kind: "starting" }, history }));
+  // Readings from before a pause stay while they are in the window; the charts show the pause as a gap.
+  update(sessionId, () => ({ state: { kind: "starting" }, history: recent(current?.history ?? [], now) }));
   const live = () => generations.get(sessionId) === gen;
   const started = api
     .ssh_stats_start(sessionId, (event) => {

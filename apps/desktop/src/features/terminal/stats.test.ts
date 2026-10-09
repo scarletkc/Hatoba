@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppError, ServerStatsView, StatsEvent } from "@/ipc/types";
 
 const ipc = vi.hoisted(() => ({
@@ -28,7 +28,7 @@ vi.mock("@/ipc/api", () => ({
 }));
 
 import {
-  STATS_HISTORY,
+  STATS_WINDOW_MS,
   clearStats,
   formatLoad,
   formatPercent,
@@ -58,6 +58,7 @@ const reading = (cpu: number | null): ServerStatsView => ({
   uptime_secs: 100,
 });
 
+const T0 = Date.UTC(2026, 9, 9, 12);
 const lastStart = () => ipc.starts[ipc.starts.length - 1];
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -69,6 +70,13 @@ beforeEach(() => {
   ipc.stops = [];
   ipc.reject = null;
   ipc.hold = false;
+  // Only Date: the tests still wait for promises with real timers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("resource usage sampling (TERM-12)", () => {
@@ -76,12 +84,37 @@ describe("resource usage sampling (TERM-12)", () => {
     startStats(sid);
     expect(getSessionStats(sid)?.state.kind).toBe("starting");
     const { emit } = lastStart();
-    for (let i = 0; i < STATS_HISTORY + 5; i++) emit({ kind: "stats", stats: reading(i) });
+    // 100 readings 2 s apart: the last one at 198 s keeps those from 18 s on.
+    for (let i = 0; i < 100; i++) {
+      vi.setSystemTime(T0 + i * 2000);
+      emit({ kind: "stats", stats: reading(i) });
+    }
     const stats = getSessionStats(sid)!;
     expect(stats.state.kind).toBe("live");
-    expect(stats.history).toHaveLength(STATS_HISTORY);
-    expect(stats.history[0].cpu_percent).toBe(5);
-    expect(stats.history.at(-1)?.cpu_percent).toBe(STATS_HISTORY + 4);
+    expect(stats.history).toHaveLength(91);
+    expect(stats.history[0].cpu_percent).toBe(9);
+    expect(stats.history.at(-1)!.at - stats.history[0].at).toBe(STATS_WINDOW_MS);
+  });
+
+  it("keeps readings from before a pause only while they are in the window", () => {
+    startStats(sid);
+    lastStart().emit({ kind: "stats", stats: reading(10) });
+    stopStats(sid);
+    // Paused for 2 minutes, again and again: the readings stay, with the time between them.
+    vi.setSystemTime(T0 + 120_000);
+    startStats(sid);
+    lastStart().emit({ kind: "stats", stats: reading(20) });
+    expect(getSessionStats(sid)?.history.map((r) => r.at - T0)).toEqual([0, 120_000]);
+    stopStats(sid);
+    vi.setSystemTime(T0 + 240_000);
+    startStats(sid);
+    expect(getSessionStats(sid)?.history.map((r) => r.cpu_percent)).toEqual([20]);
+    lastStart().emit({ kind: "stats", stats: reading(30) });
+    expect(getSessionStats(sid)?.history.map((r) => r.cpu_percent)).toEqual([20, 30]);
+    // A clock set back drops the readings that now lie in the future.
+    vi.setSystemTime(T0 + 100_000);
+    lastStart().emit({ kind: "stats", stats: reading(40) });
+    expect(getSessionStats(sid)?.history.map((r) => r.cpu_percent)).toEqual([40]);
   });
 
   it("drops what a stopped or replaced sampling still sends", async () => {
@@ -121,17 +154,6 @@ describe("resource usage sampling (TERM-12)", () => {
     stopStats(sid);
     await flush();
     expect(ipc.stops).toEqual([]);
-  });
-
-  it("keeps the charts across a short pause and starts them over after a long one", () => {
-    startStats(sid);
-    lastStart().emit({ kind: "stats", stats: reading(10) });
-    stopStats(sid);
-    startStats(sid, Date.now() + 2_000);
-    expect(getSessionStats(sid)?.history).toHaveLength(1);
-    stopStats(sid);
-    startStats(sid, Date.now() + 60_000);
-    expect(getSessionStats(sid)?.history).toHaveLength(0);
   });
 
   it("asks a server that is not Linux only once", () => {

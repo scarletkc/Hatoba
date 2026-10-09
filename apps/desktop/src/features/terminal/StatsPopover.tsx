@@ -14,7 +14,8 @@ import {
   formatUptime,
   meterLevel,
   percentOf,
-  STATS_HISTORY,
+  STATS_GAP_MS,
+  STATS_WINDOW_MS,
   type SessionStats,
   type StatsReading,
 } from "./stats";
@@ -145,7 +146,9 @@ function CpuSection({ history, reading, picked, onPick }: ChartProps) {
       </div>
       <Sparkline
         series={[{ values: history.map((r) => r.cpu_percent), className: s.cpuLine }]}
-        slots={STATS_HISTORY}
+        times={history.map((r) => r.at)}
+        span={STATS_WINDOW_MS}
+        gap={STATS_GAP_MS}
         max={100}
         width={CHART_WIDTH}
         height={CHART_HEIGHT}
@@ -248,7 +251,9 @@ function NetworkSection({ history, reading, picked, onPick }: ChartProps) {
           { values: rx, className: s.rxLine },
           { values: tx, className: s.txLine },
         ]}
-        slots={STATS_HISTORY}
+        times={history.map((r) => r.at)}
+        span={STATS_WINDOW_MS}
+        gap={STATS_GAP_MS}
         max={max}
         width={CHART_WIDTH}
         height={CHART_HEIGHT}

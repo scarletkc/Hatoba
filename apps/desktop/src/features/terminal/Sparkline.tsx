@@ -13,13 +13,16 @@ export interface SparkSeries {
 }
 
 /**
- * A small line chart of the latest readings on a window of `slots` positions, the newest at the
- * right edge (TERM-12). Pointing at it or moving along it with the arrow keys picks a reading,
- * which the caller shows in place of the current value.
+ * A small line chart of the readings in the last `span` milliseconds, placed by their time with
+ * the newest at the right edge (TERM-12). Readings more than `gap` apart are not joined. Pointing
+ * at it or moving along it with the arrow keys picks a reading, which the caller shows in place of
+ * the current value.
  */
 export function Sparkline({
   series,
-  slots,
+  times,
+  span,
+  gap,
   max,
   width,
   height,
@@ -28,7 +31,10 @@ export function Sparkline({
   onPick,
 }: {
   series: SparkSeries[];
-  slots: number;
+  /** When each reading arrived, Unix ms, oldest first; one per value of each series. */
+  times: number[];
+  span: number;
+  gap: number;
   /** The value at the top edge; the bottom edge is 0. */
   max: number;
   width: number;
@@ -37,12 +43,12 @@ export function Sparkline({
   picked: number | null;
   onPick(index: number | null): void;
 }) {
-  const count = Math.max(0, ...series.map((x) => x.values.length));
-  const step = (width - 2 * PAD) / Math.max(1, slots - 1);
-  const x = (i: number) => width - PAD - (count - 1 - i) * step;
-  const y = (v: number) => height - PAD - (Math.min(v, max) / (max || 1)) * (height - 2 * PAD);
+  const count = times.length;
   const last = count - 1;
   const at = picked ?? last;
+  const scale = (width - 2 * PAD) / span;
+  const x = (i: number) => width - PAD - (times[last] - times[i]) * scale;
+  const y = (v: number) => height - PAD - (Math.min(v, max) / (max || 1)) * (height - 2 * PAD);
 
   const path = (values: (number | null)[]) => {
     let d = "";
@@ -52,17 +58,23 @@ export function Sparkline({
         pen = false;
         return;
       }
-      d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+      const joined = pen && times[i] - times[i - 1] <= gap;
+      d += `${joined ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
       pen = true;
     });
     return d;
   };
 
+  // The reading nearest in time to the pointer.
   const pickAt = (e: PointerEvent<SVGSVGElement>) => {
     if (count === 0) return;
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left;
-    const i = Math.round(last - (width - PAD - px) / step);
-    onPick(Math.max(0, Math.min(last, i)));
+    const t = times[last] - (width - PAD - px) / scale;
+    let nearest = last;
+    times.forEach((ti, i) => {
+      if (Math.abs(ti - t) < Math.abs(times[nearest] - t)) nearest = i;
+    });
+    onPick(nearest);
   };
 
   const onKey = (e: KeyboardEvent<SVGSVGElement>) => {
