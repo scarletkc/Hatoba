@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Menu, toast, type MenuAnchor, type MenuEntry } from "@/components/overlay";
+import { Menu, toast, useOverlaysLocked, type MenuAnchor, type MenuEntry } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import { shortcutLabel, type Platform } from "@/lib/platform";
@@ -74,7 +74,8 @@ async function paste(field: TextField, restore: () => void) {
  */
 export function ContextMenuHost({ platform }: { platform: Platform }) {
   const t = useT();
-  const [menu, setMenu] = useState<{ anchor: MenuAnchor; entries: MenuEntry[] } | null>(null);
+  const locked = useOverlaysLocked();
+  const [menu, setMenu] = useState<{ anchor: MenuAnchor; entries: MenuEntry[]; onLockScreen: boolean } | null>(null);
   const close = useCallback(() => setMenu(null), []);
 
   useEffect(() => {
@@ -91,13 +92,14 @@ export function ContextMenuHost({ platform }: { platform: Platform }) {
         if (text.trim() && e.target instanceof Node && selection?.containsNode(e.target, true))
           entries = [{ label: t("edit.copy"), hint: shortcutLabel(platform, "Ctrl+C", "⌘C"), onSelect: () => void writeClipboard(text).catch(() => toast(t("terminal.clipboardDenied"), "error")) }];
       }
-      setMenu(entries.length > 0 ? { anchor: { x: e.clientX, y: e.clientY }, entries } : null);
+      setMenu(entries.length > 0 ? { anchor: { x: e.clientX, y: e.clientY }, entries, onLockScreen: locked } : null);
     };
     window.addEventListener("contextmenu", onContextMenu);
     return () => window.removeEventListener("contextmenu", onContextMenu);
-  }, [t, platform]);
+  }, [t, platform, locked]);
 
   if (!menu) return null;
-  // Text fields include the master password field on the lock screen.
-  return <Menu anchor={menu.anchor} entries={menu.entries} onClose={close} minWidth={160} whileLocked />;
+  // One opened on the lock screen is the master password field's. One opened before locking closes
+  // with the lock: its Copy holds text selected in the vault's pages.
+  return <Menu anchor={menu.anchor} entries={menu.entries} onClose={close} minWidth={160} whileLocked={menu.onLockScreen} />;
 }

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { setOverlaysLocked } from "@/components/overlay";
 import { ContextMenuHost } from "./ContextMenu";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -10,6 +11,7 @@ afterEach(() => {
   act(() => unmount?.());
   unmount = null;
   document.body.innerHTML = "";
+  setOverlaysLocked(false);
 });
 
 function render(html: string) {
@@ -53,6 +55,18 @@ describe("ContextMenuHost", () => {
     render(`<div id="d">Hosts</div>`);
     expect(rightClick(document.getElementById("d")!)).toBe(true);
     expect(document.querySelector("[role=menu]")).toBeNull();
+  });
+
+  it("closes with the vault lock, but opens on the lock screen", () => {
+    render(`<input id="f" value="ops@bastion" />`);
+    const field = document.getElementById("f") as HTMLInputElement;
+    field.setSelectionRange(0, 3);
+    rightClick(field);
+    expect(document.querySelector("[role=menu]")).not.toBeNull();
+    act(() => setOverlaysLocked(true));
+    expect(document.querySelector("[role=menu]")).toBeNull();
+    rightClick(field);
+    expect(document.querySelector("[role=menu]")).not.toBeNull();
   });
 
   it("leaves a menu of the app's own alone", () => {
