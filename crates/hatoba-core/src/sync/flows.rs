@@ -32,7 +32,7 @@ use crate::sync::backend::{
     DeviceLogin, RecoveryUpdate, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
 use crate::sync::engine::{SyncOptions, sync_round};
-use crate::sync::{SharedVault, lock_vault};
+use crate::sync::{SharedVault, SyncConfig, lock_vault};
 use crate::vault::{PasswordChange, Vault};
 
 /// Runs CPU-heavy work (Argon2) off the async executor.
@@ -69,11 +69,14 @@ fn device_login(key: &[u8; 32], device_id: &str, info: &DeviceInfo) -> Result<De
 
 /// Flow A: publishes this device's vault to an empty remote and uploads everything.
 ///
-/// 1. `health`: a remote that already holds a vault yields [`Error::RemoteInitialized`] (the MVP
-///    answer to flow C: restore on a new device instead).
-/// 2. `setup` with this vault's metadata, `auth_key` and sealed-then-unsealed `recovery_auth`.
-/// 3. `login`, then every local item is re-queued as new (revision 0) and a full round runs.
+/// 1. `health`: for an empty remote, every local item is re-queued as new (revision 0), then
+///    `setup` runs with this vault's metadata, `auth_key` and sealed-then-unsealed
+///    `recovery_auth`. A remote that already holds *this* vault (an earlier attempt set it up,
+///    then failed or lost the response) is adopted instead, and any other vault yields
+///    [`Error::RemoteInitialized`] (the MVP answer to flow C: restore on a new device).
+/// 2. `login`, a check that the remote's wrapped vault keys are this vault's, then a full round.
 ///
+/// A call that fails at any point after `setup` can therefore be retried with the same arguments.
 /// The vault must be unlocked. `setup_token` is the Worker's `SETUP_TOKEN` (`None` for D1 mode).
 /// The caller stores the returned session in the OS credential store and records the backend
 /// with `Vault::set_sync_config`.
@@ -95,39 +98,67 @@ pub async fn enable_sync(
             Err(Error::Locked)
         }
     })?;
-    if backend.health().await?.initialized {
-        return Err(Error::RemoteInitialized);
-    }
 
     let pw = Zeroizing::new(password.to_owned());
     let shared = Arc::clone(vault);
     let material = blocking(move || lock_vault(&shared)?.sync_setup_material(&pw)).await?;
 
-    backend
-        .setup(VaultInit {
-            schema_version: material.meta.schema_version,
-            kdf_salt: material.meta.kdf_salt.clone(),
-            kdf_params: material.meta.kdf_params.clone(),
-            auth_key: material.auth_key.clone(),
-            protected_vault_key: material.meta.protected_vault_key.clone(),
-            recovery_vault_key: material.meta.recovery_vault_key.clone(),
-            recovery_auth: material.recovery_auth.clone(),
-            setup_token: setup_token.map(|t| Zeroizing::new(t.to_owned())),
-        })
-        .await?;
+    if backend.health().await?.initialized {
+        // An earlier attempt published this vault, then failed (or lost the response) before
+        // sync was configured locally. Its items stay queued, so a normal round finishes it.
+        ensure_own_kdf(backend, &material.meta).await?;
+    } else {
+        // The remote is brand new: everything local is "never synced". Queue it before `setup`
+        // so that an attempt interrupted after `setup` leaves the vault ready to upload.
+        with_vault(vault, |v| {
+            v.store.transaction(|tx| {
+                tx.mark_all_dirty_for_upload()?;
+                tx.delete_meta(meta::SYNC_CURSOR)
+            })
+        })?;
+        let setup = backend
+            .setup(VaultInit {
+                schema_version: material.meta.schema_version,
+                kdf_salt: material.meta.kdf_salt.clone(),
+                kdf_params: material.meta.kdf_params.clone(),
+                auth_key: material.auth_key.clone(),
+                protected_vault_key: material.meta.protected_vault_key.clone(),
+                recovery_vault_key: material.meta.recovery_vault_key.clone(),
+                recovery_auth: material.recovery_auth.clone(),
+                setup_token: setup_token.map(|t| Zeroizing::new(t.to_owned())),
+            })
+            .await;
+        match setup {
+            // Initialised since `health`: by a retried request of ours, or by someone else.
+            Err(Error::RemoteInitialized) => ensure_own_kdf(backend, &material.meta).await?,
+            other => other?,
+        }
+    }
 
     let login = device_login(&material.vault_key, &material.device_id, &device)?;
     let session = backend.login(&material.auth_key, &login).await?;
+    // The vault key identity can only be read after login; check it before uploading anything.
+    let remote = backend.fetch_vault().await?;
+    if remote.protected_vault_key != material.meta.protected_vault_key
+        || remote.recovery_vault_key != material.meta.recovery_vault_key
+    {
+        return Err(Error::RemoteInitialized);
+    }
 
-    // The remote is brand new: everything local is "never synced".
-    with_vault(vault, |v| {
-        v.store.transaction(|tx| {
-            tx.mark_all_dirty_for_upload()?;
-            tx.delete_meta(meta::SYNC_CURSOR)
-        })
-    })?;
     sync_round(vault, backend, &SyncOptions::default()).await?;
     Ok(session)
+}
+
+/// Checks, without authenticating, that an initialised remote can hold this vault: the same
+/// salt and KDF parameters. Another vault yields [`Error::RemoteInitialized`] before the password
+/// is ever tried against it.
+async fn ensure_own_kdf(backend: &dyn SyncBackend, local: &crate::vault::LocalMeta) -> Result<()> {
+    let kdf = backend.prelogin().await?;
+    if kdf.kdf_salt == local.kdf_salt && kdf.kdf_params == local.kdf_params {
+        Ok(())
+    } else {
+        Err(Error::RemoteInitialized)
+    }
 }
 
 // ---- authentication shared by flows B and "sign in again" -----------------------------------
@@ -188,11 +219,13 @@ async fn authenticate(
 /// Flow B: sets up this (empty) device from an existing remote vault.
 ///
 /// Derives keys from the remote's salt and the master password, logs in, unwraps the vault key
-/// with `enc_key`, writes the vault metadata locally under a new device id, pulls everything and
-/// leaves the vault unlocked. The local master password becomes the remote one.
+/// with `enc_key`, and writes the vault metadata locally under a new device id together with
+/// `config`, in one transaction. The vault is left unlocked and the local master password becomes
+/// the remote one.
 ///
-/// If the final pull fails (for example the network drops) the error is returned but the local
-/// vault already exists; check `Vault::status` and call `sync` again to finish.
+/// Items are not pulled here: the caller stores the returned session and then runs an ordinary
+/// sync round. Once this returns, the device is a configured sync device, so an interrupted
+/// first pull resumes from the saved cursor on the next round, also after a restart.
 ///
 /// # Errors
 /// [`Error::VaultAlreadyInitialized`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
@@ -202,6 +235,7 @@ pub async fn restore_from_cloud(
     backend: &dyn SyncBackend,
     password: &str,
     device: DeviceInfo,
+    config: &SyncConfig,
 ) -> Result<Session> {
     with_vault(vault, |v| {
         if v.status().initialized {
@@ -213,9 +247,8 @@ pub async fn restore_from_cloud(
     let device_id = new_id();
     let auth = authenticate(backend, password, &device_id, &device).await?;
     with_vault(vault, |v| {
-        v.install_remote_vault(&auth.meta, auth.vault_key, &device_id)
+        v.install_remote_vault(&auth.meta, auth.vault_key, &device_id, Some(config))
     })?;
-    sync_round(vault, backend, &SyncOptions::default()).await?;
     Ok(auth.session)
 }
 
@@ -395,7 +428,7 @@ pub async fn recover_remote(
                 recovery_vault_key: recovered.recovery_vault_key.clone(),
                 seq: 0,
             };
-            v.install_remote_vault(&meta, vault_key.clone(), &device_id)
+            v.install_remote_vault(&meta, vault_key.clone(), &device_id, None)
         }
     })?;
 

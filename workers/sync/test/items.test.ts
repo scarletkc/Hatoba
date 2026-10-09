@@ -129,6 +129,25 @@ describe("POST /v1/items", () => {
     expect(res.body.results[0].seq).toBe(3);
   });
 
+  it("allocates past items that D1 direct mode wrote before catching meta.seq up", async () => {
+    const token = await loggedIn();
+    await push(token, [change(ID_1, 0)]); // seq 1
+    // D1 direct mode writes at MAX(seq) + 1 and raises meta.seq only after the push.
+    await env.DB.prepare(
+      "INSERT INTO items (id, envelope, revision, seq, deleted, updated_at) VALUES (?, ?, 1, 2, 0, 0)",
+    )
+      .bind(ID_2, envelope("direct"))
+      .run();
+    const pulled = await call("/v1/items?since=0", { token });
+    const cursor = pulled.body.next_since;
+    expect(cursor).toBe(2);
+
+    const res = await push(token, [change(ID_3, 0)]);
+    expect(res.body.results[0].seq).toBe(3);
+    const after = await call(`/v1/items?since=${cursor}`, { token });
+    expect(after.body.items.map((i: { id: string }) => i.id)).toEqual([ID_3]);
+  });
+
   it("stores deletions as tombstones with a NULL envelope", async () => {
     const token = await loggedIn();
     await push(token, [change(ID_1, 0, "alive")]);

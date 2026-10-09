@@ -10,11 +10,15 @@
 //!   `INSERT … ON CONFLICT(id) DO NOTHING` for new items, `UPDATE … WHERE id = ? AND revision = ?`
 //!   otherwise; zero `meta.changes` means somebody else got there first, and the current row is
 //!   read back as a conflict.
-//! * **`seq`** is assigned *inside* the write statement as `MAX(seq) + 1`. The Worker bumps
-//!   `meta.seq` and writes in one D1 batch; over the REST API two separate calls would not be
-//!   atomic, and a writer that allocated a lower number but committed later could slip behind
-//!   another client's pull cursor and be missed forever. A single statement cannot. `meta.seq` is
-//!   brought up to date at the end of each push so the same database stays usable by a Worker.
+//! * **`seq`** is assigned *inside* the write statement as one more than the larger of
+//!   `meta.seq` and `MAX(items.seq)`. The Worker bumps `meta.seq` to the same value and writes in
+//!   one D1 batch; over the REST API two separate calls would not be atomic, and a writer that
+//!   allocated a lower number but committed later could slip behind another client's pull cursor
+//!   and be missed forever. A single statement cannot. Both backends take the larger of the two
+//!   counters because each one may lag: `meta.seq` behind a D1-direct write that has not caught it
+//!   up yet, `MAX(items.seq)` behind a seq the Worker used up on a lost race. Using only one of
+//!   them could hand out a seq that is already taken. `meta.seq` is still brought up to date at
+//!   the end of each push.
 //!
 //! The Cloudflare API token usually grants edit access to *every* D1 database on the account;
 //! the UI must say so. The token is held only in memory here and stored by the shell in the OS
@@ -72,7 +76,10 @@ const SCHEMA: [&str; 3] = [
     "CREATE INDEX IF NOT EXISTS idx_items_seq ON items(seq)",
 ];
 
-const NEXT_SEQ: &str = "(SELECT COALESCE(MAX(seq), 0) + 1 FROM items)";
+/// The next `seq`, shared with the Worker (`workers/sync/src/routes/items.ts`): one more than
+/// both `meta.seq` and every item's `seq`.
+const NEXT_SEQ: &str = "(SELECT MAX(COALESCE((SELECT seq FROM meta WHERE id = 1), 0), \
+                        COALESCE((SELECT MAX(seq) FROM items), 0)) + 1)";
 
 fn valid_identifier(s: &str) -> bool {
     (1..=64).contains(&s.len())
