@@ -109,10 +109,109 @@ pub struct Host {
     pub ai_notes: String,
     /// Last modification, Unix ms. Drives last-writer-wins conflict resolution.
     pub updated_at: i64,
+    /// Environment variables the terminal asks the server to set (SSH-14), like OpenSSH's
+    /// `SetEnv`. Checked with [`check_host_env`]. Absent while empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub env: Vec<EnvVar>,
 }
 
 /// The longest [`Host::ai_notes`], in characters (AI-37).
 pub const MAX_HOST_AI_NOTES_CHARS: usize = 2_000;
+
+/// One of a host's environment variables (SSH-14).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct EnvVar {
+    /// The name, such as `TZ`.
+    pub name: String,
+    /// The value, which may be empty.
+    pub value: String,
+}
+
+impl EnvVar {
+    /// A variable with the given name and value.
+    #[must_use]
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+        }
+    }
+}
+
+/// The most environment variables a host can have (SSH-14).
+pub const MAX_HOST_ENV_VARS: usize = 64;
+/// The longest environment variable name, in characters (SSH-14).
+pub const MAX_ENV_NAME_CHARS: usize = 128;
+/// The longest environment variable value, in characters (SSH-14).
+pub const MAX_ENV_VALUE_CHARS: usize = 4_096;
+
+/// Why a host's environment variables can't be saved (SSH-14).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum EnvVarError {
+    /// More than [`MAX_HOST_ENV_VARS`].
+    #[error("a host can have at most {MAX_HOST_ENV_VARS} environment variables")]
+    TooMany,
+    /// The name is empty.
+    #[error("an environment variable needs a name")]
+    NameMissing,
+    /// The name has a character other than ASCII letters, digits and `_`, or starts with a digit.
+    #[error(
+        "{0:?} is not a valid variable name: use letters, digits and _, not starting with a digit"
+    )]
+    NameInvalid(String),
+    /// The name is longer than [`MAX_ENV_NAME_CHARS`].
+    #[error("variable names are limited to {MAX_ENV_NAME_CHARS} characters")]
+    NameTooLong,
+    /// Two variables have the same name (names are case-sensitive).
+    #[error("{0} is set more than once")]
+    NameDuplicate(String),
+    /// The value has a NUL, CR or LF.
+    #[error("the value of {0} can't contain line breaks or NUL characters")]
+    ValueInvalid(String),
+    /// The value is longer than [`MAX_ENV_VALUE_CHARS`].
+    #[error("the value of {0} is longer than {MAX_ENV_VALUE_CHARS} characters")]
+    ValueTooLong(String),
+}
+
+/// Checks one variable: a name of ASCII letters, digits and `_` that does not start with a digit,
+/// and a value without NUL, CR or LF, each within its limit.
+pub fn check_env_var(var: &EnvVar) -> std::result::Result<(), EnvVarError> {
+    let name = var.name.as_str();
+    if name.is_empty() {
+        return Err(EnvVarError::NameMissing);
+    }
+    if name.chars().count() > MAX_ENV_NAME_CHARS {
+        return Err(EnvVarError::NameTooLong);
+    }
+    let valid = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    if !valid {
+        return Err(EnvVarError::NameInvalid(name.to_owned()));
+    }
+    if var.value.contains(['\0', '\r', '\n']) {
+        return Err(EnvVarError::ValueInvalid(name.to_owned()));
+    }
+    if var.value.chars().count() > MAX_ENV_VALUE_CHARS {
+        return Err(EnvVarError::ValueTooLong(name.to_owned()));
+    }
+    Ok(())
+}
+
+/// Checks a host's variables: each as in [`check_env_var`], no name twice, and at most
+/// [`MAX_HOST_ENV_VARS`] of them.
+pub fn check_host_env(vars: &[EnvVar]) -> std::result::Result<(), EnvVarError> {
+    if vars.len() > MAX_HOST_ENV_VARS {
+        return Err(EnvVarError::TooMany);
+    }
+    for (i, var) in vars.iter().enumerate() {
+        check_env_var(var)?;
+        if vars[..i].iter().any(|v| v.name == var.name) {
+            return Err(EnvVarError::NameDuplicate(var.name.clone()));
+        }
+    }
+    Ok(())
+}
 
 impl Default for Host {
     fn default() -> Self {
@@ -129,6 +228,7 @@ impl Default for Host {
             note: String::new(),
             ai_notes: String::new(),
             updated_at: 0,
+            env: Vec::new(),
         }
     }
 }
@@ -1305,6 +1405,89 @@ mod tests {
         assert_eq!(back, Item::Host(host));
         let old: Item = serde_json::from_value(json!({"type": "host", "name": "old"})).unwrap();
         assert_eq!(old.as_host().unwrap().ai_notes, "");
+    }
+
+    #[test]
+    fn host_env_is_written_only_when_set_and_read_back() {
+        // SSH-14: a host without variables keeps the old shape, so older versions read it as before.
+        let value = serde_json::to_value(Item::Host(sample_host())).unwrap();
+        assert!(value.get("env").is_none());
+
+        let host = Host {
+            env: vec![EnvVar::new("TZ", "Asia/Tokyo"), EnvVar::new("EMPTY", "")],
+            ..sample_host()
+        };
+        let value = serde_json::to_value(Item::Host(host.clone())).unwrap();
+        assert_eq!(
+            value["env"],
+            json!([{"name": "TZ", "value": "Asia/Tokyo"}, {"name": "EMPTY", "value": ""}])
+        );
+        let back = Item::from_plaintext(&Item::Host(host.clone()).to_plaintext().unwrap()).unwrap();
+        assert_eq!(back, Item::Host(host));
+
+        // An item from before SSH-14 has no variables; a newer one with extra fields still reads.
+        let old: Item = serde_json::from_value(json!({"type": "host", "name": "old"})).unwrap();
+        assert!(old.as_host().unwrap().env.is_empty());
+        let newer: Item = serde_json::from_value(json!({
+            "type": "host",
+            "name": "newer",
+            "env": [{"name": "A", "value": "1", "secret": false}, {"name": "B"}]
+        }))
+        .unwrap();
+        assert_eq!(
+            newer.as_host().unwrap().env,
+            [EnvVar::new("A", "1"), EnvVar::new("B", "")]
+        );
+    }
+
+    #[test]
+    fn host_env_check_rules() {
+        let ok = [
+            EnvVar::new("LANG", "ja_JP.UTF-8"),
+            EnvVar::new("_private", ""),
+            EnvVar::new("LC_ALL2", "spaces and = signs"),
+            EnvVar::new("lang", "names are case-sensitive"),
+        ];
+        assert_eq!(check_host_env(&ok), Ok(()));
+        assert_eq!(check_host_env(&[]), Ok(()));
+
+        let one = |name: &str, value: &str| check_host_env(&[EnvVar::new(name, value)]);
+        assert_eq!(one("", "x"), Err(EnvVarError::NameMissing));
+        for bad in ["1ST", "A-B", "A B", "A=B", "日本", "a.b", " A"] {
+            assert_eq!(
+                one(bad, "x"),
+                Err(EnvVarError::NameInvalid(bad.into())),
+                "{bad}"
+            );
+        }
+        assert_eq!(one(&"N".repeat(MAX_ENV_NAME_CHARS), ""), Ok(()));
+        assert_eq!(
+            one(&"N".repeat(MAX_ENV_NAME_CHARS + 1), ""),
+            Err(EnvVarError::NameTooLong)
+        );
+        for bad in ["a\nb", "a\rb", "a\0b"] {
+            assert_eq!(one("V", bad), Err(EnvVarError::ValueInvalid("V".into())));
+        }
+        assert_eq!(one("V", "\ttab is fine"), Ok(()));
+        assert_eq!(one("V", &"値".repeat(MAX_ENV_VALUE_CHARS)), Ok(()));
+        assert_eq!(
+            one("V", &"値".repeat(MAX_ENV_VALUE_CHARS + 1)),
+            Err(EnvVarError::ValueTooLong("V".into()))
+        );
+
+        assert_eq!(
+            check_host_env(&[
+                EnvVar::new("A", "1"),
+                EnvVar::new("B", ""),
+                EnvVar::new("A", "2")
+            ]),
+            Err(EnvVarError::NameDuplicate("A".into()))
+        );
+        let many: Vec<EnvVar> = (0..=MAX_HOST_ENV_VARS)
+            .map(|i| EnvVar::new(format!("V{i}"), ""))
+            .collect();
+        assert_eq!(check_host_env(&many[..MAX_HOST_ENV_VARS]), Ok(()));
+        assert_eq!(check_host_env(&many), Err(EnvVarError::TooMany));
     }
 
     #[test]

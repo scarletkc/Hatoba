@@ -266,7 +266,7 @@ impl SshdServer {
                  PubkeyAuthentication yes\n\
                  PermitRootLogin yes\n\
                  AllowTcpForwarding yes\n\
-                 AcceptEnv LANG\n\
+                 AcceptEnv LANG HATOBA_*\n\
                  Subsystem sftp internal-sftp\n\
                  MaxAuthTries 10\n\
                  MaxSessions 100\n\

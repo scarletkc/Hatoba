@@ -3,7 +3,10 @@
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use hatoba_core::model::{Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
+use hatoba_core::model::{
+    EnvVar, EnvVarError, Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, MAX_HOST_ENV_VARS,
+    SshKey, check_env_var, check_host_env,
+};
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -60,6 +63,12 @@ pub fn host_from_input(
             "AI notes are limited to 2,000 characters",
         ));
     }
+    let env: Vec<EnvVar> = input
+        .env
+        .iter()
+        .map(|v| EnvVar::new(v.name.trim(), v.value.as_str()))
+        .collect();
+    check_host_env(&env).map_err(|e| AppError::invalid("env", e.to_string()))?;
     if let Some(jump) = &input.jump_host_id {
         if input.id.as_deref() == Some(jump.as_str()) {
             return Err(AppError::invalid(
@@ -122,6 +131,7 @@ pub fn host_from_input(
         note: input.note.clone(),
         ai_notes: input.ai_notes.clone(),
         updated_at: 0,
+        env,
     })
 }
 
@@ -475,6 +485,7 @@ pub fn ssh_config_import(
                 port: entry.port.unwrap_or(22),
                 username: entry.user.clone().unwrap_or_else(default_user),
                 auth,
+                env: import_env(&entry.alias, &entry.set_env, &mut result.warnings),
                 ..Host::default()
             };
             let id = v.put(None, Item::Host(host))?;
@@ -517,6 +528,29 @@ pub fn ssh_config_import(
     })?;
     sync::local_change(&app);
     Ok(result)
+}
+
+/// The `SetEnv` variables an imported host keeps (SSH-14): the ones the host editor would accept,
+/// up to the most a host can have. Each one left out gets a warning.
+fn import_env(
+    alias: &str,
+    set_env: &[(String, String)],
+    warnings: &mut Vec<String>,
+) -> Vec<EnvVar> {
+    let mut env: Vec<EnvVar> = Vec::new();
+    for (name, value) in set_env {
+        let var = EnvVar::new(name.as_str(), value.as_str());
+        let problem = if env.len() == MAX_HOST_ENV_VARS {
+            Err(EnvVarError::TooMany)
+        } else {
+            check_env_var(&var)
+        };
+        match problem {
+            Ok(()) => env.push(var),
+            Err(e) => warnings.push(format!("{alias}: SetEnv {name} was not imported: {e}")),
+        }
+    }
+    env
 }
 
 /// Imports an identity file referenced by ssh config. Reuses an existing key with the same fingerprint.
@@ -588,6 +622,7 @@ mod tests {
     use hatoba_core::KdfParams;
 
     use super::*;
+    use crate::dto::HostEnvVar;
 
     fn input(ai_notes: String) -> HostInput {
         HostInput {
@@ -605,7 +640,90 @@ mod tests {
             jump_host_id: None,
             note: String::new(),
             ai_notes,
+            env: Vec::new(),
         }
+    }
+
+    fn env_input(vars: &[(&str, &str)]) -> HostInput {
+        HostInput {
+            env: vars
+                .iter()
+                .map(|(name, value)| HostEnvVar {
+                    name: (*name).into(),
+                    value: (*value).into(),
+                })
+                .collect(),
+            ..input(String::new())
+        }
+    }
+
+    #[test]
+    fn env_is_saved_with_the_host_and_checked() {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+            .unwrap();
+        // SSH-14: names are trimmed, values kept as typed.
+        let host = host_from_input(
+            &env_input(&[(" TZ ", "Asia/Tokyo"), ("GREETING", " hi ")]),
+            None,
+            &v,
+        )
+        .unwrap();
+        assert_eq!(
+            host.env,
+            [
+                EnvVar::new("TZ", "Asia/Tokyo"),
+                EnvVar::new("GREETING", " hi ")
+            ]
+        );
+        let id = v.put(None, Item::Host(host)).unwrap();
+        let view = host_view(&id, &find_host(&v, &id).unwrap(), &v);
+        assert_eq!(view.env.len(), 2);
+        assert_eq!(view.env[1].value, " hi ");
+
+        for bad in [
+            env_input(&[("1BAD", "x")]),
+            env_input(&[("", "x")]),
+            env_input(&[("A", "1"), (" A", "2")]),
+            env_input(&[("A", "line\nbreak")]),
+        ] {
+            let err = host_from_input(&bad, None, &v).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("env"), "{}", err.detail);
+        }
+    }
+
+    #[test]
+    fn imported_set_env_keeps_the_variables_a_host_accepts() {
+        let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+            list.iter()
+                .map(|(n, v)| ((*n).to_owned(), (*v).to_owned()))
+                .collect()
+        };
+        let mut warnings = Vec::new();
+        let env = import_env(
+            "app",
+            &pairs(&[("TZ", "UTC"), ("BAD-NAME", "x"), ("LANG", "C.UTF-8")]),
+            &mut warnings,
+        );
+        assert_eq!(
+            env,
+            [EnvVar::new("TZ", "UTC"), EnvVar::new("LANG", "C.UTF-8")]
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].starts_with("app: SetEnv BAD-NAME was not imported"),
+            "{warnings:?}"
+        );
+
+        let many: Vec<(String, String)> = (0..=MAX_HOST_ENV_VARS)
+            .map(|i| (format!("V{i}"), String::new()))
+            .collect();
+        let mut warnings = Vec::new();
+        assert_eq!(
+            import_env("big", &many, &mut warnings).len(),
+            MAX_HOST_ENV_VARS
+        );
+        assert_eq!(warnings.len(), 1);
     }
 
     #[test]

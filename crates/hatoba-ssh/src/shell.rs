@@ -48,6 +48,28 @@ impl Default for ShellOptions {
     }
 }
 
+impl ShellOptions {
+    /// Adds a host's variables after the ones already set, like OpenSSH's `SetEnv` (SSH-14). A
+    /// variable with the name of one already set replaces its value, so a host's `LANG` replaces
+    /// the default. As with OpenSSH, `TERM` sets the terminal type instead of being requested
+    /// (an empty one keeps the type).
+    #[must_use]
+    pub fn with_env(mut self, vars: impl IntoIterator<Item = (String, String)>) -> Self {
+        for (name, value) in vars {
+            if name == "TERM" {
+                if !value.is_empty() {
+                    self.term = value;
+                }
+            } else if let Some(slot) = self.env.iter_mut().find(|(n, _)| *n == name) {
+                slot.1 = value;
+            } else {
+                self.env.push((name, value));
+            }
+        }
+        self
+    }
+}
+
 /// What happened on a shell channel.
 #[derive(Debug, Clone)]
 pub enum ShellEvent {
@@ -322,4 +344,45 @@ async fn flush_all(tx: &mpsc::Sender<ShellEvent>, buf: &mut BytesMut) -> bool {
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+        list.iter()
+            .map(|(n, v)| ((*n).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn host_env_follows_the_default_lang() {
+        let opts = ShellOptions::default().with_env(pairs(&[("TZ", "Asia/Tokyo"), ("A", "")]));
+        assert_eq!(
+            opts.env,
+            pairs(&[("LANG", "C.UTF-8"), ("TZ", "Asia/Tokyo"), ("A", "")])
+        );
+        assert_eq!(opts.term, "xterm-256color");
+    }
+
+    #[test]
+    fn host_lang_replaces_the_default() {
+        let opts =
+            ShellOptions::default().with_env(pairs(&[("LC_ALL", "C"), ("LANG", "ja_JP.UTF-8")]));
+        assert_eq!(opts.env, pairs(&[("LANG", "ja_JP.UTF-8"), ("LC_ALL", "C")]));
+        // Names are case-sensitive, as on the server.
+        let opts = ShellOptions::default().with_env(pairs(&[("lang", "x")]));
+        assert_eq!(opts.env, pairs(&[("LANG", "C.UTF-8"), ("lang", "x")]));
+    }
+
+    #[test]
+    fn host_term_sets_the_terminal_type() {
+        let opts = ShellOptions::default().with_env(pairs(&[("TERM", "vt100"), ("TZ", "UTC")]));
+        assert_eq!(opts.term, "vt100");
+        assert_eq!(opts.env, pairs(&[("LANG", "C.UTF-8"), ("TZ", "UTC")]));
+        let opts = ShellOptions::default().with_env(pairs(&[("TERM", "")]));
+        assert_eq!(opts.term, "xterm-256color");
+        assert_eq!(opts.env, pairs(&[("LANG", "C.UTF-8")]));
+    }
 }

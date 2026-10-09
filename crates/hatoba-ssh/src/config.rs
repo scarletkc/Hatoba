@@ -1,9 +1,10 @@
 //! `~/.ssh/config` import (SSH-11).
 //!
 //! Only the options Hatoba can map onto a host entry are understood: `Host`,
-//! `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump`. Lookup follows
-//! OpenSSH semantics: blocks are evaluated in file order and the first value
-//! obtained for an option wins (`IdentityFile` accumulates).
+//! `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `SetEnv`. Lookup
+//! follows OpenSSH semantics: blocks are evaluated in file order and the first
+//! value obtained for an option wins (`IdentityFile` accumulates, and the first
+//! `SetEnv` line that applies wins as a whole).
 //! `Match` blocks and `Include` are ignored.
 
 use std::path::PathBuf;
@@ -26,6 +27,9 @@ pub struct SshConfigHost {
     pub identity_files: Vec<String>,
     /// Raw `ProxyJump` value, e.g. `user@bastion:2222,other`.
     pub proxy_jump: Option<String>,
+    /// `SetEnv` variables as name and value, in order. Names are not checked;
+    /// arguments without `=` are dropped.
+    pub set_env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -39,6 +43,7 @@ struct Block {
     port: Option<u16>,
     identity_files: Vec<String>,
     proxy_jump: Option<String>,
+    set_env: Option<Vec<(String, String)>>,
 }
 
 /// Parses SSH config text, expanding `~` / `%d` using the current user's home
@@ -100,6 +105,12 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                 let Some(block) = blocks.last_mut() else {
                     continue;
                 };
+                if kw == "setenv" {
+                    if block.set_env.is_none() {
+                        block.set_env = parse_set_env(args);
+                    }
+                    continue;
+                }
                 let first = args.into_iter().next();
                 match (kw, first) {
                     ("hostname", Some(v)) => {
@@ -125,6 +136,21 @@ fn parse_blocks(text: &str) -> Vec<Block> {
     blocks
 }
 
+/// The `NAME=value` arguments of one `SetEnv` line; `None` when it has none.
+/// A name given twice keeps its first value, as in OpenSSH.
+fn parse_set_env(args: Vec<String>) -> Option<Vec<(String, String)>> {
+    let mut vars: Vec<(String, String)> = Vec::new();
+    for arg in args {
+        let Some((name, value)) = arg.split_once('=') else {
+            continue;
+        };
+        if !vars.iter().any(|(n, _)| n == name) {
+            vars.push((name.to_owned(), value.to_owned()));
+        }
+    }
+    (!vars.is_empty()).then_some(vars)
+}
+
 fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfigHost {
     let mut host = SshConfigHost {
         alias: alias.to_owned(),
@@ -132,6 +158,7 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
     };
     // Tracks "set" separately from the value so `ProxyJump none` still wins.
     let mut proxy_set = false;
+    let mut env_set = false;
 
     for block in blocks
         .iter()
@@ -151,6 +178,10 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
         if !proxy_set && let Some(pj) = &block.proxy_jump {
             proxy_set = true;
             host.proxy_jump = (!pj.eq_ignore_ascii_case("none")).then(|| pj.clone());
+        }
+        if !env_set && let Some(vars) = &block.set_env {
+            env_set = true;
+            host.set_env = vars.clone();
         }
     }
 
@@ -287,8 +318,8 @@ fn split_directive(line: &str) -> Option<(String, Vec<String>)> {
     Some((keyword.to_owned(), tokenize(rest)))
 }
 
-/// Whitespace-separated arguments with `"double quote"` support; an unquoted
-/// token starting with `#` begins a comment.
+/// Whitespace-separated arguments with `"double"` and `'single'` quote
+/// support; an unquoted token starting with `#` begins a comment.
 fn tokenize(s: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut chars = s.chars().peekable();
@@ -300,19 +331,22 @@ fn tokenize(s: &str) -> Vec<String> {
             _ => {}
         }
         let mut token = String::new();
-        let mut in_quotes = false;
+        let mut quote: Option<char> = None;
         while let Some(&c) = chars.peek() {
-            if c == '"' {
-                in_quotes = !in_quotes;
+            if quote == Some(c) {
+                quote = None;
                 chars.next();
-            } else if c == '\\' && in_quotes {
+            } else if quote.is_none() && matches!(c, '"' | '\'') {
+                quote = Some(c);
                 chars.next();
-                if let Some(escaped) = chars.next_if(|n| *n == '"' || *n == '\\') {
+            } else if c == '\\' && quote.is_some() {
+                chars.next();
+                if let Some(escaped) = chars.next_if(|n| matches!(n, '"' | '\'' | '\\')) {
                     token.push(escaped);
                 } else {
                     token.push('\\');
                 }
-            } else if c.is_whitespace() && !in_quotes {
+            } else if c.is_whitespace() && quote.is_none() {
                 break;
             } else {
                 token.push(c);
@@ -438,6 +472,52 @@ mod tests {
             Some("user@bastion:2222,other")
         );
         assert_eq!(hosts[1].proxy_jump, None);
+    }
+
+    #[test]
+    fn set_env_takes_several_quoted_variables() {
+        let hosts = parse(
+            "Host app\n  SetEnv TZ=Asia/Tokyo GREETING=\"hello world\" 'QUOTED=it''s' EMPTY= NOEQUALS LANG=ja_JP.UTF-8 TZ=UTC\n",
+        );
+        assert_eq!(
+            hosts[0].set_env,
+            [
+                ("TZ".to_owned(), "Asia/Tokyo".to_owned()),
+                ("GREETING".to_owned(), "hello world".to_owned()),
+                ("QUOTED".to_owned(), "its".to_owned()),
+                ("EMPTY".to_owned(), String::new()),
+                ("LANG".to_owned(), "ja_JP.UTF-8".to_owned()),
+            ]
+        );
+        let hosts = parse("Host app\n  SetEnv=A=\"x=y\" # comment\n");
+        assert_eq!(hosts[0].set_env, [("A".to_owned(), "x=y".to_owned())]);
+    }
+
+    #[test]
+    fn first_set_env_line_that_applies_wins_whole() {
+        // OpenSSH: the first SetEnv obtained is used as a whole; later lines don't add to it.
+        let hosts = parse(
+            "Host web\n  SetEnv A=1\n  SetEnv B=2\nHost db\n  SetEnv NOEQUALS\nHost *\n  SetEnv A=star C=3\nHost plain\n",
+        );
+        let by_alias = |a: &str| &hosts.iter().find(|h| h.alias == a).unwrap().set_env;
+        assert_eq!(*by_alias("web"), [("A".to_owned(), "1".to_owned())]);
+        // A line without any NAME=value sets nothing, so the defaults apply.
+        assert_eq!(
+            *by_alias("db"),
+            [
+                ("A".to_owned(), "star".to_owned()),
+                ("C".to_owned(), "3".to_owned())
+            ]
+        );
+        assert_eq!(by_alias("plain").len(), 2);
+        assert!(parse("Host none\n").pop().unwrap().set_env.is_empty());
+    }
+
+    #[test]
+    fn single_quotes_group_words() {
+        let hosts = parse("Host 'my box'\n  User \"o'neil\"\n");
+        assert_eq!(hosts[0].alias, "my box");
+        assert_eq!(hosts[0].user.as_deref(), Some("o'neil"));
     }
 
     #[test]

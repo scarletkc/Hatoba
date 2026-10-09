@@ -326,6 +326,14 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("tags", h.tags.join(", ")),
             ("note", h.note.clone()),
             ("ai_notes", h.ai_notes.clone()),
+            (
+                "env",
+                h.env
+                    .iter()
+                    .map(|v| format!("{}={}", v.name, v.value))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ),
         ],
         Item::Group(g) => vec![("name", g.name.clone())],
         Item::Key(k) => vec![
