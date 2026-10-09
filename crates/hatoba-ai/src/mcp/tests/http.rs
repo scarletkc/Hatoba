@@ -128,9 +128,10 @@ async fn http_session_lists_calls_and_closes() {
         "hi"
     );
 
-    // A notification in the response's event stream, before the result.
+    // A notification in the response's event stream, before the result: seen by the time the
+    // result is.
     assert_eq!(call(&conn, "notify", json!({})).await.content, "notified");
-    assert!(eventually(Duration::from_secs(5), || conn.tools_changed()).await);
+    assert!(conn.tools_changed());
 
     assert_eq!(
         call(&conn, "fail", json!({})).await,

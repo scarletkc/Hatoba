@@ -251,9 +251,10 @@ async fn stdio_session_lists_calls_and_shuts_down() {
         McpError::Server("Unknown tool: nope (code -32602)".into())
     );
 
-    // tools/list_changed flips the flag until the next listing.
+    // tools/list_changed flips the flag until the next listing, before the answer that follows
+    // it is returned (AI-30).
     assert_eq!(call(&conn, "notify", json!({})).await.content, "notified");
-    assert!(eventually(Duration::from_secs(5), || conn.tools_changed()).await);
+    assert!(conn.tools_changed());
     assert_eq!(conn.list_tools().await.unwrap().len(), 10);
     assert!(!conn.tools_changed());
 
