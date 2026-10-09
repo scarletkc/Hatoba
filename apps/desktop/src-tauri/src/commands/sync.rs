@@ -184,6 +184,9 @@ pub async fn sync_login(
     state: State<'_, AppState>,
     password: String,
 ) -> AppResult<()> {
+    // A disconnect, a lock or another sign-in while this one waits for the server ends the
+    // connection it started from, and this sign-in then saves and installs nothing (§6.3).
+    let generation = state.sync.generation();
     let config = state
         .vault()
         .sync_config()?
@@ -193,9 +196,19 @@ pub async fn sync_login(
         None => sync::backend_for(&config, state.secrets.as_ref())?,
     };
     let session = flows::sign_in(&state.vault, backend.as_ref(), &password, device_info()).await?;
-    save_session(state.secrets.as_ref(), &session)?;
-    backend.set_session(Some(session));
-    state.sync.set_backend(Some(backend));
+    let ended = || AppError::new(ErrorCode::Sync, "sync was disconnected while signing in");
+    {
+        let _rounds = state.sync.lock_rounds().await;
+        if state.sync.generation() != generation {
+            return Err(ended());
+        }
+        save_session(state.secrets.as_ref(), &session)?;
+        backend.set_session(Some(session));
+        // A disconnect that starts now still waits for `_rounds`, and clears this session.
+        if !state.sync.set_backend_if(generation, backend) {
+            return Err(ended());
+        }
+    }
     sync::emit_status(&app);
     sync::trigger(&app, Trigger::Manual);
     Ok(())

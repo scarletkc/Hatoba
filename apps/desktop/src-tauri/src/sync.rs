@@ -120,29 +120,62 @@ impl SyncController {
     /// that is replaced rather than installed again (as signing in again does) forgets its
     /// credentials, so a round still holding it cannot authenticate.
     pub fn set_backend(&self, backend: Option<Arc<dyn SyncBackend>>) {
-        let replaced = {
+        self.install(None, backend);
+    }
+
+    /// The current connection's generation, for a command that may install a backend only if
+    /// the connection it started from is still current ([`set_backend_if`](Self::set_backend_if)).
+    pub fn generation(&self) -> u64 {
+        self.inner().generation
+    }
+
+    /// As `set_backend(Some(backend))`, but only while the connection is still `generation`: a
+    /// disconnect, a lock or another sign-in in between keeps it ended. A refused backend
+    /// forgets its credentials, unless it is the one installed. Returns whether it installed.
+    pub fn set_backend_if(&self, generation: u64, backend: Arc<dyn SyncBackend>) -> bool {
+        self.install(Some(generation), Some(backend))
+    }
+
+    /// Keeps sync rounds from running while a command saves credentials for the connection, so
+    /// that a disconnect, which clears them only after its own wait for this lock, comes after.
+    pub async fn lock_rounds(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.round.lock().await
+    }
+
+    fn install(&self, expected: Option<u64>, backend: Option<Arc<dyn SyncBackend>>) -> bool {
+        let (installed, forget) = {
             let mut inner = self.inner();
-            inner.cancel.cancel();
-            inner.cancel = CancelToken::new();
-            inner.generation += 1;
-            inner.state = if backend.is_some() {
-                SyncState::Idle
+            if expected.is_some_and(|generation| generation != inner.generation) {
+                let current = match (&inner.backend, &backend) {
+                    (Some(current), Some(refused)) => Arc::ptr_eq(current, refused),
+                    _ => false,
+                };
+                (false, backend.filter(|_| !current))
             } else {
-                SyncState::Off
-            };
-            inner.message = None;
-            inner.worker = None;
-            let old = std::mem::replace(&mut inner.backend, backend);
-            old.filter(|old| {
-                !inner
-                    .backend
-                    .as_ref()
-                    .is_some_and(|new| Arc::ptr_eq(old, new))
-            })
+                inner.cancel.cancel();
+                inner.cancel = CancelToken::new();
+                inner.generation += 1;
+                inner.state = if backend.is_some() {
+                    SyncState::Idle
+                } else {
+                    SyncState::Off
+                };
+                inner.message = None;
+                inner.worker = None;
+                let old = std::mem::replace(&mut inner.backend, backend);
+                let replaced = old.filter(|old| {
+                    !inner
+                        .backend
+                        .as_ref()
+                        .is_some_and(|new| Arc::ptr_eq(old, new))
+                });
+                (true, replaced)
+            }
         };
-        if let Some(old) = replaced {
-            old.forget_credentials();
+        if let Some(backend) = forget {
+            backend.forget_credentials();
         }
+        installed
     }
 
     /// Ends the connection, as `set_backend(None)`, and waits until its round, if one is
@@ -682,6 +715,34 @@ mod tests {
         let current = sync.connection().unwrap();
         assert!(sync.set_state_for(&current, SyncState::Syncing, None));
         assert_eq!(sync.inner().state, SyncState::Syncing);
+    }
+
+    #[tokio::test]
+    async fn a_sign_in_cannot_revive_an_ended_connection() {
+        let server = worker().await;
+        let sync = SyncController::default();
+        sync.set_backend(Some(signed_in(&server)));
+        let generation = sync.generation();
+        let signing_in = signed_in(&server);
+
+        // Disconnected while the sign-in waited for the server.
+        drop(sync.end_connection().await);
+        assert!(!sync.set_backend_if(generation, Arc::clone(&signing_in)));
+        assert!(sync.connection().is_none());
+        assert_eq!(sync.inner().state, SyncState::Off);
+        assert!(matches!(
+            signing_in.devices().await,
+            Err(hatoba_core::Error::Unauthorized)
+        ));
+
+        // Still the same connection: the sign-in installs its backend.
+        let generation = sync.generation();
+        let current = signed_in(&server);
+        assert!(sync.set_backend_if(generation, Arc::clone(&current)));
+        assert!(sync.connection().is_some());
+        // A stale sign-in that holds the installed backend leaves its credentials alone.
+        assert!(!sync.set_backend_if(generation, Arc::clone(&current)));
+        current.devices().await.unwrap();
     }
 
     #[tokio::test]
