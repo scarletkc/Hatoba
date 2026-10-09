@@ -2,6 +2,7 @@
 //! server's resource usage (TERM-12).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use hatoba_core::model::Item;
@@ -30,6 +31,8 @@ const FRAME_ERROR: u8 = 2;
 const FRAME_SESSION: u8 = 3;
 /// How often the status bar's resource usage is read (TERM-12).
 const STATS_INTERVAL: Duration = Duration::from_secs(2);
+/// The id of the next `ssh_stats_start`.
+static NEXT_STATS_ID: AtomicU64 = AtomicU64::new(1);
 
 /// One terminal frame on the per-session channel: tag byte + payload. Sent through Tauri's raw
 /// binary IPC path (an `ArrayBuffer` in the WebView), never as a JSON number array (§10.3).
@@ -292,17 +295,20 @@ pub async fn ssh_resize(
 
 /// Starts reading the server's resource usage for the terminal's status bar (TERM-12), in
 /// place of a sampling already running on the session. Readings stream on `channel` until
-/// `ssh_stats_stop`, the end of the session, or the WebView dropping the channel.
+/// `ssh_stats_stop` with the returned id, the end of the session, or the WebView dropping the
+/// channel. When starts overlap, the one that arrived last keeps running.
 #[tauri::command]
 #[specta::specta]
 pub async fn ssh_stats_start(
     state: State<'_, AppState>,
     session_id: String,
     channel: Channel<StatsEvent>,
-) -> AppResult<()> {
+) -> AppResult<u64> {
+    // Taken before the round trip to the server, so ids follow the order the starts arrived in.
+    let id = NEXT_STATS_ID.fetch_add(1, Ordering::Relaxed);
     let live = state.ssh.get(&session_id)?;
     let (handle, mut events) = live.session.open_stats(STATS_INTERVAL).await?;
-    live.set_stats(handle);
+    live.set_stats(id, handle);
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             let event = match event {
@@ -318,14 +324,15 @@ pub async fn ssh_stats_start(
             }
         }
     });
-    Ok(())
+    Ok(id)
 }
 
+/// Stops the sampling that `ssh_stats_start` returned `stats_id` for; a later one keeps running.
 #[tauri::command]
 #[specta::specta]
-pub fn ssh_stats_stop(state: State<'_, AppState>, session_id: String) {
+pub fn ssh_stats_stop(state: State<'_, AppState>, session_id: String, stats_id: u64) {
     if let Ok(live) = state.ssh.get(&session_id) {
-        live.stop_stats();
+        live.stop_stats(stats_id);
     }
 }
 

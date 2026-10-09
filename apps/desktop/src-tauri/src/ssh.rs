@@ -31,8 +31,8 @@ pub struct LiveSession {
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
     pub forwards: Mutex<HashMap<String, ForwardHandle>>,
-    /// Resource usage sampling while the terminal shows it (TERM-12).
-    stats: Mutex<Option<StatsHandle>>,
+    /// Resource usage sampling while the terminal shows it (TERM-12), with the id of its start.
+    stats: Mutex<Option<(u64, StatsHandle)>>,
 }
 
 impl LiveSession {
@@ -46,13 +46,21 @@ impl LiveSession {
         }
     }
 
-    /// Keeps `handle` as the session's sampling; the one it replaces stops.
-    pub fn set_stats(&self, handle: StatsHandle) {
-        lock(&self.stats).replace(handle);
+    /// Keeps the sampling started as `id` in place of an earlier one, which stops. Starts can
+    /// finish out of order: one that a later start already replaced is dropped, and so stops.
+    pub fn set_stats(&self, id: u64, handle: StatsHandle) {
+        let mut stats = lock(&self.stats);
+        if stats.as_ref().is_none_or(|(current, _)| *current < id) {
+            *stats = Some((id, handle));
+        }
     }
 
-    pub fn stop_stats(&self) {
-        lock(&self.stats).take();
+    /// Stops the sampling started as `id`, unless a later one replaced it.
+    pub fn stop_stats(&self, id: u64) {
+        let mut stats = lock(&self.stats);
+        if stats.as_ref().is_some_and(|(current, _)| *current == id) {
+            *stats = None;
+        }
     }
 
     pub fn add_forward(&self, id: &str, handle: ForwardHandle) {
@@ -87,7 +95,7 @@ impl LiveSession {
         for (_, handle) in lock(&self.forwards).drain() {
             handle.stop();
         }
-        self.stop_stats();
+        lock(&self.stats).take();
         self.shell.close().await;
         self.session.disconnect().await;
     }

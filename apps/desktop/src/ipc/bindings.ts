@@ -104,10 +104,12 @@ export const commands = {
 	/**
 	 *  Starts reading the server's resource usage for the terminal's status bar (TERM-12), in
 	 *  place of a sampling already running on the session. Readings stream on `channel` until
-	 *  `ssh_stats_stop`, the end of the session, or the WebView dropping the channel.
+	 *  `ssh_stats_stop` with the returned id, the end of the session, or the WebView dropping the
+	 *  channel. When starts overlap, the one that arrived last keeps running.
 	 */
-	sshStatsStart: (sessionId: string, channel: Channel<StatsEvent>) => __TAURI_INVOKE<null>("ssh_stats_start", { sessionId, channel }),
-	sshStatsStop: (sessionId: string) => __TAURI_INVOKE<void>("ssh_stats_stop", { sessionId }),
+	sshStatsStart: (sessionId: string, channel: Channel<StatsEvent>) => __TAURI_INVOKE<number>("ssh_stats_start", { sessionId, channel }),
+	/**  Stops the sampling that `ssh_stats_start` returned `stats_id` for; a later one keeps running. */
+	sshStatsStop: (sessionId: string, statsId: number) => __TAURI_INVOKE<void>("ssh_stats_stop", { sessionId, statsId }),
 	/**  "Test connection" in the host editor: connect, authenticate, verify the host key, disconnect. */
 	sshTest: (input: HostInput) => __TAURI_INVOKE<TestResult>("ssh_test", { input }),
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),

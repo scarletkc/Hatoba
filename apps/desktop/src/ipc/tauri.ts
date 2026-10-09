@@ -78,7 +78,7 @@ export function createTauriApi(): HatobaApi {
       channel.onmessage = onEvent;
       return call("ssh_stats_start", { sessionId, channel });
     },
-    ssh_stats_stop: (sessionId) => call("ssh_stats_stop", { sessionId }),
+    ssh_stats_stop: (sessionId, statsId) => call("ssh_stats_stop", { sessionId, statsId }),
     ssh_test: (input) => call("ssh_test", { input }),
     hostkey_respond: (requestId, accept) => call("hostkey_respond", { requestId, accept }),
     auth_prompt_respond: (requestId, answers) => call("auth_prompt_respond", { requestId, answers }),

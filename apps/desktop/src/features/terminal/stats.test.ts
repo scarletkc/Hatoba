@@ -2,19 +2,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppError, ServerStatsView, StatsEvent } from "@/ipc/types";
 
 const ipc = vi.hoisted(() => ({
-  starts: [] as { sessionId: string; emit: (event: StatsEvent) => void }[],
-  stops: [] as string[],
+  starts: [] as { sessionId: string; emit: (event: StatsEvent) => void; answer: () => void }[],
+  stops: [] as [string, number][],
   reject: null as AppError | null,
+  /** Starts answer only when `answer` is called. */
+  hold: false,
+  lastId: 0,
 }));
 
 vi.mock("@/ipc/api", () => ({
   api: {
     ssh_stats_start: async (sessionId: string, onEvent: (event: StatsEvent) => void) => {
-      ipc.starts.push({ sessionId, emit: onEvent });
+      const id = ++ipc.lastId;
+      let answer = () => {};
+      const answered = new Promise<void>((resolve) => (answer = resolve));
+      ipc.starts.push({ sessionId, emit: onEvent, answer });
+      if (ipc.hold) await answered;
       if (ipc.reject) throw ipc.reject;
+      return id;
     },
-    ssh_stats_stop: async (sessionId: string) => {
-      ipc.stops.push(sessionId);
+    ssh_stats_stop: async (sessionId: string, statsId: number) => {
+      ipc.stops.push([sessionId, statsId]);
     },
   },
 }));
@@ -60,6 +68,7 @@ beforeEach(() => {
   ipc.starts = [];
   ipc.stops = [];
   ipc.reject = null;
+  ipc.hold = false;
 });
 
 describe("resource usage sampling (TERM-12)", () => {
@@ -75,12 +84,13 @@ describe("resource usage sampling (TERM-12)", () => {
     expect(stats.history.at(-1)?.cpu_percent).toBe(STATS_HISTORY + 4);
   });
 
-  it("drops what a stopped or replaced sampling still sends", () => {
+  it("drops what a stopped or replaced sampling still sends", async () => {
     startStats(sid);
     const first = lastStart().emit;
     first({ kind: "stats", stats: reading(10) });
     stopStats(sid);
-    expect(ipc.stops).toEqual([sid]);
+    await flush();
+    expect(ipc.stops).toEqual([[sid, ipc.lastId]]);
     first({ kind: "stats", stats: reading(99) });
     expect(getSessionStats(sid)?.history.map((r) => r.cpu_percent)).toEqual([10]);
 
@@ -89,6 +99,28 @@ describe("resource usage sampling (TERM-12)", () => {
     first({ kind: "ended", error: { code: "ssh", detail: "old" } });
     second({ kind: "stats", stats: reading(20) });
     expect(getSessionStats(sid)?.state.kind).toBe("live");
+  });
+
+  it("stops a sampling whose start has not answered yet once it does, by its id", async () => {
+    ipc.hold = true;
+    startStats(sid);
+    const first = ipc.lastId;
+    stopStats(sid);
+    startStats(sid);
+    await flush();
+    expect(ipc.stops).toEqual([]);
+    ipc.starts.forEach((s) => s.answer());
+    await flush();
+    // Only the first start is stopped; the one sent after it keeps running.
+    expect(ipc.stops).toEqual([[sid, first]]);
+  });
+
+  it("sends no stop for a start that failed", async () => {
+    ipc.reject = { code: "not_found", detail: "session" };
+    startStats(sid);
+    stopStats(sid);
+    await flush();
+    expect(ipc.stops).toEqual([]);
   });
 
   it("keeps the charts across a short pause and starts them over after a long one", () => {

@@ -30,6 +30,8 @@ const useStatsStore = create<{ bySession: Record<string, SessionStats> }>(() => 
 
 /** Bumped by every start and stop, so events from a sampling that was replaced are dropped. */
 const generations = new Map<string, number>();
+/** The id of each session's running sampling, once its start has answered (`null` if it failed). */
+const startIds = new Map<string, Promise<number | null>>();
 
 function bump(sessionId: string): number {
   const gen = (generations.get(sessionId) ?? 0) + 1;
@@ -60,7 +62,7 @@ export function startStats(sessionId: string, now = Date.now()) {
   const history = last && now - last.at < STALE_MS ? current.history : [];
   update(sessionId, () => ({ state: { kind: "starting" }, history }));
   const live = () => generations.get(sessionId) === gen;
-  api
+  const started = api
     .ssh_stats_start(sessionId, (event) => {
       if (!live()) return;
       switch (event.kind) {
@@ -77,17 +79,23 @@ export function startStats(sessionId: string, now = Date.now()) {
     })
     .catch((error: AppError) => {
       if (live()) update(sessionId, (s) => ({ ...s, state: { kind: "failed", error } }));
+      return null;
     });
+  startIds.set(sessionId, started);
 }
 
+/** Stops a session's sampling. A stop sent before its start has answered waits for it, so it stops that sampling and no later one. */
 export function stopStats(sessionId: string) {
   bump(sessionId);
-  void api.ssh_stats_stop(sessionId).catch(() => {});
+  const started = startIds.get(sessionId);
+  startIds.delete(sessionId);
+  void started?.then((id) => (id == null ? undefined : api.ssh_stats_stop(sessionId, id))).catch(() => {});
 }
 
 /** Forgets a session's readings once the session is gone. */
 export function clearStats(sessionId: string) {
   generations.delete(sessionId);
+  startIds.delete(sessionId);
   useStatsStore.setState((st) => {
     if (!(sessionId in st.bySession)) return st;
     const { [sessionId]: _gone, ...rest } = st.bySession;

@@ -148,9 +148,13 @@ export interface HatobaApi {
   ssh_write(session_id: string, data: string): Promise<void>;
   ssh_resize(session_id: string, cols: number, rows: number): Promise<void>;
   ssh_disconnect(session_id: string): Promise<void>;
-  /** TERM-12: reads the server's resource usage every 2 s until `ssh_stats_stop` or the session ends. */
-  ssh_stats_start(session_id: string, onEvent: (event: StatsEvent) => void): Promise<void>;
-  ssh_stats_stop(session_id: string): Promise<void>;
+  /**
+   * TERM-12: reads the server's resource usage every 2 s until `ssh_stats_stop` with the id this
+   * resolves to, or the session ends. When starts overlap, the one sent last keeps running.
+   */
+  ssh_stats_start(session_id: string, onEvent: (event: StatsEvent) => void): Promise<number>;
+  /** Stops the sampling started as `stats_id`; a later one keeps running. */
+  ssh_stats_stop(session_id: string, stats_id: number): Promise<void>;
   /** Test a (possibly unsaved) host: connect, authenticate, disconnect. */
   ssh_test(input: HostInput): Promise<TestResult>;
   hostkey_respond(request_id: string, accept: boolean): Promise<void>;

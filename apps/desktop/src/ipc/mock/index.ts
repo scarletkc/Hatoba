@@ -95,10 +95,11 @@ export function createMockApi(): HatobaApi {
   let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null = null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
-  /** TERM-12: the mock resource usage of each session that shows it. */
-  const statsTimers = new Map<string, ReturnType<typeof setInterval>>();
+  /** TERM-12: the mock resource usage of each session that shows it, by the id of its start. */
+  const statsTimers = new Map<string, { id: number; timer: ReturnType<typeof setInterval> }>();
+  let lastStatsId = 0;
   const stopStats = (sid: string) => {
-    clearInterval(statsTimers.get(sid));
+    clearInterval(statsTimers.get(sid)?.timer);
     statsTimers.delete(sid);
   };
   let seq = 0;
@@ -592,20 +593,23 @@ export function createMockApi(): HatobaApi {
     },
     ssh_stats_start: async (sid, onEvent) => {
       const shell = shells.get(sid) ?? fail("not_found", "session");
-      stopStats(sid);
+      const statsId = ++lastStatsId;
       await delay(300);
       if (shell.os === "freebsd" || shell.os === "windows") {
         onEvent({ kind: "unsupported", system: shell.os === "freebsd" ? "FreeBSD" : "Windows" });
-        return;
+        return statsId;
       }
+      // Like the backend: a start that a later one overtook does not run.
+      if ((statsTimers.get(sid)?.id ?? 0) > statsId) return statsId;
+      stopStats(sid);
       const sample = mockStats();
       onEvent({ kind: "stats", stats: sample(true) });
-      statsTimers.set(
-        sid,
-        setInterval(() => onEvent({ kind: "stats", stats: sample(false) }), 2000),
-      );
+      statsTimers.set(sid, { id: statsId, timer: setInterval(() => onEvent({ kind: "stats", stats: sample(false) }), 2000) });
+      return statsId;
     },
-    ssh_stats_stop: async (sid) => stopStats(sid),
+    ssh_stats_stop: async (sid, statsId) => {
+      if (statsTimers.get(sid)?.id === statsId) stopStats(sid);
+    },
     ssh_test: async (input) => {
       await delay(800);
       if (input.address === "172.31.40.8")
