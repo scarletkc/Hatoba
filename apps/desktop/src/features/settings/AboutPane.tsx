@@ -1,6 +1,6 @@
 import { useApp } from "@/app/store";
 import { useUpdate } from "@/app/update";
-import { Button, Icon, LinkButton, Switch, controlStyles } from "@/components/controls";
+import { AppLogo, Button, Icon, LinkButton, Switch, controlStyles } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { toast } from "@/components/overlay";
 import { copyText } from "@/features/keys/clipboard";
@@ -47,9 +47,7 @@ export function AboutPane() {
   return (
     <Pane>
       <div className={s.header}>
-        <div className={s.logo} aria-hidden>
-          <Icon name="terminal" />
-        </div>
+        <AppLogo className={s.logo} />
         <div className={s.name}>Hatoba</div>
         <button type="button" className={s.version} title={t("settings.about.copyVersion")} onClick={() => void copyVersion()}>
           {t("settings.about.version", { version })}

@@ -37,6 +37,11 @@ export function Icon({
   );
 }
 
+/** The app icon (`src-tauri/app-icon.svg`). `className` sets its size. */
+export function AppLogo({ className }: { className?: string }) {
+  return <div aria-hidden className={cx(s.appLogo, className)} />;
+}
+
 type ButtonVariant = "default" | "primary" | "danger";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

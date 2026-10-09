@@ -4,7 +4,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { WindowChrome } from "@/app/TitleBar";
-import { Icon, Spinner } from "@/components/controls";
+import { AppLogo, Icon, Spinner } from "@/components/controls";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import { cx } from "@/lib/cx";
@@ -107,9 +107,7 @@ export function UnlockScreen() {
     <div className={s.root}>
       <WindowChrome />
       <div className={s.center}>
-        <div className={s.logo} aria-hidden>
-          <Icon name="terminal" />
-        </div>
+        <AppLogo className={s.logo} />
         <h1 className={s.title}>{t("vault.unlock.title")}</h1>
         <div className={s.subtitle}>{t("vault.unlock.subtitle")}</div>
 

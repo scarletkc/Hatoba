@@ -1,5 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect x="64" y="64" width="896" height="896" rx="208" fill="#16171a"/>
-  <rect x="64.5" y="64.5" width="895" height="895" rx="207.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
-  <path d="M318 386l150 126-150 126M540 650h170" stroke="#ffffff" stroke-width="64" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024">
+  <!-- An H-shaped pier (波止場) standing in a calm sea textured with seigaiha (青海波). The surface is
+       two periods of a sine wave, with its troughs at the outer edges of the posts. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="64" x2="0" y2="698" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d1735"/>
+      <stop offset="1" stop-color="#24408a"/>
+    </linearGradient>
+    <linearGradient id="pier" x1="0" y1="272" x2="0" y2="698" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e3eeff"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="662" x2="0" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22a6e8"/>
+      <stop offset="1" stop-color="#0d4590"/>
+    </linearGradient>
+    <linearGradient id="depth" x1="0" y1="662" x2="0" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity=".04"/>
+    </linearGradient>
+    <path id="surface" d="M64 662C104.5 662 139.5 670.8 176 680S247.5 698 288 698 363.5 689.2 400 680 471.5 662 512 662 587.5 670.8 624 680 695.5 698 736 698 811.5 689.2 848 680 919.5 662 960 662"/>
+    <path id="sea" d="M64 662C104.5 662 139.5 670.8 176 680S247.5 698 288 698 363.5 689.2 400 680 471.5 662 512 662 587.5 670.8 624 680 695.5 698 736 698 811.5 689.2 848 680 919.5 662 960 662V752A208 208 0 0 1 752 960H272A208 208 0 0 1 64 752Z"/>
+    <clipPath id="below">
+      <use xlink:href="#sea"/>
+    </clipPath>
+    <g id="rings" stroke="#ffffff" stroke-width="5">
+      <circle r="56" fill="#000000"/>
+      <circle r="40.3" fill="none"/>
+      <circle r="24.6" fill="none"/>
+      <circle r="9" fill="none"/>
+    </g>
+    <!-- Each row overlaps the one above it, so the rows are drawn top to bottom. -->
+    <pattern id="seigaiha" x="64" y="662" width="112" height="56" patternUnits="userSpaceOnUse">
+      <use xlink:href="#rings" x="56" y="-28"/>
+      <use xlink:href="#rings" x="0" y="0"/>
+      <use xlink:href="#rings" x="112" y="0"/>
+      <use xlink:href="#rings" x="56" y="28"/>
+      <use xlink:href="#rings" x="0" y="56"/>
+      <use xlink:href="#rings" x="112" y="56"/>
+      <use xlink:href="#rings" x="56" y="84"/>
+    </pattern>
+    <mask id="waves" maskUnits="userSpaceOnUse" x="64" y="600" width="896" height="360">
+      <rect x="64" y="600" width="896" height="360" fill="url(#seigaiha)"/>
+    </mask>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#sky)"/>
+  <g fill="url(#pier)">
+    <rect x="288" y="272" width="104" height="688" rx="52"/>
+    <rect x="632" y="272" width="104" height="688" rx="52"/>
+    <rect x="340" y="500" width="344" height="88"/>
+  </g>
+  <use xlink:href="#sea" fill="url(#water)"/>
+  <g clip-path="url(#below)">
+    <rect x="64" y="600" width="896" height="360" fill="#ffffff" fill-opacity=".07" mask="url(#waves)"/>
+    <use xlink:href="#surface" fill="none" stroke="#b5ecff" stroke-opacity=".7" stroke-width="14"/>
+    <g fill="url(#depth)">
+      <rect x="288" y="640" width="104" height="320"/>
+      <rect x="632" y="640" width="104" height="320"/>
+    </g>
+  </g>
+  <rect x="64.5" y="64.5" width="895" height="895" rx="207.5" fill="none" stroke="#ffffff" stroke-opacity=".1"/>
 </svg>

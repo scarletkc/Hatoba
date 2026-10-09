@@ -70,7 +70,6 @@
   --focus-ring: 0 0 0 1px var(--accent), 0 0 0 3.5px var(--accenttint);
   --error-ring: 0 0 0 1px var(--red), 0 0 0 3.5px color-mix(in srgb, var(--red) 16%, transparent);
   --scrim: rgba(0, 0, 0, 0.18);
-  --logo-bg: #16171a;
 
   /* Terminal (always dark in the design; "match appearance" switches to the light set) */
   --term: #121316;

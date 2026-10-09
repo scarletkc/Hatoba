@@ -1,5 +1,12 @@
 /* Buttons, fields and small controls, ported from the design's inline styles. */
 
+/* The app icon cropped to its plate, which fills 896 of the SVG's 1024 units with a 208-unit corner radius. */
+.appLogo {
+  flex: none;
+  border-radius: calc(208 / 896 * 100%);
+  background: url("../../src-tauri/app-icon.svg") center / calc(1024 / 896 * 100%) no-repeat;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

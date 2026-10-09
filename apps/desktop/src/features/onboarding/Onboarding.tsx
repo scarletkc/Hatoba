@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { WindowChrome } from "@/app/TitleBar";
-import { Button, Icon } from "@/components/controls";
+import { AppLogo, Button, Icon } from "@/components/controls";
 import { FooterSpacer } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
@@ -30,9 +30,7 @@ export function Onboarding() {
     <div className={s.root}>
       <WindowChrome />
       <div className={s.center}>
-        <div className={s.logo} aria-hidden>
-          <Icon name="terminal" />
-        </div>
+        <AppLogo className={s.logo} />
         {step === "choose" && (
           <WizardCard
             steps={stepLabels}
