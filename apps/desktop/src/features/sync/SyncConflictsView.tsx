@@ -86,8 +86,9 @@ function ConflictCard({
       return { text: label === key ? v : label, dim: false };
     }
     if (BOOL_FIELDS.has(field) && (v === "true" || v === "false")) return { text: t(`sync.value.${v}`), dim: false };
-    // A host's proxy (SSH-13) is a proxy's name, or one of these two.
-    if (field === "proxy" && (v === "device_default" || v === "direct")) return { text: t(`sync.value.proxy.${v}`), dim: false };
+    // A host's proxy (SSH-13): "proxy:" and a saved proxy's name, or one of these three.
+    if (field === "proxy" && v?.startsWith("proxy:")) return { text: v.slice("proxy:".length), dim: false };
+    if (field === "proxy" && (v === "device_default" || v === "direct" || v === "deleted")) return { text: t(`sync.value.proxy.${v}`), dim: false };
     if (v === null || v === "") return { text: deleted ? "—" : t("sync.cf.none"), dim: true };
     return { text: v, dim: false };
   };

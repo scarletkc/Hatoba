@@ -329,7 +329,9 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
                 match &h.proxy {
                     HostProxy::DeviceDefault => "device_default".to_owned(),
                     HostProxy::Direct => "direct".to_owned(),
-                    HostProxy::Proxy { proxy_id } => hosts(proxy_id).unwrap_or_default(),
+                    // Prefixed, so a proxy named like one of the other values still reads as a name.
+                    HostProxy::Proxy { proxy_id } => hosts(proxy_id)
+                        .map_or_else(|| "deleted".to_owned(), |name| format!("proxy:{name}")),
                 },
             ),
             ("tags", h.tags.join(", ")),
@@ -375,6 +377,22 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
     }
 }
 
+/// What a row points at, for rows whose shown value can read the same for different choices:
+/// proxy names repeat, and every deleted proxy reads alike.
+fn targets(item: &Item) -> Vec<(&'static str, String)> {
+    match item {
+        Item::Host(h) => vec![(
+            "proxy",
+            match &h.proxy {
+                HostProxy::DeviceDefault => "device_default".to_owned(),
+                HostProxy::Direct => "direct".to_owned(),
+                HostProxy::Proxy { proxy_id } => format!("proxy:{proxy_id}"),
+            },
+        )],
+        _ => Vec::new(),
+    }
+}
+
 /// A host's environment variables on one line, each value quoted and escaped, so two different
 /// lists never read the same (SSH-14).
 fn env_summary(env: &[EnvVar]) -> String {
@@ -395,6 +413,8 @@ fn conflict_view(c: &ConflictEntry, hosts: &dyn Fn(&str) -> Option<String>) -> C
         .as_ref()
         .map(|i| summary(i, hosts))
         .unwrap_or_default();
+    let local_targets = c.local.as_ref().map(targets).unwrap_or_default();
+    let remote_targets = c.remote.as_ref().map(targets).unwrap_or_default();
     let mut fields: Vec<ConflictField> = Vec::new();
     if c.local_deleted != c.remote_deleted {
         let state = |deleted: bool| Some(if deleted { "deleted" } else { "modified" }.to_owned());
@@ -404,20 +424,20 @@ fn conflict_view(c: &ConflictEntry, hosts: &dyn Fn(&str) -> Option<String>) -> C
             remote: state(c.remote_deleted),
         });
     }
+    let pick = |rows: &[(&str, String)], key: &str| {
+        rows.iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v.clone())
+            .filter(|v| !v.is_empty())
+    };
     let keys: Vec<&str> = local.iter().chain(remote.iter()).map(|(k, _)| *k).collect();
     let mut seen = std::collections::HashSet::new();
     for key in keys.into_iter().filter(|k| seen.insert(*k)) {
-        let l = local
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, v)| v.clone())
-            .filter(|v| !v.is_empty());
-        let r = remote
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, v)| v.clone())
-            .filter(|v| !v.is_empty());
-        if l != r {
+        let l = pick(&local, key);
+        let r = pick(&remote, key);
+        let differs = pick(&local_targets, key).or_else(|| l.clone())
+            != pick(&remote_targets, key).or_else(|| r.clone());
+        if differs {
             fields.push(ConflictField {
                 field: key.to_owned(),
                 local: l,
@@ -511,22 +531,37 @@ mod tests {
         }))
     }
 
-    #[test]
-    fn env_conflicts_show_even_when_the_values_look_alike() {
-        // SSH-14: one variable whose value holds ", B=" is not the same as two variables.
-        let entry = ConflictEntry {
+    fn host_via(proxy: HostProxy) -> Option<Item> {
+        Some(Item::Host(Host {
+            name: "app".into(),
+            proxy,
+            ..Host::default()
+        }))
+    }
+
+    fn conflict(local: Option<Item>, remote: Option<Item>) -> ConflictEntry {
+        ConflictEntry {
             id: 1,
             item_id: "h".into(),
             resolution: Resolution::RemoteWins,
-            local: host_with(vec![EnvVar::new("A", "x, B=y")]),
-            remote: host_with(vec![EnvVar::new("A", "x"), EnvVar::new("B", "y")]),
+            local,
+            remote,
             local_deleted: false,
             remote_deleted: false,
             local_updated_at: Some(1),
             remote_updated_at: Some(2),
             created_at: 3,
             reviewed: false,
-        };
+        }
+    }
+
+    #[test]
+    fn env_conflicts_show_even_when_the_values_look_alike() {
+        // SSH-14: one variable whose value holds ", B=" is not the same as two variables.
+        let entry = conflict(
+            host_with(vec![EnvVar::new("A", "x, B=y")]),
+            host_with(vec![EnvVar::new("A", "x"), EnvVar::new("B", "y")]),
+        );
         let view = conflict_view(&entry, &|_| None);
         let env = view
             .fields
@@ -535,5 +570,39 @@ mod tests {
             .expect("the env row is shown");
         assert_eq!(env.local.as_deref(), Some(r#"A="x, B=y""#));
         assert_eq!(env.remote.as_deref(), Some(r#"A="x", B="y""#));
+    }
+
+    #[test]
+    fn proxy_conflicts_compare_the_chosen_proxy_not_its_name() {
+        // SSH-13: two proxies may share a name, and every deleted proxy reads alike.
+        let via = |id: &str| {
+            host_via(HostProxy::Proxy {
+                proxy_id: id.into(),
+            })
+        };
+        let row = |local, remote, names: &dyn Fn(&str) -> Option<String>| {
+            conflict_view(&conflict(local, remote), names)
+                .fields
+                .into_iter()
+                .find(|f| f.field == "proxy")
+                .map(|f| (f.local, f.remote))
+        };
+        let clash = |id: &str| ["a", "b"].contains(&id).then(|| "Clash".to_owned());
+        let shown = |v: &str| Some(v.to_owned());
+
+        assert_eq!(
+            row(via("a"), via("b"), &clash),
+            Some((shown("proxy:Clash"), shown("proxy:Clash")))
+        );
+        assert_eq!(
+            row(via("gone"), via("also-gone"), &clash),
+            Some((shown("deleted"), shown("deleted")))
+        );
+        assert_eq!(
+            row(via("a"), host_via(HostProxy::DeviceDefault), &clash),
+            Some((shown("proxy:Clash"), shown("device_default")))
+        );
+        assert_eq!(row(via("a"), via("a"), &clash), None);
+        assert_eq!(row(via("gone"), via("gone"), &clash), None);
     }
 }

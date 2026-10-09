@@ -282,6 +282,7 @@ export default defineMessages({
     "sync.value.false": "否",
     "sync.value.proxy.device_default": "设备默认",
     "sync.value.proxy.direct": "不使用代理",
+    "sync.value.proxy.deleted": "已删除的代理",
   },
   en: {
     "sync.step.method": "Method",
@@ -560,6 +561,7 @@ export default defineMessages({
     "sync.value.false": "No",
     "sync.value.proxy.device_default": "Device default",
     "sync.value.proxy.direct": "No proxy",
+    "sync.value.proxy.deleted": "Deleted proxy",
   },
   ja: {
     "sync.step.method": "接続方法",
@@ -830,5 +832,6 @@ export default defineMessages({
     "sync.value.false": "いいえ",
     "sync.value.proxy.device_default": "デバイスの既定",
     "sync.value.proxy.direct": "プロキシなし",
+    "sync.value.proxy.deleted": "削除されたプロキシ",
   },
 });
