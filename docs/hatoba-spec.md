@@ -523,7 +523,7 @@ Incremental pull by `seq`: `SELECT * FROM items WHERE seq > :since ORDER BY seq 
 
 The server runs one D1 batch per change (D1 executes a batch as a transaction):
 
-1. `UPDATE meta SET seq = seq + 1 WHERE id = 1`
+1. `UPDATE meta SET seq = MAX(seq, (SELECT COALESCE(MAX(seq), 0) FROM items)) + 1 WHERE id = 1`
 2. If `base_revision = 0`, run `INSERT ... ON CONFLICT(id) DO NOTHING`, and the new item gets `revision = 1`. Otherwise run `UPDATE items SET envelope = ?, deleted = ?, revision = revision + 1, seq = (SELECT seq FROM meta WHERE id = 1), updated_at = ? WHERE id = ? AND revision = ?`
 3. Zero affected rows means a conflict, and the server reads the item's row and returns it to the client.
 
@@ -547,6 +547,8 @@ The server runs one D1 batch per change (D1 executes a batch as a transaction):
 | `error` / `not_found` | `base_revision > 0`, but the server has no such item (for example after a database reset). The client can upload it again as a new item (`base_revision = 0`) |
 
 `seq` increases monotonically across the vault but may have gaps (a conflicting attempt also uses up a seq). The client relies only on it increasing.
+
+D1 direct mode writes the same tables without the Worker, assigning `seq` inside each `INSERT` or `UPDATE` statement and catching `meta.seq` up after the push. Both modes therefore allocate the next `seq` as one more than the larger of `meta.seq` and the highest item `seq`, so that devices on the two modes can share one database without two changes getting the same `seq`. A change that shares its `seq` with another one can be missed by a device whose pull cursor already passed that number; turning sync off and on again on that device resets its cursor, and the next sync pulls every item again.
 
 Structural errors (missing fields, wrong types, invalid IDs, `deleted` inconsistent with `envelope`, duplicate IDs) make the **whole request** return `400`, and nothing is written.
 
