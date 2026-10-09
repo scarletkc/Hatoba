@@ -75,7 +75,9 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 |---|---|---|
 | Software Update | 软件更新 | ソフトウェアアップデート |
 | Check for Updates | 检查更新 | アップデートを確認 |
-| Download | 前往下载 | ダウンロード |
+| Download and Install | 下载并安装 | ダウンロードしてインストール |
+| Install and Restart | 安装并重启 | インストールして再起動 |
+| View on GitHub | 在 GitHub 上查看 | GitHub で見る |
 | Automatically check for updates at startup | 启动时自动检查更新 | 起動時にアップデートを自動で確認 |
 | Checking… | 正在检查… | 確認しています… |
 | Hatoba is up to date. | 已是最新版本。 | 最新バージョンです。 |
@@ -88,8 +90,9 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 | Star | 点 Star | スターを付ける |
 
 - The page shows the version; click it to copy.
-- **Software Update** → **Check for Updates** asks GitHub Releases whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available." (with **Download**, which opens the release page in the browser), or an offline or failure message. Hatoba does not install updates itself; the user downloads and runs the new installer.
-- **Automatically check for updates at startup** is off by default. When on, Hatoba asks GitHub once after each unlock; when off, it contacts GitHub only when **Check for Updates** is pressed.
+- **Software Update** → **Check for Updates** asks GitHub whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available.", or an offline or failure message. A newer version's release notes show below the setting, with **View on GitHub** for its release page.
+- **Download and Install** asks first, and says how many SSH sessions are open. After **Install and Restart**, Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run.
+- **Automatically check for updates at startup** is off by default. When on, Hatoba asks GitHub once after each unlock; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
 - When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
 - **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
 - A card in the sidebar (**Enjoying Hatoba?**) asks once for a GitHub star, a day after first use and after a session has connected. **Star** opens the repository, **Report a Problem** opens the bug form, and the × closes it for good.

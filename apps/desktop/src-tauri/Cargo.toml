@@ -23,6 +23,8 @@ tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-opener = "2.7"
+# Signed updates (spec §11). Same TLS stack as the update check below; no v1 .zip bundles.
+tauri-plugin-updater = { version = "2.13", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 specta.workspace = true
 specta-typescript = "0.0.12"
@@ -42,7 +44,7 @@ dirs = "6"
 bytes.workspace = true
 async-trait.workspace = true
 futures.workspace = true
-# The update check. Same features and TLS stack as hatoba-core's sync transport.
+# The update check's status probe. Same features and TLS stack as hatoba-core's sync transport.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 # The AI assistant's system prompt names today's local date (spec §13.1).
@@ -51,8 +53,11 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 [dev-dependencies]
 # `KdfParams::for_tests()`, so tests can create a vault without the production Argon2 cost.
 hatoba-core = { workspace = true, features = ["test-util"] }
-# The AI turn tests run against a mock model provider.
+# The AI turn tests run against a mock model provider, and the update tests against a mock
+# update endpoint.
 wiremock = "0.6"
+# The update tests run the updater plugin in a mock app.
+tauri = { version = "2.12", features = ["test"] }
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8"

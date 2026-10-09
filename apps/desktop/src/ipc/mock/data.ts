@@ -1,5 +1,6 @@
 import { detectLocale } from "@/i18n";
 import type {
+  AvailableUpdate,
   ConflictView,
   DeviceView,
   FileEntry,
@@ -242,6 +243,24 @@ export const PREFS: LocalPrefs = {
   ai_tool_call_limit: 25,
   ai_panel_open: false,
   ai_panel_width: 380,
+};
+
+/** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs dist` writes. */
+export const AVAILABLE_UPDATE: AvailableUpdate = {
+  version: "0.2.0",
+  notes: [
+    "## Signed updates",
+    "Hatoba now downloads and installs new versions from **Settings → About**, and checks each installer's signature before it runs.",
+    "## Changelog",
+    "Changes since v0.1.0:",
+    "### Features",
+    "- **desktop:** install signed updates from the About page (#58)\n- **desktop:** quick connect from the hosts search field (#53)",
+    "### Fixes",
+    "- **ai:** record tools/list_changed before the answer that follows it (#54)",
+    "[Full diff](https://github.com/scarletkc/Hatoba/compare/v0.1.0...v0.2.0)",
+  ].join("\n\n"),
+  published_at: ago(3 * DAY),
+  release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0",
 };
 
 export function syncStatus(): SyncStatus {

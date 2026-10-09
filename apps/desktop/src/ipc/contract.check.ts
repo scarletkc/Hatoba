@@ -14,6 +14,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.AppError, Ui.AppError>>,
   Check<Assignable<Rust.AppInfo, Ui.AppInfo>>,
   Check<Assignable<Rust.UpdateCheck, Ui.UpdateCheck>>,
+  Check<Assignable<Rust.UpdateProgress, Ui.UpdateProgress>>,
   Check<Assignable<Rust.VaultStatus, Ui.VaultStatus>>,
   Check<Assignable<Rust.HostView, Ui.HostView>>,
   Check<Assignable<Rust.GroupView, Ui.GroupView>>,

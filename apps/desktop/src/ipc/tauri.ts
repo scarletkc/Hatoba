@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
-import type { AiTurnEvent, DeployProgress } from "./types";
+import type { AiTurnEvent, DeployProgress, UpdateProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -13,6 +13,11 @@ export function createTauriApi(): HatobaApi {
   return {
     app_info: () => call("app_info"),
     update_check: () => call("update_check"),
+    update_install: (onProgress) => {
+      const progress = new Channel<UpdateProgress>();
+      progress.onmessage = onProgress;
+      return call("update_install", { progress });
+    },
 
     vault_status: () => call("vault_status"),
     vault_create: (password) => call("vault_create", { password }),

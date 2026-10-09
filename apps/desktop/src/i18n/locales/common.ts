@@ -119,6 +119,7 @@ export default defineMessages({
     "err.no_worker_bundle": "这个版本的 Hatoba 没有内置同步 Worker，无法一键部署。请改用其他部署方式。",
     "err.ai": "AI 请求失败：{detail}",
     "err.ai_status": "服务商返回了 HTTP {status}：{detail}",
+    "err.update_signature": "下载的更新没有 Hatoba 的有效签名，已拒绝安装。",
 
     "ssh.err.dns": "找不到主机 {host}，请检查地址拼写或 DNS。",
     "ssh.err.refused": "{host}:{port} 拒绝了连接，SSH 服务可能没有运行，或端口不对。",
@@ -265,6 +266,7 @@ export default defineMessages({
     "err.no_worker_bundle": "This build of Hatoba doesn’t include the sync Worker, so it can’t deploy it. Use another way to deploy.",
     "err.ai": "The AI request failed: {detail}",
     "err.ai_status": "The provider returned HTTP {status}: {detail}",
+    "err.update_signature": "The downloaded update isn’t signed by Hatoba, so it wasn’t installed.",
 
     "ssh.err.dns": "Can’t find the host {host}. Check the address or DNS.",
     "ssh.err.refused": "{host}:{port} refused the connection. The SSH service may not be running, or the port is wrong.",
@@ -408,6 +410,7 @@ export default defineMessages({
     "err.no_worker_bundle": "このビルドの Hatoba には同期 Worker が含まれていないため、デプロイできません。別の方法でデプロイしてください。",
     "err.ai": "AI リクエストに失敗しました: {detail}",
     "err.ai_status": "プロバイダーが HTTP {status} を返しました: {detail}",
+    "err.update_signature": "ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。",
 
     "ssh.err.dns": "ホスト {host} が見つかりません。アドレスまたは DNS を確認してください。",
     "ssh.err.refused": "{host}:{port} に接続を拒否されました。SSH サービスが動いていないか、ポートが違う可能性があります。",

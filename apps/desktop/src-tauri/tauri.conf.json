@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "category": "DeveloperTool",
     "shortDescription": "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
     "copyright": "© 2026 ScarletKc · MIT License",
@@ -44,6 +45,14 @@
         "languages": ["SimpChinese", "English", "Japanese"],
         "displayLanguageSelector": false
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/scarletkc/Hatoba/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
+      "windows": { "installMode": "passive" }
     }
   }
 }

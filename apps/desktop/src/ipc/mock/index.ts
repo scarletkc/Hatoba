@@ -36,7 +36,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth
- *   ?platform=windows | macos | linux       ?update=available | offline | error
+ *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
@@ -46,6 +46,9 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
  * SSH error kind (`?ssh=fail` or another value: a timeout), so the error card shows (SSH-05).
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
+ * `available`, `badsig` and `dropped` find v0.2.0. Installing it downloads for a few seconds and
+ * then stays at "installing", where the real app closes; `badsig` fails the signature check and
+ * `dropped` loses the connection partway through the download.
  * The in-app deployment accepts any API token of 20 or more characters.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
  * `?worker` shows a Worker update notice (§6.7, Upgrades): `available` on a Worker the app
@@ -188,10 +191,23 @@ export function createMockApi(): HatobaApi {
     update_check: async () => {
       await delay(800);
       if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");
-      if (updateDemo === "error") fail("internal", "GitHub answered HTTP 403");
-      if (updateDemo === "available")
-        return { current_version: version, latest_version: "0.2.0", release_url: "https://github.com/scarletkc/Hatoba/releases/tag/v0.2.0", update_available: true };
-      return { current_version: version, latest_version: null, release_url: null, update_available: false };
+      if (updateDemo === "error") fail("internal", "the update endpoint answered HTTP 403");
+      if (updateDemo === "available" || updateDemo === "badsig" || updateDemo === "dropped")
+        return { current_version: version, update: D.AVAILABLE_UPDATE };
+      return { current_version: version, update: null };
+    },
+    update_install: async (onProgress) => {
+      const total = 14_680_064;
+      for (let downloaded = 0; downloaded < total; downloaded += 524_288) {
+        if (updateDemo === "dropped" && downloaded > total * 0.4) fail("sync_offline", "GitHub could not be reached");
+        onProgress({ kind: "downloading", downloaded, total });
+        await delay(100);
+      }
+      onProgress({ kind: "downloading", downloaded: total, total });
+      if (updateDemo === "badsig") fail("update_signature", "Minisign error: the signature verification failed");
+      onProgress({ kind: "installing" });
+      // The real app closes here, and the installer starts the new version.
+      return new Promise<void>(() => {});
     },
 
     vault_status: async () => ({

@@ -1,8 +1,9 @@
 //! App info and window helpers.
 
+use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
-use crate::dto::{AppInfo, UpdateCheck};
+use crate::dto::{AppInfo, UpdateCheck, UpdateProgress};
 use crate::error::{AppError, AppResult};
 use crate::platform;
 use crate::state::AppState;
@@ -18,12 +19,20 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
     }
 }
 
-/// Asks GitHub Releases whether a newer version exists (Settings → About). Runs only when the
-/// user checks, or after unlock when they turned on the automatic check.
+/// Asks the update endpoint whether a newer version exists (Settings → About). Runs only when
+/// the user checks, or after unlock when they turned on the automatic check.
 #[tauri::command]
 #[specta::specta]
-pub async fn update_check(app: AppHandle) -> AppResult<UpdateCheck> {
-    update::check(&app.package_info().version.to_string()).await
+pub async fn update_check(app: AppHandle, state: State<'_, AppState>) -> AppResult<UpdateCheck> {
+    update::check(&app, &state.updates).await
+}
+
+/// Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
+/// session, and the installer starts the new version.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_install(app: AppHandle, progress: Channel<UpdateProgress>) -> AppResult<()> {
+    update::install(&app, &progress).await
 }
 
 /// Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01).

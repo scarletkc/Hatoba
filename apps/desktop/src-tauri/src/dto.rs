@@ -786,15 +786,34 @@ pub struct AppInfo {
     pub mica: bool,
 }
 
-/// What the update check found on GitHub Releases (spec §11).
+/// What the update check found (spec §11).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct UpdateCheck {
     pub current_version: String,
-    /// The newest stable release, or `None` when none has been published yet.
-    pub latest_version: Option<String>,
-    /// The release page to download the installer from.
-    pub release_url: Option<String>,
-    pub update_available: bool,
+    /// A release newer than the running version, or `None` when there is none.
+    pub update: Option<AvailableUpdate>,
+}
+
+/// A newer release that `update_install` can download and install.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AvailableUpdate {
+    pub version: String,
+    /// The release notes in Markdown.
+    pub notes: Option<String>,
+    /// When the release was published, Unix ms.
+    pub published_at: Option<i64>,
+    /// The release page on GitHub.
+    pub release_url: String,
+}
+
+/// Sent on the `update_install` channel.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UpdateProgress {
+    /// Bytes downloaded so far, and the installer's size when the server sent it.
+    Downloading { downloaded: u64, total: Option<u64> },
+    /// The download passed the signature check. Hatoba closes, and the installer starts it again.
+    Installing,
 }
 
 #[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]

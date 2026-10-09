@@ -38,6 +38,8 @@ export type ErrorCode =
   | "no_worker_bundle"
   /** AI assistant (§13): a model provider, search provider or fetched page failed; see `http_status`. */
   | "ai"
+  /** A downloaded update does not carry a valid signature from the release key (spec §11). */
+  | "update_signature"
   | "cancelled"
   | "io"
   | "internal";
@@ -623,15 +625,30 @@ export interface AppInfo {
   mica: boolean;
 }
 
-/** What the update check found on GitHub Releases (spec §11). */
+/** What the update check found (spec §11). */
 export interface UpdateCheck {
   current_version: string;
-  /** The newest stable release, or null before the first release. */
-  latest_version: string | null;
-  /** The release page to download the installer from. */
-  release_url: string | null;
-  update_available: boolean;
+  /** A release newer than the running version, or null when there is none. */
+  update: AvailableUpdate | null;
 }
+
+/** A newer release that `update_install` can download and install. */
+export interface AvailableUpdate {
+  version: string;
+  /** The release notes in Markdown. */
+  notes: string | null;
+  /** When the release was published, Unix ms. */
+  published_at: number | null;
+  /** The release page on GitHub. */
+  release_url: string;
+}
+
+/** Sent while `update_install` runs. */
+export type UpdateProgress =
+  /** Bytes downloaded so far, and the installer's size when the server sent it. */
+  | { kind: "downloading"; downloaded: number; total: number | null }
+  /** The download passed the signature check. Hatoba closes, and the installer starts it again. */
+  | { kind: "installing" };
 
 // ───────────────────────── AI assistant (§13) ─────────────────────────
 

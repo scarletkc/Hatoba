@@ -41,6 +41,8 @@ pub enum ErrorCode {
     /// AI assistant (§13): a model provider or search provider failed. `http_status` has the
     /// status it answered with, when it answered; `detail` is its own message.
     Ai,
+    /// A downloaded update does not carry a valid signature from the release key (spec §11).
+    UpdateSignature,
     Cancelled,
     Io,
     Internal,

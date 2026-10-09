@@ -16,6 +16,7 @@ use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
 use crate::ssh::SshManager;
 use crate::sync::SyncController;
+use crate::update::Updates;
 
 pub use hatoba_core::sync::SharedVault;
 
@@ -32,6 +33,8 @@ pub struct AppState {
     pub mcp: McpManager,
     /// The paths of the window's last file drop, which the AI panel may read (AI-35).
     pub dropped: DroppedPaths,
+    /// The update the last check found (spec §11).
+    pub updates: Updates,
     pub mica: bool,
     pub lock_policy: LockPolicy,
     last_activity: Mutex<Instant>,
@@ -49,6 +52,7 @@ impl AppState {
             ai: AiManager::with_mcp(mcp.clone()),
             mcp,
             dropped: DroppedPaths::default(),
+            updates: Updates::default(),
             mica,
             lock_policy: LockPolicy::default(),
             last_activity: Mutex::new(Instant::now()),

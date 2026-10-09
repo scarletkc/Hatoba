@@ -16,10 +16,15 @@ export const commands = {
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
 	/**
-	 *  Asks GitHub Releases whether a newer version exists (Settings → About). Runs only when the
-	 *  user checks, or after unlock when they turned on the automatic check.
+	 *  Asks the update endpoint whether a newer version exists (Settings → About). Runs only when
+	 *  the user checks, or after unlock when they turned on the automatic check.
 	 */
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
+	/**
+	 *  Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
+	 *  session, and the installer starts the new version.
+	 */
+	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
 	vaultStatus: () => __TAURI_INVOKE<VaultStatus>("vault_status"),
 	/**  VAULT-01/02: creates the vault and returns the recovery code (shown exactly once). */
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
@@ -529,6 +534,17 @@ export type AuthPromptField = {
 	echo: boolean,
 };
 
+/**  A newer release that `update_install` can download and install. */
+export type AvailableUpdate = {
+	version: string,
+	/**  The release notes in Markdown. */
+	notes: string | null,
+	/**  When the release was published, Unix ms. */
+	published_at: number | null,
+	/**  The release page on GitHub. */
+	release_url: string,
+};
+
 /**  The built-in `hatoba` skill (AI-34), read-only. */
 export type BuiltinSkillView = {
 	name: string,
@@ -690,7 +706,9 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
  *  AI assistant (§13): a model provider or search provider failed. `http_status` has the
  *  status it answered with, when it answered; `detail` is its own message.
  */
-"ai" | "cancelled" | "io" | "internal";
+"ai" | 
+/**  A downloaded update does not carry a valid signature from the release key (spec §11). */
+"update_signature" | "cancelled" | "io" | "internal";
 
 export type FileEntry = {
 	name: string,
@@ -1200,15 +1218,19 @@ export type TransferProgressEvent = {
 
 export type TransferState = "running" | "done" | "failed" | "cancelled";
 
-/**  What the update check found on GitHub Releases (spec §11). */
+/**  What the update check found (spec §11). */
 export type UpdateCheck = {
 	current_version: string,
-	/**  The newest stable release, or `None` when none has been published yet. */
-	latest_version: string | null,
-	/**  The release page to download the installer from. */
-	release_url: string | null,
-	update_available: boolean,
+	/**  A release newer than the running version, or `None` when there is none. */
+	update: AvailableUpdate | null,
 };
+
+/**  Sent on the `update_install` channel. */
+export type UpdateProgress = 
+/**  Bytes downloaded so far, and the installer's size when the server sent it. */
+{ kind: "downloading"; downloaded: number; total: number | null } | 
+/**  The download passed the signature check. Hatoba closes, and the installer starts it again. */
+{ kind: "installing" };
 
 /**  What the "Update Worker" form starts from (§6.7, Upgrades). */
 export type UpgradeDefaults = {
