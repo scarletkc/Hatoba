@@ -66,6 +66,7 @@ struct State {
     sessions: Vec<SessionRec>,
     offline: bool,
     lose_next_push_response: bool,
+    fail_next: Vec<&'static str>,
     pull_calls: u32,
     push_calls: u32,
     pushed_change_count: u32,
@@ -93,6 +94,23 @@ impl FakeServer {
 
     pub(crate) fn lose_next_push_response(&self) {
         self.st().lose_next_push_response = true;
+    }
+
+    /// Makes the next call to `op` (`"setup"`, `"login"` or `"pull"`) fail with
+    /// [`Error::Offline`]. A failed `setup` has still been applied: its response is lost.
+    pub(crate) fn fail_next(&self, op: &'static str) {
+        self.st().fail_next.push(op);
+    }
+
+    fn take_failure(&self, op: &str) -> Result<()> {
+        let mut s = self.st();
+        match s.fail_next.iter().position(|o| *o == op) {
+            Some(i) => {
+                s.fail_next.remove(i);
+                Err(Error::Offline)
+            }
+            None => Ok(()),
+        }
     }
 
     /// Limits how many items one pull page returns (to exercise pagination).
@@ -345,11 +363,13 @@ impl SyncBackend for FakeBackend {
             recovery_vault_key: init.recovery_vault_key,
             recovery_auth_hash: auth_hash(&init.recovery_auth),
         });
-        Ok(())
+        drop(s);
+        self.server.take_failure("setup")
     }
 
     async fn login(&self, auth_key: &[u8; 32], device: &DeviceLogin) -> Result<Session> {
         self.check_online()?;
+        self.server.take_failure("login")?;
         let mut s = self.server.st();
         let m = s.meta.as_ref().ok_or(Error::RemoteNotInitialized)?;
         if m.auth_hash != auth_hash(auth_key) {
@@ -397,6 +417,7 @@ impl SyncBackend for FakeBackend {
 
     async fn pull(&self, since_seq: u64, limit: u32) -> Result<PullPage> {
         self.authenticate(false)?;
+        self.server.take_failure("pull")?;
         let page = {
             let mut s = self.server.st();
             s.pull_calls += 1;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { ConfirmHost, ToastHost } from "@/components/overlay";
+import { ConfirmHost, setOverlaysLocked, ToastHost } from "@/components/overlay";
 import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
@@ -23,6 +23,9 @@ import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
 import { useStartupUpdateCheck } from "./update";
 import s from "./App.module.css";
+
+// Synchronous with the phase change, so no dialog shows above the lock screen for a frame.
+useApp.subscribe((st) => setOverlaysLocked(st.phase === "locked"));
 
 export function App() {
   const phase = useApp((st) => st.phase);
@@ -70,6 +73,8 @@ function Main() {
   const aiOpen = useApp((st) => st.prefs.ai_panel_open);
   const { tabs, active } = useTabs();
   const groups = useVaultData((st) => st.groups);
+  // Only the terminals stay mounted behind the lock screen; the home page and its dialogs go.
+  const locked = useApp((st) => st.phase === "locked");
 
   const home = homeTab(page, (k) => t(k), (id) => groups.find((g) => g.id === id)?.name);
 
@@ -117,7 +122,7 @@ function Main() {
         />
         <div className={s.workspace}>
           <div className={s.body}>
-            {active === "home" && <HomePage page={page} />}
+            {active === "home" && !locked && <HomePage page={page} />}
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}

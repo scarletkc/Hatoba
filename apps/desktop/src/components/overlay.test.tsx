@@ -1,7 +1,7 @@
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Menu, Modal } from "./overlay";
+import { confirm, ConfirmHost, Menu, Modal, setOverlaysLocked } from "./overlay";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -9,6 +9,7 @@ let unmount: (() => void) | null = null;
 afterEach(() => {
   act(() => unmount?.());
   unmount = null;
+  setOverlaysLocked(false);
 });
 
 function render(ui: React.ReactNode) {
@@ -131,5 +132,43 @@ describe("Menu", () => {
     click(document.querySelector("[role=menu] > [role=menuitemradio]"));
     expect(onSelect).toHaveBeenCalledTimes(2);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("vault lock", () => {
+  it("hides an open modal while locked and shows it again after unlocking", () => {
+    render(
+      <Modal>
+        <textarea defaultValue="SECRET-KEY-MARKER" />
+      </Modal>,
+    );
+    expect(document.body.textContent).toContain("SECRET-KEY-MARKER");
+    act(() => setOverlaysLocked(true));
+    expect(document.body.textContent).not.toContain("SECRET-KEY-MARKER");
+    act(() => setOverlaysLocked(false));
+    expect(document.body.querySelector("textarea")?.value).toBe("SECRET-KEY-MARKER");
+  });
+
+  it("cancels a pending confirmation when the vault locks", async () => {
+    render(<ConfirmHost />);
+    let answer: Promise<boolean> | undefined;
+    act(() => {
+      answer = confirm({ title: "Paste 2 lines?", confirmLabel: "Paste" });
+    });
+    expect(document.body.textContent).toContain("Paste 2 lines?");
+    act(() => setOverlaysLocked(true));
+    await expect(answer).resolves.toBe(false);
+    expect(document.body.textContent).not.toContain("Paste 2 lines?");
+  });
+
+  it("refuses new confirmations while locked", async () => {
+    render(<ConfirmHost />);
+    act(() => setOverlaysLocked(true));
+    let answer: Promise<boolean> | undefined;
+    act(() => {
+      answer = confirm({ title: "Delete?", confirmLabel: "Delete" });
+    });
+    await expect(answer).resolves.toBe(false);
+    expect(document.body.textContent).not.toContain("Delete?");
   });
 });

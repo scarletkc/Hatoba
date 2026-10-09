@@ -1133,17 +1133,21 @@ impl Vault {
     }
 
     /// Installs the metadata of a remote vault into an empty local database and unlocks with
-    /// the already-unwrapped vault key (flow B). Existing items are not touched.
+    /// the already-unwrapped vault key (flow B). A sync backend is recorded in the same
+    /// transaction, so the vault never exists without the config to resume syncing.
+    /// Existing items are not touched.
     pub(crate) fn install_remote_vault(
         &mut self,
         remote: &VaultMeta,
         vault_key: Key32,
         device_id: &str,
+        config: Option<&SyncConfig>,
     ) -> Result<()> {
         if self.is_initialized() {
             return Err(Error::VaultAlreadyInitialized);
         }
         let check = seal_vault_check(&vault_key)?;
+        let config = config.map(serde_json::to_string).transpose()?;
         self.store.transaction(|tx| {
             tx.set_meta(
                 meta::SCHEMA_VERSION,
@@ -1157,6 +1161,9 @@ impl Vault {
             tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
             tx.set_meta(meta::DEVICE_ID, device_id)?;
+            if let Some(config) = &config {
+                tx.set_meta(meta::SYNC_BACKEND, config)?;
+            }
             tx.delete_meta(meta::SYNC_CURSOR)
         })?;
         self.finish_unlock(vault_key)

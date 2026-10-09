@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "@/app/store";
 import { Icon, Spinner, Switch } from "@/components/controls";
+import { useOverlaysLocked } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -78,6 +79,11 @@ function ToolsPopover({ anchor, slotId, rows, onClose }: { anchor: DOMRect; slot
   const loaded = useMcp((st) => st.servers !== null);
   const failed = useMcp((st) => st.failed);
   const [pos, setPos] = useState({ left: anchor.left, top: anchor.top });
+  const locked = useOverlaysLocked();
+
+  useEffect(() => {
+    if (locked) onClose(false);
+  }, [locked, onClose]);
 
   // Above the button (the input area is at the bottom of the panel), kept inside the window.
   useLayoutEffect(() => {
@@ -118,6 +124,7 @@ function ToolsPopover({ anchor, slotId, rows, onClose }: { anchor: DOMRect; slot
     };
   }, [onClose]);
 
+  if (locked) return null;
   return createPortal(
     <div ref={ref} role="dialog" aria-label={t("ai.tools.title")} tabIndex={-1} className={s.popover} style={pos}>
       <div className={s.header}>{t("ai.tools.title")}</div>

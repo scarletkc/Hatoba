@@ -133,13 +133,20 @@ function parseChanges(body: JsonObject): Change[] {
  * insert (`base_revision = 0`) or compare-and-swap update (`revision = base_revision`).
  * RETURNING yields the new revision and seq; no row means the optimistic check lost.
  * A lost race still consumed a seq number - gaps are allowed, only monotonicity matters.
+ *
+ * The bump starts from the larger of `meta.seq` and the highest item `seq`: a client in D1
+ * direct mode writes items in single statements and catches `meta.seq` up only afterwards, so
+ * `meta.seq` alone could hand out a seq that an item already has, and a client whose pull cursor
+ * is past it would never see this change. D1 direct mode allocates the same way.
  */
 async function applyChange(db: D1Database, change: Change, now: number): Promise<PushResult> {
   const { id, baseRevision, envelope } = change;
   const deleted = change.deleted ? 1 : 0;
   const updatedAt = change.updatedAt ?? now;
 
-  const bumpSeq = db.prepare("UPDATE meta SET seq = seq + 1 WHERE id = 1");
+  const bumpSeq = db.prepare(
+    "UPDATE meta SET seq = MAX(seq, (SELECT COALESCE(MAX(seq), 0) FROM items)) + 1 WHERE id = 1",
+  );
   const write =
     baseRevision === 0
       ? db

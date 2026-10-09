@@ -483,6 +483,8 @@ export class LiveSession {
         return;
       }
     }
+    // Reading the clipboard or confirming can outlast the session, or the vault being unlocked.
+    if (this.status !== "connected" || useApp.getState().phase !== "unlocked") return;
     this.term.paste(text);
     this.term.focus();
   }

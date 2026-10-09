@@ -13,6 +13,25 @@ import { cx } from "@/lib/cx";
 import { Button, Icon, controlStyles } from "./controls";
 import o from "./overlay.module.css";
 
+// ───────────────────────── Lock ─────────────────────────
+
+// Overlays render into document.body, outside the app that the lock screen hides (SEC-03), so they
+// hide themselves while the vault is locked.
+const useLockStore = create<{ locked: boolean }>(() => ({ locked: false }));
+
+export const useOverlaysLocked = () => useLockStore((st) => st.locked);
+
+/** Hides modals and closes menus while the vault is locked, and cancels a pending `confirm()`. */
+export function setOverlaysLocked(locked: boolean) {
+  if (useLockStore.getState().locked === locked) return;
+  useLockStore.setState({ locked });
+  if (locked) {
+    const pending = useConfirmStore.getState().pending;
+    useConfirmStore.setState({ pending: null });
+    pending?.resolve(false);
+  }
+}
+
 // ───────────────────────── Menu ─────────────────────────
 
 type MenuItem = {
@@ -68,6 +87,11 @@ export function Menu({
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
+  const locked = useOverlaysLocked();
+
+  useEffect(() => {
+    if (locked) onClose();
+  }, [locked, onClose]);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -123,6 +147,7 @@ export function Menu({
     };
   }, [entries, focus, items, onClose]);
 
+  if (locked) return null;
   return createPortal(
     <div ref={ref} role="menu" className={o.menu} style={{ ...pos, minWidth }}>
       {entries.map((e, i) => {
@@ -283,6 +308,7 @@ export function Modal({
   closeOnBackdrop?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const locked = useOverlaysLocked();
   // Captured while rendering: before the effect runs, React has already focused a control with
   // autoFocus inside the dialog.
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
@@ -291,6 +317,7 @@ export function Modal({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
+    if (locked) return;
     const node = ref.current;
     if (!node?.contains(document.activeElement)) {
       // Skips controls taken out of the tab order, such as the unselected tabs of a tablist.
@@ -311,9 +338,11 @@ export function Modal({
     return () => {
       window.removeEventListener("keydown", onKey);
       // Development mode also runs this while the dialog stays open, to run the effect twice.
-      if (!node?.isConnected) opener?.focus?.();
+      if (!node?.isConnected && !useLockStore.getState().locked) opener?.focus?.();
     };
-  }, [opener]);
+  }, [opener, locked]);
+  // Kept mounted, so the dialog comes back as it was after unlocking.
+  if (locked) return null;
   return createPortal(
     <div
       ref={ref}
@@ -412,6 +441,7 @@ const useConfirmStore = create<{
 }>(() => ({ pending: null }));
 
 export function confirm(options: ConfirmOptions): Promise<boolean> {
+  if (useLockStore.getState().locked) return Promise.resolve(false);
   return new Promise((resolve) => useConfirmStore.setState({ pending: { ...options, resolve } }));
 }
 
