@@ -28,8 +28,8 @@ pub struct SshConfigHost {
     pub identity_files: Vec<String>,
     /// Raw `ProxyJump` value, e.g. `user@bastion:2222,other`.
     pub proxy_jump: Option<String>,
-    /// Raw `ProxyCommand` value, e.g. `nc -X 5 -x proxy:1080 %h %p`. When both are set (a
-    /// `ProxyJump` before a `ProxyCommand`), OpenSSH refuses to connect.
+    /// Raw `ProxyCommand` value, e.g. `nc -X 5 -x proxy:1080 %h %p`. Never set together with
+    /// `proxy_jump`.
     pub proxy_command: Option<String>,
     /// `SetEnv` variables as name and value, in order. Names are not checked;
     /// arguments without `=` are dropped.
@@ -154,9 +154,10 @@ fn parse_blocks(text: &str) -> Vec<Block> {
     blocks
 }
 
-/// `ProxyJump` and `ProxyCommand` as OpenSSH reads them (`readconf.c`): the first `ProxyCommand`
-/// applies; a `ProxyJump` to a host applies only before any `ProxyCommand` or other `ProxyJump`;
-/// `ProxyJump none` takes the jump slot without blocking a later `ProxyCommand`; `none` clears.
+/// `ProxyJump` and `ProxyCommand` as OpenSSH reads them (`readconf.c`, `parse_jump`): the first
+/// `ProxyCommand` applies; a `ProxyJump` to a host applies only before any `ProxyCommand` or other
+/// `ProxyJump`, and then sets the command to `none`, which blocks later ones; `ProxyJump none`
+/// takes the jump slot without blocking a later `ProxyCommand`; `none` clears.
 fn resolve_proxy<'a>(
     directives: impl Iterator<Item = &'a ProxyDirective>,
 ) -> (Option<String>, Option<String>) {
@@ -171,8 +172,9 @@ fn resolve_proxy<'a>(
                 jump.get_or_insert(v);
             }
             ProxyDirective::Jump(v) => {
-                if command.is_none() {
-                    jump.get_or_insert(v);
+                if command.is_none() && jump.is_none() {
+                    jump = Some(v);
+                    command = Some("none");
                 }
             }
         }
@@ -544,15 +546,11 @@ mod tests {
             pair(0),
             (None, Some("nc -X 5 -x proxy.example.com:1080 %h %p"))
         );
-        // A ProxyJump does not stop a later ProxyCommand from being read; OpenSSH then refuses
-        // the pair, and the import warns about the command.
-        assert_eq!(
-            pair(1),
-            (Some("bastion"), Some("connect -H proxy:3128 %h %p"))
-        );
+        // A jump host blocks every later ProxyCommand, the default's included.
+        assert_eq!(pair(1), (Some("bastion"), None));
         assert_eq!(pair(2), (None, None));
         assert_eq!(pair(3), (None, Some("nc %h %p")));
-        assert_eq!(pair(4), (Some("bastion"), Some("nc %h %p")));
+        assert_eq!(pair(4), (Some("bastion"), None));
         // `ProxyJump none` does not hide a later ProxyCommand, in the same block or the default.
         assert_eq!(pair(5), (None, Some("nc -x proxy:1080 %h %p")));
         assert_eq!(pair(6), (None, Some("connect -H proxy:3128 %h %p")));
