@@ -7,18 +7,28 @@ import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
-import { useTabs, type TabStatus } from "@/app/tabs";
+import { useTabs, type TabSource, type TabStatus } from "@/app/tabs";
 import { toast } from "@/components/overlay";
+import { useRecentTargets } from "@/features/hosts/recent";
 import { useTransfers } from "@/features/sftp/transfers";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import { FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, type AppError, type QuickTarget, type SessionStateEvent } from "@/ipc/types";
+import {
+  FRAME_CLOSED,
+  FRAME_DATA,
+  FRAME_ERROR,
+  FRAME_SESSION,
+  type AppError,
+  type HostView,
+  type QuickTarget,
+  type SessionStateEvent,
+} from "@/ipc/types";
 import { isMac } from "@/lib/platform";
 import { openExternal, readClipboard, writeClipboard } from "./clipboard";
 import { dropSessionForwards, syncActiveForwards } from "./forwards";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
-import { askSecret } from "./prompts";
+import { askSecret, cancelSessionPrompts } from "./prompts";
 import { resolveMode, SEARCH_DECORATIONS, terminalOptions, useTermSettings } from "./theme";
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
@@ -47,7 +57,8 @@ export function ensureSession(tabId: string): LiveSession | null {
   if (existing) return existing;
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return null;
-  const session = new LiveSession(tabId, tab.hostId, tab.target);
+  const source: TabSource = tab.target !== null ? { hostId: null, target: tab.target } : { hostId: tab.hostId, target: null };
+  const session = new LiveSession(tabId, source);
   byTab.set(tabId, session);
   return session;
 }
@@ -86,6 +97,8 @@ export class LiveSession {
   status: TabStatus = "connecting";
 
   private lastSessionId: string | null = null;
+  /** The backend session id of the connection attempt in progress (FRAME_SESSION). */
+  private pendingSessionId: string | null = null;
   private creds: Credentials | null = null;
   private started = false;
   private opened = false;
@@ -102,10 +115,7 @@ export class LiveSession {
 
   constructor(
     readonly tabId: string,
-    /** The saved host; null for a quick connection. */
-    readonly hostId: string | null,
-    /** What a quick connection connects to (HOST-12). */
-    readonly target: QuickTarget | null,
+    private source: TabSource,
   ) {
     this.term = new Terminal({
       ...terminalOptions(useTermSettings.getState().settings),
@@ -124,6 +134,22 @@ export class LiveSession {
     this.term.attachCustomKeyEventHandler(this.handleKey);
     this.term.onData((data) => this.write(data));
     this.term.onResize(() => this.sendResize());
+  }
+
+  /** The saved host; null for a quick connection. */
+  get hostId(): string | null {
+    return this.source.hostId;
+  }
+
+  /** What a quick connection connects to (HOST-12); null for a saved host. */
+  get target(): QuickTarget | null {
+    return this.source.target;
+  }
+
+  /** A quick connection whose target is now a saved host connects as that host from here on. */
+  adoptHost(host: HostView) {
+    this.source = { hostId: host.id, target: null };
+    useTabs.getState().adoptHost(this.tabId, host.id, host.name);
   }
 
   // ───────────── DOM attachment (called by the React view) ─────────────
@@ -239,6 +265,7 @@ export class LiveSession {
     this.attempts++;
     patchInfo(this.tabId, { error: null, errorAt: null, reason: null, latencyMs: null, attempts: this.attempts });
     this.sessionId = null;
+    this.pendingSessionId = null;
     this.term.write("\x1b[?25h"); // show the cursor again (hidden while failed / disconnected)
     this.setStatus("connecting");
 
@@ -248,11 +275,13 @@ export class LiveSession {
       const sentSize = { cols: this.term.cols, rows: this.term.rows };
       const options = { cols: sentSize.cols, rows: sentSize.rows, password, passphrase };
       const onFrame = (frame: Uint8Array) => this.onFrame(frame, gen);
+      const source = this.source;
       try {
         // A quick connection asks for its password while authenticating (an `ssh://auth-prompt`).
-        const sid = this.target
-          ? await api.ssh_connect_target(this.target, options, onFrame)
-          : await api.ssh_connect(this.hostId ?? "", options, onFrame);
+        const sid =
+          source.target !== null
+            ? await api.ssh_connect_target(source.target, options, onFrame)
+            : await api.ssh_connect(source.hostId, options, onFrame);
         if (gen !== this.gen || this.disposed) {
           void api.ssh_disconnect(sid).catch(() => {});
           return;
@@ -290,8 +319,9 @@ export class LiveSession {
     this.sent = sentSize;
     bySession.set(sid, this);
     this.setStatus("connected");
-    // Last connected time and server OS; a quick connection records neither.
-    if (this.hostId) void useVaultData.getState().reloadHosts().catch(() => {});
+    // A saved host's last connected time and server OS; a quick connection's recent targets.
+    if (this.target) void useRecentTargets.getState().load();
+    else void useVaultData.getState().reloadHosts().catch(() => {});
     void syncActiveForwards(sid); // auto-start forwards (FWD-02) may be running already
     this.sendResize(); // the view may have been resized while connecting
     const early = earlyEvents.get(sid);
@@ -359,6 +389,9 @@ export class LiveSession {
       case FRAME_ERROR:
         this.term.write(`\r\n\x1b[31m${decoder.decode(frame.subarray(1))}\x1b[0m\r\n`);
         break;
+      case FRAME_SESSION:
+        this.pendingSessionId = decoder.decode(frame.subarray(1));
+        break;
     }
   }
 
@@ -407,6 +440,8 @@ export class LiveSession {
   async dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    // Host-key and login prompts of an attempt still in progress would outlive the tab.
+    if (this.isConnecting && this.pendingSessionId) cancelSessionPrompts(this.pendingSessionId);
     this.gen++;
     const sid = this.sessionId;
     this.sessionId = null;

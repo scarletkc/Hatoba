@@ -24,7 +24,7 @@ use super::{AiEnv, AiManager, COMPACT_INSTRUCTION, DISCONNECTED, EDIT_NOTE, Entr
 use super::{append, lock, title_of};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
-    AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
+    AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, QuickTarget,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -279,6 +279,7 @@ impl Fixture {
             model_id: "m1".into(),
             effort: None,
             host_id: None,
+            target: None,
             tab: true,
             session_id: None,
             disabled_mcp_servers: Vec::new(),
@@ -2686,6 +2687,43 @@ async fn a_move_to_another_host_and_a_switch_of_model_are_noted_once() {
     assert_eq!(user_messages(&last), expected);
     // They never title the conversation.
     assert_eq!(f.detail(&conv).conversation.title, "first");
+}
+
+#[tokio::test]
+async fn a_quick_connection_takes_the_conversation_off_its_host() {
+    use hatoba_ai::tools::host_change_block;
+
+    let f = Fixture::new(vec![answer("One."), answer("Two.")]).await;
+    let prod = f.add_host("prod-db", "Primary.");
+    let on_prod = AiTurnContext {
+        host_id: Some(prod.clone()),
+        ..f.context()
+    };
+    let quick = AiTurnContext {
+        target: Some(QuickTarget {
+            address: "10.0.0.9".into(),
+            port: 22,
+            username: "root".into(),
+        }),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "first", on_prod).await;
+    f.exchange(Some(&conv), "second", quick).await;
+    // HOST-12: the target is named where a host would be, and the saved host is left.
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "first".to_owned(),
+            format!("{}second", host_change_block("prod-db", "root@10.0.0.9:22"))
+        ]
+    );
+    assert_eq!(f.detail(&conv).conversation.host_id, None);
+    let system = system_of(&f.requests().await[1]);
+    assert!(
+        system.contains("connected to the host \"root@10.0.0.9:22\" as the user \"root\""),
+        "{system}"
+    );
+    assert!(!system.contains("<host_notes"), "{system}");
 }
 
 #[tokio::test]

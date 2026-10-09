@@ -5,6 +5,8 @@
 //! sshd); without it `SshdServer::start()` prints a note and returns `None`.
 #![allow(dead_code)]
 
+pub mod ask_server;
+
 use std::fs;
 use std::io::Write;
 use std::net::TcpListener;

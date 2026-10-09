@@ -113,10 +113,14 @@ export function parseQuickConnect(input: string): QuickParse | null {
   return { ok: true, target: { address: dest.address, port, username: username || null }, search };
 }
 
+/** The address as it goes before `:port`: an IPv6 address in brackets. */
+export function bracketHost(address: string): string {
+  return address.includes(":") ? `[${address}]` : address;
+}
+
 /** `user@host:port`, with an IPv6 address in brackets. */
 export function formatTarget(t: { address: string; port: number; username: string | null }): string {
-  const host = t.address.includes(":") ? `[${t.address}]` : t.address;
-  return `${t.username ? `${t.username}@` : ""}${host}:${t.port}`;
+  return `${t.username ? `${t.username}@` : ""}${bracketHost(t.address)}:${t.port}`;
 }
 
 const bare = (address: string) => address.replace(/^\[(.*)\]$/, "$1").toLowerCase();

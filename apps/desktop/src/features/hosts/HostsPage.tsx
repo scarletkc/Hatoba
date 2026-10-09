@@ -26,7 +26,15 @@ import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
 import { ImportSshDialog } from "./ImportSshDialog";
 import { OsIcon } from "./OsIcon";
-import { formatTarget, parseQuickConnect, sameTarget, savedHostFor, type QuickProblem, type TypedTarget } from "./quickConnect";
+import {
+  bracketHost,
+  formatTarget,
+  parseQuickConnect,
+  sameTarget,
+  savedHostFor,
+  type QuickProblem,
+  type TypedTarget,
+} from "./quickConnect";
 import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
 import { useHostsUi, type HostSort } from "./ui";
@@ -164,9 +172,13 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   // the best saved host is, even with recent targets listed above it.
   const preferred = exact?.id ?? (quickRows[0]?.id === TYPED_ROW ? TYPED_ROW : null);
   const effectiveId = useMemo(() => {
-    if (selectedId && rowIds.includes(selectedId) && (!preferred || pickedFor === deferredQuery)) return selectedId;
+    const picked = pickedFor === deferredQuery;
+    if (selectedId && rowIds.includes(selectedId) && (picked || (!preferred && !problem))) return selectedId;
+    // An ssh command quick connect cannot run selects nothing, so Enter does not connect a saved
+    // host with other settings than the ones typed.
+    if (problem) return null;
     return preferred ?? visible[0]?.id ?? quickRows[0]?.id ?? null;
-  }, [rowIds, selectedId, preferred, pickedFor, deferredQuery, visible, quickRows]);
+  }, [rowIds, selectedId, preferred, problem, pickedFor, deferredQuery, visible, quickRows]);
 
   // The row callbacks read these through a ref, so they stay stable and memoized rows skip re-rendering.
   const latest = useRef({ deferredQuery, quickRows });
@@ -408,6 +420,14 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       move(e.key === "ArrowDown" ? 1 : -1);
+    } else if (e.key === "Enter" && effectiveId === TYPED_ROW) {
+      e.preventDefault();
+      // The list may still show an earlier keystroke: connect what the field says now.
+      const typed = parseQuickConnect(query);
+      if (!typed?.ok) return;
+      const saved = savedHostFor(hosts, typed.target);
+      if (saved) connect(saved.id);
+      else void connectTarget(typed.target);
     } else if (e.key === "Enter" && effectiveId) {
       e.preventDefault();
       connect(effectiveId);
@@ -702,11 +722,10 @@ const HostRow = memo(function HostRow({
 
 /** `user@host:port` in the address column's style. */
 function TargetText({ target }: { target: TypedTarget }) {
-  const host = target.address.includes(":") ? `[${target.address}]` : target.address;
   return (
     <span className={s.addr}>
       {target.username && <span className={s.dim}>{target.username}@</span>}
-      {host}
+      {bracketHost(target.address)}
       <span className={s.dim}>:{target.port}</span>
     </span>
   );
@@ -789,7 +808,7 @@ function ProblemRow({ problem }: { problem: QuickProblem }) {
         ? t("hosts.quick.command")
         : t("hosts.err.portInvalid");
   return (
-    <div className={cx(s.row, s.problemRow)} role="note">
+    <div className={cx(s.row, s.problemRow)} role="option" aria-selected={false} aria-disabled>
       <Icon name="prohibit" className={s.quickIcon} />
       <span className={s.problemText}>{text}</span>
     </div>

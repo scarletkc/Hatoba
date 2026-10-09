@@ -305,6 +305,8 @@ export interface TestResult {
 export const FRAME_DATA = 0;
 export const FRAME_CLOSED = 1;
 export const FRAME_ERROR = 2;
+/** The backend session id, sent before connecting, so a tab can answer its prompts if it closes. */
+export const FRAME_SESSION = 3;
 
 // ───────────────────────── Port forwarding (FWD-01/02) ─────────────────────────
 
@@ -791,6 +793,11 @@ export interface AiTurnContext {
   effort: AiEffort | null;
   /** The tab's host; the next message moves the conversation to it (AI-09). */
   host_id: string | null;
+  /**
+   * The tab's quick-connect target when it has no saved host (HOST-12): the next message moves the
+   * conversation off its saved host, and the request names the target instead.
+   */
+  target: QuickTarget | null;
   /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
   tab: boolean;
   /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */

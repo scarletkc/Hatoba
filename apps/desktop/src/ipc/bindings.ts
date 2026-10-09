@@ -450,6 +450,11 @@ export type AiTurnContext = {
 	effort: AiEffort | null,
 	/**  The tab's host; the next message moves the conversation to it (AI-09). */
 	host_id: string | null,
+	/**
+	 *  The tab's quick-connect target when it has no saved host (HOST-12): the next message
+	 *  moves the conversation off its saved host, and the request names the target instead.
+	 */
+	target: QuickTarget | null,
 	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
 	tab: boolean,
 	/**

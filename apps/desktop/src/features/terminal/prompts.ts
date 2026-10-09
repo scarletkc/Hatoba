@@ -18,7 +18,14 @@ export interface SecretRequest {
 export type PromptItem =
   | { key: string; kind: "hostkey"; prompt: HostKeyPrompt }
   | { key: string; kind: "auth"; prompt: AuthPrompt }
-  | { key: string; kind: "secret"; request: SecretRequest; resolve: (value: string | null) => void }
+  | {
+      key: string;
+      kind: "secret";
+      request: SecretRequest;
+      resolve: (value: string | null) => void;
+      /** The backend session asking, for a quick connection's login password. */
+      sessionId?: string | null;
+    }
   | { key: string; kind: "username"; target: string; resolve: (value: string | null) => void };
 
 interface PromptState {
@@ -50,10 +57,19 @@ export function pushAuthPrompt(prompt: AuthPrompt) {
     const request: SecretRequest = { kind: "password", hostName: prompt.target, target: prompt.target, oneOff: true };
     const resolve = (value: string | null) =>
       void api.auth_prompt_respond(prompt.request_id, value === null ? null : [value]).catch(() => {});
-    push({ kind: "secret", request, resolve });
+    push({ kind: "secret", request, resolve, sessionId: prompt.session_id });
     return;
   }
   push({ kind: "auth", prompt });
+}
+
+/** The tab of session `sessionId` closed while connecting: refuse its host key, cancel its logins. */
+export function cancelSessionPrompts(sessionId: string) {
+  for (const item of usePrompts.getState().items) {
+    if (item.kind === "hostkey" && item.prompt.session_id === sessionId) answerHostKey(item, false);
+    else if (item.kind === "auth" && item.prompt.session_id === sessionId) answerAuth(item, null);
+    else if (item.kind === "secret" && item.sessionId === sessionId) answerSecret(item, null);
+  }
 }
 
 /** Resolves with the typed secret, or `null` when the user cancels. */

@@ -59,7 +59,7 @@ use zeroize::Zeroizing;
 use crate::dto::{
     AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFinish, AiSearchHit,
     AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext,
-    AiTurnEndReason, AiTurnEvent, AiUsage,
+    AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -697,6 +697,14 @@ impl AiManager {
                         came_from = Some(host_name(&v, old).unwrap_or_default());
                     }
                     conversation.host_id = Some(host_id.clone());
+                } else if context.host_id.is_none()
+                    && context.target.is_some()
+                    && let Some(old) = conversation.host_id.take()
+                {
+                    // A quick connection (HOST-12) is no saved host: the conversation leaves its own.
+                    if came_from.is_none() {
+                        came_from = Some(host_name(&v, &old).unwrap_or_default());
+                    }
                 }
                 // AI-05: the conversation keeps the level of its last message.
                 conversation.effort = context.effort.map(core_effort);
@@ -704,11 +712,16 @@ impl AiManager {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
                 }
+                let host_now = conversation
+                    .host_id
+                    .as_deref()
+                    .and_then(|id| host_name(&v, id))
+                    .or_else(|| context.target.as_ref().map(quick_label));
                 let notes = notes_before(
                     &v,
                     &earlier,
                     came_from.as_deref(),
-                    conversation.host_id.as_deref(),
+                    host_now.as_deref(),
                     &context,
                 );
                 let full = format!("{notes}{text}");
@@ -1630,6 +1643,7 @@ fn prompt(
         .as_deref()
         .and_then(|id| v.get(id))
         .and_then(Item::as_host);
+    let target = context.target.as_ref().map(quick_label);
     let provider = v.get(&context.provider_id).and_then(Item::as_ai_provider);
     let model_name = provider
         .and_then(|p| p.models.iter().find(|m| m.id == context.model_id))
@@ -1654,8 +1668,10 @@ fn prompt(
             name: model_name,
             provider: provider.map_or("", |p| p.name.as_str()),
         },
-        host_name: host.map(|h| h.name.as_str()),
-        host_user: host.map(|h| h.username.as_str()),
+        host_name: host.map(|h| h.name.as_str()).or(target.as_deref()),
+        host_user: host
+            .map(|h| h.username.as_str())
+            .or(context.target.as_ref().map(|t| t.username.as_str())),
         server_id,
         date: &date,
         instructions: chars_prefix(
@@ -2312,6 +2328,11 @@ fn leading_block(text: &str) -> Option<(Block<'_>, &str)> {
     None
 }
 
+/// How a quick-connect target (HOST-12) is named where a host's display name would be.
+fn quick_label(target: &QuickTarget) -> String {
+    crate::ssh::target_label(&target.username, &target.address, target.port)
+}
+
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {
     v.get(host_id)
@@ -2334,7 +2355,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 ///
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
 ///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
-///   `None` when the conversation did not move.
+///   `None` when the conversation did not move. `host_now` is the display name of the host (or
+///   quick-connect target) the conversation is on now.
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
@@ -2347,13 +2369,10 @@ fn notes_before(
 ) -> String {
     let mut notes = String::new();
     // A message with nothing before it has no earlier screens to tell apart.
-    if let (Some(from), Some(to), false) = (
-        came_from,
-        host_now.and_then(|id| host_name(v, id)),
-        earlier.is_empty(),
-    ) && from != to
+    if let (Some(from), Some(to), false) = (came_from, host_now, earlier.is_empty())
+        && from != to
     {
-        notes.push_str(&tools::host_change_block(from, &to));
+        notes.push_str(&tools::host_change_block(from, to));
     }
     let to = stored_model_label(v, &context.provider_id, &context.model_id);
     for entry in earlier.iter().rev() {

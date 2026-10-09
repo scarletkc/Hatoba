@@ -298,8 +298,7 @@ function Notices({ slot, tab, tabHost, convHost }: { slotId: string; slot: Slot;
       );
     else if (tab.status === "connecting") items.push(<Notice key="state" icon={<Spinner size={12} />}>{t("ai.notice.connecting", { host: name })}</Notice>);
     const convHostId = slot.conversation?.host_id;
-    // A quick connection (no saved host) leaves the conversation's host as it is.
-    if (convHostId && tab.hostId && convHostId !== tab.hostId)
+    if (convHostId && convHostId !== tab.hostId)
       items.push(
         <Notice key="move" icon={<Icon name="arrows-left-right" size={14} />}>
           {t("ai.notice.moveHost", { from: convHost?.name ?? t("ai.history.hostGone"), to: name })}

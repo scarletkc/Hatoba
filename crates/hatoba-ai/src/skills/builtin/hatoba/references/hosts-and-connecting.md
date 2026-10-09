@@ -49,8 +49,8 @@ Typing `user@host`, `user@host:port` or an ssh command such as `ssh -p 2222 depl
 
 - Only `-p` (port) and `-l` (user) are understood. Other options (`-i`, `-J`, `-L` …) and remote commands show a row that explains why it cannot connect; save a host to use keys, jump hosts or forwards.
 - Without a user name (`ssh host`), Hatoba asks for one before connecting.
-- Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog. The password is used once and never saved. Saved keys are not tried. The host key is checked as for any host (trust it on first use; it syncs).
-- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user.
+- Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when the server's prompts fail). The password is used once and never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
+- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
 - Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
 
 | en | zh-CN | ja |

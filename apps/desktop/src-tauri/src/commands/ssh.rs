@@ -22,6 +22,9 @@ use crate::state::{AppState, now_ms};
 const FRAME_DATA: u8 = 0;
 const FRAME_CLOSED: u8 = 1;
 const FRAME_ERROR: u8 = 2;
+/// The session id, sent before connecting: the tab can then answer the session's host-key and
+/// login prompts for itself if it closes while they are open.
+const FRAME_SESSION: u8 = 3;
 
 /// One terminal frame on the per-session channel: tag byte + payload. Sent through Tauri's raw
 /// binary IPC path (an `ArrayBuffer` in the WebView), never as a JSON number array (§10.3).
@@ -87,6 +90,7 @@ pub async fn ssh_connect(
     channel: Channel<TermFrame>,
 ) -> AppResult<String> {
     let session_id = uuid::Uuid::now_v7().to_string();
+    let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
     let cfg = state.with_unlocked(|v| {
         let host = v
             .get(&host_id)
@@ -126,6 +130,7 @@ pub async fn ssh_connect_target(
     // Known hosts live in the vault (SSH-04).
     state.with_unlocked(|_| Ok(()))?;
     let session_id = uuid::Uuid::now_v7().to_string();
+    let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
     let cfg = ConnectConfig::new(
         target.address.clone(),
         target.port,

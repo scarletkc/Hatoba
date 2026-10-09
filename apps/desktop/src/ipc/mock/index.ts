@@ -14,7 +14,8 @@ import type {
   SyncStatus,
   VaultStatus,
 } from "../types";
-import { FRAME_CLOSED, FRAME_DATA } from "../types";
+import { sameTarget } from "@/features/hosts/quickConnect";
+import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiSettingsMock } from "./aiSettings";
@@ -410,6 +411,7 @@ export function createMockApi(): HatobaApi {
       const h = hosts.find((x) => x.id === hostId);
       if (!h) fail("not_found");
       const sid = id("s");
+      onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", { session_id: sid, host_id: hostId, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
       setTimeout(() => state("connecting"), 0);
@@ -474,6 +476,7 @@ export function createMockApi(): HatobaApi {
     ssh_connect_target: async (target, _options, onFrame: FrameHandler) => {
       needUnlocked();
       const sid = id("s");
+      onFrame(frame(FRAME_SESSION, new TextEncoder().encode(sid)));
       const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
         emit("ssh://state", { session_id: sid, host_id: null, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
       const failWith = (error: AppError): never => {
@@ -526,8 +529,7 @@ export function createMockApi(): HatobaApi {
       const shellHost: HostView = { ...D.HOSTS[0], id: "", name: target.address, address: target.address, port: target.port, username: target.username };
       const shell = new FakeShell(shellHost, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
       shells.set(sid, shell);
-      const same = (r: QuickTarget) => r.address.toLowerCase() === target.address.toLowerCase() && r.port === target.port && r.username === target.username;
-      recentTargets = [target, ...recentTargets.filter((r) => !same(r))].slice(0, 8);
+      recentTargets = [target, ...recentTargets.filter((r) => !sameTarget(r, target))].slice(0, 8);
       setTimeout(() => {
         state("connected", { latency_ms: 21 });
         shell.start();
@@ -545,9 +547,7 @@ export function createMockApi(): HatobaApi {
     },
     recent_target_remove: async (target) => {
       needUnlocked();
-      recentTargets = recentTargets.filter(
-        (r) => !(r.address.toLowerCase() === target.address.toLowerCase() && r.port === target.port && r.username === target.username),
-      );
+      recentTargets = recentTargets.filter((r) => !sameTarget(r, target));
       return recentTargets.map((r) => ({ ...r }));
     },
     ssh_write: async (sid, data) => {

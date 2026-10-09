@@ -101,7 +101,7 @@ describe("useStarPromptDue", () => {
 describe("connectedOnce", () => {
   it("stays set after the connected tab closes", async () => {
     const { useTabs } = await load();
-    const id = useTabs.getState().openSession("h1", "web-1");
+    const id = useTabs.getState().openSession({ hostId: "h1", target: null }, "web-1");
     useTabs.getState().update(id, { status: "failed" });
     expect(useTabs.getState().connectedOnce).toBe(false);
     useTabs.getState().update(id, { status: "connected", sessionId: "s1" });

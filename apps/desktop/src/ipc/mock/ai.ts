@@ -1,5 +1,6 @@
 import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
+import { formatTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -612,7 +613,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
     const hosts = (await deps.hosts?.()) ?? [];
-    const to = hosts.find((h) => h.id === c.view.host_id)?.name;
+    const to = hosts.find((h) => h.id === c.view.host_id)?.name ?? (context.target ? formatTarget(context.target) : undefined);
     if (cameFrom !== null && to !== undefined && earlier.length > 0 && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
     const providers = await deps.providers();
     const label = (providerId: string, modelId: string) => {
@@ -919,6 +920,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         // A chat that had no host (the home tab's) did not come from one.
         cameFrom = c.view.host_id ? await hostName(c.view.host_id) : null;
         c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
+      } else if (!input.context.host_id && input.context.target && c.view.host_id) {
+        // Like Rust: a quick connection (HOST-12) takes the conversation off its host.
+        cameFrom = await hostName(c.view.host_id);
+        c.view = { ...c.view, host_id: null, updated_at: Date.now() };
       }
       // Like Rust: the conversation keeps the level of its last message.
       if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
@@ -1011,6 +1016,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (context.host_id && context.host_id !== c.view.host_id) {
         if (cameFrom === null && c.view.host_id) cameFrom = await hostName(c.view.host_id);
         c.view = { ...c.view, host_id: context.host_id };
+      } else if (!context.host_id && context.target && c.view.host_id) {
+        if (cameFrom === null) cameFrom = await hostName(c.view.host_id);
+        c.view = { ...c.view, host_id: null };
       }
       c.view = { ...c.view, effort: context.effort };
       const notes = await notesBefore(c, [...c.entries], cameFrom, context);

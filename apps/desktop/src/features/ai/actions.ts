@@ -102,6 +102,7 @@ export function turnContext(slotId: string): AiTurnContext | null {
     model_id: model.model_id,
     effort: slotEffort(slotId),
     host_id: target ? target.tab.hostId : (getSlot(slotId).conversation?.host_id ?? null),
+    target: target?.tab.target ?? null,
     tab: connected,
     session_id: connected ? (target.tab.sessionId ?? null) : null,
     disabled_mcp_servers: getSlot(slotId).mcpOff,

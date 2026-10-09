@@ -1,8 +1,8 @@
-import { hostById } from "@/app/data";
+import { hostById, useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { toast } from "@/components/overlay";
-import { formatTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { t } from "@/i18n";
 import type { HostView, QuickTarget } from "@/ipc/types";
 import { startSessionListeners } from "./listeners";
@@ -36,7 +36,7 @@ export async function connectHost(hostId: string): Promise<void> {
   }
   const creds = await collectCredentials(host);
   if (!creds) return;
-  const tabId = useTabs.getState().openSession(hostId, host.name);
+  const tabId = useTabs.getState().openSession({ hostId, target: null }, host.name);
   const session = ensureSession(tabId);
   // The view connects as soon as it has measured the terminal size.
   session?.setCredentials(creds);
@@ -51,14 +51,17 @@ export async function connectTarget(typed: { address: string; port: number; user
   const username = typed.username ?? (await askUsername(formatTarget(typed)))?.trim();
   if (!username) return;
   const target: QuickTarget = { address: typed.address, port: typed.port, username };
-  useTabs.getState().openSession(null, `${username}@${target.address}`, target);
+  useTabs.getState().openSession({ hostId: null, target }, `${username}@${target.address}`);
 }
 
 /** Retry / reconnect a tab in place (prompting again for "ask every time" hosts). */
 export async function reconnectSession(tabId: string): Promise<void> {
   const session = getSession(tabId);
-  const host = session ? hostById(session.hostId) : undefined;
-  if (!session) return;
+  if (!session || session.status === "connecting") return;
+  // A quick connection saved as a host since (Save as Host…) reconnects as that host.
+  const saved = session.target ? savedHostFor(useVaultData.getState().hosts, session.target) : undefined;
+  if (saved) session.adoptHost(saved);
+  const host = hostById(session.hostId);
   await session.reconnect(async () => (host ? collectCredentials(host) : NONE));
 }
 

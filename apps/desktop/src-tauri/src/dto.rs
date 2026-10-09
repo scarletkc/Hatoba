@@ -1151,6 +1151,9 @@ pub struct AiTurnContext {
     pub effort: Option<AiEffort>,
     /// The tab's host; the next message moves the conversation to it (AI-09).
     pub host_id: Option<String>,
+    /// The tab's quick-connect target when it has no saved host (HOST-12): the next message
+    /// moves the conversation off its saved host, and the request names the target instead.
+    pub target: Option<QuickTarget>,
     /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
     pub tab: bool,
     /// The tab's SSH session while it is connected, whose server's identification string the
