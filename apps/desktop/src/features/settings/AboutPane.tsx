@@ -6,6 +6,7 @@ import { Group } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
 import { Markdown } from "@/features/ai/Markdown";
 import { copyText } from "@/features/keys/clipboard";
+import { useTransfers } from "@/features/sftp/transfers";
 import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
 import type { AppError, AvailableUpdate, UpdateProgress } from "@/ipc/types";
@@ -90,10 +91,18 @@ export function AboutPane() {
   };
 
   const confirmInstall = async (target: AvailableUpdate) => {
-    const n = useTabs.getState().tabs.filter((tab) => tab.status === "connected").length;
+    // One line per count, so that each picks its own plural form.
+    const sessions = useTabs.getState().tabs.filter((tab) => tab.status === "connected").length;
+    const transfers = useTransfers.getState().items.filter((item) => item.state === "running").length;
     const ok = await confirm({
       title: t("settings.about.install.title", { version: target.version }),
-      body: n > 0 ? t("settings.about.install.bodySessions", { n }) : t("settings.about.install.body"),
+      body: (
+        <>
+          {t("settings.about.install.body")}
+          {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
+          {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
+        </>
+      ),
       confirmLabel: t("settings.about.install.confirm"),
       icon: "arrow-circle-up",
     });

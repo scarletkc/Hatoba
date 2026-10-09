@@ -132,3 +132,8 @@
 .notesBody > div > :first-child {
   margin-top: 0;
 }
+
+.consequence {
+  display: block;
+  margin-top: 6px;
+}

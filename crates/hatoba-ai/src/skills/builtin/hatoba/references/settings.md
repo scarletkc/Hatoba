@@ -91,7 +91,7 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 
 - The page shows the version; click it to copy.
 - **Software Update** → **Check for Updates** asks GitHub whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available.", or an offline or failure message. A newer version's release notes show below the setting, with **View on GitHub** for its release page.
-- **Download and Install** asks first, and says how many SSH sessions are open. After **Install and Restart**, Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run.
+- **Download and Install** asks first, and says how many open SSH sessions and running file transfers closing Hatoba will end. After **Install and Restart**, Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run.
 - **Automatically check for updates at startup** is off by default. When on, Hatoba asks GitHub once after each unlock; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
 - When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
 - **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
