@@ -403,6 +403,14 @@
   animation: spin 0.9s linear infinite;
 }
 
+/* Keeps turning with reduced motion, as macOS's spinner does (base.css). */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 0.9s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
