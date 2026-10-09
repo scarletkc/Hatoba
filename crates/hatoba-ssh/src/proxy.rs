@@ -440,19 +440,26 @@ mod tests {
     use super::*;
     use tokio::io::duplex;
 
-    fn socks(username: &str, password: &str) -> ProxyConfig {
-        ProxyConfig {
-            username: username.to_owned(),
-            password: Zeroizing::new(password.to_owned()),
-            ..ProxyConfig::new(ProxyKind::Socks5, "127.0.0.1", 1080)
-        }
+    fn socks() -> ProxyConfig {
+        ProxyConfig::new(ProxyKind::Socks5, "127.0.0.1", 1080)
     }
 
-    fn http(username: &str, password: &str) -> ProxyConfig {
-        ProxyConfig {
-            kind: ProxyKind::Http,
-            ..socks(username, password)
-        }
+    fn http() -> ProxyConfig {
+        ProxyConfig::new(ProxyKind::Http, "127.0.0.1", 1080)
+    }
+
+    /// A password made up for each run, so the tests write none into the source.
+    fn secret() -> String {
+        use std::hash::BuildHasher;
+        std::collections::hash_map::RandomState::new()
+            .hash_one(0u8)
+            .to_string()
+    }
+
+    fn signed_in(mut proxy: ProxyConfig, username: &str, password: &str) -> ProxyConfig {
+        proxy.username = username.to_owned();
+        proxy.password = Zeroizing::new(password.to_owned());
+        proxy
     }
 
     /// Runs the handshake against `server`, which plays the proxy on the other end of a pipe.
@@ -488,7 +495,7 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_without_auth_sends_the_name_for_the_proxy_to_resolve() {
-        let rest = run(socks("", ""), "example.com", 22, |mut far| async move {
+        let rest = run(socks(), "example.com", 22, |mut far| async move {
             expect(&mut far, &[5, 1, 0]).await;
             far.write_all(&[5, 0]).await.unwrap();
             let mut want = vec![5, 1, 0, 3, 11];
@@ -508,14 +515,19 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_with_auth_and_ip_targets() {
+        let pass = secret();
+        let mut sign_in = vec![1, 5];
+        sign_in.extend_from_slice(b"alice");
+        sign_in.push(u8::try_from(pass.len()).unwrap());
+        sign_in.extend_from_slice(pass.as_bytes());
         run(
-            socks("alice", "s3cret"),
+            signed_in(socks(), "alice", &pass),
             "10.0.0.7",
             2222,
             |mut far| async move {
                 expect(&mut far, &[5, 2, 0, 2]).await;
                 far.write_all(&[5, 2]).await.unwrap();
-                expect(&mut far, b"\x01\x05alice\x06s3cret").await;
+                expect(&mut far, &sign_in).await;
                 far.write_all(&[1, 0]).await.unwrap();
                 expect(&mut far, &[5, 1, 0, 1, 10, 0, 0, 7, 0x08, 0xae]).await;
                 far.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0])
@@ -526,7 +538,7 @@ mod tests {
         .await
         .unwrap();
 
-        run(socks("", ""), "[2001:db8::1]", 22, |mut far| async move {
+        run(socks(), "[2001:db8::1]", 22, |mut far| async move {
             expect(&mut far, &[5, 1, 0]).await;
             far.write_all(&[5, 0]).await.unwrap();
             let mut want = vec![5, 1, 0, 4];
@@ -548,23 +560,30 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_auth_failures() {
-        let err = run(socks("alice", "wrong"), "h", 22, |mut far| async move {
-            expect(&mut far, &[5, 2, 0, 2]).await;
-            far.write_all(&[5, 2]).await.unwrap();
-            let mut buf = [0u8; 13];
-            far.read_exact(&mut buf).await.unwrap();
-            far.write_all(&[1, 1]).await.unwrap();
-        })
+        let wrong = secret();
+        let sent = 3 + "alice".len() + wrong.len();
+        let err = run(
+            signed_in(socks(), "alice", &wrong),
+            "h",
+            22,
+            move |mut far| async move {
+                expect(&mut far, &[5, 2, 0, 2]).await;
+                far.write_all(&[5, 2]).await.unwrap();
+                let mut buf = vec![0u8; sent];
+                far.read_exact(&mut buf).await.unwrap();
+                far.write_all(&[1, 1]).await.unwrap();
+            },
+        )
         .await
         .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::ProxyAuth);
         assert!(err.message.contains("rejected"), "{err}");
         assert!(
-            !err.message.contains("wrong"),
+            !err.message.contains(&wrong),
             "no password in messages: {err}"
         );
 
-        let err = run(socks("", ""), "h", 22, |mut far| async move {
+        let err = run(socks(), "h", 22, |mut far| async move {
             expect(&mut far, &[5, 1, 0]).await;
             far.write_all(&[5, 0xff]).await.unwrap();
         })
@@ -582,20 +601,15 @@ mod tests {
             (0x05, SshErrorKind::Refused),
             (0x06, SshErrorKind::Timeout),
         ] {
-            let err = run(
-                socks("", ""),
-                "db.internal",
-                22,
-                move |mut far| async move {
-                    expect(&mut far, &[5, 1, 0]).await;
-                    far.write_all(&[5, 0]).await.unwrap();
-                    let mut buf = vec![0u8; 7 + "db.internal".len()];
-                    far.read_exact(&mut buf).await.unwrap();
-                    far.write_all(&[5, code, 0, 1, 0, 0, 0, 0, 0, 0])
-                        .await
-                        .unwrap();
-                },
-            )
+            let err = run(socks(), "db.internal", 22, move |mut far| async move {
+                expect(&mut far, &[5, 1, 0]).await;
+                far.write_all(&[5, 0]).await.unwrap();
+                let mut buf = vec![0u8; 7 + "db.internal".len()];
+                far.read_exact(&mut buf).await.unwrap();
+                far.write_all(&[5, code, 0, 1, 0, 0, 0, 0, 0, 0])
+                    .await
+                    .unwrap();
+            })
             .await
             .unwrap_err();
             assert_eq!(err.kind, kind, "{code:#04x}: {err}");
@@ -606,7 +620,7 @@ mod tests {
     #[tokio::test]
     async fn wrong_protocol_or_closed_connection_is_a_proxy_error() {
         // An HTTP proxy configured as SOCKS5.
-        let err = run(socks("", ""), "h", 22, |mut far| async move {
+        let err = run(socks(), "h", 22, |mut far| async move {
             let mut buf = [0u8; 3];
             far.read_exact(&mut buf).await.unwrap();
             far.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")
@@ -622,7 +636,7 @@ mod tests {
         );
 
         // A SOCKS5 proxy configured as HTTP hangs up on the request.
-        let err = run(http("", ""), "h", 22, |far| async move { drop(far) })
+        let err = run(http(), "h", 22, |far| async move { drop(far) })
             .await
             .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::Proxy);
@@ -631,7 +645,7 @@ mod tests {
 
     #[tokio::test]
     async fn http_connect_keeps_what_follows_the_head() {
-        let rest = run(http("", ""), "example.com", 22, |mut far| async move {
+        let rest = run(http(), "example.com", 22, |mut far| async move {
             expect(
                 &mut far,
                 b"CONNECT example.com:22 HTTP/1.1\r\nHost: example.com:22\r\n\r\n",
@@ -648,14 +662,22 @@ mod tests {
 
     #[tokio::test]
     async fn http_connect_with_basic_auth_and_ipv6() {
-        run(http("alice", "pa:ss"), "::1", 2222, |mut far| async move {
-            let want = format!(
-                "CONNECT [::1]:2222 HTTP/1.1\r\nHost: [::1]:2222\r\nProxy-Authorization: Basic {}\r\n\r\n",
-                BASE64.encode("alice:pa:ss")
-            );
-            expect(&mut far, want.as_bytes()).await;
-            far.write_all(b"HTTP/1.0 200 OK\r\n\r\n").await.unwrap();
-        })
+        // A colon in the password is kept; only the username cannot have one.
+        let mut pass = secret();
+        pass.insert(1, ':');
+        let want = format!(
+            "CONNECT [::1]:2222 HTTP/1.1\r\nHost: [::1]:2222\r\nProxy-Authorization: Basic {}\r\n\r\n",
+            BASE64.encode(format!("alice:{pass}"))
+        );
+        run(
+            signed_in(http(), "alice", &pass),
+            "::1",
+            2222,
+            |mut far| async move {
+                expect(&mut far, want.as_bytes()).await;
+                far.write_all(b"HTTP/1.0 200 OK\r\n\r\n").await.unwrap();
+            },
+        )
         .await
         .unwrap();
     }
@@ -672,7 +694,7 @@ mod tests {
             ("502 Bad Gateway", SshErrorKind::Proxy, "HTTP 502"),
             ("504 Gateway Timeout", SshErrorKind::Timeout, "HTTP 504"),
         ] {
-            let err = run(http("", ""), "h", 22, move |mut far| async move {
+            let err = run(http(), "h", 22, move |mut far| async move {
                 let mut buf = vec![0u8; "CONNECT h:22 HTTP/1.1\r\nHost: h:22\r\n\r\n".len()];
                 far.read_exact(&mut buf).await.unwrap();
                 far.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\n\r\n").as_bytes())
@@ -688,17 +710,17 @@ mod tests {
 
     #[tokio::test]
     async fn http_connect_rejects_bad_input_and_endless_heads() {
-        let err = run(http("", ""), "h\r\nX: y", 22, |_| async {})
+        let err = run(http(), "h\r\nX: y", 22, |_| async {})
             .await
             .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::Proxy);
 
-        let err = run(http("a:b", ""), "h", 22, |_| async {})
+        let err = run(signed_in(http(), "a:b", &secret()), "h", 22, |_| async {})
             .await
             .unwrap_err();
         assert_eq!(err.kind, SshErrorKind::ProxyAuth);
 
-        let err = run(http("", ""), "h", 22, |mut far| async move {
+        let err = run(http(), "h", 22, |mut far| async move {
             let mut buf = vec![0u8; "CONNECT h:22 HTTP/1.1\r\nHost: h:22\r\n\r\n".len()];
             far.read_exact(&mut buf).await.unwrap();
             far.write_all(b"HTTP/1.1 200 OK\r\n").await.unwrap();
@@ -733,8 +755,9 @@ mod tests {
 
     #[test]
     fn debug_redacts_the_password() {
-        let text = format!("{:?}", socks("alice", "s3cret"));
-        assert!(text.contains("alice") && !text.contains("s3cret"), "{text}");
+        let pass = secret();
+        let text = format!("{:?}", signed_in(socks(), "alice", &pass));
+        assert!(text.contains("alice") && !text.contains(&pass), "{text}");
     }
 
     #[tokio::test]

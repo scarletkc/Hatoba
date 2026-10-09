@@ -649,7 +649,8 @@ mod tests {
     #[test]
     fn hosts_whose_proxy_was_deleted_are_still_reported() {
         let mut v = Vault::open_in_memory().unwrap();
-        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+        // The master password is made up for each run.
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
             .unwrap();
         let host = host_from_input(&input(String::new()), None, &v).unwrap();
         let id = v.put(None, Item::Host(host)).unwrap();

@@ -227,7 +227,8 @@ mod tests {
     #[test]
     fn deleting_a_proxy_resets_the_hosts_and_the_device_default() {
         let mut v = Vault::open_in_memory().unwrap();
-        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+        // The master password is made up for each run.
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
             .unwrap();
         assert_eq!(device_default(&v), None);
         let proxy = proxy_from_input(&input(ProxyKind::Socks5, "", None), None).unwrap();
