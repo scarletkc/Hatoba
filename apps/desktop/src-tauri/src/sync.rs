@@ -18,6 +18,7 @@ use tokio::sync::Notify;
 
 use crate::dto::{SyncCounts, SyncKind, SyncState, SyncStatus, WorkerUpdate, WorkerUpdateKind};
 use crate::error::{AppError, AppResult};
+use crate::lock;
 use crate::state::{AppState, state};
 
 const INTERVAL: Duration = Duration::from_secs(60);
@@ -398,7 +399,8 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
     }
     let engine =
         SyncEngine::new(st.vault.clone(), backend).with_conflict_suffix(conflict_suffix(app));
-    let result = engine.sync().await;
+    // Pulled settings take effect now, not at the next local save or unlock.
+    let result = lock::refresh_after_sync(&st, engine.sync()).await;
     let outcome = match result {
         Ok(report) => {
             tracing::info!(
