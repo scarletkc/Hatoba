@@ -83,7 +83,7 @@ export async function sendInput(session: LiveSession, json: string, signal: Abor
   const { text, key, waitSeconds } = parsed.value;
 
   const capture = new OutputCapture();
-  let lastOutput = Date.now();
+  let lastOutput: number;
   const off = session.onOutput((chunk) => {
     capture.push(chunk);
     lastOutput = Date.now();

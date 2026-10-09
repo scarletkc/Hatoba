@@ -233,7 +233,7 @@ function firstLine(s: string): string {
  * Characters that are invisible or reorder what follows: C0 and C1 controls but the line break, and
  * the bidirectional and zero-width format characters.
  */
-const HIDDEN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f؜​-‏‪-‮⁠-⁩﻿]/g;
+const HIDDEN = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/g;
 
 const SHOWN: Record<string, string> = { "\t": "\\t", "\r": "\\r" };
 

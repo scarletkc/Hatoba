@@ -614,7 +614,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   }
 
   async function runTool(c: Conv, x: AiToolCall, sessionId: string | null, edited: string | null): Promise<{ status: AiToolStatus; content: string }> {
-    let args: Record<string, unknown> = {};
+    let args: Record<string, unknown>;
     try {
       args = JSON.parse(edited ?? x.arguments) as Record<string, unknown>;
     } catch {

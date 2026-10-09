@@ -78,6 +78,7 @@ export function SkillDialog({
     return () => {
       live.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const problems = validateSkill(draft, takenNames);

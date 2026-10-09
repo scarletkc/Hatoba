@@ -73,6 +73,7 @@ export function SkillImportDialog({
     return () => {
       live.current = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
 
   const reserved = !!preview && preview.reserved_name && preview.issues.length === 0;

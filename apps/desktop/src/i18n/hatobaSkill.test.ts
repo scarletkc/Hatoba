@@ -104,7 +104,7 @@ describe("built-in hatoba skill", () => {
   });
 
   it("has frontmatter with the name hatoba and a description", () => {
-    const skill = files[0].text.replace(/^﻿/, "").split(/\r?\n/);
+    const skill = files[0].text.replace(/^\ufeff/, "").split(/\r?\n/);
     expect(skill[0], "SKILL.md must start with a --- line").toBe("---");
     const end = skill.indexOf("---", 1);
     expect(end, "SKILL.md frontmatter must be closed by a --- line").toBeGreaterThan(0);

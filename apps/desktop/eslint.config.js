@@ -16,6 +16,8 @@ export default defineConfig(
       "@typescript-eslint/no-misused-promises": "error",
       // tsc reports unused locals and parameters (noUnusedLocals and noUnusedParameters in tsconfig.json).
       "@typescript-eslint/no-unused-vars": "off",
+      // The app matches terminal escape sequences and control characters on purpose.
+      "no-control-regex": "off",
       // These React Compiler rules report patterns the app uses on purpose: reading and writing refs
       // during render, Date.now() during render, setting state in an effect, and module variables
       // that remember UI state across mounts.
