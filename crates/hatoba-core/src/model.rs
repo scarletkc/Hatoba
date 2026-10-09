@@ -8,6 +8,8 @@
 //! different app versions can read each other's data. Secret-bearing types implement `Debug`
 //! by hand so they can never leak into logs, and wipe themselves when dropped.
 //!
+//! [`Proxy`] holds a proxy password and has a redacting `Debug` too (SSH-13).
+//!
 //! The AI assistant adds seven item types (spec §5.1, §13): [`AiProvider`] and [`SearchProvider`]
 //! hold API keys, [`McpServer`] holds environment and header values, and [`AiMessage`] holds a
 //! slice of conversation content (SEC-04). All four have a redacting `Debug`. An `ai_message`'s
@@ -101,6 +103,10 @@ pub struct Host {
     pub favorite: bool,
     /// ProxyJump host (P1).
     pub jump_host_id: Option<String>,
+    /// SOCKS5 or HTTP proxy for the TCP connection (SSH-13). With a jump host, the jump host's
+    /// own choice applies instead. Absent while it is the device's default.
+    #[serde(skip_serializing_if = "HostProxy::is_device_default")]
+    pub proxy: HostProxy,
     /// Free-form note.
     pub note: String,
     /// What the AI assistant is told about this host in its system prompt (AI-37), at most
@@ -126,10 +132,117 @@ impl Default for Host {
             tags: Vec::new(),
             favorite: false,
             jump_host_id: None,
+            proxy: HostProxy::DeviceDefault,
             note: String::new(),
             ai_notes: String::new(),
             updated_at: 0,
         }
+    }
+}
+
+/// Which proxy a host's connection goes through (SSH-13).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum HostProxy {
+    /// The default proxy chosen on each device, if any. That choice is device-local, because a
+    /// proxy such as one running on `127.0.0.1` exists only on some devices.
+    #[default]
+    DeviceDefault,
+    /// No proxy, whatever the device default is.
+    Direct,
+    /// A saved [`Proxy`].
+    Proxy {
+        /// Id of the [`Proxy`] item.
+        proxy_id: String,
+    },
+}
+
+impl HostProxy {
+    /// Whether this is [`HostProxy::DeviceDefault`] (which is not written out).
+    #[must_use]
+    pub fn is_device_default(&self) -> bool {
+        matches!(self, Self::DeviceDefault)
+    }
+
+    /// The saved proxy's id, if the host names one.
+    #[must_use]
+    pub fn proxy_id(&self) -> Option<&str> {
+        match self {
+            Self::Proxy { proxy_id } => Some(proxy_id),
+            Self::DeviceDefault | Self::Direct => None,
+        }
+    }
+}
+
+/// The protocol of a [`Proxy`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProxyKind {
+    /// SOCKS5 (RFC 1928), with optional username and password (RFC 1929).
+    #[default]
+    Socks5,
+    /// An HTTP proxy that supports `CONNECT`, with optional Basic authentication.
+    Http,
+}
+
+impl ProxyKind {
+    /// The `kind` string as it appears in the plaintext JSON.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Socks5 => "socks5",
+            Self::Http => "http",
+        }
+    }
+}
+
+/// A saved proxy that hosts connect through (SSH-13). The password is wiped on drop and never
+/// printed.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct Proxy {
+    /// Display name, e.g. `Office SOCKS`.
+    pub name: String,
+    /// Protocol.
+    #[zeroize(skip)]
+    pub kind: ProxyKind,
+    /// Domain name or IP address of the proxy.
+    pub address: String,
+    /// TCP port, default 1080.
+    pub port: u16,
+    /// Login name on the proxy; empty when it needs none.
+    pub username: String,
+    /// Password on the proxy (secret), used only with a username. Never sent to the front-end.
+    pub password: Zeroizing<String>,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+impl Default for Proxy {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            kind: ProxyKind::default(),
+            address: String::new(),
+            port: 1080,
+            username: String::new(),
+            password: Zeroizing::default(),
+            updated_at: 0,
+        }
+    }
+}
+
+impl fmt::Debug for Proxy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Proxy")
+            .field("name", &self.name)
+            .field("kind", &self.kind)
+            .field("address", &self.address)
+            .field("port", &self.port)
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .field("updated_at", &self.updated_at)
+            .finish()
     }
 }
 
@@ -923,8 +1036,8 @@ impl Default for Settings {
 }
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
-/// "forward" | "snippet" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" |
-/// "skill" | "skill_file" | "mcp_server" | "settings"`.
+/// "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" |
+/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
@@ -940,6 +1053,8 @@ pub enum Item {
     Forward(PortForward),
     /// A command snippet.
     Snippet(Snippet),
+    /// A SOCKS5 or HTTP proxy.
+    Proxy(Proxy),
     /// An AI model provider.
     AiProvider(AiProvider),
     /// The web search backend.
@@ -969,6 +1084,7 @@ impl Item {
             Self::KnownHost(_) => "known_host",
             Self::Forward(_) => "forward",
             Self::Snippet(_) => "snippet",
+            Self::Proxy(_) => "proxy",
             Self::AiProvider(_) => "ai_provider",
             Self::SearchProvider(_) => "search_provider",
             Self::AiConversation(_) => "ai_conversation",
@@ -990,6 +1106,7 @@ impl Item {
             Self::KnownHost(i) => i.updated_at,
             Self::Forward(i) => i.updated_at,
             Self::Snippet(i) => i.updated_at,
+            Self::Proxy(i) => i.updated_at,
             Self::AiProvider(i) => i.updated_at,
             Self::SearchProvider(i) => i.updated_at,
             Self::AiConversation(i) => i.updated_at,
@@ -1010,6 +1127,7 @@ impl Item {
             Self::KnownHost(i) => i.updated_at = at,
             Self::Forward(i) => i.updated_at = at,
             Self::Snippet(i) => i.updated_at = at,
+            Self::Proxy(i) => i.updated_at = at,
             Self::AiProvider(i) => i.updated_at = at,
             Self::SearchProvider(i) => i.updated_at = at,
             Self::AiConversation(i) => i.updated_at = at,
@@ -1031,6 +1149,7 @@ impl Item {
             Self::KnownHost(i) => format!("{}:{}", i.host, i.port),
             Self::Forward(i) => format!("{}:{}", i.bind_address, i.bind_port),
             Self::Snippet(i) => i.name.clone(),
+            Self::Proxy(i) => i.name.clone(),
             Self::AiProvider(i) => i.name.clone(),
             Self::SearchProvider(i) => i.kind.as_str().to_owned(),
             Self::AiConversation(i) => i.title.clone(),
@@ -1093,6 +1212,16 @@ impl Item {
     pub fn as_forward(&self) -> Option<&PortForward> {
         if let Self::Forward(f) = self {
             Some(f)
+        } else {
+            None
+        }
+    }
+
+    /// The proxy, if this is one.
+    #[must_use]
+    pub fn as_proxy(&self) -> Option<&Proxy> {
+        if let Self::Proxy(p) = self {
+            Some(p)
         } else {
             None
         }
@@ -1188,6 +1317,7 @@ impl Item {
             Self::Group(i) => i.name.push_str(suffix),
             Self::Key(i) => i.name.push_str(suffix),
             Self::Snippet(i) => i.name.push_str(suffix),
+            Self::Proxy(i) => i.name.push_str(suffix),
             Self::AiProvider(i) => i.name.push_str(suffix),
             Self::Skill(i) => i.name.push_str(suffix),
             Self::McpServer(i) => i.name.push_str(suffix),
@@ -1308,6 +1438,68 @@ mod tests {
     }
 
     #[test]
+    fn proxies_match_the_spec_shape() {
+        let proxy = Item::Proxy(Proxy {
+            name: "Office".into(),
+            kind: ProxyKind::Http,
+            address: "proxy.example.com".into(),
+            port: 3128,
+            username: "alice".into(),
+            password: Zeroizing::new("s3cret".into()),
+            updated_at: 7,
+        });
+        assert_eq!(
+            serde_json::to_value(&proxy).unwrap(),
+            json!({
+                "type": "proxy",
+                "name": "Office",
+                "kind": "http",
+                "address": "proxy.example.com",
+                "port": 3128,
+                "username": "alice",
+                "password": "s3cret",
+                "updated_at": 7
+            })
+        );
+        let text = format!("{proxy:?}");
+        assert!(text.contains("alice") && !text.contains("s3cret"), "{text}");
+        let old: Item = serde_json::from_value(json!({"type": "proxy", "name": "x"})).unwrap();
+        let old = old.as_proxy().unwrap();
+        assert_eq!((old.kind, old.port), (ProxyKind::Socks5, 1080));
+
+        // A host writes its proxy only when it is not the device default.
+        let value = serde_json::to_value(Item::Host(sample_host())).unwrap();
+        assert!(value.get("proxy").is_none());
+        for (choice, expected) in [
+            (HostProxy::Direct, json!({"kind": "direct"})),
+            (
+                HostProxy::Proxy {
+                    proxy_id: "p1".into(),
+                },
+                json!({"kind": "proxy", "proxy_id": "p1"}),
+            ),
+        ] {
+            let host = Host {
+                proxy: choice.clone(),
+                ..sample_host()
+            };
+            let value = serde_json::to_value(Item::Host(host.clone())).unwrap();
+            assert_eq!(value["proxy"], expected);
+            let back = Item::from_plaintext(&Item::Host(host.clone()).to_plaintext().unwrap());
+            assert_eq!(back.unwrap(), Item::Host(host));
+        }
+        let old: Item = serde_json::from_value(json!({"type": "host", "name": "old"})).unwrap();
+        assert_eq!(old.as_host().unwrap().proxy, HostProxy::DeviceDefault);
+        assert_eq!(
+            HostProxy::Proxy {
+                proxy_id: "p1".into()
+            }
+            .proxy_id(),
+            Some("p1")
+        );
+    }
+
+    #[test]
     fn every_type_tag_round_trips() {
         let items = [
             (Item::Host(Host::default()), "host"),
@@ -1316,6 +1508,7 @@ mod tests {
             (Item::KnownHost(KnownHost::default()), "known_host"),
             (Item::Forward(PortForward::default()), "forward"),
             (Item::Snippet(Snippet::default()), "snippet"),
+            (Item::Proxy(Proxy::default()), "proxy"),
             (Item::AiProvider(AiProvider::default()), "ai_provider"),
             (
                 Item::SearchProvider(SearchProvider::default()),

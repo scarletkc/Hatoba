@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use hatoba_core::model::{HostAuth, Item};
+use hatoba_core::model::{HostAuth, HostProxy, Item};
 use hatoba_core::platform::{SecretStore, secret_keys};
 use hatoba_core::sync::{
     ConflictEntry, D1Backend, Resolution, SyncBackend, SyncConfig, WorkerBackend, clear_session,
@@ -287,6 +287,7 @@ fn item_type(item: Option<&Item>) -> ItemType {
         Some(Item::KnownHost(_)) => ItemType::KnownHost,
         Some(Item::Forward(_)) => ItemType::Forward,
         Some(Item::Snippet(_)) => ItemType::Snippet,
+        Some(Item::Proxy(_)) => ItemType::Proxy,
         Some(Item::AiProvider(_)) => ItemType::AiProvider,
         Some(Item::SearchProvider(_)) => ItemType::SearchProvider,
         Some(Item::AiConversation(_)) => ItemType::AiConversation,
@@ -323,6 +324,14 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
                     .and_then(hosts)
                     .unwrap_or_default(),
             ),
+            (
+                "proxy",
+                match &h.proxy {
+                    HostProxy::DeviceDefault => "device_default".to_owned(),
+                    HostProxy::Direct => "direct".to_owned(),
+                    HostProxy::Proxy { proxy_id } => hosts(proxy_id).unwrap_or_default(),
+                },
+            ),
             ("tags", h.tags.join(", ")),
             ("note", h.note.clone()),
             ("ai_notes", h.ai_notes.clone()),
@@ -335,6 +344,14 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
         Item::KnownHost(k) => vec![("fingerprint", k.fingerprint.clone())],
         Item::Forward(f) => vec![("bind_port", f.bind_port.to_string())],
         Item::Snippet(s) => vec![("name", s.name.clone())],
+        // Never the password.
+        Item::Proxy(p) => vec![
+            ("name", p.name.clone()),
+            ("kind", p.kind.as_str().to_owned()),
+            ("address", p.address.clone()),
+            ("port", p.port.to_string()),
+            ("username", p.username.clone()),
+        ],
         // Never the API key, env or header values, or message data.
         Item::AiProvider(p) => vec![
             ("name", p.name.clone()),
@@ -432,8 +449,13 @@ fn conflict_view(c: &ConflictEntry, hosts: &dyn Fn(&str) -> Option<String>) -> C
 #[specta::specta]
 pub fn sync_conflicts(state: State<'_, AppState>) -> AppResult<Vec<ConflictView>> {
     state.with_unlocked(|v| {
-        let names: std::collections::HashMap<String, String> =
-            v.hosts().into_iter().map(|(id, h)| (id, h.name)).collect();
+        // Hosts name their jump host and proxy by id.
+        let names: std::collections::HashMap<String, String> = v
+            .hosts()
+            .into_iter()
+            .map(|(id, h)| (id, h.name))
+            .chain(v.proxies().into_iter().map(|(id, p)| (id, p.name)))
+            .collect();
         let lookup = |id: &str| names.get(id).cloned();
         Ok(v.conflicts(true)?
             .iter()

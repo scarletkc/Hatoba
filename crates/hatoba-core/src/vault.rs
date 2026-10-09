@@ -23,7 +23,8 @@ use crate::crypto::{
 };
 use crate::error::{Error, Result};
 use crate::model::{
-    Group, Host, Item, KnownHost, PortForward, RightClick, SETTINGS_ID, Settings, SshKey, new_id,
+    Group, Host, Item, KnownHost, PortForward, Proxy, RightClick, SETTINGS_ID, Settings, SshKey,
+    new_id,
 };
 use crate::recovery::RecoveryCode;
 use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
@@ -858,6 +859,12 @@ impl Vault {
     #[must_use]
     pub fn known_hosts(&self) -> Vec<(String, KnownHost)> {
         self.collect(Item::as_known_host)
+    }
+
+    /// All proxies (SSH-13).
+    #[must_use]
+    pub fn proxies(&self) -> Vec<(String, Proxy)> {
+        self.collect(Item::as_proxy)
     }
 
     /// All port forwards.

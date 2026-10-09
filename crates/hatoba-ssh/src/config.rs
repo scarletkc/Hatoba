@@ -1,7 +1,8 @@
 //! `~/.ssh/config` import (SSH-11).
 //!
 //! Only the options Hatoba can map onto a host entry are understood: `Host`,
-//! `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump`. Lookup follows
+//! `HostName`, `User`, `Port`, `IdentityFile` and `ProxyJump`. `ProxyCommand` is
+//! read only so the import can say it was left out. Lookup follows
 //! OpenSSH semantics: blocks are evaluated in file order and the first value
 //! obtained for an option wins (`IdentityFile` accumulates).
 //! `Match` blocks and `Include` are ignored.
@@ -26,6 +27,9 @@ pub struct SshConfigHost {
     pub identity_files: Vec<String>,
     /// Raw `ProxyJump` value, e.g. `user@bastion:2222,other`.
     pub proxy_jump: Option<String>,
+    /// Raw `ProxyCommand` value, e.g. `nc -X 5 -x proxy:1080 %h %p`. Like OpenSSH, whichever of
+    /// `ProxyJump` and `ProxyCommand` comes first is the one that applies.
+    pub proxy_command: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -39,6 +43,7 @@ struct Block {
     port: Option<u16>,
     identity_files: Vec<String>,
     proxy_jump: Option<String>,
+    proxy_command: Option<String>,
 }
 
 /// Parses SSH config text, expanding `~` / `%d` using the current user's home
@@ -100,6 +105,12 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                 let Some(block) = blocks.last_mut() else {
                     continue;
                 };
+                if kw == "proxycommand" {
+                    if !args.is_empty() {
+                        block.proxy_command.get_or_insert(args.join(" "));
+                    }
+                    continue;
+                }
                 let first = args.into_iter().next();
                 match (kw, first) {
                     ("hostname", Some(v)) => {
@@ -151,6 +162,9 @@ fn resolve_alias(alias: &str, blocks: &[Block], home: Option<&str>) -> SshConfig
         if !proxy_set && let Some(pj) = &block.proxy_jump {
             proxy_set = true;
             host.proxy_jump = (!pj.eq_ignore_ascii_case("none")).then(|| pj.clone());
+        } else if !proxy_set && let Some(pc) = &block.proxy_command {
+            proxy_set = true;
+            host.proxy_command = (!pc.eq_ignore_ascii_case("none")).then(|| pc.clone());
         }
     }
 
@@ -438,6 +452,30 @@ mod tests {
             Some("user@bastion:2222,other")
         );
         assert_eq!(hosts[1].proxy_jump, None);
+    }
+
+    #[test]
+    fn proxy_command_is_kept_raw_and_shares_the_slot_with_proxy_jump() {
+        let hosts = parse(
+            "Host socks
+  ProxyCommand nc -X 5 -x proxy.example.com:1080 %h %p
+             Host jumped
+  ProxyJump bastion
+             Host off
+  ProxyCommand none
+             Host *
+  ProxyCommand connect -H proxy:3128 %h %p
+",
+        );
+        assert_eq!(
+            hosts[0].proxy_command.as_deref(),
+            Some("nc -X 5 -x proxy.example.com:1080 %h %p")
+        );
+        assert_eq!(hosts[0].proxy_jump, None);
+        // The first of the two wins, as in OpenSSH.
+        assert_eq!(hosts[1].proxy_jump.as_deref(), Some("bastion"));
+        assert_eq!(hosts[1].proxy_command, None);
+        assert_eq!(hosts[2].proxy_command, None);
     }
 
     #[test]

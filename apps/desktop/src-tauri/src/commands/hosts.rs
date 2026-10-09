@@ -3,14 +3,16 @@
 use std::collections::{BTreeMap, HashSet};
 use std::time::Duration;
 
-use hatoba_core::model::{Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
+use hatoba_core::model::{
+    Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_CHARS, SshKey,
+};
 use hatoba_core::vault::Vault;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
 use crate::convert::{group_view, host_view};
 use crate::dto::{
-    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult,
+    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult, ProxyMode,
     SshConfigCandidate, TagCount,
 };
 use crate::error::{AppError, AppResult};
@@ -76,6 +78,20 @@ pub fn host_from_input(
     {
         return Err(AppError::invalid("group_id", "group not found"));
     }
+    let proxy = match input.proxy_mode {
+        ProxyMode::DeviceDefault => HostProxy::DeviceDefault,
+        ProxyMode::Direct => HostProxy::Direct,
+        ProxyMode::Proxy => {
+            let proxy_id = input
+                .proxy_id
+                .clone()
+                .ok_or_else(|| AppError::invalid("proxy_id", "choose a proxy"))?;
+            if vault.get(&proxy_id).and_then(Item::as_proxy).is_none() {
+                return Err(AppError::invalid("proxy_id", "proxy not found"));
+            }
+            HostProxy::Proxy { proxy_id }
+        }
+    };
     let auth = match input.auth_kind {
         AuthKind::Password => match (&input.password, existing.map(|h| &h.auth)) {
             (Some(pw), _) => HostAuth::Password {
@@ -119,6 +135,7 @@ pub fn host_from_input(
         tags,
         favorite: input.favorite,
         jump_host_id: input.jump_host_id.clone(),
+        proxy,
         note: input.note.clone(),
         ai_notes: input.ai_notes.clone(),
         updated_at: 0,
@@ -354,20 +371,24 @@ pub async fn hosts_probe(
     state: State<'_, AppState>,
     ids: Vec<String>,
 ) -> AppResult<Vec<ProbeResult>> {
-    let targets: Vec<(String, String, u16)> = state.with_unlocked(|v| {
+    type Target = (String, String, u16, Option<hatoba_ssh::ProxyConfig>);
+    let targets: Vec<Target> = state.with_unlocked(|v| {
         Ok(ids
             .iter()
             .take(500)
             .filter_map(|id| {
-                v.get(id)
-                    .and_then(Item::as_host)
-                    .map(|h| (id.clone(), h.address.clone(), h.port))
+                let h = v.get(id).and_then(Item::as_host)?;
+                // SSH-13: through the proxy the connection would use, never around it. A host
+                // whose proxy was deleted is not probed.
+                let proxy = crate::ssh::connection_proxy(v, h).ok()?;
+                Some((id.clone(), h.address.clone(), h.port, proxy))
             })
             .collect())
     })?;
-    let probes = targets.into_iter().map(|(id, host, port)| async move {
+    let probes = targets.into_iter().map(|(id, host, port, proxy)| async move {
         // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
-        let latency = hatoba_ssh::tcp_probe(&host, port, Duration::from_secs(3)).await;
+        let latency =
+            hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3)).await;
         ProbeResult {
             id,
             online: latency.is_some(),
@@ -422,6 +443,7 @@ pub fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfig
                 username: e.user.clone().unwrap_or_else(default_user),
                 identity_file: e.identity_files.first().cloned(),
                 proxy_jump: e.proxy_jump.clone(),
+                proxy_command: e.proxy_command.clone(),
                 alias: e.alias,
             })
             .collect())
@@ -477,6 +499,12 @@ pub fn ssh_config_import(
                 auth,
                 ..Host::default()
             };
+            if let Some(command) = &entry.proxy_command {
+                result.warnings.push(format!(
+                    "{}: ProxyCommand {command} was not imported; set a proxy or jump host for it",
+                    entry.alias
+                ));
+            }
             let id = v.put(None, Item::Host(host))?;
             result.hosts_created += 1;
             created.push((id, entry));
@@ -603,6 +631,8 @@ mod tests {
             tags: Vec::new(),
             favorite: false,
             jump_host_id: None,
+            proxy_mode: ProxyMode::DeviceDefault,
+            proxy_id: None,
             note: String::new(),
             ai_notes,
         }

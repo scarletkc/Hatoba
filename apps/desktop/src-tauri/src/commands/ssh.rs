@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use hatoba_core::model::Item;
+use hatoba_core::model::{HostProxy, Item};
 use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tauri::{AppHandle, State};
@@ -20,7 +20,7 @@ use crate::dto::{
     ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, StatsEvent, TestResult,
 };
 use crate::error::{AppError, AppResult};
-use crate::ssh::{LiveSession, Overrides, build_config, connect_with};
+use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
 use crate::state::{AppState, now_ms};
 
 const FRAME_DATA: u8 = 0;
@@ -135,16 +135,17 @@ pub async fn ssh_connect_target(
     channel: Channel<TermFrame>,
 ) -> AppResult<String> {
     let target = quick::validate(target)?;
-    // Known hosts live in the vault (SSH-04).
-    state.with_unlocked(|_| Ok(()))?;
+    // Known hosts live in the vault (SSH-04). The device's default proxy applies (SSH-13).
+    let proxy = state.with_unlocked(|v| resolve_proxy(v, &HostProxy::DeviceDefault))?;
     let session_id = uuid::Uuid::now_v7().to_string();
     let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
-    let cfg = ConnectConfig::new(
+    let mut cfg = ConnectConfig::new(
         target.address.clone(),
         target.port,
         target.username.clone(),
         AuthMethod::AgentThenAsk,
     );
+    cfg.proxy = proxy;
     let (live, events) = open_terminal(&app, &state, cfg, &session_id, None, &options).await?;
     if let Err(e) = state.with_unlocked(|v| quick::remember(v, &target)) {
         tracing::debug!("recent target not recorded: {}", e.detail);

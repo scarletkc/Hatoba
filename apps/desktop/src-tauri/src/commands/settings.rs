@@ -136,7 +136,7 @@ pub fn prefs_save(state: State<'_, AppState>, prefs: LocalPrefs) -> AppResult<()
 /// Writes `prefs` over the stored JSON. Keys this build does not know stay: the terminal
 /// behaviour older builds kept there waits for [`adopt_legacy_prefs`], which needs the vault
 /// unlocked and the latest settings, and a newer build's prefs survive a downgrade.
-fn merge_prefs(stored: Option<&str>, prefs: &LocalPrefs) -> AppResult<String> {
+pub(crate) fn merge_prefs(stored: Option<&str>, prefs: &LocalPrefs) -> AppResult<String> {
     let mut merged = stored_prefs(stored);
     if let Value::Object(fields) =
         serde_json::to_value(prefs).map_err(|e| AppError::internal(e.to_string()))?

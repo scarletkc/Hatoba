@@ -17,6 +17,7 @@ use crate::handler::{ClientHandler, CloseReason, SessionShared};
 use crate::hostkey::HostKeyVerifier;
 use crate::interactive::KeyboardInteractive;
 use crate::net::{ConnectClock, Phase, ceil_ms, tcp_connect};
+use crate::proxy::{self, ProxyConfig};
 use crate::server_os::{ServerOs, server_os};
 use crate::sftp::SftpClient;
 use crate::shell;
@@ -26,6 +27,9 @@ pub use crate::stats::{ServerStats, StatsEvent, StatsHandle};
 
 /// Upper bound for output collected by [`SshSession::exec_output`].
 const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;
+/// How long the round trip measured through a proxy may take before the proxy's own answer
+/// time stands in for it.
+const PROXY_PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How to prove who we are to a server.
 #[derive(Clone)]
@@ -93,6 +97,9 @@ pub struct ConnectConfig {
     pub auth: AuthMethod,
     /// ProxyJump chain, outermost (first to connect) first.
     pub jump: Vec<JumpHop>,
+    /// SOCKS5 or HTTP proxy for the TCP connection of the first hop: the first jump host, or
+    /// the target when there is none. Later hops go through the earlier ones.
+    pub proxy: Option<ProxyConfig>,
     /// Budget for DNS + TCP + handshake + authentication of each hop.
     /// Time spent waiting for the host key verifier or the user is not counted.
     pub connect_timeout: Duration,
@@ -118,6 +125,7 @@ impl ConnectConfig {
             username: username.into(),
             auth,
             jump: Vec::new(),
+            proxy: None,
             connect_timeout: Duration::from_secs(15),
             keepalive_interval: Duration::from_secs(30),
             keepalive_max: 3,
@@ -134,6 +142,7 @@ impl fmt::Debug for ConnectConfig {
             .field("username", &self.username)
             .field("auth", &self.auth)
             .field("jump", &self.jump)
+            .field("proxy", &self.proxy)
             .field("connect_timeout", &self.connect_timeout)
             .field("keepalive_interval", &self.keepalive_interval)
             .field("keepalive_max", &self.keepalive_max)
@@ -162,7 +171,7 @@ fn russh_config(cfg: &ConnectConfig) -> Arc<client::Config> {
 struct Hop {
     handle: Handle<ClientHandler>,
     shared: Arc<SessionShared>,
-    /// TCP connect time (only for hops reached directly over TCP).
+    /// TCP connect time, or the proxy's answer time (only for the hop reached over TCP).
     rtt: Option<Duration>,
 }
 
@@ -177,6 +186,7 @@ async fn connect_hop(
     config: &Arc<client::Config>,
     spec: &HopSpec<'_>,
     via: Option<&Handle<ClientHandler>>,
+    proxy: Option<&ProxyConfig>,
     verifier: &Arc<dyn HostKeyVerifier>,
     interactive: Option<&Arc<dyn KeyboardInteractive>>,
     budget: Duration,
@@ -194,9 +204,30 @@ async fn connect_hop(
     let work = async {
         let (mut handle, rtt) = match via {
             None => {
-                let (stream, rtt) = tcp_connect(spec.host, spec.port, &clock).await?;
+                let (stream, rtt) = match proxy {
+                    Some(proxy) => proxy::open_tunnel(proxy, spec.host, spec.port, &clock).await?,
+                    None => tcp_connect(spec.host, spec.port, &clock).await?,
+                };
                 clock.set_phase(Phase::Handshake);
-                let handle = client::connect_stream(Arc::clone(config), stream, handler).await?;
+                let handle = client::connect_stream(Arc::clone(config), stream, handler)
+                    .await
+                    .map_err(|e| {
+                        let e = SshError::from(e);
+                        // Some proxies confirm at once and only then try the server, so a
+                        // server they cannot reach shows up as the tunnel closing here.
+                        if proxy.is_some() && e.kind == SshErrorKind::Disconnected {
+                            SshError::new(
+                                SshErrorKind::Proxy,
+                                format!(
+                                    "the connection through the proxy closed before the SSH \
+                                     handshake finished: {}",
+                                    e.message
+                                ),
+                            )
+                        } else {
+                            e
+                        }
+                    })?;
                 (handle, Some(rtt))
             }
             Some(previous) => {
@@ -274,10 +305,12 @@ pub async fn connect(
     let mut last: Option<Hop> = None;
     for (i, spec) in specs.iter().enumerate() {
         let via = jumps.last().map(|j| &j.handle);
+        let proxy = cfg.proxy.as_ref().filter(|_| i == 0);
         let mut hop = connect_hop(
             &config,
             spec,
             via,
+            proxy,
             &verifier,
             interactive,
             cfg.connect_timeout,
@@ -295,6 +328,7 @@ pub async fn connect(
                 &config,
                 &ask,
                 via,
+                proxy,
                 &verifier,
                 interactive,
                 cfg.connect_timeout,
@@ -328,6 +362,15 @@ pub async fn connect(
         }
     }
     let hop = last.ok_or_else(|| SshError::other("no hop to connect to"))?;
+    if cfg.proxy.is_some() {
+        // The proxy's answer says little about the network (some answer before they connect),
+        // so the first hop's round trip is measured through the tunnel.
+        let first = jumps.first().map_or(&hop.handle, |j| &j.handle);
+        let started = tokio::time::Instant::now();
+        if let Ok(Ok(())) = tokio::time::timeout(PROXY_PING_TIMEOUT, first.send_ping()).await {
+            first_rtt = Some(started.elapsed());
+        }
+    }
 
     let inner = Arc::new(Inner {
         handle: hop.handle,
@@ -439,7 +482,7 @@ impl fmt::Debug for SshSession {
 
 impl SshSession {
     /// TCP connect round-trip time of the first hop, in milliseconds
-    /// (at least 1).
+    /// (at least 1). Through a proxy, the round trip of an SSH keepalive to the first hop.
     pub fn latency_ms(&self) -> u32 {
         self.inner.latency_ms
     }
