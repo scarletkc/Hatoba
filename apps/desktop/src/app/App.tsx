@@ -140,7 +140,15 @@ function HomePage({ page }: { page: Page }) {
     case "hosts":
       return <HostsPage filter={page.filter} />;
     case "host-edit":
-      return <HostEditPage key={page.hostId ?? "new"} hostId={page.hostId} groupId={page.groupId} back={page.back} />;
+      return (
+        <HostEditPage
+          key={page.hostId ?? `new:${page.prefill ? JSON.stringify(page.prefill) : ""}`}
+          hostId={page.hostId}
+          groupId={page.groupId}
+          back={page.back}
+          prefill={page.prefill}
+        />
+      );
     case "keys":
       return <KeysPage />;
     case "sync":

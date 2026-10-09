@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, SyncStatus, VaultStatus } from "@/ipc/types";
+import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultStatus } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 
 export type HostFilter =
@@ -13,7 +13,14 @@ export type HostFilter =
 /** What the "home" tab shows. Session tabs are tracked in `tabs.ts`. */
 export type Page =
   | { kind: "hosts"; filter: HostFilter }
-  | { kind: "host-edit"; hostId: string | null; groupId: string | null; back: HostFilter }
+  | {
+      kind: "host-edit";
+      hostId: string | null;
+      groupId: string | null;
+      back: HostFilter;
+      /** A new host starts from this quick-connect target (HOST-12). */
+      prefill?: QuickTarget;
+    }
   | { kind: "keys" }
   | { kind: "sync" };
 

@@ -7,7 +7,7 @@ export default defineMessages({
     "hosts.newHost": "新建主机",
 
     "hosts.count": "{n} 台",
-    "hosts.search": "搜索名称、IP 或标签",
+    "hosts.search": "搜索主机或 ssh user@host",
     "hosts.sort": "排序方式",
     "hosts.sort.recent": "最近连接",
     "hosts.sort.name": "名称",
@@ -51,6 +51,14 @@ export default defineMessages({
     "hosts.noResults.title": "没有找到匹配的主机",
     "hosts.noResults.body": "没有主机匹配“{q}”。试试名称、地址、用户名或标签里的其他关键字。",
     "hosts.noResults.clear": "清除搜索",
+
+    // quick connect (HOST-12)
+    "hosts.quick.notSaved": "未保存",
+    "hosts.quick.recent": "最近",
+    "hosts.quick.recentTitle": "快速连接记录",
+    "hosts.quick.forget": "从记录中移除",
+    "hosts.quick.option": "快速连接不支持 {option}。要使用密钥、跳板机等设置，请新建主机。",
+    "hosts.quick.command": "快速连接不能直接运行远程命令。请先连接，再在终端里运行。",
 
     "hosts.import.title": "从 SSH 配置导入",
     "hosts.import.subtitle": "选择要从 {path} 导入的主机。已存在同名主机的默认不勾选。",
@@ -151,7 +159,7 @@ export default defineMessages({
 
     "hosts.count": "{n} hosts",
     "hosts.count_one": "1 host",
-    "hosts.search": "Search name, IP or tag",
+    "hosts.search": "Search hosts or ssh user@host",
     "hosts.sort": "Sort by",
     "hosts.sort.recent": "Recent",
     "hosts.sort.name": "Name",
@@ -195,6 +203,13 @@ export default defineMessages({
     "hosts.noResults.title": "No matching hosts",
     "hosts.noResults.body": "Nothing matches “{q}”. Try another word from the name, address, username or tags.",
     "hosts.noResults.clear": "Clear Search",
+
+    "hosts.quick.notSaved": "Not saved",
+    "hosts.quick.recent": "Recent",
+    "hosts.quick.recentTitle": "Recent Quick Connections",
+    "hosts.quick.forget": "Remove from Recent",
+    "hosts.quick.option": "Quick connect doesn’t support {option}. To use keys, jump hosts or other options, add a host.",
+    "hosts.quick.command": "Quick connect can’t run a remote command. Connect first, then run it in the terminal.",
 
     "hosts.import.title": "Import SSH Config",
     "hosts.import.subtitle": "Choose the hosts to import from {path}. Hosts that already exist are unchecked by default.",
@@ -297,7 +312,7 @@ export default defineMessages({
     "hosts.newHost": "新規ホスト",
 
     "hosts.count": "{n} 台",
-    "hosts.search": "名前、IP、タグを検索",
+    "hosts.search": "ホストを検索、または ssh user@host",
     "hosts.sort": "並べ替え",
     "hosts.sort.recent": "最近の接続",
     "hosts.sort.name": "名前",
@@ -341,6 +356,13 @@ export default defineMessages({
     "hosts.noResults.title": "一致するホストがありません",
     "hosts.noResults.body": "「{q}」に一致するホストはありません。名前、アドレス、ユーザー名、タグの別の語句をお試しください。",
     "hosts.noResults.clear": "検索をクリア",
+
+    "hosts.quick.notSaved": "未保存",
+    "hosts.quick.recent": "最近",
+    "hosts.quick.recentTitle": "最近のクイック接続",
+    "hosts.quick.forget": "履歴から削除",
+    "hosts.quick.option": "クイック接続は {option} に対応していません。鍵や踏み台などを使うには、ホストを追加してください。",
+    "hosts.quick.command": "クイック接続ではリモートコマンドを実行できません。接続してからターミナルで実行してください。",
 
     "hosts.import.title": "SSH 設定からインポート",
     "hosts.import.subtitle": "{path} からインポートするホストを選択してください。同名のホストがすでにある場合は、初期状態でオフになっています。",

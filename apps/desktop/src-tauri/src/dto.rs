@@ -189,7 +189,7 @@ pub struct ConnectOptions {
     pub passphrase: Option<String>,
 }
 
-/// A target typed into the hosts search field (quick connect, HOST-11). It is never saved as a
+/// A target typed into the hosts search field (quick connect, HOST-12). It is never saved as a
 /// host; once connected it joins the device-local recent list.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct QuickTarget {
@@ -212,7 +212,7 @@ pub enum SessionState {
 #[tauri_specta(event_name = "ssh://state")]
 pub struct SessionStateEvent {
     pub session_id: String,
-    /// `None` for a quick-connect session (HOST-11).
+    /// `None` for a quick-connect session (HOST-12).
     pub host_id: Option<String>,
     pub state: SessionState,
     pub latency_ms: Option<u32>,
@@ -255,7 +255,7 @@ pub struct AuthPrompt {
     pub name: String,
     pub instructions: String,
     pub prompts: Vec<AuthPromptField>,
-    /// The login password of a quick connection (HOST-11), asked like an "ask every time"
+    /// The login password of a quick connection (HOST-12), asked like an "ask every time"
     /// password (SSH-03) rather than as a server prompt; answered with one value.
     pub password: bool,
     /// `user@host:port` of the hop that asks.

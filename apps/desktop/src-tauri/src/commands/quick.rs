@@ -1,4 +1,4 @@
-//! Quick connect targets (HOST-11): validation and the device-local recent list.
+//! Quick connect targets (HOST-12): validation and the device-local recent list.
 
 use hatoba_core::vault::Vault;
 use tauri::State;

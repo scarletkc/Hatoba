@@ -1,4 +1,4 @@
-//! `AuthMethod::AgentThenAsk` (quick connect, HOST-11) against a scripted in-process SSH server.
+//! `AuthMethod::AgentThenAsk` (quick connect, HOST-12) against a scripted in-process SSH server.
 //!
 //! One test function on purpose: it points `SSH_AUTH_SOCK` at a missing agent for the whole
 //! process, so the agent step is skipped the way it is on a machine without an agent.

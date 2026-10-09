@@ -1,5 +1,5 @@
 import { hostById } from "@/app/data";
-import type { AppError, HostView, SshErrorKind } from "@/ipc/types";
+import type { AppError, HostView, QuickTarget, SshErrorKind } from "@/ipc/types";
 
 /** Short, familiar codes for the error card's meta line ("ETIMEDOUT · 09:44:07"). */
 const SSH_CODES: Record<SshErrorKind, string> = {
@@ -33,13 +33,21 @@ export function clockTime(ms: number): string {
  * Text for "Copy Diagnostics". Technical English on purpose (it is pasted into bug reports and
  * chats) and free of secrets: no passwords, passphrases or key material.
  */
-export function diagnosticsText(host: HostView | undefined, fallbackName: string, err: AppError, at: number, attempts: number): string {
-  const jump = hostById(host?.jump_host_id)?.name;
+export function diagnosticsText(
+  host: HostView | QuickTarget | null | undefined,
+  fallbackName: string,
+  err: AppError,
+  at: number,
+  attempts: number,
+): string {
+  // A quick connection (HOST-12) has a target but no saved host.
+  const saved = host && "id" in host ? host : undefined;
+  const jump = hostById(saved?.jump_host_id)?.name;
   const lines = [
     "Hatoba connection diagnostics",
-    `Host: ${host?.name ?? fallbackName}${host ? ` (${host.address}:${host.port})` : ""}`,
+    `Host: ${saved?.name ?? fallbackName}${host ? ` (${host.address}:${host.port})` : ""}`,
     host && `User: ${host.username}`,
-    host && `Auth: ${host.auth_kind}`,
+    host && `Auth: ${saved ? saved.auth_kind : "quick connect (agent, then password or keyboard-interactive)"}`,
     jump && `Jump host: ${jump}`,
     `Error: ${errorCode(err)} (${err.code}${err.ssh_kind ? `/${err.ssh_kind}` : ""})`,
     `Detail: ${err.detail}`,

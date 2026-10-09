@@ -4,7 +4,7 @@
 
 The home tab shows the host list for the sidebar item that is selected: **All Hosts**, **Favorites**, **Recent** (hosts that have been connected before), a group, or a tag. A host is one saved SSH destination. Groups are flat (one level) and a host belongs to at most one group; tags are free text and a host can have several.
 
-- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘K focuses it), the sort button, and **New Host**.
+- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘K focuses it), the sort button, and **New Host**. The search box also connects to hosts that are not saved; see Quick connect below.
 - Each row shows the name, `user@address:port`, the jump host if any, tags, and the time of the last connection. The dot is green when the host is connected or answers a TCP probe, grey otherwise. A host whose latest attempt in this launch failed shows **Failed** in red.
 - To connect: double-click a row, select it and press Enter, or click **Connect**. Up and down move the selection, and typing starts a search. The same host can be opened in several tabs.
 - Right-click a row for its menu.
@@ -14,7 +14,7 @@ The home tab shows the host list for the sidebar item that is selected: **All Ho
 | All Hosts | 全部主机 | すべてのホスト |
 | Favorites | 收藏 | お気に入り |
 | Recent | 最近连接 | 最近の接続 |
-| Search name, IP or tag | 搜索名称、IP 或标签 | 名前、IP、タグを検索 |
+| Search hosts or ssh user@host | 搜索主机或 ssh user@host | ホストを検索、または ssh user@host |
 | Sort by | 排序方式 | 並べ替え |
 | Name | 名称 | 名前 |
 | Address | 地址 | アドレス |
@@ -42,6 +42,26 @@ The home tab shows the host list for the sidebar item that is selected: **All Ho
 | Delete Group | 删除分组 | グループを削除 |
 | General | 通用 | 一般 |
 | Show host reachability | 显示主机在线状态 | ホストの接続状態を表示 |
+
+## Quick connect
+
+Typing `user@host`, `user@host:port` or an ssh command such as `ssh -p 2222 deploy@203.0.113.7` in the search box connects without saving a host. A **Connect** row for that target appears at the top of the list and is selected, so Enter connects it; up and down move on to the matching saved hosts. Plain words only search. If a saved host has the same address, port and user, that host is selected instead, so its key and jump host are used.
+
+- Only `-p` (port) and `-l` (user) are understood. Other options (`-i`, `-J`, `-L` …) and remote commands show a row that explains why it cannot connect; save a host to use keys, jump hosts or forwards.
+- Without a user name (`ssh host`), Hatoba asks for one before connecting.
+- Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog. The password is used once and never saved. Saved keys are not tried. The host key is checked as for any host (trust it on first use; it syncs).
+- The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user.
+- Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Connect | 连接 | 接続 |
+| Not saved | 未保存 | 未保存 |
+| Recent | 最近 | 最近 |
+| Recent Quick Connections | 快速连接记录 | 最近のクイック接続 |
+| Remove from Recent | 从记录中移除 | 履歴から削除 |
+| Save as Host… | 保存为主机… | ホストとして保存… |
+| Username | 用户名 | ユーザー名 |
 
 ## Import from ~/.ssh/config
 
@@ -133,7 +153,7 @@ A connection opens a new terminal tab (orange dot while connecting). The connect
 
 ## When a connection fails or ends
 
-- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (opens the AI panel with the diagnostics attached; nothing is sent until the user sends it, see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. See `references/troubleshooting-connections.md` for each reason.
+- A failed attempt shows a card over the terminal titled "Can’t connect to" plus the host name. It gives the reason, a short code (for example ETIMEDOUT) with the time, and the buttons **Copy Diagnostics**, **Ask AI** (opens the AI panel with the diagnostics attached; nothing is sent until the user sends it, see `references/ai-attachments.md`), **Edit Host** and **Retry**. Diagnostics hold the host, user, auth method, error and time, and no secrets. A quick connection has no **Edit Host** button. See `references/troubleshooting-connections.md` for each reason.
 - A connection that ends later (the server closed it, the network dropped, keepalives went unanswered) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
 - Closing a tab (the × on the tab, middle-click, or Ctrl+Shift+W / ⌘W) ends its session.
 - Locking keeps open sessions connected in the background unless **Disconnect all sessions when locked** is on (Settings → Security).

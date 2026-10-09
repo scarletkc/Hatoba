@@ -238,11 +238,23 @@ export interface ConnectOptions {
   passphrase: string | null;
 }
 
+/**
+ * A target typed into the hosts search field (quick connect, HOST-12). It is never saved as a host;
+ * once connected it joins the device-local recent list.
+ */
+export interface QuickTarget {
+  /** DNS name or IP address, IPv6 without brackets. */
+  address: string;
+  port: number;
+  username: string;
+}
+
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";
 
 export interface SessionStateEvent {
   session_id: string;
-  host_id: string;
+  /** null for a quick-connect session (HOST-12). */
+  host_id: string | null;
   state: SessionState;
   /** Connection round-trip time, once connected. */
   latency_ms: number | null;
@@ -271,6 +283,10 @@ export interface AuthPrompt {
   name: string;
   instructions: string;
   prompts: { prompt: string; echo: boolean }[];
+  /** The login password of a quick connection (HOST-12): asked like SSH-03 and answered with one value. */
+  password: boolean;
+  /** `user@host:port` of the hop that asks. */
+  target: string;
 }
 
 export interface TestResult {

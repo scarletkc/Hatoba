@@ -81,7 +81,7 @@ export const commands = {
 	keyDeploy: (keyId: string, hostId: string) => __TAURI_INVOKE<null>("key_deploy", { keyId, hostId }),
 	sshConnect: (hostId: string, options: ConnectOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("ssh_connect", { hostId, options, channel }),
 	/**
-	 *  Quick connect (HOST-11): a terminal on a target typed into the hosts search field, which is
+	 *  Quick connect (HOST-12): a terminal on a target typed into the hosts search field, which is
 	 *  not saved as a host. Authentication is the ssh-agent, then the server's keyboard-interactive
 	 *  prompts or a password asked once (SSH-03, SSH-08, SSH-09); the host key goes through the
 	 *  usual check and is saved like any other (SSH-04).
@@ -511,7 +511,7 @@ export type AuthPrompt = {
 	instructions: string,
 	prompts: AuthPromptField[],
 	/**
-	 *  The login password of a quick connection (HOST-11), asked like an "ask every time"
+	 *  The login password of a quick connection (HOST-12), asked like an "ask every time"
 	 *  password (SSH-03) rather than as a server prompt; answered with one value.
 	 */
 	password: boolean,
@@ -970,7 +970,7 @@ export type ProbeResult = {
 };
 
 /**
- *  A target typed into the hosts search field (quick connect, HOST-11). It is never saved as a
+ *  A target typed into the hosts search field (quick connect, HOST-12). It is never saved as a
  *  host; once connected it joins the device-local recent list.
  */
 export type QuickTarget = {
@@ -1006,7 +1006,7 @@ export type SessionState = "connecting" | "connected" | "disconnected" | "failed
 
 export type SessionStateEvent = {
 	session_id: string,
-	/**  `None` for a quick-connect session (HOST-11). */
+	/**  `None` for a quick-connect session (HOST-12). */
 	host_id: string | null,
 	state: SessionState,
 	latency_ms: number | null,

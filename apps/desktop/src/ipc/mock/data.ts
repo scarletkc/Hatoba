@@ -8,6 +8,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  QuickTarget,
   SettingsView,
   SyncStatus,
 } from "../types";
@@ -125,6 +126,13 @@ export const PROBE: Record<string, boolean> = {
 
 /** Hosts whose connection attempt fails in the mock (design §03b). */
 export const FAILING_HOSTS = new Set(["h-staging-web"]);
+
+/** Quick-connect targets (HOST-12) this "device" connected to before. */
+export const RECENT_TARGETS: QuickTarget[] = [
+  { address: "10.0.8.21", port: 22, username: "root" },
+  { address: "raspberrypi.local", port: 22, username: "pi" },
+  { address: "build-runner.internal", port: 2222, username: "ci" },
+];
 
 export const KEYS: KeyView[] = [
   {

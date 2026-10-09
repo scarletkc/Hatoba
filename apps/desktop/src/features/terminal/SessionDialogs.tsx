@@ -8,6 +8,7 @@ import {
   answerAuth,
   answerHostKey,
   answerSecret,
+  answerUsername,
   usePrompts,
   type PromptItem,
 } from "./prompts";
@@ -30,6 +31,8 @@ export function SessionDialogs() {
       return <AuthPromptDialog key={item.key} item={item} />;
     case "secret":
       return <SecretDialog key={item.key} item={item} />;
+    case "username":
+      return <UsernameDialog key={item.key} item={item} />;
   }
 }
 
@@ -181,7 +184,9 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
         </div>
         <div className={s.body}>
           {isPassword
-            ? t("terminal.password.body", { target: r.target })
+            ? r.oneOff
+              ? t("terminal.password.oneOffBody")
+              : t("terminal.password.body", { target: r.target })
             : t("terminal.passphrase.body", { name: r.hostName })}
         </div>
         {r.wrong && <div className={s.wrong}>{t("terminal.passphrase.wrong")}</div>}
@@ -200,6 +205,50 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
         <div className={s.actions}>
           <Button onClick={cancel}>{t("btn.cancel")}</Button>
           <Button variant="primary" type="submit" disabled={!value}>
+            {t("terminal.connect")}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Quick connect without a user name (`ssh host`, HOST-12): who to log in as. */
+function UsernameDialog({ item }: { item: PromptItem & { kind: "username" } }) {
+  const t = useT();
+  const [value, setValue] = useState("");
+  const name = value.trim();
+  const cancel = useCallback(() => answerUsername(item, null), [item]);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (name && !/\s/.test(name)) answerUsername(item, name);
+  };
+  return (
+    <Modal center onClose={cancel} closeOnBackdrop={false}>
+      <form role="dialog" aria-modal aria-labelledby="user-title" className={s.card} onSubmit={submit}>
+        <div className={s.head}>
+          <Icon name="user" size={20} color="var(--accent)" />
+          <div id="user-title" className={s.title}>
+            {t("terminal.user.title", { target: item.target })}
+          </div>
+        </div>
+        <div className={s.body}>{t("terminal.user.body")}</div>
+        <div className={s.fields}>
+          <TextField
+            large
+            mono
+            autoFocus
+            spellCheck={false}
+            autoCapitalize="off"
+            aria-label={t("terminal.user.label")}
+            placeholder={t("terminal.user.label")}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <div className={s.actions}>
+          <Button onClick={cancel}>{t("btn.cancel")}</Button>
+          <Button variant="primary" type="submit" disabled={!name || /\s/.test(name)}>
             {t("terminal.connect")}
           </Button>
         </div>

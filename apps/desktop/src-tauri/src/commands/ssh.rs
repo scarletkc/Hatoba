@@ -1,4 +1,4 @@
-//! Terminal sessions (spec §7.1, §7.2, §10.3), including quick connect (HOST-11).
+//! Terminal sessions (spec §7.1, §7.2, §10.3), including quick connect (HOST-12).
 
 use std::sync::Arc;
 
@@ -113,7 +113,7 @@ pub async fn ssh_connect(
     Ok(session_id)
 }
 
-/// Quick connect (HOST-11): a terminal on a target typed into the hosts search field, which is
+/// Quick connect (HOST-12): a terminal on a target typed into the hosts search field, which is
 /// not saved as a host. Authentication is the ssh-agent, then the server's keyboard-interactive
 /// prompts or a password asked once (SSH-03, SSH-08, SSH-09); the host key goes through the
 /// usual check and is saved like any other (SSH-04).

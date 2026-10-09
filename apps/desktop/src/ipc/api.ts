@@ -44,6 +44,7 @@ import type {
   McpServerView,
   McpToolInfo,
   ProbeResult,
+  QuickTarget,
   SearchProviderInput,
   SearchProviderView,
   SettingsView,
@@ -129,6 +130,12 @@ export interface HatobaApi {
 
   // ssh
   ssh_connect(host_id: string, options: ConnectOptions, onFrame: FrameHandler): Promise<string>;
+  /** Quick connect (HOST-12): a terminal on a target that is not saved as a host. */
+  ssh_connect_target(target: QuickTarget, options: ConnectOptions, onFrame: FrameHandler): Promise<string>;
+  /** Recent quick-connect targets on this device, newest first. */
+  recent_targets_list(): Promise<QuickTarget[]>;
+  /** Forgets a recent target; resolves to what is left. */
+  recent_target_remove(target: QuickTarget): Promise<QuickTarget[]>;
   ssh_write(session_id: string, data: string): Promise<void>;
   ssh_resize(session_id: string, cols: number, rows: number): Promise<void>;
   ssh_disconnect(session_id: string): Promise<void>;

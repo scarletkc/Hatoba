@@ -35,7 +35,8 @@ account.
 ## Features
 
 - **Hosts**: groups, tags, favorites, fuzzy search, recent connections, online
-  status, `~/.ssh/config` import, and ProxyJump.
+  status, `~/.ssh/config` import, and ProxyJump. Type `ssh user@host` in the
+  search box to connect without saving a host.
 - **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
   methods, confirmation before multi-line paste, search, and clickable links.
 - **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without

@@ -20,6 +20,8 @@ interface Props {
   latencyMs: number | null;
   findOpen: boolean;
   sftpOpen: boolean;
+  /** The tab has saved port forwards to offer (FWD-01): not for a quick connection. */
+  forwards: boolean;
   /** Forwards running on this session (FWD-01); shown as a count on the button. */
   forwardCount: number;
   forwardsOpen: boolean;
@@ -38,6 +40,7 @@ export function StatusBar({
   latencyMs,
   findOpen,
   sftpOpen,
+  forwards,
   forwardCount,
   forwardsOpen,
   findHint,
@@ -65,20 +68,22 @@ export function StatusBar({
       {connected && latencyMs != null && <span className={s.latency}>{latencyMs} ms</span>}
       <div className={s.spacer} />
       <IconButton icon="magnifying-glass" label={`${t("terminal.find")} (${findHint})`} active={findOpen} onClick={onFind} />
-      <button
-        type="button"
-        className={cx(controlStyles.iconButton, forwardsOpen && controlStyles.iconButtonActive, s.fwd)}
-        disabled={!connected}
-        data-forwards-trigger=""
-        aria-haspopup="dialog"
-        aria-expanded={forwardsOpen}
-        aria-label={forwardCount > 0 ? `${t("terminal.fwd")} (${t("terminal.fwd.running", { n: forwardCount })})` : t("terminal.fwd")}
-        title={forwardCount > 0 ? `${t("terminal.fwd")} · ${t("terminal.fwd.running", { n: forwardCount })}` : t("terminal.fwd")}
-        onClick={(e) => onForwards(e.currentTarget)}
-      >
-        <Icon name="arrows-left-right" />
-        {forwardCount > 0 && <span className={s.fwdCount}>{forwardCount}</span>}
-      </button>
+      {forwards && (
+        <button
+          type="button"
+          className={cx(controlStyles.iconButton, forwardsOpen && controlStyles.iconButtonActive, s.fwd)}
+          disabled={!connected}
+          data-forwards-trigger=""
+          aria-haspopup="dialog"
+          aria-expanded={forwardsOpen}
+          aria-label={forwardCount > 0 ? `${t("terminal.fwd")} (${t("terminal.fwd.running", { n: forwardCount })})` : t("terminal.fwd")}
+          title={forwardCount > 0 ? `${t("terminal.fwd")} · ${t("terminal.fwd.running", { n: forwardCount })}` : t("terminal.fwd")}
+          onClick={(e) => onForwards(e.currentTarget)}
+        >
+          <Icon name="arrows-left-right" />
+          {forwardCount > 0 && <span className={s.fwdCount}>{forwardCount}</span>}
+        </button>
+      )}
       <button
         type="button"
         className={cx(s.sftp, sftpOpen && connected && s.sftpOn)}

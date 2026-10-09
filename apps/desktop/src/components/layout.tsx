@@ -28,8 +28,18 @@ export function PageHeader({
 
 export const SearchField = forwardRef<
   HTMLInputElement,
-  { value: string; onChange: (v: string) => void; placeholder: string; shortcut?: string; width?: number }
->(function SearchField({ value, onChange, placeholder, shortcut, width }, ref) {
+  {
+    value: string;
+    onChange: (v: string) => void;
+    placeholder: string;
+    shortcut?: string;
+    width?: number;
+    onFocus?: () => void;
+    onBlur?: () => void;
+    /** A list of suggestions under the field: its element id, whether it shows, and the active option's id. */
+    popup?: { id: string; open: boolean; active?: string };
+  }
+>(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup }, ref) {
   return (
     <label className={l.search} style={{ width }}>
       <Icon name="magnifying-glass" />
@@ -39,6 +49,13 @@ export const SearchField = forwardRef<
         value={value}
         placeholder={placeholder}
         spellCheck={false}
+        role={popup ? "combobox" : undefined}
+        aria-autocomplete={popup ? "list" : undefined}
+        aria-expanded={popup ? popup.open : undefined}
+        aria-controls={popup?.open ? popup.id : undefined}
+        aria-activedescendant={popup?.open ? popup.active : undefined}
+        onFocus={onFocus}
+        onBlur={onBlur}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape" && value) {

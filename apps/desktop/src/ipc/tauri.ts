@@ -57,6 +57,13 @@ export function createTauriApi(): HatobaApi {
       channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
       return call("ssh_connect", { hostId, options, channel });
     },
+    ssh_connect_target: (target, options, onFrame) => {
+      const channel = new Channel<ArrayBuffer | number[]>();
+      channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
+      return call("ssh_connect_target", { target, options, channel });
+    },
+    recent_targets_list: () => call("recent_targets_list"),
+    recent_target_remove: (target) => call("recent_target_remove", { target }),
     ssh_write: (sessionId, data) => call("ssh_write", { sessionId, data }),
     ssh_resize: (sessionId, cols, rows) => call("ssh_resize", { sessionId, cols, rows }),
     ssh_disconnect: (sessionId) => call("ssh_disconnect", { sessionId }),

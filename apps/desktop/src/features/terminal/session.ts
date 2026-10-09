@@ -12,7 +12,7 @@ import { toast } from "@/components/overlay";
 import { useTransfers } from "@/features/sftp/transfers";
 import { t } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import { FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, type AppError, type SessionStateEvent } from "@/ipc/types";
+import { FRAME_CLOSED, FRAME_DATA, FRAME_ERROR, type AppError, type QuickTarget, type SessionStateEvent } from "@/ipc/types";
 import { isMac } from "@/lib/platform";
 import { openExternal, readClipboard, writeClipboard } from "./clipboard";
 import { dropSessionForwards, syncActiveForwards } from "./forwards";
@@ -42,11 +42,12 @@ export function getSession(tabId: string): LiveSession | undefined {
  * The live session behind a tab, created on first use. Returns null when the tab is gone, so a
  * late re-render of a closed tab can never resurrect (and reconnect) a session.
  */
-export function ensureSession(tabId: string, hostId: string): LiveSession | null {
+export function ensureSession(tabId: string): LiveSession | null {
   const existing = byTab.get(tabId);
   if (existing) return existing;
-  if (!useTabs.getState().tabs.some((tab) => tab.id === tabId)) return null;
-  const session = new LiveSession(tabId, hostId);
+  const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
+  if (!tab) return null;
+  const session = new LiveSession(tabId, tab.hostId, tab.target);
   byTab.set(tabId, session);
   return session;
 }
@@ -101,7 +102,10 @@ export class LiveSession {
 
   constructor(
     readonly tabId: string,
-    readonly hostId: string,
+    /** The saved host; null for a quick connection. */
+    readonly hostId: string | null,
+    /** What a quick connection connects to (HOST-12). */
+    readonly target: QuickTarget | null,
   ) {
     this.term = new Terminal({
       ...terminalOptions(useTermSettings.getState().settings),
@@ -242,12 +246,13 @@ export class LiveSession {
     const password = creds?.password ?? null;
     for (let round = 0; ; round++) {
       const sentSize = { cols: this.term.cols, rows: this.term.rows };
+      const options = { cols: sentSize.cols, rows: sentSize.rows, password, passphrase };
+      const onFrame = (frame: Uint8Array) => this.onFrame(frame, gen);
       try {
-        const sid = await api.ssh_connect(
-          this.hostId,
-          { cols: sentSize.cols, rows: sentSize.rows, password, passphrase },
-          (frame) => this.onFrame(frame, gen),
-        );
+        // A quick connection asks for its password while authenticating (an `ssh://auth-prompt`).
+        const sid = this.target
+          ? await api.ssh_connect_target(this.target, options, onFrame)
+          : await api.ssh_connect(this.hostId ?? "", options, onFrame);
         if (gen !== this.gen || this.disposed) {
           void api.ssh_disconnect(sid).catch(() => {});
           return;
@@ -367,8 +372,7 @@ export class LiveSession {
   /** Reconnect in this tab (SSH-07: always user-initiated, never an automatic loop). */
   async reconnect(collect: () => Promise<Credentials | null>) {
     if (this.disposed || this.isConnecting) return;
-    const host = hostById(this.hostId);
-    if (!host) {
+    if (!this.target && !hostById(this.hostId)) {
       toast(t("terminal.hostMissing"), "error");
       return;
     }

@@ -146,3 +146,113 @@
 .rowSel .connect {
   opacity: 1;
 }
+
+/* Quick connect (HOST-12): the search field's recent targets, and Connect rows for unsaved targets. */
+.searchWrap {
+  position: relative;
+}
+
+.quickCell {
+  grid-column: 1 / 4;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.quickIcon {
+  font-size: 14px;
+  color: var(--fg2);
+  flex: none;
+}
+
+.quickHint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forget {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+  font-size: 12px;
+  opacity: 0;
+}
+
+.forget:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.row:hover .forget,
+.rowSel .forget,
+.suggestItemActive .forget {
+  opacity: 1;
+}
+
+.problemRow {
+  display: flex;
+  gap: 9px;
+  color: var(--fg2);
+  font-size: var(--text-sm);
+}
+
+.problemRow:hover {
+  background: transparent;
+}
+
+.problemText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 5px;
+  border-radius: 9px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+}
+
+.suggestTitle {
+  padding: 3px 8px 5px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--fg2);
+}
+
+.suggestItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 5px 0 8px;
+  border-radius: var(--radius-sm);
+}
+
+.suggestItemActive {
+  background: var(--rowsel);
+}
+
+.suggestLabel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}

@@ -5,11 +5,12 @@ import { useApp } from "@/app/store";
 import type { SessionTab } from "@/app/tabs";
 import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { askAi as askAiAbout, askAiAboutConnection } from "@/features/ai/actions";
+import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { SftpPanel } from "@/features/sftp/SftpPanel";
 import { useT } from "@/i18n";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import { editSessionHost, reconnectSession } from "./connect";
+import { editSessionHost, reconnectSession, saveTargetAsHost } from "./connect";
 import { countRunning, useForwardRuns } from "./forwards";
 import { ForwardsPopover } from "./ForwardsPopover";
 import { FindBar } from "./FindBar";
@@ -22,7 +23,7 @@ import s from "./TerminalView.module.css";
 
 /** One terminal session (design §03 / §03b). Inactive tabs stay mounted so their sessions keep running. */
 export function TerminalView({ tab, active }: { tab: SessionTab; active: boolean }) {
-  const session = ensureSession(tab.id, tab.hostId);
+  const session = ensureSession(tab.id);
   if (!session) return null;
   return <TerminalBody tab={tab} active={active} session={session} />;
 }
@@ -31,7 +32,9 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const info = useSessionInfo(tab.id);
-  const host = useVaultData((st) => st.hosts.find((h) => h.id === tab.hostId));
+  const host = useVaultData((st) => (tab.hostId ? st.hosts.find((h) => h.id === tab.hostId) : undefined));
+  // A quick connection (HOST-12) whose target has been saved as a host since.
+  const savedHost = useVaultData((st) => (tab.target ? savedHostFor(st.hosts, tab.target) : undefined));
   const jumpName = useVaultData((st) => st.hosts.find((h) => h.id === host?.jump_host_id)?.name ?? null);
   const chrome = useTerminalChrome();
 
@@ -73,7 +76,8 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   useEffect(() => {
     if (!active || !connected) closeForwards(); // a popover must not outlive its tab being visible / connected
   }, [active, connected, closeForwards]);
-  const target = host ? `${host.username}@${host.address}:${host.port}` : null;
+  const target = host ? `${host.username}@${host.address}:${host.port}` : tab.target ? formatTarget(tab.target) : null;
+  const quickTarget = tab.target;
 
   const buildMenu = (context: boolean): MenuEntry[] => {
     const hasSelection = session.term.hasSelection();
@@ -132,7 +136,14 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       // Also here: with right click set to copy/paste there is no context menu.
       askAi,
       { kind: "separator" },
-      { label: t("terminal.menu.editHost"), icon: "pencil-simple", disabled: !host, onSelect: () => editSessionHost(tab.hostId) },
+      quickTarget && !savedHost
+        ? { label: t("terminal.menu.saveAsHost"), icon: "floppy-disk", onSelect: () => saveTargetAsHost(quickTarget) }
+        : {
+            label: t("terminal.menu.editHost"),
+            icon: "pencil-simple",
+            disabled: !host && !savedHost,
+            onSelect: () => editSessionHost(host?.id ?? savedHost?.id ?? null),
+          },
     ];
   };
 
@@ -158,6 +169,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         latencyMs={info.latencyMs}
         findOpen={findOpen}
         sftpOpen={info.sftpOpen}
+        forwards={!!tab.hostId}
         forwardCount={countRunning(forwardRuns)}
         forwardsOpen={!!forwardsMenu.anchor}
         findHint={shortcutLabel(platform, "Ctrl+Shift+F", "⌘F")}
@@ -181,6 +193,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             <ErrorCard
               name={host?.name ?? tab.title}
               host={host}
+              target={tab.target}
               error={info.error}
               at={info.errorAt}
               attempts={info.attempts}
@@ -197,7 +210,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
           <SftpPanel key={tab.sessionId} sessionId={tab.sessionId} hostName={host?.name ?? tab.title} active={active} />
         )}
       </div>
-      {forwardsMenu.anchor && tab.sessionId && connected && (
+      {forwardsMenu.anchor && tab.sessionId && tab.hostId && connected && (
         <ForwardsPopover
           anchor={forwardsMenu.anchor}
           sessionId={tab.sessionId}

@@ -981,7 +981,7 @@ impl Vault {
     }
 
     /// The device-local list of recent quick-connect targets (opaque JSON owned by the shell,
-    /// HOST-11). Never synced, and sealed under the vault key because it names hosts. A value
+    /// HOST-12). Never synced, and sealed under the vault key because it names hosts. A value
     /// this vault key cannot open reads as `None`.
     ///
     /// # Errors

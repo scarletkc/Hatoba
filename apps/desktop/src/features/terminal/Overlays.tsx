@@ -2,7 +2,7 @@ import { errorMessage } from "@/app/errors";
 import { Button, Icon, Spinner } from "@/components/controls";
 import { toast } from "@/components/overlay";
 import { useT } from "@/i18n";
-import type { AppError, HostView } from "@/ipc/types";
+import type { AppError, HostView, QuickTarget } from "@/ipc/types";
 import { writeClipboard } from "./clipboard";
 import { clockTime, diagnosticsText, errorCode } from "./diagnostics";
 import s from "./Overlays.module.css";
@@ -24,6 +24,7 @@ export function ConnectingOverlay({ name }: { name: string }) {
 export function ErrorCard({
   name,
   host,
+  target,
   error,
   at,
   attempts,
@@ -33,6 +34,8 @@ export function ErrorCard({
 }: {
   name: string;
   host: HostView | undefined;
+  /** What a quick connection connects to (HOST-12). */
+  target: QuickTarget | null;
   error: AppError | null;
   at: number | null;
   attempts: number;
@@ -50,7 +53,7 @@ export function ErrorCard({
 
   const copyDiagnostics = async () => {
     try {
-      await writeClipboard(diagnosticsText(host, name, err, at ?? Date.now(), attempts));
+      await writeClipboard(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts));
       toast(t("terminal.err.diagCopied"), "success");
     } catch {
       toast(t("terminal.clipboardDenied"), "error");
@@ -67,7 +70,7 @@ export function ErrorCard({
           </div>
         </div>
         <div className={s.cardBody}>
-          {errorMessage(t, err, { host: host?.address, port: host?.port, timeoutSec: 15 })}
+          {errorMessage(t, err, { host: (host ?? target)?.address, port: (host ?? target)?.port, timeoutSec: 15 })}
         </div>
         <div className={s.meta}>{meta}</div>
         <div className={s.cardActions}>
@@ -76,7 +79,7 @@ export function ErrorCard({
             {t("terminal.err.copyDiag")}
           </button>
           <div className={s.grow} />
-          <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host, name, err, at ?? Date.now(), attempts))}>
+          <button type="button" className={s.darkButton} onClick={() => onAskAi(diagnosticsText(host ?? target, name, err, at ?? Date.now(), attempts))}>
             <Icon name="sparkle" size={13} />
             {t("terminal.err.askAi")}
           </button>

@@ -9,7 +9,7 @@ import { InstructionsField } from "@/features/ai/InstructionsField";
 import { charCount, HOST_NOTES_MAX_CHARS } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AuthKind, HostInput, HostView, KeyView } from "@/ipc/types";
+import type { AuthKind, HostInput, HostView, KeyView, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { ForwardsSection } from "./ForwardsSection";
 import { useHostsUi } from "./ui";
@@ -54,12 +54,12 @@ const BACKEND_FIELDS: Record<string, FieldKey> = {
   ai_notes: "aiNotes",
 };
 
-function initialForm(host: HostView | undefined, groupId: string | null): Form {
+function initialForm(host: HostView | undefined, groupId: string | null, prefill: QuickTarget | undefined): Form {
   return {
-    name: host?.name ?? "",
-    address: host?.address ?? "",
-    port: String(host?.port ?? 22),
-    username: host?.username ?? "",
+    name: host?.name ?? prefill?.address ?? "",
+    address: host?.address ?? prefill?.address ?? "",
+    port: String(host?.port ?? prefill?.port ?? 22),
+    username: host?.username ?? prefill?.username ?? "",
     authKind: host?.auth_kind ?? "password",
     password: "",
     replacing: false,
@@ -77,7 +77,18 @@ function keyHint(k: KeyView): string {
   return k.algorithm === "rsa" ? `RSA ${k.bits}` : k.algorithm.toUpperCase();
 }
 
-export function HostEditPage({ hostId, groupId, back }: { hostId: string | null; groupId: string | null; back: HostFilter }) {
+export function HostEditPage({
+  hostId,
+  groupId,
+  back,
+  prefill,
+}: {
+  hostId: string | null;
+  groupId: string | null;
+  back: HostFilter;
+  /** A quick-connect target the new host starts from (HOST-12). */
+  prefill?: QuickTarget;
+}) {
   const t = useT();
   const navigate = useApp((st) => st.navigate);
   const hosts = useVaultData((st) => st.hosts);
@@ -86,7 +97,7 @@ export function HostEditPage({ hostId, groupId, back }: { hostId: string | null;
   const tagList = useVaultData((st) => st.tags);
 
   const host = useMemo(() => hosts.find((h) => h.id === hostId), [hosts, hostId]);
-  const [form, setForm] = useState<Form>(() => initialForm(host, groupId));
+  const [form, setForm] = useState<Form>(() => initialForm(host, groupId, prefill));
   const [errors, setErrors] = useState<Errors>({});
   const [userTouched, setUserTouched] = useState(false);
   const [saving, setSaving] = useState(false);

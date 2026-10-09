@@ -400,7 +400,7 @@ The database holds device-local data (the device ID, the sync cursor, the local 
 
 `MIGRATIONS` in `crates/hatoba-core/src/store.rs` defines the tables, and the `meta` module in the same file lists the keys of the `meta` table. The tables hold:
 
-- `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on.
+- `meta`: key-value pairs for the KDF parameters, the wrapped vault key, the device ID, the sync cursor, and so on. The recent quick-connect targets (HOST-12) are sealed under the vault key here, because they name hosts.
 - `items`: one row per item. `envelope` holds only the §4.2 envelope and becomes NULL after deletion (a tombstone). `revision` is the version the server has confirmed, 0 for items that were never synced. `dirty` marks local changes that have not been pushed yet.
 - `local_state`: device-local data that is not synced, such as the last connection time.
 - `conflict_log`: conflicts resolved automatically under §6.4, kept for item-by-item review and restore.
@@ -861,6 +861,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | HOST-08 | On the host edit page, a saved password shows only **Saved** and can be replaced but not viewed | P0 |
 | HOST-09 | Duplicate a host | P1 |
 | HOST-10 | Online status dots: probe the TCP port of the hosts visible in the list (TCP connect only, no authentication), with a 3-second timeout, once every 60 seconds. A setting turns it off | P1 |
+| HOST-12 | Quick connect from the search box. Input that contains `@` or starts with `ssh ` is also read as a target: `user@host[:port]`, `ssh://user@host[:port]`, or `ssh [-p port] [-l user] [user@]host`, with an IPv6 address in brackets. A **Connect** row for it heads the list and is selected, so Enter connects it; other ssh options and remote commands show the row disabled with the reason. A saved host with the same address, port, and user is selected instead, so its key and jump host are used. Without a user name, the app asks for one. Authentication works like the `ssh` command: ssh-agent first (SSH-09), then the server's keyboard-interactive prompts (SSH-08), or else a password asked as in SSH-03 and never stored; saved keys are not tried. The host key, timeouts, and reconnecting work as in SSH-04, SSH-05, and SSH-07. Nothing is saved as a host unless the user picks **Save as Host…** in the tab's menu, which opens the host editor filled in with the address, port, and user; features that belong to a saved host, such as port forwarding, are not offered on these tabs. Targets that connected are kept as device-local recent targets (at most 8, only `user@host:port`, never synced), each removable. They show under the search box while it is focused and empty, and as extra **Connect** rows when they match the query | P1 |
 
 ### 8.3 Keys
 
@@ -884,7 +885,7 @@ The design defines the visuals. This section only specifies the behavior and sta
 |---|---|---|
 | Unlock | Enter the master password, Windows Hello (P1), and a forgotten-password link into the recovery code flow | Wrong password, throttled |
 | First launch | Choose between **Create a New Vault** and **Restore from Cloud** | None |
-| Host list | The sidebar has All, Favorites, groups, and tags. List rows show the name, `user@host:port`, tags, online status, and last connection time. A search box and a new-host button sit at the top | Empty (suggesting a new host or an ssh config import), no search results |
+| Host list | The sidebar has All, Favorites, groups, and tags. List rows show the name, `user@host:port`, tags, online status, and last connection time. A search box and a new-host button sit at the top. The search box also takes an SSH target to connect to without saving it (HOST-12) | Empty (suggesting a new host or an ssh config import), no search results, a typed target (a **Connect** row in place of no results), an ssh command quick connect cannot run (the row disabled with the reason), recent targets under the focused, empty search box |
 | Host edit | Fields as in §5.1, password field rules as in HOST-08 | Field validation errors |
 | Terminal | Tab bar at the top, connection status, and an expandable SFTP panel | Connecting, connection failed (with a retry button), fingerprint confirmation dialog, fingerprint mismatch warning, disconnected |
 | Keys | See §8.3 | Empty |

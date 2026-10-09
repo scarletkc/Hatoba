@@ -22,7 +22,7 @@ On Windows and Linux every app shortcut uses Ctrl+Shift, so that plain Ctrl+lett
 | Settings | 设置 | 設定 |
 | Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
 | Hide AI Panel | 隐藏 AI 面板 | AI パネルを隠す |
-| Search name, IP or tag | 搜索名称、IP 或标签 | 名前、IP、タグを検索 |
+| Search hosts or ssh user@host | 搜索主机或 ssh user@host | ホストを検索、または ssh user@host |
 | Right-Click in Terminal | 终端中的右键 | ターミナルでの右クリック |
 
 ## Terminal

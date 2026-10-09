@@ -3,6 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,14 +17,16 @@ import { useTabs, type TabStatus } from "@/app/tabs";
 import { Button, Icon, LinkButton, StatusDot } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
-import { connectHost } from "@/features/terminal/connect";
+import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { formatRelative, useT, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { HostView } from "@/ipc/types";
+import type { HostView, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
 import { ImportSshDialog } from "./ImportSshDialog";
+import { formatTarget, parseQuickConnect, sameTarget, savedHostFor, type QuickProblem, type TypedTarget } from "./quickConnect";
+import { useRecentTargets } from "./recent";
 import { buildHostIndex, searchHosts } from "./search";
 import { useHostsUi, type HostSort } from "./ui";
 import s from "./HostsPage.module.css";
@@ -33,6 +36,18 @@ const PROBE_INTERVAL_MS = 60_000;
 const PROBE_LIMIT = 200;
 
 let handledSearchTick = 0;
+
+/** Row id of the typed quick-connect target (HOST-12); saved hosts use their item ids. */
+const TYPED_ROW = "quick:typed";
+const SUGGESTIONS_ID = "recent-targets";
+
+/** A Connect row for a target that is not a saved host: the one typed, or a recent one. */
+interface QuickRowItem {
+  id: string;
+  target: TypedTarget;
+  /** Set when the target is in the recent list, so the row can remove it. */
+  recent: QuickTarget | null;
+}
 
 function applyFilter(hosts: HostView[], filter: HostFilter): HostView[] {
   switch (filter.kind) {
@@ -72,6 +87,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const hosts = useVaultData((st) => st.hosts);
   const groups = useVaultData((st) => st.groups);
   const tabs = useTabs((st) => st.tabs);
+  const recents = useRecentTargets((st) => st.targets);
   const { selectedId, sort, select, setSort } = useHostsUi();
 
   const [query, setQuery] = useState("");
@@ -80,6 +96,11 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const [importing, setImporting] = useState(false);
   const [ctxHost, setCtxHost] = useState<HostView | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [suggestDismissed, setSuggestDismissed] = useState(false);
+  const [suggestAt, setSuggestAt] = useState(-1);
+  /** The query at which the user last picked a row; until then the typed target stays selected. */
+  const [pickedFor, setPickedFor] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const rowMenu = useMenu();
@@ -105,21 +126,84 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   // Filter + sort only when inputs change; typing in the search box touches neither.
   const base = useMemo(() => sortHosts(applyFilter(hosts, filter), sort, t.locale), [hosts, filter, sort, t.locale]);
   const index = useMemo(() => buildHostIndex(base), [base]);
-  const visible = useMemo(() => searchHosts(index, deferredQuery), [index, deferredQuery]);
+  // HOST-12: `user@host` and `ssh …` input is also a target to connect to. The list is then
+  // filtered by its destination, without the ssh syntax around it.
+  const parsed = useMemo(() => parseQuickConnect(deferredQuery), [deferredQuery]);
+  const searchText = parsed ? parsed.search : deferredQuery;
+  const found = useMemo(() => searchHosts(index, searchText), [index, searchText]);
+  // A typed target that is a saved host connects as that host, with its key and jump host.
+  const exact = useMemo(() => (parsed?.ok ? savedHostFor(hosts, parsed.target) : undefined), [parsed, hosts]);
+  const visible = useMemo(() => (exact && !found.includes(exact) ? [exact, ...found] : found), [exact, found]);
+  // Recent targets that have been saved as hosts since show as those hosts.
+  const unsavedRecents = useMemo(() => recents.filter((r) => !savedHostFor(hosts, r)), [recents, hosts]);
+  const quickRows = useMemo(() => {
+    const rows: QuickRowItem[] = [];
+    if (parsed?.ok && !exact)
+      rows.push({ id: TYPED_ROW, target: parsed.target, recent: unsavedRecents.find((r) => sameTarget(r, parsed.target)) ?? null });
+    const q = searchText.trim().toLowerCase();
+    if (q)
+      for (const r of unsavedRecents)
+        if (!(parsed?.ok && sameTarget(r, parsed.target)) && formatTarget(r).toLowerCase().includes(q))
+          rows.push({ id: `quick:recent:${formatTarget(r)}`, target: r, recent: r });
+    return rows;
+  }, [parsed, exact, unsavedRecents, searchText]);
+  const problem = parsed && !parsed.ok ? parsed.problem : null;
 
   const hostName = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
 
   // The latest tab per host tells us whether the last attempt failed (design: red "连接失败").
   const tabStatus = useMemo(() => {
     const m = new Map<string, TabStatus>();
-    for (const tab of tabs) m.set(tab.hostId, tab.status);
+    for (const tab of tabs) if (tab.hostId) m.set(tab.hostId, tab.status);
     return m;
   }, [tabs]);
 
-  const effectiveId = useMemo(
-    () => (visible.some((h) => h.id === selectedId) ? selectedId : (visible[0]?.id ?? null)),
-    [visible, selectedId],
+  const rowIds = useMemo(() => [...quickRows.map((r) => r.id), ...visible.map((h) => h.id)], [quickRows, visible]);
+  // The typed target, or the saved host it is, is selected until the user picks another row; otherwise
+  // the best saved host is, even with recent targets listed above it.
+  const preferred = exact?.id ?? (quickRows[0]?.id === TYPED_ROW ? TYPED_ROW : null);
+  const effectiveId = useMemo(() => {
+    if (selectedId && rowIds.includes(selectedId) && (!preferred || pickedFor === deferredQuery)) return selectedId;
+    return preferred ?? visible[0]?.id ?? quickRows[0]?.id ?? null;
+  }, [rowIds, selectedId, preferred, pickedFor, deferredQuery, visible, quickRows]);
+
+  // The row callbacks read these through a ref, so they stay stable and memoized rows skip re-rendering.
+  const latest = useRef({ deferredQuery, quickRows });
+  useLayoutEffect(() => {
+    latest.current = { deferredQuery, quickRows };
+  });
+
+  const pick = useCallback(
+    (id: string) => {
+      setPickedFor(latest.current.deferredQuery);
+      select(id);
+    },
+    [select],
   );
+
+  // Recent targets under the empty field (HOST-12).
+  const suggestions = query.trim() ? [] : unsavedRecents;
+  const suggestOpen = searchFocused && !suggestDismissed && suggestions.length > 0;
+  const suggestActive = Math.min(suggestAt, suggestions.length - 1);
+  const removeRecent = useRecentTargets((st) => st.remove);
+
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    setSuggestDismissed(false);
+    setSuggestAt(-1);
+  };
+
+  const onSearchFocus = () => {
+    setSearchFocused(true);
+    setSuggestDismissed(false);
+    setSuggestAt(-1);
+    void useRecentTargets.getState().load();
+  };
+
+  const connectQuick = (target: TypedTarget) => {
+    setSuggestDismissed(true);
+    void connectTarget(target);
+  };
 
   // Relative times ("2 min ago") refresh once a minute.
   useEffect(() => {
@@ -188,6 +272,11 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 
   const connect = useCallback(
     (id: string) => {
+      const quick = latest.current.quickRows.find((r) => r.id === id);
+      if (quick) {
+        void connectTarget(quick.target);
+        return;
+      }
       select(id);
       void connectHost(id);
     },
@@ -281,12 +370,12 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   ];
 
   const move = (delta: 1 | -1) => {
-    if (visible.length === 0) return;
-    const i = visible.findIndex((h) => h.id === effectiveId);
-    const next = visible[Math.max(0, Math.min(visible.length - 1, i + delta))];
-    select(next.id);
+    if (rowIds.length === 0) return;
+    const i = effectiveId ? rowIds.indexOf(effectiveId) : -1;
+    const next = rowIds[Math.max(0, Math.min(rowIds.length - 1, i + delta))];
+    pick(next);
     requestAnimationFrame(() =>
-      listRef.current?.querySelector(`[data-id="${CSS.escape(next.id)}"]`)?.scrollIntoView({ block: "nearest" }),
+      listRef.current?.querySelector(`[data-id="${CSS.escape(next)}"]`)?.scrollIntoView({ block: "nearest" }),
     );
   };
 
@@ -296,6 +385,25 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     const inSearch = target === searchRef.current;
     const onList = target === listRef.current;
     if (!inSearch && !onList) return;
+    // While the recent targets show under the field, the arrows go through them first.
+    if (inSearch && suggestOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = suggestions.length;
+        setSuggestAt(e.key === "ArrowDown" ? Math.min(n - 1, suggestActive + 1) : Math.max(-1, suggestActive - 1));
+        return;
+      }
+      if (e.key === "Enter" && suggestActive >= 0) {
+        e.preventDefault();
+        connectQuick(suggestions[suggestActive]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSuggestDismissed(true);
+        return;
+      }
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       move(e.key === "ArrowDown" ? 1 : -1);
@@ -314,11 +422,45 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     </Button>
   );
 
-  // The vault has no hosts at all: design §01b.
-  if (hosts.length === 0) {
+  const searchField = (
+    <div className={s.searchWrap}>
+      <SearchField
+        ref={searchRef}
+        value={query}
+        onChange={onQueryChange}
+        placeholder={t("hosts.search")}
+        shortcut={shortcutLabel(platform, "Ctrl+Shift+K", "⌘K")}
+        width={300}
+        onFocus={onSearchFocus}
+        onBlur={() => setSearchFocused(false)}
+        popup={{
+          id: SUGGESTIONS_ID,
+          open: suggestOpen,
+          active: suggestActive >= 0 ? `${SUGGESTIONS_ID}-${suggestActive}` : undefined,
+        }}
+      />
+      {suggestOpen && (
+        <RecentSuggestions
+          targets={suggestions}
+          active={suggestActive}
+          title={t("hosts.quick.recentTitle")}
+          removeLabel={t("hosts.quick.forget")}
+          onHover={setSuggestAt}
+          onConnect={connectQuick}
+          onRemove={(r) => void removeRecent(r)}
+        />
+      )}
+    </div>
+  );
+
+  // The vault has no hosts at all: design §01b. Quick connect still works from the search field.
+  if (hosts.length === 0 && !query.trim()) {
     return (
-      <div className={s.page}>
-        <PageHeader title={title}>{newButton}</PageHeader>
+      <div className={s.page} onKeyDown={onKeyDown}>
+        <PageHeader title={title}>
+          {searchField}
+          {newButton}
+        </PageHeader>
         <EmptyState
           icon="hard-drives"
           title={t("hosts.empty.title")}
@@ -350,8 +492,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   };
 
   const searching = deferredQuery.trim() !== "";
+  const hasQuick = quickRows.length > 0 || problem !== null;
   const emptyBody = (() => {
-    if (base.length === 0) {
+    if (base.length === 0 && hosts.length > 0 && !hasQuick && !exact) {
       switch (filter.kind) {
         case "favorites":
           return { icon: "star", key: "hosts.emptyFav" } as const;
@@ -369,13 +512,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   return (
     <div className={s.page} onKeyDown={onKeyDown}>
       <PageHeader title={title} count={t("hosts.count", { n: visible.length })}>
-        <SearchField
-          ref={searchRef}
-          value={query}
-          onChange={setQuery}
-          placeholder={t("hosts.search")}
-          shortcut={shortcutLabel(platform, "Ctrl+Shift+K", "⌘K")}
-        />
+        {searchField}
         <Button
           ref={sortButton}
           trailingIcon="caret-down"
@@ -401,7 +538,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
             ) : undefined
           }
         />
-      ) : visible.length === 0 && searching ? (
+      ) : visible.length === 0 && searching && !hasQuick ? (
         <EmptyState
           icon="magnifying-glass"
           title={t("hosts.noResults.title")}
@@ -418,6 +555,20 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
             <span />
           </div>
           <div className={s.rows}>
+            {problem && <ProblemRow problem={problem} />}
+            {quickRows.map((r) => (
+              <QuickRow
+                key={r.id}
+                item={r}
+                selected={r.id === effectiveId}
+                connectLabel={t("hosts.connect")}
+                hint={r.recent ? t("hosts.quick.recent") : t("hosts.quick.notSaved")}
+                removeLabel={t("hosts.quick.forget")}
+                onSelect={pick}
+                onConnect={connect}
+                onRemove={(target) => void removeRecent(target)}
+              />
+            ))}
             {visible.map((h) => (
               <HostRow
                 key={h.id}
@@ -431,7 +582,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
                 connectLabel={t("hosts.connect")}
                 failedLabel={t("hosts.failed")}
                 viaTitle={h.jump_host_id ? t("hosts.viaTitle", { name: hostName.get(h.jump_host_id) ?? "" }) : ""}
-                onSelect={select}
+                onSelect={pick}
                 onConnect={connect}
                 onContext={onContext}
               />
@@ -546,3 +697,149 @@ const HostRow = memo(function HostRow({
     </div>
   );
 });
+
+/** `user@host:port` in the address column's style. */
+function TargetText({ target }: { target: TypedTarget }) {
+  const host = target.address.includes(":") ? `[${target.address}]` : target.address;
+  return (
+    <span className={s.addr}>
+      {target.username && <span className={s.dim}>{target.username}@</span>}
+      {host}
+      <span className={s.dim}>:{target.port}</span>
+    </span>
+  );
+}
+
+interface QuickRowProps {
+  item: QuickRowItem;
+  selected: boolean;
+  connectLabel: string;
+  hint: string;
+  removeLabel: string;
+  onSelect: (id: string) => void;
+  onConnect: (id: string) => void;
+  onRemove: (target: QuickTarget) => void;
+}
+
+/** "Connect user@host:port" for a target that is not a saved host (HOST-12). */
+function QuickRow({ item, selected, connectLabel, hint, removeLabel, onSelect, onConnect, onRemove }: QuickRowProps) {
+  const recent = item.recent;
+  return (
+    <div
+      role="option"
+      aria-selected={selected}
+      data-id={item.id}
+      className={cx(s.row, s.cols, selected && s.rowSel)}
+      onClick={() => onSelect(item.id)}
+      onDoubleClick={() => onConnect(item.id)}
+    >
+      <div className={s.quickCell}>
+        <Icon name={recent ? "clock-counter-clockwise" : "terminal-window"} className={s.quickIcon} />
+        <span className={s.name}>{connectLabel}</span>
+        <span className={s.addrCell}>
+          <TargetText target={item.target} />
+        </span>
+      </div>
+      <div className={cx(s.last, s.quickHint)}>
+        <span>{hint}</span>
+        {recent && (
+          <button
+            type="button"
+            tabIndex={-1}
+            className={s.forget}
+            aria-label={removeLabel}
+            title={removeLabel}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(recent);
+            }}
+          >
+            <Icon name="x" />
+          </button>
+        )}
+      </div>
+      <div className={s.action}>
+        <Button
+          size="xs"
+          variant="primary"
+          tabIndex={-1}
+          className={s.connect}
+          onClick={(e) => {
+            e.stopPropagation();
+            onConnect(item.id);
+          }}
+        >
+          {connectLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** An ssh command quick connect cannot run, with the reason. It is not selectable. */
+function ProblemRow({ problem }: { problem: QuickProblem }) {
+  const t = useT();
+  const text =
+    problem.kind === "option"
+      ? t("hosts.quick.option", { option: problem.option })
+      : problem.kind === "command"
+        ? t("hosts.quick.command")
+        : t("hosts.err.portInvalid");
+  return (
+    <div className={cx(s.row, s.problemRow)} role="note">
+      <Icon name="prohibit" className={s.quickIcon} />
+      <span className={s.problemText}>{text}</span>
+    </div>
+  );
+}
+
+interface SuggestionsProps {
+  targets: QuickTarget[];
+  active: number;
+  title: string;
+  removeLabel: string;
+  onHover: (index: number) => void;
+  onConnect: (target: QuickTarget) => void;
+  onRemove: (target: QuickTarget) => void;
+}
+
+/** Recent quick-connect targets under the empty search field (HOST-12). */
+function RecentSuggestions({ targets, active, title, removeLabel, onHover, onConnect, onRemove }: SuggestionsProps) {
+  return (
+    // Clicks inside keep the focus in the search field, so the list stays open.
+    <div className={s.suggest} onMouseDown={(e) => e.preventDefault()}>
+      <div className={s.suggestTitle}>{title}</div>
+      <div id={SUGGESTIONS_ID} role="listbox" aria-label={title}>
+        {targets.map((target, i) => (
+          <div
+            key={formatTarget(target)}
+            id={`${SUGGESTIONS_ID}-${i}`}
+            role="option"
+            aria-selected={i === active}
+            className={cx(s.suggestItem, i === active && s.suggestItemActive)}
+            onMouseEnter={() => onHover(i)}
+            onClick={() => onConnect(target)}
+          >
+            <Icon name="clock-counter-clockwise" className={s.quickIcon} />
+            <span className={s.suggestLabel}>
+              <TargetText target={target} />
+            </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              className={s.forget}
+              aria-label={removeLabel}
+              title={removeLabel}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(target);
+              }}
+            >
+              <Icon name="x" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

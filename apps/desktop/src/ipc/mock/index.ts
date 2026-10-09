@@ -8,6 +8,7 @@ import type {
   HostView,
   KeyView,
   LocalPrefs,
+  QuickTarget,
   SshErrorKind,
   StarPrompt,
   SyncStatus,
@@ -39,6 +40,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?star=due
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected
+ * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
+ * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
  * SSH error kind (`?ssh=fail` or another value: a timeout), so the error card shows (SSH-05).
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
@@ -72,6 +75,8 @@ export function createMockApi(): HatobaApi {
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
   let forwards: ForwardView[] = demo === "empty" ? [] : D.FORWARDS.map((f) => ({ ...f }));
+  let recentTargets: QuickTarget[] = demo === "empty" ? [] : D.RECENT_TARGETS.map((r) => ({ ...r }));
+  const trustedQuickHosts = new Set(recentTargets.map((r) => `${r.address}:${r.port}`));
   const activeForwards = new Map<string, number>();
   const dropSessionForwards = (sid: string) => {
     for (const key of [...activeForwards.keys()]) if (key.startsWith(`${sid}/`)) activeForwards.delete(key);
@@ -465,6 +470,85 @@ export function createMockApi(): HatobaApi {
       }
       return sid;
     },
+    ssh_connect_target: async (target, _options, onFrame: FrameHandler) => {
+      needUnlocked();
+      const sid = id("s");
+      const state = (s: EventMap["ssh://state"]["state"], extra: Partial<EventMap["ssh://state"]> = {}) =>
+        emit("ssh://state", { session_id: sid, host_id: null, state: s, latency_ms: null, error: null, exit_status: null, ...extra });
+      const failWith = (error: AppError): never => {
+        setTimeout(() => state("failed", { error }), 0);
+        throw error;
+      };
+      setTimeout(() => state("connecting"), 0);
+      await delay(400);
+      if (target.address.includes("timeout"))
+        failWith({ code: "ssh", detail: SSH_DEMO_DETAIL.timeout(target.address, target.port), ssh_kind: "timeout" });
+      const endpoint = `${target.address}:${target.port}`;
+      if (!trustedQuickHosts.has(endpoint)) {
+        const accepted = await new Promise<boolean>((resolve) => {
+          const rid = id("hk");
+          pendingHostKeys.set(rid, resolve);
+          emit("ssh://hostkey-prompt", {
+            request_id: rid,
+            session_id: sid,
+            host: target.address,
+            port: target.port,
+            key_type: "ssh-ed25519",
+            fingerprint: "SHA256:Qm3cT8vLk2Hs9Xa4Pz7Wd1Nf6Ry0Ub5Ej2Gi8Ko",
+            kind: "new",
+            known_fingerprint: null,
+            known_key_type: null,
+          });
+        });
+        if (!accepted) failWith({ code: "ssh", detail: "host key rejected", ssh_kind: "host_key_rejected" });
+        trustedQuickHosts.add(endpoint);
+      }
+      // No ssh-agent here: the server asks for the password.
+      const answers = await new Promise<string[] | null>((resolve) => {
+        const rid = id("ap");
+        pendingAuth.set(rid, resolve);
+        const host = target.address.includes(":") ? `[${target.address}]` : target.address;
+        emit("ssh://auth-prompt", {
+          request_id: rid,
+          session_id: sid,
+          name: target.address,
+          instructions: "",
+          prompts: [{ prompt: "Password: ", echo: false }],
+          password: true,
+          target: `${target.username}@${host}:${target.port}`,
+        });
+      });
+      if (!answers) failWith({ code: "ssh", detail: "operation cancelled", ssh_kind: "cancelled" });
+      if (answers![0] === "wrong")
+        failWith({ code: "ssh", detail: "the server rejected the password (server accepts: publickey, password)", ssh_kind: "auth_failed" });
+      await delay(300);
+      const shellHost: HostView = { ...D.HOSTS[0], id: "", name: target.address, address: target.address, port: target.port, username: target.username };
+      const shell = new FakeShell(shellHost, (bytes) => onFrame(frame(FRAME_DATA, bytes)));
+      shells.set(sid, shell);
+      const same = (r: QuickTarget) => r.address.toLowerCase() === target.address.toLowerCase() && r.port === target.port && r.username === target.username;
+      recentTargets = [target, ...recentTargets.filter((r) => !same(r))].slice(0, 8);
+      setTimeout(() => {
+        state("connected", { latency_ms: 21 });
+        shell.start();
+      }, 0);
+      shell.onExit = () => {
+        onFrame(frame(FRAME_CLOSED, new TextEncoder().encode("exit")));
+        state("disconnected", { exit_status: 0 });
+        shells.delete(sid);
+      };
+      return sid;
+    },
+    recent_targets_list: async () => {
+      needUnlocked();
+      return recentTargets.map((r) => ({ ...r }));
+    },
+    recent_target_remove: async (target) => {
+      needUnlocked();
+      recentTargets = recentTargets.filter(
+        (r) => !(r.address.toLowerCase() === target.address.toLowerCase() && r.port === target.port && r.username === target.username),
+      );
+      return recentTargets.map((r) => ({ ...r }));
+    },
     ssh_write: async (sid, data) => {
       shells.get(sid)?.input(data);
     },
@@ -484,7 +568,10 @@ export function createMockApi(): HatobaApi {
       pendingHostKeys.get(rid)?.(accept);
       pendingHostKeys.delete(rid);
     },
-    auth_prompt_respond: async () => {},
+    auth_prompt_respond: async (rid, answers) => {
+      pendingAuth.get(rid)?.(answers);
+      pendingAuth.delete(rid);
+    },
 
     forwards_list: async (hostId) => forwards.filter((f) => f.host_id === hostId),
     forward_save: async (input) => {
@@ -766,6 +853,7 @@ export function createMockApi(): HatobaApi {
 }
 
 const pendingHostKeys = new Map<string, (accept: boolean) => void>();
+const pendingAuth = new Map<string, (answers: string[] | null) => void>();
 const transfers = new Map<string, () => void>();
 
 function frame(tag: number, payload: Uint8Array): Uint8Array {
