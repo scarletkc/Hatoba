@@ -294,7 +294,13 @@ impl SftpClient {
             .open(remote)
             .await
             .map_err(|e| self.err("open", remote, e))?;
-        let (part, target) = create_local_part(local).await?;
+        let (part, target) = match create_local_part(local).await {
+            Ok(created) => created,
+            Err(e) => {
+                let _ = source.close().await;
+                return Err(e);
+            }
+        };
         let result = self
             .download_to(
                 remote,
@@ -471,7 +477,8 @@ impl SftpClient {
         if self.sftp.rename(part, remote).await.is_ok() {
             return Ok(());
         }
-        let backup = format!("{remote}.hatoba-old");
+        // A unique name, so a backup left by a concurrent upload never blocks this one.
+        let backup = format!("{remote}.{}.hatoba-old", part_token());
         let exists = self.sftp.try_exists(remote).await.unwrap_or(false);
         let result = if exists {
             match self.sftp.rename(remote, backup.as_str()).await {
@@ -481,7 +488,13 @@ impl SftpClient {
                         Ok(())
                     }
                     Err(e) => {
-                        let _ = self.sftp.rename(backup.as_str(), remote).await;
+                        // Put the old file back. If another upload has already
+                        // replaced it, the backup is stale and is removed.
+                        if self.sftp.rename(backup.as_str(), remote).await.is_err()
+                            && self.sftp.try_exists(remote).await.unwrap_or(false)
+                        {
+                            let _ = self.sftp.remove_file(backup.as_str()).await;
+                        }
                         Err(self.err("finalize upload", remote, e))
                     }
                 },

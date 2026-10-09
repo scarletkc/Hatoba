@@ -672,6 +672,27 @@ async fn concurrent_transfers_to_the_same_destination_do_not_collide() {
     );
     assert_eq!(names_in(&area), ["shared.bin"]);
 
+    // Concurrent uploads over an existing file: at least one wins, no backup
+    // or temporary file is left behind, and later uploads still work.
+    for round in 0..5 {
+        let (ra, rb) = tokio::join!(
+            sftp.upload(&src_a, s(&remote), |_| {}, CancellationToken::new()),
+            sftp.upload(&src_b, s(&remote), |_| {}, CancellationToken::new()),
+        );
+        assert!(ra.is_ok() || rb.is_ok(), "round {round}: {ra:?} {rb:?}");
+        let got = sha256_hex(&fs::read(&remote).unwrap());
+        assert!(
+            got == sha256_hex(&a) || got == sha256_hex(&b),
+            "round {round}"
+        );
+        assert_eq!(names_in(&area), ["shared.bin"], "round {round}");
+    }
+    sftp.upload(&src_a, s(&remote), |_| {}, CancellationToken::new())
+        .await
+        .unwrap();
+    let got = sha256_hex(&fs::read(&remote).unwrap());
+    assert_eq!(got, sha256_hex(&a));
+
     let dst = local.path().join("dst.bin");
     let (da, db) = tokio::join!(
         sftp.download(s(&remote), &dst, |_| {}, CancellationToken::new()),
