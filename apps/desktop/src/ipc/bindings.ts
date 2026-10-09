@@ -71,11 +71,12 @@ export const commands = {
 	hostsProbe: (ids: string[]) => __TAURI_INVOKE<ProbeResult[]>("hosts_probe", { ids }),
 	sshConfigPreview: () => __TAURI_INVOKE<SshConfigCandidate[]>("ssh_config_preview"),
 	/**
-	 *  SSH-11: creates hosts for the chosen aliases. With `import_keys` it also imports the
-	 *  unencrypted identity files they use as keys; without it no private key file is read, and
-	 *  those hosts ask how to sign in.
+	 *  SSH-11: creates hosts for the chosen aliases. It imports as keys only the unencrypted
+	 *  identity files in `key_files`, the ones the preview listed and the user confirmed. A host
+	 *  whose identity file is not among them (the config or the files changed after the preview)
+	 *  asks how to sign in, with a warning. With no `key_files`, no private key file is read.
 	 */
-	sshConfigImport: (aliases: string[], importKeys: boolean) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases, importKeys }),
+	sshConfigImport: (aliases: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases, keyFiles }),
 	keysList: () => __TAURI_INVOKE<KeyView[]>("keys_list"),
 	/**  KEY-01 / WIN-09: OpenSSH, PEM and PuTTY .ppk, from a file or pasted text, with clear errors. */
 	keyImport: (input: KeyImportInput) => __TAURI_INVOKE<KeyView>("key_import", { input }),
@@ -153,7 +154,9 @@ export const commands = {
 	 * 
 	 *  The connection ends first, and its running round stops before the saved settings are
 	 *  cleared, so no round writes sync state after this returns or into a connection set up later
-	 *  (spec §6.3). Sync stays stopped on this device even if clearing a setting fails.
+	 *  (spec §6.3). Each setting is cleared even if clearing another fails, so a failed credential
+	 *  store cannot keep the sync configuration that would reconnect at the next unlock; the first
+	 *  error is returned.
 	 */
 	syncDisconnect: () => __TAURI_INVOKE<null>("sync_disconnect"),
 	syncDevices: () => __TAURI_INVOKE<DeviceView[]>("sync_devices"),

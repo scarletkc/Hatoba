@@ -430,15 +430,19 @@ fn default_user() -> String {
 
 #[tauri::command]
 #[specta::specta]
-pub fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfigCandidate>> {
-    // Which identity files exist is checked before the vault is locked.
-    let entries: Vec<(SshConfigHost, Option<String>)> = read_ssh_config()?
-        .into_iter()
-        .map(|e| {
-            let found = identity_path(&e);
-            (e, found)
-        })
-        .collect();
+pub async fn ssh_config_preview(state: State<'_, AppState>) -> AppResult<Vec<SshConfigCandidate>> {
+    // The config is read and its identity files are checked in a blocking task, before the
+    // vault is locked: a file on an unreachable network path can take long to answer.
+    let entries: Vec<(SshConfigHost, Option<String>)> = blocking(|| {
+        Ok(read_ssh_config()?
+            .into_iter()
+            .map(|e| {
+                let found = identity_path(&e);
+                (e, found)
+            })
+            .collect())
+    })
+    .await?;
     state.with_unlocked(|v| {
         let names: HashSet<String> = v
             .hosts()
@@ -470,20 +474,22 @@ fn identity_path(entry: &SshConfigHost) -> Option<String> {
         .cloned()
 }
 
-/// SSH-11: creates hosts for the chosen aliases. With `import_keys` it also imports the
-/// unencrypted identity files they use as keys; without it no private key file is read, and
-/// those hosts ask how to sign in.
+/// SSH-11: creates hosts for the chosen aliases. It imports as keys only the unencrypted
+/// identity files in `key_files`, the ones the preview listed and the user confirmed. A host
+/// whose identity file is not among them (the config or the files changed after the preview)
+/// asks how to sign in, with a warning. With no `key_files`, no private key file is read.
 #[tauri::command]
 #[specta::specta]
 pub async fn ssh_config_import(
     app: AppHandle,
     state: State<'_, AppState>,
     aliases: Vec<String>,
-    import_keys: bool,
+    key_files: Vec<String>,
 ) -> AppResult<ImportResult> {
     let wanted: HashSet<String> = aliases.into_iter().collect();
+    let confirmed: HashSet<String> = key_files.into_iter().collect();
     let (entries, identities) =
-        blocking(move || Ok(prepare_import(read_ssh_config()?, &wanted, import_keys))).await?;
+        blocking(move || Ok(prepare_import(read_ssh_config()?, &wanted, &confirmed))).await?;
     let result = state.with_unlocked(|v| import_hosts(v, entries, identities))?;
     sync::local_change(&app);
     Ok(result)
@@ -492,25 +498,33 @@ pub async fn ssh_config_import(
 /// The identity files an import reads, by path: the parsed key, or why it cannot be imported.
 type Identities = HashMap<String, Result<ParsedKey, String>>;
 
-/// The first step of an import, before the vault is locked: picks the chosen entries and, with
-/// `import_keys`, the identity file of each, then reads and parses each file once.
+/// The first step of an import, before the vault is locked: picks the chosen entries and, when
+/// key files were confirmed, the identity file of each. Each confirmed file is read and parsed
+/// once; any other file is left unread.
 fn prepare_import(
     entries: Vec<SshConfigHost>,
     wanted: &HashSet<String>,
-    import_keys: bool,
+    confirmed: &HashSet<String>,
 ) -> (Vec<(SshConfigHost, Option<String>)>, Identities) {
     let entries: Vec<(SshConfigHost, Option<String>)> = entries
         .into_iter()
         .filter(|e| wanted.contains(&e.alias))
         .map(|e| {
-            let path = import_keys.then(|| identity_path(&e)).flatten();
+            let path = (!confirmed.is_empty()).then(|| identity_path(&e)).flatten();
             (e, path)
         })
         .collect();
     let mut identities = Identities::new();
     for path in entries.iter().filter_map(|(_, path)| path.as_ref()) {
         if !identities.contains_key(path) {
-            identities.insert(path.clone(), read_identity(path));
+            let identity = if confirmed.contains(path) {
+                read_identity(path)
+            } else {
+                Err(format!(
+                    "{path} was not among the confirmed key files and was not imported"
+                ))
+            };
+            identities.insert(path.clone(), identity);
         }
     }
     (entries, identities)
@@ -775,10 +789,11 @@ mod tests {
         v: &mut Vault,
         entries: Vec<SshConfigHost>,
         aliases: &[&str],
-        import_keys: bool,
+        key_files: &[&str],
     ) -> ImportResult {
         let wanted = aliases.iter().map(|a| (*a).to_owned()).collect();
-        let (entries, identities) = prepare_import(entries, &wanted, import_keys);
+        let confirmed = key_files.iter().map(|f| (*f).to_owned()).collect();
+        let (entries, identities) = prepare_import(entries, &wanted, &confirmed);
         import_hosts(v, entries, identities).unwrap()
     }
 
@@ -799,7 +814,7 @@ mod tests {
         let (entries, identities) = prepare_import(
             vec![entry("web", &[&path])],
             &HashSet::from(["web".into()]),
-            false,
+            &HashSet::new(),
         );
         assert_eq!(entries[0].1, None, "no identity file is chosen");
         assert!(identities.is_empty(), "no key file is read");
@@ -840,7 +855,7 @@ mod tests {
                 entry("skipped", &[&shared]),
             ],
             &["a", "b", "c"],
-            true,
+            &[&shared, &existing],
         );
 
         assert_eq!((result.hosts_created, result.keys_imported), (3, 1));
@@ -883,7 +898,7 @@ mod tests {
                 entry("text", &[&not_a_key]),
             ],
             &["locked", "locked-too", "big", "text"],
-            true,
+            &[&locked, &big, &not_a_key],
         );
 
         assert_eq!((result.hosts_created, result.keys_imported), (4, 0));
@@ -895,6 +910,33 @@ mod tests {
             assert!(matches!(auth_of(&v, alias), HostAuth::Ask), "{alias}");
         }
         assert!(v.keys().is_empty());
+    }
+
+    #[test]
+    fn only_the_confirmed_key_files_are_read() {
+        let dir = KeyDir::new();
+        let (listed, _) = dir.key("id_listed", None);
+        // Missing when the preview ran, so not in the list, and created before the import.
+        let (appeared, _) = dir.key("id_appeared", None);
+        let mut v = vault();
+
+        let result = import(
+            &mut v,
+            vec![entry("listed", &[&listed]), entry("appeared", &[&appeared])],
+            &["listed", "appeared"],
+            &[&listed],
+        );
+
+        assert_eq!((result.hosts_created, result.keys_imported), (2, 1));
+        assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+        assert!(
+            result.warnings[0].contains("was not among the confirmed key files"),
+            "{:?}",
+            result.warnings
+        );
+        assert!(matches!(auth_of(&v, "listed"), HostAuth::Key { .. }));
+        assert!(matches!(auth_of(&v, "appeared"), HostAuth::Ask));
+        assert_eq!(v.keys().len(), 1);
     }
 
     fn input(ai_notes: String) -> HostInput {

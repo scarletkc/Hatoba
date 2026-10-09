@@ -62,7 +62,8 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
   const submit = async () => {
     setBusy(true);
     try {
-      const result = await api.ssh_config_import([...picked], importKeys && keyFiles.length > 0);
+      // Only the files listed here are read, even if the config changed since the preview.
+      const result = await api.ssh_config_import([...picked], importKeys ? keyFiles : []);
       await useVaultData.getState().reload();
       toast(t("hosts.import.done", { n: result.hosts_created }), "success");
       if (result.warnings.length > 0) toast(t("hosts.import.warnings", { n: result.warnings.length }));

@@ -125,8 +125,8 @@ export interface HatobaApi {
   tags_list(): Promise<TagCount[]>;
   hosts_probe(ids: string[]): Promise<ProbeResult[]>;
   ssh_config_preview(): Promise<SshConfigCandidate[]>;
-  /** With `importKeys`, also imports the hosts' unencrypted identity files as keys; without it, no key file is read. */
-  ssh_config_import(aliases: string[], importKeys: boolean): Promise<ImportResult>;
+  /** Also imports the unencrypted identity files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
+  ssh_config_import(aliases: string[], keyFiles: string[]): Promise<ImportResult>;
 
   // keys
   keys_list(): Promise<KeyView[]>;

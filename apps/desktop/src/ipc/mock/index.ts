@@ -386,11 +386,11 @@ export function createMockApi(): HatobaApi {
       { alias: "minecraft", address: "mc.example.org", port: 22, username: "mc", identity_file: "~/.ssh/mc_rsa", identity_file_found: false, proxy_jump: "bastion-tokyo", exists: false },
       { alias: "build-arm", address: "10.0.4.31", port: 22, username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true, proxy_jump: null, exists: false },
     ],
-    ssh_config_import: async (aliases, importKeys) => {
+    ssh_config_import: async (aliases, keyFiles) => {
       await delay(300);
       aliases.forEach((a) => hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask" }));
       touch();
-      return { hosts_created: aliases.length, keys_imported: importKeys ? 1 : 0, warnings: [] };
+      return { hosts_created: aliases.length, keys_imported: keyFiles.length, warnings: [] };
     },
 
     keys_list: async () => {
