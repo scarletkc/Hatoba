@@ -10,6 +10,7 @@
     "tauri": "pnpm --filter @hatoba/desktop tauri",
     "build": "pnpm --filter @hatoba/desktop build",
     "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "worker:bundle": "node scripts/worker/bundle.mjs"
   }

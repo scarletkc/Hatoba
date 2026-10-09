@@ -90,7 +90,9 @@ describe("useStarPromptDue", () => {
     const root = createRoot(document.createElement("div"));
     act(() => root.render(createElement(Probe)));
     expect(seen.at(-1)).toBe(false);
-    act(() => vi.advanceTimersByTime(60_000));
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
     expect(seen.at(-1)).toBe(true);
     act(() => root.unmount());
   });

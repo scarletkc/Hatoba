@@ -107,6 +107,7 @@ CI also runs format and lint checks:
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
+pnpm lint     # ESLint for the desktop frontend; warnings fail too
 ```
 
 ## Troubleshooting

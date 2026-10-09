@@ -16,10 +16,11 @@ const SCROLLBACK = [1000, 5000, 10000, 50000];
 export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const term = settings?.terminal;
-  const [font, setFont] = useState(term?.font_family ?? DEFAULT_FONT);
+  const fontFamily = term?.font_family;
+  const [font, setFont] = useState(fontFamily ?? DEFAULT_FONT);
   useEffect(() => {
-    if (term) setFont(term.font_family);
-  }, [term?.font_family]);
+    if (fontFamily !== undefined) setFont(fontFamily);
+  }, [fontFamily]);
 
   if (!term) return <Pane>{null}</Pane>;
 

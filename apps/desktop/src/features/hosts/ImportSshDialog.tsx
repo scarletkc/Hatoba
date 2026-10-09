@@ -33,6 +33,7 @@ export function ImportSshDialog({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggle = (alias: string, on: boolean) =>

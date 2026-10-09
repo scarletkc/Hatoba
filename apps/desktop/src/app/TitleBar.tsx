@@ -36,7 +36,7 @@ export function WindowControls() {
     void currentWindow().then(async (w) => {
       if (!w || disposed) return;
       setMaximized(await w.isMaximized());
-      unlisten.push(await w.onResized(async () => setMaximized(await w.isMaximized())));
+      unlisten.push(await w.onResized(() => void w.isMaximized().then(setMaximized)));
       unlisten.push(await w.onFocusChanged(({ payload }) => setFocused(payload)));
     });
     return () => {

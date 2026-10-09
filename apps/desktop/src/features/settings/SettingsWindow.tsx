@@ -58,6 +58,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Escape closes the window, but a dialog or menu opened from inside it gets the key first. The

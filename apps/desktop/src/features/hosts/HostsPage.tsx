@@ -138,6 +138,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   useEffect(() => {
     if (searchTick === handledSearchTick) listRef.current?.focus({ preventScroll: true });
     // Only on mount: don't steal focus when the filter changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // HOST-10: TCP reachability of the hosts in this view, now and every 60 s.
