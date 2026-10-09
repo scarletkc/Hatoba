@@ -41,6 +41,15 @@ fn s(p: &Path) -> &str {
     p.to_str().unwrap()
 }
 
+fn names_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<_> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    names.sort();
+    names
+}
+
 #[tokio::test]
 async fn home_and_listing_order() {
     let server = server!();
@@ -271,7 +280,7 @@ async fn upload_and_download_round_trip_with_progress() {
         .unwrap();
     let elapsed = started.elapsed();
     assert_eq!(sha256_hex(&fs::read(&remote).unwrap()), sha256_hex(&data));
-    assert!(!area.join("remote.bin.part").exists(), "no leftovers");
+    assert_eq!(names_in(&area), ["remote.bin"], "no leftovers");
     let ev = events.lock().unwrap().clone();
     let last = ev.last().expect("final progress event");
     assert_eq!(
@@ -294,7 +303,11 @@ async fn upload_and_download_round_trip_with_progress() {
         .await
         .unwrap();
     assert_eq!(sha256_hex(&fs::read(&dst).unwrap()), sha256_hex(&data));
-    assert!(!local.path().join("dst.bin.part").exists());
+    assert_eq!(
+        names_in(local.path()),
+        ["dst.bin", "src.bin"],
+        "no leftovers"
+    );
     let last = *events.lock().unwrap().last().unwrap();
     assert_eq!(
         (last.bytes, last.total),
@@ -438,7 +451,7 @@ async fn download_cancel_and_failure_remove_partial_local_file() {
         .unwrap_err();
     assert_eq!(err.kind, SshErrorKind::Cancelled, "{err}");
     assert!(!dst.exists());
-    assert!(!local.path().join("huge.local.part").exists());
+    assert!(fs::read_dir(local.path()).unwrap().next().is_none());
 
     // Pre-cancelled token: nothing is created.
     let cancelled = CancellationToken::new();
@@ -547,4 +560,146 @@ async fn sftp_keeps_the_connection_alive_after_other_handles_drop() {
     };
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(sftp.list(s(&area)).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn transfers_leave_existing_part_files_alone() {
+    let server = server!();
+    let (_s, sftp) = sftp_for(&server).await;
+    let area = server.area("part_sibling");
+    let local = tempfile::tempdir().unwrap();
+    let keep = "unrelated irreplaceable data";
+
+    // Upload next to a remote `report.txt.part` that belongs to someone else.
+    fs::write(area.join("report.txt.part"), keep).unwrap();
+    let src = local.path().join("src.txt");
+    fs::write(&src, "uploaded").unwrap();
+    sftp.upload(
+        &src,
+        s(&area.join("report.txt")),
+        |_| {},
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(area.join("report.txt")).unwrap(),
+        "uploaded"
+    );
+    assert_eq!(
+        fs::read_to_string(area.join("report.txt.part")).unwrap(),
+        keep
+    );
+    assert_eq!(names_in(&area), ["report.txt", "report.txt.part"]);
+
+    // Download next to a local `report.txt.part`.
+    let dst = local.path().join("report.txt");
+    fs::write(local.path().join("report.txt.part"), keep).unwrap();
+    sftp.download(
+        s(&area.join("report.txt")),
+        &dst,
+        |_| {},
+        CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(fs::read_to_string(&dst).unwrap(), "uploaded");
+    assert_eq!(
+        fs::read_to_string(local.path().join("report.txt.part")).unwrap(),
+        keep
+    );
+    assert_eq!(
+        names_in(local.path()),
+        ["report.txt", "report.txt.part", "src.txt"]
+    );
+
+    // A cancelled upload removes only its own temporary file.
+    let huge = local.path().join("huge");
+    fs::File::create(&huge)
+        .unwrap()
+        .set_len(512 * 1024 * 1024)
+        .unwrap();
+    fs::write(area.join("huge.bin.part"), keep).unwrap();
+    let cancel = CancellationToken::new();
+    let trigger = cancel.clone();
+    let err = sftp
+        .upload(
+            &huge,
+            s(&area.join("huge.bin")),
+            move |p| {
+                if p.bytes >= 1024 * 1024 {
+                    trigger.cancel();
+                }
+            },
+            cancel,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err.kind, SshErrorKind::Cancelled, "{err}");
+    assert_eq!(
+        fs::read_to_string(area.join("huge.bin.part")).unwrap(),
+        keep
+    );
+    assert_eq!(
+        names_in(&area),
+        ["huge.bin.part", "report.txt", "report.txt.part"]
+    );
+}
+
+#[tokio::test]
+async fn concurrent_transfers_to_the_same_destination_do_not_collide() {
+    let server = server!();
+    let (_s, sftp) = sftp_for(&server).await;
+    let area = server.area("same_dest");
+    let local = tempfile::tempdir().unwrap();
+
+    let a = pseudo_random(3 * 1024 * 1024, 1);
+    let b = pseudo_random(3 * 1024 * 1024 + 7, 2);
+    let (src_a, src_b) = (local.path().join("a"), local.path().join("b"));
+    fs::write(&src_a, &a).unwrap();
+    fs::write(&src_b, &b).unwrap();
+    let remote = area.join("shared.bin");
+    let (ra, rb) = tokio::join!(
+        sftp.upload(&src_a, s(&remote), |_| {}, CancellationToken::new()),
+        sftp.upload(&src_b, s(&remote), |_| {}, CancellationToken::new()),
+    );
+    ra.unwrap();
+    rb.unwrap();
+    let got = sha256_hex(&fs::read(&remote).unwrap());
+    assert!(
+        got == sha256_hex(&a) || got == sha256_hex(&b),
+        "one whole upload wins"
+    );
+    assert_eq!(names_in(&area), ["shared.bin"]);
+
+    // Concurrent uploads over an existing file: at least one wins, no backup
+    // or temporary file is left behind, and later uploads still work.
+    for round in 0..5 {
+        let (ra, rb) = tokio::join!(
+            sftp.upload(&src_a, s(&remote), |_| {}, CancellationToken::new()),
+            sftp.upload(&src_b, s(&remote), |_| {}, CancellationToken::new()),
+        );
+        assert!(ra.is_ok() || rb.is_ok(), "round {round}: {ra:?} {rb:?}");
+        let got = sha256_hex(&fs::read(&remote).unwrap());
+        assert!(
+            got == sha256_hex(&a) || got == sha256_hex(&b),
+            "round {round}"
+        );
+        assert_eq!(names_in(&area), ["shared.bin"], "round {round}");
+    }
+    sftp.upload(&src_a, s(&remote), |_| {}, CancellationToken::new())
+        .await
+        .unwrap();
+    let got = sha256_hex(&fs::read(&remote).unwrap());
+    assert_eq!(got, sha256_hex(&a));
+
+    let dst = local.path().join("dst.bin");
+    let (da, db) = tokio::join!(
+        sftp.download(s(&remote), &dst, |_| {}, CancellationToken::new()),
+        sftp.download(s(&remote), &dst, |_| {}, CancellationToken::new()),
+    );
+    da.unwrap();
+    db.unwrap();
+    assert_eq!(sha256_hex(&fs::read(&dst).unwrap()), got);
+    assert_eq!(names_in(local.path()), ["a", "b", "dst.bin"]);
 }
