@@ -284,6 +284,93 @@ async fn enable_sync_requires_unlocked_vault_and_an_empty_remote() {
     assert!(matches!(err, Error::RemoteInitialized));
 }
 
+/// Enables sync on `a` after `interrupt` broke the first attempt, and checks the result is as
+/// good as an uninterrupted setup: everything uploaded and readable from a second device.
+async fn enable_after_interruption(interrupt: impl FnOnce(&Arc<FakeServer>, &Dev)) {
+    let (server, _clock, a, b) = world();
+    a.put(host("web-1"));
+    a.put(key("deploy", "PRIVATE-KEY-BODY"));
+    interrupt(&server, &a);
+    let err = enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Offline), "got {err:?}");
+    server.set_offline(false);
+    assert!(a.backend.health().await.unwrap().initialized);
+
+    enable(&a).await;
+    assert_eq!(a.pending(), 0);
+    assert_eq!(server.item_count(), 3, "settings + host + key");
+    restore(&b).await;
+    assert_eq!(a.snapshot(), b.snapshot());
+}
+
+#[tokio::test]
+async fn enable_sync_resumes_after_a_lost_setup_response() {
+    enable_after_interruption(|server, _| server.fail_next("setup")).await;
+}
+
+#[tokio::test]
+async fn enable_sync_resumes_after_a_failed_login() {
+    enable_after_interruption(|server, _| server.fail_next("login")).await;
+}
+
+#[tokio::test]
+async fn enable_sync_resumes_after_a_failed_first_pull() {
+    enable_after_interruption(|server, _| server.fail_next("pull")).await;
+}
+
+#[tokio::test]
+async fn enable_sync_resumes_after_a_failed_push() {
+    enable_after_interruption(|server, a| {
+        let offline = Arc::clone(server);
+        a.backend.on_next_pull(move || offline.set_offline(true));
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn enable_sync_resumes_after_a_lost_push_response() {
+    let (server, _clock, a, b) = world();
+    a.put(host("web-1"));
+    server.lose_next_push_response();
+    let err = enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Offline), "got {err:?}");
+    assert_eq!(server.item_count(), 2, "the server applied the push");
+
+    enable(&a).await;
+    assert_eq!(a.pending(), 0);
+    assert_eq!(server.item_count(), 2);
+    assert!(
+        a.v().conflicts(false).unwrap().is_empty(),
+        "identical content converges silently"
+    );
+    restore(&b).await;
+    assert_eq!(a.snapshot(), b.snapshot());
+}
+
+#[tokio::test]
+async fn enable_sync_still_rejects_another_vault_with_the_same_password() {
+    let (server, clock, a, _b) = world();
+    enable(&a).await;
+    let other = device(&server, &clock, "other", true);
+    other.put(host("other-host"));
+    let err = enable_sync(
+        &other.vault,
+        &other.backend,
+        PW,
+        Some(SETUP_TOKEN),
+        other.info(),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, Error::RemoteInitialized));
+    assert_eq!(server.session_count(), 1, "the other vault never logged in");
+    assert_eq!(server.item_count(), 1, "only A's settings item");
+}
+
 #[tokio::test]
 async fn restore_errors() {
     let (server, clock, a, b) = world();
