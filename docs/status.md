@@ -111,7 +111,9 @@ This page tracks implementation progress, items awaiting verification, and follo
 
 ## MVP scope
 
-Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), Telnet, Serial, RDP, VNC, and a sync service hosted by Hatoba.
+Out of scope for the MVP: team sharing and multi-user vaults, mobile apps (the architecture leaves room for them, see [§3.4](hatoba-spec.md#34-mobile-readiness)), and a sync service hosted by Hatoba.
+
+Hosts connect only over SSH. Telnet, Serial, and Mosh are proposed in [#60](https://github.com/scarletkc/Hatoba/issues/60). RDP, VNC, and FTP are not planned.
 
 ## Milestones
 
