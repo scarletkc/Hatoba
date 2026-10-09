@@ -4,7 +4,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use hatoba_core::model::{Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, SshKey};
+use hatoba_core::model::{
+    EnvVar, EnvVarError, Group, Host, HostAuth, Item, MAX_HOST_AI_NOTES_CHARS, MAX_HOST_ENV_BYTES,
+    MAX_HOST_ENV_VARS, MAX_ITEM_PLAINTEXT_BYTES, SshKey, check_env_var, check_host_env,
+};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{ParsedKey, SshConfigHost};
 use tauri::{AppHandle, State};
@@ -62,6 +65,12 @@ pub fn host_from_input(
             "AI notes are limited to 2,000 characters",
         ));
     }
+    let env: Vec<EnvVar> = input
+        .env
+        .iter()
+        .map(|v| EnvVar::new(v.name.trim(), v.value.as_str()))
+        .collect();
+    check_host_env(&env).map_err(|e| AppError::invalid("env", e.to_string()))?;
     if let Some(jump) = &input.jump_host_id {
         if input.id.as_deref() == Some(jump.as_str()) {
             return Err(AppError::invalid(
@@ -124,6 +133,7 @@ pub fn host_from_input(
         note: input.note.clone(),
         ai_notes: input.ai_notes.clone(),
         updated_at: 0,
+        env,
     })
 }
 
@@ -159,12 +169,25 @@ pub fn host_save(
             Some(id) => Some(find_host(v, id)?),
             None => None,
         };
-        let host = host_from_input(&input, existing.as_ref(), v)?;
-        let id = v.put(input.id.as_deref(), Item::Host(host))?;
+        let item = Item::Host(host_from_input(&input, existing.as_ref(), v)?);
+        check_item_size(&item)?;
+        let id = v.put(input.id.as_deref(), item)?;
         Ok(host_view(&id, &find_host(v, &id)?, v))
     })?;
     sync::local_change(&app);
     Ok(view)
+}
+
+/// Refuses a host too large to sync: the Worker and D1 would reject its envelope on every sync
+/// (§6.2). Long notes or environment variables are what make a host this large.
+fn check_item_size(item: &Item) -> AppResult<()> {
+    if item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
+        return Err(AppError::invalid(
+            "host",
+            "this host is too large to sync: shorten its notes or environment variables",
+        ));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -536,6 +559,7 @@ fn import_hosts(
             port: entry.port.unwrap_or(22),
             username: entry.user.clone().unwrap_or_else(default_user),
             auth,
+            env: import_env(&entry.alias, &entry.set_env, &mut result.warnings),
             ..Host::default()
         };
         let id = v.put(None, Item::Host(host))?;
@@ -575,6 +599,37 @@ fn import_hosts(
         }
     }
     Ok(result)
+}
+
+/// The `SetEnv` variables an imported host keeps (SSH-14): the ones the host editor would accept,
+/// in order until the host has as many, or as many bytes, as it can. Each one left out gets a
+/// warning.
+fn import_env(
+    alias: &str,
+    set_env: &[(String, String)],
+    warnings: &mut Vec<String>,
+) -> Vec<EnvVar> {
+    let mut env: Vec<EnvVar> = Vec::new();
+    let mut bytes = 0;
+    for (name, value) in set_env {
+        let var = EnvVar::new(name.as_str(), value.as_str());
+        let size = name.len() + value.len();
+        let problem = if env.len() == MAX_HOST_ENV_VARS {
+            Err(EnvVarError::TooMany)
+        } else if bytes + size > MAX_HOST_ENV_BYTES {
+            Err(EnvVarError::TooLarge)
+        } else {
+            check_env_var(&var)
+        };
+        match problem {
+            Ok(()) => {
+                bytes += size;
+                env.push(var);
+            }
+            Err(e) => warnings.push(format!("{alias}: SetEnv {name} was not imported: {e}")),
+        }
+    }
+    env
 }
 
 /// Reads and parses an identity file referenced by ssh config, with the Keys page's size limit
@@ -661,10 +716,12 @@ mod tests {
     use hatoba_ssh::GenerateKind;
 
     use super::*;
+    use crate::dto::HostEnvVar;
 
-    fn unlocked_vault() -> Vault {
+    /// An unlocked vault in memory. Its master password is made up for each run.
+    fn vault() -> Vault {
         let mut v = Vault::open_in_memory().unwrap();
-        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
+        v.create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
             .unwrap();
         v
     }
@@ -710,6 +767,7 @@ mod tests {
             port: None,
             identity_files: identity_files.iter().map(|p| (*p).to_owned()).collect(),
             proxy_jump: None,
+            set_env: Vec::new(),
         }
     }
 
@@ -736,7 +794,7 @@ mod tests {
     fn hosts_import_without_their_keys_unless_asked() {
         let dir = KeyDir::new();
         let (path, _) = dir.key("id_ed25519", None);
-        let mut v = unlocked_vault();
+        let mut v = vault();
 
         let (entries, identities) = prepare_import(
             vec![entry("web", &[&path])],
@@ -758,7 +816,7 @@ mod tests {
         let dir = KeyDir::new();
         let (shared, shared_fp) = dir.key("id_shared", None);
         let (existing, existing_fp) = dir.key("id_existing", None);
-        let mut v = unlocked_vault();
+        let mut v = vault();
         // The vault already holds the second key, under another name.
         let parsed = read_identity(&existing).unwrap();
         v.put(
@@ -814,7 +872,7 @@ mod tests {
         let (locked, _) = dir.key("id_locked", Some("synthetic passphrase"));
         let big = dir.file("id_big", &"A".repeat(256 * 1024 + 1));
         let not_a_key = dir.file("id_text", "not a key\n");
-        let mut v = unlocked_vault();
+        let mut v = vault();
 
         let result = import(
             &mut v,
@@ -855,14 +913,134 @@ mod tests {
             jump_host_id: None,
             note: String::new(),
             ai_notes,
+            env: Vec::new(),
+        }
+    }
+
+    fn env_input(vars: &[(&str, &str)]) -> HostInput {
+        HostInput {
+            env: vars
+                .iter()
+                .map(|(name, value)| HostEnvVar {
+                    name: (*name).into(),
+                    value: (*value).into(),
+                })
+                .collect(),
+            ..input(String::new())
         }
     }
 
     #[test]
+    fn env_is_saved_with_the_host_and_checked() {
+        let mut v = vault();
+        // SSH-14: names are trimmed, values kept as typed.
+        let host = host_from_input(
+            &env_input(&[(" TZ ", "Asia/Tokyo"), ("GREETING", " hi ")]),
+            None,
+            &v,
+        )
+        .unwrap();
+        assert_eq!(
+            host.env,
+            [
+                EnvVar::new("TZ", "Asia/Tokyo"),
+                EnvVar::new("GREETING", " hi ")
+            ]
+        );
+        let id = v.put(None, Item::Host(host)).unwrap();
+        let view = host_view(&id, &find_host(&v, &id).unwrap(), &v);
+        assert_eq!(view.env.len(), 2);
+        assert_eq!(view.env[1].value, " hi ");
+
+        for bad in [
+            env_input(&[("1BAD", "x")]),
+            env_input(&[("", "x")]),
+            env_input(&[("A", "1"), (" A", "2")]),
+            env_input(&[("A", "line\nbreak")]),
+        ] {
+            let err = host_from_input(&bad, None, &v).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("env"), "{}", err.detail);
+        }
+    }
+
+    #[test]
+    fn imported_set_env_keeps_the_variables_a_host_accepts() {
+        let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+            list.iter()
+                .map(|(n, v)| ((*n).to_owned(), (*v).to_owned()))
+                .collect()
+        };
+        let mut warnings = Vec::new();
+        let env = import_env(
+            "app",
+            &pairs(&[("TZ", "UTC"), ("BAD-NAME", "x"), ("LANG", "C.UTF-8")]),
+            &mut warnings,
+        );
+        assert_eq!(
+            env,
+            [EnvVar::new("TZ", "UTC"), EnvVar::new("LANG", "C.UTF-8")]
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].starts_with("app: SetEnv BAD-NAME was not imported"),
+            "{warnings:?}"
+        );
+
+        let many: Vec<(String, String)> = (0..=MAX_HOST_ENV_VARS)
+            .map(|i| (format!("V{i}"), String::new()))
+            .collect();
+        let mut warnings = Vec::new();
+        assert_eq!(
+            import_env("big", &many, &mut warnings).len(),
+            MAX_HOST_ENV_VARS
+        );
+        assert_eq!(warnings.len(), 1);
+
+        // A variable that would take the host over its byte budget is left out; later small
+        // ones are still kept.
+        let long = "x".repeat(4_000);
+        let wide: Vec<(String, String)> = (0..5)
+            .map(|i| (format!("L{i}"), long.clone()))
+            .chain([("TZ".to_owned(), "UTC".to_owned())])
+            .collect();
+        let mut warnings = Vec::new();
+        let env = import_env("wide", &wide, &mut warnings);
+        assert_eq!(
+            env.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
+            ["L0", "L1", "L2", "L3", "TZ"]
+        );
+        assert_eq!(check_host_env(&env), Ok(()));
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].starts_with("wide: SetEnv L4 was not imported"),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn a_host_too_large_to_sync_is_refused() {
+        let v = vault();
+        let host = |note: String| {
+            Item::Host(
+                host_from_input(
+                    &HostInput {
+                        note,
+                        ..input(String::new())
+                    },
+                    None,
+                    &v,
+                )
+                .unwrap(),
+            )
+        };
+        assert!(check_item_size(&host("n".repeat(30_000))).is_ok());
+        let err = check_item_size(&host("n".repeat(MAX_ITEM_PLAINTEXT_BYTES))).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("host"));
+    }
+
+    #[test]
     fn ai_notes_are_saved_with_the_host_up_to_their_limit() {
-        let mut v = Vault::open_in_memory().unwrap();
-        v.create_with_params("correct horse battery staple", KdfParams::for_tests())
-            .unwrap();
+        let mut v = vault();
         // AI-37: kept as typed, line breaks and placeholders included.
         let notes = "PostgreSQL 16 primary.\nRestart with `systemctl restart <unit>`.";
         let host = host_from_input(&input(notes.into()), None, &v).unwrap();

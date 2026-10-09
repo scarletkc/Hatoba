@@ -28,7 +28,7 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
 };
 
 /** Fields whose values read better in the monospace face (as in the design). */
-const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path"]);
+const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path", "env"]);
 
 /** Fields the backend sends as "true" or "false". */
 const BOOL_FIELDS = new Set(["pinned", "enabled", "always_ask"]);

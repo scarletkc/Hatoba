@@ -68,6 +68,7 @@ function host(
     last_connected_at: last,
     os: null,
     show_stats: false,
+    env: [],
     ...extra,
   };
 }
@@ -78,6 +79,11 @@ export const HOSTS: HostView[] = [
     show_stats: true,
     favorite: true,
     key_id: "k-deploy",
+    // SSH-14: sent when a terminal opens.
+    env: [
+      { name: "TZ", value: "Asia/Tokyo" },
+      { name: "LANG", value: "en_US.UTF-8" },
+    ],
     note: zh
       ? "主 API 节点，部署走 GitHub Actions。重启 api.service 前先在 #ops 频道说一声。"
       : "Primary API node, deployed via GitHub Actions. Post in #ops before restarting api.service.",

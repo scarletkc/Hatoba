@@ -67,6 +67,8 @@ pub struct HostView {
     /// The host's terminals show the server's resource usage on this device (TERM-12).
     /// Device-local, like `last_connected_at`, and off until turned on.
     pub show_stats: bool,
+    /// Environment variables the terminal asks the server to set (SSH-14).
+    pub env: Vec<HostEnvVar>,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -87,6 +89,15 @@ pub struct HostInput {
     pub note: String,
     /// At most 2,000 characters (AI-37).
     pub ai_notes: String,
+    /// Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14).
+    pub env: Vec<HostEnvVar>,
+}
+
+/// One of a host's environment variables (SSH-14).
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct HostEnvVar {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
