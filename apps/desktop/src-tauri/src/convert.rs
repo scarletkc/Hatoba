@@ -4,7 +4,9 @@ use hatoba_core::model::{Group, Host, HostAuth, KeyAlgorithm as CoreAlg, SshKey}
 use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
-use crate::dto::{AuthKind, GroupView, HostView, KeyAlgorithm, KeyView, ServerStatsView};
+use crate::dto::{
+    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, ServerStatsView,
+};
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
     let (auth_kind, has_password, key_id) = match &host.auth {
@@ -32,6 +34,14 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         last_connected_at: vault.last_connected(id),
         os: vault.host_os(id),
         show_stats: vault.host_show_stats(id),
+        env: host
+            .env
+            .iter()
+            .map(|v| HostEnvVar {
+                name: v.name.clone(),
+                value: v.value.clone(),
+            })
+            .collect(),
     }
 }
 

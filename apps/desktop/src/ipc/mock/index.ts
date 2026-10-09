@@ -14,6 +14,7 @@ import type {
   SyncStatus,
   VaultStatus,
 } from "../types";
+import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { sameTarget } from "@/features/hosts/quickConnect";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
@@ -305,6 +306,9 @@ export function createMockApi(): HatobaApi {
       if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
       if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
+      const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));
+      if (env.length > ENV_MAX_VARS || validateEnvRows(envRows(env)).some(Boolean) || envTooLarge(envRows(env)) || env.some((v) => !v.name))
+        fail("invalid_input", "invalid environment variables", { field: "env" });
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
@@ -321,6 +325,7 @@ export function createMockApi(): HatobaApi {
         jump_host_id: input.jump_host_id,
         note: input.note,
         ai_notes: input.ai_notes,
+        env,
         updated_at: Date.now(),
         last_connected_at: existing?.last_connected_at ?? null,
         os: existing?.os ?? null,
