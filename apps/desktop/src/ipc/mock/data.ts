@@ -245,7 +245,7 @@ export const PREFS: LocalPrefs = {
   ai_panel_width: 380,
 };
 
-/** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs dist` writes. */
+/** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */
 export const AVAILABLE_UPDATE: AvailableUpdate = {
   version: "0.2.0",
   notes: [

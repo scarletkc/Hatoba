@@ -1,14 +1,15 @@
 // Serves a signed installer as an update from this machine, so that a test build of Hatoba can
 // install it end to end. docs/development.md describes the steps.
 // Usage: node scripts/release/serve-update.mjs --installer FILE --pubkey FILE [--port PORT]
-//   --installer  the installer that `tauri build` wrote; its .sig must be next to it
+//   --installer  the NSIS installer, deb package, or AppImage that `tauri build` wrote; its .sig
+//                must be next to it
 //   --pubkey     the .pub file of the key that signed it
 //   --port       the port on 127.0.0.1 to serve on (default 18765)
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { basename } from "node:path";
+import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
-import { verifyUpdaterSignature } from "./release.mjs";
+import { INSTALLERS, verifyUpdaterSignature } from "./release.mjs";
 
 const { values } = parseArgs({
   options: { installer: { type: "string" }, pubkey: { type: "string" }, port: { type: "string", default: "18765" } },
@@ -17,6 +18,9 @@ if (!values.installer || !values.pubkey) {
   console.error("Usage: node scripts/release/serve-update.mjs --installer FILE --pubkey FILE [--port PORT]");
   process.exit(1);
 }
+// The updater looks for the installer under a key that depends on the kind of build it runs in.
+const bundle = Object.keys(INSTALLERS).find((type) => extname(INSTALLERS[type].name("0")) === extname(values.installer));
+if (!bundle) throw new Error(`${values.installer} is not an NSIS installer, a deb package, or an AppImage.`);
 const installer = readFileSync(values.installer);
 const signature = readFileSync(`${values.installer}.sig`, "utf8").trim();
 const version = verifyUpdaterSignature(installer, signature, readFileSync(values.pubkey, "utf8"));
@@ -29,7 +33,7 @@ const latest = JSON.stringify({
   version,
   notes: `## Local test update\n\nServed from \`${name}\` by \`scripts/release/serve-update.mjs\`.`,
   pub_date: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-  platforms: { "windows-x86_64": { signature, url: `${origin}${path}` } },
+  platforms: { [INSTALLERS[bundle].updater]: { signature, url: `${origin}${path}` } },
 });
 
 createServer((req, res) => {

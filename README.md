@@ -30,7 +30,8 @@ account.
   exposes only ciphertext.
 - **Local first.** Everything works offline, and sync is optional.
 - **Windows first.** A custom title bar with Snap Layouts, Mica, Segoe UI and
-  Cascadia fonts, and Windows input methods. macOS and Linux follow.
+  Cascadia fonts, and Windows input methods. Each release also has Linux
+  packages, and macOS follows.
 
 ## Features
 
@@ -64,11 +65,19 @@ account.
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows%20x64-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4=)](https://github.com/scarletkc/Hatoba/releases)
 
-Download `Hatoba_<version>_x64-setup.exe` from
-[Releases](https://github.com/scarletkc/Hatoba/releases) and run it. It installs
-for the current user without administrator rights, and each release's notes
-cover what changed and how to install it. Builds for macOS and Linux will
-follow; until then, [build from source](#build-from-source).
+[![Download for Linux](https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/scarletkc/Hatoba/releases)
+
+Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
+
+- **Windows**: `Hatoba_<version>_x64-setup.exe` installs for the current user
+  without administrator rights.
+- **Linux (x86_64)**: `Hatoba_<version>_amd64.deb` for Debian, Ubuntu, and
+  distributions based on them, or `Hatoba_<version>_amd64.AppImage` for the
+  others. Sync keeps its credentials in the Secret Service, so it needs GNOME
+  Keyring, KWallet, or another Secret Service provider.
+
+Each release's notes cover what changed and how to install it. A macOS build
+will follow; until then, [build from source](#build-from-source).
 
 ## Screenshots
 
@@ -116,8 +125,9 @@ pnpm install
 pnpm tauri dev
 ```
 
-On Windows, `pnpm tauri build --no-sign` produces the NSIS installer, without
-the update signature that only release builds carry. The
+`pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb
+package and the AppImage on Linux, without the update signatures that only
+release builds carry. The
 [development guide](docs/development.md) covers the browser-only frontend,
 tests, and the generated TypeScript bindings.
 

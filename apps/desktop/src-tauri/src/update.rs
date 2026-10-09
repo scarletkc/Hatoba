@@ -372,7 +372,7 @@ mod tests {
             .expect("build the mock app")
     }
 
-    /// A manifest like the one `release.mjs dist` writes, with an entry for every platform the
+    /// A manifest like the one `release.mjs publish` writes, with an entry for every platform the
     /// tests may run on.
     fn manifest(server: &MockServer, version: &str) -> Value {
         let platform =

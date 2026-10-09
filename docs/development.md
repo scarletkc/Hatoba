@@ -126,6 +126,8 @@ The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mo
 5. Open **Hatoba Update Test**, create a vault, and in **Settings → About** choose **Check for Updates**, then **Download and Install**. Hatoba closes, the installer shows its progress, and the new version opens.
 6. Uninstall **Hatoba Update Test** in the Windows settings, delete `%LOCALAPPDATA%\app.hatoba.updatetest`, and delete the throwaway key.
 
+On Linux, build with `--bundles deb,appimage` and copy the packages out of `target/release/bundle/deb` and `target/release/bundle/appimage`. Install the older deb package or run the older AppImage, then pass the newer package of the same kind to `serve-update.mjs`, which serves it under the key that kind of build looks for in `latest.json`. Afterwards, remove the deb package with `sudo apt remove hatoba-update-test`, and delete `~/.local/share/app.hatoba.updatetest` and the throwaway key.
+
 ## Update the TypeScript bindings
 
 After changing a Rust command, event, or DTO, regenerate `apps/desktop/src/ipc/bindings.ts`:

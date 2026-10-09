@@ -44,7 +44,7 @@ jobs:
           path: release-notes.md
           if-no-files-found: error
 
-  build:
+  build-windows:
     name: Build (Windows)
     needs: preflight
     runs-on: windows-latest
@@ -68,20 +68,52 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-notes
-          path: release-notes
-      - run: node scripts/release/release.mjs dist --bundle target/release/bundle/nsis --notes release-notes/release-notes.md --output dist
+      - run: node scripts/release/release.mjs dist --platform windows --bundle target/release/bundle --output dist
       - uses: actions/upload-artifact@v4
         with:
           name: hatoba-windows
           path: dist/
           if-no-files-found: error
 
+  build-linux:
+    name: Build (Linux)
+    needs: preflight
+    # The packages run only on systems with at least the glibc they were built against, so they are
+    # built on an older Ubuntu LTS than ubuntu-latest.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    # Holds the update signing key, as for the Windows build.
+    environment: release-signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev
+      # No Rust cache: the packages are built from a clean target directory.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --bundles deb,appimage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - run: node scripts/release/release.mjs dist --platform linux --bundle target/release/bundle --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hatoba-linux
+          path: dist/
+          if-no-files-found: error
+
   publish:
     name: Publish
-    needs: [preflight, build]
+    needs: [preflight, build-windows, build-linux]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The environment's required reviewers hold this job until someone approves the run.
@@ -102,8 +134,9 @@ jobs:
           path: release-notes
       - uses: actions/download-artifact@v4
         with:
-          name: hatoba-windows
+          pattern: hatoba-*
           path: dist
+          merge-multiple: true
       - run: node scripts/release/release.mjs publish --notes release-notes/release-notes.md --dist dist
         env:
           GH_TOKEN: ${{ github.token }}
