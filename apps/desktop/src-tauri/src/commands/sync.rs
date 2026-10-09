@@ -317,19 +317,18 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
                 }
                 .to_owned(),
             ),
+            // Names are prefixed, so one that reads like another value still reads as a name.
             (
                 "jump_host",
-                h.jump_host_id
-                    .as_deref()
-                    .and_then(hosts)
-                    .unwrap_or_default(),
+                h.jump_host_id.as_deref().map_or_else(String::new, |id| {
+                    hosts(id).map_or_else(|| "deleted".to_owned(), |name| format!("host:{name}"))
+                }),
             ),
             (
                 "proxy",
                 match &h.proxy {
                     HostProxy::DeviceDefault => "device_default".to_owned(),
                     HostProxy::Direct => "direct".to_owned(),
-                    // Prefixed, so a proxy named like one of the other values still reads as a name.
                     HostProxy::Proxy { proxy_id } => hosts(proxy_id)
                         .map_or_else(|| "deleted".to_owned(), |name| format!("proxy:{name}")),
                 },
@@ -378,17 +377,20 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
 }
 
 /// What a row points at, for rows whose shown value can read the same for different choices:
-/// proxy names repeat, and every deleted proxy reads alike.
+/// host and proxy names repeat, and every deleted one reads alike.
 fn targets(item: &Item) -> Vec<(&'static str, String)> {
     match item {
-        Item::Host(h) => vec![(
-            "proxy",
-            match &h.proxy {
-                HostProxy::DeviceDefault => "device_default".to_owned(),
-                HostProxy::Direct => "direct".to_owned(),
-                HostProxy::Proxy { proxy_id } => format!("proxy:{proxy_id}"),
-            },
-        )],
+        Item::Host(h) => vec![
+            ("jump_host", h.jump_host_id.clone().unwrap_or_default()),
+            (
+                "proxy",
+                match &h.proxy {
+                    HostProxy::DeviceDefault => "device_default".to_owned(),
+                    HostProxy::Direct => "direct".to_owned(),
+                    HostProxy::Proxy { proxy_id } => format!("proxy:{proxy_id}"),
+                },
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -539,6 +541,32 @@ mod tests {
         }))
     }
 
+    fn host_behind(jump: Option<&str>) -> Option<Item> {
+        Some(Item::Host(Host {
+            name: "app".into(),
+            jump_host_id: jump.map(str::to_owned),
+            ..Host::default()
+        }))
+    }
+
+    /// The local and remote values of one row, or `None` when the row is not shown.
+    fn row(
+        field: &str,
+        local: Option<Item>,
+        remote: Option<Item>,
+        names: &dyn Fn(&str) -> Option<String>,
+    ) -> Option<(Option<String>, Option<String>)> {
+        conflict_view(&conflict(local, remote), names)
+            .fields
+            .into_iter()
+            .find(|f| f.field == field)
+            .map(|f| (f.local, f.remote))
+    }
+
+    fn shown(v: &str) -> Option<String> {
+        Some(v.to_owned())
+    }
+
     fn conflict(local: Option<Item>, remote: Option<Item>) -> ConflictEntry {
         ConflictEntry {
             id: 1,
@@ -580,29 +608,45 @@ mod tests {
                 proxy_id: id.into(),
             })
         };
-        let row = |local, remote, names: &dyn Fn(&str) -> Option<String>| {
-            conflict_view(&conflict(local, remote), names)
-                .fields
-                .into_iter()
-                .find(|f| f.field == "proxy")
-                .map(|f| (f.local, f.remote))
-        };
         let clash = |id: &str| ["a", "b"].contains(&id).then(|| "Clash".to_owned());
-        let shown = |v: &str| Some(v.to_owned());
+        let row = |local, remote| row("proxy", local, remote, &clash);
 
         assert_eq!(
-            row(via("a"), via("b"), &clash),
+            row(via("a"), via("b")),
             Some((shown("proxy:Clash"), shown("proxy:Clash")))
         );
         assert_eq!(
-            row(via("gone"), via("also-gone"), &clash),
+            row(via("gone"), via("also-gone")),
             Some((shown("deleted"), shown("deleted")))
         );
         assert_eq!(
-            row(via("a"), host_via(HostProxy::DeviceDefault), &clash),
+            row(via("a"), host_via(HostProxy::DeviceDefault)),
             Some((shown("proxy:Clash"), shown("device_default")))
         );
-        assert_eq!(row(via("a"), via("a"), &clash), None);
-        assert_eq!(row(via("gone"), via("gone"), &clash), None);
+        assert_eq!(row(via("a"), via("a")), None);
+        assert_eq!(row(via("gone"), via("gone")), None);
+    }
+
+    #[test]
+    fn jump_host_conflicts_compare_the_chosen_host_not_its_name() {
+        // Two hosts may share a name, and every deleted jump host reads alike.
+        let bastion = |id: &str| ["a", "b"].contains(&id).then(|| "bastion".to_owned());
+        let row = |local, remote| row("jump_host", local, remote, &bastion);
+        let behind = |id| host_behind(Some(id));
+
+        assert_eq!(
+            row(behind("a"), behind("b")),
+            Some((shown("host:bastion"), shown("host:bastion")))
+        );
+        assert_eq!(
+            row(behind("gone"), behind("also-gone")),
+            Some((shown("deleted"), shown("deleted")))
+        );
+        assert_eq!(
+            row(behind("gone"), host_behind(None)),
+            Some((shown("deleted"), None))
+        );
+        assert_eq!(row(behind("a"), behind("a")), None);
+        assert_eq!(row(host_behind(None), host_behind(None)), None);
     }
 }

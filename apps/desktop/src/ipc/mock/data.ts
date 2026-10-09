@@ -342,7 +342,7 @@ export const CONFLICTS: ConflictView[] = [
     remote_deleted: false,
     fields: [
       { field: "port", local: "22", remote: "2222" },
-      { field: "jump_host", local: "bastion-tokyo", remote: null },
+      { field: "jump_host", local: "host:bastion-tokyo", remote: null },
       { field: "proxy", local: zh ? "proxy:办公室代理" : "proxy:Office proxy", remote: "deleted" },
     ],
     created_at: ago(20 * MIN),
