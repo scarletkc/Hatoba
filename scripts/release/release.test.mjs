@@ -8,6 +8,7 @@ import {
   CHECKSUMS,
   LATEST,
   TAURI_CONFIG,
+  allowsOnlyMain,
   ciCovers,
   collectDist,
   composeNotes,
@@ -182,7 +183,7 @@ test("collects the installer, its updater signature and checksum, and writes lat
   const latest = JSON.parse(readFileSync(join(release.output, LATEST), "utf8"));
   assert.deepEqual(latest, {
     version: "0.2.0",
-    notes: updateNotes(release.notes, "0.2.0"),
+    notes: updateNotes(release.notes, "0.2.0", REPOSITORY),
     pub_date: "2026-10-09T08:30:15Z",
     platforms: {
       "windows-x86_64": {
@@ -192,6 +193,7 @@ test("collects the installer, its updater signature and checksum, and writes lat
     },
   });
   assert.ok(latest.notes.startsWith("## Faster sync\n\nSync sends only what changed.\n\n## Changelog\n\n"), latest.notes);
+  assert.ok(latest.notes.includes(`- **sync:** send only what changed ([#7](https://github.com/${REPOSITORY}/pull/7))\n`), latest.notes);
   assert.ok(!latest.notes.includes("## Install") && !latest.notes.includes("SmartScreen"), latest.notes);
 });
 
@@ -199,12 +201,40 @@ test("leaves only the install section out of the updater's notes", (t) => {
   const repo = repository(t);
   repo.commit("Initial commit");
   repo.note("0.1.0", "## First release\n\nHello.\n");
-  assert.equal(updateNotes(composeNotes("0.1.0", REPOSITORY, repo.root), "0.1.0"), "## First release\n\nHello.");
+  assert.equal(updateNotes(composeNotes("0.1.0", REPOSITORY, repo.root), "0.1.0", REPOSITORY), "## First release\n\nHello.");
   repo.run("tag", "v0.1.0");
   repo.commit("fix: keep the active tab (#8)");
-  const changelogOnly = updateNotes(composeNotes("0.1.1", REPOSITORY, repo.root), "0.1.1");
+  const changelogOnly = updateNotes(composeNotes("0.1.1", REPOSITORY, repo.root), "0.1.1", REPOSITORY);
   assert.ok(changelogOnly.startsWith("## Changelog\n\nChanges since v0.1.0:") && changelogOnly.endsWith(")"), changelogOnly);
-  assert.throws(() => updateNotes(composeNotes("0.1.1", REPOSITORY, repo.root), "0.1.2"), /no install section for 0\.1\.2/);
+  assert.throws(() => updateNotes(composeNotes("0.1.1", REPOSITORY, repo.root), "0.1.2", REPOSITORY), /no install section for 0\.1\.2/);
+});
+
+test("links pull request numbers at the end of a line in the updater's notes", (t) => {
+  const repo = repository(t);
+  repo.commit("Initial commit");
+  repo.run("tag", "v0.1.0");
+  const unlinked = repo.commit("fix: keep the active tab");
+  repo.commit("fix: restore the window size (#8)");
+  repo.note("0.1.1", "## Window fixes\n\nThe window keeps its size, which #8 fixed (#8)\n");
+  const notes = updateNotes(composeNotes("0.1.1", REPOSITORY, repo.root), "0.1.1", REPOSITORY);
+  const link = `([#8](https://github.com/${REPOSITORY}/pull/8))`;
+  assert.ok(notes.startsWith(`## Window fixes\n\nThe window keeps its size, which #8 fixed ${link}\n\n`), notes);
+  assert.ok(notes.includes(`- restore the window size ${link}\n`), notes);
+  assert.ok(notes.includes(`- keep the active tab (${unlinked.slice(0, 7)}`), notes);
+});
+
+test("accepts a signing environment only when main alone can use it", () => {
+  const custom = { deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } };
+  const main = { name: "main", type: "branch" };
+  assert.ok(allowsOnlyMain(custom, [main]));
+  assert.ok(!allowsOnlyMain(null, []));
+  assert.ok(!allowsOnlyMain({ deployment_branch_policy: null }, []));
+  assert.ok(!allowsOnlyMain({ deployment_branch_policy: { protected_branches: true, custom_branch_policies: false } }, []));
+  assert.ok(!allowsOnlyMain(custom, []));
+  assert.ok(!allowsOnlyMain(custom, [{ name: "*", type: "branch" }]));
+  assert.ok(!allowsOnlyMain(custom, [{ name: "release/*", type: "branch" }]));
+  assert.ok(!allowsOnlyMain(custom, [{ name: "main", type: "tag" }]));
+  assert.ok(!allowsOnlyMain(custom, [main, { name: "release/*", type: "branch" }]));
 });
 
 test("refuses a bundle without the installer or its updater signature", (t) => {

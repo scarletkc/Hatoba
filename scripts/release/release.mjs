@@ -263,20 +263,44 @@ async function gate(repository, root = ROOT) {
   }
   console.log(`Publishing waits for approval in the ${ENVIRONMENT} environment.`);
   const signing = await github(`${repository}/environments/${SIGNING_ENVIRONMENT}`, { allowMissing: true });
-  if (!signing?.deployment_branch_policy) {
+  const policies = signing?.deployment_branch_policy?.custom_branch_policies
+    ? (await github(`${repository}/environments/${SIGNING_ENVIRONMENT}/deployment-branch-policies?per_page=100`)).branch_policies
+    : [];
+  if (!allowsOnlyMain(signing, policies)) {
     throw new Error(
-      `The ${SIGNING_ENVIRONMENT} environment must exist and allow only selected branches, because its secrets sign updates. Set it up as docs/releasing.md describes, then rerun this workflow.`,
+      `The ${SIGNING_ENVIRONMENT} environment must exist and allow deployments only from the main branch, because its secrets sign updates. Set it up as docs/releasing.md describes, then rerun this workflow.`,
     );
   }
-  console.log(`The build signs updates with the secrets of the ${SIGNING_ENVIRONMENT} environment.`);
+  console.log(`The build signs updates with the secrets of the ${SIGNING_ENVIRONMENT} environment, which only main can use.`);
 }
 
-/** The release notes without the install instructions, which describe the manual download, for the updater. */
-export function updateNotes(notes, version) {
+/**
+ * Whether an environment, as GitHub's API returns it with its deployment branch policies, allows
+ * deployments from the main branch and nothing else.
+ */
+export function allowsOnlyMain(environment, policies) {
+  const rule = environment?.deployment_branch_policy;
+  return (
+    rule?.custom_branch_policies === true &&
+    rule.protected_branches === false &&
+    policies.length === 1 &&
+    policies[0].name === "main" &&
+    policies[0].type === "branch"
+  );
+}
+
+/**
+ * The release notes for the updater: without the install instructions, which describe the manual
+ * download, and with each trailing (#N) as a link, which GitHub adds only on the release page.
+ */
+export function updateNotes(notes, version, repository) {
   const install = installSection(version);
   const at = notes.indexOf(install);
   if (at === -1) throw new Error(`The release notes have no install section for ${version}. Write them with the notes command.`);
-  return [notes.slice(0, at).trimEnd(), notes.slice(at + install.length).trim()].filter(Boolean).join("\n\n");
+  return [notes.slice(0, at).trimEnd(), notes.slice(at + install.length).trim()]
+    .filter(Boolean)
+    .join("\n\n")
+    .replace(/\(#(\d+)\)$/gm, `([#$1](https://github.com/${repository}/pull/$1))`);
 }
 
 /**
@@ -302,7 +326,7 @@ export function collectDist(version, bundle, output, { notes, repository, pubkey
   if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
   const latest = {
     version,
-    notes: updateNotes(notes, version),
+    notes: updateNotes(notes, version, repository),
     pub_date: now.toISOString().replace(/\.\d{3}Z$/, "Z"),
     platforms: {
       "windows-x86_64": { signature, url: `https://github.com/${repository}/releases/download/v${version}/${name}` },

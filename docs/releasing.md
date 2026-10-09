@@ -12,7 +12,7 @@ Do this once. The workflow stops before building until the `release` environment
 
 ## Set up update signing
 
-Installed apps install an update only when its installer is signed by the update signing key: they check the signature against the public key in `plugins.updater.pubkey` of [`tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json), which every build carries. Do this once. The workflow stops before building while the public key is empty, or while the `release-signing` environment is missing or open to every branch.
+Installed apps install an update only when its installer is signed by the update signing key: they check the signature against the public key in `plugins.updater.pubkey` of [`tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json), which every build carries. Do this once. The workflow stops before building while the public key is empty, or while the `release-signing` environment is missing or allows deployments from anything but `main`.
 
 1. Generate the key pair outside the repository, and enter a password when asked:
 
@@ -65,7 +65,7 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
    - the release note is valid, or an earlier release exists to list changes from
    - `plugins.updater.pubkey` in `tauri.conf.json` is a public key
    - CI passed on the commit, or on an earlier commit that differs from it only in files CI skips: Markdown files and `docs/`
-   - the `release` environment requires a reviewer, and the `release-signing` environment allows only selected branches
+   - the `release` environment requires a reviewer, and the `release-signing` environment allows deployments only from `main`
 
    It then writes the release notes to the run summary.
 3. **Build (Windows)** builds the installer and signs it with the update signing key, checks the signature against the public key in `tauri.conf.json`, and uploads the `hatoba-windows` artifact: `Hatoba_X.Y.Z_x64-setup.exe`, its signature `Hatoba_X.Y.Z_x64-setup.exe.sig`, `SHA256SUMS.txt`, and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer.
@@ -81,7 +81,7 @@ Publishing tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** wi
 2. Install instructions for the installer.
 3. A changelog of the commits since the previous release, with a link to the full diff. Breaking changes, features, fixes, and performance improvements each have a section, sorted by the commits' Conventional Commits headers. The other commits are folded under **Other changes**.
 
-`latest.json` carries the same notes without the install instructions, and **Settings → About** shows them with the update.
+`latest.json` carries the same notes without the install instructions and with each pull request number at the end of a line as a link, and **Settings → About** shows them with the update.
 
 The previous release is the highest `vX.Y.Z` tag that the release commit contains and that is lower than the new version. A stable release skips prereleases, so its changelog covers the whole prerelease cycle, while a prerelease compares with any earlier release. For example, `1.3.0` compares with `v1.2.0` even when `v1.3.0-rc.1` exists, and `1.3.0-rc.2` compares with `v1.3.0-rc.1`.
 
