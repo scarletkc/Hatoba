@@ -17,9 +17,9 @@ use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::crypto::{
-    self, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY, AAD_VAULT_CHECK, AAD_VAULT_KEY, KdfParams,
-    Key32, MasterKeys, b64_encode, decode_salt, item_aad, random_key, random_salt, seal,
-    unwrap_key, wrap_key,
+    self, AAD_RECENT_TARGETS, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY, AAD_VAULT_CHECK,
+    AAD_VAULT_KEY, KdfParams, Key32, MasterKeys, b64_encode, decode_salt, item_aad, random_key,
+    random_salt, seal, unwrap_key, wrap_key,
 };
 use crate::error::{Error, Result};
 use crate::model::{
@@ -980,6 +980,38 @@ impl Vault {
         self.store.set_meta(meta::MCP_DEVICE_STATE, json)
     }
 
+    /// The device-local list of recent quick-connect targets (opaque JSON owned by the shell,
+    /// HOST-11). Never synced, and sealed under the vault key because it names hosts. A value
+    /// this vault key cannot open reads as `None`.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn recent_targets(&self) -> Result<Option<String>> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let Some(sealed) = self.store.get_meta(meta::RECENT_TARGETS)? else {
+            return Ok(None);
+        };
+        Ok(
+            crypto::open_json(&unlocked.vault_key, AAD_RECENT_TARGETS.as_bytes(), &sealed)
+                .ok()
+                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
+        )
+    }
+
+    /// Stores the recent quick-connect targets, sealed under the vault key.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn set_recent_targets(&mut self, json: &str) -> Result<()> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let sealed = seal(
+            &unlocked.vault_key,
+            AAD_RECENT_TARGETS.as_bytes(),
+            json.as_bytes(),
+        )?;
+        self.store.set_meta(meta::RECENT_TARGETS, &sealed.to_json())
+    }
+
     // ---- backup ----
 
     /// Writes an encrypted backup (VAULT-07). Only envelopes and key blobs are written; the
@@ -1864,6 +1896,37 @@ mod tests {
         assert_eq!(vault.worker_update_dismissed().as_deref(), Some("0.3.0"));
         // last_connected is not an item and never dirties anything.
         assert_eq!(vault.pending_count(), 2);
+    }
+
+    #[test]
+    fn recent_targets_are_sealed_and_need_the_vault_unlocked() {
+        let (mut vault, _clock, _code) = created();
+        assert_eq!(vault.recent_targets().unwrap(), None);
+        let json = r#"[{"address":"db.internal.example","port":22,"username":"deploy"}]"#;
+        vault.set_recent_targets(json).unwrap();
+        assert_eq!(vault.recent_targets().unwrap().as_deref(), Some(json));
+        let raw = vault.store.get_meta(meta::RECENT_TARGETS).unwrap().unwrap();
+        assert!(!raw.contains("db.internal.example"), "{raw}");
+        // Device-local: nothing to push.
+        assert_eq!(vault.pending_count(), 1);
+
+        vault.lock();
+        assert!(matches!(vault.recent_targets(), Err(Error::Locked)));
+        assert!(matches!(vault.set_recent_targets("[]"), Err(Error::Locked)));
+        vault.unlock(PW).unwrap();
+        assert_eq!(vault.recent_targets().unwrap().as_deref(), Some(json));
+
+        // Sealed under another key (a vault replaced since): reads as nothing.
+        vault
+            .store
+            .set_meta(
+                meta::RECENT_TARGETS,
+                &seal(&[7u8; 32], AAD_RECENT_TARGETS.as_bytes(), b"[]")
+                    .unwrap()
+                    .to_json(),
+            )
+            .unwrap();
+        assert_eq!(vault.recent_targets().unwrap(), None);
     }
 
     #[test]

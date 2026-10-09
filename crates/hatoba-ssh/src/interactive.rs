@@ -12,11 +12,19 @@ pub struct Prompt {
     pub echo: bool,
 }
 
-/// A keyboard-interactive info request sent by the server.
+/// A keyboard-interactive info request sent by the server, or the login password that
+/// [`AuthMethod::AgentThenAsk`](crate::AuthMethod::AgentThenAsk) asks for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptRequest {
     /// Host (as configured for the hop) that is asking.
     pub host: String,
+    /// SSH port of that host.
+    pub port: u16,
+    /// Login name on that host.
+    pub username: String,
+    /// `true` when the client asks for the login password itself rather than relaying a
+    /// server prompt: `prompts` then holds one prompt that is not echoed.
+    pub password: bool,
     /// Optional title chosen by the server (often empty).
     pub name: String,
     /// Optional instructions chosen by the server (often empty).

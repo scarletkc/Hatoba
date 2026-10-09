@@ -80,6 +80,17 @@ export const commands = {
 	 */
 	keyDeploy: (keyId: string, hostId: string) => __TAURI_INVOKE<null>("key_deploy", { keyId, hostId }),
 	sshConnect: (hostId: string, options: ConnectOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("ssh_connect", { hostId, options, channel }),
+	/**
+	 *  Quick connect (HOST-11): a terminal on a target typed into the hosts search field, which is
+	 *  not saved as a host. Authentication is the ssh-agent, then the server's keyboard-interactive
+	 *  prompts or a password asked once (SSH-03, SSH-08, SSH-09); the host key goes through the
+	 *  usual check and is saved like any other (SSH-04).
+	 */
+	sshConnectTarget: (target: QuickTarget, options: ConnectOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("ssh_connect_target", { target, options, channel }),
+	/**  The recent quick-connect targets on this device, newest first. */
+	recentTargetsList: () => __TAURI_INVOKE<QuickTarget[]>("recent_targets_list"),
+	/**  Forgets one recent target and returns what is left. */
+	recentTargetRemove: (target: QuickTarget) => __TAURI_INVOKE<QuickTarget[]>("recent_target_remove", { target }),
 	sshWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("ssh_write", { sessionId, data }),
 	sshResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("ssh_resize", { sessionId, cols, rows }),
 	sshDisconnect: (sessionId: string) => __TAURI_INVOKE<null>("ssh_disconnect", { sessionId }),
@@ -499,6 +510,13 @@ export type AuthPrompt = {
 	name: string,
 	instructions: string,
 	prompts: AuthPromptField[],
+	/**
+	 *  The login password of a quick connection (HOST-11), asked like an "ask every time"
+	 *  password (SSH-03) rather than as a server prompt; answered with one value.
+	 */
+	password: boolean,
+	/**  `user@host:port` of the hop that asks. */
+	target: string,
 };
 
 export type AuthPromptField = {
@@ -951,6 +969,17 @@ export type ProbeResult = {
 	latency_ms: number | null,
 };
 
+/**
+ *  A target typed into the hosts search field (quick connect, HOST-11). It is never saved as a
+ *  host; once connected it joins the device-local recent list.
+ */
+export type QuickTarget = {
+	/**  DNS name or IP address, IPv6 without brackets. */
+	address: string,
+	port: number,
+	username: string,
+};
+
 export type RightClick = "copy_paste" | "menu";
 
 export type SearchKind = "brave" | "tavily" | "searxng";
@@ -977,7 +1006,8 @@ export type SessionState = "connecting" | "connected" | "disconnected" | "failed
 
 export type SessionStateEvent = {
 	session_id: string,
-	host_id: string,
+	/**  `None` for a quick-connect session (HOST-11). */
+	host_id: string | null,
 	state: SessionState,
 	latency_ms: number | null,
 	error: AppError | null,

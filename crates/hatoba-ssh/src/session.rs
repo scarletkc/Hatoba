@@ -39,6 +39,10 @@ pub enum AuthMethod {
     },
     /// Keys held by ssh-agent (`SSH_AUTH_SOCK` / Windows OpenSSH pipe).
     Agent,
+    /// What the `ssh` command does without saved credentials: the ssh-agent identities
+    /// (skipped when no agent runs), then the server's keyboard-interactive prompts, or else
+    /// the login password asked through [`ConnectConfig::keyboard_interactive`] and used once.
+    AgentThenAsk,
     /// No credentials (only useful for servers that allow it).
     None,
 }
@@ -49,6 +53,7 @@ impl fmt::Debug for AuthMethod {
             Self::Password(_) => "AuthMethod::Password(<redacted>)",
             Self::PrivateKey { .. } => "AuthMethod::PrivateKey { <redacted> }",
             Self::Agent => "AuthMethod::Agent",
+            Self::AgentThenAsk => "AuthMethod::AgentThenAsk",
             Self::None => "AuthMethod::None",
         })
     }
@@ -207,6 +212,7 @@ async fn connect_hop(
         clock.set_phase(Phase::Auth);
         let ctx = AuthContext {
             host: spec.host,
+            port: spec.port,
             username: spec.username,
             interactive,
             clock: &clock,

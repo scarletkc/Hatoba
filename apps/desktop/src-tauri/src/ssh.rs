@@ -357,6 +357,8 @@ impl KeyboardInteractive for Interactive {
                     echo: p.echo,
                 })
                 .collect(),
+            password: request.password,
+            target: target_label(&request.username, &request.host, request.port),
         };
         if event.emit(&self.app).is_err() {
             lock(&state.ssh.auth_waiters).remove(&request_id);
@@ -371,6 +373,15 @@ impl KeyboardInteractive for Interactive {
         let answers = answers?;
         (answers.len() == request.prompts.len())
             .then(|| answers.into_iter().map(Zeroizing::new).collect())
+    }
+}
+
+/// `user@host:port`, with an IPv6 address in brackets.
+pub fn target_label(username: &str, host: &str, port: u16) -> String {
+    if host.contains(':') {
+        format!("{username}@[{host}]:{port}")
+    } else {
+        format!("{username}@{host}:{port}")
     }
 }
 

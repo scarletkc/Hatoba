@@ -55,6 +55,9 @@ pub mod meta {
     pub const RECOVERY_AUTH_SEALED: &str = "recovery_auth_sealed";
     /// Envelope JSON: a constant sealed under the vault key, to verify a candidate vault key.
     pub const VAULT_CHECK: &str = "vault_check";
+    /// Envelope JSON: the shell's list of recent quick-connect targets (HOST-11), sealed under
+    /// the vault key because it names hosts. Device-local, never synced.
+    pub const RECENT_TARGETS: &str = "recent_targets";
 }
 
 /// One row of the `items` table.

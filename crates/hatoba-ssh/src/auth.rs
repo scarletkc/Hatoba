@@ -1,5 +1,5 @@
-//! Authentication of one SSH hop: password, private key, agent, none and
-//! keyboard-interactive (SSH-01, SSH-02, SSH-08, SSH-09).
+//! Authentication of one SSH hop: password, private key, agent, none,
+//! keyboard-interactive and agent-then-ask (SSH-01, SSH-02, SSH-08, SSH-09).
 
 use std::sync::Arc;
 
@@ -24,6 +24,7 @@ const MAX_KI_ROUNDS: usize = 10;
 
 pub(crate) struct AuthContext<'a> {
     pub host: &'a str,
+    pub port: u16,
     pub username: &'a str,
     pub interactive: Option<&'a Arc<dyn KeyboardInteractive>>,
     pub clock: &'a Arc<ConnectClock>,
@@ -74,7 +75,65 @@ pub(crate) async fn authenticate(
             finish(handle, ctx, result, "the server rejected the private key").await
         }
         AuthMethod::Agent => agent_auth(handle, ctx).await,
+        AuthMethod::AgentThenAsk => agent_then_ask(handle, ctx, &offered).await,
     }
+}
+
+/// [`AuthMethod::AgentThenAsk`]. Like `ssh`, keyboard-interactive is preferred over asking for
+/// the password, since the server's own prompts may ask for more than a password.
+async fn agent_then_ask(
+    handle: &mut Handle<ClientHandler>,
+    ctx: &AuthContext<'_>,
+    offered: &MethodSet,
+) -> Result<(), SshError> {
+    if offered.contains(&MethodKind::PublicKey) {
+        match agent_auth(handle, ctx).await {
+            Ok(()) => return Ok(()),
+            // No agent, an empty one, or no identity accepted: go on with the next method.
+            Err(e) if matches!(e.kind, SshErrorKind::AuthFailed | SshErrorKind::Other) => {
+                tracing::debug!("ssh-agent did not authenticate: {}", e.message);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    if offered.contains(&MethodKind::KeyboardInteractive) {
+        return keyboard_interactive(handle, ctx, None).await;
+    }
+    if !offered.contains(&MethodKind::Password) {
+        return Err(auth_failed(
+            "no ssh-agent identity was accepted",
+            Some(offered),
+        ));
+    }
+    let Some(callback) = ctx.interactive else {
+        return Err(SshError::new(
+            SshErrorKind::AuthFailed,
+            "the server asks for a password but no handler is available",
+        ));
+    };
+    let request = PromptRequest {
+        host: ctx.host.to_owned(),
+        port: ctx.port,
+        username: ctx.username.to_owned(),
+        password: true,
+        name: String::new(),
+        instructions: String::new(),
+        prompts: vec![Prompt {
+            text: "Password: ".to_owned(),
+            echo: false,
+        }],
+    };
+    let answers = {
+        let _pause = ctx.clock.pause();
+        callback.respond(request).await
+    };
+    let Some(password) = answers.and_then(|a| a.into_iter().next()) else {
+        return Err(SshError::cancelled());
+    };
+    let result = handle
+        .authenticate_password(ctx.username, password.as_str())
+        .await?;
+    finish(handle, ctx, result, "the server rejected the password").await
 }
 
 async fn password_auth(
@@ -193,6 +252,9 @@ async fn keyboard_interactive(
                     };
                     let request = PromptRequest {
                         host: ctx.host.to_owned(),
+                        port: ctx.port,
+                        username: ctx.username.to_owned(),
+                        password: false,
                         name,
                         instructions,
                         prompts: prompts

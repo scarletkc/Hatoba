@@ -18,8 +18,8 @@ mod sync;
 mod update;
 
 use commands::{
-    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, mcp as mcp_cmd, settings, sftp,
-    skills, ssh as ssh_cmd, sync as sync_cmd, vault,
+    ai as ai_cmd, app, deploy as deploy_cmd, forwards, hosts, keys, mcp as mcp_cmd, quick,
+    settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -71,6 +71,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             keys::key_public,
             keys::key_deploy,
             ssh_cmd::ssh_connect,
+            ssh_cmd::ssh_connect_target,
+            quick::recent_targets_list,
+            quick::recent_target_remove,
             ssh_cmd::ssh_write,
             ssh_cmd::ssh_resize,
             ssh_cmd::ssh_disconnect,

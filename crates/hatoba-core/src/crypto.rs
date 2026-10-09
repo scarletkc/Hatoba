@@ -51,6 +51,8 @@ pub const AAD_DEVICE_PREFIX: &str = "hatoba/device/v1/";
 pub const AAD_RECOVERY_AUTH: &str = "hatoba/recovery-auth/v1";
 /// AAD of the local-only `vault_check` meta value used to verify a candidate vault key.
 pub const AAD_VAULT_CHECK: &str = "hatoba/vault-check/v1";
+/// AAD of the local-only `recent_targets` meta value (recent quick-connect targets).
+pub const AAD_RECENT_TARGETS: &str = "hatoba/recent-targets/v1";
 
 /// AAD for the item with the given id. Conflict-log copies reuse the item AAD of their item.
 #[must_use]

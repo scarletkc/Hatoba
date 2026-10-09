@@ -1,16 +1,20 @@
-//! Terminal sessions (spec §7.1, §7.2, §10.3).
+//! Terminal sessions (spec §7.1, §7.2, §10.3), including quick connect (HOST-11).
 
 use std::sync::Arc;
 
 use hatoba_core::model::Item;
-use hatoba_ssh::{ShellEvent, ShellOptions};
+use hatoba_ssh::{AuthMethod, ConnectConfig, ShellEvent, ShellOptions};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 use tauri::{AppHandle, State};
 use tauri_specta::Event;
+use tokio::sync::mpsc;
 use zeroize::Zeroizing;
 
 use crate::commands::hosts::host_from_input;
-use crate::dto::{ConnectOptions, HostInput, SessionState, SessionStateEvent, TestResult};
+use crate::commands::quick;
+use crate::dto::{
+    ConnectOptions, HostInput, QuickTarget, SessionState, SessionStateEvent, TestResult,
+};
 use crate::error::{AppError, AppResult};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with};
 use crate::state::{AppState, now_ms};
@@ -42,13 +46,13 @@ impl IpcResponse for TermFrame {
 fn emit_state(
     app: &AppHandle,
     session_id: &str,
-    host_id: &str,
+    host_id: Option<&str>,
     state: SessionState,
     extra: impl FnOnce(&mut SessionStateEvent),
 ) {
     let mut event = SessionStateEvent {
         session_id: session_id.to_owned(),
-        host_id: host_id.to_owned(),
+        host_id: host_id.map(str::to_owned),
         state,
         latency_ms: None,
         error: None,
@@ -91,21 +95,73 @@ pub async fn ssh_connect(
             .ok_or_else(|| AppError::not_found("host"))?;
         build_config(v, &host, Some(&host_id), Some(&overrides(&options)))
     })?;
-    emit_state(
-        &app,
-        &session_id,
-        &host_id,
-        SessionState::Connecting,
-        |_| {},
+    let (live, events) =
+        open_terminal(&app, &state, cfg, &session_id, Some(&host_id), &options).await?;
+    // HOST-06: device-local, never synced.
+    if let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(&host_id, now_ms())?)) {
+        tracing::debug!("last-connected not recorded: {}", e.detail);
+    }
+    crate::commands::forwards::start_auto(&app, &session_id, &live, &host_id).await;
+    pump(
+        app,
+        session_id.clone(),
+        Some(host_id),
+        live,
+        events,
+        channel,
     );
+    Ok(session_id)
+}
 
+/// Quick connect (HOST-11): a terminal on a target typed into the hosts search field, which is
+/// not saved as a host. Authentication is the ssh-agent, then the server's keyboard-interactive
+/// prompts or a password asked once (SSH-03, SSH-08, SSH-09); the host key goes through the
+/// usual check and is saved like any other (SSH-04).
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_connect_target(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: QuickTarget,
+    options: ConnectOptions,
+    channel: Channel<TermFrame>,
+) -> AppResult<String> {
+    let target = quick::validate(target)?;
+    // Known hosts live in the vault (SSH-04).
+    state.with_unlocked(|_| Ok(()))?;
+    let session_id = uuid::Uuid::now_v7().to_string();
+    let cfg = ConnectConfig::new(
+        target.address.clone(),
+        target.port,
+        target.username.clone(),
+        AuthMethod::AgentThenAsk,
+    );
+    let (live, events) = open_terminal(&app, &state, cfg, &session_id, None, &options).await?;
+    if let Err(e) = state.with_unlocked(|v| quick::remember(v, &target)) {
+        tracing::debug!("recent target not recorded: {}", e.detail);
+    }
+    pump(app, session_id.clone(), None, live, events, channel);
+    Ok(session_id)
+}
+
+/// Connects, opens the shell and registers the session, reporting each step as an
+/// `ssh://state` event.
+async fn open_terminal(
+    app: &AppHandle,
+    state: &AppState,
+    cfg: ConnectConfig,
+    session_id: &str,
+    host_id: Option<&str>,
+    options: &ConnectOptions,
+) -> AppResult<(Arc<LiveSession>, mpsc::Receiver<ShellEvent>)> {
+    emit_state(app, session_id, host_id, SessionState::Connecting, |_| {});
     let fail = |err: AppError| {
-        emit_state(&app, &session_id, &host_id, SessionState::Failed, |e| {
+        emit_state(app, session_id, host_id, SessionState::Failed, |e| {
             e.error = Some(err.clone())
         });
         err
     };
-    let session = connect_with(&app, cfg, Some(session_id.clone()))
+    let session = connect_with(app, cfg, Some(session_id.to_owned()))
         .await
         .map_err(fail)?;
     let shell_opts = ShellOptions {
@@ -113,28 +169,33 @@ pub async fn ssh_connect(
         rows: options.rows.clamp(2, 500),
         ..ShellOptions::default()
     };
-    let (shell, mut events) = match session.open_shell(shell_opts).await {
+    let (shell, events) = match session.open_shell(shell_opts).await {
         Ok(v) => v,
         Err(e) => {
             session.disconnect().await;
             return Err(fail(e.into()));
         }
     };
-
     let live = Arc::new(LiveSession::new(session.clone(), shell));
-    state.ssh.insert(session_id.clone(), live.clone());
-    // HOST-06: device-local, never synced.
-    if let Err(e) = state.with_unlocked(|v| Ok(v.set_last_connected(&host_id, now_ms())?)) {
-        tracing::debug!("last-connected not recorded: {}", e.detail);
-    }
+    state.ssh.insert(session_id.to_owned(), live.clone());
     let latency = session.latency_ms();
-    emit_state(&app, &session_id, &host_id, SessionState::Connected, |e| {
+    emit_state(app, session_id, host_id, SessionState::Connected, |e| {
         e.latency_ms = Some(latency)
     });
-    crate::commands::forwards::start_auto(&app, &session_id, &live, &host_id).await;
+    Ok((live, events))
+}
 
-    let (app2, sid, hid) = (app.clone(), session_id.clone(), host_id.clone());
+/// Relays shell output to the WebView until the shell ends, then drops the session.
+fn pump(
+    app: AppHandle,
+    session_id: String,
+    host_id: Option<String>,
+    live: Arc<LiveSession>,
+    mut events: mpsc::Receiver<ShellEvent>,
+    channel: Channel<TermFrame>,
+) {
     tauri::async_runtime::spawn(async move {
+        let host_id = host_id.as_deref();
         while let Some(event) = events.recv().await {
             match event {
                 ShellEvent::Data(bytes) => {
@@ -149,26 +210,34 @@ pub async fn ssh_connect(
                     exit_status,
                 } => {
                     let _ = channel.send(TermFrame::new(FRAME_CLOSED, reason.as_bytes()));
-                    emit_state(&app2, &sid, &hid, SessionState::Disconnected, |e| {
-                        e.exit_status = exit_status
-                    });
+                    emit_state(
+                        &app,
+                        &session_id,
+                        host_id,
+                        SessionState::Disconnected,
+                        |e| e.exit_status = exit_status,
+                    );
                     break;
                 }
                 ShellEvent::Error(err) => {
                     let _ = channel.send(TermFrame::new(FRAME_ERROR, err.message.as_bytes()));
                     let err: AppError = err.into();
-                    emit_state(&app2, &sid, &hid, SessionState::Disconnected, |e| {
-                        e.error = Some(err)
-                    });
+                    emit_state(
+                        &app,
+                        &session_id,
+                        host_id,
+                        SessionState::Disconnected,
+                        |e| e.error = Some(err),
+                    );
                     break;
                 }
             }
         }
-        crate::state::state(&app2).ssh.remove_if_same(&sid, &live);
+        crate::state::state(&app)
+            .ssh
+            .remove_if_same(&session_id, &live);
         live.close().await;
     });
-
-    Ok(session_id)
 }
 
 #[tauri::command]
