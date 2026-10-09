@@ -614,6 +614,8 @@ In the MVP, deleted items keep their tombstones forever (`envelope = NULL, delet
 2. Open **Cloud Sync** in the sidebar, choose Worker mode, enter the Worker URL and the setup token, and select **Test Connection** (which calls `/v1/health`). An in-app deployment (§6.7) supplies the URL and the setup token itself.
 3. Call `/v1/setup` to upload meta, then sign in and push all items.
 
+A failure after `/v1/setup` succeeded, including a lost response, leaves the remote initialized while sync is not yet configured locally. Retrying the step resumes it: when `/v1/prelogin` returns this vault's salt and parameters, the client skips `/v1/setup`, signs in, checks that the remote's wrapped vault keys are the local ones, and finishes the upload. A remote that holds any other vault still gets the Flow C message.
+
 **Flow B: add a new device**
 
 1. On first launch, choose **Restore from Cloud** and enter the Worker URL.
