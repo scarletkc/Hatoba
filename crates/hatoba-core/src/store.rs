@@ -525,18 +525,23 @@ impl Store {
                 tx.set_meta(meta::SCHEMA_VERSION, &(step + 1).to_string())
             })?;
         }
-        for (table, column, kind) in LOCAL_COLUMNS {
-            let present: bool = self.conn.query_row(
-                "SELECT EXISTS (SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)",
-                [table, column],
-                |r| r.get(0),
-            )?;
-            if !present {
-                self.conn
-                    .execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {kind}"))?;
+        // Checked inside the write lock, so a second process opening the file waits and then
+        // finds the column instead of adding it twice.
+        self.transaction(|tx| {
+            for (table, column, kind) in LOCAL_COLUMNS {
+                let present: bool = tx.conn().query_row(
+                    "SELECT EXISTS (SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)",
+                    [table, column],
+                    |r| r.get(0),
+                )?;
+                if !present {
+                    tx.conn().execute_batch(&format!(
+                        "ALTER TABLE {table} ADD COLUMN {column} {kind}"
+                    ))?;
+                }
             }
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Runs `f` in one immediate transaction: all of its writes commit together or not at all.

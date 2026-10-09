@@ -18,6 +18,9 @@ interface VaultData {
   clear(): void;
 }
 
+/** Bumped by every full reload and clear, so a hosts-only reload already in flight is dropped. */
+let generation = 0;
+
 export const useVaultData = create<VaultData>((set) => ({
   loaded: false,
   hosts: [],
@@ -25,6 +28,7 @@ export const useVaultData = create<VaultData>((set) => ({
   tags: [],
   keys: [],
   reload: async () => {
+    generation++;
     const [hosts, groups, tags, keys] = await Promise.all([
       api.hosts_list(),
       api.groups_list(),
@@ -33,8 +37,15 @@ export const useVaultData = create<VaultData>((set) => ({
     ]);
     set({ loaded: true, hosts, groups: [...groups].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name)), tags, keys });
   },
-  reloadHosts: async () => set({ hosts: await api.hosts_list() }),
-  clear: () => set({ loaded: false, hosts: [], groups: [], tags: [], keys: [] }),
+  reloadHosts: async () => {
+    const started = generation;
+    const hosts = await api.hosts_list();
+    if (started === generation) set({ hosts });
+  },
+  clear: () => {
+    generation++;
+    set({ loaded: false, hosts: [], groups: [], tags: [], keys: [] });
+  },
 }));
 
 export function hostById(id: string | null | undefined): HostView | undefined {

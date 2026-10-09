@@ -129,7 +129,10 @@ pub async fn ssh_connect(
         v.set_last_connected(&host_id, now_ms())?;
         Ok(v.set_host_os(&host_id, os)?)
     }) {
-        tracing::debug!("last-connected not recorded: {}", e.detail);
+        tracing::debug!(
+            "last-connected time and server OS not recorded: {}",
+            e.detail
+        );
     }
     let latency = session.latency_ms();
     emit_state(&app, &session_id, &host_id, SessionState::Connected, |e| {
