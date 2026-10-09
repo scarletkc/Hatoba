@@ -57,6 +57,7 @@ describe("tools menu (AI-30)", () => {
       'npx -y @scope/pkg --root "C:\\My Files"',
     );
     expect(transportLabel({ kind: "stdio", command: "uvx", args: ['say "hi"', ""], env_keys: [] })).toBe('uvx "say \\"hi\\"" ""');
+    expect(transportLabel({ kind: "stdio", command: "node", args: ["server.js\r--evil"], env_keys: [] })).toBe('node "server.js\\r--evil"');
     expect(transportLabel({ kind: "http", url: "https://mcp.example.com/mcp", header_keys: ["Authorization"] })).toBe("https://mcp.example.com/mcp");
   });
 });

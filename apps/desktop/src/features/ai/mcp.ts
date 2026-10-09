@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { formatCommandLine } from "@/features/settings/mcpLogic";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpTransportView } from "@/ipc/types";
 
@@ -84,13 +85,7 @@ export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number;
   return { on: used.length, total: rows.length, failed: used.some((r) => r.state === "failed") };
 }
 
-/** An argument as one word: in double quotes when it is empty or has spaces or quotes. */
-function shellWord(arg: string): string {
-  if (arg && !/[\s"']/.test(arg)) return arg;
-  return `"${arg.replace(/"/g, '\\"')}"`;
-}
-
-/** The transport in one line: the command line of a `stdio` server or the URL of an `http` one. */
+/** The transport in one line: the command line of a `stdio` server, as Settings → AI shows it, or the URL of an `http` one. */
 export function transportLabel(t: McpTransportView): string {
-  return t.kind === "stdio" ? [t.command, ...t.args].map(shellWord).join(" ") : t.url;
+  return t.kind === "stdio" ? formatCommandLine(t.command, t.args) : t.url;
 }
