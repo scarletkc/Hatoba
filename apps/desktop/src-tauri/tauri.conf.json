@@ -49,7 +49,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlEMUYzMDc4N0Y2NDQ4N0MKUldSOFNHUi9lREFmbmZBL25IRDNCSUVTSlJmVVRDWU55SzVZeTFlZ1JLc3BwZ1IxTDdPd0ZUZ0oK",
       "endpoints": ["https://github.com/scarletkc/Hatoba/releases/latest/download/latest.json"],
       "requireSignedVersion": true,
       "windows": { "installMode": "passive" }
