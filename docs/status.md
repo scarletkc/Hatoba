@@ -32,6 +32,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin and the Japanese IME needs verification on a real Windows machine |
 | TERM-07, 08 | Terminal search, links | ✅ | |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
+| TERM-12 | Resource usage in the status bar | 🟡 | Integration tests run the sampling against OpenSSH on Linux; needs a try in the app against a real server |
 | SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
 | SFTP-05 | Edit remote files | ⬜ | P2 |
 | FWD-01, 02 | Local forwarding, start with the connection | ✅ | |
