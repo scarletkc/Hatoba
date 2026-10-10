@@ -1193,9 +1193,9 @@ pub struct AiConversationView {
     pub title: String,
     /// The host the conversation last worked on.
     pub host_id: Option<String>,
-    /// The quick-connect target (HOST-12) it last worked on, as `user@host:port`, while `host_id`
-    /// is `None` (AI-09).
-    pub quick_target: Option<String>,
+    /// The quick-connect target (HOST-12) it last worked on while `host_id` is `None` (AI-09),
+    /// as the conversation records it: the address in lowercase and without brackets.
+    pub quick_target: Option<QuickTarget>,
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
     pub context_start: Option<String>,

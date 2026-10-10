@@ -4,7 +4,6 @@ import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { confirm, Menu, useMenu } from "@/components/overlay";
-import { formatTarget } from "@/features/hosts/quickConnect";
 import { reconnectSession } from "@/features/terminal/connect";
 import { useT } from "@/i18n";
 import type { AiPermissionMode, HostView } from "@/ipc/types";
@@ -318,12 +317,12 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
           {t("ai.notice.homeConversation", { title: homeTitle || t("ai.untitled") })}
         </Notice>,
       );
-    // Both named as the divider of the next message will name them.
-    const from = slot.conversation ? movedFrom(slot.conversation, tab, hosts) : null;
-    if (from !== null)
+    // Only for a move the next message notes, named as its divider will name them.
+    const move = slot.conversation ? movedFrom(slot.conversation, tab, hosts) : null;
+    if (move)
       items.push(
         <Notice key="move" icon={<Icon name="arrows-left-right" size={14} />}>
-          {t("ai.notice.moveHost", { from: from || t("ai.history.hostGone"), to: tabHost?.name ?? (tab.target ? formatTarget(tab.target) : tab.title) })}
+          {t("ai.notice.moveHost", { from: move.from || t("ai.history.hostGone"), to: move.to })}
         </Notice>,
       );
   }

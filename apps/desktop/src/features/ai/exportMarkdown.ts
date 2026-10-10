@@ -1,3 +1,4 @@
+import { formatTarget } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { parseMessage, type Attachment } from "./attachments";
@@ -75,7 +76,7 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
   const meta: string[] = [];
   if (host) meta.push(`- ${t("ai.export.host")}: ${host.name} (\`${host.target}\`)`);
   else if (conversation.host_id) meta.push(`- ${t("ai.export.host")}: ${t("ai.history.hostGone")}`);
-  else if (conversation.quick_target) meta.push(`- ${t("ai.export.host")}: \`${conversation.quick_target}\``);
+  else if (conversation.quick_target) meta.push(`- ${t("ai.export.host")}: \`${formatTarget(conversation.quick_target)}\``);
   meta.push(`- ${t("ai.export.created")}: ${time(conversation.created_at)}`);
 
   const blocks = [`# ${conversation.title || t("ai.untitled")}`, meta.join("\n")];

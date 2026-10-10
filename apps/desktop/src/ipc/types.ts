@@ -851,8 +851,8 @@ export interface AiConversationView {
   title: string;
   /** The host the conversation last worked on. */
   host_id: string | null;
-  /** The quick-connect target (HOST-12) it last worked on, as `user@host:port`, while `host_id` is null (AI-09). */
-  quick_target: string | null;
+  /** The quick-connect target (HOST-12) it last worked on while `host_id` is null (AI-09), the address in lowercase and without brackets. */
+  quick_target: QuickTarget | null;
   pinned: boolean;
   /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
   context_start: string | null;

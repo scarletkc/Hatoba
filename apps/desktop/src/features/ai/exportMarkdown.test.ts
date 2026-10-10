@@ -109,7 +109,7 @@ describe("Markdown export (AI-25)", () => {
   });
 
   it("names the quick-connect target a conversation is on, and nothing for a home tab chat (HOST-12)", () => {
-    const quick = { ...conversation, host_id: null, quick_target: "root@[2001:db8::1]:2222" };
+    const quick = { ...conversation, host_id: null, quick_target: { address: "2001:db8::1", port: 2222, username: "root" } };
     expect(conversationMarkdown({ conversation: quick, entries: [], host: null }, { t, time })).toBe("# Disk on prod\n\n- Host: `root@[2001:db8::1]:2222`\n- Created: T1000\n");
     const home = { ...conversation, host_id: null };
     expect(conversationMarkdown({ conversation: home, entries: [], host: null }, { t, time })).toBe("# Disk on prod\n\n- Created: T1000\n");

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionTab } from "@/app/tabs";
-import type { AiConversationView, AiProviderView } from "@/ipc/types";
+import type { AiConversationView, AiProviderView, QuickTarget } from "@/ipc/types";
 
 // turnContext never calls the backend; this keeps the real IPC layer out of the test.
 vi.mock("@/ipc/api", async (importActual) => ({ ...(await importActual<typeof import("@/ipc/api")>()), api: {} }));
@@ -21,7 +21,7 @@ const provider: AiProviderView = {
   models: [{ id: "m", name: "m", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
   updated_at: 0,
 };
-const view = (host_id: string | null, quick_target: string | null): AiConversationView => ({
+const view = (host_id: string | null, quick_target: QuickTarget | null): AiConversationView => ({
   id: "c1",
   title: "t",
   host_id,
@@ -46,8 +46,13 @@ beforeEach(() => {
 
 describe("turnContext (AI-09)", () => {
   it("names the conversation's quick-connect target on the home tab, with no terminal (HOST-12)", () => {
-    attach(HOME_SLOT, view(null, "root@[2001:db8::1]:2222"));
-    expect(turnContext(HOME_SLOT)).toMatchObject({ host_id: null, target: { address: "2001:db8::1", port: 2222, username: "root" }, tab: false, session_id: null });
+    const target = { address: "2001:db8::1", port: 2222, username: "root" };
+    attach(HOME_SLOT, view(null, target));
+    expect(turnContext(HOME_SLOT)).toMatchObject({ host_id: null, target, tab: false, session_id: null });
+    // A user name typed at the prompt can have a space; the target goes as it is.
+    const domainUser = { address: "10.0.0.7", port: 22, username: "domain user" };
+    attach(HOME_SLOT, view(null, domainUser));
+    expect(turnContext(HOME_SLOT)).toMatchObject({ host_id: null, target: domainUser });
   });
 
   it("names the conversation's host on the home tab", () => {
@@ -56,7 +61,7 @@ describe("turnContext (AI-09)", () => {
   });
 
   it("names the tab's target in a terminal tab, which the next message moves the conversation to", () => {
-    attach(quickTab.id, view(null, "root@10.0.0.7:22"));
+    attach(quickTab.id, view(null, { address: "10.0.0.7", port: 22, username: "root" }));
     expect(turnContext(quickTab.id)).toMatchObject({ host_id: null, target: quickTab.target, tab: true, session_id: "s1" });
   });
 });

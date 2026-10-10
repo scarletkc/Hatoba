@@ -3,7 +3,6 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab, type TabSource } from "@/app/tabs";
 import { confirm, toast } from "@/components/overlay";
-import { parseTarget } from "@/features/hosts/quickConnect";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";
@@ -115,13 +114,12 @@ export function turnContext(slotId: string): AiTurnContext | null {
   const attached = attachedTab(slotId);
   const connected = !!attached && attached.tab.status === "connected";
   const conversation = getSlot(slotId).conversation;
-  const quick = conversation?.quick_target ? parseTarget(conversation.quick_target) : null;
   return {
     provider_id: model.provider_id,
     model_id: model.model_id,
     effort: slotEffort(slotId),
     host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
-    target: attached ? attached.tab.target : quick,
+    target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
     tab: connected,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: getSlot(slotId).mcpOff,

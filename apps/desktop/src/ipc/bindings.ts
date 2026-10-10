@@ -344,10 +344,10 @@ export type AiConversationView = {
 	/**  The host the conversation last worked on. */
 	host_id: string | null,
 	/**
-	 *  The quick-connect target (HOST-12) it last worked on, as `user@host:port`, while `host_id`
-	 *  is `None` (AI-09).
+	 *  The quick-connect target (HOST-12) it last worked on while `host_id` is `None` (AI-09),
+	 *  as the conversation records it: the address in lowercase and without brackets.
 	 */
-	quick_target: string | null,
+	quick_target: QuickTarget | null,
 	pinned: boolean,
 	/**  `entry_id` where the context sent to the model starts (AI-21). */
 	context_start: string | null,
