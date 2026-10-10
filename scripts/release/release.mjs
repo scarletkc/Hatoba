@@ -33,23 +33,45 @@ export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 /**
  * The installers of a release, by Tauri bundle type: the name passed to `tauri build --bundles` and,
  * unless `dir` names another, the directory under target/release/bundle that holds the installer.
- * Each platform's build job in release.yml builds the bundle types of its platform. `name` is the
- * file name in the release. `updater` is the key of the installer in latest.json: the updater looks
- * for `<os>-<arch>-<bundle type>`, then for `<os>-<arch>`. Only installers with that key have an
- * updater signature: on macOS people download the disk image, while the updater installs the app
- * bundle from `archive`, which `tauri build` writes only when it makes updater artifacts.
+ * Each platform's build job in release.yml builds the bundle types of its platform. `built` is the
+ * file name that `tauri build` writes, and `name` the file name in the release, which names the
+ * platform in words people know so that they can tell which file to download. `updater` is the key
+ * of the installer in latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then for
+ * `<os>-<arch>`. Only installers with that key have an updater signature: on macOS people download
+ * the disk image, while the updater installs the app bundle from an `archive`, which `tauri build`
+ * writes only when it makes updater artifacts.
  */
 export const INSTALLERS = {
-  nsis: { platform: "windows", updater: "windows-x86_64", name: (version) => `Hatoba_${version}_x64-setup.exe` },
-  deb: { platform: "linux", updater: "linux-x86_64-deb", name: (version) => `Hatoba_${version}_amd64.deb` },
-  appimage: { platform: "linux", updater: "linux-x86_64-appimage", name: (version) => `Hatoba_${version}_amd64.AppImage` },
-  dmg: { platform: "macos", name: (version) => `Hatoba_${version}_aarch64.dmg` },
+  nsis: {
+    platform: "windows",
+    updater: "windows-x86_64",
+    built: (version) => `Hatoba_${version}_x64-setup.exe`,
+    name: (version) => `Hatoba_${version}_windows-x64-setup.exe`,
+  },
+  deb: {
+    platform: "linux",
+    updater: "linux-x86_64-deb",
+    built: (version) => `Hatoba_${version}_amd64.deb`,
+    name: (version) => `Hatoba_${version}_linux-x64.deb`,
+  },
+  appimage: {
+    platform: "linux",
+    updater: "linux-x86_64-appimage",
+    built: (version) => `Hatoba_${version}_amd64.AppImage`,
+    name: (version) => `Hatoba_${version}_linux-x64.AppImage`,
+  },
+  dmg: {
+    platform: "macos",
+    built: (version) => `Hatoba_${version}_aarch64.dmg`,
+    name: (version) => `Hatoba_${version}_macos-apple-silicon.dmg`,
+  },
   app: {
     platform: "macos",
     updater: "darwin-aarch64",
     dir: "macos",
-    archive: "Hatoba.app.tar.gz",
-    name: (version) => `Hatoba_${version}_aarch64.app.tar.gz`,
+    archive: true,
+    built: () => "Hatoba.app.tar.gz",
+    name: (version) => `Hatoba_${version}_macos-apple-silicon-update.app.tar.gz`,
   },
 };
 
@@ -220,13 +242,13 @@ function changelog(previous, tag, repository, root) {
 }
 
 function installSection(version) {
-  const [nsis, deb, appimage, dmg] = ["nsis", "deb", "appimage", "dmg"].map((bundle) => installerName(bundle, version));
+  const [nsis, deb, appimage, dmg, app] = ["nsis", "deb", "appimage", "dmg", "app"].map((bundle) => installerName(bundle, version));
   return [
     "## Install",
     `**Windows:** download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
     `**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
     `**macOS (Apple Silicon, experimental):** on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
-    `\`${CHECKSUMS}\` has the SHA-256 checksum of each file.`,
+    `\`${CHECKSUMS}\` has the SHA-256 checksum of each file. The \`.sig\` files, \`${app}\`, and \`${LATEST}\` are for the app's updater, so you don't need to download them.`,
   ].join("\n\n");
 }
 
@@ -355,14 +377,14 @@ function bundlesOf(platform) {
  */
 export function collectDist(version, platform, bundles, output, { pubkey }) {
   const files = bundlesOf(platform).flatMap((bundle) => {
-    const { dir: subdir = bundle, archive, updater } = INSTALLERS[bundle];
+    const { dir: subdir = bundle, archive, built, updater } = INSTALLERS[bundle];
     const dir = join(bundles, subdir);
     const name = installerName(bundle, version);
-    const file = archive ?? name;
+    const file = built(version);
     if (!existsSync(join(dir, file))) {
       if (archive) {
         throw new Error(
-          `Expected the updater archive ${archive} in ${dir}. \`pnpm tauri build\` writes it only when it makes updater artifacts: with \`bundle.createUpdaterArtifacts\` on in tauri.conf.json and not turned off by --config, and with TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD set, as docs/releasing.md describes.`,
+          `Expected the updater archive ${file} in ${dir}. \`pnpm tauri build\` writes it only when it makes updater artifacts: with \`bundle.createUpdaterArtifacts\` on in tauri.conf.json and not turned off by --config, and with TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD set, as docs/releasing.md describes.`,
         );
       }
       const found = existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith(extname(file))) : [];

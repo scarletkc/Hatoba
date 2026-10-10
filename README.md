@@ -72,18 +72,19 @@ account.
 
 Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
 
-- **Windows**: `Hatoba_<version>_x64-setup.exe` installs for the current user
-  without administrator rights.
-- **Linux (x86_64)**: `Hatoba_<version>_amd64.deb` for Debian, Ubuntu, and
-  distributions based on them, or `Hatoba_<version>_amd64.AppImage` for the
+- **Windows**: `Hatoba_<version>_windows-x64-setup.exe` installs for the
+  current user without administrator rights.
+- **Linux (x86_64)**: `Hatoba_<version>_linux-x64.deb` for Debian, Ubuntu, and
+  distributions based on them, or `Hatoba_<version>_linux-x64.AppImage` for the
   others. Sync keeps its credentials in the Secret Service, so it needs GNOME
   Keyring, KWallet, or another Secret Service provider.
-- **macOS (Apple Silicon, experimental)**: `Hatoba_<version>_aarch64.dmg` for
-  macOS 13 or later. The app is not signed with an Apple Developer ID or
-  notarized, so macOS blocks it the first time you open it. Within the next
-  hour, go to **System Settings → Privacy & Security**, choose **Open Anyway**
-  under **Security**, and enter your login password. After an update, macOS may
-  ask whether Hatoba can use its keychain items: enter your login password and
+- **macOS (Apple Silicon, experimental)**:
+  `Hatoba_<version>_macos-apple-silicon.dmg` for macOS 13 or later. The app is
+  not signed with an Apple Developer ID or notarized, so macOS blocks it the
+  first time you open it. Within the next hour, go to
+  **System Settings → Privacy & Security**, choose **Open Anyway** under
+  **Security**, and enter your login password. After an update, macOS may ask
+  whether Hatoba can use its keychain items: enter your login password and
   choose **Always Allow**, because sync fails if you deny it.
 
 The maintainer uses Windows, so the Linux and macOS builds get little testing
