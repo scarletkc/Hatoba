@@ -79,14 +79,16 @@ Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
   others. Sync keeps its credentials in the Secret Service, so it needs GNOME
   Keyring, KWallet, or another Secret Service provider.
 - **macOS (Apple Silicon, experimental)**: `Hatoba_<version>_aarch64.dmg` for
-  macOS 13 or later. The maintainer cannot test it on a Mac, so please report
-  what does not work in [Issues](https://github.com/scarletkc/Hatoba/issues).
-  The app is not signed with an Apple Developer ID or notarized, so macOS
-  blocks it the first time you open it. Within the next hour, go to
-  **System Settings → Privacy & Security**, choose **Open Anyway** under
-  **Security**, and enter your login password. After an update, macOS may ask
-  whether Hatoba can use its keychain items: enter your login password and
+  macOS 13 or later. The app is not signed with an Apple Developer ID or
+  notarized, so macOS blocks it the first time you open it. Within the next
+  hour, go to **System Settings → Privacy & Security**, choose **Open Anyway**
+  under **Security**, and enter your login password. After an update, macOS may
+  ask whether Hatoba can use its keychain items: enter your login password and
   choose **Always Allow**, because sync fails if you deny it.
+
+The maintainer uses Windows, so the Linux and macOS builds get little testing
+on real machines. If something doesn't work on them, please
+[open an issue](https://github.com/scarletkc/Hatoba/issues).
 
 Each release's notes cover what changed and how to install it.
 
