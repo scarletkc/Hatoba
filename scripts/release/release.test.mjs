@@ -197,7 +197,7 @@ test("collects each platform's installers with their updater signatures", (t) =>
   assert.deepEqual(dist("0.2.0", "linux", release), linux);
   assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_amd64.AppImage"), "utf8"), INSTALLER);
   assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_amd64.AppImage.sig"), "utf8"), SIGNATURE);
-  assert.throws(() => dist("0.2.0", "macos", release), /Unknown platform 'macos'\. Use windows or linux\./);
+  assert.throws(() => dist("0.2.0", "freebsd", release), /Unknown platform 'freebsd'\. Use windows, linux, or macos\./);
 });
 
 test("writes the checksums and latest.json of every installer", (t) => {
@@ -315,4 +315,99 @@ test("reads the updater's public key from tauri.conf.json", (t) => {
   assert.throws(() => updaterPubkey(root), /is not a minisign public key/);
   configure(PUBKEY);
   assert.equal(updaterPubkey(root), PUBKEY);
+});
+
+const DMG = "Hatoba 0.2.0 disk image stand-in\n";
+
+/**
+ * Adds the macOS bundles to a `bundled` directory, as `tauri build --bundles app,dmg` leaves them:
+ * the disk image under its versioned name, and the app tarball, which installed apps update from,
+ * under an unversioned one.
+ */
+function withMacos(release, version, { tarball = INSTALLER, signature = SIGNATURE } = {}) {
+  mkdirSync(join(release.bundle, "dmg"), { recursive: true });
+  writeFileSync(join(release.bundle, "dmg", `Hatoba_${version}_aarch64.dmg`), DMG);
+  mkdirSync(join(release.bundle, "macos"), { recursive: true });
+  writeFileSync(join(release.bundle, "macos", "Hatoba.app.tar.gz"), tarball);
+  if (signature !== null) writeFileSync(join(release.bundle, "macos", "Hatoba.app.tar.gz.sig"), signature);
+  return release;
+}
+
+const MACOS = ["Hatoba_0.2.0_aarch64.dmg", "Hatoba_0.2.0_aarch64.app.tar.gz", "Hatoba_0.2.0_aarch64.app.tar.gz.sig"];
+
+test("collects the macOS disk image, and the app tarball with its signature under versioned names", (t) => {
+  const release = withMacos(bundled(t, "0.2.0"), "0.2.0");
+  assert.deepEqual(dist("0.2.0", "macos", release), MACOS);
+  assert.deepEqual(readdirSync(release.output).sort(), [...MACOS].sort());
+  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_aarch64.dmg"), "utf8"), DMG);
+  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_aarch64.app.tar.gz"), "utf8"), INSTALLER);
+  assert.equal(readFileSync(join(release.output, "Hatoba_0.2.0_aarch64.app.tar.gz.sig"), "utf8"), SIGNATURE);
+});
+
+test("refuses a macOS bundle without the disk image, or with an app tarball that installed apps would refuse", (t) => {
+  const unsigned = withMacos(bundled(t, "0.2.0"), "0.2.0", { signature: null });
+  assert.throws(() => dist("0.2.0", "macos", unsigned), /Expected the updater signature Hatoba\.app\.tar\.gz\.sig .*TAURI_SIGNING_PRIVATE_KEY/);
+  assert.ok(!existsSync(unsigned.output), "nothing is copied while a file is missing");
+
+  const noImage = withMacos(bundled(t, "0.2.0"), "0.2.0");
+  rmSync(join(noImage.bundle, "dmg", "Hatoba_0.2.0_aarch64.dmg"));
+  assert.throws(() => dist("0.2.0", "macos", noImage), /Expected the installer Hatoba_0\.2\.0_aarch64\.dmg in .*found no installer/);
+
+  assert.throws(() => dist("0.2.0", "macos", withMacos(bundled(t, "0.2.0"), "0.2.0", { tarball: "tampered" })), /does not match the installer/);
+  // The tarball's name has no version, so only its signature tells a tarball left from an earlier build.
+  assert.throws(() => dist("0.3.0", "macos", withMacos(bundled(t, "0.3.0"), "0.3.0")), /Hatoba\.app\.tar\.gz\.sig was made for version 0\.2\.0, not 0\.3\.0/);
+});
+
+test("adds macOS to the checksums and latest.json and leaves the Windows and Linux entries as they are", (t) => {
+  const notes = releaseNotes(t, "0.2.0");
+  const without = bundled(t, "0.2.0");
+  dist("0.2.0", "windows", without);
+  dist("0.2.0", "linux", without);
+  assemble("0.2.0", without.output, notes);
+  const release = withMacos(bundled(t, "0.2.0"), "0.2.0");
+  for (const platform of ["windows", "linux", "macos"]) dist("0.2.0", platform, release);
+
+  const installers = ["Hatoba_0.2.0_x64-setup.exe", "Hatoba_0.2.0_amd64.deb", "Hatoba_0.2.0_amd64.AppImage"];
+  assert.deepEqual(assemble("0.2.0", release.output, notes), [...installers.flatMap((name) => [name, `${name}.sig`]), ...MACOS, CHECKSUMS, LATEST]);
+  const read = (output, name) => readFileSync(join(output, name), "utf8");
+  const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+  assert.equal(
+    read(release.output, CHECKSUMS),
+    `${read(without.output, CHECKSUMS)}${sha256(DMG)}  Hatoba_0.2.0_aarch64.dmg\n${sha256(INSTALLER)}  Hatoba_0.2.0_aarch64.app.tar.gz\n`,
+  );
+  // The updater installs the app tarball; the disk image is only for people to download.
+  const before = JSON.parse(read(without.output, LATEST));
+  const tarball = { signature: SIGNATURE, url: `https://github.com/${REPOSITORY}/releases/download/v0.2.0/Hatoba_0.2.0_aarch64.app.tar.gz` };
+  const latest = { ...before, platforms: { ...before.platforms, "darwin-aarch64": tarball } };
+  assert.equal(read(release.output, LATEST), `${JSON.stringify(latest, null, 2)}\n`);
+  assert.ok(!latest.notes.includes("Open Anyway"), latest.notes);
+});
+
+test("publishes the macOS files only when every one of them was collected", (t) => {
+  const notes = releaseNotes(t, "0.2.0");
+  const release = withMacos(bundled(t, "0.2.0"), "0.2.0");
+  for (const platform of ["windows", "linux", "macos"]) dist("0.2.0", platform, release);
+  rmSync(join(release.output, "Hatoba_0.2.0_aarch64.dmg"));
+  assert.throws(() => assemble("0.2.0", release.output, notes), /Missing release files in .*: Hatoba_0\.2\.0_aarch64\.dmg\. Collect them/);
+  assert.ok(!existsSync(join(release.output, LATEST)) && !existsSync(join(release.output, CHECKSUMS)));
+
+  for (const name of MACOS.slice(1)) rmSync(join(release.output, name));
+  assert.ok(!assemble("0.2.0", release.output, notes).some((name) => name.includes("aarch64")));
+  assert.ok(!("darwin-aarch64" in JSON.parse(readFileSync(join(release.output, LATEST), "utf8")).platforms));
+});
+
+test("writes install instructions for each platform, with macOS marked experimental", (t) => {
+  const repo = repository(t);
+  repo.commit("Initial commit");
+  repo.note("0.2.0", "## First release\n\nHello.\n");
+  const notes = composeNotes("0.2.0", REPOSITORY, repo.root);
+  const install = [
+    "## Install",
+    "**Windows:** download `Hatoba_0.2.0_x64-setup.exe` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.",
+    "**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download `Hatoba_0.2.0_amd64.deb` and install it with `sudo apt install ./Hatoba_0.2.0_amd64.deb`. On other distributions, download `Hatoba_0.2.0_amd64.AppImage`, make it executable with `chmod +x Hatoba_0.2.0_amd64.AppImage`, and run it.",
+    "**macOS (Apple Silicon, experimental):** on macOS 13 or later, download `Hatoba_0.2.0_aarch64.dmg`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password.",
+    "`SHA256SUMS.txt` has the SHA-256 checksum of each file.",
+  ];
+  assert.equal(notes, `## First release\n\nHello.\n\n${install.join("\n\n")}\n`);
+  assert.equal(updateNotes(notes, "0.2.0", REPOSITORY), "## First release\n\nHello.");
 });

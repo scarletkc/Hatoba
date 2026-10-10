@@ -31,16 +31,33 @@ export const LATEST = "latest.json";
 export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
 
 /**
- * The installers of a release, by Tauri bundle type: the name passed to `tauri build --bundles` and
- * the directory under target/release/bundle that holds the installer. Each platform's build job in
- * release.yml builds the bundle types of its platform. `updater` is the key of the installer in
- * latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then for `<os>-<arch>`.
+ * The installers of a release, by Tauri bundle type: the name passed to `tauri build --bundles` and,
+ * unless `dir` names another, the directory under target/release/bundle that holds the installer.
+ * Each platform's build job in release.yml builds the bundle types of its platform. `name` is the
+ * file name in the release, and `built` the one `tauri build` writes when they differ. `updater` is
+ * the key of the installer in latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then
+ * for `<os>-<arch>`. Only installers with that key have an updater signature: on macOS people
+ * download the disk image, while the updater installs the app bundle from a tarball.
  */
 export const INSTALLERS = {
   nsis: { platform: "windows", updater: "windows-x86_64", name: (version) => `Hatoba_${version}_x64-setup.exe` },
   deb: { platform: "linux", updater: "linux-x86_64-deb", name: (version) => `Hatoba_${version}_amd64.deb` },
   appimage: { platform: "linux", updater: "linux-x86_64-appimage", name: (version) => `Hatoba_${version}_amd64.AppImage` },
+  dmg: { platform: "macos", name: (version) => `Hatoba_${version}_aarch64.dmg` },
+  app: {
+    platform: "macos",
+    updater: "darwin-aarch64",
+    dir: "macos",
+    built: "Hatoba.app.tar.gz",
+    name: (version) => `Hatoba_${version}_aarch64.app.tar.gz`,
+  },
 };
+
+/**
+ * Platforms whose files a release can be without. The macOS build is experimental: a release
+ * publishes its files when the dist directory has them, and stops when it has only some of them.
+ */
+const OPTIONAL_PLATFORMS = ["macos"];
 
 export function installerName(bundle, version) {
   return INSTALLERS[bundle].name(version);
@@ -49,6 +66,12 @@ export function installerName(bundle, version) {
 /** The updater signature that `tauri build` writes next to the installer. */
 export function signatureName(bundle, version) {
   return `${installerName(bundle, version)}.sig`;
+}
+
+/** The files the dist command collects for `bundle`: the installer, and its updater signature if it has one. */
+function distFiles(bundle, version) {
+  const name = installerName(bundle, version);
+  return INSTALLERS[bundle].updater ? [name, signatureName(bundle, version)] : [name];
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -202,11 +225,12 @@ function changelog(previous, tag, repository, root) {
 }
 
 function installSection(version) {
-  const [nsis, deb, appimage] = ["nsis", "deb", "appimage"].map((bundle) => installerName(bundle, version));
+  const [nsis, deb, appimage, dmg] = ["nsis", "deb", "appimage", "dmg"].map((bundle) => installerName(bundle, version));
   return [
     "## Install",
     `**Windows:** download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
     `**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
+    `**macOS (Apple Silicon, experimental):** on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password.`,
     `\`${CHECKSUMS}\` has the SHA-256 checksum of each file.`,
   ].join("\n\n");
 }
@@ -323,33 +347,40 @@ function bundlesOf(platform) {
   const bundles = Object.keys(INSTALLERS).filter((bundle) => INSTALLERS[bundle].platform === platform);
   if (bundles.length === 0) {
     const platforms = [...new Set(Object.values(INSTALLERS).map((installer) => installer.platform))];
-    throw new Error(`Unknown platform '${platform}'. Use ${platforms.join(" or ")}.`);
+    throw new Error(`Unknown platform '${platform}'. Use ${new Intl.ListFormat("en", { type: "disjunction" }).format(platforms)}.`);
   }
   return bundles;
 }
 
 /**
  * Copies the installers of `platform` and their updater signatures out of `bundles`, Tauri's bundle
- * directory (target/release/bundle), into `output`, after checking each signature as installed apps
- * will. Copies nothing when an installer or a signature is missing or refused.
+ * directory (target/release/bundle), into `output` under their names in the release, after checking
+ * each signature as installed apps will. Copies nothing when an installer or a signature is missing
+ * or refused.
  */
 export function collectDist(version, platform, bundles, output, { pubkey }) {
   const files = bundlesOf(platform).flatMap((bundle) => {
-    const dir = join(bundles, bundle);
+    const { dir: subdir = bundle, built, updater } = INSTALLERS[bundle];
+    const dir = join(bundles, subdir);
     const name = installerName(bundle, version);
-    const sig = signatureName(bundle, version);
-    if (!existsSync(join(dir, name))) {
-      const found = existsSync(dir) ? readdirSync(dir).filter((file) => file.endsWith(extname(name))) : [];
-      throw new Error(`Expected the installer ${name} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
+    const file = built ?? name;
+    if (!existsSync(join(dir, file))) {
+      const found = existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith(extname(file))) : [];
+      throw new Error(`Expected the installer ${file} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
     }
+    if (!updater) return [{ from: join(dir, file), name }];
+    const sig = `${file}.sig`;
     if (!existsSync(join(dir, sig))) {
       throw new Error(
         `Expected the updater signature ${sig} in ${dir}. \`pnpm tauri build\` writes it when TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD are set, as docs/releasing.md describes.`,
       );
     }
-    const signed = verifyUpdaterSignature(readFileSync(join(dir, name)), readFileSync(join(dir, sig), "utf8").trim(), pubkey);
+    const signed = verifyUpdaterSignature(readFileSync(join(dir, file)), readFileSync(join(dir, sig), "utf8").trim(), pubkey);
     if (signed !== version) throw new Error(`${sig} was made for version ${signed ?? "(none)"}, not ${version}. Rebuild the installer.`);
-    return [name, sig].map((file) => ({ from: join(dir, file), name: file }));
+    return [
+      { from: join(dir, file), name },
+      { from: join(dir, sig), name: signatureName(bundle, version) },
+    ];
   });
   mkdirSync(output, { recursive: true });
   for (const { from, name } of files) copyFileSync(from, join(output, name));
@@ -362,8 +393,12 @@ export function collectDist(version, platform, bundles, output, { pubkey }) {
  * order it lists them. `notes` is the text the notes command wrote.
  */
 export function assembleRelease(version, dist, { notes, repository, now = new Date() }) {
-  const bundles = Object.keys(INSTALLERS);
-  const files = bundles.flatMap((bundle) => [installerName(bundle, version), signatureName(bundle, version)]);
+  const collected = (bundle) => distFiles(bundle, version).some((name) => existsSync(join(dist, name)));
+  const bundles = Object.keys(INSTALLERS).filter((bundle) => {
+    const { platform } = INSTALLERS[bundle];
+    return !OPTIONAL_PLATFORMS.includes(platform) || bundlesOf(platform).some(collected);
+  });
+  const files = bundles.flatMap((bundle) => distFiles(bundle, version));
   const absent = files.filter((name) => !existsSync(join(dist, name)));
   if (absent.length > 0) {
     throw new Error(`Missing release files in ${dist}: ${absent.join(", ")}. Collect them with the dist command of each platform.`);
@@ -373,7 +408,7 @@ export function assembleRelease(version, dist, { notes, repository, now = new Da
     return `${createHash("sha256").update(readFileSync(join(dist, name))).digest("hex")}  ${name}\n`;
   });
   writeFileSync(join(dist, CHECKSUMS), checksums.join(""));
-  const platforms = bundles.map((bundle) => [
+  const platforms = bundles.filter((bundle) => INSTALLERS[bundle].updater).map((bundle) => [
     INSTALLERS[bundle].updater,
     {
       signature: readFileSync(join(dist, signatureName(bundle, version)), "utf8").trim(),
