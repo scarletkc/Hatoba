@@ -34,10 +34,10 @@ export const TAURI_CONFIG = "apps/desktop/src-tauri/tauri.conf.json";
  * The installers of a release, by Tauri bundle type: the name passed to `tauri build --bundles` and,
  * unless `dir` names another, the directory under target/release/bundle that holds the installer.
  * Each platform's build job in release.yml builds the bundle types of its platform. `name` is the
- * file name in the release, and `built` the one `tauri build` writes when they differ. `updater` is
- * the key of the installer in latest.json: the updater looks for `<os>-<arch>-<bundle type>`, then
- * for `<os>-<arch>`. Only installers with that key have an updater signature: on macOS people
- * download the disk image, while the updater installs the app bundle from a tarball.
+ * file name in the release. `updater` is the key of the installer in latest.json: the updater looks
+ * for `<os>-<arch>-<bundle type>`, then for `<os>-<arch>`. Only installers with that key have an
+ * updater signature: on macOS people download the disk image, while the updater installs the app
+ * bundle from `archive`, which `tauri build` writes only when it makes updater artifacts.
  */
 export const INSTALLERS = {
   nsis: { platform: "windows", updater: "windows-x86_64", name: (version) => `Hatoba_${version}_x64-setup.exe` },
@@ -48,23 +48,18 @@ export const INSTALLERS = {
     platform: "macos",
     updater: "darwin-aarch64",
     dir: "macos",
-    built: "Hatoba.app.tar.gz",
+    archive: "Hatoba.app.tar.gz",
     name: (version) => `Hatoba_${version}_aarch64.app.tar.gz`,
   },
 };
-
-/**
- * Platforms whose files a release can be without. The macOS build is experimental: a release
- * publishes its files when the dist directory has them, and stops when it has only some of them.
- */
-const OPTIONAL_PLATFORMS = ["macos"];
 
 export function installerName(bundle, version) {
   return INSTALLERS[bundle].name(version);
 }
 
-/** The updater signature that `tauri build` writes next to the installer. */
+/** The name in the release of the updater signature that `tauri build` writes next to the installer. */
 export function signatureName(bundle, version) {
+  if (!INSTALLERS[bundle].updater) throw new Error(`${installerName(bundle, version)} has no updater signature.`);
   return `${installerName(bundle, version)}.sig`;
 }
 
@@ -230,7 +225,7 @@ function installSection(version) {
     "## Install",
     `**Windows:** download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
     `**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
-    `**macOS (Apple Silicon, experimental):** on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password.`,
+    `**macOS (Apple Silicon, experimental):** on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
     `\`${CHECKSUMS}\` has the SHA-256 checksum of each file.`,
   ].join("\n\n");
 }
@@ -360,11 +355,16 @@ function bundlesOf(platform) {
  */
 export function collectDist(version, platform, bundles, output, { pubkey }) {
   const files = bundlesOf(platform).flatMap((bundle) => {
-    const { dir: subdir = bundle, built, updater } = INSTALLERS[bundle];
+    const { dir: subdir = bundle, archive, updater } = INSTALLERS[bundle];
     const dir = join(bundles, subdir);
     const name = installerName(bundle, version);
-    const file = built ?? name;
+    const file = archive ?? name;
     if (!existsSync(join(dir, file))) {
+      if (archive) {
+        throw new Error(
+          `Expected the updater archive ${archive} in ${dir}. \`pnpm tauri build\` writes it only when it makes updater artifacts: with \`bundle.createUpdaterArtifacts\` on in tauri.conf.json and not turned off by --config, and with TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD set, as docs/releasing.md describes.`,
+        );
+      }
       const found = existsSync(dir) ? readdirSync(dir).filter((entry) => entry.endsWith(extname(file))) : [];
       throw new Error(`Expected the installer ${file} in ${dir}; found ${found.length > 0 ? found.join(", ") : "no installer"}.`);
     }
@@ -393,11 +393,7 @@ export function collectDist(version, platform, bundles, output, { pubkey }) {
  * order it lists them. `notes` is the text the notes command wrote.
  */
 export function assembleRelease(version, dist, { notes, repository, now = new Date() }) {
-  const collected = (bundle) => distFiles(bundle, version).some((name) => existsSync(join(dist, name)));
-  const bundles = Object.keys(INSTALLERS).filter((bundle) => {
-    const { platform } = INSTALLERS[bundle];
-    return !OPTIONAL_PLATFORMS.includes(platform) || bundlesOf(platform).some(collected);
-  });
+  const bundles = Object.keys(INSTALLERS);
   const files = bundles.flatMap((bundle) => distFiles(bundle, version));
   const absent = files.filter((name) => !existsSync(join(dist, name)));
   if (absent.length > 0) {

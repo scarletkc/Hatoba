@@ -205,13 +205,33 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # The SSH integration tests stay off here: their harness needs Linux and root to start sshd.
       - run: cargo test --workspace
-      # The release profile is a second full build, so PRs skip it. The CI environment variable makes
-      # the DMG step skip the Finder window layout, which fails on a runner without a desktop session.
-      # Only the Release workflow has the update signing key, so this build makes no updater artifacts.
-      # Unlike --no-sign, that keeps the ad-hoc code signature.
+      # The release profile is a second full build, so PRs skip it. Only the Release workflow has the
+      # update signing key, so this build signs its updater archive with a throwaway key that this
+      # checkout's tauri.conf.json trusts instead. The release script then checks the archive as the
+      # Release workflow does, before a release depends on it. The DMG therefore trusts the throwaway
+      # key and cannot install real updates.
+      - name: Trust a throwaway update signing key
+        if: github.event_name != 'pull_request'
+        run: |
+          pnpm tauri signer generate --ci -p ci -w "$RUNNER_TEMP/update.key"
+          node -e '
+            const fs = require("fs");
+            const file = "apps/desktop/src-tauri/tauri.conf.json";
+            const config = JSON.parse(fs.readFileSync(file, "utf8"));
+            config.plugins.updater.pubkey = fs.readFileSync(`${process.env.RUNNER_TEMP}/update.key.pub`, "utf8").trim();
+            fs.writeFileSync(file, JSON.stringify(config, null, 2));
+          '
+      # The CI environment variable makes the DMG step skip the Finder window layout, which fails on a
+      # runner without a desktop session. No --no-sign, which would also drop the ad-hoc code signature.
       - name: Build app bundle and DMG
         if: github.event_name != 'pull_request'
-        run: pnpm tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: pnpm tauri build --bundles app,dmg
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ runner.temp }}/update.key
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ci
+      - name: Check the release files
+        if: github.event_name != 'pull_request'
+        run: node scripts/release/release.mjs dist --platform macos --bundle target/release/bundle --output "$RUNNER_TEMP/dist"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
