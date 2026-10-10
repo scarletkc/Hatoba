@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { messages } from "./locales";
-import { detectLocale, formatBytes, formatMessageTime, formatRelative, translate } from "./index";
+import { detectLocale, formatBytes, formatMessageTime, formatRelative, startOfDay, translate } from "./index";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -58,6 +58,22 @@ describe("locale helpers", () => {
     expect(formatMessageTime("zh-CN", at(2026, 9, 7, 23, 59), now)).toBe("昨天 23:59");
     expect(formatMessageTime("en", at(2026, 9, 5, 14, 3), now)).toBe("Oct 5, 14:03");
     expect(formatMessageTime("zh-CN", at(2025, 11, 31, 8, 0), now)).toBe("2025年12月31日 08:00");
+  });
+
+  it("counts days by the calendar across a DST change", () => {
+    const tz = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      // Clocks went forward on March 8, 2026, so that day had 23 hours.
+      const now = new Date(2026, 2, 9, 0, 30).getTime();
+      expect(startOfDay(now, -1)).toBe(new Date(2026, 2, 8).getTime());
+      expect(now - startOfDay(now, -1)).toBe(23.5 * 3_600_000);
+      // 24 hours before midnight would fall in March 7. (Formatters keep the zone they were made in.)
+      expect(formatMessageTime("en", new Date(2026, 2, 7, 23, 30).getTime(), now)).not.toMatch(/^Yesterday/);
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
 
   it("formats sizes", () => {

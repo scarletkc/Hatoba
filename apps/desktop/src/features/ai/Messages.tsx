@@ -3,7 +3,7 @@ import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
-import { formatDateTime, formatMessageTime, useT, type MessageKey } from "@/i18n";
+import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
 import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
@@ -13,7 +13,7 @@ import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
-import { replies as findReplies } from "./replies";
+import { replies as findReplies, type ReplyEnd } from "./replies";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -168,7 +168,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             break;
           }
           case "assistant": {
-            const reply = running && entry.entry_id === replies.open ? undefined : replies.texts.get(entry.entry_id);
+            const reply = running && entry.entry_id === replies.open ? undefined : replies.ends.get(entry.entry_id);
             body = (
               <AssistantMessage
                 slotId={slotId}
@@ -179,7 +179,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 host={host}
                 finish={entry.finish}
                 flash={flash}
-                reply={reply === undefined ? undefined : { text: reply, at: entry.created_at }}
+                reply={reply}
               />
             );
             break;
@@ -216,9 +216,10 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 /** When a message was sent or a reply finished, with the full date and time on hover. */
 function MessageTime({ at }: { at: number }) {
   const t = useT();
+  const today = useToday();
   return (
     <time className={s.time} dateTime={new Date(at).toISOString()} title={formatDateTime(t.locale, at)}>
-      {formatMessageTime(t.locale, at)}
+      {formatMessageTime(t.locale, at, today)}
     </time>
   );
 }
@@ -461,7 +462,7 @@ function AssistantMessage({
   /** The highlighted search hit (AI-24). */
   flash?: string | null;
   /** The finished reply this entry ends: its text for Copy, and when it ended. */
-  reply?: { text: string; at: number };
+  reply?: ReplyEnd;
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
   return (
