@@ -204,8 +204,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 
 /**
  * The user's message. With `onResend`, Edit replaces it and sends it again (AI-26). The notes Hatoba
- * stored before it (AI-05, AI-09) are dividers above it, not part of the bubble; an edit keeps them,
- * since Rust carries them over to the new message.
+ * stored before it (AI-05, AI-09) are dividers above it, not part of the bubble; an edit shows them
+ * while it is sent, and Rust works them out again for the new message.
  */
 function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
@@ -236,13 +236,19 @@ function UserMessage({ text, pending, onResend }: { text: string; pending: boole
   );
 }
 
-/** A note Hatoba stored before a message: the conversation moved to another host, or went to another model. */
+const NOTE_ICONS = { host_change: "arrows-left-right", model_change: "swap" } as const;
+
+/**
+ * A note Hatoba stored before a message: the conversation moved to another host, a terminal became
+ * attached or went away, or it went to another model.
+ */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
+  const icon = note.kind === "terminal_change" ? (note.to === "attached" ? "plugs-connected" : "plugs") : NOTE_ICONS[note.kind];
   return (
     <div className={s.noteDivider} role="note" title={noteTitle(t, note)}>
       <span className={s.noteText}>
-        <Icon name={note.kind === "host_change" ? "arrows-left-right" : "swap"} size={12} />
+        <Icon name={icon} size={12} />
         {noteLabel(t, note)}
       </span>
     </div>

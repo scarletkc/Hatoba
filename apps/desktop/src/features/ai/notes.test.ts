@@ -23,13 +23,26 @@ describe("notes as dividers (AI-05, AI-09)", () => {
     expect(noteLabel(tr("en"), { ...note, from: "qwen3:8b" })).toBe("Switched to Claude Opus 5.5 (was qwen3:8b)");
   });
 
+  it("say whether a terminal became available or went away", () => {
+    const attached = { kind: "terminal_change", to: "attached" } as const;
+    const detached = { kind: "terminal_change", to: "detached" } as const;
+    expect(noteLabel(tr("en"), attached)).toBe("Terminal now available");
+    expect(noteLabel(tr("en"), detached)).toBe("Terminal no longer available");
+    expect(noteTitle(tr("en"), detached)).toBe("Terminal no longer available");
+    expect(noteLabel(tr("zh-CN"), attached)).toBe("终端已可用");
+    expect(noteLabel(tr("zh-CN"), detached)).toBe("终端不再可用");
+    expect(noteLabel(tr("ja"), attached)).toBe("ターミナルを使えるようになりました");
+    expect(noteLabel(tr("ja"), detached)).toBe("ターミナルを使えなくなりました");
+  });
+
   it("come out of a stored message in order, apart from its bubble", () => {
     const stored = composeMessage("Why?", [{ kind: "paste", lines: 1, text: "x" }], [
       { kind: "model_change", from: "A (a)", to: "B (b)" },
+      { kind: "terminal_change", to: "attached" },
       { kind: "host_change", from: "one", to: "two" },
     ]);
     const parts = parseMessage(stored);
-    expect(parts.notes.map((n) => noteLabel(tr("en"), n))).toEqual(["Moved to two (was on one)", "Switched to B (was A)"]);
+    expect(parts.notes.map((n) => noteLabel(tr("en"), n))).toEqual(["Moved to two (was on one)", "Terminal now available", "Switched to B (was A)"]);
     expect(parts.typed).toBe("Why?");
     expect(parts.attachments).toHaveLength(1);
   });

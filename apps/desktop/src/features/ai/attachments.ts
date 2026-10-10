@@ -13,8 +13,8 @@
  *   the typed text
  *
  * Before them, Rust stores the notes Hatoba writes itself when a message moves the conversation to
- * another host or goes to another model (`host_change`, `model_change`); the panel shows those as
- * dividers. The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3
+ * another host, changes whether a terminal is attached, or goes to another model (`host_change`,
+ * `terminal_change`, `model_change`); the panel shows those as dividers. The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3
  * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
  * conversation.
  */
@@ -199,15 +199,15 @@ export function attachmentTokens(a: Attachment): number {
 // ───────────── the stored blocks ─────────────
 
 /**
- * A note Hatoba writes before a message (AI-05, AI-09), never the user: the conversation moved to
- * another host with this message, or went to another model. `from` of a host change is empty when
- * the earlier host no longer exists; a model is named as `Name (id)`, or by its ID alone.
+ * A note Hatoba writes before a message (AI-05, AI-09), never the user: with this message the
+ * conversation moved to another host, a terminal became attached or stopped being attached, or it
+ * went to another model. `from` of a host change is empty when the earlier host no longer exists; a
+ * model is named as `Name (id)`, or by its ID alone.
  */
-export interface Note {
-  kind: "host_change" | "model_change";
-  from: string;
-  to: string;
-}
+export type Note = { kind: "host_change" | "model_change"; from: string; to: string } | { kind: "terminal_change"; to: "attached" | "detached" };
+
+/** The order Hatoba writes its notes in. */
+const NOTE_ORDER = ["host_change", "terminal_change", "model_change"] as const satisfies readonly Note["kind"][];
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -252,11 +252,19 @@ function block(a: Attachment): string {
   return writeBlock(TAGS[a.kind], attrs, a.text);
 }
 
+const TERMINAL_BODY = {
+  attached:
+    "A terminal is attached from this message on. Before this message none was, so replies that said they could not read a screen or run commands were right at the time.",
+  detached: "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
+} as const;
+
 /**
- * A note as Rust writes it (`host_change_block` and `model_change_block` in crates/hatoba-ai). The
- * panel never sends one; Rust adds them when it stores a message, and the mock does the same.
+ * A note as Rust writes it (`host_change_block`, `terminal_change_block` and `model_change_block` in
+ * crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
+ * does the same.
  */
 export function noteBlock(n: Note): string {
+  if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   const from = noteText(n.from);
   const body =
     n.kind === "model_change"
@@ -277,9 +285,9 @@ export function orderAttachments(list: readonly Attachment[]): Attachment[] {
   return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...rest];
 }
 
-/** The user entry's text: Hatoba's notes (host first), the attachment blocks, then the typed text. */
+/** The user entry's text: Hatoba's notes in their order, the attachment blocks, then the typed text. */
 export function composeMessage(typed: string, attachments: readonly Attachment[], notes: readonly Note[] = []): string {
-  const ordered = [...notes.filter((n) => n.kind === "host_change"), ...notes.filter((n) => n.kind === "model_change")];
+  const ordered = NOTE_ORDER.flatMap((kind) => notes.filter((n) => n.kind === kind));
   return [...ordered.map(noteBlock), ...orderAttachments(attachments).map(block), typed].join("\n\n");
 }
 
@@ -290,7 +298,7 @@ export interface MessageParts {
   typed: string;
 }
 
-const OPEN = /^<(host_change|model_change|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+const OPEN = /^<(host_change|terminal_change|model_change|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -304,6 +312,10 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     case "host_change":
     case "model_change":
       return names === "from,to" ? { kind: "note", note: { kind: tag, from: value(0), to: value(1) } } : null;
+    case "terminal_change": {
+      const to = names === "to" ? value(0) : "";
+      return to === "attached" || to === "detached" ? { kind: "note", note: { kind: tag, to } } : null;
+    }
     case TAGS.selection:
       if ((names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) && DIGITS.test(value(1)))
         return attachment({ kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body });

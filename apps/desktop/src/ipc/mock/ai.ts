@@ -61,6 +61,8 @@ interface Conv {
   entries: AiEntryView[];
   /** `?ai=running`: a turn "runs in Rust" until then, started by an earlier page. */
   runningUntil: number;
+  /** Like Rust's `AiConversation.terminal` (AI-09): whether its newest turn offered the terminal tools, unknown while absent. */
+  terminal?: boolean;
 }
 
 interface Turn {
@@ -606,15 +608,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * Like Rust's `notes_before` (AI-05, AI-09): a `host_change` note when the entries before the message
-   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), and
-   * a `model_change` note when the newest reply came from another model, unless a message without a
-   * reply noted that switch already. Returned as the text that goes before the message.
+   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), a
+   * `terminal_change` note when the turn before it (`hadTerminal`, unknown when undefined) offered the
+   * terminal tools and this one does not or the other way round, and a `model_change` note when the
+   * newest reply came from another model, unless a message without a reply noted that switch already.
+   * Returned as the text that goes before the message.
    */
-  async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, context: AiTurnContext): Promise<string> {
+  async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, hadTerminal: boolean | undefined, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
+    if (earlier.length === 0) return "";
     const hosts = (await deps.hosts?.()) ?? [];
     const to = hosts.find((h) => h.id === c.view.host_id)?.name ?? (context.target ? formatTarget(context.target) : undefined);
-    if (cameFrom !== null && to !== undefined && earlier.length > 0 && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
+    if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
+    if (hadTerminal === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
     const label = (providerId: string, modelId: string) => {
       const name = (providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)?.name ?? "").trim();
@@ -925,9 +931,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         cameFrom = await hostName(c.view.host_id);
         c.view = { ...c.view, host_id: null, updated_at: Date.now() };
       }
-      // Like Rust: the conversation keeps the level of its last message.
+      // Like Rust: the conversation keeps the level of its last message, and records its terminal.
       if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
-      const notes = input.conversation_id ? await notesBefore(c, earlier, cameFrom, input.context) : "";
+      const hadTerminal = c.terminal;
+      c.terminal = input.context.tab;
+      const notes = input.conversation_id ? await notesBefore(c, earlier, cameFrom, hadTerminal, input.context) : "";
       const user_entry = await storeMessage(c, turn, notes + input.text);
       return { conversation: view(c), user_entry };
     },
@@ -939,6 +947,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const last = [...contextOf(c)].reverse().find((e) => e.role !== "tool");
       if (!last || (last.role === "assistant" && last.tool_calls.length === 0)) fail("invalid_input", "nothing to retry: the conversation ends with the model's answer", { field: "conversation_id" });
       if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
+      // Like Rust: the next message compares its terminal with the retry's, which no note announces.
+      c.terminal = context.tab;
       startTurn(c, context, onEvent);
     },
     ai_tool_result: async (id, callId, result: AiToolResultInput) => {
@@ -1000,12 +1010,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await checkModel(context);
       // The stopped turn's cancelled results go with everything else after the message.
       stopTurn(id);
-      // Like Rust: the earliest move the deleted messages noted still tells where the earlier screens came from.
-      let cameFrom: string | null =
-        c.entries
-          .slice(i)
-          .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
-          .find((n) => n.kind === "host_change")?.from ?? null;
+      // Like Rust: the earliest move the deleted messages noted still tells where the earlier screens came
+      // from, and their earliest terminal change what the turn before them had.
+      const deleted = c.entries.slice(i).flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []));
+      const moved = deleted.find((n) => n.kind === "host_change");
+      let cameFrom: string | null = moved?.kind === "host_change" ? moved.from : null;
+      const terminalNote = deleted.find((n) => n.kind === "terminal_change");
+      const hadTerminal = terminalNote?.kind === "terminal_change" ? terminalNote.to !== "attached" : c.terminal;
       c.entries = c.entries.slice(0, i);
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
@@ -1021,7 +1032,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         c.view = { ...c.view, host_id: null };
       }
       c.view = { ...c.view, effort: context.effort };
-      const notes = await notesBefore(c, [...c.entries], cameFrom, context);
+      c.terminal = context.tab;
+      const notes = await notesBefore(c, [...c.entries], cameFrom, hadTerminal, context);
       const user_entry = await storeMessage(c, turn, notes + text);
       return { conversation: view(c), user_entry };
     },

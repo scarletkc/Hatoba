@@ -2899,7 +2899,7 @@ async fn the_prompt_names_the_model_and_the_server_and_carries_instructions_and_
 async fn a_move_to_another_host_and_a_switch_of_model_are_noted_once() {
     use hatoba_ai::tools::{host_change_block, model_change_block};
 
-    let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     f.add_model("m2", "Model 2");
     let staging = f.add_host("staging-web", "");
     let prod = f.add_host("prod-db", "");
@@ -2908,12 +2908,6 @@ async fn a_move_to_another_host_and_a_switch_of_model_are_noted_once() {
         model_id: model.into(),
         ..f.context()
     };
-
-    // A chat that had no host (the home tab's) did not come from another one.
-    let (home, _) = f.exchange(None, "hi", f.context()).await;
-    f.exchange(Some(&home), "on a host", on(&staging, "m1"))
-        .await;
-    assert_eq!(f.user_texts(&home), ["hi", "on a host"]);
 
     let (conv, _) = f.exchange(None, "first", on(&staging, "m1")).await;
     // AI-09: the message that moves the conversation carries the note, once.
@@ -3061,6 +3055,227 @@ async fn editing_a_message_keeps_the_note_of_the_move_it_made() {
     assert_eq!(
         f.detail(&conv).conversation.host_id.as_deref(),
         Some(prod.as_str())
+    );
+}
+
+impl Fixture {
+    /// The ids of the stored user entries, oldest first.
+    fn user_ids(&self, conversation_id: &str) -> Vec<String> {
+        let v = lock(&self.vault);
+        let entries = Entries::load(&v, conversation_id).unwrap();
+        entries
+            .ids
+            .into_iter()
+            .zip(entries.list)
+            .filter(|(_, e)| matches!(e.body, EntryBody::User { .. }))
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// What the conversation item records about its newest turn's terminal (AI-09).
+    fn recorded_terminal(&self, conversation_id: &str) -> Option<bool> {
+        super::find_conversation(&lock(&self.vault), conversation_id)
+            .unwrap()
+            .terminal
+    }
+}
+
+#[tokio::test]
+async fn a_terminal_that_comes_or_goes_between_turns_is_noted() {
+    use hatoba_ai::tools::terminal_change_block;
+
+    let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let vmiss = f.add_host("VMISS", "");
+    let home = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+    let connected = AiTurnContext {
+        host_id: Some(vmiss.clone()),
+        ..f.context()
+    };
+    let disconnected = AiTurnContext {
+        tab: false,
+        ..connected.clone()
+    };
+
+    // A home tab chat moves to a connected tab: no host to come from, but a terminal now.
+    let (conv, _) = f.exchange(None, "can you run df?", home.clone()).await;
+    assert_eq!(f.recorded_terminal(&conv), Some(false));
+    f.exchange(Some(&conv), "connected", connected.clone())
+        .await;
+    // Nothing changed since.
+    f.exchange(Some(&conv), "and now?", connected.clone()).await;
+    // The tab disconnects, and connects again.
+    f.exchange(Some(&conv), "still there?", disconnected).await;
+    f.exchange(Some(&conv), "back", connected.clone()).await;
+    let attached = terminal_change_block(true);
+    let expected = [
+        "can you run df?".to_owned(),
+        format!("{attached}connected"),
+        "and now?".to_owned(),
+        format!("{}still there?", terminal_change_block(false)),
+        format!("{attached}back"),
+    ];
+    assert_eq!(f.user_texts(&conv), expected);
+    // The notes go to the model with the message, as stored, and never title the conversation.
+    let last = f.requests().await.pop().unwrap();
+    assert_eq!(user_messages(&last), expected);
+    assert_eq!(f.detail(&conv).conversation.title, "can you run df?");
+    assert_eq!(f.recorded_terminal(&conv), Some(true));
+
+    // A conversation that never recorded its terminal (from an earlier version) gets no note.
+    {
+        let mut v = lock(&f.vault);
+        let mut item = super::find_conversation(&v, &conv).unwrap();
+        item.terminal = None;
+        v.put(Some(&conv), Item::AiConversation(item)).unwrap();
+    }
+    f.exchange(Some(&conv), "from home", home).await;
+    assert_eq!(f.user_texts(&conv)[5], "from home");
+    assert_eq!(f.recorded_terminal(&conv), Some(false));
+}
+
+#[tokio::test]
+async fn notes_of_a_move_a_terminal_and_a_model_come_in_that_order() {
+    use hatoba_ai::tools::{host_change_block, model_change_block, terminal_change_block};
+
+    let f = Fixture::new((0..3).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    f.add_model("m2", "Model 2");
+    let staging = f.add_host("staging-web", "");
+    let prod = f.add_host("prod-db", "");
+    let (conv, _) = f
+        .exchange(
+            None,
+            "first",
+            AiTurnContext {
+                host_id: Some(staging),
+                ..f.context()
+            },
+        )
+        .await;
+    // Opened on the home tab: the conversation keeps its host, without a terminal.
+    let home = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "second", home).await;
+    // Then in a connected tab on another host, with another model.
+    let prod_tab = AiTurnContext {
+        host_id: Some(prod),
+        model_id: "m2".into(),
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "third", prod_tab).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "first".to_owned(),
+            format!("{}second", terminal_change_block(false)),
+            format!(
+                "{}{}{}third",
+                host_change_block("staging-web", "prod-db"),
+                terminal_change_block(true),
+                model_change_block("Model 1 (m1)", "Model 2 (m2)")
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn an_edit_compares_the_terminal_with_the_turn_before_the_messages_it_deletes() {
+    use hatoba_ai::tools::terminal_change_block;
+
+    let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let vmiss = f.add_host("VMISS", "");
+    let home = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+    let connected = AiTurnContext {
+        host_id: Some(vmiss),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "first", home.clone()).await;
+    f.exchange(Some(&conv), "second", connected.clone()).await;
+    f.exchange(Some(&conv), "third", connected.clone()).await;
+    let attached = terminal_change_block(true);
+
+    // AI-26: the turn before the third message had the terminal, so editing it from home notes
+    // that the terminal went away.
+    let third = f.user_ids(&conv)[2].clone();
+    f.edit_with(&conv, &third, "third, from home", home.clone())
+        .await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "first".to_owned(),
+            format!("{attached}second"),
+            format!("{}third, from home", terminal_change_block(false)),
+        ]
+    );
+
+    // The second message brought the terminal: before it there was none, whatever came after.
+    let second = f.user_ids(&conv)[1].clone();
+    f.edit_with(&conv, &second, "second, edited", connected.clone())
+        .await;
+    assert_eq!(
+        f.user_texts(&conv),
+        ["first".to_owned(), format!("{attached}second, edited")]
+    );
+    // Edited from home, nothing changed since the first message.
+    let second = f.user_ids(&conv)[1].clone();
+    f.edit_with(&conv, &second, "second, from home", home).await;
+    assert_eq!(f.user_texts(&conv), ["first", "second, from home"]);
+
+    // The first message has nothing before it.
+    let first = f.user_ids(&conv)[0].clone();
+    f.edit_with(&conv, &first, "first, edited", connected).await;
+    assert_eq!(f.user_texts(&conv), ["first, edited"]);
+    assert_eq!(f.recorded_terminal(&conv), Some(true));
+}
+
+#[tokio::test]
+async fn a_retry_records_its_terminal_without_a_note() {
+    use hatoba_ai::tools::terminal_change_block;
+
+    let f = Fixture::new(vec![
+        answer("One."),
+        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
+        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
+        answer("Two."),
+        answer("Three."),
+    ])
+    .await;
+    let vmiss = f.add_host("VMISS", "");
+    let connected = AiTurnContext {
+        host_id: Some(vmiss),
+        ..f.context()
+    };
+    let disconnected = AiTurnContext {
+        tab: false,
+        ..connected.clone()
+    };
+    let (conv, _) = f.exchange(None, "one", connected.clone()).await;
+    let (_, failed) = f.exchange(Some(&conv), "two", disconnected.clone()).await;
+    assert_eq!(failed, AiTurnEndReason::Error);
+    // A change noted on a message without a reply is not noted again.
+    let (_, failed) = f.exchange(Some(&conv), "two again", disconnected).await;
+    assert_eq!(failed, AiTurnEndReason::Error);
+    // The retry stores no message to carry a note, but the next message compares with it.
+    let sink = f.retry(&conv, connected.clone()).unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(f.recorded_terminal(&conv), Some(true));
+    f.exchange(Some(&conv), "three", connected).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "one".to_owned(),
+            format!("{}two", terminal_change_block(false)),
+            "two again".to_owned(),
+            "three".to_owned(),
+        ]
     );
 }
 
