@@ -1404,6 +1404,35 @@ impl fmt::Debug for AiToolResultInput {
     }
 }
 
+/// The change an `edit_file` or `write_file` call would make, for its approval card (AI-39,
+/// AI-40). The texts show CRLF line breaks as `\n`; `crlf` says the write keeps them as CRLF.
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiFilePreview {
+    /// The path the call names.
+    pub path: String,
+    /// The file as Hatoba read it, or `None` when it does not exist (the call creates it) or
+    /// `error` is set.
+    pub before: Option<String>,
+    /// The file after the call, or `None` when `error` is set.
+    pub after: Option<String>,
+    /// Why the call cannot apply: the error result running it would give the model.
+    pub error: Option<String>,
+    /// Most of the file's line breaks are CRLF, and the write keeps them.
+    pub crlf: bool,
+}
+
+impl fmt::Debug for AiFilePreview {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let size = |t: &Option<String>| t.as_ref().map(|t| t.chars().count());
+        f.debug_struct("AiFilePreview")
+            .field("before_chars", &size(&self.before))
+            .field("after_chars", &size(&self.after))
+            .field("error", &self.error.is_some())
+            .field("crlf", &self.crlf)
+            .finish_non_exhaustive()
+    }
+}
+
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
 //
 // Skill text reaches the model as instructions; it is never logged (SEC-04), so the types that

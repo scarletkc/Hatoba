@@ -630,6 +630,56 @@ async fn exec_status_stdout_stderr_and_stdin() {
     );
 }
 
+/// The file tools' read and write (AI-38…40) through sshd and the user's login shell.
+#[tokio::test]
+async fn remote_files_are_read_and_written_in_place() {
+    use std::os::unix::fs::MetadataExt;
+
+    use hatoba_ssh::remote_file::{self, Expect, RemoteFileError};
+
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let area = server.area("remote_file");
+    let path = area.join("it's $HOME.conf");
+    std::fs::write(&path, b"listen 80;\r\n").unwrap();
+    let inode = std::fs::metadata(&path).unwrap().ino();
+    let name = path.to_str().unwrap();
+
+    let read = remote_file::read(&session, name, 1024).await.unwrap();
+    assert_eq!(read, b"listen 80;\r\n");
+    assert!(matches!(
+        remote_file::read(&session, name, 4).await,
+        Err(RemoteFileError::TooLarge(12))
+    ));
+
+    remote_file::write(&session, name, b"listen 443;\r\n", Expect::Content(&read))
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"listen 443;\r\n");
+    assert_eq!(std::fs::metadata(&path).unwrap().ino(), inode);
+    // What the first read saw is gone, so a second write against it is refused.
+    assert!(matches!(
+        remote_file::write(&session, name, b"x", Expect::Content(&read)).await,
+        Err(RemoteFileError::Changed)
+    ));
+
+    let new = area.join("new.txt");
+    let new_name = new.to_str().unwrap();
+    assert!(matches!(
+        remote_file::read(&session, new_name, 1024).await,
+        Err(RemoteFileError::NotFound)
+    ));
+    remote_file::write(
+        &session,
+        new_name,
+        &pseudo_random(256 * 1024, 5),
+        Expect::Missing,
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read(&new).unwrap(), pseudo_random(256 * 1024, 5));
+}
+
 // --------------------------------------------------------------------------- probe & errors on a live server
 
 #[tokio::test]

@@ -59,13 +59,14 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFinish, AiSearchHit,
-    AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext,
-    AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFilePreview, AiFinish,
+    AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus,
+    AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
 use crate::state::now_ms;
+use files::FileJob;
 
 /// The line a result starts with when the user edited the call before it ran (AI-17).
 const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it ran with";
@@ -171,6 +172,10 @@ struct Inner {
     /// Running tools, compactions and provider requests, so that stop and lock reach them.
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
+    /// What the approval card of an `edit_file` or `write_file` call read, by conversation and
+    /// call id: the call writes only over that content (AI-39). Kept until the call has a
+    /// result, its conversation stops, or the vault locks.
+    file_bases: Mutex<HashMap<(String, String), files::Base>>,
 }
 
 struct Op {
@@ -432,6 +437,7 @@ impl AiManager {
     /// `turn_ended { stopped }` on the turn's channel. Returns the cancelled results it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
         let turn = self.cancel(conversation_id);
+        guard(&self.0.file_bases).retain(|(id, _), _| id != conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
             let cancelled = Entries::load(v, conversation_id)
@@ -476,6 +482,8 @@ impl AiManager {
         for op in guard(&self.0.ops).values() {
             op.cancel.cancel();
         }
+        // File content stays in memory only while the vault is unlocked.
+        guard(&self.0.file_bases).clear();
     }
 
     // ---- conversations ----
@@ -1064,7 +1072,7 @@ impl AiManager {
             let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
             let op = self.start_call(conversation_id, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
-            let job = if call.name.starts_with(MCP_PREFIX) {
+            let mut job = if call.name.starts_with(MCP_PREFIX) {
                 Job::mcp(
                     &v,
                     self.0.mcp.offered(conversation_id, &call.name),
@@ -1074,6 +1082,10 @@ impl AiManager {
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
+            if let Job::File(_, base) = &mut job {
+                *base = guard(&self.0.file_bases)
+                    .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
+            }
             (job, op)
         };
         let (status, content) = job
@@ -1105,6 +1117,45 @@ impl AiManager {
         Ok(view)
     }
 
+    /// `ai_file_preview` (AI-39, AI-40): the change an open `edit_file` or `write_file` call
+    /// would make, for its approval card, with `edited_arguments` when the user edits the call on
+    /// the card. The file is read once per call; what was read is kept for the run, which writes
+    /// only over that content.
+    pub async fn file_preview(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        tool_call_id: &str,
+        session_id: Option<&str>,
+        edited_arguments: Option<&str>,
+    ) -> AppResult<AiFilePreview> {
+        let call = {
+            let v = unlocked(vault)?;
+            find_conversation(&v, conversation_id)?;
+            open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?
+        };
+        let key = (conversation_id.to_owned(), tool_call_id.to_owned());
+        let cached = guard(&self.0.file_bases).get(&key).cloned();
+        let (preview, base) = files::preview(
+            live_session(env, session_id),
+            &call.name,
+            edited_arguments.unwrap_or(&call.arguments),
+            cached,
+        )
+        .await;
+        if let Some(base) = base {
+            // Kept only while the call waits: not after its result, a stop or the lock.
+            let v = unlocked(vault)?;
+            if open_call(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok()
+                && !self.call_running(conversation_id, tool_call_id)
+            {
+                guard(&self.0.file_bases).insert(key, base);
+            }
+        }
+        Ok(preview)
+    }
+
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn.
     fn store_result(
         &self,
@@ -1116,6 +1167,7 @@ impl AiManager {
     ) -> AppResult<AiEntryView> {
         let entry = AiEntry::tool(now_ms(), tool_call_id, status, content);
         let entry_id = append(v, conversation_id, &entry)?;
+        guard(&self.0.file_bases).remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
         let view = entry_view(&entry_id, &entry);
         if let Some(turn) = self.running(conversation_id) {
             turn.emit(AiTurnEvent::Entry {
@@ -2062,6 +2114,8 @@ enum Job {
     /// The result is known without running anything: a vault read, or a call that cannot run.
     Ready(ToolStatus, String),
     RunCommand(RunCommandArgs),
+    /// `read_file`, `edit_file` or `write_file`, with what the approval card read for it.
+    File(FileJob, Option<files::Base>),
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30).
@@ -2093,6 +2147,12 @@ impl Job {
 
     /// `version`: the app's, for the built-in skill (AI-34).
     fn new(v: &Vault, name: &str, arguments: &str, version: &str) -> Self {
+        if let Some(parsed) = FileJob::parse(name, arguments) {
+            return match parsed {
+                Ok(job) => Self::File(job, None),
+                Err(message) => Self::error(message),
+            };
+        }
         match name {
             tools::RUN_COMMAND => match parse::<RunCommandArgs>(arguments) {
                 Ok(args) if args.command.trim().is_empty() => Self::error("The command is empty."),
@@ -2136,6 +2196,9 @@ impl Job {
             Self::Ready(status, content) => (status, content),
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
+            Self::File(job, base) => {
+                files::run(live_session(env, session_id), job, base, cancel).await
+            }
             Self::WebSearch(config, query) => {
                 match web::web_search(http, &config, &query, cancel).await {
                     Ok(results) => (
@@ -2168,6 +2231,13 @@ fn parse<T: DeserializeOwned>(arguments: &str) -> Result<T, String> {
     serde_json::from_str(arguments).map_err(|e| format!("The arguments are not valid: {e}."))
 }
 
+/// The tab's SSH connection while it is open (AI-08).
+fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<hatoba_ssh::SshSession> {
+    session_id
+        .and_then(|id| env.session(id))
+        .filter(|s| !s.is_closed())
+}
+
 /// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout.
 async fn run_command(
     env: &dyn AiEnv,
@@ -2175,10 +2245,7 @@ async fn run_command(
     args: &RunCommandArgs,
     cancel: &CancellationToken,
 ) -> (ToolStatus, String) {
-    let Some(session) = session_id
-        .and_then(|id| env.session(id))
-        .filter(|s| !s.is_closed())
-    else {
+    let Some(session) = live_session(env, session_id) else {
         return (ToolStatus::Error, DISCONNECTED.to_owned());
     };
     let limit = args.timeout();
@@ -2975,5 +3042,6 @@ pub fn error_kind(e: &AiError) -> &'static str {
     }
 }
 
+mod files;
 #[cfg(test)]
 mod tests;

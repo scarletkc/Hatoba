@@ -573,6 +573,9 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill"
         ]
@@ -1377,6 +1380,75 @@ async fn compaction_is_refused_while_a_turn_runs() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 }
 
+/// AI-38…40 without a live session: the calls and the approval card's preview say why, and a
+/// preview is only for an open edit or write.
+#[tokio::test]
+async fn file_tools_need_a_live_session() {
+    let f = Fixture::new(vec![
+        calls(&[
+            (
+                "f1",
+                "edit_file",
+                json!({"path": "/etc/hosts", "old_string": "a", "new_string": "b"}),
+            ),
+            ("f2", "read_file", json!({"path": "/etc/hosts"})),
+            ("f3", "write_file", json!({"path": "/tmp/x"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "fix the hosts file").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let system = messages(&f.requests().await[0])[0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        system.contains("rather than with cat, sed or heredocs"),
+        "{system}"
+    );
+
+    let preview = |call: &'static str| {
+        f.manager
+            .file_preview(&f.vault, f.env.as_ref(), &conv, call, Some("tab-1"), None)
+    };
+    let card = preview("f1").await.unwrap();
+    assert_eq!(card.path, "/etc/hosts");
+    assert!(card.error.unwrap().contains("disconnected"));
+    assert!(
+        preview("f2")
+            .await
+            .unwrap()
+            .error
+            .unwrap()
+            .contains("shows no diff")
+    );
+    assert_eq!(preview("nope").await.unwrap_err().code, ErrorCode::NotFound);
+
+    for call in ["f1", "f2"] {
+        let result = f.run(&conv, call, Some("tab-1"), None).await.unwrap();
+        assert_eq!(view_content(&result).1, AiToolStatus::Error);
+        assert!(
+            view_content(&result)
+                .2
+                .contains("disconnected, so the tool did not run")
+        );
+    }
+    let f3 = f.run(&conv, "f3", Some("tab-1"), None).await.unwrap();
+    assert!(
+        view_content(&f3)
+            .2
+            .starts_with("The arguments are not valid")
+    );
+    // The call has its result, so its card is gone.
+    assert_eq!(
+        preview("f1").await.unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+}
+
 #[tokio::test]
 async fn tools_that_run_in_rust_report_failures_as_error_results() {
     let f = Fixture::new(vec![
@@ -1415,6 +1487,9 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill"
         ]
@@ -1709,6 +1784,9 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill",
             "mcp__files__echo",
