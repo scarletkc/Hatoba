@@ -1495,13 +1495,14 @@ async fn wait_for_results(
             if turn.cancel.is_cancelled() || !v.is_unlocked() {
                 return Err(Halt::Stopped);
             }
-            let entries = Entries::load(&v, conversation_id)?;
-            let Some(from) = entries.ids.iter().position(|id| id == entry_id) else {
+            // The response and the entries after it; the history before it is not read.
+            let entries = Entries::load_from(&v, conversation_id, entry_id)?;
+            if entries.ids.first().is_none_or(|id| id != entry_id) {
                 return Err(Halt::Failed(
                     "The model's response is no longer stored.".into(),
                 ));
-            };
-            if fix_up_missing_results(&entries.list[from..]).is_empty() {
+            }
+            if fix_up_missing_results(&entries.list).is_empty() {
                 return Ok(());
             }
         }
@@ -2077,7 +2078,22 @@ struct Entries {
 
 impl Entries {
     fn load(v: &Vault, conversation_id: &str) -> AppResult<Self> {
-        let stored = v.ai_entries(conversation_id)?;
+        Ok(Self::decode(
+            conversation_id,
+            v.ai_entries(conversation_id)?,
+        ))
+    }
+
+    /// The entries from `entry_id` on, that entry included if it is stored. Earlier entries are
+    /// not read from the store.
+    fn load_from(v: &Vault, conversation_id: &str, entry_id: &str) -> AppResult<Self> {
+        Ok(Self::decode(
+            conversation_id,
+            v.ai_entries_from(conversation_id, entry_id)?,
+        ))
+    }
+
+    fn decode(conversation_id: &str, stored: Vec<hatoba_core::StoredEntry>) -> Self {
         let mut entries = Self {
             ids: Vec::with_capacity(stored.len()),
             list: Vec::with_capacity(stored.len()),
@@ -2095,7 +2111,7 @@ impl Entries {
                 ),
             }
         }
-        Ok(entries)
+        entries
     }
 
     /// Index of the first entry of the context (AI-21): at or after `context_start`, which
