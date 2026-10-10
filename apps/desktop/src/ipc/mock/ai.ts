@@ -1,6 +1,6 @@
 import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
-import { formatTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -18,6 +18,7 @@ import type {
   AiUsage,
   AppError,
   HostView,
+  QuickTarget,
 } from "../types";
 
 type AiApi = Pick<
@@ -62,23 +63,19 @@ interface Conv {
   /** `?ai=running`: a turn "runs in Rust" until then, started by an earlier page. */
   runningUntil: number;
   /** Like Rust's `AiConversation.quick_target` (AI-09): the quick-connect target (HOST-12) it is on while `host_id` is null. */
-  quickTarget?: string;
+  quickTarget?: QuickTarget;
 }
 
 /** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
 interface Move {
   from: string | null;
   host_id: string | null;
-  quickTarget: string | undefined;
+  quickTarget: QuickTarget | undefined;
 }
 
-/** A quick-connect target's label with its address in lowercase and without brackets, so labels compare as `sameTarget` compares targets (HOST-12). */
-function targetKey(label: string): string {
-  const at = label.lastIndexOf("@");
-  const colon = label.lastIndexOf(":");
-  if (at < 0 || colon < at) return label;
-  const address = label.slice(at + 1, colon).replace(/^\[(.*)\]$/, "$1").toLowerCase();
-  return `${label.slice(0, at)}@${address}:${label.slice(colon + 1)}`;
+/** Like Rust's `AiQuickTarget::new` (AI-09): a target as a conversation records it, the address in lowercase and without brackets. */
+function recorded(t: { address: string; port: number; username: string }): QuickTarget {
+  return { address: t.address.replace(/^\[(.*)\]$/, "$1").toLowerCase(), port: t.port, username: t.username };
 }
 
 interface Turn {
@@ -615,14 +612,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   }
 
   /**
-   * The user's message after a compaction it waited for, unless the turn was stopped meanwhile, with the move its
-   * note tells of (like Rust).
+   * The user's message after a compaction it waited for, unless the turn was stopped meanwhile, with the thinking
+   * level and the move its note tells of (like Rust).
    */
-  async function storeMessage(c: Conv, turn: Turn, text: string, move: Move | null = null): Promise<AiEntryView> {
+  async function storeMessage(c: Conv, turn: Turn, text: string, context: AiTurnContext, move: Move | null): Promise<AiEntryView> {
     if (!(await compactBefore(c, turn, text))) {
       if (turns.get(c.view.id) === turn) turns.delete(c.view.id);
       fail("cancelled", "the message was stopped before it was sent");
     }
+    // AI-05: the conversation keeps the level of its last message.
+    if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
     if (move) {
       c.view = { ...c.view, host_id: move.host_id, updated_at: Date.now() };
       c.quickTarget = move.quickTarget;
@@ -647,7 +646,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (earlier.length === 0) return "";
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? { host_id: c.view.host_id, quickTarget: c.quickTarget };
-    const to = hosts.find((h) => h.id === place.host_id)?.name ?? place.quickTarget;
+    const to = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quickTarget && formatTarget(place.quickTarget));
     if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
     if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
@@ -688,20 +687,28 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * it is. `storeMessage` stores it with the message.
    */
   async function moveOf(c: Conv, context: AiTurnContext): Promise<Move | null> {
-    const target = !context.host_id && context.target ? formatTarget(context.target) : undefined;
-    const same = (a: string | undefined, b: string | undefined) => a !== undefined && b !== undefined && targetKey(a) === targetKey(b);
-    const moves = context.host_id ? context.host_id !== c.view.host_id : target !== undefined && (c.view.host_id !== null || !same(c.quickTarget, target));
+    const target = !context.host_id && context.target ? recorded(context.target) : undefined;
+    const moves = context.host_id ? context.host_id !== c.view.host_id : target !== undefined && (c.view.host_id !== null || !c.quickTarget || !sameTarget(c.quickTarget, target));
     if (!moves) return null;
     const hosts = (await deps.hosts?.()) ?? [];
-    const hostTarget = (id: string | null) => {
-      const h = hosts.find((x) => x.id === id);
-      return h ? formatTarget(h) : undefined;
-    };
+    const old = hosts.find((h) => h.id === c.view.host_id);
+    const next = hosts.find((h) => h.id === context.host_id);
     let from: string | null = null;
     if (c.view.host_id) {
-      if (!same(hostTarget(c.view.host_id), target)) from = hosts.find((h) => h.id === c.view.host_id)?.name ?? "";
-    } else if (c.quickTarget !== undefined && !same(hostTarget(context.host_id), c.quickTarget)) from = c.quickTarget;
+      if (!(target && old && sameTarget(old, target))) from = old?.name ?? "";
+    } else if (c.quickTarget && !(next && sameTarget(next, c.quickTarget))) from = formatTarget(c.quickTarget);
     return { from, host_id: context.host_id, quickTarget: target };
+  }
+
+  /**
+   * Like Rust's `names_server` (AI-09): whether a `host_change` note's `from` names the server the conversation is
+   * on with `move` (or without it): its target's name, or a saved host of that name with its address, port, and user.
+   */
+  async function namesServer(c: Conv, move: Move | null, from: string): Promise<boolean> {
+    const hosts = (await deps.hosts?.()) ?? [];
+    const host = hosts.find((h) => h.id === (move ? move.host_id : c.view.host_id));
+    const here = host ? recorded(host) : move ? move.quickTarget : c.quickTarget;
+    return !!here && (formatTarget(here) === from || hosts.some((h) => h.name === from && sameTarget(h, here)));
   }
 
   /** Like Rust: the call must belong to the newest response and have no result yet. */
@@ -986,17 +993,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           },
           entries: [],
           runningUntil: 0,
-          quickTarget: !input.context.host_id && input.context.target ? formatTarget(input.context.target) : undefined,
+          quickTarget: !input.context.host_id && input.context.target ? recorded(input.context.target) : undefined,
         };
       }
       const turn = startTurn(c, input.context, onEvent, false);
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
-      // Like Rust: the conversation keeps the level of its last message.
-      if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
       const notes = input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "";
-      const user_entry = await storeMessage(c, turn, notes + input.text, move);
+      const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move);
       return { conversation: view(c), user_entry };
     },
     ai_retry: async (id, context, onEvent) => {
@@ -1082,10 +1087,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       c.view = { ...c.view, updated_at: Date.now() };
       const turn = startTurn(c, context, onEvent, false);
       const move = await moveOf(c, context);
-      if (cameFrom === null) cameFrom = move?.from ?? null;
-      c.view = { ...c.view, effort: context.effort };
+      // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
+      if (cameFrom !== null && (await namesServer(c, move, cameFrom))) cameFrom = null;
+      else if (cameFrom === null) cameFrom = move?.from ?? null;
       const notes = await notesBefore(c, [...c.entries], move, cameFrom, context);
-      const user_entry = await storeMessage(c, turn, notes + text, move);
+      const user_entry = await storeMessage(c, turn, notes + text, context, move);
       return { conversation: view(c), user_entry };
     },
     // The browser reads dropped files itself (File API); there are no paths to read here.

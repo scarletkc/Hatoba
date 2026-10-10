@@ -766,12 +766,12 @@ pub struct AiConversation {
     pub title: String,
     /// The host the conversation last worked on.
     pub host_id: Option<String>,
-    /// The quick-connect target (HOST-12) it last worked on, as `user@host:port`, while
-    /// `host_id` is `None`: a message in a tab on a saved host or another target starts with a
-    /// `host_change` note from it (AI-09). `None` (absent) is none, as for conversations from
-    /// before it was recorded, which get no note.
+    /// The quick-connect target (HOST-12) it last worked on, while `host_id` is `None`: a message
+    /// in a tab on a saved host or another target starts with a `host_change` note from it
+    /// (AI-09). `None` (absent) is none, as for conversations from before it was recorded, which
+    /// get no note.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quick_target: Option<String>,
+    pub quick_target: Option<AiQuickTarget>,
     /// Pinned to the top of the history.
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
@@ -788,6 +788,36 @@ pub struct AiConversation {
     pub created_at: i64,
     /// Last modification, Unix ms.
     pub updated_at: i64,
+}
+
+/// A quick-connect target (HOST-12) as a conversation records it (AI-09): the address in
+/// lowercase and without brackets, so one server has one form and targets compare as HOST-12
+/// compares them. Build it with [`AiQuickTarget::new`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiQuickTarget {
+    /// The user name it connects as.
+    pub username: String,
+    /// DNS name or IP address, in lowercase, IPv6 without brackets.
+    pub address: String,
+    /// The SSH port.
+    pub port: u16,
+}
+
+impl AiQuickTarget {
+    /// The recorded form of `username@address:port`.
+    #[must_use]
+    pub fn new(username: &str, address: &str, port: u16) -> Self {
+        let address = address
+            .strip_prefix('[')
+            .and_then(|a| a.strip_suffix(']'))
+            .unwrap_or(address);
+        Self {
+            username: username.to_owned(),
+            address: address.to_lowercase(),
+            port,
+        }
+    }
 }
 
 /// One part of a conversation entry (P1, spec §13.7). Entries are written once and never change,
@@ -1894,13 +1924,15 @@ mod tests {
             })
         );
         // On a quick connection (HOST-12), the target in place of a host.
+        let target = AiQuickTarget::new("root", "[FE80::1]", 2222);
+        assert_eq!(target, AiQuickTarget::new("root", "fe80::1", 2222));
         assert_eq!(
             serde_json::to_value(Item::AiConversation(AiConversation {
-                quick_target: Some("root@10.0.0.9:22".into()),
+                quick_target: Some(target),
                 ..AiConversation::default()
             }))
             .unwrap()["quick_target"],
-            "root@10.0.0.9:22"
+            json!({"username": "root", "address": "fe80::1", "port": 2222})
         );
 
         let message = Item::AiMessage(AiMessage {

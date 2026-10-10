@@ -2514,14 +2514,19 @@ async fn a_move_stopped_while_the_context_is_compacted_is_not_stored() {
         .await;
 
     // AI-09: the move to another target goes with the message, which the stop keeps from being
-    // stored.
-    let (send, sink) = spawn_send_with(&f, &conv, &"disk ".repeat(720), f.quick("10.0.0.10"));
+    // stored, and so does the thinking level (AI-05).
+    let elsewhere = AiTurnContext {
+        effort: Some(AiEffort::High),
+        ..f.quick("10.0.0.10")
+    };
+    let (send, sink) = spawn_send_with(&f, &conv, &"disk ".repeat(720), elsewhere);
     f.wait_for_requests(2).await;
     f.manager.stop(&f.vault, f.env.as_ref(), &conv);
     assert_eq!(send.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     let first = "root@10.0.0.9:22";
     assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
+    assert_eq!(f.detail(&conv).conversation.effort, None);
 
     // So the next message from that target still notes the move.
     f.exchange(Some(&conv), "short", f.quick("10.0.0.10")).await;
@@ -3039,10 +3044,30 @@ impl Fixture {
         }
     }
 
-    /// The host and the quick-connect target the conversation item records (AI-09).
+    /// The host and the quick-connect target the conversation item records (AI-09), the target
+    /// by its name in notes.
     fn recorded_place(&self, conversation_id: &str) -> (Option<String>, Option<String>) {
         let item = super::find_conversation(&lock(&self.vault), conversation_id).unwrap();
-        (item.host_id, item.quick_target)
+        (
+            item.host_id,
+            item.quick_target.as_ref().map(super::target_name),
+        )
+    }
+
+    /// Stores a host at `root@{address}:22`, as Save as Host… makes one (HOST-12).
+    fn add_saved_target(&self, name: &str, address: &str) -> String {
+        lock(&self.vault)
+            .put(
+                None,
+                Item::Host(hatoba_core::model::Host {
+                    name: name.into(),
+                    address: address.into(),
+                    port: 22,
+                    username: "root".into(),
+                    ..hatoba_core::model::Host::default()
+                }),
+            )
+            .unwrap()
     }
 }
 
@@ -3096,18 +3121,7 @@ async fn a_move_off_a_quick_connection_is_noted_from_its_target() {
 async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
     let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     // Save as Host… (HOST-12): the same address, port, and user.
-    let saved = lock(&f.vault)
-        .put(
-            None,
-            Item::Host(hatoba_core::model::Host {
-                name: "web-1".into(),
-                address: "10.0.0.9".into(),
-                port: 22,
-                username: "root".into(),
-                ..hatoba_core::model::Host::default()
-            }),
-        )
-        .unwrap();
+    let saved = f.add_saved_target("web-1", "10.0.0.9");
     let on_saved = AiTurnContext {
         host_id: Some(saved.clone()),
         ..f.context()
@@ -3138,25 +3152,15 @@ async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
 #[tokio::test]
 async fn a_target_in_another_letter_case_is_the_same_server() {
     let f = Fixture::new((0..3).map(|i| answer(&format!("Answer {i}."))).collect()).await;
-    // The panel compares addresses in any letter case and without brackets (HOST-12).
-    let saved = lock(&f.vault)
-        .put(
-            None,
-            Item::Host(hatoba_core::model::Host {
-                name: "db".into(),
-                address: "db.example.org".into(),
-                port: 22,
-                username: "root".into(),
-                ..hatoba_core::model::Host::default()
-            }),
-        )
-        .unwrap();
+    // The panel compares addresses in any letter case and without brackets (HOST-12), so the
+    // conversation records the address in lowercase.
+    let saved = f.add_saved_target("db", "db.example.org");
     let (conv, _) = f.exchange(None, "one", f.quick("DB.Example.org")).await;
     f.exchange(Some(&conv), "two", f.quick("db.example.ORG"))
         .await;
     assert_eq!(
         f.recorded_place(&conv),
-        (None, Some("root@DB.Example.org:22".to_owned()))
+        (None, Some("root@db.example.org:22".to_owned()))
     );
     let on_saved = AiTurnContext {
         host_id: Some(saved),
@@ -3166,16 +3170,57 @@ async fn a_target_in_another_letter_case_is_the_same_server() {
     assert_eq!(f.user_texts(&conv), ["one", "two", "three"]);
 }
 
-#[test]
-fn target_labels_compare_as_the_panel_compares_targets() {
-    use super::same_target;
+#[tokio::test]
+async fn an_edit_drops_the_note_of_a_move_from_the_server_it_goes_from() {
+    use hatoba_ai::tools::host_change_block;
 
-    assert!(same_target("root@DB.example:22", "root@db.EXAMPLE:22"));
-    assert!(same_target("root@[FE80::1]:22", "root@[fe80::1]:22"));
-    assert!(!same_target("root@db:22", "Root@db:22"));
-    assert!(!same_target("root@db:22", "root@db:2222"));
-    assert!(!same_target("root@db:22", "root@db2:22"));
-    assert!(same_target("odd", "odd"));
+    let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "");
+    let on = |host: &str| AiTurnContext {
+        host_id: Some(host.to_owned()),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "one", f.quick("srv.example")).await;
+    f.exchange(Some(&conv), "two", on(&prod)).await;
+    let moved = host_change_block("root@srv.example:22", "prod-db");
+    assert_eq!(f.user_texts(&conv)[1], format!("{moved}two"));
+    let edit = |text: &'static str, context: AiTurnContext| {
+        let f = &f;
+        let conv = &conv;
+        async move {
+            let two = f.user_ids(conv)[1].clone();
+            f.edit_with(conv, &two, text, context).await;
+        }
+    };
+
+    // AI-26: edited from the target in another letter case, the message goes from the server
+    // the earlier screens came from.
+    edit("two, same target", f.quick("SRV.Example")).await;
+    assert_eq!(f.user_texts(&conv), ["one", "two, same target"]);
+    // So does one from the host the target was saved as (Save as Host…, HOST-12).
+    f.exchange(Some(&conv), "three", on(&prod)).await;
+    let srv = f.add_saved_target("srv", "srv.example");
+    let three = f.user_ids(&conv)[2].clone();
+    f.edit_with(&conv, &three, "three, saved", on(&srv)).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        ["one", "two, same target", "three, saved"]
+    );
+
+    // And the other way round: a note from the saved host, edited from its target.
+    f.exchange(Some(&conv), "four", on(&prod)).await;
+    assert_eq!(
+        f.user_texts(&conv)[3],
+        format!("{}four", host_change_block("srv", "prod-db"))
+    );
+    let four = f.user_ids(&conv)[3].clone();
+    f.edit_with(&conv, &four, "four, quick", f.quick("srv.example"))
+        .await;
+    assert_eq!(f.user_texts(&conv)[3], "four, quick");
+    assert_eq!(
+        f.recorded_place(&conv),
+        (None, Some("root@srv.example:22".to_owned()))
+    );
 }
 
 #[tokio::test]
