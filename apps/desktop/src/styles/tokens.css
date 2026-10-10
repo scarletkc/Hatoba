@@ -164,9 +164,18 @@
     monospace;
 }
 
-/* macOS keeps the design's native look (P1) */
+/* macOS keeps the design's native look (P1). The mono stack keeps CJK fallbacks for wide characters (TERM-02). */
 :root[data-platform="macos"] {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue",
     Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "PingFang SC", "Hiragino Sans GB",
+    "Hiragino Sans", monospace;
+}
+
+/* The macOS block above has the same specificity as :root:lang(ja) and comes later, so Japanese needs its own rule. */
+:root[data-platform="macos"]:lang(ja) {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "PingFang SC", "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", "Hiragino Sans", "PingFang SC",
+    monospace;
 }

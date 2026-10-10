@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/controls";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import type { LiveSession } from "./session";
 import s from "./FindBar.module.css";
 
@@ -46,6 +47,7 @@ export function FindBar({ session, onClose }: { session: LiveSession; onClose():
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
+            if (isImeEvent(e)) return;
             e.preventDefault();
             step(e.shiftKey ? "prev" : "next");
           } else if (e.key === "Escape") {

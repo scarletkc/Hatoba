@@ -7,6 +7,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, DeployStart, DeployStep, UpgradeDefaults, UpgradePlan } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { deployError, EditTokenLink, LABEL, StepList } from "./DeployStep";
 import { DEPLOY_GUIDE_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
 import type { T } from "./syncUtils";
@@ -295,7 +296,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
                 placeholder={t("sync.dep.accountId.enter")}
                 onChange={(e) => setAccountId(e.target.value)}
                 onBlur={() => void inspect()}
-                onKeyDown={(e) => e.key === "Enter" && void inspect()}
+                onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void inspect()}
               />
             ) : (
               <div className={s.accountLine}>
@@ -318,7 +319,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
                 invalid={!!workerName && !nameOk}
                 onChange={(e) => setWorkerName(e.target.value.toLowerCase())}
                 onBlur={() => void inspect()}
-                onKeyDown={(e) => e.key === "Enter" && void inspect()}
+                onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void inspect()}
               />
             </Field>
           )}

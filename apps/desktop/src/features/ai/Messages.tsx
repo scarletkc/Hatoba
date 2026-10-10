@@ -6,6 +6,7 @@ import { readClipboard } from "@/features/terminal/clipboard";
 import { useT, type MessageKey } from "@/i18n";
 import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
@@ -358,7 +359,7 @@ function EditMessage({
             e.preventDefault();
             e.stopPropagation();
             onCancel();
-          } else if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+          } else if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !isImeEvent(e)) {
             e.preventDefault();
             void send();
           }
@@ -824,7 +825,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
             aria-label={t("ai.approval.reason")}
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              if (e.key === "Enter" && !isImeEvent(e)) {
                 e.preventDefault();
                 reject();
               } else if (e.key === "Escape") {

@@ -7,6 +7,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AiAuthHeader, AiEffort, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import {
   addModels,
   formatEfforts,
@@ -419,7 +420,7 @@ export function ProviderDialog({
               placeholder={t("aiSettings.models.addPlaceholder")}
               onChange={(e) => setAdding(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key !== "Enter") return;
+                if (e.key !== "Enter" || isImeEvent(e)) return;
                 // Enter here adds the model; it must not save the whole form.
                 e.preventDefault();
                 addTyped();

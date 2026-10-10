@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type RefObject } from "react";
+import { useApp } from "@/app/store";
 import { isTauri } from "@/ipc/api";
+import { isDropInside } from "@/lib/dropPoint";
 
 /** Where text files dropped on the AI panel go: `File`s in the browser, paths in the desktop app. */
 export interface PanelDrop {
@@ -11,7 +13,7 @@ export interface PanelDrop {
  * AI-35: text files dropped on the AI panel. In the browser the WebView's own drag and drop hands
  * over the files, which are read with the File API. The desktop app's webview takes file drops
  * itself (as for the SFTP panel's uploads, `features/sftp/useFileDrop.ts`) and gives only their
- * paths, positions in physical pixels; Rust reads those (`ai_read_dropped_files`), and only the
+ * paths, with positions that `lib/dropPoint.ts` converts; Rust reads those (`ai_read_dropped_files`), and only the
  * paths of the window's last drop.
  */
 export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: boolean, drop: PanelDrop) {
@@ -25,12 +27,8 @@ export function usePanelFileDrop(panel: RefObject<HTMLElement | null>, enabled: 
     if (!isTauri() || !enabled) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
-    const inside = (pos: { x: number; y: number }) => {
-      const r = panel.current?.getBoundingClientRect();
-      if (!r) return false;
-      const scale = window.devicePixelRatio || 1;
-      return pos.x / scale >= r.left && pos.x / scale <= r.right && pos.y / scale >= r.top && pos.y / scale <= r.bottom;
-    };
+    const inside = (pos: { x: number; y: number }) =>
+      isDropInside(panel.current?.getBoundingClientRect(), pos, useApp.getState().info.platform, window.devicePixelRatio);
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent(({ payload }) => {

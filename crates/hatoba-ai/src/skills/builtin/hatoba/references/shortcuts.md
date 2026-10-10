@@ -6,7 +6,7 @@ On Windows and Linux every app shortcut uses Ctrl+Shift, so that plain Ctrl+lett
 
 | Action | Windows / Linux | macOS |
 |---|---|---|
-| Search hosts (opens the host list and focuses the search box) | Ctrl+Shift+K (Ctrl+K also works when the terminal does not have focus) | ⌘K |
+| Search hosts (opens the host list and focuses the search box) | Ctrl+Shift+K (Ctrl+K also works when the terminal does not have focus) | ⌘⇧K (⌘K also works when the terminal does not have focus, and clears the terminal while it has) |
 | New tab (also opens the host list and focuses the search box; connecting a host opens its own tab) | Ctrl+Shift+T | ⌘T |
 | Close tab (a terminal tab; the home tab cannot be closed) | Ctrl+Shift+W | ⌘W |
 | Next tab / previous tab | Ctrl+Tab / Ctrl+Shift+Tab | ⌃Tab / ⌃⇧Tab |

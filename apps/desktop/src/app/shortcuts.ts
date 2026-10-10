@@ -6,14 +6,16 @@ export type ShortcutAction = "search" | "newTab" | "closeTab" | "nextTab" | "pre
 /**
  * App-level shortcuts (WIN-04). On Windows/Linux every app shortcut uses Ctrl+Shift so that plain
  * Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K…). Exceptions are Ctrl+Tab,
- * Ctrl+, and Ctrl+K while focus is outside the terminal.
+ * Ctrl+, and Ctrl+K while focus is outside the terminal. On macOS ⌘K likewise searches hosts only
+ * outside the terminal; inside it clears the terminal (session.ts). ⌘⇧K searches hosts everywhere,
+ * like Ctrl+Shift+K.
  */
 export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: boolean): ShortcutAction | null {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (platform === "macos") {
     if (e.ctrlKey && key === "Tab") return e.shiftKey ? "prevTab" : "nextTab";
     if (!e.metaKey || e.altKey || e.ctrlKey) return null;
-    if (key === "k" && !e.shiftKey) return "search";
+    if (key === "k") return e.shiftKey || !inTerminal ? "search" : null;
     if (key === "t" && !e.shiftKey) return "newTab";
     if (key === "w" && !e.shiftKey) return "closeTab";
     if (key === "," && !e.shiftKey) return "settings";

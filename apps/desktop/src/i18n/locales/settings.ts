@@ -41,7 +41,6 @@ export default defineMessages({
     "settings.backup.done": "备份已导出",
 
     "settings.term.font": "字体",
-    "settings.term.fontPlaceholder": "Cascadia Mono",
     "settings.term.size": "字号",
     "settings.term.sizeDown": "减小字号",
     "settings.term.sizeUp": "增大字号",
@@ -200,7 +199,6 @@ export default defineMessages({
     "settings.backup.done": "Backup exported",
 
     "settings.term.font": "Font",
-    "settings.term.fontPlaceholder": "Cascadia Mono",
     "settings.term.size": "Font Size",
     "settings.term.sizeDown": "Decrease font size",
     "settings.term.sizeUp": "Increase font size",
@@ -364,7 +362,6 @@ export default defineMessages({
     "settings.backup.done": "バックアップをエクスポートしました",
 
     "settings.term.font": "フォント",
-    "settings.term.fontPlaceholder": "Cascadia Mono",
     "settings.term.size": "フォントサイズ",
     "settings.term.sizeDown": "フォントサイズを小さく",
     "settings.term.sizeUp": "フォントサイズを大きく",

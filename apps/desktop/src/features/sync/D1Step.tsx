@@ -7,6 +7,7 @@ import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, SyncConfigInput } from "@/ipc/types";
+import { isImeEvent } from "@/lib/ime";
 import { API_TOKENS_URL, openExternal } from "./external";
 import { EMPTY_D1, type D1Form } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
@@ -97,7 +98,7 @@ export function D1Step({
             large
             value={form.accountId}
             onChange={(e) => reset({ accountId: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && void runVerify()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runVerify()}
           />
         </Field>
 
@@ -109,7 +110,7 @@ export function D1Step({
             value={form.apiToken}
             invalid={verify.status === "failed"}
             onChange={(e) => reset({ apiToken: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && void runVerify()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runVerify()}
           />
           {verify.status === "failed" && (
             <div className={s.tokenError} role="alert">

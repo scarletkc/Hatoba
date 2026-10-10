@@ -22,6 +22,7 @@ import { formatRelative, useT, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { HostView, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
 import { ImportSshDialog } from "./ImportSshDialog";
@@ -398,6 +399,8 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     const inSearch = target === searchRef.current;
     const onList = target === listRef.current;
     if (!inSearch && !onList) return;
+    // The Enter that commits an IME candidate must not connect.
+    if (e.key === "Enter" && isImeEvent(e)) return;
     // While the recent targets show under the field, the arrows go through them first.
     if (inSearch && suggestOpen) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {

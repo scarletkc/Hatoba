@@ -8,6 +8,7 @@ import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AppError, DeployPlan, DeployStep as Step, DeployTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { API_TOKENS_URL, DEPLOY_TOKEN_URL, openExternal } from "./external";
 import type { T } from "./syncUtils";
 import { DEPLOY_STEPS, EMPTY_DEPLOY, type DeployForm, type StepState } from "./wizardTypes";
@@ -137,7 +138,7 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
             disabled={form.verifying}
             invalid={!!form.tokenError}
             onChange={(e) => set((f) => ({ ...f, apiToken: e.target.value, tokenError: null }))}
-            onKeyDown={(e) => e.key === "Enter" && void verify()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void verify()}
           />
         </Field>
         <EditTokenLink error={form.tokenError} />
@@ -149,7 +150,7 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
             value={form.accountId}
             disabled={form.verifying}
             onChange={(e) => set((f) => ({ ...f, accountId: e.target.value, tokenError: null }))}
-            onKeyDown={(e) => e.key === "Enter" && void verify()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void verify()}
           />
         </Field>
       </div>
@@ -264,7 +265,7 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
               placeholder={t("sync.dep.accountId.enter")}
               onChange={(e) => set((f) => ({ ...f, accountId: e.target.value }))}
               onBlur={() => reinspect({})}
-              onKeyDown={(e) => e.key === "Enter" && reinspect({})}
+              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && reinspect({})}
             />
           )}
         </Field>
@@ -286,7 +287,7 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
               invalid={!!form.subdomain && !subdomainOk}
               trailing={<span className={s.fieldSuffix}>.workers.dev</span>}
               onChange={(e) => set((f) => ({ ...f, subdomain: e.target.value.toLowerCase() }))}
-              onKeyDown={(e) => e.key === "Enter" && deploy()}
+              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && deploy()}
             />
           </Field>
         )}
@@ -306,7 +307,7 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
                   invalid={nameError?.field === "worker"}
                   onChange={(e) => set((f) => ({ ...f, workerName: e.target.value.toLowerCase() }))}
                   onBlur={() => reinspect({})}
-                  onKeyDown={(e) => e.key === "Enter" && reinspect({})}
+                  onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && reinspect({})}
                 />
               </Field>
               <Field label={t("sync.dep.databaseName")} htmlFor={databaseId} error={nameError?.field === "database" ? nameError.text : undefined}>
@@ -317,7 +318,7 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
                   invalid={nameError?.field === "database"}
                   onChange={(e) => set((f) => ({ ...f, databaseName: e.target.value.toLowerCase() }))}
                   onBlur={() => reinspect({})}
-                  onKeyDown={(e) => e.key === "Enter" && reinspect({})}
+                  onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && reinspect({})}
                 />
               </Field>
             </div>

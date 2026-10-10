@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type DragEvent, type RefObject } from "react";
+import { useApp } from "@/app/store";
 import { isTauri } from "@/ipc/api";
+import { isDropInside } from "@/lib/dropPoint";
 
 /**
  * Drag & drop upload target (SFTP-02). In the app the webview hands us native file paths
- * (`onDragDropEvent`, positions in physical pixels); in a plain browser we use HTML5 events and
+ * (`onDragDropEvent`; `lib/dropPoint.ts` converts the positions); in a plain browser we use HTML5 events and
  * only get file names, which is enough for the mock backend.
  */
 export function useFileDrop(panel: RefObject<HTMLElement | null>, enabled: boolean, onDrop: (paths: string[]) => void) {
@@ -18,14 +20,8 @@ export function useFileDrop(panel: RefObject<HTMLElement | null>, enabled: boole
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    const inside = (pos: { x: number; y: number }) => {
-      const r = panel.current?.getBoundingClientRect();
-      if (!r) return false;
-      const scale = window.devicePixelRatio || 1;
-      const x = pos.x / scale;
-      const y = pos.y / scale;
-      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    };
+    const inside = (pos: { x: number; y: number }) =>
+      isDropInside(panel.current?.getBoundingClientRect(), pos, useApp.getState().info.platform, window.devicePixelRatio);
 
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>

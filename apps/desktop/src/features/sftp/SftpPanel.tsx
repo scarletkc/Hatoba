@@ -7,6 +7,7 @@ import { formatBytes, formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AppError, FileEntry } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { pickSavePath, pickUploadFiles } from "./native";
 import { joinPath, parentPath, splitLastSegment } from "./paths";
 import { TransferList } from "./TransferList";
@@ -406,6 +407,7 @@ function NameInput({
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") {
+          if (isImeEvent(e)) return;
           e.preventDefault();
           finish(true);
         } else if (e.key === "Escape") {

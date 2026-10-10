@@ -7,6 +7,7 @@ import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpServerView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
@@ -236,7 +237,7 @@ export function McpServerDialog({
                         onChange={(e) => setArg(arg.uid, e.target.value)}
                         onKeyDown={(e) => {
                           // Enter adds the next argument; it must not save the whole form.
-                          if (e.key !== "Enter") return;
+                          if (e.key !== "Enter" || isImeEvent(e)) return;
                           e.preventDefault();
                           addArg(arg.uid);
                         }}

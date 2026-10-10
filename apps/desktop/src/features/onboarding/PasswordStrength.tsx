@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon, TextField } from "@/components/controls";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { COMMON_PASSWORDS } from "./commonPasswords";
 import s from "./PasswordStrength.module.css";
 
@@ -104,7 +105,7 @@ export function NewPasswordFields({
   const [confirmTouched, setConfirmTouched] = useState(false);
   const mismatch = confirm.length > 0 && !matches && (confirmTouched || confirm.length >= password.length);
   const enter = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") onEnter?.();
+    if (e.key === "Enter" && !isImeEvent(e)) onEnter?.();
   };
   return (
     <>

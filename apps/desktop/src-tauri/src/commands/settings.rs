@@ -237,8 +237,16 @@ mod tests {
 
     const PW: &str = "correct horse battery staple";
 
+    /// A right-click value other than this platform's default.
+    fn custom() -> RightClick {
+        match RightClick::platform_default() {
+            RightClick::Menu => RightClick::CopyPaste,
+            RightClick::CopyPaste => RightClick::Menu,
+        }
+    }
+
     /// `local_prefs` as the last build that kept the terminal behaviour on the device wrote it.
-    fn legacy_prefs(right_click: &str, confirm_multiline_paste: bool) -> String {
+    fn legacy_prefs(right_click: RightClick, confirm_multiline_paste: bool) -> String {
         json!({
             "language": "ja",
             "appearance": "dark",
@@ -275,12 +283,14 @@ mod tests {
         let mut vault = vault();
         put_older_settings(&mut vault, json!({"font_size": 15}));
         let before = vault.settings().updated_at;
-        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), false))
+            .unwrap();
 
         assert!(adopt_legacy_prefs(&mut vault).unwrap());
 
         let settings = vault.settings();
-        assert_eq!(settings.terminal.right_click, Some(RightClick::Menu));
+        assert_eq!(settings.terminal.right_click, Some(custom()));
         assert_eq!(settings.terminal.confirm_multiline_paste, Some(false));
         assert_eq!(settings.terminal.font_size, 15);
         // A newer write, so it wins over the older copy on the server.
@@ -296,26 +306,35 @@ mod tests {
     #[test]
     fn a_value_already_recorded_is_kept() {
         let mut vault = vault();
-        // Another device recorded copy/paste (the default) and left the paste field unset.
-        put_older_settings(&mut vault, json!({"right_click": "copy_paste"}));
-        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        // Another device recorded the default and left the paste field unset.
+        put_older_settings(
+            &mut vault,
+            json!({"right_click": RightClick::platform_default()}),
+        );
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), false))
+            .unwrap();
 
         adopt_legacy_prefs(&mut vault).unwrap();
 
         let t = vault.settings().terminal;
-        assert_eq!(t.right_click, Some(RightClick::CopyPaste));
+        assert_eq!(t.right_click, Some(RightClick::platform_default()));
         assert_eq!(t.confirm_multiline_paste, Some(false));
     }
 
     #[test]
     fn runs_once() {
         let mut vault = vault();
-        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), false))
+            .unwrap();
         adopt_legacy_prefs(&mut vault).unwrap();
 
         // The user switches back on another device and the change syncs in.
         let mut settings = vault.settings();
-        settings.terminal.set_right_click(RightClick::CopyPaste);
+        settings
+            .terminal
+            .set_right_click(RightClick::platform_default());
         settings.terminal.set_confirm_multiline_paste(true);
         vault.put(None, Item::Settings(settings)).unwrap();
         let after_change = vault.settings();
@@ -329,7 +348,7 @@ mod tests {
         let mut vault = vault();
         let before = vault.settings();
         vault
-            .set_local_prefs(&legacy_prefs("copy_paste", true))
+            .set_local_prefs(&legacy_prefs(RightClick::platform_default(), true))
             .unwrap();
 
         assert!(!adopt_legacy_prefs(&mut vault).unwrap());
@@ -338,12 +357,11 @@ mod tests {
         assert!(stored(&vault).get("right_click").is_none());
 
         // So a device with a customised value can still bring it over.
-        vault.set_local_prefs(&legacy_prefs("menu", true)).unwrap();
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), true))
+            .unwrap();
         adopt_legacy_prefs(&mut vault).unwrap();
-        assert_eq!(
-            vault.settings().terminal.right_click,
-            Some(RightClick::Menu)
-        );
+        assert_eq!(vault.settings().terminal.right_click, Some(custom()));
     }
 
     #[test]
@@ -365,19 +383,23 @@ mod tests {
         std::fs::remove_file(&path).unwrap();
         imported.unwrap();
         assert!(vault.get(SETTINGS_ID).is_none());
-        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), false))
+            .unwrap();
 
         adopt_legacy_prefs(&mut vault).unwrap();
 
         let settings = vault.get(SETTINGS_ID).and_then(Item::as_settings).unwrap();
-        assert_eq!(settings.terminal.right_click, Some(RightClick::Menu));
+        assert_eq!(settings.terminal.right_click, Some(custom()));
         assert_eq!(settings.terminal.confirm_multiline_paste, Some(false));
     }
 
     #[test]
     fn after_unlock_it_waits_for_sync_when_sync_is_configured() {
         let mut vault = vault();
-        vault.set_local_prefs(&legacy_prefs("menu", false)).unwrap();
+        vault
+            .set_local_prefs(&legacy_prefs(custom(), false))
+            .unwrap();
         let config = SyncConfig::Worker {
             url: "https://sync.example.workers.dev".into(),
             deployment: None,
@@ -387,15 +409,12 @@ mod tests {
 
         assert!(!adopt_legacy_prefs_after_unlock(&mut vault).unwrap());
         assert_eq!(vault.settings(), before);
-        assert_eq!(stored(&vault)["right_click"], "menu");
+        assert_eq!(stored(&vault)["right_click"], json!(custom()));
 
         // Without sync this device holds the only copy, so the move runs right away.
         vault.set_sync_config(None).unwrap();
         assert!(adopt_legacy_prefs_after_unlock(&mut vault).unwrap());
-        assert_eq!(
-            vault.settings().terminal.right_click,
-            Some(RightClick::Menu)
-        );
+        assert_eq!(vault.settings().terminal.right_click, Some(custom()));
     }
 
     #[test]
@@ -403,12 +422,12 @@ mod tests {
         // The language changes on the lock screen before the first unlock after the upgrade.
         let prefs = LocalPrefs {
             language: Language::En,
-            ..LocalPrefs::from_stored(&legacy_prefs("menu", false))
+            ..LocalPrefs::from_stored(&legacy_prefs(custom(), false))
         };
-        let json = merge_prefs(Some(&legacy_prefs("menu", false)), &prefs).unwrap();
+        let json = merge_prefs(Some(&legacy_prefs(custom(), false)), &prefs).unwrap();
         let saved: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(saved["language"], "en");
-        assert_eq!(saved["right_click"], "menu");
+        assert_eq!(saved["right_click"], json!(custom()));
         assert_eq!(saved["confirm_multiline_paste"], false);
         let fresh: Value =
             serde_json::from_str(&merge_prefs(None, &LocalPrefs::default()).unwrap()).unwrap();

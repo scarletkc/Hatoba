@@ -8,6 +8,7 @@ import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { DeviceView, SyncStatus, WorkerUpdate } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, openExternal } from "./external";
 import { ChangePasswordDialog, RecoveryCodeDialog } from "./SyncDialogs";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";
@@ -227,7 +228,7 @@ function ReloginForm() {
             setPassword(e.target.value);
             setError(null);
           }}
-          onKeyDown={(e) => e.key === "Enter" && void login()}
+          onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void login()}
         />
         <Button variant="primary" busy={busy} disabled={!password} onClick={() => void login()}>
           {t("sync.auth.login")}

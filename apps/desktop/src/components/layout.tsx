@@ -1,6 +1,7 @@
 import { forwardRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { tagColor } from "@/lib/tags";
 import { Icon, controlStyles } from "./controls";
 import l from "./layout.module.css";
@@ -221,6 +222,7 @@ export function TagInput({
         onBlur={() => draft && add(draft)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
+            if (isImeEvent(e)) return;
             e.preventDefault();
             add(draft);
           } else if (e.key === "Backspace" && !draft && value.length) {

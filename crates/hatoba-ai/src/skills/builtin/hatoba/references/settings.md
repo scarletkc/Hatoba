@@ -25,7 +25,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Export Encrypted Backup | 导出加密备份 | 暗号化バックアップをエクスポート |
 | Export… | 导出… | エクスポート… |
 
-- **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default) or **Show context menu**.
+- **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.

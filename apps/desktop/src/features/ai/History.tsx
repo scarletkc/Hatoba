@@ -6,6 +6,7 @@ import { formatRelative, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { deleteConversation, exportConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
 import { sortConversations } from "./models";
 import { conversationPlace, placeName } from "./place";
@@ -356,7 +357,7 @@ function TitleInput({ initial, onDone }: { initial: string; onDone: (title: stri
       onBlur={() => finish(value)}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+        if (e.key === "Enter" && !isImeEvent(e)) {
           e.preventDefault();
           finish(value);
         } else if (e.key === "Escape") {

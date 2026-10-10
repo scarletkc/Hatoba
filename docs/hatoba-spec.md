@@ -377,12 +377,12 @@ interface McpServer {            // P2, §13.9
 interface Settings {             // Fixed ID "settings", a single item
   type: "settings";
   terminal: {
-    font_family: string;
+    font_family: string;        // "Cascadia Mono" for a new vault, "Menlo" when created on macOS
     font_size: number;
     theme: "system" | "light" | "dark";
     cursor_style: "block" | "bar" | "underline";
     scrollback: number;         // 10000 by default
-    right_click?: "copy_paste" | "menu"; // WIN-05, "copy_paste" while absent
+    right_click?: "copy_paste" | "menu"; // WIN-05, "copy_paste" while absent ("menu" on macOS)
     confirm_multiline_paste?: boolean;   // TERM-04, true while absent
   };
   auto_lock_minutes: number;
@@ -398,7 +398,7 @@ interface Settings {             // Fixed ID "settings", a single item
 }
 ```
 
-`terminal.right_click` and `terminal.confirm_multiline_paste` were device-local in earlier versions, which do not write them. Each stays absent until it is set to a value other than its default. After the upgrade, each device moves its own values into the fields that are still absent, under the same rule, and does this once. With sync off, the move happens right after unlock. With sync on, it waits for the first successful sync round after unlock, so it changes the latest `Settings` the server had: a value already set there is kept, and edits other devices had already uploaded are not outdated by the move's newer `updated_at` (§6.4). Until then the values stay in the device-local preferences. The move then uploads like any other edit.
+`terminal.right_click` and `terminal.confirm_multiline_paste` were device-local in earlier versions, which do not write them. Each stays absent until it is set to a value other than its default (for `right_click`, the default of the platform the device runs on). After the upgrade, each device moves its own values into the fields that are still absent, under the same rule, and does this once. With sync off, the move happens right after unlock. With sync on, it waits for the first successful sync round after unlock, so it changes the latest `Settings` the server had: a value already set there is kept, and edits other devices had already uploaded are not outdated by the move's newer `updated_at` (§6.4). Until then the values stay in the device-local preferences. The move then uploads like any other edit.
 
 Device-local data such as the last connection time and the window size is **not synced**. Otherwise every connection would cause a write and a potential conflict.
 
@@ -934,7 +934,7 @@ The design has a macOS look, and the first Windows release adapts it as below. I
 | WIN-02 | Font mapping: the UI font SF Pro becomes `Segoe UI Variable`, falling back to `Segoe UI` on Windows 10. The terminal font SF Mono becomes `Cascadia Mono`, falling back to `Consolas`. Chinese falls back to `Microsoft YaHei UI`, and Japanese to `Yu Gothic UI` | P0 |
 | WIN-03 | High DPI and multiple monitors: sharp at 100%, 125%, 150%, and 200% scaling, with no blur or misplacement when the window moves between monitors with different scaling | P0 |
 | WIN-04 | Shortcuts (see the table below). While the terminal has focus, Ctrl+letter must reach the remote side unchanged (Ctrl+L clears the screen, Ctrl+W deletes a word, Ctrl+K deletes to the end of the line, and so on), so every app-level shortcut adds Shift | P0 |
-| WIN-05 | Terminal copy and paste: Ctrl+C copies when text is selected and sends `^C` otherwise. Ctrl+V and Ctrl+Shift+V both paste. Right-click can be set to copy if text is selected and paste otherwise (the PuTTY habit), or to open a menu | P0 |
+| WIN-05 | Terminal copy and paste: Ctrl+C copies when text is selected and sends `^C` otherwise. Ctrl+V and Ctrl+Shift+V both paste. Right-click can be set to copy if text is selected and paste otherwise (the PuTTY habit), or to open a menu. The default is the PuTTY habit, except on macOS, where it is the menu | P0 |
 | WIN-06 | WebView2 runtime: the installer embeds the bootstrapper and installs the runtime automatically when Windows 10 lacks it | P0 |
 | WIN-07 | Backdrop: the design's translucent sidebar uses Mica on Windows 11 and falls back to the design's solid color on Windows 10 | P1 |
 | WIN-08 | Follow the system light or dark mode and update live when it changes | P0 |
@@ -942,7 +942,7 @@ The design has a macOS look, and the first Windows release adapts it as below. I
 
 | Action | Windows / Linux | macOS (P1) |
 |---|---|---|
-| Search hosts | Ctrl+Shift+K (Ctrl+K also works when the terminal does not have focus) | ⌘K |
+| Search hosts | Ctrl+Shift+K (Ctrl+K also works when the terminal does not have focus) | ⌘⇧K (⌘K also works when the terminal does not have focus, and clears the terminal while it has) |
 | New tab | Ctrl+Shift+T | ⌘T |
 | Close tab | Ctrl+Shift+W | ⌘W |
 | Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab | ⌃Tab / ⌃⇧Tab |

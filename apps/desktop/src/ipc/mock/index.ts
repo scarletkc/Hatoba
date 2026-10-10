@@ -17,6 +17,7 @@ import type {
 } from "../types";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { sameTarget } from "@/features/hosts/quickConnect";
+import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
@@ -66,6 +67,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  */
 export function createMockApi(): HatobaApi {
   const q = new URLSearchParams(location.search);
+  const platformParam = q.get("platform");
+  const platform = platformParam === "macos" || platformParam === "linux" || platformParam === "windows" ? platformParam : "windows";
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
@@ -81,6 +84,8 @@ export function createMockApi(): HatobaApi {
   let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
   let proxies: ProxyView[] = demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p }));
   let settings = structuredClone(D.SETTINGS);
+  settings.terminal.font_family = defaultTerminalFont(platform);
+  settings.terminal.right_click = defaultRightClick(platform);
   let prefs: LocalPrefs = loadPrefs();
   const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
@@ -203,11 +208,7 @@ export function createMockApi(): HatobaApi {
       hosts: async () => hosts,
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
-    app_info: async () => {
-      const p = q.get("platform");
-      const platform = p === "macos" || p === "linux" || p === "windows" ? p : "windows";
-      return { version, platform, mica: false };
-    },
+    app_info: async () => ({ version, platform, mica: false }),
     update_check: async () => {
       await delay(800);
       if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");

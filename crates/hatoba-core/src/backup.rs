@@ -243,7 +243,7 @@ mod tests {
             "to-delete",
             PW,
             "\"type\"",
-            "Cascadia",
+            crate::model::DEFAULT_FONT_FAMILY,
         ] {
             assert!(!raw.contains(needle), "{needle} leaked into the backup");
         }

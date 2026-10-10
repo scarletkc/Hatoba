@@ -6,6 +6,7 @@ import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
+import { isImeEvent } from "@/lib/ime";
 import { refreshSyncStatus } from "./syncUtils";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
 import s from "./Wizard.module.css";
@@ -80,7 +81,7 @@ export function PasswordStep({ submit, onBack }: { submit: (password: string) =>
             setPassword(e.target.value);
             setError(null);
           }}
-          onKeyDown={(e) => e.key === "Enter" && void finish()}
+          onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void finish()}
         />
       </Field>
       <Callout icon="info" iconColor="var(--orange)" title={t("sync.loss.title")}>

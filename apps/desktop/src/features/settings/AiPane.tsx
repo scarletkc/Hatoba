@@ -9,6 +9,7 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import {
   TOOL_LIMIT_DEFAULT,
   modelChoices,
@@ -433,7 +434,7 @@ function DeviceSection() {
               value={limitText}
               onChange={(e) => setLimitText(e.target.value)}
               onBlur={commitLimit}
-              onKeyDown={(e) => e.key === "Enter" && commitLimit()}
+              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && commitLimit()}
             />
           </div>
         </SettingRow>

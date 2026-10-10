@@ -12,6 +12,7 @@ import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
 import { proxySummary } from "@/features/settings/proxyLogic";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { ENV_FOCUS_ID, EnvVarsSection } from "./EnvVarsSection";
 import { envInput, envRows, envTooLarge, validateEnvRows, type EnvRow } from "./envVars";
 import { ForwardsSection } from "./ForwardsSection";
@@ -273,7 +274,7 @@ export function HostEditPage({
   // Enter in a single-line field saves (tag input handles its own Enter).
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement;
-    if (e.key === "Enter" && !e.defaultPrevented && target.tagName === "INPUT" && target.getAttribute("type") !== "checkbox") {
+    if (e.key === "Enter" && !isImeEvent(e) && !e.defaultPrevented && target.tagName === "INPUT" && target.getAttribute("type") !== "checkbox") {
       e.preventDefault();
       void save();
     }

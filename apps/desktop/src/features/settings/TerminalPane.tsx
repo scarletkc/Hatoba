@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
+import { useApp } from "@/app/store";
 import { Icon, Segmented, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { TerminalSettings } from "@/ipc/types";
+import { isImeEvent } from "@/lib/ime";
+import { defaultTerminalFont } from "@/lib/platform";
 import { Pane, SettingRow, type PaneProps } from "./shared";
 import s from "./TerminalPane.module.css";
 
-const DEFAULT_FONT = "Cascadia Mono";
 const SIZE_MIN = 10;
 const SIZE_MAX = 24;
 const SCROLLBACK = [1000, 5000, 10000, 50000];
@@ -15,9 +17,10 @@ const SCROLLBACK = [1000, 5000, 10000, 50000];
 /** Settings → Terminal (TERM-05 / TERM-06): font, cursor and scrollback. */
 export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
+  const defaultFont = defaultTerminalFont(useApp((a) => a.info.platform));
   const term = settings?.terminal;
   const fontFamily = term?.font_family;
-  const [font, setFont] = useState(fontFamily ?? DEFAULT_FONT);
+  const [font, setFont] = useState(fontFamily ?? defaultFont);
   useEffect(() => {
     if (fontFamily !== undefined) setFont(fontFamily);
   }, [fontFamily]);
@@ -25,7 +28,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   if (!term) return <Pane>{null}</Pane>;
 
   const commitFont = () => {
-    const next = font.trim() || DEFAULT_FONT;
+    const next = font.trim() || defaultFont;
     setFont(next);
     if (next !== term.font_family) updateTerminal({ font_family: next });
   };
@@ -42,10 +45,10 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
               mono
               aria-label={t("settings.term.font")}
               value={font}
-              placeholder={t("settings.term.fontPlaceholder")}
+              placeholder={defaultFont}
               onChange={(e) => setFont(e.target.value)}
               onBlur={commitFont}
-              onKeyDown={(e) => e.key === "Enter" && commitFont()}
+              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && commitFont()}
             />
           </div>
         </SettingRow>

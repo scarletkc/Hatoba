@@ -4,7 +4,7 @@
 
 The home tab shows the host list for the sidebar item that is selected: **All Hosts**, **Favorites**, **Recent** (hosts that have been connected before), a group, or a tag. A host is one saved SSH destination. Groups are flat (one level) and a host belongs to at most one group; tags are free text and a host can have several.
 
-- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘K focuses it), the sort button, and **New Host**. The search box also connects to hosts that are not saved; see Quick connect below.
+- The header has a search box (fuzzy match on name, address, user name and tags; Ctrl+Shift+K or ⌘⇧K focuses it), the sort button, and **New Host**. The search box also connects to hosts that are not saved; see Quick connect below.
 - Each row shows the name, `user@address:port`, the jump host if any, tags, and the time of the last connection. The dot is green when the host is connected or answers a TCP probe, grey otherwise. A host whose latest attempt in this launch failed shows **Failed** in red.
 - To connect: double-click a row, select it and press Enter, or click **Connect**. Up and down move the selection, and typing starts a search. The same host can be opened in several tabs.
 - Right-click a row for its menu.

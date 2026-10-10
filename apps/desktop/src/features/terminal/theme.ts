@@ -3,17 +3,20 @@ import { create } from "zustand";
 import { isDarkTheme, useApp } from "@/app/store";
 import { api } from "@/ipc/api";
 import type { TerminalSettings } from "@/ipc/types";
+import { defaultRightClick, defaultTerminalFont, type Platform } from "@/lib/platform";
 
 /** Used until `settings_get` answers, and when it fails. */
-export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
-  font_family: "Cascadia Mono",
-  font_size: 13,
-  theme: "dark",
-  cursor_style: "block",
-  scrollback: 10_000,
-  right_click: "copy_paste",
-  confirm_multiline_paste: true,
-};
+export function defaultTerminalSettings(platform: Platform): TerminalSettings {
+  return {
+    font_family: defaultTerminalFont(platform),
+    font_size: 13,
+    theme: "dark",
+    cursor_style: "block",
+    scrollback: 10_000,
+    right_click: defaultRightClick(platform),
+    confirm_multiline_paste: true,
+  };
+}
 
 interface TermSettingsState {
   settings: TerminalSettings;
@@ -24,12 +27,12 @@ interface TermSettingsState {
 
 /** Synced terminal settings (TERM-04/05/06, WIN-05), cached for every terminal. Re-read when the settings window closes. */
 export const useTermSettings = create<TermSettingsState>((set) => ({
-  settings: DEFAULT_TERMINAL_SETTINGS,
+  settings: defaultTerminalSettings(useApp.getState().info.platform),
   appearanceTick: 0,
   reload: async () => {
     try {
       const { terminal } = await api.settings_get();
-      set({ settings: { ...DEFAULT_TERMINAL_SETTINGS, ...terminal } });
+      set({ settings: { ...defaultTerminalSettings(useApp.getState().info.platform), ...terminal } });
     } catch {
       /* locked or unavailable: keep what we have */
     }

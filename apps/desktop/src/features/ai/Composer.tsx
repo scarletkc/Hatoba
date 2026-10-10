@@ -5,6 +5,7 @@ import { readClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
 import type { AiEffort, AiModelRef } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { isImeEvent } from "@/lib/ime";
 import { addPaste, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
@@ -97,7 +98,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     }
     // Enter sends, Shift+Enter adds a line, and nothing is sent while an IME is composing.
     if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (isImeEvent(e)) return;
     e.preventDefault();
     send();
   };

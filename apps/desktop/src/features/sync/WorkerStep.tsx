@@ -5,6 +5,7 @@ import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncConfigInput } from "@/ipc/types";
+import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, DEPLOY_URL, openExternal } from "./external";
 import { normalizeWorkerUrl, type WorkerForm } from "./wizardTypes";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
@@ -132,7 +133,7 @@ export function WorkerStep({
             invalid={test.status === "failed"}
             trailing={ok && !initialized ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
             onChange={(e) => update({ url: e.target.value, test: { status: "idle" } })}
-            onKeyDown={(e) => e.key === "Enter" && void runTest()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runTest()}
           />
         </Field>
         <Field label={t("sync.setupToken")} htmlFor={tokenId} hint={t("sync.setupToken.hint")}>
@@ -142,7 +143,7 @@ export function WorkerStep({
             secret
             value={form.token}
             onChange={(e) => update({ token: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && void runTest()}
+            onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runTest()}
           />
         </Field>
         <div className={s.testRow}>
