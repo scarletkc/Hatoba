@@ -384,5 +384,7 @@ fn into_entry(
         finish: assembled.finish,
         usage: Some(usage),
         raw: assembled.raw,
+        // The shell knows which tools the request offered and records it when it stores the entry.
+        terminal: None,
     }
 }

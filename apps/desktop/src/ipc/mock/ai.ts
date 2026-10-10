@@ -123,6 +123,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const zh = detectLocale() === "zh-CN";
   const convs = new Map<string, Conv>();
   const turns = new Map<string, Turn>();
+  /** By reply entry id: whether its request offered the terminal tools (AI-09). */
+  const replyTerminal = new Map<string, boolean>();
   let errorShown = false;
   let lastMs = 0;
   let seq = 0;
@@ -550,6 +552,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       finish: p.finish,
       usage,
     };
+    // Like Rust's `AssistantEntry.terminal` (AI-09), which the view does not carry.
+    replyTerminal.set(entry.entry_id, turn.context.tab);
     store(c, entry);
     turn.emit({ kind: "done", finish: p.finish });
     if (p.finish === "tool_calls") return;
@@ -606,15 +610,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * Like Rust's `notes_before` (AI-05, AI-09): a `host_change` note when the entries before the message
-   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), and
-   * a `model_change` note when the newest reply came from another model, unless a message without a
-   * reply noted that switch already. Returned as the text that goes before the message.
+   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), a
+   * `terminal_change` note when the message has the terminal tools and `terminalBefore` says there was
+   * none, or the other way round, and a `model_change` note when the newest reply came from another
+   * model, unless a message without a reply noted that switch already. Returned as the text that goes
+   * before the message.
    */
   async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
+    if (earlier.length === 0) return "";
     const hosts = (await deps.hosts?.()) ?? [];
     const to = hosts.find((h) => h.id === c.view.host_id)?.name ?? (context.target ? formatTarget(context.target) : undefined);
-    if (cameFrom !== null && to !== undefined && earlier.length > 0 && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
+    if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
+    if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
     const label = (providerId: string, modelId: string) => {
       const name = (providers.find((p) => p.id === providerId)?.models.find((m) => m.id === modelId)?.name ?? "").trim();
@@ -629,6 +637,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
     }
     return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
+  }
+
+  /**
+   * Like Rust's `terminal_before` (AI-09): what the newest reply's request offered, or what a
+   * `terminal_change` note says on a newer message without a reply; undefined when unknown.
+   */
+  function terminalBefore(earlier: AiEntryView[]): boolean | undefined {
+    for (const e of [...earlier].reverse()) {
+      if (e.role === "assistant") return replyTerminal.get(e.entry_id);
+      if (e.role !== "user") continue;
+      const note = parseMessage(e.text).notes.find((n) => n.kind === "terminal_change");
+      if (note?.kind === "terminal_change") return note.to === "attached";
+    }
+    return undefined;
   }
 
   /** The name of a host for a note: empty when it no longer exists. */
@@ -750,19 +772,24 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return c;
     };
     const user = (ms: number, text: string): AiEntryView => ({ role: "user", entry_id: newId(ms), created_at: ms, text });
-    const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => ({
-      role: "assistant",
-      entry_id: newId(ms),
-      created_at: ms,
-      provider_id: model[0],
-      model_id: model[1],
-      text,
-      reasoning: null,
-      tool_calls: [],
-      finish: "stop",
-      usage: { input_tokens: 3200, output_tokens: 240, estimated: false },
-      ...opts,
-    });
+    const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => {
+      const entry: Assistant = {
+        role: "assistant",
+        entry_id: newId(ms),
+        created_at: ms,
+        provider_id: model[0],
+        model_id: model[1],
+        text,
+        reasoning: null,
+        tool_calls: [],
+        finish: "stop",
+        usage: { input_tokens: 3200, output_tokens: 240, estimated: false },
+        ...opts,
+      };
+      // Every demo conversation was held in a connected tab of its host.
+      replyTerminal.set(entry.entry_id, true);
+      return entry;
+    };
     const result = (ms: number, callId: string, status: AiToolStatus, content: string): AiEntryView => ({ role: "tool", entry_id: newId(ms), created_at: ms, tool_call_id: callId, status, content });
     const SONNET: [string, string] = ["p-anthropic", "claude-sonnet-5-5"];
     const QWEN: [string, string] = ["p-ollama", "qwen3:8b"];
@@ -849,7 +876,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function settleRemote(c: Conv) {
     if (!c.runningUntil || Date.now() < c.runningUntil) return;
     c.runningUntil = 0;
-    c.entries.push({
+    const entry: Assistant = {
       role: "assistant",
       entry_id: newId(),
       created_at: Date.now(),
@@ -860,7 +887,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       tool_calls: [],
       finish: "stop",
       usage: { input_tokens: 4100, output_tokens: 40, estimated: false },
-    });
+    };
+    // The earlier page ran the turn in a connected tab.
+    replyTerminal.set(entry.entry_id, true);
+    c.entries.push(entry);
   }
 
   return {
@@ -1001,11 +1031,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // The stopped turn's cancelled results go with everything else after the message.
       stopTurn(id);
       // Like Rust: the earliest move the deleted messages noted still tells where the earlier screens came from.
-      let cameFrom: string | null =
-        c.entries
-          .slice(i)
-          .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
-          .find((n) => n.kind === "host_change")?.from ?? null;
+      const moved = c.entries
+        .slice(i)
+        .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
+        .find((n) => n.kind === "host_change");
+      let cameFrom: string | null = moved?.kind === "host_change" ? moved.from : null;
       c.entries = c.entries.slice(0, i);
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");

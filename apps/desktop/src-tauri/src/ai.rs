@@ -1615,6 +1615,11 @@ fn store_response(
     turn: &Turn,
     response: AssistantEntry,
 ) -> Result<String, Halt> {
+    // AI-09: the next message is noted when it has the other set of tools.
+    let response = AssistantEntry {
+        terminal: Some(turn.context.tab),
+        ..response
+    };
     let finish = response.finish;
     let shared = shared_call_ids(&response.tool_calls);
     let entry_id = {
@@ -2361,6 +2366,9 @@ fn title_of(text: &str) -> String {
 /// The tag of the note Hatoba puts before a message that moves the conversation to another
 /// host (AI-09).
 const HOST_CHANGE: &str = "host_change";
+/// The tag of the note Hatoba puts before a message whose requests offer the terminal tools when
+/// the newest reply's did not, or the other way round (AI-09).
+const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
 
@@ -2397,6 +2405,12 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
+    },
+    AttachmentKind {
+        tag: TERMINAL_CHANGE,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("to", "attached" | "detached")]),
     },
     AttachmentKind {
         tag: MODEL_CHANGE,
@@ -2541,12 +2555,15 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
     tools::model_label(model_id, name)
 }
 
-/// The notes Hatoba puts before a new message (spec §13.3), the host's first:
+/// The notes Hatoba puts before a new message (spec §13.3), in this order:
 ///
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
 ///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
 ///   `None` when the conversation did not move. `host_now` is the display name of the host (or
 ///   quick-connect target) the conversation is on now.
+/// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
+///   `earlier` tells the model, there was none before, or the other way round
+///   ([`terminal_before`]).
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
@@ -2558,11 +2575,17 @@ fn notes_before(
     context: &AiTurnContext,
 ) -> String {
     let mut notes = String::new();
-    // A message with nothing before it has no earlier screens to tell apart.
-    if let (Some(from), Some(to), false) = (came_from, host_now, earlier.is_empty())
+    // A message with nothing before it has no earlier screens or replies to tell apart.
+    if earlier.is_empty() {
+        return notes;
+    }
+    if let (Some(from), Some(to)) = (came_from, host_now)
         && from != to
     {
         notes.push_str(&tools::host_change_block(from, to));
+    }
+    if terminal_before(earlier) == Some(!context.tab) {
+        notes.push_str(&tools::terminal_change_block(context.tab));
     }
     let to = stored_model_label(v, &context.provider_id, &context.model_id);
     for entry in earlier.iter().rev() {
@@ -2583,6 +2606,25 @@ fn notes_before(
         }
     }
     notes
+}
+
+/// Whether a terminal was attached as far as `earlier` (the entries before a new message) tells
+/// the model (AI-09): what the newest reply's request offered, or what a `terminal_change` note
+/// says on a newer message that got no reply. `None` when the newest reply is from before replies
+/// recorded it, or when there is no reply.
+fn terminal_before(earlier: &[AiEntry]) -> Option<bool> {
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => return a.terminal,
+            EntryBody::User { text } => {
+                if let Some(to) = note_attr(text, TERMINAL_CHANGE, "to") {
+                    return Some(to == "attached");
+                }
+            }
+            EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
+        }
+    }
+    None
 }
 
 // ---- history search (AI-24) ----

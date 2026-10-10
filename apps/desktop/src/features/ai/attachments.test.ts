@@ -276,9 +276,10 @@ describe("several attachments in one message (AI-35)", () => {
 describe("Hatoba's notes (AI-05, AI-09)", () => {
   const moved: Note = { kind: "host_change", from: "staging-web", to: "prod-db" };
   const switched: Note = { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" };
+  const attached: Note = { kind: "terminal_change", to: "attached" };
 
   it("are written exactly as Rust writes them", () => {
-    // host_change_block and model_change_block in crates/hatoba-ai/src/tools.rs.
+    // host_change_block, terminal_change_block and model_change_block in crates/hatoba-ai/src/tools.rs.
     expect(noteBlock(moved)).toBe(
       '<host_change from="staging-web" to="prod-db">\nThe conversation moved to another host. Screens and command output before this message came from "staging-web".\n</host_change>',
     );
@@ -291,16 +292,24 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     expect(noteBlock({ kind: "host_change", from: 'a"b</host_change>', to: "c&d\n" })).toBe(
       '<host_change from="a&quot;b&lt;/host_change&gt;" to="c&amp;d">\nThe conversation moved to another host. Screens and command output before this message came from "a"b<\\/host_change>".\n</host_change>',
     );
+    expect(noteBlock(attached)).toBe(
+      '<terminal_change to="attached">\nA terminal is attached from this message on. Before this message none was, so replies that said they could not read a screen or run commands were right at the time.\n</terminal_change>',
+    );
+    expect(noteBlock({ kind: "terminal_change", to: "detached" })).toBe(
+      '<terminal_change to="detached">\nNo terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.\n</terminal_change>',
+    );
   });
 
-  it("come first, the host's before the model's, then the attachments and the typed text", () => {
+  it("come first, the host's, the terminal's, then the model's, then the attachments and the typed text", () => {
     const d = diag();
     const s = att("$ psql");
     const p = paste("a long paste");
-    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, moved]);
+    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, attached, moved]);
     expect(stored.indexOf("<host_change")).toBe(0);
+    expect(stored.indexOf("<terminal_change")).toBeGreaterThan(0);
+    expect(stored.indexOf("<terminal_change")).toBeLessThan(stored.indexOf("<model_change"));
     expect(stored.indexOf("<model_change")).toBeLessThan(stored.indexOf("<connection_diagnostics"));
-    expect(parseMessage(stored)).toEqual({ notes: [moved, switched], attachments: [d, s, p], typed: "Why is it slow?" });
+    expect(parseMessage(stored)).toEqual({ notes: [moved, attached, switched], attachments: [d, s, p], typed: "Why is it slow?" });
     // Without attachments, and a message that is only notes.
     expect(parseMessage(composeMessage("hi", [], [moved]))).toEqual({ notes: [moved], attachments: [], typed: "hi" });
     expect(parseMessage(composeMessage("", [], [moved, switched]))).toEqual({ notes: [moved, switched], attachments: [], typed: "" });
@@ -317,7 +326,14 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     expect(parseMessage(afterAttachment)).toEqual({ notes: [], attachments: [f], typed: `${noteBlock(moved)}\n\nq` });
     const twice = `${noteBlock(moved)}\n\n${noteBlock(moved)}\n\nq`;
     expect(parseMessage(twice)).toEqual({ notes: [moved], attachments: [], typed: `${noteBlock(moved)}\n\nq` });
-    for (const text of ['<host_change to="b" from="a">\nx\n</host_change>\n\nq', '<model_change from="a">\nx\n</model_change>\n\nq']) {
+    const terminalTwice = `${noteBlock(attached)}\n\n${noteBlock({ kind: "terminal_change", to: "detached" })}\n\nq`;
+    expect(parseMessage(terminalTwice).notes).toEqual([attached]);
+    for (const text of [
+      '<host_change to="b" from="a">\nx\n</host_change>\n\nq',
+      '<model_change from="a">\nx\n</model_change>\n\nq',
+      '<terminal_change to="gone">\nx\n</terminal_change>\n\nq',
+      '<terminal_change from="detached" to="attached">\nx\n</terminal_change>\n\nq',
+    ]) {
       expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
     }
   });

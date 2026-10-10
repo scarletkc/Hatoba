@@ -66,7 +66,7 @@ function toolCall(t: Tr, call: AiToolCall, result: ToolEntry | undefined): strin
 /**
  * AI-25: the conversation as Markdown. The user's and the assistant's messages under headings,
  * reasoning as a quote, each tool call with its input and result in fenced blocks, and summaries, the
- * start of the context, and moves to another host or model marked.
+ * start of the context, and moves to another host or model and a terminal attached or gone marked.
  */
 export function conversationMarkdown({ conversation, entries, host }: ExportSource, { t, time }: ExportFormat): string {
   const results = new Map<string, ToolEntry>();
