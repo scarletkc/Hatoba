@@ -47,6 +47,7 @@ use crate::dto::{
     McpTransportView,
 };
 use crate::error::{AppError, AppResult};
+use crate::platform;
 
 /// How long a server gets to start and answer `initialize` (and each `tools/list` page). Long
 /// enough for `npx -y` to download a package the first time.
@@ -202,6 +203,28 @@ pub fn transport_config(t: &McpTransport) -> McpTransportConfig {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
         },
+    }
+}
+
+/// A `stdio` server's configuration with `path` as its `PATH`, unless the server sets its own.
+/// The server is looked up on it and started with it. `http` servers and `None` change nothing.
+pub fn with_default_path(
+    config: McpTransportConfig,
+    path: Option<&std::ffi::OsStr>,
+) -> McpTransportConfig {
+    match (config, path) {
+        (
+            McpTransportConfig::Stdio {
+                command,
+                args,
+                mut env,
+            },
+            Some(path),
+        ) if !env.iter().any(|(name, _)| name == "PATH") => {
+            env.push(("PATH".into(), path.to_string_lossy().into_owned().into()));
+            McpTransportConfig::Stdio { command, args, env }
+        }
+        (config, _) => config,
     }
 }
 
@@ -823,6 +846,16 @@ impl McpManager {
                 }
                 tracing::info!(server_id = %id, transport = config.kind_str(), "MCP server starting");
                 let http = manager.http();
+                // The login shell's PATH on macOS, resolved when the first stdio server starts.
+                let path = if matches!(config, McpTransportConfig::Stdio { .. }) {
+                    tauri::async_runtime::spawn_blocking(platform::shell_path::default_path)
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+                let config = with_default_path(config.clone(), path);
                 match McpConnection::connect_with_stderr(&config, &http, START_TIMEOUT, stderr)
                     .await
                 {

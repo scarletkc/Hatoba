@@ -459,7 +459,7 @@ fn conflict_suffix(app: &AppHandle) -> &'static str {
         Ok(Language::ZhCn) => "zh".to_owned(),
         Ok(Language::Ja) => "ja".to_owned(),
         Ok(Language::En) => "en".to_owned(),
-        _ => sys_locale(),
+        _ => crate::platform::system::locale(),
     };
     if lang.starts_with("zh") {
         "（冲突副本）"
@@ -468,13 +468,6 @@ fn conflict_suffix(app: &AppHandle) -> &'static str {
     } else {
         " (conflict copy)"
     }
-}
-
-fn sys_locale() -> String {
-    std::env::var("LANG")
-        .or_else(|_| std::env::var("LC_ALL"))
-        .unwrap_or_default()
-        .to_lowercase()
 }
 
 /// Runs one sync round now. Errors are reflected in the status and returned. A round whose
@@ -613,18 +606,8 @@ pub fn spawn_scheduler(app: AppHandle) {
 
 /// Device name and platform shown in the device list (stored encrypted on the server).
 pub fn device_info() -> hatoba_core::platform::DeviceInfo {
-    let name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .ok()
-        .filter(|n| !n.trim().is_empty())
-        .or_else(|| {
-            std::fs::read_to_string("/etc/hostname")
-                .ok()
-                .map(|s| s.trim().to_owned())
-        })
-        .unwrap_or_else(|| "Hatoba".to_owned());
     hatoba_core::platform::DeviceInfo {
-        name,
+        name: crate::platform::system::device_name(),
         platform: crate::platform::os_label(),
     }
 }

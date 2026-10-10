@@ -934,3 +934,36 @@ async fn locking_aborts_a_start_in_flight_and_kills_its_process() {
     assert_eq!(events.states(&slow).last(), Some(&McpServerState::Stopped));
     eventually("the server process to exit", || !alive(pid)).await;
 }
+
+fn stdio_config(env: &[(&str, &str)]) -> hatoba_ai::mcp::McpTransportConfig {
+    hatoba_ai::mcp::McpTransportConfig::Stdio {
+        command: "npx".into(),
+        args: vec!["-y".into(), "server".into()],
+        env: env
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), Zeroizing::new((*v).to_owned())))
+            .collect(),
+    }
+}
+
+#[test]
+fn a_stdio_server_gets_the_default_path_unless_it_sets_one() {
+    use super::with_default_path;
+    use hatoba_ai::mcp::McpTransportConfig;
+
+    let default = std::ffi::OsStr::new("/opt/homebrew/bin:/usr/bin");
+    assert_eq!(
+        with_default_path(stdio_config(&[("API_KEY", "k")]), Some(default)),
+        stdio_config(&[("API_KEY", "k"), ("PATH", "/opt/homebrew/bin:/usr/bin")])
+    );
+    // The server's own PATH wins, and nothing changes where there is no default.
+    let own = stdio_config(&[("PATH", "/mine")]);
+    assert_eq!(with_default_path(own.clone(), Some(default)), own);
+    let plain = stdio_config(&[]);
+    assert_eq!(with_default_path(plain.clone(), None), plain);
+    let remote = McpTransportConfig::Http {
+        url: "https://mcp.example/mcp".into(),
+        headers: Vec::new(),
+    };
+    assert_eq!(with_default_path(remote.clone(), Some(default)), remote);
+}

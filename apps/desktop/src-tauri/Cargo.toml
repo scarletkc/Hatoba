@@ -72,6 +72,12 @@ windows = { version = "0.62", features = [
   "Foundation",
 ] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# `killpg` for the login shell that resolves the MCP servers' PATH.
+libc = "0.2"
+# The user's preferred languages (`NSLocale`); a Finder-launched app has no `LANG`.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSLocale", "NSString"] }
+
 [features]
 # Enables devtools in release builds. Never enabled for distributed builds (SEC-05).
 devtools = ["tauri/devtools"]
