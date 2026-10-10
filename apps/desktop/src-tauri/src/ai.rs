@@ -2841,6 +2841,11 @@ pub fn conversation_view_at(
         id: id.to_owned(),
         title: c.title.clone(),
         host_id: c.host_id.clone(),
+        quick_target: c.quick_target.as_ref().map(|t| QuickTarget {
+            address: t.address.clone(),
+            port: t.port,
+            username: t.username.clone(),
+        }),
         pinned: c.pinned,
         context_start: c.context_start.clone(),
         effort: c.effort.map(effort_view),

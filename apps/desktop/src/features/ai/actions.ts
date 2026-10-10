@@ -1,9 +1,9 @@
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
-import { useTabs, type SessionTab } from "@/app/tabs";
+import { useTabs, type SessionTab, type TabSource } from "@/app/tabs";
 import { confirm, toast } from "@/components/overlay";
-import { connectHost } from "@/features/terminal/connect";
+import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -104,22 +104,24 @@ export function slotEffort(slotId: string): AiEffort | null {
 }
 
 /**
- * What a request may act on: the tab's host and, when connected, its terminal tools and session,
- * whose server's identification string the system prompt states (AI-08, AI-09, §13.1).
+ * What a request may act on: the tab's host or quick-connect target and, when connected, its terminal
+ * tools and session, whose server's identification string the system prompt states (AI-08, AI-09,
+ * §13.1). The home tab names the conversation's own host or target, which leaves it where it is.
  */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
   if (!model) return null;
-  const target = attachedTab(slotId);
-  const connected = !!target && target.tab.status === "connected";
+  const attached = attachedTab(slotId);
+  const connected = !!attached && attached.tab.status === "connected";
+  const conversation = getSlot(slotId).conversation;
   return {
     provider_id: model.provider_id,
     model_id: model.model_id,
     effort: slotEffort(slotId),
-    host_id: target ? target.tab.hostId : (getSlot(slotId).conversation?.host_id ?? null),
-    target: target?.tab.target ?? null,
+    host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
+    target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
     tab: connected,
-    session_id: connected ? (target.tab.sessionId ?? null) : null,
+    session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: getSlot(slotId).mcpOff,
   };
 }
@@ -714,10 +716,10 @@ export async function openConversation(slotId: string, id: string, reveal: strin
   await reloadSlot(slotId);
 }
 
-/** AI-09 "Connect to host": opens a tab for the host and attaches the home tab's conversation to it. */
-export async function connectConversation(hostId: string) {
+/** AI-09 "Connect to host": opens a tab on the host or quick-connect target (HOST-12) and attaches the home tab's conversation to it. */
+export async function connectConversation(source: TabSource) {
   const before = new Set(useTabs.getState().tabs.map((x) => x.id));
-  await connectHost(hostId);
+  await (source.hostId !== null ? connectHost(source.hostId) : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
 }

@@ -16,6 +16,7 @@ const conversation = (effort: AiConversationView["effort"]): AiConversationView 
   id: "c1",
   title: "t",
   host_id: null,
+  quick_target: null,
   pinned: false,
   context_start: null,
   effort,

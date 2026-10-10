@@ -3118,6 +3118,44 @@ async fn a_move_off_a_quick_connection_is_noted_from_its_target() {
 }
 
 #[tokio::test]
+async fn the_home_tab_names_the_target_its_conversation_is_on() {
+    use hatoba_ai::tools::terminal_change_block;
+
+    let f = Fixture::new(vec![answer("One."), answer("Two.")]).await;
+    let (conv, _) = f.exchange(None, "one", f.quick("10.0.0.9")).await;
+    // The panel shows the target (AI-09), and the home tab sends it, as it sends a saved host.
+    assert_eq!(
+        f.detail(&conv).conversation.quick_target,
+        Some(QuickTarget {
+            address: "10.0.0.9".into(),
+            port: 22,
+            username: "root".into(),
+        })
+    );
+    let home = AiTurnContext {
+        tab: false,
+        ..f.quick("10.0.0.9")
+    };
+    f.exchange(Some(&conv), "two", home).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "one".to_owned(),
+            format!("{}two", terminal_change_block(false))
+        ]
+    );
+    assert_eq!(
+        f.recorded_place(&conv),
+        (None, Some("root@10.0.0.9:22".to_owned()))
+    );
+    let system = system_of(&f.requests().await[1]);
+    assert!(
+        system.contains("This conversation is about the host \"root@10.0.0.9:22\"."),
+        "{system}"
+    );
+}
+
+#[tokio::test]
 async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
     let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     // Save as Host… (HOST-12): the same address, port, and user.

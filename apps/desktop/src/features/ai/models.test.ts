@@ -56,6 +56,7 @@ describe("sortConversations (AI-23)", () => {
     id,
     title: id,
     host_id: null,
+    quick_target: null,
     pinned,
     context_start: null,
     effort: null,

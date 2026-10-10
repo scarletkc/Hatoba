@@ -15,6 +15,7 @@ import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
 import { conversationModel, hasModels } from "./models";
+import { connectionFor, movedFrom } from "./place";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
 import s from "./AiPanel.module.css";
 
@@ -38,7 +39,6 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const tab = useTabs((st) => (slotId === HOME_SLOT ? undefined : st.tabs.find((x) => x.id === slotId)));
   const hosts = useVaultData((st) => st.hosts);
   const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
-  const convHost = slot.conversation?.host_id ? hosts.find((h) => h.id === slot.conversation?.host_id) : undefined;
   const [view, setView] = useState<"chat" | "history">("chat");
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -175,7 +175,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
         <NoProvider none={catalog.providers.length === 0} />
       ) : (
         <>
-          <Notices slotId={slotId} slot={slot} tab={tab} tabHost={tabHost} convHost={convHost} />
+          <Notices slotId={slotId} slot={slot} tab={tab} tabHost={tabHost} hosts={hosts} />
           {slot.loadFailed ? (
             <div className={s.center}>
               <span>{t("ai.loadFailed")}</span>
@@ -260,23 +260,24 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
 }
 
 /**
- * The tab's state: no terminal (AI-09), disconnected (AI-08), a conversation from another host, or the
- * home tab's conversation to continue here (AI-09).
+ * The tab's state: no terminal (AI-09), disconnected (AI-08), a conversation from another host or
+ * quick-connect target, or the home tab's conversation to continue here (AI-09).
  */
-function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; convHost: HostView | undefined }) {
+function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; hosts: HostView[] }) {
   const t = useT();
   // The title of the home tab's conversation while this tab offers to continue it (AI-09).
   const homeTitle = useAi((st) => (tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null));
   const items: ReactNode[] = [];
   if (!tab) {
-    if (convHost)
+    const connection = slot.conversation ? connectionFor(slot.conversation, hosts) : null;
+    if (connection)
       items.push(
         <Notice
           key="tab"
           icon={<Icon name="terminal-window" size={14} />}
           action={
-            <Button size="xs" icon="plugs-connected" onClick={() => void connectConversation(convHost.id)}>
-              {t("ai.connectTo", { host: convHost.name })}
+            <Button size="xs" icon="plugs-connected" onClick={() => void connectConversation(connection.source)}>
+              {t("ai.connectTo", { host: connection.name })}
             </Button>
           }
         >
@@ -316,11 +317,12 @@ function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slo
           {t("ai.notice.homeConversation", { title: homeTitle || t("ai.untitled") })}
         </Notice>,
       );
-    const convHostId = slot.conversation?.host_id;
-    if (convHostId && convHostId !== tab.hostId)
+    // Only for a move the next message notes, named as its divider will name them.
+    const move = slot.conversation ? movedFrom(slot.conversation, tab, hosts) : null;
+    if (move)
       items.push(
         <Notice key="move" icon={<Icon name="arrows-left-right" size={14} />}>
-          {t("ai.notice.moveHost", { from: convHost?.name ?? t("ai.history.hostGone"), to: name })}
+          {t("ai.notice.moveHost", { from: move.from || t("ai.history.hostGone"), to: move.to })}
         </Notice>,
       );
   }

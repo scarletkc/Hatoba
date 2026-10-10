@@ -8,6 +8,7 @@ import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { deleteConversation, exportConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
 import { sortConversations } from "./models";
+import { conversationPlace, placeName } from "./place";
 import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
 import { useAi } from "./store";
 import s from "./History.module.css";
@@ -41,7 +42,7 @@ function useSearch(query: string): [Search, () => void] {
   return [result, () => setRetry((n) => n + 1)];
 }
 
-/** AI-23: conversations by last activity, pinned first, with title, host and time. */
+/** AI-23: conversations by last activity, pinned first, with title, host or quick-connect target, and time. */
 export function History({ slotId, currentId, onClose }: { slotId: string; currentId: string | null; onClose: () => void }) {
   const t = useT();
   const history = useAi((st) => st.history);
@@ -133,7 +134,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
             </div>
           )}
           {list?.map((c) => {
-            const host = hosts.find((h) => h.id === c.host_id);
+            const place = conversationPlace(c, hosts);
             const menuOpen = !!menu.anchor?.trigger && menuRow === c.id;
             return (
               <div
@@ -159,14 +160,9 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                     </div>
                   )}
                   <div className={s.rowMeta}>
-                    {host ? (
-                      <>
-                        <Icon name="hard-drives" size={11} />
-                        <span className={s.metaHost}>{host.name}</span>
-                      </>
-                    ) : (
-                      <span className={s.metaHost}>{c.host_id ? t("ai.history.hostGone") : t("ai.history.noHost")}</span>
-                    )}
+                    {place.kind === "host" && <Icon name="hard-drives" size={11} />}
+                    {place.kind === "target" && <Icon name="terminal-window" size={11} />}
+                    <span className={s.metaHost}>{placeName(t, place)}</span>
                     <span className={s.dot}>·</span>
                     <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
                   </div>
@@ -298,7 +294,6 @@ function SearchResults({
       {search.hits.map((hit) => {
         const c = history?.find((x) => x.id === hit.conversation_id);
         const title = c?.title || t("ai.untitled");
-        const host = c?.host_id ? hosts.find((h) => h.id === c.host_id) : undefined;
         return (
           <button
             key={hit.conversation_id}
@@ -321,7 +316,7 @@ function SearchResults({
               )}
               {c && (
                 <div className={s.rowMeta}>
-                  <span className={s.metaHost}>{host ? host.name : c.host_id ? t("ai.history.hostGone") : t("ai.history.noHost")}</span>
+                  <span className={s.metaHost}>{placeName(t, conversationPlace(c, hosts))}</span>
                   <span className={s.dot}>·</span>
                   <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
                 </div>
