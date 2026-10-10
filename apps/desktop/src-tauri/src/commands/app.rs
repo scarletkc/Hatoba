@@ -42,21 +42,30 @@ pub fn window_snap_overlay() {
     platform::window::snap_overlay();
 }
 
-/// Writes text to a path the user chose in the native save dialog (recovery code "Save as Text").
+/// The extensions `save_text_file` writes: the recovery code (.txt), a conversation export (.md,
+/// AI-25) and the MCP server export (.json).
+const TEXT_EXTENSIONS: [&str; 3] = ["txt", "md", "json"];
+
+/// Writes text to a path the user chose in the native save dialog.
 #[tauri::command]
 #[specta::specta]
 pub fn save_text_file(path: String, contents: String) -> AppResult<()> {
     let path = std::path::PathBuf::from(path);
     // Only plain-text files at an absolute, user-chosen location: this command is not a general
     // file-write primitive for the WebView.
-    let is_txt = path
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("txt"));
-    if !path.is_absolute() || path.is_dir() || !is_txt {
-        return Err(AppError::invalid("path", "choose a .txt file location"));
+    if !path.is_absolute() || path.is_dir() || !is_text_file(&path) {
+        return Err(AppError::invalid(
+            "path",
+            "choose a .txt, .md or .json file location",
+        ));
     }
     std::fs::write(&path, contents)?;
     Ok(())
+}
+
+fn is_text_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .is_some_and(|e| TEXT_EXTENSIONS.iter().any(|t| e.eq_ignore_ascii_case(t)))
 }
 
 /// Feeds the idle auto-lock timer (SEC-02).
@@ -64,4 +73,21 @@ pub fn save_text_file(path: String, contents: String) -> AppResult<()> {
 #[specta::specta]
 pub fn activity_ping(state: State<'_, AppState>) {
     state.touch_activity();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn saves_only_the_text_files_the_app_exports() {
+        for name in ["code.txt", "Chat.MD", "mcp-servers.json"] {
+            assert!(is_text_file(Path::new(name)), "{name}");
+        }
+        for name in ["run.exe", "notes", "config.json.bat", ".md"] {
+            assert!(!is_text_file(Path::new(name)), "{name}");
+        }
+    }
 }
