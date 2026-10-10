@@ -2,6 +2,7 @@
 //! `edit_file` and `write_file` (spec §13.4, "File tools"). The text work is in
 //! `hatoba_ai::files`, the exec scripts in `hatoba_ssh::remote_file`.
 
+use std::future::Future;
 use std::time::Duration;
 
 use hatoba_ai::entry::ToolStatus;
@@ -57,7 +58,34 @@ pub(super) struct Base {
     pub bytes: Option<Vec<u8>>,
 }
 
-/// Runs a file tool. `base` is what the approval card read for the call, if it showed one.
+/// Why a file tool or a preview ended without a result of its own.
+pub(super) enum Stop {
+    /// The turn stopped or the vault locked before a write began.
+    Cancelled,
+    /// The message for the model, or for the approval card.
+    Failed(String),
+}
+
+impl From<String> for Stop {
+    fn from(message: String) -> Self {
+        Self::Failed(message)
+    }
+}
+
+/// `work`, unless `cancel` fires first.
+async fn unless_cancelled<T>(
+    cancel: &CancellationToken,
+    work: impl Future<Output = Result<T, String>>,
+) -> Result<T, Stop> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(Stop::Cancelled),
+        result = work => result.map_err(Stop::Failed),
+    }
+}
+
+/// Runs a file tool. `base` is what the approval card read for the call, if it showed one. A stop
+/// ends the call while it reads, but never cuts a write off once it has begun.
 pub(super) async fn run(
     session: Option<SshSession>,
     job: FileJob,
@@ -67,89 +95,79 @@ pub(super) async fn run(
     let Some(session) = session else {
         return (ToolStatus::Error, DISCONNECTED.to_owned());
     };
-    let work = async {
-        match job {
-            FileJob::Read(args) => read(&session, &args).await,
-            FileJob::Edit(args) => edit(&session, &args, base).await,
-            FileJob::Write(args) => write(&session, &args, base).await,
-        }
+    let result = match job {
+        FileJob::Read(args) => unless_cancelled(cancel, read(&session, &args)).await,
+        FileJob::Edit(args) => edit(&session, &args, base, cancel).await,
+        FileJob::Write(args) => write(&session, &args, base, cancel).await,
     };
-    tokio::select! {
-        biased;
-        () = cancel.cancelled() => (ToolStatus::Cancelled, String::new()),
-        result = work => match result {
-            Ok(text) => (ToolStatus::Ok, text),
-            Err(_) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
-            Err(message) => (ToolStatus::Error, message),
-        },
+    match result {
+        Ok(text) => (ToolStatus::Ok, text),
+        Err(Stop::Cancelled) => (ToolStatus::Cancelled, String::new()),
+        Err(Stop::Failed(_)) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
+        Err(Stop::Failed(message)) => (ToolStatus::Error, message),
     }
 }
 
-/// The diff the approval card shows for an `edit_file` or `write_file` call, and what it read,
-/// to keep for the run. `cached` is what an earlier preview of the call read, used again for its
-/// path so that editing the call on the card does not read the file on every change.
-pub(super) async fn preview(
+/// An `edit_file` or `write_file` call for its approval card, with its path, or the preview that
+/// says why there is no diff to show.
+pub(super) fn preview_job(name: &str, arguments: &str) -> Result<(FileJob, String), AiFilePreview> {
+    match FileJob::parse(name, arguments) {
+        Some(Ok(job @ (FileJob::Edit(_) | FileJob::Write(_)))) => {
+            let path = job.path().to_owned();
+            Ok((job, path))
+        }
+        Some(Err(message)) => Err(failed_preview("", message)),
+        _ => Err(failed_preview("", format!("{name} shows no diff."))),
+    }
+}
+
+/// Reads the file the approval card shows a change to.
+pub(super) async fn read_base(
     session: Option<SshSession>,
-    name: &str,
-    arguments: &str,
-    cached: Option<Base>,
-) -> (AiFilePreview, Option<Base>) {
-    let job = match FileJob::parse(name, arguments) {
-        Some(Ok(job @ (FileJob::Edit(_) | FileJob::Write(_)))) => job,
-        Some(Err(message)) => return (failed_preview("", message), None),
-        _ => {
-            return (failed_preview("", format!("{name} shows no diff.")), None);
-        }
+    path: &str,
+    cancel: &CancellationToken,
+) -> Result<Base, Stop> {
+    let Some(session) = session else {
+        return Err(Stop::Failed(DISCONNECTED.to_owned()));
     };
-    let path = job.path().to_owned();
-    let base = match cached.filter(|b| b.path == path) {
-        Some(base) => base,
-        None => {
-            let Some(session) = session else {
-                return (failed_preview(&path, DISCONNECTED.to_owned()), None);
-            };
-            match read_bytes(&session, &path).await {
-                Ok(bytes) => Base {
-                    path: path.clone(),
-                    bytes,
-                },
-                Err(_) if session.is_closed() => {
-                    return (failed_preview(&path, DISCONNECTED.to_owned()), None);
-                }
-                Err(message) => return (failed_preview(&path, message), None),
-            }
-        }
-    };
-    let before = match base.bytes.as_deref().map(|b| decode(&path, b)).transpose() {
+    match unless_cancelled(cancel, read_bytes(&session, path)).await {
+        Ok(bytes) => Ok(Base {
+            path: path.to_owned(),
+            bytes,
+        }),
+        Err(Stop::Failed(_)) if session.is_closed() => Err(Stop::Failed(DISCONNECTED.to_owned())),
+        Err(stop) => Err(stop),
+    }
+}
+
+/// The change `job` makes to `base`, as the approval card shows it.
+pub(super) fn preview_of(job: &FileJob, base: &Base) -> AiFilePreview {
+    let path = &base.path;
+    let before = match base.bytes.as_deref().map(|b| decode(path, b)).transpose() {
         Ok(before) => before,
-        Err(message) => return (failed_preview(&path, message), Some(base)),
+        Err(message) => return failed_preview(path, message),
     };
-    let after = match &job {
+    let after = match job {
         FileJob::Edit(args) => before
             .as_ref()
-            .ok_or_else(|| missing_for_edit(&path))
-            .and_then(|file| files::apply_edit(&path, file, args).map(|e| e.file)),
-        FileJob::Write(args) => new_content(&path, before.as_ref(), &args.content),
-        FileJob::Read(_) => Err(format!("{name} shows no diff.")),
+            .ok_or_else(|| missing_for_edit(path))
+            .and_then(|file| files::apply_edit(path, file, args).map(|e| e.file)),
+        FileJob::Write(args) => new_content(path, before.as_ref(), &args.content),
+        FileJob::Read(_) => Err(format!("{} shows no diff.", tools::READ_FILE)),
     };
-    let crlf = before.as_ref().is_some_and(|f| f.crlf);
-    let preview = match after {
+    match after {
         Ok(after) => AiFilePreview {
-            path,
+            path: path.clone(),
             before: before.as_ref().map(TextFile::display_text),
             after: Some(after.display_text()),
             error: None,
-            crlf,
+            crlf: before.as_ref().is_some_and(|f| f.crlf),
         },
-        Err(message) => AiFilePreview {
-            error: Some(message),
-            ..failed_preview(&path, String::new())
-        },
-    };
-    (preview, Some(base))
+        Err(message) => failed_preview(path, message),
+    }
 }
 
-fn failed_preview(path: &str, message: String) -> AiFilePreview {
+pub(super) fn failed_preview(path: &str, message: String) -> AiFilePreview {
     AiFilePreview {
         path: path.to_owned(),
         before: None,
@@ -171,19 +189,14 @@ async fn edit(
     session: &SshSession,
     args: &EditFileArgs,
     base: Option<Base>,
-) -> Result<String, String> {
-    let (bytes, from_card) = current(session, &args.path, base).await?;
+    cancel: &CancellationToken,
+) -> Result<String, Stop> {
+    let (bytes, from_card) = unless_cancelled(cancel, current(session, &args.path, base)).await?;
     let bytes = bytes.ok_or_else(|| missing_for_edit(&args.path))?;
     let edit = files::apply_edit(&args.path, &decode(&args.path, &bytes)?, args)?;
     let new = edit.file.encode();
-    write_bytes(
-        session,
-        &args.path,
-        &new,
-        Expect::Content(&bytes),
-        from_card,
-    )
-    .await?;
+    let expect = Expect::Content(&bytes);
+    write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
     Ok(files::edit_result(&args.path, &edit))
 }
 
@@ -191,15 +204,24 @@ async fn write(
     session: &SshSession,
     args: &WriteFileArgs,
     base: Option<Base>,
-) -> Result<String, String> {
-    let (bytes, from_card) = current(session, &args.path, base).await?;
+    cancel: &CancellationToken,
+) -> Result<String, Stop> {
+    let (bytes, from_card) = unless_cancelled(cancel, current(session, &args.path, base)).await?;
     let before = bytes
         .as_deref()
         .map(|b| decode(&args.path, b))
         .transpose()?;
     let file = new_content(&args.path, before.as_ref(), &args.content)?;
     let expect = bytes.as_deref().map_or(Expect::Missing, Expect::Content);
-    write_bytes(session, &args.path, &file.encode(), expect, from_card).await?;
+    write_bytes(
+        session,
+        &args.path,
+        &file.encode(),
+        expect,
+        from_card,
+        cancel,
+    )
+    .await?;
     Ok(files::write_result(&args.path, &file, bytes.is_none()))
 }
 
@@ -241,17 +263,22 @@ async fn read_bytes(session: &SshSession, path: &str) -> Result<Option<Vec<u8>>,
 }
 
 /// Writes `bytes` if the file is as `expect` says. `from_card`: `expect` is what the approval
-/// card read.
+/// card read. A stop before the write prevents it; once it has begun it runs to the end (or the
+/// timeout), because closing the channel midway leaves the file cut short.
 async fn write_bytes(
     session: &SshSession,
     path: &str,
     bytes: &[u8],
     expect: Expect<'_>,
     from_card: bool,
-) -> Result<(), String> {
+    cancel: &CancellationToken,
+) -> Result<(), Stop> {
+    if cancel.is_cancelled() {
+        return Err(Stop::Cancelled);
+    }
     match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await {
-        Err(_) => Err(timed_out(path, Op::Write)),
-        Ok(result) => result.map_err(|e| describe(path, Op::Write, e, from_card)),
+        Err(_) => Err(Stop::Failed(timed_out(path, Op::Write))),
+        Ok(result) => result.map_err(|e| Stop::Failed(describe(path, Op::Write, e, from_card))),
     }
 }
 
@@ -297,6 +324,11 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
         RemoteFileError::NotRegular => format!(
             "{path} is not a regular file (it is a device, a pipe or a socket), so the file tools \
              do not {verb} it."
+        ),
+        RemoteFileError::DanglingLink => format!(
+            "{path} is a symbolic link to a file that does not exist, so the file tools do not \
+             {verb} it: writing would create the link's target, which may be anywhere. Use the \
+             path the link should point to, or ask the user."
         ),
         RemoteFileError::PermissionDenied => format!(
             "Permission denied: the user this tab is logged in as cannot {verb} {path}. The file \
@@ -388,67 +420,58 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn previews_without_a_session_or_of_other_tools_explain_why() {
-        let (card, base) = preview(
-            None,
-            tools::EDIT_FILE,
-            r#"{"path":"/etc/hosts","old_string":"a","new_string":"b"}"#,
-            None,
-        )
-        .await;
-        assert_eq!(card.path, "/etc/hosts");
-        assert_eq!(card.error.as_deref(), Some(DISCONNECTED));
-        assert!(base.is_none());
+    async fn previews_show_the_change_against_what_was_read() {
+        // Without a session nothing is read, and the card says why.
+        let cancel = CancellationToken::new();
+        match read_base(None, "/etc/hosts", &cancel).await {
+            Err(Stop::Failed(message)) => assert_eq!(message, DISCONNECTED),
+            _ => panic!("expected the disconnected message"),
+        }
 
-        // A preview the card read before needs no session.
-        let cached = Base {
+        let job = |name, arguments| preview_job(name, arguments).ok().unwrap().0;
+        let hosts = Base {
             path: "/etc/hosts".into(),
             bytes: Some(b"127.0.0.1 a\r\n::1 a\r\n".to_vec()),
         };
-        let (card, base) = preview(
-            None,
+        let edit = job(
             tools::EDIT_FILE,
             r#"{"path":"/etc/hosts","old_string":"::1 a\n","new_string":""}"#,
-            Some(cached),
-        )
-        .await;
+        );
+        let card = preview_of(&edit, &hosts);
         assert_eq!(card.error, None);
         assert_eq!(card.before.as_deref(), Some("127.0.0.1 a\n::1 a\n"));
         assert_eq!(card.after.as_deref(), Some("127.0.0.1 a\n"));
         assert!(card.crlf);
-        assert!(base.is_some());
 
-        let new = Base {
+        let missing = Base {
             path: "/srv/new.txt".into(),
             bytes: None,
         };
-        let (card, _) = preview(
-            None,
+        let write = job(
             tools::WRITE_FILE,
             r#"{"path":"/srv/new.txt","content":"hello\n"}"#,
-            Some(new.clone()),
-        )
-        .await;
+        );
+        let card = preview_of(&write, &missing);
         assert_eq!(
             (card.before, card.after.as_deref()),
             (None, Some("hello\n"))
         );
-        let (card, _) = preview(
-            None,
+        let edit_missing = job(
             tools::EDIT_FILE,
             r#"{"path":"/srv/new.txt","old_string":"a","new_string":"b"}"#,
-            Some(new),
-        )
-        .await;
-        assert!(card.error.unwrap().contains("Use write_file"));
-
-        let (card, _) = preview(None, tools::READ_FILE, r#"{"path":"a"}"#, None).await;
-        assert!(card.error.is_some());
-        let (card, _) = preview(None, tools::EDIT_FILE, "{", None).await;
-        assert!(
-            card.error
-                .unwrap()
-                .starts_with("The arguments are not valid")
         );
+        let error = preview_of(&edit_missing, &missing).error.unwrap();
+        assert!(error.contains("Use write_file"), "{error}");
+        let binary = Base {
+            path: "/bin/ls".into(),
+            bytes: Some(b"\x7fELF\0".to_vec()),
+        };
+        let error = preview_of(&write, &binary).error.unwrap();
+        assert!(error.contains("cannot be read as text"), "{error}");
+
+        // Other tools and broken arguments have no diff.
+        let no_diff = |name, arguments| preview_job(name, arguments).err().unwrap().error.unwrap();
+        assert!(no_diff(tools::READ_FILE, r#"{"path":"a"}"#).contains("shows no diff"));
+        assert!(no_diff(tools::EDIT_FILE, "{").starts_with("The arguments are not valid"));
     }
 }

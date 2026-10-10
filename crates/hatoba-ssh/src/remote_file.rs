@@ -17,10 +17,12 @@ use crate::session::{ExecOutput, SshSession};
 const MARKER: &[u8] = b"hatoba-file\n";
 
 /// Reads the file named on stdin, `$1` bytes at most. Exit statuses: 2 missing, 3 directory,
-/// 4 not readable, 5 larger than `$1` (its size on stderr), 6 not a regular file, 9 no path.
+/// 4 not readable, 5 larger than `$1` (its size on stderr), 6 not a regular file, 8 a symbolic
+/// link to nothing, 9 no path.
 const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; esac; \
-     [ -d \"$f\" ] && exit 3; [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
+     [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
+     [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
      [ -r \"$f\" ] || exit 4; n=$(wc -c < \"$f\") || exit 4; n=$(echo $n); \
      [ \"$n\" -le \"$1\" ] || { echo \"$n\" >&2; exit 5; }; \
      echo hatoba-file; exec cat -- \"$f\"";
@@ -28,13 +30,18 @@ const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// Writes the rest of stdin to the file named on its first line, after checking the state on
 /// its second line: `any`, `missing`, or the file's `cksum` output (`crc size`). Exit statuses:
 /// 2 no such directory, 3 directory, 4 not writable, 6 not a regular file, 7 not in the
-/// expected state, 9 no path.
+/// expected state, 8 a symbolic link to nothing (writing would create its target, wherever that
+/// is), 9 no path.
+///
+/// The check and the write run in one command, so a change made since the caller read the file
+/// is caught. A write by another process in the moment between the check and `cat` is not: an
+/// in-place rewrite has no lock that every writer honors.
 const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; esac; \
-     [ -d \"$f\" ] && exit 3; \
+     [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -f \"$f\" ] || exit 6; [ \"$g\" = missing ] && exit 7; \
-     if [ \"$g\" != any ]; then c=$(cksum < \"$f\") || exit 4; set -- $c; \
-     [ \"$1 $2\" = \"$g\" ] || exit 7; fi; [ -w \"$f\" ] || exit 4; \
+     case $g in any) ;; *) c=$(cksum < \"$f\") || exit 4; set -- $c; \
+     [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; fi; \
      cat > \"$f\"";
@@ -63,6 +70,8 @@ pub enum RemoteFileError {
     IsDirectory,
     /// The path is a device, FIFO, socket or another file that is not a regular file.
     NotRegular,
+    /// The path is a symbolic link whose target does not exist.
+    DanglingLink,
     /// The user cannot read (or write) the file, or create it in its directory.
     PermissionDenied,
     /// Read: the file has this many bytes, more than the limit.
@@ -88,6 +97,7 @@ impl fmt::Display for RemoteFileError {
             Self::NoDirectory => f.write_str("no such directory"),
             Self::IsDirectory => f.write_str("is a directory"),
             Self::NotRegular => f.write_str("not a regular file"),
+            Self::DanglingLink => f.write_str("a symbolic link to a file that does not exist"),
             Self::PermissionDenied => f.write_str("permission denied"),
             Self::TooLarge(size) => write!(f, "the file is too large ({size} bytes)"),
             Self::Changed => f.write_str("the file changed"),
@@ -224,6 +234,7 @@ fn parse_read(out: &ExecOutput, max: u64) -> Result<Vec<u8>, RemoteFileError> {
             .parse()
             .map_or_else(|_| failed(out), RemoteFileError::TooLarge)),
         Some(6) => Err(RemoteFileError::NotRegular),
+        Some(8) => Err(RemoteFileError::DanglingLink),
         _ => Err(failed(out)),
     }
 }
@@ -236,6 +247,7 @@ fn parse_write(out: &ExecOutput) -> Result<(), RemoteFileError> {
         Some(4) => Err(RemoteFileError::PermissionDenied),
         Some(6) => Err(RemoteFileError::NotRegular),
         Some(7) => Err(RemoteFileError::Changed),
+        Some(8) => Err(RemoteFileError::DanglingLink),
         _ => Err(failed(out)),
     }
 }
@@ -281,7 +293,8 @@ mod tests {
     #[test]
     fn scripts_survive_any_login_shell() {
         for script in [READ_SCRIPT, WRITE_SCRIPT] {
-            assert!(!script.contains(['\'', '\\', '\n']), "{script}");
+            // `!` too: csh expands it even inside single quotes when its history is on.
+            assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
         assert!(matches!(
             read_request("a\nb", 10),
@@ -420,6 +433,11 @@ mod tests {
                 Err(RemoteFileError::TooLarge(8))
             ));
             assert!(read(home, "notes", 8).is_ok());
+            std::os::unix::fs::symlink(home.join("gone"), home.join("dangling")).unwrap();
+            assert!(matches!(
+                read(home, "dangling", 100),
+                Err(RemoteFileError::DanglingLink)
+            ));
 
             if !is_root() {
                 let secret = home.join("secret");
@@ -487,6 +505,15 @@ mod tests {
                 write(home, ".", b"x", Expect::Any),
                 Err(RemoteFileError::IsDirectory)
             ));
+            // A link to nothing would create its target somewhere else: refused.
+            std::os::unix::fs::symlink(home.join("elsewhere"), home.join("dangling")).unwrap();
+            for expect in [Expect::Missing, Expect::Any] {
+                assert!(matches!(
+                    write(home, "dangling", b"x", expect),
+                    Err(RemoteFileError::DanglingLink)
+                ));
+            }
+            assert!(!home.join("elsewhere").exists());
 
             if !is_root() {
                 let locked = home.join("locked");

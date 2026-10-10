@@ -9,7 +9,8 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
-import { FileChange, useFilePreview } from "./FileChange";
+import { FileChange } from "./FileChange";
+import { useFilePreview } from "./filePreview";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
@@ -916,7 +917,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {t("btn.edit")}
             </Button>
           )}
-          {/* An edit or write runs once its diff has been read, so the user approves what they saw. */}
+          {/* An edit or write runs once its diff has been read, so the user approves what they saw; so does Allow below. */}
           <Button size="sm" variant="primary" icon="play" disabled={fileChange && file.loading} onClick={() => run()}>
             {t("ai.approval.run")}
           </Button>
@@ -925,7 +926,13 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
       {/* An MCP call whose tool is unknown cannot be allowed ahead: nothing names what it would reach. */}
       {mode !== "reject" && (kind !== "mcp" || mcp) && (
         <div className={s.allowRow}>
-          <LinkButton tone="muted" icon="chat-circle-dots" title={t("ai.approval.allowHereHint", { tool: label })} onClick={() => run("conversation")}>
+          <LinkButton
+            tone="muted"
+            icon="chat-circle-dots"
+            title={t("ai.approval.allowHereHint", { tool: label })}
+            disabled={fileChange && file.loading}
+            onClick={() => run("conversation")}
+          >
             {t("ai.approval.allowHere")}
           </LinkButton>
           {/* Always allow covers manual mode; a server set to Always ask still asks in bypass mode. */}

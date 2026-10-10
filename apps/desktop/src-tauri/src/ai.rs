@@ -1120,7 +1120,8 @@ impl AiManager {
     /// `ai_file_preview` (AI-39, AI-40): the change an open `edit_file` or `write_file` call
     /// would make, for its approval card, with `edited_arguments` when the user edits the call on
     /// the card. The file is read once per call; what was read is kept for the run, which writes
-    /// only over that content.
+    /// only over that content. The read is an op of the conversation, so a stop or the lock ends
+    /// it.
     pub async fn file_preview(
         &self,
         vault: &SharedVault,
@@ -1130,30 +1131,58 @@ impl AiManager {
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiFilePreview> {
-        let call = {
+        let (call, op) = {
             let v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
-            open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?
+            let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
+            (call, self.start_op(conversation_id))
         };
+        let (job, path) =
+            match files::preview_job(&call.name, edited_arguments.unwrap_or(&call.arguments)) {
+                Ok(job) => job,
+                Err(preview) => return Ok(preview),
+            };
         let key = (conversation_id.to_owned(), tool_call_id.to_owned());
-        let cached = guard(&self.0.file_bases).get(&key).cloned();
-        let (preview, base) = files::preview(
-            live_session(env, session_id),
-            &call.name,
-            edited_arguments.unwrap_or(&call.arguments),
-            cached,
-        )
-        .await;
-        if let Some(base) = base {
-            // Kept only while the call waits: not after its result, a stop or the lock.
-            let v = unlocked(vault)?;
-            if open_call(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok()
-                && !self.call_running(conversation_id, tool_call_id)
-            {
-                guard(&self.0.file_bases).insert(key, base);
+        let cached = guard(&self.0.file_bases)
+            .get(&key)
+            .filter(|b| b.path == path)
+            .cloned();
+        let base = match cached {
+            Some(base) => base,
+            None => {
+                let read = match files::read_base(live_session(env, session_id), &path, op.token())
+                    .await
+                {
+                    Ok(base) => base,
+                    Err(files::Stop::Failed(message)) => {
+                        return Ok(files::failed_preview(&path, message));
+                    }
+                    Err(files::Stop::Cancelled) => {
+                        return Err(AppError::new(
+                            ErrorCode::Cancelled,
+                            "the preview was stopped",
+                        ));
+                    }
+                };
+                let v = unlocked(vault)?;
+                let waiting = open_call(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok()
+                    && !self.call_running(conversation_id, tool_call_id);
+                let mut bases = guard(&self.0.file_bases);
+                match bases.get(&key) {
+                    // Previews can overlap (Edit while the first read runs): the read kept first
+                    // stays, so every diff the card shows is against the content the run checks.
+                    Some(kept) if kept.path == path => kept.clone(),
+                    // Kept only while the call waits: not after its result, a stop or the lock.
+                    _ if waiting => {
+                        bases.insert(key, read.clone());
+                        read
+                    }
+                    _ => read,
+                }
             }
-        }
-        Ok(preview)
+        };
+        drop(op);
+        Ok(files::preview_of(&job, &base))
     }
 
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn.

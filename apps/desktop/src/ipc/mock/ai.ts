@@ -106,6 +106,7 @@ const DAY = 24 * HOUR;
  *   "read file"       read_file of an nginx site        "edit"     edit_file of its proxy block
  *   "listen"          edit_file with replace_all         "nomatch"  edit_file whose old_string is missing
  *   "crlf"            edit_file of a CRLF file           "write"    write_file of a new file
+ *   "bigfile"         write_file of a 1,200-line file, to see the diff paged
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
@@ -386,6 +387,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
         if (want("write", "写入", "書き込"))
           calls.push(call("write_file", { path: "/srv/app/public/maintenance.html", content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
+        if (want("bigfile"))
+          calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
         if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
