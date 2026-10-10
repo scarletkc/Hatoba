@@ -2713,8 +2713,17 @@ async fn calls_stored_with_a_shared_id_run_each_with_its_own_arguments() {
 async fn a_running_call_is_not_run_or_answered_again() {
     use crate::mcp::tests::{put_server, set_enabled, stdio_server};
 
+    // The server holds its answer to c1 until the test releases it. The turn waits for the
+    // panel's result of c2, so the response with c1 stays the newest until then.
     let f = Fixture::new(vec![
-        calls(&[("c1", "mcp__files__echo", json!({"text": "once"}))]),
+        calls(&[
+            (
+                "c1",
+                "mcp__files__echo",
+                json!({"text": "once", "hold": true}),
+            ),
+            ("c2", "read_terminal", json!({})),
+        ]),
         answer("Done."),
     ])
     .await;
@@ -2725,23 +2734,30 @@ async fn a_running_call_is_not_run_or_answered_again() {
     sink.done_with(AiFinish::ToolCalls).await;
 
     // While the first run waits for the server, a second run of the call is refused before it
-    // runs anything, and so is a result from the panel.
-    let (first, (second, result)) = tokio::join!(f.run(&conv, "c1", None, None), async {
-        let second = f.run(&conv, "c1", None, None).await;
-        let result = f.result(&conv, "c1", AiToolStatus::Error, "The tool failed", None);
-        (second, result)
-    });
-    assert_eq!(
-        view_content(&first.unwrap()),
-        ("c1", AiToolStatus::Ok, "once")
-    );
+    // runs anything, and so is a result from the panel. Nothing polls the first run meanwhile,
+    // so it cannot finish before they are checked.
+    let mut first = Box::pin(f.run(&conv, "c1", None, None));
+    assert!(poll_once(&mut first).await.is_pending());
+    let second = f.run(&conv, "c1", None, None).await;
+    let result = f.result(&conv, "c1", AiToolStatus::Error, "The tool failed", None);
     for err in [second.unwrap_err(), result.unwrap_err()] {
         assert_eq!(err.code, ErrorCode::InvalidInput);
         assert_eq!(err.detail, "the tool call is already running");
     }
+    let echo = f.mcp.offered(&conv, "mcp__files__echo").unwrap();
+    let release = json!({"release": true}).as_object().cloned().unwrap();
+    f.mcp
+        .call(&f.vault, &echo, release, &CancellationToken::new())
+        .await;
+    assert_eq!(
+        view_content(&first.await.unwrap()),
+        ("c1", AiToolStatus::Ok, "once")
+    );
     // Once it finished, the call has its result.
     let err = f.run(&conv, "c1", None, None).await.unwrap_err();
     assert_eq!(err.detail, "the tool call already has a result");
+    f.result(&conv, "c2", AiToolStatus::Ok, "the screen", None)
+        .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.mcp.shutdown().await;
 }
