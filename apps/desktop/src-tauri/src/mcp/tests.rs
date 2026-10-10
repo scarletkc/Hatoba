@@ -72,6 +72,11 @@ fn serve() -> ! {
     send(&Value::Null);
     let _ = writeln!(std::io::stderr(), "mock server starting");
     let mut notified = false;
+    // An `echo` with `hold` is answered once an `echo` with `release` arrives, before or after
+    // it (the client may send concurrent requests in either order), so a test decides how long
+    // the call runs.
+    let mut held: Option<(Value, Value)> = None;
+    let mut released = false;
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
@@ -108,14 +113,21 @@ fn serve() -> ! {
                 reply(&id, json!({"tools": tools}));
             }
             "tools/call" => match message["params"]["name"].as_str().unwrap_or_default() {
-                "echo" => reply(
-                    &id,
-                    text(
-                        message["params"]["arguments"]["text"]
-                            .as_str()
-                            .unwrap_or("?"),
-                    ),
-                ),
+                "echo" => {
+                    let arguments = &message["params"]["arguments"];
+                    let result = text(arguments["text"].as_str().unwrap_or("?"));
+                    if arguments["release"] == true {
+                        released = true;
+                        if let Some((held_id, held_result)) = held.take() {
+                            reply(&held_id, held_result);
+                        }
+                    }
+                    if arguments["hold"] == true && !released {
+                        held = Some((id, result));
+                    } else {
+                        reply(&id, result);
+                    }
+                }
                 "fail" => reply(
                     &id,
                     json!({"content": [{"type": "text", "text": "boom"}], "isError": true}),
