@@ -68,8 +68,9 @@ describe("locale helpers", () => {
       const now = new Date(2026, 2, 9, 0, 30).getTime();
       expect(startOfDay(now, -1)).toBe(new Date(2026, 2, 8).getTime());
       expect(now - startOfDay(now, -1)).toBe(23.5 * 3_600_000);
-      // 24 hours before midnight would fall in March 7. (Formatters keep the zone they were made in.)
-      expect(formatMessageTime("en", new Date(2026, 2, 7, 23, 30).getTime(), now)).not.toMatch(/^Yesterday/);
+      // 24 hours before midnight would fall in March 7. The clock is in the new zone too, not the one
+      // the cached formatters were made in.
+      expect(formatMessageTime("en", new Date(2026, 2, 7, 23, 30).getTime(), now)).toBe("Mar 7, 23:30");
     } finally {
       if (tz === undefined) delete process.env.TZ;
       else process.env.TZ = tz;

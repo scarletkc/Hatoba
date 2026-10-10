@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect, toast } from "@/components/overlay";
@@ -214,7 +214,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 // ───────────────────────── entries ─────────────────────────
 
 /** When a message was sent or a reply finished, with the full date and time on hover. */
-function MessageTime({ at }: { at: number }) {
+const MessageTime = memo(function MessageTime({ at }: { at: number }) {
   const t = useT();
   const today = useToday();
   return (
@@ -222,7 +222,7 @@ function MessageTime({ at }: { at: number }) {
       {formatMessageTime(t.locale, at, today)}
     </time>
   );
-}
+});
 
 /** Copies a message's text and shows a check for a moment. */
 function CopyButton({ text }: { text: string }) {

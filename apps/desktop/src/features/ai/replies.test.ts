@@ -48,6 +48,20 @@ describe("replies", () => {
     expect(open).toBe("a2");
   });
 
+  it("counts a result stored after the user's next message for the reply that asked for it", () => {
+    const { ends } = replies([
+      user("u1", "Run it", 1),
+      assistant("a1", "Running.", 1, 2),
+      user("u2", "typed while it ran", 3),
+      tool("t1", "a1c0", 50),
+      assistant("a2", "Done.", 0, 60),
+    ]);
+    expect([...ends]).toEqual([
+      ["a1", { text: "Running.", at: 50 }],
+      ["a2", { text: "Done.", at: 60 }],
+    ]);
+  });
+
   it("keeps a reply without text, and has no open reply after the user's last message", () => {
     const { ends, open } = replies([user("u1", "Run it"), assistant("a1", " ", 1, 2), tool("t1", "a1c0", 3), user("u2", "Again", 4)]);
     expect([...ends]).toEqual([["a1", { text: "", at: 3 }]]);

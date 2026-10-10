@@ -61,7 +61,9 @@ export function useT() {
 
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 function fmt(locale: Locale, opts: Intl.DateTimeFormatOptions) {
-  const k = locale + JSON.stringify(opts);
+  // A formatter keeps the time zone it was made in, and the system's can change while the app runs.
+  // The UTC offset is a cheap stand-in for the zone (a DST change only adds formatters).
+  const k = `${locale}${new Date().getTimezoneOffset()}${JSON.stringify(opts)}`;
   let f = dateFormatters.get(k);
   if (!f) dateFormatters.set(k, (f = new Intl.DateTimeFormat(locale, opts)));
   return f;
