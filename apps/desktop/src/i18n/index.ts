@@ -59,12 +59,63 @@ export function useT() {
   return Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale });
 }
 
+let zone = { id: "", offset: NaN, at: NaN };
+
+/**
+ * The system time zone, which can change while the app runs. Resolving it costs as much as making a
+ * formatter, so it is looked up at most once a second, or at once when the UTC offset changes.
+ */
+function timeZone(): string {
+  const now = Date.now();
+  const offset = new Date(now).getTimezoneOffset();
+  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000)) zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
+  return zone.id;
+}
+
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 function fmt(locale: Locale, opts: Intl.DateTimeFormatOptions) {
-  const k = locale + JSON.stringify(opts);
+  // A formatter keeps the time zone it was made in.
+  const k = `${locale}|${timeZone()}|${JSON.stringify(opts)}`;
   let f = dateFormatters.get(k);
   if (!f) dateFormatters.set(k, (f = new Intl.DateTimeFormat(locale, opts)));
   return f;
+}
+
+/** Local midnight of the day `ms` falls on, or of a day `days` from it. A day is not always 24 hours (DST). */
+export function startOfDay(ms: number, days = 0): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days).getTime();
+}
+
+const dayListeners = new Set<() => void>();
+let dayTimer: number | undefined;
+
+function subscribeDay(cb: () => void) {
+  dayListeners.add(cb);
+  // A check every minute rather than a timer to midnight, which sleep or a time zone change would throw off.
+  dayTimer ??= window.setInterval(() => dayListeners.forEach((l) => l()), 60_000);
+  return () => {
+    dayListeners.delete(cb);
+    if (dayListeners.size > 0) return;
+    window.clearInterval(dayTimer);
+    dayTimer = undefined;
+  };
+}
+
+let clock = { zone: "", today: NaN };
+
+function clockNow() {
+  const next = { zone: timeZone(), today: startOfDay(Date.now()) };
+  if (next.zone !== clock.zone || next.today !== clock.today) clock = next;
+  return clock;
+}
+
+/**
+ * React hook: local midnight of today, for labels that name the day. It re-renders when the day or
+ * the system time zone changes.
+ */
+export function useToday(): number {
+  return useSyncExternalStore(subscribeDay, clockNow).today;
 }
 
 /** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the design's last-connected style. */
@@ -74,13 +125,30 @@ export function formatRelative(locale: Locale, ms: number, now = Date.now()): st
   if (min < 1) return translate(locale, "time.justNow");
   if (min < 60) return translate(locale, "time.minutesAgo", { n: min });
   const d = new Date(ms);
-  const today = new Date(now);
-  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   const hm = fmt(locale, { hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
-  if (ms >= startOfToday) return translate(locale, "time.todayAt", { time: hm });
-  if (ms >= startOfToday - 86_400_000) return translate(locale, "time.yesterdayAt", { time: hm });
-  const sameYear = d.getFullYear() === today.getFullYear();
+  if (ms >= startOfDay(now)) return translate(locale, "time.todayAt", { time: hm });
+  if (ms >= startOfDay(now, -1)) return translate(locale, "time.yesterdayAt", { time: hm });
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
   return fmt(locale, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" }).format(d);
+}
+
+/**
+ * A message's time: "09:12" today, "Yesterday 09:12", "Oct 5, 09:12", and the year too before this
+ * one. Only the day of `now` matters, so `useToday()` can stand in for it.
+ */
+export function formatMessageTime(locale: Locale, ms: number, now = Date.now()): string {
+  const d = new Date(ms);
+  const clock = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
+  // A time from a later day (another device's clock ahead, say) keeps its date.
+  if (ms >= startOfDay(now) && ms < startOfDay(now, 1)) return fmt(locale, clock).format(d);
+  if (ms >= startOfDay(now, -1) && ms < startOfDay(now)) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
+  const year = d.getFullYear() === new Date(now).getFullYear() ? {} : ({ year: "numeric" } as const);
+  return fmt(locale, { ...year, month: "short", day: "numeric", ...clock }).format(d);
+}
+
+/** The full date and time, for a tooltip. */
+export function formatDateTime(locale: Locale, ms: number): string {
+  return fmt(locale, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(ms));
 }
 
 /** "2026-03-14" */

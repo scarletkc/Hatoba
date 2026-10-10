@@ -67,7 +67,9 @@
 .userRow {
   display: flex;
   justify-content: flex-end;
-  padding-left: 32px;
+  align-items: flex-start;
+  gap: 4px;
+  padding-left: 4px;
 }
 
 .user {
@@ -86,25 +88,54 @@
   opacity: 0.7;
 }
 
-/* AI-26: Edit sits left of the user's message and shows on hover; with it the row needs less padding. */
-.userRow:has(.editButton) {
-  align-items: flex-start;
-  gap: 4px;
-  padding-left: 4px;
+/*
+ * Copy and Edit (AI-26) sit left of the user's message and show on hover or keyboard focus. Hidden,
+ * they stay focusable but take no taps, so a tap there on a touch screen only shows them.
+ */
+.userActions {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 24px;
+  margin-top: 3px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.editButton {
-  flex: none;
+.userRow:hover .userActions,
+.userActions:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.messageAction {
   width: 24px;
   height: 24px;
-  margin-top: 3px;
   color: var(--fg2);
-  visibility: hidden;
 }
 
-.userRow:hover .editButton,
-.editButton:focus-visible {
-  visibility: visible;
+/* Under a finished reply: Copy, its icon in line with the text, and the time. */
+.replyFoot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin: -4px 0 0 -5px;
+}
+
+.replyFoot > .time:first-child {
+  margin-left: 5px;
+}
+
+/* When a message was sent or a reply finished. */
+.time {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--fg3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
 }
 
 /* The message with a terminal selection card above it (AI-10); an open card takes the row's width. */
