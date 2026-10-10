@@ -11,7 +11,8 @@
 //!   within [`AI_PART_MAX_BYTES`], so every envelope stays under the Worker's 64 KB limit (§6.2).
 //! * The item map keeps the header of a part (`conversation_id`, `entry_id`, `part`,
 //!   `part_count`, `updated_at`) and not its `data`. [`Vault::ai_entries`] reads a conversation
-//!   back from the local database and decrypts it again.
+//!   back from the local database and decrypts it again; [`Vault::ai_entries_from`] reads only
+//!   its newest entries, picked by their headers.
 //! * Deleting a conversation or a skill tombstones everything that belongs to it (§6.5), and
 //!   editing a message to send it again (AI-26) tombstones that entry and every later one.
 //!   Parts that another device added to a conversation deleted here (or the other way round)
@@ -126,6 +127,35 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`]; storage errors.
     pub fn ai_entries(&self, conversation_id: &str) -> Result<Vec<StoredEntry>> {
+        self.read_entries(conversation_id, None)
+    }
+
+    /// The entries of a conversation from `entry_id` on, that entry included: the tail of
+    /// [`ai_entries`](Self::ai_entries), which leaves out the same incomplete and unreadable
+    /// entries. The headers pick the entries, so earlier ones are neither read nor decrypted.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_entries_from(
+        &self,
+        conversation_id: &str,
+        entry_id: &str,
+    ) -> Result<Vec<StoredEntry>> {
+        self.read_entries(conversation_id, Some(entry_id))
+    }
+
+    /// How many message parts [`ai_entries`](Self::ai_entries) and
+    /// [`ai_entries_from`](Self::ai_entries_from) have read from the database and decrypted.
+    #[cfg(any(test, feature = "test-util"))]
+    #[must_use]
+    pub fn ai_parts_read(&self) -> usize {
+        self.ai_parts_read
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// The entries of a conversation whose `entry_id` is at least `from` (all of them without
+    /// `from`), oldest first.
+    fn read_entries(&self, conversation_id: &str, from: Option<&str>) -> Result<Vec<StoredEntry>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
 
         // Group the cached headers by entry. `parts` maps a part number to the item holding it
@@ -137,6 +167,9 @@ impl Vault {
         }
         let mut pending: BTreeMap<&str, Pending<'_>> = BTreeMap::new();
         for (item_id, header) in self.message_headers(conversation_id) {
+            if from.is_some_and(|from| header.entry_id.as_str() < from) {
+                continue;
+            }
             let entry = pending
                 .entry(header.entry_id.as_str())
                 .or_insert_with(|| Pending {
@@ -166,6 +199,9 @@ impl Vault {
             }
             let mut pieces: Vec<Zeroizing<String>> = Vec::with_capacity(entry.parts.len());
             for (&part, &item_id) in &entry.parts {
+                #[cfg(any(test, feature = "test-util"))]
+                self.ai_parts_read
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let readable = self
                     .store
                     .item_row(item_id)?
@@ -975,6 +1011,135 @@ mod tests {
         let entries = vault.ai_entries(&conv).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].entry_id, id);
+    }
+
+    #[test]
+    fn reading_from_an_entry_is_the_tail_of_reading_them_all() {
+        let (mut vault, _clock) = vault();
+        let conv = conversation(&mut vault, "t");
+        let other = conversation(&mut vault, "other");
+        let part = |vault: &mut Vault, entry_id: &str, part: u32, part_count: u32| {
+            vault
+                .put(
+                    None,
+                    Item::AiMessage(AiMessage {
+                        conversation_id: conv.clone(),
+                        entry_id: entry_id.into(),
+                        part,
+                        part_count,
+                        data: format!(r#"{{"entry":"{entry_id}","part":{part}}}"#),
+                        ..AiMessage::default()
+                    }),
+                )
+                .unwrap()
+        };
+        part(&mut vault, "e1", 0, 1);
+        // Incomplete: part 1 has not arrived.
+        part(&mut vault, "e2", 0, 2);
+        part(&mut vault, "e3", 1, 2);
+        part(&mut vault, "e3", 0, 2);
+        // Two items claim the only part.
+        part(&mut vault, "e4", 0, 1);
+        part(&mut vault, "e4", 0, 1);
+        // The parts disagree about the part count.
+        part(&mut vault, "e5", 0, 1);
+        part(&mut vault, "e5", 1, 2);
+        part(&mut vault, "e6", 0, 0);
+        // A part that cannot be decrypted.
+        let unreadable = part(&mut vault, "e7", 0, 1);
+        vault
+            .store
+            .upsert_item_row(&ItemRow {
+                id: unreadable,
+                envelope: Some(
+                    r#"{"v":1,"n":"AAAAAAAAAAAAAAAA","c":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#
+                        .into(),
+                ),
+                revision: 0,
+                deleted: false,
+                dirty: false,
+                updated_at: 1,
+            })
+            .unwrap();
+        part(&mut vault, "e8", 0, 1);
+        vault.ai_append_entry(&other, "{}").unwrap();
+
+        let all = vault.ai_entries(&conv).unwrap();
+        assert_eq!(
+            all.iter().map(|e| e.entry_id.as_str()).collect::<Vec<_>>(),
+            ["e1", "e3", "e4", "e8"]
+        );
+        // From stored, skipped and missing ids alike (the bound is inclusive).
+        for from in [
+            "", "e0", "e1", "e15", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "f",
+        ] {
+            let tail: Vec<StoredEntry> = all
+                .iter()
+                .filter(|e| e.entry_id.as_str() >= from)
+                .cloned()
+                .collect();
+            assert_eq!(vault.ai_entries_from(&conv, from).unwrap(), tail, "{from}");
+        }
+        assert!(vault.ai_entries_from("missing", "").unwrap().is_empty());
+        vault.lock();
+        assert!(matches!(
+            vault.ai_entries_from(&conv, "e1"),
+            Err(Error::Locked)
+        ));
+    }
+
+    #[test]
+    fn reading_from_an_entry_decrypts_none_of_the_earlier_parts() {
+        let (mut vault, _clock) = vault();
+        let conv = conversation(&mut vault, "t");
+        let big = serde_json::to_string(&json!({"text": nasty(60_000)})).unwrap();
+        // A long history, every tenth entry in several parts.
+        for i in 0..200 {
+            let json = if i % 10 == 0 {
+                big.clone()
+            } else {
+                format!(r#"{{"n":{i}}}"#)
+            };
+            vault.ai_append_entry(&conv, &json).unwrap();
+        }
+        let from = vault.ai_append_entry(&conv, &big).unwrap();
+        let last = vault.ai_append_entry(&conv, r#"{"n":"last"}"#).unwrap();
+        let parts = |entry_id: &str| {
+            cached_messages(&vault)
+                .iter()
+                .filter(|m| m.entry_id == entry_id)
+                .count()
+        };
+        let tail_parts = parts(&from) + parts(&last);
+        assert!(tail_parts >= 3, "{tail_parts} parts");
+
+        let before = vault.ai_parts_read();
+        let tail = vault.ai_entries_from(&conv, &from).unwrap();
+        assert_eq!(vault.ai_parts_read() - before, tail_parts);
+        assert_eq!(
+            tail.iter().map(|e| e.entry_id.as_str()).collect::<Vec<_>>(),
+            [from.as_str(), last.as_str()]
+        );
+        assert_eq!(tail[0].json.as_str(), big);
+
+        // Past the newest entry: nothing is read.
+        let before = vault.ai_parts_read();
+        let after_last = successor(Uuid::parse_str(&last).unwrap()).to_string();
+        assert!(
+            vault
+                .ai_entries_from(&conv, &after_last)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(vault.ai_parts_read(), before);
+
+        // The full read decrypts every part.
+        let before = vault.ai_parts_read();
+        assert_eq!(vault.ai_entries(&conv).unwrap().len(), 202);
+        assert_eq!(
+            vault.ai_parts_read() - before,
+            cached_messages(&vault).len()
+        );
     }
 
     #[test]

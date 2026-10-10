@@ -31,7 +31,8 @@
 //! # Cargo features
 //!
 //! * `test-util`: relaxes that KDF floor and exposes `KdfParams::for_tests()` so other crates'
-//!   tests can create vaults quickly. Never enable it in a shipping build.
+//!   tests can create vaults quickly, and `Vault::ai_parts_read()` so they can count the
+//!   conversation parts a path decrypts. Never enable it in a shipping build.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

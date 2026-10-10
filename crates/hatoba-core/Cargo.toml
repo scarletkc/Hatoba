@@ -9,8 +9,8 @@ rust-version.workspace = true
 publish = false
 
 [features]
-# Relaxes the KDF cost floor and exposes `KdfParams::for_tests()`. For tests only; never enable
-# in a shipping build.
+# Relaxes the KDF cost floor and exposes `KdfParams::for_tests()` and `Vault::ai_parts_read()`.
+# For tests only; never enable in a shipping build.
 test-util = []
 
 [dependencies]

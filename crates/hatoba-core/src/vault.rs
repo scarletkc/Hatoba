@@ -216,7 +216,8 @@ impl SyncCtx<'_> {
 /// Decrypts a row into the form the item map holds. `Ok(None)` for tombstones.
 ///
 /// A conversation message part comes back without its `data` (spec §13.7); opening the
-/// conversation reads it again from the store ([`Vault::ai_entries`]).
+/// conversation reads it again from the store ([`Vault::ai_entries`],
+/// [`Vault::ai_entries_from`]).
 pub(crate) fn decode_row(key: &[u8; 32], row: &ItemRow) -> Result<Option<Item>> {
     let Some(env) = row.envelope.as_deref().filter(|_| !row.deleted) else {
         return Ok(None);
@@ -253,6 +254,9 @@ pub struct Vault {
     pub(crate) store: Store,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) unlocked: Option<Unlocked>,
+    /// Message parts read back from the store ([`Vault::ai_parts_read`]).
+    #[cfg(any(test, feature = "test-util"))]
+    pub(crate) ai_parts_read: std::sync::atomic::AtomicUsize,
 }
 
 impl Vault {
@@ -277,6 +281,8 @@ impl Vault {
             store,
             clock: Arc::new(SystemClock),
             unlocked: None,
+            #[cfg(any(test, feature = "test-util"))]
+            ai_parts_read: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
