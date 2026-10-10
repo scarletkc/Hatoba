@@ -59,11 +59,23 @@ export function useT() {
   return Object.assign((key: MessageKey, params?: Params) => translate(locale, key, params), { locale });
 }
 
+let zone = { id: "", offset: NaN, at: NaN };
+
+/**
+ * The system time zone, which can change while the app runs. Resolving it costs as much as making a
+ * formatter, so it is looked up at most once a second, or at once when the UTC offset changes.
+ */
+function timeZone(): string {
+  const now = Date.now();
+  const offset = new Date(now).getTimezoneOffset();
+  if (offset !== zone.offset || !(Math.abs(now - zone.at) < 1000)) zone = { id: Intl.DateTimeFormat().resolvedOptions().timeZone, offset, at: now };
+  return zone.id;
+}
+
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 function fmt(locale: Locale, opts: Intl.DateTimeFormatOptions) {
-  // A formatter keeps the time zone it was made in, and the system's can change while the app runs.
-  // The UTC offset is a cheap stand-in for the zone (a DST change only adds formatters).
-  const k = `${locale}${new Date().getTimezoneOffset()}${JSON.stringify(opts)}`;
+  // A formatter keeps the time zone it was made in.
+  const k = `${locale}|${timeZone()}|${JSON.stringify(opts)}`;
   let f = dateFormatters.get(k);
   if (!f) dateFormatters.set(k, (f = new Intl.DateTimeFormat(locale, opts)));
   return f;
@@ -90,11 +102,20 @@ function subscribeDay(cb: () => void) {
   };
 }
 
-const todayStart = () => startOfDay(Date.now());
+let clock = { zone: "", today: NaN };
 
-/** React hook: local midnight of today, which re-renders when the day changes, for labels that name the day. */
+function clockNow() {
+  const next = { zone: timeZone(), today: startOfDay(Date.now()) };
+  if (next.zone !== clock.zone || next.today !== clock.today) clock = next;
+  return clock;
+}
+
+/**
+ * React hook: local midnight of today, for labels that name the day. It re-renders when the day or
+ * the system time zone changes.
+ */
 export function useToday(): number {
-  return useSyncExternalStore(subscribeDay, todayStart);
+  return useSyncExternalStore(subscribeDay, clockNow).today;
 }
 
 /** "2 min ago", "Today 09:12", "Yesterday", "Oct 5" — the design's last-connected style. */

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { messages } from "./locales";
-import { detectLocale, formatBytes, formatMessageTime, formatRelative, startOfDay, translate } from "./index";
+import { detectLocale, formatBytes, formatDateTime, formatMessageTime, formatRelative, startOfDay, translate } from "./index";
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -73,6 +73,24 @@ describe("locale helpers", () => {
       // the cached formatters were made in.
       expect(formatMessageTime("en", new Date(2026, 2, 7, 23, 30).getTime(), now)).toBe("Mar 7, 23:30");
     } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
+
+  it("formats in the new time zone when the system's changes to one with the same offset", () => {
+    const tz = process.env.TZ;
+    vi.useFakeTimers({ now: Date.UTC(2026, 0, 15, 12) });
+    try {
+      const july = Date.UTC(2026, 6, 1, 18);
+      process.env.TZ = "America/Denver";
+      expect(formatDateTime("en", july)).toContain("12:00:00");
+      // Phoenix is also UTC−7 in January, but keeps it in summer.
+      process.env.TZ = "America/Phoenix";
+      vi.advanceTimersByTime(1000);
+      expect(formatDateTime("en", july)).toContain("11:00:00");
+    } finally {
+      vi.useRealTimers();
       if (tz === undefined) delete process.env.TZ;
       else process.env.TZ = tz;
     }
