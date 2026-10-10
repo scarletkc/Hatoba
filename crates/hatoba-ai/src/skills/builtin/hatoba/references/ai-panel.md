@@ -31,6 +31,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 - Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
 - A quick connection counts as a host named by its `user@host:port`, in the panel and in History, so a conversation that moves from one to a saved host or to another quick connection gets the same notice and divider. Saving a quick connection as a host (**Save as Host…**) keeps the same server, so a conversation that continues on the saved host gets neither.
 - With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands or send input: those three tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host or a quick connection, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation; a quick connection saved as a host since opens as that host.
+- A new terminal tab starts with its own empty conversation, and the home tab's chat stays on the home tab. While the tab's conversation has no messages and the home tab's chat has some and is not working, waiting for approval or compacting, the panel offers **Continue Here**, which moves that chat into the tab and gives the home tab a new conversation. Whatever the tab's input holds stays, a selection or diagnostics chip included; when it holds nothing, the home tab's unsent text and attachments come along. The next message moves the chat to the tab's host.
 - When the terminal tools come or go between two messages, as when a home tab chat continues in a connected tab or a tab disconnects and connects again, the next message gets a divider above it, "Terminal now available" or "Terminal no longer available", and the assistant is told that its earlier replies had the tools of their time.
 
 | en | zh-CN | ja |
@@ -46,6 +47,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | The assistant is working | AI 助手正在工作 | アシスタントが作業中です |
 | The assistant is waiting for you | AI 助手在等你确认 | アシスタントが確認を待っています |
 | Reconnect | 重新连接 | 再接続 |
+| Continue Here | 在这里继续 | ここで続ける |
 
 ## Tools and approvals
 

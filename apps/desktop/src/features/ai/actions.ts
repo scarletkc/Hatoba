@@ -47,7 +47,22 @@ import {
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
-import { blankSlot, defaultMode, getSlot, HOME_SLOT, NO_SELECTION, patchSlot, setSlot, slotOf, updateConversation, useAi, type PendingAttachment, type Slot, type TabSelection } from "./store";
+import {
+  blankSlot,
+  defaultMode,
+  getSlot,
+  HOME_SLOT,
+  NO_SELECTION,
+  offersHomeConversation,
+  patchSlot,
+  setSlot,
+  slotOf,
+  updateConversation,
+  useAi,
+  type PendingAttachment,
+  type Slot,
+  type TabSelection,
+} from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
@@ -654,10 +669,11 @@ function moveSlot(from: string, to: string) {
   const source = getSlot(from);
   const runner = runners.get(from);
   const target = getSlot(to);
-  // The input area of the slot the conversation moves to wins when it holds something.
-  const keep = !!target.draft || target.extras.length > 0;
+  // The input area of the slot the conversation moves to wins when it holds something, a tab's selection or
+  // diagnostics chip included (AI-10); the source's then stays.
+  const keep = !!target.draft || pendingAttachments(to).length > 0;
   setSlot(to, { ...source, draft: keep ? target.draft : source.draft, extras: keep ? target.extras : source.extras });
-  setSlot(from, blankSlot());
+  setSlot(from, keep ? blankSlot(defaultMode(), source.draft, source.extras) : blankSlot());
   if (runner) {
     runners.delete(from);
     runner.slotId = to;
@@ -708,6 +724,18 @@ export async function connectConversation(source: TabSource) {
   await (source.hostId !== null ? connectHost(source.hostId) : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
+}
+
+/**
+ * AI-09 "Continue Here": attaches the home tab's conversation to a terminal tab that shows a new one with
+ * no messages, never on its own. Not while the home conversation is busy, since its turn finishes there.
+ */
+export function continueHomeConversation(tabId: string): boolean {
+  if (tabId === HOME_SLOT || slotBusy(HOME_SLOT) || slotBusy(tabId)) return false;
+  if (!offersHomeConversation(getSlot(tabId), useAi.getState().slots[HOME_SLOT])) return false;
+  moveSlot(HOME_SLOT, tabId);
+  focusInput();
+  return true;
 }
 
 /** Closing a tab detaches its conversation, which stays in history (AI-08). Its turn stops. */
