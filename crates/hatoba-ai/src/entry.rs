@@ -77,6 +77,10 @@ pub struct AssistantEntry {
     /// The assistant message as the provider returned it, every field kept: the Chat Completions
     /// message object, or the Anthropic content block array.
     pub raw: serde_json::Value,
+    /// Whether its request offered the terminal tools (AI-09), which tells when the next message
+    /// needs a `terminal_change` note. `None` in entries from before it was recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<bool>,
 }
 
 /// A tool call made by the model.
@@ -288,6 +292,7 @@ mod tests {
                     ..Usage::default()
                 }),
                 raw: json!({"role": "assistant"}),
+                terminal: Some(true),
             },
         );
         let value = serde_json::to_value(&entry).unwrap();
@@ -303,7 +308,8 @@ mod tests {
                 "tool_calls": [{"id": "c1", "name": "run_command", "arguments": "{\"command\":\"ls\"}"}],
                 "finish": "tool_calls",
                 "usage": {"input_tokens": 10, "output_tokens": 2, "estimated": false},
-                "raw": {"role": "assistant"}
+                "raw": {"role": "assistant"},
+                "terminal": true
             })
         );
         let back: AiEntry = serde_json::from_value(value).unwrap();
@@ -353,6 +359,7 @@ mod tests {
         };
         assert_eq!(a.finish, Finish::Stop);
         assert!(a.raw.is_null() && a.usage.is_none() && a.tool_calls.is_empty());
+        assert_eq!(a.terminal, None);
 
         let tool: AiEntry =
             serde_json::from_value(json!({"created_at": 1, "role": "tool", "tool_call_id": "x"}))

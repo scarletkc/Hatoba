@@ -778,11 +778,6 @@ pub struct AiConversation {
         skip_serializing_if = "Option::is_none"
     )]
     pub effort: Option<AiEffort>,
-    /// Whether its newest turn offered the terminal tools (AI-09), which tells when a message
-    /// needs a `terminal_change` note. `None` (absent) is unknown, as for conversations from
-    /// before it was recorded, and gets no note.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub terminal: Option<bool>,
     /// Creation time, Unix ms.
     pub created_at: i64,
     /// Last modification, Unix ms.
@@ -1873,7 +1868,6 @@ mod tests {
             pinned: true,
             context_start: Some("e1".into()),
             effort: Some(AiEffort::Xhigh),
-            terminal: Some(false),
             created_at: 5,
             updated_at: 9,
         });
@@ -1881,8 +1875,8 @@ mod tests {
             serde_json::to_value(&conversation).unwrap(),
             json!({
                 "type": "ai_conversation", "title": "Why is nginx down", "host_id": "h1",
-                "pinned": true, "context_start": "e1", "effort": "xhigh", "terminal": false,
-                "created_at": 5, "updated_at": 9
+                "pinned": true, "context_start": "e1", "effort": "xhigh", "created_at": 5,
+                "updated_at": 9
             })
         );
         assert_eq!(

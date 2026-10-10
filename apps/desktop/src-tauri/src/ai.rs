@@ -692,23 +692,12 @@ impl AiManager {
                     list: mut earlier,
                 } = Entries::load(&v, &id)?;
                 let mut came_from = None;
-                // AI-09: whether the turn before the new message offered the terminal tools. Before
-                // the entries an edit deletes, it is the opposite of their earliest
-                // terminal_change note, or the newest turn's when they have none.
-                let mut had_terminal = conversation.terminal;
                 if let Some((entry_id, summary_before)) = edit {
                     if let Some(at) = ids.iter().position(|e| *e == entry_id) {
-                        let deleted = &earlier[at..];
-                        let noted = |tag, name| {
-                            deleted.iter().find_map(|e| match &e.body {
-                                EntryBody::User { text } => note_attr(text, tag, name),
-                                _ => None,
-                            })
-                        };
-                        came_from = noted(HOST_CHANGE, "from");
-                        if let Some(to) = noted(TERMINAL_CHANGE, "to") {
-                            had_terminal = Some(to != "attached");
-                        }
+                        came_from = earlier[at..].iter().find_map(|e| match &e.body {
+                            EntryBody::User { text } => note_attr(text, HOST_CHANGE, "from"),
+                            _ => None,
+                        });
                         earlier.truncate(at);
                     }
                     v.ai_delete_entries_from(&id, &entry_id)?;
@@ -745,7 +734,6 @@ impl AiManager {
                 }
                 // AI-05: the conversation keeps the level of its last message.
                 conversation.effort = context.effort.map(core_effort);
-                conversation.terminal = Some(context.tab);
                 if conversation != before {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
@@ -760,7 +748,6 @@ impl AiManager {
                     &earlier,
                     came_from.as_deref(),
                     host_now.as_deref(),
-                    had_terminal,
                     &context,
                 );
                 let full = format!("{notes}{text}");
@@ -776,7 +763,6 @@ impl AiManager {
                         pinned: false,
                         context_start: None,
                         effort: context.effort.map(core_effort),
-                        terminal: Some(context.tab),
                         created_at: now_ms(),
                         updated_at: 0,
                     }),
@@ -828,13 +814,10 @@ impl AiManager {
                 ));
             }
             // AI-05: a retry at another level is the one the conversation used last, as for a
-            // new message. AI-09: so are its terminal tools, which no note announces, since a
-            // retry stores no message.
+            // new message.
             let effort = context.effort.map(core_effort);
-            let terminal = Some(context.tab);
-            if conversation.effort != effort || conversation.terminal != terminal {
+            if conversation.effort != effort {
                 conversation.effort = effort;
-                conversation.terminal = terminal;
                 v.put(
                     Some(&conversation_id),
                     Item::AiConversation(conversation.clone()),
@@ -1632,6 +1615,11 @@ fn store_response(
     turn: &Turn,
     response: AssistantEntry,
 ) -> Result<String, Halt> {
+    // AI-09: the next message is noted when it has the other set of tools.
+    let response = AssistantEntry {
+        terminal: Some(turn.context.tab),
+        ..response
+    };
     let finish = response.finish;
     let shared = shared_call_ids(&response.tool_calls);
     let entry_id = {
@@ -2379,7 +2367,7 @@ fn title_of(text: &str) -> String {
 /// host (AI-09).
 const HOST_CHANGE: &str = "host_change";
 /// The tag of the note Hatoba puts before a message whose requests offer the terminal tools when
-/// the newest turn's did not, or the other way round (AI-09).
+/// the newest reply's did not, or the other way round (AI-09).
 const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
@@ -2573,9 +2561,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 ///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
 ///   `None` when the conversation did not move. `host_now` is the display name of the host (or
 ///   quick-connect target) the conversation is on now.
-/// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and the turn
-///   before it did not, or the other way round. `had_terminal` is what that turn offered, `None`
-///   when unknown.
+/// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
+///   `earlier` tells the model, there was none before, or the other way round
+///   ([`terminal_before`]).
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
@@ -2584,7 +2572,6 @@ fn notes_before(
     earlier: &[AiEntry],
     came_from: Option<&str>,
     host_now: Option<&str>,
-    had_terminal: Option<bool>,
     context: &AiTurnContext,
 ) -> String {
     let mut notes = String::new();
@@ -2597,7 +2584,7 @@ fn notes_before(
     {
         notes.push_str(&tools::host_change_block(from, to));
     }
-    if had_terminal == Some(!context.tab) {
+    if terminal_before(earlier) == Some(!context.tab) {
         notes.push_str(&tools::terminal_change_block(context.tab));
     }
     let to = stored_model_label(v, &context.provider_id, &context.model_id);
@@ -2619,6 +2606,25 @@ fn notes_before(
         }
     }
     notes
+}
+
+/// Whether a terminal was attached as far as `earlier` (the entries before a new message) tells
+/// the model (AI-09): what the newest reply's request offered, or what a `terminal_change` note
+/// says on a newer message that got no reply. `None` when the newest reply is from before replies
+/// recorded it, or when there is no reply.
+fn terminal_before(earlier: &[AiEntry]) -> Option<bool> {
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => return a.terminal,
+            EntryBody::User { text } => {
+                if let Some(to) = note_attr(text, TERMINAL_CHANGE, "to") {
+                    return Some(to == "attached");
+                }
+            }
+            EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
+        }
+    }
+    None
 }
 
 // ---- history search (AI-24) ----

@@ -3072,19 +3072,37 @@ impl Fixture {
             .collect()
     }
 
-    /// What the conversation item records about its newest turn's terminal (AI-09).
-    fn recorded_terminal(&self, conversation_id: &str) -> Option<bool> {
-        super::find_conversation(&lock(&self.vault), conversation_id)
-            .unwrap()
-            .terminal
+    /// Whether each stored reply's request offered the terminal tools (AI-09), oldest first.
+    fn reply_terminals(&self, conversation_id: &str) -> Vec<Option<bool>> {
+        self.entries(conversation_id)
+            .into_iter()
+            .filter_map(|e| match e.body {
+                EntryBody::Assistant(a) => Some(a.terminal),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Stores a message and its reply as another device (or an earlier version) wrote them.
+    fn append_exchange(&self, conversation_id: &str, text: &str, terminal: Option<bool>) {
+        let mut v = lock(&self.vault);
+        append(&mut v, conversation_id, &AiEntry::user(1, text)).unwrap();
+        let reply = AssistantEntry {
+            provider_id: self.provider_id.clone(),
+            model_id: "m1".into(),
+            text: "Elsewhere.".into(),
+            terminal,
+            ..AssistantEntry::default()
+        };
+        append(&mut v, conversation_id, &AiEntry::assistant(2, reply)).unwrap();
     }
 }
 
 #[tokio::test]
-async fn a_terminal_that_comes_or_goes_between_turns_is_noted() {
+async fn a_terminal_that_comes_or_goes_between_replies_is_noted() {
     use hatoba_ai::tools::terminal_change_block;
 
-    let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     let vmiss = f.add_host("VMISS", "");
     let home = AiTurnContext {
         tab: false,
@@ -3100,15 +3118,14 @@ async fn a_terminal_that_comes_or_goes_between_turns_is_noted() {
     };
 
     // A home tab chat moves to a connected tab: no host to come from, but a terminal now.
-    let (conv, _) = f.exchange(None, "can you run df?", home.clone()).await;
-    assert_eq!(f.recorded_terminal(&conv), Some(false));
+    let (conv, _) = f.exchange(None, "can you run df?", home).await;
     f.exchange(Some(&conv), "connected", connected.clone())
         .await;
     // Nothing changed since.
     f.exchange(Some(&conv), "and now?", connected.clone()).await;
     // The tab disconnects, and connects again.
     f.exchange(Some(&conv), "still there?", disconnected).await;
-    f.exchange(Some(&conv), "back", connected.clone()).await;
+    f.exchange(Some(&conv), "back", connected).await;
     let attached = terminal_change_block(true);
     let expected = [
         "can you run df?".to_owned(),
@@ -3118,22 +3135,50 @@ async fn a_terminal_that_comes_or_goes_between_turns_is_noted() {
         format!("{attached}back"),
     ];
     assert_eq!(f.user_texts(&conv), expected);
+    // Each reply records what its request offered.
+    assert_eq!(
+        f.reply_terminals(&conv),
+        [Some(false), Some(true), Some(true), Some(false), Some(true)]
+    );
     // The notes go to the model with the message, as stored, and never title the conversation.
     let last = f.requests().await.pop().unwrap();
     assert_eq!(user_messages(&last), expected);
     assert_eq!(f.detail(&conv).conversation.title, "can you run df?");
-    assert_eq!(f.recorded_terminal(&conv), Some(true));
+}
 
-    // A conversation that never recorded its terminal (from an earlier version) gets no note.
-    {
-        let mut v = lock(&f.vault);
-        let mut item = super::find_conversation(&v, &conv).unwrap();
-        item.terminal = None;
-        v.put(Some(&conv), Item::AiConversation(item)).unwrap();
-    }
-    f.exchange(Some(&conv), "from home", home).await;
-    assert_eq!(f.user_texts(&conv)[5], "from home");
-    assert_eq!(f.recorded_terminal(&conv), Some(false));
+#[tokio::test]
+async fn the_newest_reply_decides_whatever_device_or_version_wrote_it() {
+    use hatoba_ai::tools::terminal_change_block;
+
+    let f = Fixture::new((0..3).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let vmiss = f.add_host("VMISS", "");
+    let connected = AiTurnContext {
+        host_id: Some(vmiss),
+        ..f.context()
+    };
+    let disconnected = AiTurnContext {
+        tab: false,
+        ..connected.clone()
+    };
+    let (conv, _) = f.exchange(None, "first", connected.clone()).await;
+    // Another device went on without a terminal; its entries merged after this device's.
+    let detached = format!("{}on the laptop", terminal_change_block(false));
+    f.append_exchange(&conv, &detached, Some(false));
+    f.exchange(Some(&conv), "still without", disconnected.clone())
+        .await;
+    // A reply from an earlier version did not record it, so nothing is noted after it.
+    f.append_exchange(&conv, "from an older version", None);
+    f.exchange(Some(&conv), "connected again", connected).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "first".to_owned(),
+            detached,
+            "still without".to_owned(),
+            "from an older version".to_owned(),
+            "connected again".to_owned(),
+        ]
+    );
 }
 
 #[tokio::test]
@@ -3183,7 +3228,7 @@ async fn notes_of_a_move_a_terminal_and_a_model_come_in_that_order() {
 }
 
 #[tokio::test]
-async fn an_edit_compares_the_terminal_with_the_turn_before_the_messages_it_deletes() {
+async fn an_edit_compares_the_terminal_with_the_reply_before_it() {
     use hatoba_ai::tools::terminal_change_block;
 
     let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
@@ -3201,7 +3246,7 @@ async fn an_edit_compares_the_terminal_with_the_turn_before_the_messages_it_dele
     f.exchange(Some(&conv), "third", connected.clone()).await;
     let attached = terminal_change_block(true);
 
-    // AI-26: the turn before the third message had the terminal, so editing it from home notes
+    // AI-26: the reply before the third message had the terminal, so editing it from home notes
     // that the terminal went away.
     let third = f.user_ids(&conv)[2].clone();
     f.edit_with(&conv, &third, "third, from home", home.clone())
@@ -3223,7 +3268,7 @@ async fn an_edit_compares_the_terminal_with_the_turn_before_the_messages_it_dele
         f.user_texts(&conv),
         ["first".to_owned(), format!("{attached}second, edited")]
     );
-    // Edited from home, nothing changed since the first message.
+    // Edited from home, nothing changed since the first reply.
     let second = f.user_ids(&conv)[1].clone();
     f.edit_with(&conv, &second, "second, from home", home).await;
     assert_eq!(f.user_texts(&conv), ["first", "second, from home"]);
@@ -3232,19 +3277,21 @@ async fn an_edit_compares_the_terminal_with_the_turn_before_the_messages_it_dele
     let first = f.user_ids(&conv)[0].clone();
     f.edit_with(&conv, &first, "first, edited", connected).await;
     assert_eq!(f.user_texts(&conv), ["first, edited"]);
-    assert_eq!(f.recorded_terminal(&conv), Some(true));
 }
 
 #[tokio::test]
-async fn a_retry_records_its_terminal_without_a_note() {
+async fn a_change_at_a_retry_is_not_noted_and_the_next_message_compares_with_its_reply() {
     use hatoba_ai::tools::terminal_change_block;
 
+    let overloaded =
+        || ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}}));
     let f = Fixture::new(vec![
         answer("One."),
-        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
-        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
-        answer("Two."),
+        overloaded(),
+        overloaded(),
+        answer("Retried."),
         answer("Three."),
+        answer("Edited."),
     ])
     .await;
     let vmiss = f.add_host("VMISS", "");
@@ -3260,22 +3307,38 @@ async fn a_retry_records_its_terminal_without_a_note() {
     let (_, failed) = f.exchange(Some(&conv), "two", disconnected.clone()).await;
     assert_eq!(failed, AiTurnEndReason::Error);
     // A change noted on a message without a reply is not noted again.
-    let (_, failed) = f.exchange(Some(&conv), "two again", disconnected).await;
+    let (_, failed) = f
+        .exchange(Some(&conv), "two again", disconnected.clone())
+        .await;
     assert_eq!(failed, AiTurnEndReason::Error);
-    // The retry stores no message to carry a note, but the next message compares with it.
+    // The retry stores no message to carry a note; its reply records the terminal it had.
     let sink = f.retry(&conv, connected.clone()).unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
-    assert_eq!(f.recorded_terminal(&conv), Some(true));
     f.exchange(Some(&conv), "three", connected).await;
+    let detached = format!("{}two", terminal_change_block(false));
     assert_eq!(
         f.user_texts(&conv),
         [
             "one".to_owned(),
-            format!("{}two", terminal_change_block(false)),
+            detached.clone(),
             "two again".to_owned(),
-            "three".to_owned(),
+            "three".to_owned()
         ]
+    );
+    assert_eq!(
+        f.reply_terminals(&conv),
+        [Some(true), Some(true), Some(true)]
+    );
+
+    // Editing a message from before the retry compares with what came before that message,
+    // not with the retry: the note on "two" already said the terminal went away.
+    let again = f.user_ids(&conv)[2].clone();
+    f.edit_with(&conv, &again, "two, edited", disconnected)
+        .await;
+    assert_eq!(
+        f.user_texts(&conv),
+        ["one".to_owned(), detached, "two, edited".to_owned()]
     );
 }
 
