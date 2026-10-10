@@ -2,8 +2,8 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type R
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect, toast } from "@/components/overlay";
-import { readClipboard } from "@/features/terminal/clipboard";
-import { useT, type MessageKey } from "@/i18n";
+import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
+import { formatDateTime, formatMessageTime, useT, type MessageKey } from "@/i18n";
 import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
@@ -13,6 +13,7 @@ import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
+import { replies as findReplies } from "./replies";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -53,6 +54,8 @@ type CallView =
 
 /** How long a revealed entry stays highlighted (AI-24). */
 const FLASH_MS = 2400;
+/** How long Copy shows its check after copying. */
+const COPIED_MS = 1500;
 
 export interface HostInfo {
   name: string;
@@ -82,6 +85,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     for (let i = entries.length - 1; i >= 0; i--) if (entries[i].role === "assistant") return entries[i].entry_id;
     return null;
   }, [entries]);
+  const replies = useMemo(() => findReplies(entries), [entries]);
 
   // Follow new content while the view is at the bottom.
   useLayoutEffect(() => {
@@ -125,6 +129,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const canEdit = !!slot.conversationId && !turn && !slot.remoteRunning && !slot.compacting && !slot.loading;
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
+  // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
+  const running = !!turn || slot.remoteRunning;
 
   return (
     <div
@@ -154,13 +160,15 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             body = (
               <UserMessage
                 text={entry.text}
+                at={entry.created_at}
                 pending={pending}
                 onResend={canEdit && !pending ? (text) => editAndResend(slotId, entry.entry_id, text) : undefined}
               />
             );
             break;
           }
-          case "assistant":
+          case "assistant": {
+            const reply = running && entry.entry_id === replies.open ? undefined : replies.texts.get(entry.entry_id);
             body = (
               <AssistantMessage
                 slotId={slotId}
@@ -171,9 +179,11 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 host={host}
                 finish={entry.finish}
                 flash={flash}
+                reply={reply === undefined ? undefined : { text: reply, at: entry.created_at }}
               />
             );
             break;
+          }
           case "summary":
             body = <SummaryBlock text={entry.text} flash={flashed} />;
             break;
@@ -203,12 +213,43 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
 
 // ───────────────────────── entries ─────────────────────────
 
+/** When a message was sent or a reply finished, with the full date and time on hover. */
+function MessageTime({ at }: { at: number }) {
+  const t = useT();
+  return (
+    <time className={s.time} dateTime={new Date(at).toISOString()} title={formatDateTime(t.locale, at)}>
+      {formatMessageTime(t.locale, at)}
+    </time>
+  );
+}
+
+/** Copies a message's text and shows a check for a moment. */
+function CopyButton({ text }: { text: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return (
+    <IconButton
+      icon={copied ? "check" : "copy"}
+      label={t(copied ? "btn.copied" : "btn.copy")}
+      size={13}
+      className={s.messageAction}
+      onClick={() => void writeClipboard(text).then(() => setCopied(true), () => toast(t("terminal.clipboardDenied"), "error"))}
+    />
+  );
+}
+
 /**
- * The user's message. With `onResend`, Edit replaces it and sends it again (AI-26). The notes Hatoba
- * stored before it (AI-05, AI-09) are dividers above it, not part of the bubble; an edit shows them
- * while it is sent, and Rust works them out again for the new message.
+ * The user's message. Copy takes what was typed, without the attachments. With `onResend`, Edit
+ * replaces it and sends it again (AI-26). The notes Hatoba stored before it (AI-05, AI-09) are
+ * dividers above it, not part of the bubble; an edit shows them while it is sent, and Rust works
+ * them out again for the new message.
  */
-function UserMessage({ text, pending, onResend }: { text: string; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
+function UserMessage({ text, at, pending, onResend }: { text: string; at: number; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
@@ -225,12 +266,16 @@ function UserMessage({ text, pending, onResend }: { text: string; pending: boole
     <>
       {notes}
       <div className={s.userRow}>
-        {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.editButton} onClick={() => setEditing(true)} />}
+        <div className={s.userActions}>
+          {parts.typed && <CopyButton text={parts.typed} />}
+          {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.messageAction} onClick={() => setEditing(true)} />}
+        </div>
         <div className={s.userStack}>
           {parts.attachments.map((a, i) => (
             <AttachmentCardFor key={i} attachment={a} />
           ))}
           <div className={cx(s.user, pending && s.userPending, "selectable")}>{parts.typed}</div>
+          <MessageTime at={at} />
         </div>
       </div>
     </>
@@ -403,6 +448,7 @@ function AssistantMessage({
   streaming,
   finish,
   flash,
+  reply,
 }: {
   slotId: string;
   text: string;
@@ -414,6 +460,8 @@ function AssistantMessage({
   finish?: string;
   /** The highlighted search hit (AI-24). */
   flash?: string | null;
+  /** The finished reply this entry ends: its text for Copy, and when it ended. */
+  reply?: { text: string; at: number };
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
   return (
@@ -424,6 +472,12 @@ function AssistantMessage({
       {calls.map((call) => (
         <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} host={host} flash={flash === `call:${call.id}`} />
       ))}
+      {reply && (
+        <div className={s.replyFoot}>
+          {reply.text && <CopyButton text={reply.text} />}
+          <MessageTime at={reply.at} />
+        </div>
+      )}
     </div>
   );
 }

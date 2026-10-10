@@ -83,6 +83,23 @@ export function formatRelative(locale: Locale, ms: number, now = Date.now()): st
   return fmt(locale, sameYear ? { month: "short", day: "numeric" } : { year: "numeric", month: "short", day: "numeric" }).format(d);
 }
 
+/** A message's time: "09:12" today, "Yesterday 09:12", "Oct 5, 09:12", and the year too before this one. */
+export function formatMessageTime(locale: Locale, ms: number, now = Date.now()): string {
+  const d = new Date(ms);
+  const today = new Date(now);
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const clock = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
+  if (ms >= startOfToday) return fmt(locale, clock).format(d);
+  if (ms >= startOfToday - 86_400_000) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
+  const year = d.getFullYear() === today.getFullYear() ? {} : ({ year: "numeric" } as const);
+  return fmt(locale, { ...year, month: "short", day: "numeric", ...clock }).format(d);
+}
+
+/** The full date and time, for a tooltip. */
+export function formatDateTime(locale: Locale, ms: number): string {
+  return fmt(locale, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(ms));
+}
+
 /** "2026-03-14" */
 export function formatDate(ms: number): string {
   const d = new Date(ms);
