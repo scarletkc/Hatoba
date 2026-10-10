@@ -8,8 +8,8 @@ vi.mock("@/ipc/api", async (importActual) => ({ ...(await importActual<typeof im
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { continueHomeConversation } = await import("./actions");
-const { blankSlot, getSlot, HOME_SLOT, offersHomeConversation, useAi } = await import("./store");
+const { askAiAboutConnection, continueHomeConversation, noteSelection } = await import("./actions");
+const { blankSlot, getSlot, HOME_SLOT, offersHomeConversation, patchSlot, useAi } = await import("./store");
 type Slot = import("./store").Slot;
 
 const TAB = "tab-1";
@@ -33,7 +33,7 @@ function homeSlot(patch: Partial<Slot> = {}): Slot {
 }
 
 function setSlots(home: Slot | null, tab: Slot = blankSlot("manual")) {
-  useAi.setState({ slots: { ...(home ? { [HOME_SLOT]: home } : {}), [TAB]: tab } });
+  useAi.setState({ slots: { ...(home ? { [HOME_SLOT]: home } : {}), [TAB]: tab }, selections: {}, diagnostics: {} });
 }
 
 beforeEach(() => setSlots(homeSlot()));
@@ -87,6 +87,23 @@ describe("continueHomeConversation (AI-09)", () => {
     continueHomeConversation(TAB);
     expect(getSlot(TAB)).toMatchObject({ conversationId: view.id, draft: "tab draft", extras: [] });
     expect(getSlot(HOME_SLOT)).toMatchObject({ conversationId: null, draft: "home draft", extras: [{ id: "x1", attachment: paste }] });
+  });
+
+  it("counts the tab's selection and diagnostics chips as input it holds (AI-10)", () => {
+    const attach = [
+      () => noteSelection(TAB, "502 Bad Gateway"),
+      () => {
+        askAiAboutConnection(TAB, "prod-api", "kind: timeout");
+        patchSlot(TAB, { draft: "" }); // leave only the chip, without the suggested question
+      },
+    ];
+    for (const chip of attach) {
+      setSlots(homeSlot({ draft: "home draft" }));
+      chip();
+      continueHomeConversation(TAB);
+      expect(getSlot(TAB)).toMatchObject({ conversationId: view.id, draft: "" });
+      expect(getSlot(HOME_SLOT)).toMatchObject({ conversationId: null, draft: "home draft" });
+    }
   });
 
   it("leaves a busy home conversation where it is", () => {

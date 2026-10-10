@@ -665,8 +665,9 @@ function moveSlot(from: string, to: string) {
   const source = getSlot(from);
   const runner = runners.get(from);
   const target = getSlot(to);
-  // The input area of the slot the conversation moves to wins when it holds something; the source's then stays.
-  const keep = !!target.draft || target.extras.length > 0;
+  // The input area of the slot the conversation moves to wins when it holds something, a tab's selection or
+  // diagnostics chip included (AI-10); the source's then stays.
+  const keep = !!target.draft || pendingAttachments(to).length > 0;
   setSlot(to, { ...source, draft: keep ? target.draft : source.draft, extras: keep ? target.extras : source.extras });
   setSlot(from, keep ? blankSlot(defaultMode(), source.draft, source.extras) : blankSlot());
   if (runner) {
