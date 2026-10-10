@@ -1,0 +1,153 @@
+/* The change an edit_file or write_file call makes, on its approval card (AI-39, AI-40). */
+
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fileIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--fg2);
+}
+
+/* The whole path, wrapped: the card hides nothing of a call's input (AI-17). */
+.path {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.stats {
+  flex: none;
+  display: inline-flex;
+  gap: 5px;
+  margin-left: auto;
+  padding-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.added {
+  color: var(--green);
+}
+
+.removed {
+  color: var(--red);
+}
+
+/* One grid for every row, so the line number gutters line up and long lines wrap beside them. */
+.diff {
+  display: grid;
+  grid-template-columns: max-content max-content 1.4ch minmax(0, 1fr);
+  padding: 4px 0;
+  border-radius: var(--radius-md);
+  background: var(--win);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: text;
+}
+
+.num {
+  padding: 0 5px 0 8px;
+  text-align: right;
+  color: var(--fg3);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.num + .num {
+  padding-left: 3px;
+}
+
+.sign {
+  user-select: none;
+  color: var(--fg3);
+}
+
+.text {
+  padding-right: 9px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg);
+}
+
+.add {
+  background: color-mix(in srgb, var(--green) 13%, transparent);
+}
+
+.del {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.sign.add {
+  color: var(--green);
+}
+
+.sign.del {
+  color: var(--red);
+}
+
+.num.add,
+.num.del {
+  color: var(--fg2);
+}
+
+.gap {
+  grid-column: 1 / -1;
+  margin: 2px 0;
+  padding: 1px 9px;
+  background: var(--fill);
+  color: var(--fg3);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  user-select: none;
+}
+
+.noEol {
+  color: var(--fg3);
+  user-select: none;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--red) 8%, var(--win));
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--red) 45%, transparent);
+  font-size: var(--text-xs);
+  color: var(--fg);
+}
+
+.errorText {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--red);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

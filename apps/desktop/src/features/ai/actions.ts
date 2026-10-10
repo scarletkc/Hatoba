@@ -11,6 +11,7 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFilePreview,
   AiModelRef,
   AiPermissionMode,
   AiToolCall,
@@ -610,6 +611,18 @@ export async function stopTurn(slotId: string) {
 /** The user's answer to an approval card (AI-17) or the tool call limit (AI-18). */
 export function decideCall(slotId: string, decision: Decision) {
   runners.get(slotId)?.decide(decision);
+}
+
+/**
+ * AI-39, AI-40: the change an `edit_file` or `write_file` call waiting on the slot's approval card would
+ * make, read from the host of the slot's tab, with the arguments as the user edited them on the card.
+ */
+export function previewFileCall(slotId: string, callId: string, edited: string | null): Promise<AiFilePreview> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId) return Promise.reject(new Error("the conversation is not stored yet"));
+  const target = attachedTab(slotId);
+  const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
+  return api.ai_file_preview(convId, callId, sessionId, edited);
 }
 
 export type { Decision };

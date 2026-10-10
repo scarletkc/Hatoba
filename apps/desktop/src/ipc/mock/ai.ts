@@ -34,6 +34,7 @@ type AiApi = Pick<
   | "ai_retry"
   | "ai_tool_result"
   | "ai_tool_run"
+  | "ai_file_preview"
   | "ai_stop"
   | "ai_compact"
   | "ai_search"
@@ -102,6 +103,11 @@ const DAY = 24 * HOUR;
  *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
  *   "hidden"          run_command with several lines, a tab, an escape sequence and a right-to-left
  *                     override, to see how the approval card shows them (AI-17)
+ *   "read file"       read_file of an nginx site        "edit"     edit_file of its proxy block
+ *   "listen"          edit_file with replace_all         "nomatch"  edit_file whose old_string is missing
+ *   "crlf"            edit_file of a CRLF file           "write"    write_file of a new file
+ *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
+ *                     shared by every tab, and a run changes them for the next card)
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
  * Keywords come from the typed text. A message without one gets an answer about what it carries:
  * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
@@ -354,7 +360,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (results.length === 0 && callsSoFar === 0) {
       const calls: AiToolCall[] = [];
       // Terminal tools only with a connected tab; a request without one does not offer them.
-      const wantsTerminal = want("disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "screen", "屏幕", "画面", "type", "send", "输入", "入力");
+      const wantsTerminal = want(
+        ...["disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
+        ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込"],
+      );
       if (terminal) {
         if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
         if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
@@ -362,6 +371,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
         if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
         if (want("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
+        // AI-38…40: the file tools, on the mock's files.
+        if (want("read file", "cat ", "读取文件", "ファイルを読")) calls.push(call("read_file", { path: "/etc/nginx/sites-available/default" }));
+        if (want("edit", "编辑", "編集"))
+          calls.push(
+            call("edit_file", {
+              path: "/etc/nginx/sites-available/default",
+              old_string: "        proxy_pass http://127.0.0.1:8081/;\n        proxy_read_timeout 30s;",
+              new_string: "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
+            }),
+          );
+        if (want("listen", "端口", "ポート")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "80 default_server", new_string: "8080 default_server", replace_all: true }));
+        if (want("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
+        if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
+        if (want("write", "写入", "書き込"))
+          calls.push(call("write_file", { path: "/srv/app/public/maintenance.html", content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
+        if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
@@ -716,6 +741,74 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   // ───────────── tools that run in "Rust" ─────────────
 
+  /** The file tools' host (AI-38…40): a few files every tab shares. `~/` is the home directory of `deploy`. */
+  const remoteFiles = new Map<string, string>([
+    [
+      "/etc/nginx/sites-available/default",
+      [
+        "# Default server configuration",
+        "#",
+        "server {",
+        "    listen 80 default_server;",
+        "    listen [::]:80 default_server;",
+        "",
+        "    root /var/www/html;",
+        "    index index.html index.htm;",
+        "",
+        "    server_name _;",
+        "",
+        "    location / {",
+        "        try_files $uri $uri/ =404;",
+        "    }",
+        "",
+        "    location /api/ {",
+        "        proxy_pass http://127.0.0.1:8081/;",
+        "        proxy_read_timeout 30s;",
+        "    }",
+        "",
+        "    access_log /var/log/nginx/access.log;",
+        "    error_log /var/log/nginx/error.log warn;",
+        "}",
+        "",
+      ].join("\n"),
+    ],
+    ["/etc/motd", "Welcome to prod-api.\nMaintenance window: Sundays 02:00–04:00 UTC.\n"],
+    ["/srv/app/web.config", '<?xml version="1.0"?>\r\n<configuration>\r\n  <appSettings>\r\n    <add key="mode" value="production" />\r\n  </appSettings>\r\n</configuration>\r\n'],
+  ]);
+  /** What each approval card read, like Rust's: the call writes only over it (AI-39). */
+  const fileBases = new Map<string, string | null>();
+
+  const filePath = (p: string) => (p === "~" ? "/home/deploy" : p.startsWith("~/") ? `/home/deploy/${p.slice(2)}` : p.startsWith("/") ? p : `/home/deploy/${p}`);
+  const crlfOf = (text: string) => {
+    const crlf = text.split("\r\n").length - 1;
+    return crlf > text.split("\n").length - 1 - crlf;
+  };
+  const toCrlf = (text: string) => text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n");
+  const fileLines = (text: string) => (text === "" ? [] : text.replace(/\n$/, "").split("\n").map((l) => l.replace(/\r$/, "")));
+  const FILE_DISCONNECTED = "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
+
+  /** The file after an edit or a write, or the error the model gets, as `hatoba_ai::files` computes them. */
+  function fileAfter(name: string, args: Record<string, unknown>, before: string | null): { text: string } | { error: string } {
+    const path = String(args.path ?? "");
+    if (name === "write_file") {
+      const content = String(args.content ?? "");
+      return { text: before !== null && crlfOf(before) ? toCrlf(content) : content };
+    }
+    if (before === null) return { error: `${path} does not exist. Use write_file to create it.` };
+    const crlf = crlfOf(before);
+    const old = crlf ? toCrlf(String(args.old_string ?? "")) : String(args.old_string ?? "");
+    const neu = crlf ? toCrlf(String(args.new_string ?? "")) : String(args.new_string ?? "");
+    if (!old) return { error: "old_string is empty. To create a file or replace all of its content, use write_file." };
+    const count = before.split(old).length - 1;
+    if (count === 0)
+      return {
+        error: `old_string was not found in ${path}, so nothing was changed. It must match the file exactly, including spaces, tabs and line breaks: read the file with read_file and copy the text without the line numbers.`,
+      };
+    if (count > 1 && args.replace_all !== true)
+      return { error: `old_string appears ${count} times in ${path}, so nothing was changed. Include more of the surrounding lines to make it unique, or set replace_all to replace every occurrence.` };
+    return { text: args.replace_all === true ? before.split(old).join(neu) : before.replace(old, () => neu) };
+  }
+
   function exec(command: string): { status: number; stdout: string; stderr: string } {
     if (/nonexistent|fail/.test(command)) return { status: 5, stdout: "", stderr: "Failed to restart nonexistent.service: Unit nonexistent.service not found." };
     if (/\bdf\b/.test(command))
@@ -757,6 +850,40 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
         const r = exec(command);
         return { status: "ok", content: `exit status: ${r.status}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}` };
+      }
+      case "read_file": {
+        if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };
+        await wait(500);
+        const path = String(args.path ?? "");
+        const text = remoteFiles.get(filePath(path));
+        if (text === undefined) return { status: "error", content: `${path} does not exist.` };
+        const lines = fileLines(text);
+        const from = Math.max(1, Number(args.offset ?? 1) || 1);
+        const shown = lines.slice(from - 1, args.limit ? from - 1 + Number(args.limit) : undefined);
+        const crlf = crlfOf(text) ? ", CRLF line breaks" : "";
+        const head = shown.length === lines.length ? `${path}: ${lines.length} lines${crlf}` : `${path}: lines ${from}–${from + shown.length - 1} of ${lines.length}${crlf}`;
+        return { status: "ok", content: `${head}\n${shown.map((l, i) => `${String(from + i).padStart(6)}\t${l}`).join("\n")}\n` };
+      }
+      case "edit_file":
+      case "write_file": {
+        if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };
+        await wait(600);
+        const path = String(args.path ?? "");
+        const key = filePath(path);
+        const current = remoteFiles.get(key) ?? null;
+        const seen = fileBases.has(x.id) ? fileBases.get(x.id)! : current;
+        fileBases.delete(x.id);
+        if (seen !== current)
+          return {
+            status: "error",
+            content: `${path} changed on the host after Hatoba read it for the approval card, so nothing was written. Read it again with read_file before you change it.`,
+          };
+        const after = fileAfter(x.name, args, current);
+        if ("error" in after) return { status: "error", content: after.error };
+        remoteFiles.set(key, after.text);
+        const count = fileLines(after.text).length;
+        if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
+        return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
       }
       case "web_search":
         await wait(700);
@@ -1015,6 +1142,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       openCall(c, callId);
       // Like Rust: a rejection stores the user's reason; the adapter tells the model the call was rejected.
       const content = result.status === "rejected" ? result.content.trim() : result.content;
+      fileBases.delete(callId);
       return storeResult(c, callId, result.status, content, result.edited_arguments);
     },
     ai_tool_run: async (id, callId, sessionId, edited) => {
@@ -1024,6 +1152,31 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // A stop stored a cancelled result while the tool ran.
       if (answered(c).has(callId)) fail("cancelled", "the tool call was stopped");
       return storeResult(c, callId, r.status, r.content, edited);
+    },
+    ai_file_preview: async (id, callId, sessionId, edited) => {
+      const c = need(id);
+      const x = openCall(c, callId);
+      let args: Record<string, unknown>;
+      try {
+        args = JSON.parse(edited ?? x.arguments) as Record<string, unknown>;
+      } catch {
+        return { path: "", before: null, after: null, error: "The arguments are not valid JSON.", crlf: false };
+      }
+      const path = String(args.path ?? "");
+      const failed = (error: string) => ({ path, before: null, after: null, error, crlf: false });
+      if (x.name !== "edit_file" && x.name !== "write_file") return failed(`${x.name} shows no diff.`);
+      // Like Rust: the file is read once per call, and the run writes only over what was read.
+      if (!fileBases.has(callId)) {
+        if (!sessionId) return failed(FILE_DISCONNECTED);
+        await delay(450);
+        fileBases.set(callId, remoteFiles.get(filePath(path)) ?? null);
+      }
+      const before = fileBases.get(callId) ?? null;
+      const after = fileAfter(x.name, args, before);
+      if ("error" in after) return failed(after.error);
+      const crlf = before !== null && crlfOf(before);
+      const shown = (text: string) => (crlf ? text.replace(/\r\n/g, "\n") : text);
+      return { path, before: before === null ? null : shown(before), after: shown(after.text), error: null, crlf };
     },
     ai_stop: async (id) => {
       const c = convs.get(id);

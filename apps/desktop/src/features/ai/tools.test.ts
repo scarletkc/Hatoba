@@ -4,6 +4,7 @@ import {
   callSummary,
   exitStatusOf,
   grantKey,
+  isFileTool,
   keySequence,
   mcpOffResult,
   mustAsk,
@@ -61,6 +62,17 @@ describe("tool kinds", () => {
     expect(needsSession("fetch_url")).toBe(false);
     expect(needsSession("web_search")).toBe(false);
   });
+
+  it("runs the file tools in Rust on the tab's session (AI-38…40)", () => {
+    for (const name of ["read_file", "edit_file", "write_file"]) {
+      const kind = toolKind(name);
+      expect(kind).toBe(name);
+      expect(isFileTool(kind)).toBe(true);
+      expect(runsInFrontend(kind)).toBe(false);
+      expect(needsSession(kind)).toBe(true);
+    }
+    expect(isFileTool("run_command")).toBe(false);
+  });
 });
 
 describe("permission modes (§13.5)", () => {
@@ -72,10 +84,14 @@ describe("permission modes (§13.5)", () => {
     expect(needsApproval("send_input", "manual")).toBe(true);
     expect(needsApproval("fetch_url", "manual")).toBe(true);
     expect(needsApproval("mcp", "manual")).toBe(true);
+    // read_file asks too: it can send ~/.ssh or .env to the provider.
+    expect(needsApproval("read_file", "manual")).toBe(true);
+    expect(needsApproval("edit_file", "manual")).toBe(true);
+    expect(needsApproval("write_file", "manual")).toBe(true);
   });
 
   it("runs everything in bypass mode", () => {
-    for (const kind of ["read_terminal", "run_command", "send_input", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
+    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
       expect(needsApproval(kind, "bypass")).toBe(false);
     }
   });
@@ -138,6 +154,10 @@ describe("display helpers", () => {
     expect(callSummary("send_input", '{"text":"y","key":"enter"}')).toBe("y [enter]");
     expect(callSummary("fetch_url", '{"url":"https://example.com"}')).toBe("https://example.com");
     expect(callSummary("mcp__x__y", "{}")).toBe("");
+    expect(callSummary("read_file", '{"path":"/etc/hosts"}')).toBe("/etc/hosts");
+    expect(callSummary("read_file", '{"path":"/var/log/syslog","offset":200}')).toBe("/var/log/syslog:200");
+    expect(callSummary("edit_file", '{"path":"~/.bashrc","old_string":"a","new_string":"b"}')).toBe("~/.bashrc");
+    expect(callSummary("write_file", '{"path":"/srv/new.txt","content":"x"}')).toBe("/srv/new.txt");
   });
 
   it("finds the exit status in a run_command result", () => {
@@ -196,6 +216,9 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: true, mcp: info(false, true) })).toBe(false);
     expect(mustAsk({ kind: "run_command", mode: "manual", allowedHere: false })).toBe(true);
     expect(mustAsk({ kind: "web_search", mode: "manual", allowedHere: false })).toBe(false);
+    // AI-19 per tool: allowing edit_file leaves write_file asking.
+    expect(grantKey("edit_file", "edit_file", null)).toBe("edit_file");
+    expect(grantKey("write_file", "write_file", null)).not.toBe(grantKey("edit_file", "edit_file", null));
   });
 
   it("labels built-in, MCP and unknown tools", () => {

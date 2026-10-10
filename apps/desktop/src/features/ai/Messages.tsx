@@ -9,6 +9,7 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
+import { FileChange, useFilePreview } from "./FileChange";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
@@ -24,6 +25,9 @@ const TOOL_ICON: Record<ToolKind, string> = {
   read_terminal: "terminal-window",
   run_command: "terminal",
   send_input: "keyboard",
+  read_file: "file-text",
+  edit_file: "note-pencil",
+  write_file: "file-plus",
   web_search: "magnifying-glass",
   fetch_url: "globe",
   read_skill: "book-open",
@@ -585,6 +589,13 @@ function draftFrom(kind: ToolKind, args: Record<string, unknown>, json: string):
       return { main: str(args.text), timeout: "", key: (SEND_KEYS as readonly string[]).includes(str(args.key)) ? (str(args.key) as SendKey) : "", wait: str(args.wait_seconds) };
     case "fetch_url":
       return { main: str(args.url), timeout: "", key: "", wait: "" };
+    case "read_file":
+      return { main: str(args.path), timeout: "", key: "", wait: "" };
+    // AI-39, AI-40: Edit changes the text the call writes; the diff follows.
+    case "edit_file":
+      return { main: str(args.new_string), timeout: "", key: "", wait: "" };
+    case "write_file":
+      return { main: str(args.content), timeout: "", key: "", wait: "" };
     default:
       return { main: prettyArgs(json), timeout: "", key: "", wait: "" };
   }
@@ -601,6 +612,12 @@ function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { js
       return { json: JSON.stringify(without({ ...base, text: d.main, key: d.key || undefined, wait_seconds: num(d.wait) })) };
     case "fetch_url":
       return { json: JSON.stringify({ ...base, url: d.main.trim() }) };
+    case "read_file":
+      return { json: JSON.stringify({ ...base, path: d.main.trim() }) };
+    case "edit_file":
+      return { json: JSON.stringify({ ...base, new_string: d.main }) };
+    case "write_file":
+      return { json: JSON.stringify({ ...base, content: d.main }) };
     default: {
       const parsed = parseArgs(d.main);
       return parsed ? { json: JSON.stringify(parsed) } : { error: true };
@@ -693,6 +710,14 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
   const [invalid, setInvalid] = useState(false);
   const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, call.name);
   const bypass = useAi((st) => st.slots[slotId]?.mode === "bypass");
+  // AI-39, AI-40: an edit or write shows its diff, which follows the text changed in Edit.
+  const fileChange = kind === "edit_file" || kind === "write_file";
+  const editedFile = useMemo(() => {
+    if (!fileChange || mode !== "edit") return null;
+    const next = argsFrom(kind, args, draft);
+    return "json" in next && next.json !== JSON.stringify(args) ? next.json : null;
+  }, [fileChange, mode, kind, args, draft]);
+  const file = useFilePreview(slotId, call.id, editedFile, fileChange);
 
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
     if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow });
@@ -743,21 +768,41 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
             }
           }}
         >
-          {kind === "fetch_url" ? (
-            <input className={s.input} value={draft.main} aria-label={t("ai.approval.url")} spellCheck={false} onChange={(e) => setDraft({ ...draft, main: e.target.value })} autoFocus />
-          ) : (
-            <textarea
-              className={cx(s.input, s.textarea)}
+          {kind === "fetch_url" || kind === "read_file" ? (
+            <input
+              className={s.input}
               value={draft.main}
-              aria-label={kind === "send_input" ? t("ai.approval.text") : kind === "run_command" ? t("ai.approval.command") : t("ai.call.input")}
+              aria-label={kind === "read_file" ? t("ai.approval.path") : t("ai.approval.url")}
               spellCheck={false}
-              rows={Math.min(8, Math.max(2, draft.main.split("\n").length))}
-              onChange={(e) => {
-                setInvalid(false);
-                setDraft({ ...draft, main: e.target.value });
-              }}
+              onChange={(e) => setDraft({ ...draft, main: e.target.value })}
               autoFocus
             />
+          ) : (
+            <>
+              {fileChange && <div className={s.label}>{kind === "edit_file" ? t("ai.approval.newString") : t("ai.approval.content")}</div>}
+              <textarea
+                className={cx(s.input, s.textarea)}
+                value={draft.main}
+                aria-label={
+                  kind === "send_input"
+                    ? t("ai.approval.text")
+                    : kind === "run_command"
+                      ? t("ai.approval.command")
+                      : kind === "edit_file"
+                        ? t("ai.approval.newString")
+                        : kind === "write_file"
+                          ? t("ai.approval.content")
+                          : t("ai.call.input")
+                }
+                spellCheck={false}
+                rows={Math.min(fileChange ? 14 : 8, Math.max(2, draft.main.split("\n").length))}
+                onChange={(e) => {
+                  setInvalid(false);
+                  setDraft({ ...draft, main: e.target.value });
+                }}
+                autoFocus
+              />
+            </>
           )}
           {invalid && <div className={s.fieldError}>{t("ai.approval.invalidJson")}</div>}
           {kind === "run_command" && (
@@ -782,6 +827,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {t("ai.approval.seconds")}
             </div>
           )}
+          {fileChange && <FileChange state={file} replaceAll={args.replace_all === true} />}
         </div>
       ) : (
         <div className={s.approvalInput}>
@@ -807,7 +853,18 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {args.offset !== undefined && <div className={s.meta}>{t("ai.approval.offset", { n: str(args.offset) })}</div>}
             </>
           )}
-          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && (
+          {kind === "read_file" && (
+            <>
+              <ShownInput text={str(args.path)} command />
+              <div className={s.meta}>
+                {[t("ai.approval.fromLine", { n: str(args.offset) || 1 }), args.limit !== undefined && args.limit !== null ? t("ai.approval.maxLines", { n: str(args.limit) }) : ""]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </>
+          )}
+          {fileChange && <FileChange state={file} replaceAll={args.replace_all === true} />}
+          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && kind !== "read_file" && !fileChange && (
             <>
               {mcp && <div className={s.label}>{t("ai.approval.arguments")}</div>}
               <ShownInput text={prettyArgs(call.arguments) || "{}"} />
@@ -859,7 +916,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {t("btn.edit")}
             </Button>
           )}
-          <Button size="sm" variant="primary" icon="play" onClick={() => run()}>
+          {/* An edit or write runs once its diff has been read, so the user approves what they saw. */}
+          <Button size="sm" variant="primary" icon="play" disabled={fileChange && file.loading} onClick={() => run()}>
             {t("ai.approval.run")}
           </Button>
         </div>
