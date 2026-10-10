@@ -265,7 +265,8 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
  */
 function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; convHost: HostView | undefined }) {
   const t = useT();
-  const home = useAi((st) => (tab ? st.slots[HOME_SLOT] : undefined));
+  // The title of the home tab's conversation while this tab offers to continue it (AI-09).
+  const homeTitle = useAi((st) => (tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null));
   const items: ReactNode[] = [];
   if (!tab) {
     if (convHost)
@@ -301,7 +302,7 @@ function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slo
         </Notice>,
       );
     else if (tab.status === "connecting") items.push(<Notice key="state" icon={<Spinner size={12} />}>{t("ai.notice.connecting", { host: name })}</Notice>);
-    if (home && offersHomeConversation(slot, home))
+    if (homeTitle !== null)
       items.push(
         <Notice
           key="home"
@@ -312,7 +313,7 @@ function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slo
             </Button>
           }
         >
-          {t("ai.notice.homeConversation", { title: home.conversation?.title || t("ai.untitled") })}
+          {t("ai.notice.homeConversation", { title: homeTitle || t("ai.untitled") })}
         </Notice>,
       );
     const convHostId = slot.conversation?.host_id;
