@@ -2427,8 +2427,17 @@ fn spawn_send(
     conversation_id: &str,
     text: &str,
 ) -> (tokio::task::JoinHandle<AppResult<AiSendStarted>>, Arc<Sink>) {
+    spawn_send_with(f, conversation_id, text, f.context())
+}
+
+fn spawn_send_with(
+    f: &Fixture,
+    conversation_id: &str,
+    text: &str,
+    context: AiTurnContext,
+) -> (tokio::task::JoinHandle<AppResult<AiSendStarted>>, Arc<Sink>) {
     let sink = Arc::new(Sink::default());
-    let (manager, vault, env, context) = (f.manager.clone(), f.vault.clone(), f.env(), f.context());
+    let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env());
     let input = AiSendInput {
         conversation_id: Some(conversation_id.to_owned()),
         text: text.to_owned(),
@@ -2487,6 +2496,46 @@ async fn a_message_stopped_while_the_context_is_compacted_is_not_stored() {
     assert_eq!(f.entries(&conv).len(), 2);
     assert!(!f.manager.is_running(&conv));
     assert_eq!(f.context_start(&conv), None);
+}
+
+#[tokio::test]
+async fn a_move_stopped_while_the_context_is_compacted_is_not_stored() {
+    use hatoba_ai::tools::host_change_block;
+
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY").set_delay(Duration::from_secs(30)),
+        answer("Short answer."),
+    ])
+    .await;
+    f.set_context_window(1_000);
+    let (conv, _) = f
+        .exchange(None, "first question", f.quick("10.0.0.9"))
+        .await;
+
+    // AI-09: the move to another target goes with the message, which the stop keeps from being
+    // stored.
+    let (send, sink) = spawn_send_with(&f, &conv, &"disk ".repeat(720), f.quick("10.0.0.10"));
+    f.wait_for_requests(2).await;
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    assert_eq!(send.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    let first = "root@10.0.0.9:22";
+    assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
+
+    // So the next message from that target still notes the move.
+    f.exchange(Some(&conv), "short", f.quick("10.0.0.10")).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "first question".to_owned(),
+            format!("{}short", host_change_block(first, "root@10.0.0.10:22"))
+        ]
+    );
+    assert_eq!(
+        f.recorded_place(&conv),
+        (None, Some("root@10.0.0.10:22".to_owned()))
+    );
 }
 
 #[tokio::test]
@@ -3084,6 +3133,49 @@ async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
     };
     f.exchange(Some(&conv), "four", on_prod).await;
     assert_eq!(f.user_texts(&conv), ["one", "two", "three", "four"]);
+}
+
+#[tokio::test]
+async fn a_target_in_another_letter_case_is_the_same_server() {
+    let f = Fixture::new((0..3).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    // The panel compares addresses in any letter case and without brackets (HOST-12).
+    let saved = lock(&f.vault)
+        .put(
+            None,
+            Item::Host(hatoba_core::model::Host {
+                name: "db".into(),
+                address: "db.example.org".into(),
+                port: 22,
+                username: "root".into(),
+                ..hatoba_core::model::Host::default()
+            }),
+        )
+        .unwrap();
+    let (conv, _) = f.exchange(None, "one", f.quick("DB.Example.org")).await;
+    f.exchange(Some(&conv), "two", f.quick("db.example.ORG"))
+        .await;
+    assert_eq!(
+        f.recorded_place(&conv),
+        (None, Some("root@DB.Example.org:22".to_owned()))
+    );
+    let on_saved = AiTurnContext {
+        host_id: Some(saved),
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "three", on_saved).await;
+    assert_eq!(f.user_texts(&conv), ["one", "two", "three"]);
+}
+
+#[test]
+fn target_labels_compare_as_the_panel_compares_targets() {
+    use super::same_target;
+
+    assert!(same_target("root@DB.example:22", "root@db.EXAMPLE:22"));
+    assert!(same_target("root@[FE80::1]:22", "root@[fe80::1]:22"));
+    assert!(!same_target("root@db:22", "Root@db:22"));
+    assert!(!same_target("root@db:22", "root@db:2222"));
+    assert!(!same_target("root@db:22", "root@db2:22"));
+    assert!(same_target("odd", "odd"));
 }
 
 #[tokio::test]

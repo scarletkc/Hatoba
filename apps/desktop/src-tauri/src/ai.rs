@@ -571,8 +571,8 @@ impl AiManager {
     }
 
     /// Registers the turn, compacts first when the new message needs it (AI-22), stores the
-    /// user's message (in place of `replace` and the entries after it, for an edit) and returns
-    /// the turn's task.
+    /// user's message (in place of `replace` and the entries after it, for an edit) with the move
+    /// its note tells of (AI-09), and returns the turn's task.
     #[expect(
         clippy::too_many_arguments,
         reason = "the two commands that start a turn pass their own pieces"
@@ -604,7 +604,7 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (id, turn, compact, notes) = registered?;
+        let (id, turn, compact, notes, moved_to) = registered?;
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
@@ -629,7 +629,15 @@ impl AiManager {
             // AI-05, AI-09: Hatoba's notes come before what the panel sent (spec §13.3).
             let entry = AiEntry::user(now_ms(), format!("{notes}{text}"));
             let entry_id = append(&mut v, &id, &entry)?;
-            let conversation = find_conversation(&v, &id)?;
+            let mut conversation = find_conversation(&v, &id)?;
+            if let Some(place) = moved_to
+                && (conversation.host_id != place.host_id
+                    || conversation.quick_target != place.quick_target)
+            {
+                conversation.host_id = place.host_id;
+                conversation.quick_target = place.quick_target;
+                v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
+            }
             Ok(AiSendStarted {
                 conversation: conversation_view(&v, &id, &conversation),
                 user_entry: entry_view(&entry_id, &entry),
@@ -657,7 +665,8 @@ impl AiManager {
     /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host or
     /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the
     /// registered turn, and whether the new message needs a compaction first (AI-22). Returns the
-    /// conversation's id, the turn, that answer, and the notes.
+    /// conversation's id, the turn, that answer, the notes, and the move, which is stored with
+    /// the message: a stop while the context is compacted stores no message to note it.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -671,10 +680,10 @@ impl AiManager {
         (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
         stored: &mut bool,
-    ) -> AppResult<(String, Arc<Turn>, bool, String)> {
+    ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, compact, notes) = match conversation_id {
+        let (id, compact, notes, moved_to) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
                 let before = conversation.clone();
@@ -720,10 +729,14 @@ impl AiManager {
                     (Some(host_id), _) => conversation.host_id.as_ref() != Some(host_id),
                     (None, Some(target)) => {
                         conversation.host_id.is_some()
-                            || conversation.quick_target.as_ref() != Some(target)
+                            || !conversation
+                                .quick_target
+                                .as_deref()
+                                .is_some_and(|t| same_target(t, target))
                     }
                     (None, None) => false,
                 };
+                let mut moved_to = None;
                 if moves {
                     if came_from.is_none() {
                         came_from = moved_from(
@@ -733,8 +746,10 @@ impl AiManager {
                             target.as_deref(),
                         );
                     }
-                    conversation.host_id = context.host_id.clone();
-                    conversation.quick_target = target;
+                    moved_to = Some(Place {
+                        host_id: context.host_id.clone(),
+                        quick_target: target,
+                    });
                 }
                 // AI-05: the conversation keeps the level of its last message.
                 conversation.effort = context.effort.map(core_effort);
@@ -742,11 +757,14 @@ impl AiManager {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
                 }
-                let host_now = conversation
-                    .host_id
+                let (host_id, quick_target) = match &moved_to {
+                    Some(place) => (&place.host_id, &place.quick_target),
+                    None => (&conversation.host_id, &conversation.quick_target),
+                };
+                let host_now = host_id
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
-                    .or_else(|| conversation.quick_target.clone());
+                    .or_else(|| quick_target.clone());
                 let notes = notes_before(
                     &v,
                     &earlier,
@@ -756,7 +774,7 @@ impl AiManager {
                 );
                 let full = format!("{notes}{text}");
                 let compact = compaction_before(&v, &id, &context, &full)?;
-                (id, compact, notes)
+                (id, compact, notes, moved_to)
             }
             None => {
                 let id = v.put(
@@ -773,7 +791,7 @@ impl AiManager {
                     }),
                 )?;
                 *stored = true;
-                (id, false, String::new())
+                (id, false, String::new(), None)
             }
         };
         let turn = self.register(&id, context, server_id, sink);
@@ -782,7 +800,7 @@ impl AiManager {
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, compact, notes))
+        Ok((id, turn, compact, notes, moved_to))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -2552,6 +2570,33 @@ fn tab_target(context: &AiTurnContext) -> Option<String> {
         .map(quick_label)
 }
 
+/// Whether two quick-connect target labels (`user@host:port`) name one server: the same user and
+/// port, and the same address in any letter case, with or without brackets, as the panel compares
+/// targets (HOST-12).
+fn same_target(a: &str, b: &str) -> bool {
+    fn key(label: &str) -> Option<(&str, String, &str)> {
+        let (rest, port) = label.rsplit_once(':')?;
+        let (user, address) = rest.rsplit_once('@')?;
+        let address = address
+            .strip_prefix('[')
+            .and_then(|a| a.strip_suffix(']'))
+            .unwrap_or(address);
+        Some((user, address.to_lowercase(), port))
+    }
+    a == b || key(a).is_some_and(|k| Some(k) == key(b))
+}
+
+/// Where a message moves its conversation (AI-09): to a saved host, or to the quick-connect
+/// target it records in place of one (HOST-12).
+struct Place {
+    host_id: Option<String>,
+    quick_target: Option<String>,
+}
+
+/// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, whether the message
+/// needs a compaction first, the notes, and the move.
+type Opened = (String, Arc<Turn>, bool, String, Option<Place>);
+
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {
     v.get(host_id)
@@ -2575,10 +2620,11 @@ fn moved_from(
             .and_then(Item::as_host)
             .map(|h| crate::ssh::target_label(&h.username, &h.address, h.port))
     };
+    let same = |id: &str, target: &str| host_target(id).is_some_and(|t| same_target(&t, target));
     match (&conversation.host_id, &conversation.quick_target) {
-        (Some(old), _) if target.is_some() && host_target(old).as_deref() == target => None,
+        (Some(old), _) if target.is_some_and(|t| same(old, t)) => None,
         (Some(old), _) => Some(host_name(v, old).unwrap_or_default()),
-        (None, Some(old)) if host_id.and_then(host_target).as_ref() == Some(old) => None,
+        (None, Some(old)) if host_id.is_some_and(|id| same(id, old)) => None,
         (None, old) => old.clone(),
     }
 }
