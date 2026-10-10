@@ -214,6 +214,7 @@ async fn chat_completions_streams_text_and_sends_the_expected_request() {
             finish: Finish::Stop,
             usage: Some(cached_usage(812, 9, 768, 0)),
             raw: json!({"role": "assistant", "content": "Disk usage is 42%.", "refusal": null}),
+            terminal: None,
         }
     );
 
@@ -598,6 +599,7 @@ fn thinking_entry() -> AssistantEntry {
         finish: a.finish,
         usage: a.usage,
         raw: a.raw,
+        terminal: None,
     }
 }
 

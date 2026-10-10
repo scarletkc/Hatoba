@@ -392,6 +392,28 @@ pub fn host_change_block(from: &str, to: &str) -> String {
     )
 }
 
+/// The attachment block that notes a terminal attached to the conversation, or no longer attached,
+/// from this message on (AI-09, spec §13.3), with the blank line after it.
+#[must_use]
+pub fn terminal_change_block(attached: bool) -> String {
+    const TAG: &str = "terminal_change";
+    let (to, body) = if attached {
+        (
+            "attached",
+            "A terminal is attached from this message on. Before this message none was, so \
+             replies that said they could not read a screen or run commands were right at the \
+             time.",
+        )
+    } else {
+        (
+            "detached",
+            "No terminal is attached from this message on. Screens and command output before \
+             this message came from the terminal that was attached then.",
+        )
+    };
+    format!("<{TAG} to=\"{to}\">\n{body}\n</{TAG}>\n\n")
+}
+
 /// The attachment block that notes a switch to another model (AI-05, spec §13.3), with the blank
 /// line after it. `from` and `to` are [`model_label`]s.
 #[must_use]
@@ -430,6 +452,9 @@ const ATTACHMENTS: &str = "<attachments>\n\
      that Hatoba adds:\n\
      - <host_change from=\"…\" to=\"…\">: with this message the conversation moved to another \
      host. Screens and command output before it came from the host in from.\n\
+     - <terminal_change to=\"…\">: with this message a terminal became attached \
+     (to=\"attached\") or stopped being attached (to=\"detached\"). Replies before it had the \
+     tools offered then, so what they said they could or could not do was true at the time.\n\
      - <model_change from=\"…\" to=\"…\">: with this message the user switched models. Earlier \
      replies came from the model in from.\n\
      Then come the blocks the user attached:\n\
@@ -815,6 +840,7 @@ mod tests {
             "</context>\n\n<rules>\n",
             "</rules>\n\n<attachments>\n",
             "<host_change from=",
+            "<terminal_change to=",
             "<model_change from=",
             "<file name=",
             "</attachments>\n\n<skills>\n",
@@ -1060,7 +1086,7 @@ mod tests {
     }
 
     #[test]
-    fn host_and_model_change_notes_are_blocks_hatoba_writes() {
+    fn notes_are_blocks_hatoba_writes() {
         assert_eq!(
             host_change_block("staging-web", "prod-db"),
             "<host_change from=\"staging-web\" to=\"prod-db\">\nThe conversation moved to another \
@@ -1089,6 +1115,18 @@ mod tests {
             "<model_change from=\"Claude Sonnet 5.5 (claude-sonnet-5-5)\" to=\"Claude Opus 5.5 \
              (claude-opus-5-5)\">\nEarlier replies in this conversation came from another \
              model.\n</model_change>\n\n"
+        );
+        assert_eq!(
+            terminal_change_block(true),
+            "<terminal_change to=\"attached\">\nA terminal is attached from this message on. \
+             Before this message none was, so replies that said they could not read a screen or \
+             run commands were right at the time.\n</terminal_change>\n\n"
+        );
+        assert_eq!(
+            terminal_change_block(false),
+            "<terminal_change to=\"detached\">\nNo terminal is attached from this message on. \
+             Screens and command output before this message came from the terminal that was \
+             attached then.\n</terminal_change>\n\n"
         );
     }
 
@@ -1141,6 +1179,7 @@ PostgreSQL 16 primary. Never restart postgresql during business hours.
 <attachments>
 A user message can start with blocks before the text the user typed. First come notes that Hatoba adds:
 - <host_change from="…" to="…">: with this message the conversation moved to another host. Screens and command output before it came from the host in from.
+- <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 Then come the blocks the user attached:
 - <terminal_selection host="…" lines="…">: text selected in the terminal. truncated="true" means its middle was left out.
