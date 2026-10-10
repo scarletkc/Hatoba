@@ -1277,13 +1277,15 @@ async fn an_anthropic_compact_request_keeps_the_prefix_and_asks_for_less_output(
 
 /// AI-21: an answer to a Compact request that calls tools, or has no text, is dropped (nothing
 /// runs and nothing is stored) and the request goes once more without tools, with the system
-/// prompt that says why. Only once: a second answer without text fails the compaction.
+/// prompt that says why. Only once: when that answer is no summary either (an endpoint that
+/// still calls tools, its text only the preamble), the compaction fails.
 #[tokio::test]
 async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
     let f = Fixture::new(vec![
         answer("First answer."),
         answer("   "),
-        answer(""),
+        // "Checking." and a call, from a request without tools.
+        calls(&[("x0", "read_terminal", json!({}))]),
         calls(&[("x1", "run_command", json!({"command": "rm -rf /"}))]),
         answer("SUMMARY from the request without tools."),
     ])
@@ -1299,6 +1301,7 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
         .await
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::Ai);
+    assert_eq!(err.detail, "the model returned no summary");
     assert_eq!(f.requests().await.len(), 3);
     assert_eq!(f.entries(&conv).len(), 2);
 
@@ -1327,7 +1330,7 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
             COMPACT_INSTRUCTION
         );
     }
-    // The dropped call never ran and was never stored.
+    // The dropped calls never ran and were never stored.
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 3);
     assert!(matches!(&entries[2].body, EntryBody::Summary { .. }));

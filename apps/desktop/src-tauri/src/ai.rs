@@ -1145,7 +1145,7 @@ impl AiManager {
         let Some(summary) = summary else {
             return Err(AppError::new(
                 ErrorCode::Ai,
-                "the model returned an empty summary",
+                "the model returned no summary",
             ));
         };
         let view = {
@@ -1193,8 +1193,9 @@ impl AiManager {
 
     /// Asks the model for the summary a Compact request wants (AI-21). An answer that calls tools
     /// or has no text is dropped (none of its calls runs or is stored), and the request goes once
-    /// more without tools, with the system prompt that says so. `None` when that answer has no
-    /// text either.
+    /// more without tools, with the system prompt that says so. `None` when that answer is no
+    /// summary either: an endpoint can still return calls without tools, and their text is then
+    /// only what comes before them.
     async fn summarize(
         &self,
         conversation_id: &str,
@@ -1208,9 +1209,8 @@ impl AiManager {
         let http = self.http();
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
         log_compact_usage(conversation_id, false, response.usage);
-        let summary = response.text.trim();
-        if response.tool_calls.is_empty() && !summary.is_empty() {
-            return Ok(Some(summary.to_owned()));
+        if let Some(summary) = summary_of(&response) {
+            return Ok(Some(summary));
         }
         tracing::info!(
             conversation_id,
@@ -1221,8 +1221,14 @@ impl AiManager {
         request.system = plain_system;
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
         log_compact_usage(conversation_id, true, response.usage);
-        let summary = response.text.trim();
-        Ok((!summary.is_empty()).then(|| summary.to_owned()))
+        if !response.tool_calls.is_empty() {
+            tracing::info!(
+                conversation_id,
+                tool_calls = response.tool_calls.len(),
+                "AI compaction answered with tool calls again"
+            );
+        }
+        Ok(summary_of(&response))
     }
 
     /// AI-22, before a new message or a retry: builds the Compact request from the request the
@@ -1287,13 +1293,10 @@ impl AiManager {
             }
         };
         let Some(summary) = summary else {
-            tracing::warn!(
-                conversation_id,
-                "AI automatic compaction got an empty summary"
-            );
+            tracing::warn!(conversation_id, "AI automatic compaction got no summary");
             return Err(CompactFailure::Failed {
                 status: None,
-                message: "The context is nearly full, and the model returned an empty summary \
+                message: "The context is nearly full, and the model returned no summary \
                           when asked to compact it."
                     .into(),
             });
@@ -1353,6 +1356,12 @@ impl Compact {
             plain_system,
         }
     }
+}
+
+/// The summary in an answer to a Compact request: its text, when it has some and calls no tools.
+fn summary_of(response: &AssistantEntry) -> Option<String> {
+    let text = response.text.trim();
+    (response.tool_calls.is_empty() && !text.is_empty()).then(|| text.to_owned())
 }
 
 /// The Compact request (AI-21) for the conversation's context, forked from the next request of a
