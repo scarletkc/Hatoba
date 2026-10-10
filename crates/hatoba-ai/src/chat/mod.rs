@@ -17,7 +17,7 @@
 //! - A request refused with a 4xx that names its thinking or effort fields (`reasoning_effort`,
 //!   `output_config`, `effort`, adaptive thinking, `display`) is sent once more without any of
 //!   them, and when it carried a level, [`StreamEvent::EffortIgnored`] says so.
-//! - A request that offers no tools (such as Compact, AI-21) contains no
+//! - A request that offers no tools (such as the fallback of Compact, AI-21) contains no
 //!   `tool_use` / `tool_result` blocks, `tool_calls` or `tool` messages, whatever the history
 //!   holds: calls and results are sent as text, an assistant entry's calls after its text and
 //!   each result as a `user` message that names its call (see `request`). Anthropic refuses
@@ -70,7 +70,7 @@ pub struct ChatRequest<'a> {
     /// Tools to offer; empty sends no `tools` field, and then the request has no structured tool
     /// blocks either: the calls and results already in `entries` are sent as plain text, because
     /// providers refuse `tool_use` / `tool_result` blocks and `tool_calls` / `tool` messages
-    /// without tools. The desktop shell sends none for Compact (AI-21).
+    /// without tools. The desktop shell sends none when Compact falls back (AI-21).
     pub tools: &'a [ToolDef],
     /// The conversation from `context_start` on. Calls without a result get a cancelled one in
     /// the request.
@@ -371,6 +371,7 @@ fn into_entry(
             input_tokens: estimate_tokens(request_chars),
             output_tokens: estimate_tokens(output_chars),
             estimated: true,
+            ..Usage::default()
         }
     });
     on_event(StreamEvent::Usage(usage));

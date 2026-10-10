@@ -117,6 +117,18 @@ pub struct Usage {
     pub output_tokens: u64,
     /// True when estimated from text length because the provider reported no usage.
     pub estimated: bool,
+    /// Of the input tokens, those read from the provider's prompt cache, when it said so.
+    /// Stored only when not zero.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub cache_read_tokens: u64,
+    /// Of the input tokens, those written to the provider's prompt cache, when it said so.
+    /// Stored only when not zero.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub cache_write_tokens: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// How a tool call ended.
@@ -273,6 +285,7 @@ mod tests {
                     input_tokens: 10,
                     output_tokens: 2,
                     estimated: false,
+                    ..Usage::default()
                 }),
                 raw: json!({"role": "assistant"}),
             },
@@ -295,6 +308,21 @@ mod tests {
         );
         let back: AiEntry = serde_json::from_value(value).unwrap();
         assert_eq!(back, entry);
+
+        // Cache counts are stored only when the provider reported some.
+        let cached = Usage {
+            input_tokens: 10,
+            output_tokens: 2,
+            estimated: false,
+            cache_read_tokens: 8,
+            cache_write_tokens: 0,
+        };
+        let value = serde_json::to_value(cached).unwrap();
+        assert_eq!(
+            value,
+            json!({"input_tokens": 10, "output_tokens": 2, "estimated": false, "cache_read_tokens": 8})
+        );
+        assert_eq!(serde_json::from_value::<Usage>(value).unwrap(), cached);
 
         for (entry, expected) in [
             (

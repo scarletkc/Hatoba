@@ -185,6 +185,11 @@ impl ChatCompletionsStream {
                 output_tokens: first_u64(usage, &["completion_tokens", "output_tokens"])
                     .unwrap_or(0),
                 estimated: false,
+                cache_read_tokens: usage
+                    .pointer("/prompt_tokens_details/cached_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                cache_write_tokens: 0,
             });
         }
         let Some(choices) = chunk.get("choices").and_then(Value::as_array) else {

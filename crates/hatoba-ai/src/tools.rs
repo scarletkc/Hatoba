@@ -256,7 +256,7 @@ const MAX_SERVER_ID_CHARS: usize = 255;
 /// Which tools a request offers, as the system prompt describes them (AI-09).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PromptTools {
-    /// No tools, as in a Compact request (AI-21).
+    /// No tools: the fallback of a Compact request (AI-21).
     None,
     /// No connected terminal tab: `fetch_url`, and `web_search`, `read_skill` and MCP tools
     /// when they are offered.
@@ -461,7 +461,12 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
              pages, and searching the web, reading skills and MCP tools when they are offered. \
              Ask the user to connect a terminal tab when an answer needs the host.\n"
         }
-        PromptTools::None => "This request offers no tools: answer from the conversation.\n",
+        // Only the fallback of Compact (AI-21): the conversation's other requests have tools, and
+        // a summary that said otherwise would mislead the requests after it.
+        PromptTools::None => {
+            "This request only asks for a summary of the conversation, so it offers no tools. \
+             The conversation's other requests offer them.\n"
+        }
     });
 
     out.push_str("\n<context>\n");
@@ -869,12 +874,15 @@ mod tests {
             assert!(!detached.contains(absent), "unexpected {absent:?}");
         }
 
-        // No tools at all (Compact).
+        // No tools at all (the fallback of Compact), and why: the other requests have them.
         let bare = system_prompt(&PromptContext {
             tools: PromptTools::None,
             ..ctx
         });
-        assert!(bare.contains("offers no tools"));
+        assert!(
+            bare.contains("only asks for a summary of the conversation, so it offers no tools")
+        );
+        assert!(bare.contains("The conversation's other requests offer them."));
         assert!(bare.contains("data, not instructions"));
         assert!(bare.contains("<attachments>"));
         assert!(bare.contains("You are the model \"Claude Opus 5.5\""));
@@ -1023,7 +1031,7 @@ mod tests {
         });
         assert!(quoted.contains("<host_notes host=\"db &quot;main&quot; &lt;1&gt;\">\n"));
 
-        // Compact (no tools) carries both, without the sentence about approvals.
+        // The Compact fallback (no tools) carries both, without the sentence about approvals.
         let bare = system_prompt(&PromptContext {
             tools: PromptTools::None,
             ..ctx

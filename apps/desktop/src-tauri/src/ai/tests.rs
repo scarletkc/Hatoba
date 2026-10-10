@@ -20,7 +20,10 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use zeroize::Zeroizing;
 
-use super::{AiEnv, AiManager, COMPACT_INSTRUCTION, DISCONNECTED, EDIT_NOTE, Entries, EventSink};
+use super::{
+    AiEnv, AiManager, COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION, DISCONNECTED, EDIT_NOTE,
+    Entries, EventSink,
+};
 use super::{append, lock, title_of};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
@@ -1093,7 +1096,9 @@ async fn compaction_moves_the_context_start_to_the_summary() {
 
     let requests = f.requests().await;
     let compact = &requests[1];
-    assert!(compact.get("tools").is_none());
+    // The request a turn would send, with its tools and system prompt.
+    assert_eq!(tool_names(compact), tool_names(&requests[0]));
+    assert_eq!(system_of(compact), system_of(&requests[0]));
     let last = messages(compact).last().unwrap();
     assert_eq!(last["role"], "user");
     assert_eq!(last["content"], COMPACT_INSTRUCTION);
@@ -1104,9 +1109,248 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     let requests = f.requests().await;
     let next = requests[2].to_string();
     assert!(!next.contains("first question"));
-    assert!(next.contains("Summary of the earlier conversation"));
-    assert!(next.contains("SUMMARY: the user checked the disk."));
+    assert!(next.contains("This conversation continues from a summary"));
+    assert!(next.contains("<summary>\\nSUMMARY: the user checked the disk.\\n</summary>"));
     assert!(next.contains("next question"));
+}
+
+fn without_messages(body: &Value) -> Value {
+    let mut body = body.clone();
+    body.as_object_mut().unwrap().remove("messages");
+    body
+}
+
+/// AI-21: a Compact request is the request the next turn would send with the instruction after
+/// it: the same system prompt, built-in and MCP tools (without the server the conversation
+/// switched off) and messages, `raw` replayed, and no `tool_choice`. So the provider's prompt
+/// cache serves everything before the instruction.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_compact_request_is_the_next_request_with_the_instruction_after_it() {
+    use crate::mcp::tests::{put_server, set_enabled, stdio_server};
+
+    let f = Fixture::new(vec![
+        calls(&[("c1", "read_terminal", json!({}))]),
+        answer("The disk is fine."),
+        answer("SUMMARY: the disk is fine."),
+    ])
+    .await;
+    let files = put_server(&f.vault, stdio_server("files"));
+    let other = put_server(&f.vault, stdio_server("other"));
+    set_enabled(&f.vault, &files, true);
+    set_enabled(&f.vault, &other, true);
+    let context = AiTurnContext {
+        disabled_mcp_servers: vec![other],
+        ..f.context()
+    };
+    let (started, sink) = f.send_with(None, "check the disk", context.clone()).await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    f.result(&conv, "c1", AiToolStatus::Ok, "Use% 42%", None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    f.manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &context)
+        .await
+        .unwrap();
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 3);
+    let (last_turn, compact) = (&requests[1], &requests[2]);
+    let names = tool_names(compact);
+    assert!(names.contains(&"mcp__files__echo".to_owned()), "{names:?}");
+    assert!(
+        !names.iter().any(|n| n.starts_with("mcp__other__")),
+        "{names:?}"
+    );
+    assert!(compact.get("tool_choice").is_none());
+    assert_eq!(without_messages(compact), without_messages(last_turn));
+    let (before, after) = messages(compact).split_at(messages(last_turn).len());
+    assert_eq!(before, &messages(last_turn)[..]);
+    // The answer, replayed from `raw`, then the instruction.
+    assert_eq!(after.len(), 2);
+    assert_eq!(after[0]["content"], "The disk is fine.");
+    assert_eq!(after[0]["provider_note"], "RAW-ONLY");
+    assert_eq!(
+        after[1],
+        json!({"role": "user", "content": COMPACT_INSTRUCTION})
+    );
+    f.mcp.stop_all(&f.vault).await;
+}
+
+/// An Anthropic response with `text`, a part of its input read from the prompt cache.
+fn anthropic_answer(text: &str) -> ResponseTemplate {
+    let events = [
+        json!({"type": "message_start", "message": {"id": "msg_1", "type": "message",
+               "role": "assistant", "model": "m1", "content": [], "stop_reason": null,
+               "usage": {"input_tokens": 20, "cache_read_input_tokens": 80, "output_tokens": 1}}}),
+        json!({"type": "content_block_start", "index": 0,
+               "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0,
+               "delta": {"type": "text_delta", "text": text}}),
+        json!({"type": "content_block_stop", "index": 0}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+               "usage": {"output_tokens": 5}}),
+        json!({"type": "message_stop"}),
+    ];
+    let mut body = String::new();
+    for event in events {
+        body.push_str(&format!(
+            "event: {}\ndata: {event}\n\n",
+            event["type"].as_str().unwrap()
+        ));
+    }
+    ResponseTemplate::new(200)
+        .insert_header("content-type", "text/event-stream")
+        .set_body_string(body)
+}
+
+/// AI-21 on Anthropic: the Compact request's body is the next request's with the instruction
+/// after its messages. Only `max_tokens` differs, which is not part of the cached prefix: 16,000
+/// instead of the model's whole output limit, so that it fits beside a nearly full context.
+#[tokio::test]
+async fn an_anthropic_compact_request_keeps_the_prefix_and_asks_for_less_output() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(Script(Mutex::new(
+            vec![
+                anthropic_answer("First answer."),
+                anthropic_answer("Second answer."),
+                anthropic_answer("SUMMARY: two questions."),
+            ]
+            .into(),
+        )))
+        .mount(&server)
+        .await;
+    let base_url = server.uri();
+    let f = Fixture::with_base_url(Some(server), base_url);
+    {
+        let mut v = lock(&f.vault);
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .cloned()
+            .unwrap();
+        provider.protocol = AiProtocol::Anthropic;
+        provider.models[0].context_window = Some(200_000);
+        provider.models[0].max_output_tokens = Some(64_000);
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+    let (conv, _) = f.exchange(None, "first question", f.context()).await;
+    f.exchange(Some(&conv), "second question", f.context())
+        .await;
+    let summary = f
+        .manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .await
+        .unwrap();
+    assert!(matches!(summary, AiEntryView::Summary { .. }));
+
+    let requests = f.requests().await;
+    let (last_turn, compact) = (&requests[1], &requests[2]);
+    assert_eq!(last_turn["max_tokens"], 64_000);
+    assert_eq!(compact["max_tokens"], 16_000);
+    let rest = |body: &Value| {
+        let mut body = without_messages(body);
+        body.as_object_mut().unwrap().remove("max_tokens");
+        body
+    };
+    assert_eq!(rest(compact), rest(last_turn));
+    assert!(!compact["tools"].as_array().unwrap().is_empty());
+    let (before, after) = messages(compact).split_at(messages(last_turn).len());
+    assert_eq!(before, &messages(last_turn)[..]);
+    assert_eq!(
+        after,
+        [
+            json!({"role": "assistant", "content": [{"type": "text", "text": "Second answer."}]}),
+            json!({"role": "user", "content": [{"type": "text", "text": COMPACT_INSTRUCTION}]}),
+        ]
+    );
+}
+
+/// AI-21: an answer to a Compact request that calls tools, or has no text, is dropped (nothing
+/// runs and nothing is stored) and the request goes once more without tools, with the system
+/// prompt that says why. Only once: a second answer without text fails the compaction.
+#[tokio::test]
+async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("   "),
+        answer(""),
+        calls(&[("x1", "run_command", json!({"command": "rm -rf /"}))]),
+        answer("SUMMARY from the request without tools."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "first question").await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let err = f
+        .manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::Ai);
+    assert_eq!(f.requests().await.len(), 3);
+    assert_eq!(f.entries(&conv).len(), 2);
+
+    let summary = f
+        .manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .await
+        .unwrap();
+    let AiEntryView::Summary { text, .. } = &summary else {
+        panic!("expected a summary, got {summary:?}");
+    };
+    assert_eq!(text, "SUMMARY from the request without tools.");
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 5);
+    for (fork, plain) in [(&requests[1], &requests[2]), (&requests[3], &requests[4])] {
+        assert!(!tool_names(fork).is_empty());
+        assert!(plain.get("tools").is_none());
+        assert!(
+            system_of(plain).contains("only asks for a summary of the conversation"),
+            "{}",
+            system_of(plain)
+        );
+        assert_eq!(messages(plain)[1..], messages(fork)[1..]);
+        assert_eq!(
+            messages(plain).last().unwrap()["content"],
+            COMPACT_INSTRUCTION
+        );
+    }
+    // The dropped call never ran and was never stored.
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 3);
+    assert!(matches!(&entries[2].body, EntryBody::Summary { .. }));
+}
+
+#[test]
+fn a_compact_request_asks_for_output_that_fits_beside_the_context() {
+    use hatoba_ai::provider::ModelSpec;
+
+    for (window, output, expected) in [
+        (Some(200_000), Some(64_000), 16_000),
+        (Some(128_000), Some(16_384), 11_520),
+        (Some(1_000_000), Some(8_000), 8_000),
+        (None, Some(4_096), 4_096),
+        (None, None, 16_000),
+        (Some(1_000), None, 90),
+    ] {
+        let model = ModelSpec {
+            context_window: window,
+            max_output_tokens: output,
+            ..ModelSpec::new("m1")
+        };
+        assert_eq!(
+            super::compact_output_tokens(&model),
+            expected,
+            "window {window:?}, output {output:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -1573,7 +1817,7 @@ async fn a_new_message_that_would_fill_the_context_is_sent_after_a_compaction() 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 3);
     let compact = &requests[1];
-    assert!(compact.get("tools").is_none());
+    assert_eq!(tool_names(compact), tool_names(&requests[0]));
     assert_eq!(
         messages(compact).last().unwrap()["content"],
         COMPACT_INSTRUCTION
@@ -1611,9 +1855,14 @@ async fn a_full_context_between_tool_calls_is_compacted_once() {
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 3);
+    // The request the turn was about to send, asking where the task stands.
+    let compact = &requests[1];
+    assert_eq!(tool_names(compact), tool_names(&requests[0]));
+    let roles: Vec<&Value> = messages(compact).iter().map(|m| &m["role"]).collect();
+    assert_eq!(roles, ["system", "user", "assistant", "tool", "user"]);
     assert_eq!(
-        messages(&requests[1]).last().unwrap()["content"],
-        COMPACT_INSTRUCTION
+        messages(compact).last().unwrap()["content"],
+        COMPACT_MID_TURN_INSTRUCTION
     );
     // The summary is over 90% too, but it is never compacted again right away.
     let next = requests[2].to_string();

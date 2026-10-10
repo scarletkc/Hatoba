@@ -390,6 +390,8 @@ impl Assembler for AnthropicStream {
             input_tokens: self.usage.input + self.usage.cache_creation + self.usage.cache_read,
             output_tokens: self.usage.output,
             estimated: false,
+            cache_read_tokens: self.usage.cache_read,
+            cache_write_tokens: self.usage.cache_creation,
         });
         let raw = Value::Array(
             self.blocks

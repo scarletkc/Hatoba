@@ -9,8 +9,10 @@
 //!
 //! Before each request the turn asks the [`McpManager`] for the MCP tools to offer (AI-30),
 //! which starts the servers that need it, and compacts the context first when the request would
-//! pass 90% of the model's context window (AI-22). History search (AI-24) and edit and resend
-//! (AI-26) are here too.
+//! pass 90% of the model's context window (AI-22). A Compact request (AI-21) is the request a
+//! turn would send next with the instruction after it, built by the same function, so it reuses
+//! the prefix the provider cached. History search (AI-24) and edit and resend (AI-26) are here
+//! too.
 //!
 //! Everything works on a [`SharedVault`] and two small traits, [`EventSink`] (where a turn's
 //! events go) and [`AiEnv`] (the sync trigger and the tab's SSH session), so the turn tests run
@@ -34,7 +36,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
-    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, fix_up_missing_results,
+    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, Usage, fix_up_missing_results,
 };
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -75,13 +77,38 @@ const MCP_PREFIX: &str = "mcp__";
 const DISCONNECTED: &str = "The terminal tab is disconnected, so the command did not run. Ask \
      the user to reconnect the tab.";
 
-/// The final instruction of a Compact request (AI-21).
-const COMPACT_INSTRUCTION: &str = "Summarize the conversation so far so that the summary can \
-     replace it as the context of the rest of this conversation. Keep everything later work \
-     needs: the user's goals and requests, the hosts and systems involved, the commands that \
-     were run and their outcomes, files and settings that were changed, decisions made, and open \
-     problems and next steps. Leave out what no longer matters. Write the summary in the user's \
-     language and reply with the summary only.";
+/// The final instruction of a Compact request (AI-21). The request offers the conversation's
+/// tools, so it first asks for text only. The summary leaves out what the assistant can use:
+/// every request states that in its system prompt, and a summary written by the fallback without
+/// tools would otherwise tell the requests after it that there are none.
+const COMPACT_INSTRUCTION: &str = "Respond with text only. Do not call any tools.\n\n\
+     Summarize the conversation so far so that the summary can replace it as the context of the \
+     rest of this conversation. Keep everything later work needs: the user's goals and requests, \
+     the hosts and systems involved, the commands that were run and their outcomes, files and \
+     settings that were changed, decisions made, and open problems and next steps. Leave out what \
+     no longer matters, and leave out what the assistant can use, such as its tools, skills and \
+     terminal connection: every request states that in its system prompt, and it can change \
+     between requests. Write the summary in the user's language and reply with the summary only.";
+
+/// The instruction of a Compact request between tool calls (AI-22), after which the turn goes on
+/// from the summary alone: it asks for the task in progress and its next step as well.
+const COMPACT_MID_TURN_INSTRUCTION: &str = "Respond with text only. Do not call any tools.\n\n\
+     The context is nearly full in the middle of a task. Summarize the conversation so far so \
+     that the summary can replace it and the task can go on from it. Keep the user's goals and \
+     requests, the hosts and systems involved, the task in progress and the step it has reached, \
+     what the latest tool results showed, the commands that were run and their outcomes, files \
+     and settings that were changed, decisions made, and the next step. Leave out what no longer \
+     matters, and leave out what the assistant can use, such as its tools, skills and terminal \
+     connection: every request states that in its system prompt, and it can change between \
+     requests. Write the summary in the user's language and reply with the summary only.";
+
+/// The most output tokens a Compact request asks for (Anthropic's `max_tokens`, AI-21).
+const COMPACT_MAX_TOKENS: u64 = 16_000;
+
+/// The most output tokens a Compact request asks for, in hundredths of the context window: what
+/// a context just under the AI-22 threshold leaves free, less a hundredth for the instruction and
+/// the error of the estimate, so the request stays inside the window.
+const COMPACT_OUTPUT_PERCENT: u64 = 9;
 
 /// A skill's main file (§13.8).
 const SKILL_MD: &str = "SKILL.md";
@@ -582,10 +609,9 @@ impl AiManager {
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
         // and if it does not, the provider's error says so. A stop meanwhile is checked below.
-        if let Some(compact) = compact
-            && let Err(CompactFailure::Failed { .. }) = self
-                .auto_compact(vault, env.as_ref(), &id, &turn, compact)
-                .await
+        if compact
+            && let Err(CompactFailure::Failed { .. }) =
+                self.compact_before(vault, env.as_ref(), &id, &turn).await
         {
             tracing::warn!(conversation_id = %id, "AI message sent without compaction");
         }
@@ -624,14 +650,14 @@ impl AiManager {
         } else {
             tracing::info!(conversation_id = %id, "AI turn started");
         }
-        Ok((started, self.task(vault.clone(), env, id, turn, None)))
+        Ok((started, self.task(vault.clone(), env, id, turn, false)))
     }
 
     /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
     /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host
     /// (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the registered turn, and
-    /// the Compact request the new message needs (AI-22). Returns the conversation's id, the
-    /// turn, that request, and the notes.
+    /// whether the new message needs a compaction first (AI-22). Returns the conversation's id,
+    /// the turn, that answer, and the notes.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -645,7 +671,7 @@ impl AiManager {
         (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
         stored: &mut bool,
-    ) -> AppResult<(String, Arc<Turn>, Option<Request>, String)> {
+    ) -> AppResult<(String, Arc<Turn>, bool, String)> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
         let (id, compact, notes) = match conversation_id {
@@ -725,7 +751,7 @@ impl AiManager {
                     &context,
                 );
                 let full = format!("{notes}{text}");
-                let compact = compaction_before(&v, &id, &conversation, &context, &full)?;
+                let compact = compaction_before(&v, &id, &context, &full)?;
                 (id, compact, notes)
             }
             None => {
@@ -742,7 +768,7 @@ impl AiManager {
                     }),
                 )?;
                 *stored = true;
-                (id, None, String::new())
+                (id, false, String::new())
             }
         };
         let turn = self.register(&id, context, server_id, sink);
@@ -798,7 +824,7 @@ impl AiManager {
                 )?;
                 stored = true;
             }
-            let compact = compaction_before(&v, &conversation_id, &conversation, &context, "")?;
+            let compact = compaction_before(&v, &conversation_id, &context, "")?;
             let turn = self.register(&conversation_id, context, server_id, sink);
             for entry in cancelled {
                 turn.emit(AiTurnEvent::Entry { entry });
@@ -813,25 +839,24 @@ impl AiManager {
         Ok(self.task(vault.clone(), env, conversation_id, turn, compact))
     }
 
-    /// The turn's task: the Compact request `compact` first, when the context needs one
-    /// (AI-22), then the turn.
+    /// The turn's task: a compaction first when `compact` says the context needs one (AI-22),
+    /// then the turn.
     fn task(
         &self,
         vault: SharedVault,
         env: Arc<dyn AiEnv>,
         conversation_id: String,
         turn: Arc<Turn>,
-        compact: Option<Request>,
+        compact: bool,
     ) -> TurnTask {
         let manager = self.clone();
         Box::pin(async move {
-            let compacted = match compact {
-                Some(compact) => {
-                    manager
-                        .auto_compact(&vault, env.as_ref(), &conversation_id, &turn, compact)
-                        .await
-                }
-                None => Ok(()),
+            let compacted = if compact {
+                manager
+                    .compact_before(&vault, env.as_ref(), &conversation_id, &turn)
+                    .await
+            } else {
+                Ok(())
             };
             let reason = match compacted {
                 Err(CompactFailure::Stopped) => AiTurnEndReason::Stopped,
@@ -877,13 +902,8 @@ impl AiManager {
                     if turn.cancel.is_cancelled() || !v.is_unlocked() {
                         return AiTurnEndReason::Stopped;
                     }
-                    compact_request(
-                        &v,
-                        &turn.context,
-                        request.provider,
-                        request.model,
-                        request.entries,
-                    )
+                    // The request the turn was about to send, asking where the task stands.
+                    Compact::fork(&v, &turn.context, request, COMPACT_MID_TURN_INSTRUCTION)
                 };
                 match self
                     .auto_compact(vault, env, conversation_id, turn, compact)
@@ -1074,8 +1094,9 @@ impl AiManager {
 
     // ---- compaction ----
 
-    /// `ai_compact` (AI-21): asks the model for a summary of the context, with no tools, stores
-    /// it as a `summary` entry and moves `context_start` to it. Refused while a turn runs.
+    /// `ai_compact` (AI-21): asks the model for a summary of the context with the request a turn
+    /// would send next ([`compact_request`]), stores it as a `summary` entry and moves
+    /// `context_start` to it. Refused while a turn runs.
     pub async fn compact(
         &self,
         vault: &SharedVault,
@@ -1088,8 +1109,28 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (request, op) = prepared?;
-        let summary = match self.summarize(&request, &op.cancel).await {
+        let op = prepared?;
+        // AI-30: the MCP tools the next request offers, so the Compact request offers them too.
+        let offer = self.0.mcp.offer(vault, context, &op.cancel).await;
+        let server_id = turn_server_id(env, context);
+        let compact = {
+            let v = unlocked(vault)?;
+            if op.cancel.is_cancelled() {
+                return Err(AppError::new(
+                    ErrorCode::Cancelled,
+                    "compaction was stopped",
+                ));
+            }
+            compact_request(
+                &v,
+                conversation_id,
+                context,
+                server_id.as_deref(),
+                &offer,
+                COMPACT_INSTRUCTION,
+            )?
+        };
+        let summary = match self.summarize(conversation_id, compact, &op.cancel).await {
             Ok(summary) => summary,
             Err(e) => {
                 tracing::warn!(
@@ -1123,47 +1164,98 @@ impl AiManager {
         Ok(view)
     }
 
+    /// The checks of `ai_compact` under the vault guard, before any server starts: no turn runs,
+    /// the context has something to summarize, and the model exists. Gives the calls without a
+    /// result a cancelled one, and registers the compaction so that stop and lock reach it.
     fn prepare_compact(
         &self,
         vault: &SharedVault,
         conversation_id: &str,
         context: &AiTurnContext,
         stored: &mut bool,
-    ) -> AppResult<(Request, OpGuard<'_>)> {
+    ) -> AppResult<OpGuard<'_>> {
         let mut v = unlocked(vault)?;
-        let conversation = find_conversation(&v, conversation_id)?;
+        find_conversation(&v, conversation_id)?;
         if self.is_running(conversation_id) {
             return Err(AppError::invalid("conversation_id", "a turn is running"));
         }
-        let mut entries = Entries::load(&v, conversation_id)?;
+        let entries = Entries::load(&v, conversation_id)?;
         if !cancel_open_calls(&mut v, conversation_id, &entries)?.is_empty() {
             *stored = true;
-            entries = Entries::load(&v, conversation_id)?;
         }
-        let from = entries.context_from(conversation.context_start.as_deref());
-        let list = entries.list.split_off(from);
-        if !list
-            .iter()
-            .any(|e| matches!(e.body, EntryBody::User { .. } | EntryBody::Assistant(_)))
-        {
+        if !compactable(&context_entries(&v, conversation_id)?) {
             return Err(AppError::invalid("conversation_id", "nothing to compact"));
         }
-        let (provider, model) = resolve_model(&v, &context.provider_id, &context.model_id)
+        resolve_model(&v, &context.provider_id, &context.model_id)
             .map_err(|message| AppError::invalid("model_id", message))?;
-        let request = compact_request(&v, context, provider, model, list);
-        Ok((request, self.start_op(conversation_id)))
+        Ok(self.start_op(conversation_id))
     }
 
-    /// Asks the model for the summary a Compact request wants (AI-21); `None` when it answered
-    /// with nothing.
+    /// Asks the model for the summary a Compact request wants (AI-21). An answer that calls tools
+    /// or has no text is dropped (none of its calls runs or is stored), and the request goes once
+    /// more without tools, with the system prompt that says so. `None` when that answer has no
+    /// text either.
     async fn summarize(
         &self,
-        request: &Request,
+        conversation_id: &str,
+        compact: Compact,
         cancel: &CancellationToken,
     ) -> Result<Option<String>, AiError> {
-        let response = complete(&self.http(), &request.provider, &request.chat(), cancel).await?;
+        let Compact {
+            mut request,
+            plain_system,
+        } = compact;
+        let http = self.http();
+        let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
+        log_compact_usage(conversation_id, false, response.usage);
+        let summary = response.text.trim();
+        if response.tool_calls.is_empty() && !summary.is_empty() {
+            return Ok(Some(summary.to_owned()));
+        }
+        tracing::info!(
+            conversation_id,
+            tool_calls = response.tool_calls.len(),
+            "AI compaction answered without a summary; asking again without tools"
+        );
+        request.tools = Vec::new();
+        request.system = plain_system;
+        let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
+        log_compact_usage(conversation_id, true, response.usage);
         let summary = response.text.trim();
         Ok((!summary.is_empty()).then(|| summary.to_owned()))
+    }
+
+    /// AI-22, before a new message or a retry: builds the Compact request from the request the
+    /// turn would send next, with the MCP tools it would offer (starting their servers, as the
+    /// turn would), then compacts like [`Self::auto_compact`].
+    async fn compact_before(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        turn: &Turn,
+    ) -> Result<(), CompactFailure> {
+        let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
+        let compact = {
+            let v = lock(vault);
+            if turn.cancel.is_cancelled() || !v.is_unlocked() {
+                return Err(CompactFailure::Stopped);
+            }
+            compact_request(
+                &v,
+                conversation_id,
+                &turn.context,
+                turn.server_id.as_deref(),
+                &offer,
+                COMPACT_INSTRUCTION,
+            )
+            .map_err(|e| CompactFailure::Failed {
+                status: None,
+                message: e.detail,
+            })?
+        };
+        self.auto_compact(vault, env, conversation_id, turn, compact)
+            .await
     }
 
     /// AI-22: runs a Compact request inside a turn, exactly like `ai_compact`, stores the
@@ -1174,10 +1266,10 @@ impl AiManager {
         env: &dyn AiEnv,
         conversation_id: &str,
         turn: &Turn,
-        compact: Request,
+        compact: Compact,
     ) -> Result<(), CompactFailure> {
         tracing::info!(conversation_id, "AI context nearly full; compacting");
-        let summary = match self.summarize(&compact, &turn.cancel).await {
+        let summary = match self.summarize(conversation_id, compact, &turn.cancel).await {
             Ok(summary) => summary,
             Err(_) if turn.cancel.is_cancelled() => return Err(CompactFailure::Stopped),
             Err(AiError::Cancelled) => return Err(CompactFailure::Stopped),
@@ -1239,67 +1331,126 @@ enum CompactFailure {
     },
 }
 
-/// AI-22, before a new message is stored: the Compact request when the context plus the message
-/// would pass 90% of the model's known context window. Nothing when the context is empty or
-/// ends with a summary (it was just compacted, and no entry has followed it since), or the
-/// model cannot be resolved (the turn then says why).
+/// A Compact request (AI-21): the conversation's next request, as [`next_request`] builds it for
+/// a turn, with the instruction after it. It offers the same tools with the same system prompt
+/// and replays the same entries, so the provider reads its prefix from the cache the
+/// conversation's requests wrote. Only its output limit differs ([`compact_output_tokens`]),
+/// which is not part of that prefix. `plain_system` is the system prompt of the fallback without
+/// tools ([`AiManager::summarize`]).
+struct Compact {
+    request: Request,
+    plain_system: String,
+}
+
+impl Compact {
+    /// Forks `next`, the request a turn with `context` sends next, by appending `instruction`.
+    fn fork(v: &Vault, context: &AiTurnContext, mut next: Request, instruction: &str) -> Self {
+        next.entries.push(AiEntry::user(now_ms(), instruction));
+        next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
+        let (plain_system, _) = prompt(v, context, false, None);
+        Self {
+            request: next,
+            plain_system,
+        }
+    }
+}
+
+/// The Compact request (AI-21) for the conversation's context, forked from the next request of a
+/// turn with `context` and `server_id` whose MCP tools are `offer`.
+fn compact_request(
+    v: &Vault,
+    conversation_id: &str,
+    context: &AiTurnContext,
+    server_id: Option<&str>,
+    offer: &Offer,
+    instruction: &str,
+) -> AppResult<Compact> {
+    let list = context_entries(v, conversation_id)?;
+    if !compactable(&list) {
+        return Err(AppError::invalid("conversation_id", "nothing to compact"));
+    }
+    let next = next_request(v, context, server_id, offer, list)
+        .map_err(|message| AppError::invalid("model_id", message))?;
+    Ok(Compact::fork(v, context, next, instruction))
+}
+
+/// The conversation's context: its entries from `context_start` on (AI-21).
+fn context_entries(v: &Vault, conversation_id: &str) -> AppResult<Vec<AiEntry>> {
+    let conversation = find_conversation(v, conversation_id)?;
+    let mut entries = Entries::load(v, conversation_id)?;
+    let from = entries.context_from(conversation.context_start.as_deref());
+    Ok(entries.list.split_off(from))
+}
+
+/// Whether a context has something to summarize: a message or a response.
+fn compactable(context: &[AiEntry]) -> bool {
+    context
+        .iter()
+        .any(|e| matches!(e.body, EntryBody::User { .. } | EntryBody::Assistant(_)))
+}
+
+/// The output tokens a Compact request asks for: at most 16,000, the model's output limit, and 9%
+/// of its context window, so that a context compacted at 90% of the window (AI-22) leaves room
+/// for the summary. Anthropic refuses a request whose input and `max_tokens` pass the window, and
+/// a normal request asks for the model's whole output limit.
+fn compact_output_tokens(model: &ModelSpec) -> u64 {
+    let mut tokens = COMPACT_MAX_TOKENS;
+    if let Some(output) = model.max_output_tokens.filter(|n| *n > 0) {
+        tokens = tokens.min(output);
+    }
+    if let Some(window) = model.context_window.filter(|w| *w > 0) {
+        tokens = tokens.min(window.saturating_mul(COMPACT_OUTPUT_PERCENT) / 100);
+    }
+    tokens.max(1)
+}
+
+/// Logs the token counts of a Compact response, never its text (SEC-04), so the share the prompt
+/// cache served can be measured.
+fn log_compact_usage(conversation_id: &str, fallback: bool, usage: Option<Usage>) {
+    let usage = usage.unwrap_or_default();
+    tracing::info!(
+        conversation_id,
+        fallback,
+        input_tokens = usage.input_tokens,
+        cache_read_tokens = usage.cache_read_tokens,
+        cache_write_tokens = usage.cache_write_tokens,
+        output_tokens = usage.output_tokens,
+        estimated = usage.estimated,
+        "AI compaction response"
+    );
+}
+
+/// AI-22, before a new message is stored: whether the context plus the message would pass 90% of
+/// the model's known context window. Never when the context is empty or ends with a summary (it
+/// was just compacted, and no entry has followed it since), or the model cannot be resolved (the
+/// turn then says why).
 fn compaction_before(
     v: &Vault,
     conversation_id: &str,
-    conversation: &AiConversation,
     context: &AiTurnContext,
     text: &str,
-) -> AppResult<Option<Request>> {
-    let Ok((provider, model)) = resolve_model(v, &context.provider_id, &context.model_id) else {
-        return Ok(None);
+) -> AppResult<bool> {
+    let Ok((_, model)) = resolve_model(v, &context.provider_id, &context.model_id) else {
+        return Ok(false);
     };
     let Some(window) = model.context_window.filter(|w| *w > 0) else {
-        return Ok(None);
+        return Ok(false);
     };
-    let mut entries = Entries::load(v, conversation_id)?;
-    let from = entries.context_from(conversation.context_start.as_deref());
-    let list = entries.list.split_off(from);
-    let compactable = list
-        .iter()
-        .any(|e| matches!(e.body, EntryBody::User { .. } | EntryBody::Assistant(_)));
-    if !compactable
+    let list = context_entries(v, conversation_id)?;
+    if !compactable(&list)
         || matches!(
             list.last().map(|e| &e.body),
             Some(EntryBody::Summary { .. })
         )
     {
-        return Ok(None);
+        return Ok(false);
     }
     let tokens = context_tokens(&list).saturating_add(estimate_tokens(text));
-    if !over_threshold(tokens, window) {
-        return Ok(None);
-    }
-    Ok(Some(compact_request(v, context, provider, model, list)))
+    Ok(over_threshold(tokens, window))
 }
 
 fn over_threshold(tokens: u64, window: u64) -> bool {
     tokens.saturating_mul(10) > window.saturating_mul(AUTO_COMPACT_TENTHS)
-}
-
-/// A Compact request (AI-21): the context with the instruction after it, and no tools.
-fn compact_request(
-    v: &Vault,
-    context: &AiTurnContext,
-    provider: ProviderConfig,
-    model: ModelSpec,
-    mut entries: Vec<AiEntry>,
-) -> Request {
-    entries.push(AiEntry::user(now_ms(), COMPACT_INSTRUCTION));
-    let (system, _) = prompt(v, context, false, None);
-    Request {
-        provider_id: context.provider_id.clone(),
-        provider,
-        model,
-        effort: context.effort.map(request_effort),
-        system,
-        tools: Vec::new(),
-        entries,
-    }
 }
 
 /// Stores a summary entry and moves `context_start` to it (AI-21).
@@ -1413,19 +1564,32 @@ fn prepare_locked(
     if nothing_to_send(&context) {
         return Err(Halt::Idle);
     }
-    let (provider, model) = resolve_model(v, &turn.context.provider_id, &turn.context.model_id)
-        .map_err(Halt::Failed)?;
-    let (system, mut tools) = prompt(v, &turn.context, true, turn.server_id.as_deref());
+    next_request(v, &turn.context, turn.server_id.as_deref(), offer, context).map_err(Halt::Failed)
+}
+
+/// The conversation's next request (§13.1) for its context `entries`: the system prompt that
+/// offers tools, the built-in tools, then the MCP tools of `offer`. Every request of a turn and
+/// every Compact request (AI-21) is built here, so a Compact request has its turn's prefix. The
+/// error is a sentence for the panel.
+fn next_request(
+    v: &Vault,
+    context: &AiTurnContext,
+    server_id: Option<&str>,
+    offer: &Offer,
+    entries: Vec<AiEntry>,
+) -> Result<Request, String> {
+    let (provider, model) = resolve_model(v, &context.provider_id, &context.model_id)?;
+    let (system, mut tools) = prompt(v, context, true, server_id);
     // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09).
     tools.extend(offer.tool_defs(provider.protocol));
     Ok(Request {
-        provider_id: turn.context.provider_id.clone(),
+        provider_id: context.provider_id.clone(),
         provider,
         model,
-        effort: turn.context.effort.map(request_effort),
+        effort: context.effort.map(request_effort),
         system,
         tools,
-        entries: context,
+        entries,
     })
 }
 
@@ -1629,7 +1793,8 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
 /// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
 /// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
 /// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `offer_tools`
-/// is false for Compact (AI-21). `server_id` is the tab's SSH server's identification string.
+/// is false only for the fallback of Compact (AI-21). `server_id` is the tab's SSH server's
+/// identification string.
 /// The prompt names the model and its provider, and carries the user's custom instructions
 /// (AI-36) and the host's AI notes (AI-37), each cut to its limit.
 fn prompt(
