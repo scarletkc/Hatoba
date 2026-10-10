@@ -654,10 +654,10 @@ impl AiManager {
     }
 
     /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
-    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host
-    /// (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the registered turn, and
-    /// whether the new message needs a compaction first (AI-22). Returns the conversation's id,
-    /// the turn, that answer, and the notes.
+    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host or
+    /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the
+    /// registered turn, and whether the new message needs a compaction first (AI-22). Returns the
+    /// conversation's id, the turn, that answer, and the notes.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -712,25 +712,29 @@ impl AiManager {
                         conversation.context_start = summary_before;
                     }
                 }
-                // AI-09: the next message moves the conversation to the tab's host.
-                if let Some(host_id) = &context.host_id
-                    && conversation.host_id.as_ref() != Some(host_id)
-                {
-                    // A conversation that had no host (a home tab chat) did not come from one.
-                    if came_from.is_none()
-                        && let Some(old) = conversation.host_id.as_deref()
-                    {
-                        came_from = Some(host_name(&v, old).unwrap_or_default());
+                // AI-09: the next message moves the conversation to the tab's host, or to its
+                // quick-connect target (HOST-12), which is no saved host, so the conversation
+                // records the target instead. On the home tab it stays where it was.
+                let target = tab_target(&context);
+                let moves = match (&context.host_id, &target) {
+                    (Some(host_id), _) => conversation.host_id.as_ref() != Some(host_id),
+                    (None, Some(target)) => {
+                        conversation.host_id.is_some()
+                            || conversation.quick_target.as_ref() != Some(target)
                     }
-                    conversation.host_id = Some(host_id.clone());
-                } else if context.host_id.is_none()
-                    && context.target.is_some()
-                    && let Some(old) = conversation.host_id.take()
-                {
-                    // A quick connection (HOST-12) is no saved host: the conversation leaves its own.
+                    (None, None) => false,
+                };
+                if moves {
                     if came_from.is_none() {
-                        came_from = Some(host_name(&v, &old).unwrap_or_default());
+                        came_from = moved_from(
+                            &v,
+                            &conversation,
+                            context.host_id.as_deref(),
+                            target.as_deref(),
+                        );
                     }
+                    conversation.host_id = context.host_id.clone();
+                    conversation.quick_target = target;
                 }
                 // AI-05: the conversation keeps the level of its last message.
                 conversation.effort = context.effort.map(core_effort);
@@ -742,7 +746,7 @@ impl AiManager {
                     .host_id
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
-                    .or_else(|| context.target.as_ref().map(quick_label));
+                    .or_else(|| conversation.quick_target.clone());
                 let notes = notes_before(
                     &v,
                     &earlier,
@@ -760,6 +764,7 @@ impl AiManager {
                     Item::AiConversation(AiConversation {
                         title: title_of(text),
                         host_id: context.host_id.clone(),
+                        quick_target: tab_target(&context),
                         pinned: false,
                         context_start: None,
                         effort: context.effort.map(core_effort),
@@ -2537,11 +2542,45 @@ fn quick_label(target: &QuickTarget) -> String {
     crate::ssh::target_label(&target.username, &target.address, target.port)
 }
 
+/// The quick-connect target of a tab without a saved host, as the conversation item records it
+/// (AI-09).
+fn tab_target(context: &AiTurnContext) -> Option<String> {
+    context
+        .target
+        .as_ref()
+        .filter(|_| context.host_id.is_none())
+        .map(quick_label)
+}
+
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {
     v.get(host_id)
         .and_then(Item::as_host)
         .map(|h| h.name.clone())
+}
+
+/// Where a conversation that moves to the host `host_id` or the quick-connect `target` (AI-09)
+/// was, as a `host_change` note names it: its host's display name, empty when the host no longer
+/// exists, or its target (HOST-12). `None` when it had neither, as a home tab chat, or when the
+/// move is between a target and the saved host with its address, port, and user (as **Save as
+/// Host…** makes), which is the same server.
+fn moved_from(
+    v: &Vault,
+    conversation: &AiConversation,
+    host_id: Option<&str>,
+    target: Option<&str>,
+) -> Option<String> {
+    let host_target = |id: &str| {
+        v.get(id)
+            .and_then(Item::as_host)
+            .map(|h| crate::ssh::target_label(&h.username, &h.address, h.port))
+    };
+    match (&conversation.host_id, &conversation.quick_target) {
+        (Some(old), _) if target.is_some() && host_target(old).as_deref() == target => None,
+        (Some(old), _) => Some(host_name(v, old).unwrap_or_default()),
+        (None, Some(old)) if host_id.and_then(host_target).as_ref() == Some(old) => None,
+        (None, old) => old.clone(),
+    }
 }
 
 /// How a stored model is named in a `model_change` note: its display name and ID, or the ID
@@ -2558,9 +2597,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// The notes Hatoba puts before a new message (spec §13.3), in this order:
 ///
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
-///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
-///   `None` when the conversation did not move. `host_now` is the display name of the host (or
-///   quick-connect target) the conversation is on now.
+///   conversation's host now: `came_from` names it (empty when it no longer exists) or the
+///   quick-connect target (HOST-12) they came from, and is `None` when the conversation did not
+///   move. `host_now` is the display name of the host (or the target) the conversation is on now.
 /// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
 ///   `earlier` tells the model, there was none before, or the other way round
 ///   ([`terminal_before`]).

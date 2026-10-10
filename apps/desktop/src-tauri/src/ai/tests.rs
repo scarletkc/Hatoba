@@ -2977,6 +2977,115 @@ async fn a_quick_connection_takes_the_conversation_off_its_host() {
     assert!(!system.contains("<host_notes"), "{system}");
 }
 
+impl Fixture {
+    /// A tab connected to `root@{address}:22` without a saved host (HOST-12).
+    fn quick(&self, address: &str) -> AiTurnContext {
+        AiTurnContext {
+            target: Some(QuickTarget {
+                address: address.into(),
+                port: 22,
+                username: "root".into(),
+            }),
+            ..self.context()
+        }
+    }
+
+    /// The host and the quick-connect target the conversation item records (AI-09).
+    fn recorded_place(&self, conversation_id: &str) -> (Option<String>, Option<String>) {
+        let item = super::find_conversation(&lock(&self.vault), conversation_id).unwrap();
+        (item.host_id, item.quick_target)
+    }
+}
+
+#[tokio::test]
+async fn a_move_off_a_quick_connection_is_noted_from_its_target() {
+    use hatoba_ai::tools::{host_change_block, terminal_change_block};
+
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "");
+    let first = "root@10.0.0.9:22";
+    let second = "root@10.0.0.10:22";
+    let home = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+
+    // HOST-12: a conversation started on a target records it in place of a host.
+    let (conv, _) = f.exchange(None, "one", f.quick("10.0.0.9")).await;
+    assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
+    f.exchange(Some(&conv), "two", f.quick("10.0.0.9")).await;
+    // The home tab leaves it there.
+    f.exchange(Some(&conv), "three", home).await;
+    assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
+    // AI-09: another target is a move, and so is a saved host.
+    f.exchange(Some(&conv), "four", f.quick("10.0.0.10")).await;
+    assert_eq!(f.recorded_place(&conv), (None, Some(second.to_owned())));
+    let on_prod = AiTurnContext {
+        host_id: Some(prod.clone()),
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "five", on_prod).await;
+    assert_eq!(f.recorded_place(&conv), (Some(prod), None));
+
+    let expected = [
+        "one".to_owned(),
+        "two".to_owned(),
+        format!("{}three", terminal_change_block(false)),
+        format!(
+            "{}{}four",
+            host_change_block(first, second),
+            terminal_change_block(true)
+        ),
+        format!("{}five", host_change_block(second, "prod-db")),
+    ];
+    assert_eq!(f.user_texts(&conv), expected);
+    let last = f.requests().await.pop().unwrap();
+    assert_eq!(user_messages(&last), expected);
+}
+
+#[tokio::test]
+async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
+    let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    // Save as Host… (HOST-12): the same address, port, and user.
+    let saved = lock(&f.vault)
+        .put(
+            None,
+            Item::Host(hatoba_core::model::Host {
+                name: "web-1".into(),
+                address: "10.0.0.9".into(),
+                port: 22,
+                username: "root".into(),
+                ..hatoba_core::model::Host::default()
+            }),
+        )
+        .unwrap();
+    let on_saved = AiTurnContext {
+        host_id: Some(saved.clone()),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "one", f.quick("10.0.0.9")).await;
+    f.exchange(Some(&conv), "two", on_saved.clone()).await;
+    assert_eq!(f.recorded_place(&conv), (Some(saved.clone()), None));
+    // Back on a tab that has not reconnected as the saved host yet.
+    f.exchange(Some(&conv), "three", f.quick("10.0.0.9")).await;
+    assert_eq!(f.user_texts(&conv), ["one", "two", "three"]);
+
+    // A conversation on a target from before targets were recorded came from no known place.
+    {
+        let mut v = lock(&f.vault);
+        let mut item = super::find_conversation(&v, &conv).unwrap();
+        item.quick_target = None;
+        v.put(Some(&conv), Item::AiConversation(item)).unwrap();
+    }
+    let prod = f.add_host("prod-db", "");
+    let on_prod = AiTurnContext {
+        host_id: Some(prod),
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "four", on_prod).await;
+    assert_eq!(f.user_texts(&conv), ["one", "two", "three", "four"]);
+}
+
 #[tokio::test]
 async fn a_switch_noted_on_a_message_without_a_reply_is_not_noted_again() {
     use hatoba_ai::tools::model_change_block;
@@ -3056,6 +3165,67 @@ async fn editing_a_message_keeps_the_note_of_the_move_it_made() {
         f.detail(&conv).conversation.host_id.as_deref(),
         Some(prod.as_str())
     );
+}
+
+#[tokio::test]
+async fn editing_a_message_keeps_the_note_of_a_move_off_a_quick_connection() {
+    use hatoba_ai::tools::{host_change_block, terminal_change_block};
+
+    let f = Fixture::new((0..7).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "");
+    let on_prod = AiTurnContext {
+        host_id: Some(prod.clone()),
+        ..f.context()
+    };
+    let first = "root@10.0.0.9:22";
+    let second = "root@10.0.0.10:22";
+    let (conv, _) = f.exchange(None, "one", f.quick("10.0.0.9")).await;
+    f.exchange(Some(&conv), "two", on_prod.clone()).await;
+    let edit = |text: &'static str, context: AiTurnContext| {
+        let f = &f;
+        let conv = &conv;
+        async move {
+            let two = f.user_ids(conv)[1].clone();
+            f.edit_with(conv, &two, text, context).await;
+        }
+    };
+
+    // AI-26: the edited message replaces the one that moved the conversation off the target.
+    edit("two, edited", on_prod.clone()).await;
+    let moved = host_change_block(first, "prod-db");
+    assert_eq!(
+        f.user_texts(&conv),
+        ["one".to_owned(), format!("{moved}two, edited")]
+    );
+
+    // Edited from another target: the earlier screens still came from the first one.
+    edit("two, elsewhere", f.quick("10.0.0.10")).await;
+    let elsewhere = host_change_block(first, second);
+    assert_eq!(f.user_texts(&conv)[1], format!("{elsewhere}two, elsewhere"));
+    assert_eq!(f.recorded_place(&conv), (None, Some(second.to_owned())));
+
+    // From the home tab, the conversation stays on the target it records.
+    let home = AiTurnContext {
+        tab: false,
+        ..f.context()
+    };
+    edit("two, from home", home).await;
+    assert_eq!(
+        f.user_texts(&conv)[1],
+        format!("{elsewhere}{}two, from home", terminal_change_block(false))
+    );
+    assert_eq!(f.recorded_place(&conv), (None, Some(second.to_owned())));
+
+    // From the first target, nothing moved.
+    edit("two, back", f.quick("10.0.0.9")).await;
+    assert_eq!(f.user_texts(&conv), ["one", "two, back"]);
+    assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
+
+    // The first message has nothing before it.
+    let one = f.user_ids(&conv)[0].clone();
+    f.edit_with(&conv, &one, "one, edited", on_prod).await;
+    assert_eq!(f.user_texts(&conv), ["one, edited"]);
+    assert_eq!(f.recorded_place(&conv), (Some(prod), None));
 }
 
 impl Fixture {

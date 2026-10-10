@@ -766,6 +766,12 @@ pub struct AiConversation {
     pub title: String,
     /// The host the conversation last worked on.
     pub host_id: Option<String>,
+    /// The quick-connect target (HOST-12) it last worked on, as `user@host:port`, while
+    /// `host_id` is `None`: a message in a tab on a saved host or another target starts with a
+    /// `host_change` note from it (AI-09). `None` (absent) is none, as for conversations from
+    /// before it was recorded, which get no note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quick_target: Option<String>,
     /// Pinned to the top of the history.
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
@@ -1865,6 +1871,7 @@ mod tests {
         let conversation = Item::AiConversation(AiConversation {
             title: "Why is nginx down".into(),
             host_id: Some("h1".into()),
+            quick_target: None,
             pinned: true,
             context_start: Some("e1".into()),
             effort: Some(AiEffort::Xhigh),
@@ -1885,6 +1892,15 @@ mod tests {
                 "type": "ai_conversation", "title": "", "host_id": null, "pinned": false,
                 "context_start": null, "created_at": 0, "updated_at": 0
             })
+        );
+        // On a quick connection (HOST-12), the target in place of a host.
+        assert_eq!(
+            serde_json::to_value(Item::AiConversation(AiConversation {
+                quick_target: Some("root@10.0.0.9:22".into()),
+                ..AiConversation::default()
+            }))
+            .unwrap()["quick_target"],
+            "root@10.0.0.9:22"
         );
 
         let message = Item::AiMessage(AiMessage {
