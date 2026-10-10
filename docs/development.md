@@ -129,6 +129,8 @@ The tests in `apps/desktop/src-tauri/src/update.rs` run the updater against a mo
 
 On Linux, build with `--bundles deb,appimage` and copy the packages out of `target/release/bundle/deb` and `target/release/bundle/appimage`. Install the older deb package or run the older AppImage, then pass the newer package of the same kind to `serve-update.mjs`, which serves it under the key that kind of build looks for in `latest.json`. Afterwards, remove the deb package with `sudo apt remove hatoba-update-test`, and delete `~/.local/share/app.hatoba.updatetest` and the throwaway key.
 
+On macOS, build each version with `--bundles app` and copy `Hatoba Update Test.app`, `Hatoba Update Test.app.tar.gz`, and its `.sig` out of `target/release/bundle/macos` before the next build. Copy the older app to Applications and open it, then pass the newer `.app.tar.gz` to `serve-update.mjs`. The updater replaces the app and restarts it. Afterwards, delete the app, `~/Library/Application Support/app.hatoba.updatetest`, and the throwaway key.
+
 ## Update the TypeScript bindings
 
 After changing a Rust command, event, or DTO, regenerate `apps/desktop/src/ipc/bindings.ts`:

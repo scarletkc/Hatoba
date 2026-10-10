@@ -1,8 +1,8 @@
 // Serves a signed installer as an update from this machine, so that a test build of Hatoba can
 // install it end to end. docs/development.md describes the steps.
 // Usage: node scripts/release/serve-update.mjs --installer FILE --pubkey FILE [--port PORT]
-//   --installer  the NSIS installer, deb package, or AppImage that `tauri build` wrote; its .sig
-//                must be next to it
+//   --installer  the NSIS installer, deb package, AppImage, or macOS app tarball that `tauri build`
+//                wrote; its .sig must be next to it
 //   --pubkey     the .pub file of the key that signed it
 //   --port       the port on 127.0.0.1 to serve on (default 18765)
 import { readFileSync } from "node:fs";
@@ -19,8 +19,8 @@ if (!values.installer || !values.pubkey) {
   process.exit(1);
 }
 // The updater looks for the installer under a key that depends on the kind of build it runs in.
-const bundle = Object.keys(INSTALLERS).find((type) => extname(INSTALLERS[type].name("0")) === extname(values.installer));
-if (!bundle) throw new Error(`${values.installer} is not an NSIS installer, a deb package, or an AppImage.`);
+const bundle = Object.keys(INSTALLERS).find((type) => INSTALLERS[type].updater && extname(INSTALLERS[type].name("0")) === extname(values.installer));
+if (!bundle) throw new Error(`${values.installer} is not an NSIS installer, a deb package, an AppImage, or a macOS app tarball.`);
 const installer = readFileSync(values.installer);
 const signature = readFileSync(`${values.installer}.sig`, "utf8").trim();
 const version = verifyUpdaterSignature(installer, signature, readFileSync(values.pubkey, "utf8"));

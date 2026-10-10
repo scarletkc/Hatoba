@@ -111,9 +111,43 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  build-macos:
+    name: Build (macOS)
+    needs: preflight
+    # Apple Silicon.
+    runs-on: macos-latest
+    timeout-minutes: 90
+    # Holds the update signing key, as for the Windows build.
+    environment: release-signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # No Rust cache: the app is built from a clean target directory.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Without --no-sign, so the app keeps the ad-hoc code signature that tauri.conf.json asks for;
+      # Apple Silicon Macs report an unsigned download as damaged. The CI environment variable makes
+      # the DMG step skip the Finder window layout, which fails on a runner without a desktop session.
+      - run: pnpm tauri build --bundles app,dmg
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - run: node scripts/release/release.mjs dist --platform macos --bundle target/release/bundle --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hatoba-macos
+          path: dist/
+          if-no-files-found: error
+
   publish:
     name: Publish
-    needs: [preflight, build-windows, build-linux]
+    needs: [preflight, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The environment's required reviewers hold this job until someone approves the run.

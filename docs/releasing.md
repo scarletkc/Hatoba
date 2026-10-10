@@ -1,6 +1,6 @@
 # Release Hatoba
 
-A release publishes one commit on `main` as a GitHub Release with the Windows installer and the Linux packages. The [Release workflow](../.github/workflows/release.yml) builds and signs them, waits for a maintainer to approve, and then tags the commit `vX.Y.Z` and publishes the release, from which installed apps update themselves. The scripts in [`scripts/release`](../scripts/release) prepare the version and run each step of the workflow. Run them from the repository root with Node.js 22 or later.
+A release publishes one commit on `main` as a GitHub Release with the Windows installer, the Linux packages, and an experimental macOS build. The [Release workflow](../.github/workflows/release.yml) builds and signs them, waits for a maintainer to approve, and then tags the commit `vX.Y.Z` and publishes the release, from which installed apps update themselves. The scripts in [`scripts/release`](../scripts/release) prepare the version and run each step of the workflow. Run them from the repository root with Node.js 22 or later.
 
 ## Set up the release environment
 
@@ -68,10 +68,11 @@ Commit the changes, open a pull request titled `chore(release): prepare vX.Y.Z`,
    - the `release` environment requires a reviewer, and the `release-signing` environment allows deployments only from `main`
 
    It then writes the release notes to the run summary.
-3. Two jobs build the installers, sign each with the update signing key, and check each signature against the public key in `tauri.conf.json`. Each job uploads its installers and their `.sig` signatures as an artifact. `INSTALLERS` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) names the files.
+3. Three jobs build the installers, sign the ones that installed apps update from with the update signing key, and check each signature against the public key in `tauri.conf.json`. Each job uploads its installers and their `.sig` signatures as an artifact. `INSTALLERS` in [`scripts/release/release.mjs`](../scripts/release/release.mjs) names the files.
    - **Build (Windows)** uploads `Hatoba_X.Y.Z_x64-setup.exe` as the `hatoba-windows` artifact.
    - **Build (Linux)** builds on Ubuntu 22.04, so that the packages run on systems with glibc 2.35 or later, and uploads `Hatoba_X.Y.Z_amd64.deb` and `Hatoba_X.Y.Z_amd64.AppImage` as the `hatoba-linux` artifact.
-4. **Publish** waits for approval. Read the notes in the run summary, and run the manual checks in [§12 Testing](hatoba-spec.md#12-testing) with the installers from the artifacts. Approve the deployment to publish, or reject it to stop without publishing.
+   - **Build (macOS)** builds for Apple Silicon and uploads `Hatoba_X.Y.Z_aarch64.dmg`, which people download, and `Hatoba_X.Y.Z_aarch64.app.tar.gz`, which installed apps update from, as the `hatoba-macos` artifact. The app is ad-hoc signed and not notarized.
+4. **Publish** waits for approval. Read the notes in the run summary, and run the manual checks in [§12 Testing](hatoba-spec.md#12-testing) with the installers from the artifacts. The maintainer has no Mac, so before you approve, QingYunA downloads the `hatoba-macos` artifact and opens the DMG on a Mac. Approve the deployment to publish, or reject it to stop without publishing.
 
 Publishing writes `SHA256SUMS.txt` with the checksum of each installer and `latest.json`, which tells installed apps the version, the release notes, and where to download the installer for their platform and package type. It then tags the commit `vX.Y.Z` and creates the release **Hatoba vX.Y.Z** with the installers, their signatures, and those two files. A prerelease is marked as a pre-release and never becomes the latest release. Installed stable versions read `latest.json` from the latest release, so they update only to stable releases. Installed prereleases look through the list of releases for the newest one with a `latest.json`, so they update to the next prerelease as well. Either finds a release as soon as it is published.
 

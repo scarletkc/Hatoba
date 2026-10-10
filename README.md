@@ -31,7 +31,7 @@ account.
 - **Local first.** Everything works offline, and sync is optional.
 - **Windows first.** A custom title bar with Snap Layouts, Mica, Segoe UI and
   Cascadia fonts, and Windows input methods. Each release also has Linux
-  packages, and macOS follows.
+  packages and an experimental macOS build.
 
 ## Features
 
@@ -68,6 +68,8 @@ account.
 
 [![Download for Linux](https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/scarletkc/Hatoba/releases)
 
+[![Download for macOS](https://img.shields.io/badge/Download-macOS%20Apple%20Silicon%20%28experimental%29-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/scarletkc/Hatoba/releases)
+
 Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
 
 - **Windows**: `Hatoba_<version>_x64-setup.exe` installs for the current user
@@ -76,9 +78,17 @@ Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
   distributions based on them, or `Hatoba_<version>_amd64.AppImage` for the
   others. Sync keeps its credentials in the Secret Service, so it needs GNOME
   Keyring, KWallet, or another Secret Service provider.
+- **macOS (Apple Silicon, experimental)**: `Hatoba_<version>_aarch64.dmg` for
+  macOS 13 or later. The maintainer cannot test it on a Mac, so please report
+  what does not work in [Issues](https://github.com/scarletkc/Hatoba/issues).
+  The app is not signed with an Apple Developer ID or notarized, so macOS
+  blocks it the first time you open it. Within the next hour, go to
+  **System Settings → Privacy & Security**, choose **Open Anyway** under
+  **Security**, and enter your login password. After an update, macOS may ask
+  whether Hatoba can use its keychain items: enter your login password and
+  choose **Always Allow**, because sync fails if you deny it.
 
-Each release's notes cover what changed and how to install it. A macOS build
-will follow; until then, [build from source](#build-from-source).
+Each release's notes cover what changed and how to install it.
 
 ## Screenshots
 
@@ -118,8 +128,8 @@ send.
 ## Build from source
 
 You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
-WebView2, which Windows 11 includes, and Linux needs the Tauri system
-dependencies such as `libwebkit2gtk-4.1-dev`.
+WebView2, which Windows 11 includes, macOS needs the Xcode Command Line Tools,
+and Linux needs the Tauri system dependencies such as `libwebkit2gtk-4.1-dev`.
 
 ```sh
 pnpm install
@@ -128,8 +138,16 @@ pnpm tauri dev
 
 `pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb
 package and the AppImage on Linux, without the update signatures that only
-release builds carry. The
-[development guide](docs/development.md) covers the browser-only frontend,
+release builds carry. On macOS, don't pass `--no-sign`: it also drops the
+ad-hoc code signature, and Apple Silicon Macs report an app without one as
+damaged once it is downloaded or copied from another Mac. Turn off the update
+artifacts instead, and the build produces the app bundle and the DMG:
+
+```sh
+pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+The [development guide](docs/development.md) covers the browser-only frontend,
 tests, and the generated TypeScript bindings.
 
 ## Set up sync
