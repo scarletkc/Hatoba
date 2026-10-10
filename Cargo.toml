@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/hatoba-ai", "crates/hatoba-core", "crates/hatoba-ssh", "apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/scarletkc/Hatoba"
