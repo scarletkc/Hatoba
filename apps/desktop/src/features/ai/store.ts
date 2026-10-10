@@ -161,6 +161,16 @@ export function slotActivity(slot: Slot | undefined): Activity {
   return slot.turn || slot.remoteRunning ? "running" : "idle";
 }
 
+/**
+ * AI-09: whether a terminal tab's slot offers Continue Here for the home tab's conversation. The tab
+ * shows a new conversation with no messages, and the home tab's has messages and is idle: a turn or a
+ * compaction finishes where it started.
+ */
+export function offersHomeConversation(slot: Slot, home: Slot | undefined): boolean {
+  if (slot.conversationId || slot.entries.length > 0 || slot.turn || slot.compacting) return false;
+  return !!home?.conversationId && home.entries.length > 0 && !home.turn && !home.remoteRunning && !home.compacting;
+}
+
 /** Keeps a conversation's history entry in step with what a command returned. */
 export function updateConversation(view: AiConversationView) {
   useAi.setState((st) => ({
