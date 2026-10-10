@@ -180,3 +180,41 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
+
+  rust-macos:
+    name: Rust (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @hatoba/desktop build
+      # The first run that compiles the macOS-only code, such as platform/window.rs.
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The SSH integration tests stay off here: their harness needs Linux and root to start sshd.
+      - run: cargo test --workspace
+      # The release profile is a second full build, so PRs skip it. The CI environment variable makes
+      # the DMG step skip the Finder window layout, which fails on a runner without a desktop session.
+      # Only the Release workflow has the update signing key, so this build makes no updater artifacts.
+      # Unlike --no-sign, that keeps the ad-hoc code signature.
+      - name: Build app bundle and DMG
+        if: github.event_name != 'pull_request'
+        run: pnpm tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: hatoba-macos-dmg
+          path: target/release/bundle/dmg/*.dmg
+          if-no-files-found: error

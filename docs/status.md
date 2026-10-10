@@ -88,6 +88,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 |---|---|---|
 | NSIS installer | ✅ | Built by the `rust-windows` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests). Unsigned |
 | Linux deb package and AppImage | 🟡 | Built by the `linux-packages` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests). Not yet tried on a Linux desktop |
+| macOS app bundle and DMG | 🟡 | Built by the `rust-macos` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests), for Apple Silicon. Ad-hoc signed (`signingIdentity` `-`), not notarized. Opening a downloaded DMG through Gatekeeper not yet tried |
 | GitHub Releases | 🟡 | The [Release workflow](../.github/workflows/release.yml) publishes the installers after approval; [Release Hatoba](releasing.md) has the steps |
 | Authenticode code signing | Not planned | A certificate is impractical to obtain ([§11](hatoba-spec.md#11-non-functional-requirements)), so SmartScreen warns on the first install |
 | Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. Not yet tried against a published release |

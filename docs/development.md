@@ -6,6 +6,7 @@ Build, run, and test Hatoba locally. [`.github/workflows/ci.yml`](../.github/wor
 
 - Rust stable, Node.js 22+, and pnpm (the version is in `packageManager` in the root [`package.json`](../package.json)).
 - Windows: WebView2 (included in Windows 11).
+- macOS 13 or later: the Xcode Command Line Tools (`xcode-select --install`), and Rust from [rustup](https://rustup.rs/). The Rust version that Homebrew installs may be older than `rust-version` in the root [`Cargo.toml`](../Cargo.toml), so make sure `rustc --version` reports the rustup toolchain.
 - Linux: the Tauri dependencies, such as `libwebkit2gtk-4.1-dev`. The System dependencies step of the `rust-linux` job in `ci.yml` has the full list that CI installs.
 - The SSH integration tests and the end-to-end test need an OpenSSH server (`sshd`).
 
@@ -39,7 +40,7 @@ node --test "scripts/**/*.test.mjs"   # Release and CI scripts
 
 ### SSH integration tests
 
-These tests start a throwaway local `sshd` and need the OpenSSH server installed. They are skipped unless `HATOBA_SSH_IT=1` is set.
+These tests start a throwaway local `sshd` and need the OpenSSH server installed. They are skipped unless `HATOBA_SSH_IT=1` is set. The test harness needs `/run/sshd`, the privilege separation directory of Linux OpenSSH, so run them on Linux; CI runs them only in the `rust-linux` job.
 
 ```sh
 HATOBA_SSH_IT=1 cargo test -p hatoba-ssh
