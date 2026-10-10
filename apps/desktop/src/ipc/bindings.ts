@@ -11,7 +11,7 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
-	/**  Writes text to a path the user chose in the native save dialog (recovery code "Save as Text"). */
+	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
