@@ -772,19 +772,24 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return c;
     };
     const user = (ms: number, text: string): AiEntryView => ({ role: "user", entry_id: newId(ms), created_at: ms, text });
-    const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => ({
-      role: "assistant",
-      entry_id: newId(ms),
-      created_at: ms,
-      provider_id: model[0],
-      model_id: model[1],
-      text,
-      reasoning: null,
-      tool_calls: [],
-      finish: "stop",
-      usage: { input_tokens: 3200, output_tokens: 240, estimated: false },
-      ...opts,
-    });
+    const reply = (ms: number, model: [string, string], text: string, opts: Partial<Assistant> = {}): Assistant => {
+      const entry: Assistant = {
+        role: "assistant",
+        entry_id: newId(ms),
+        created_at: ms,
+        provider_id: model[0],
+        model_id: model[1],
+        text,
+        reasoning: null,
+        tool_calls: [],
+        finish: "stop",
+        usage: { input_tokens: 3200, output_tokens: 240, estimated: false },
+        ...opts,
+      };
+      // Every demo conversation was held in a connected tab of its host.
+      replyTerminal.set(entry.entry_id, true);
+      return entry;
+    };
     const result = (ms: number, callId: string, status: AiToolStatus, content: string): AiEntryView => ({ role: "tool", entry_id: newId(ms), created_at: ms, tool_call_id: callId, status, content });
     const SONNET: [string, string] = ["p-anthropic", "claude-sonnet-5-5"];
     const QWEN: [string, string] = ["p-ollama", "qwen3:8b"];
@@ -871,7 +876,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function settleRemote(c: Conv) {
     if (!c.runningUntil || Date.now() < c.runningUntil) return;
     c.runningUntil = 0;
-    c.entries.push({
+    const entry: Assistant = {
       role: "assistant",
       entry_id: newId(),
       created_at: Date.now(),
@@ -882,7 +887,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       tool_calls: [],
       finish: "stop",
       usage: { input_tokens: 4100, output_tokens: 40, estimated: false },
-    });
+    };
+    // The earlier page ran the turn in a connected tab.
+    replyTerminal.set(entry.entry_id, true);
+    c.entries.push(entry);
   }
 
   return {
