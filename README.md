@@ -84,7 +84,9 @@ Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
   The app is not signed with an Apple Developer ID or notarized, so macOS
   blocks it the first time you open it. Within the next hour, go to
   **System Settings → Privacy & Security**, choose **Open Anyway** under
-  **Security**, and enter your login password.
+  **Security**, and enter your login password. After an update, macOS may ask
+  whether Hatoba can use its keychain items: enter your login password and
+  choose **Always Allow**, because sync fails if you deny it.
 
 Each release's notes cover what changed and how to install it.
 
@@ -126,8 +128,8 @@ send.
 ## Build from source
 
 You need Rust stable, Node.js 22 or later, and pnpm. Windows also needs
-WebView2, which Windows 11 includes, and Linux needs the Tauri system
-dependencies such as `libwebkit2gtk-4.1-dev`.
+WebView2, which Windows 11 includes, macOS needs the Xcode Command Line Tools,
+and Linux needs the Tauri system dependencies such as `libwebkit2gtk-4.1-dev`.
 
 ```sh
 pnpm install
@@ -136,8 +138,16 @@ pnpm tauri dev
 
 `pnpm tauri build --no-sign` produces the NSIS installer on Windows, and the deb
 package and the AppImage on Linux, without the update signatures that only
-release builds carry. The
-[development guide](docs/development.md) covers the browser-only frontend,
+release builds carry. On macOS, don't pass `--no-sign`: it also drops the
+ad-hoc code signature, and Apple Silicon Macs report an app without one as
+damaged once it is downloaded or copied from another Mac. Turn off the update
+artifacts instead, and the build produces the app bundle and the DMG:
+
+```sh
+pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
+
+The [development guide](docs/development.md) covers the browser-only frontend,
 tests, and the generated TypeScript bindings.
 
 ## Set up sync
