@@ -48,8 +48,8 @@ use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
-    Item, MAX_CUSTOM_INSTRUCTIONS_CHARS, MAX_HOST_AI_NOTES_CHARS, SearchKind as CoreSearchKind,
-    SearchProvider,
+    AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS, MAX_HOST_AI_NOTES_CHARS,
+    SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use serde::de::DeserializeOwned;
@@ -571,8 +571,8 @@ impl AiManager {
     }
 
     /// Registers the turn, compacts first when the new message needs it (AI-22), stores the
-    /// user's message (in place of `replace` and the entries after it, for an edit) and returns
-    /// the turn's task.
+    /// user's message (in place of `replace` and the entries after it, for an edit) with the
+    /// thinking level (AI-05) and the move its note tells of (AI-09), and returns the turn's task.
     #[expect(
         clippy::too_many_arguments,
         reason = "the two commands that start a turn pass their own pieces"
@@ -604,7 +604,7 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (id, turn, compact, notes) = registered?;
+        let (id, turn, compact, notes, moved_to) = registered?;
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
@@ -629,7 +629,17 @@ impl AiManager {
             // AI-05, AI-09: Hatoba's notes come before what the panel sent (spec §13.3).
             let entry = AiEntry::user(now_ms(), format!("{notes}{text}"));
             let entry_id = append(&mut v, &id, &entry)?;
-            let conversation = find_conversation(&v, &id)?;
+            let mut conversation = find_conversation(&v, &id)?;
+            let before = conversation.clone();
+            // AI-05: the conversation keeps the level of its last message.
+            conversation.effort = turn.context.effort.map(core_effort);
+            if let Some(place) = moved_to {
+                conversation.host_id = place.host_id;
+                conversation.quick_target = place.quick_target;
+            }
+            if conversation != before {
+                v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
+            }
             Ok(AiSendStarted {
                 conversation: conversation_view(&v, &id, &conversation),
                 user_entry: entry_view(&entry_id, &entry),
@@ -654,10 +664,12 @@ impl AiManager {
     }
 
     /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
-    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host
-    /// (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the registered turn, and
-    /// whether the new message needs a compaction first (AI-22). Returns the conversation's id,
-    /// the turn, that answer, and the notes.
+    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host or
+    /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the
+    /// registered turn, and whether the new message needs a compaction first (AI-22). Returns the
+    /// conversation's id, the turn, that answer, the notes, and the move, which is stored with
+    /// the message, like the thinking level: a stop while the context is compacted stores no
+    /// message.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -671,10 +683,10 @@ impl AiManager {
         (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
         stored: &mut bool,
-    ) -> AppResult<(String, Arc<Turn>, bool, String)> {
+    ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, compact, notes) = match conversation_id {
+        let (id, compact, notes, moved_to) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
                 let before = conversation.clone();
@@ -712,37 +724,59 @@ impl AiManager {
                         conversation.context_start = summary_before;
                     }
                 }
-                // AI-09: the next message moves the conversation to the tab's host.
-                if let Some(host_id) = &context.host_id
-                    && conversation.host_id.as_ref() != Some(host_id)
-                {
-                    // A conversation that had no host (a home tab chat) did not come from one.
-                    if came_from.is_none()
-                        && let Some(old) = conversation.host_id.as_deref()
-                    {
-                        came_from = Some(host_name(&v, old).unwrap_or_default());
+                let noted = came_from.is_some();
+                // AI-09: the next message moves the conversation to the tab's host, or to its
+                // quick-connect target (HOST-12), which is no saved host, so the conversation
+                // records the target instead. On the home tab it stays where it was.
+                let target = tab_target(&context);
+                let moves = match (&context.host_id, &target) {
+                    (Some(host_id), _) => conversation.host_id.as_ref() != Some(host_id),
+                    (None, Some(target)) => {
+                        conversation.host_id.is_some()
+                            || conversation.quick_target.as_ref() != Some(target)
                     }
-                    conversation.host_id = Some(host_id.clone());
-                } else if context.host_id.is_none()
-                    && context.target.is_some()
-                    && let Some(old) = conversation.host_id.take()
-                {
-                    // A quick connection (HOST-12) is no saved host: the conversation leaves its own.
+                    (None, None) => false,
+                };
+                let mut moved_to = None;
+                if moves {
                     if came_from.is_none() {
-                        came_from = Some(host_name(&v, &old).unwrap_or_default());
+                        came_from = moved_from(
+                            &v,
+                            &conversation,
+                            context.host_id.as_deref(),
+                            target.as_ref(),
+                        );
                     }
+                    moved_to = Some(Place {
+                        host_id: context.host_id.clone(),
+                        quick_target: target,
+                    });
                 }
-                // AI-05: the conversation keeps the level of its last message.
-                conversation.effort = context.effort.map(core_effort);
                 if conversation != before {
                     v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
                     *stored = true;
                 }
-                let host_now = conversation
-                    .host_id
+                let (host_id, quick_target) = match &moved_to {
+                    Some(place) => (&place.host_id, &place.quick_target),
+                    None => (&conversation.host_id, &conversation.quick_target),
+                };
+                // An edit keeps the move the deleted messages noted, unless the note names the
+                // server the message goes from under its other name: a target and the saved host
+                // with its address, port, and user.
+                let here = host_id
+                    .as_deref()
+                    .and_then(|id| host_target(&v, id))
+                    .or_else(|| quick_target.clone());
+                if noted
+                    && let (Some(from), Some(here)) = (&came_from, &here)
+                    && names_server(&v, from, here)
+                {
+                    came_from = None;
+                }
+                let host_now = host_id
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
-                    .or_else(|| context.target.as_ref().map(quick_label));
+                    .or_else(|| quick_target.as_ref().map(target_name));
                 let notes = notes_before(
                     &v,
                     &earlier,
@@ -752,7 +786,7 @@ impl AiManager {
                 );
                 let full = format!("{notes}{text}");
                 let compact = compaction_before(&v, &id, &context, &full)?;
-                (id, compact, notes)
+                (id, compact, notes, moved_to)
             }
             None => {
                 let id = v.put(
@@ -760,6 +794,7 @@ impl AiManager {
                     Item::AiConversation(AiConversation {
                         title: title_of(text),
                         host_id: context.host_id.clone(),
+                        quick_target: tab_target(&context),
                         pinned: false,
                         context_start: None,
                         effort: context.effort.map(core_effort),
@@ -768,7 +803,7 @@ impl AiManager {
                     }),
                 )?;
                 *stored = true;
-                (id, false, String::new())
+                (id, false, String::new(), None)
             }
         };
         let turn = self.register(&id, context, server_id, sink);
@@ -777,7 +812,7 @@ impl AiManager {
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, compact, notes))
+        Ok((id, turn, compact, notes, moved_to))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -2537,11 +2572,75 @@ fn quick_label(target: &QuickTarget) -> String {
     crate::ssh::target_label(&target.username, &target.address, target.port)
 }
 
+/// The quick-connect target of a tab without a saved host, as the conversation item records it
+/// (AI-09).
+fn tab_target(context: &AiTurnContext) -> Option<AiQuickTarget> {
+    context
+        .target
+        .as_ref()
+        .filter(|_| context.host_id.is_none())
+        .map(|t| AiQuickTarget::new(&t.username, &t.address, t.port))
+}
+
+/// A saved host's address, port, and user in the form a conversation records a target, which is
+/// equal to a target's when HOST-12 would pick the host for it.
+fn host_target(v: &Vault, host_id: &str) -> Option<AiQuickTarget> {
+    v.get(host_id)
+        .and_then(Item::as_host)
+        .map(|h| AiQuickTarget::new(&h.username, &h.address, h.port))
+}
+
+/// How a recorded quick-connect target is named in a `host_change` note: `user@host:port`.
+fn target_name(target: &AiQuickTarget) -> String {
+    crate::ssh::target_label(&target.username, &target.address, target.port)
+}
+
+/// Whether a `host_change` note's `from` names the server at `here` (AI-09): the target's name,
+/// or the display name of a saved host with its address, port, and user.
+fn names_server(v: &Vault, from: &str, here: &AiQuickTarget) -> bool {
+    target_name(here) == from
+        || v.hosts().iter().any(|(_, h)| {
+            h.name == from && AiQuickTarget::new(&h.username, &h.address, h.port) == *here
+        })
+}
+
+/// Where a message moves its conversation (AI-09): to a saved host, or to the quick-connect
+/// target it records in place of one (HOST-12).
+struct Place {
+    host_id: Option<String>,
+    quick_target: Option<AiQuickTarget>,
+}
+
+/// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, whether the message
+/// needs a compaction first, the notes, and the move.
+type Opened = (String, Arc<Turn>, bool, String, Option<Place>);
+
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {
     v.get(host_id)
         .and_then(Item::as_host)
         .map(|h| h.name.clone())
+}
+
+/// Where a conversation that moves to the host `host_id` or the quick-connect `target` (AI-09)
+/// was, as a `host_change` note names it: its host's display name, empty when the host no longer
+/// exists, or its target (HOST-12). `None` when it had neither, as a home tab chat, or when the
+/// move is between a target and the saved host with its address, port, and user (as **Save as
+/// Host…** makes), which is the same server.
+fn moved_from(
+    v: &Vault,
+    conversation: &AiConversation,
+    host_id: Option<&str>,
+    target: Option<&AiQuickTarget>,
+) -> Option<String> {
+    match (&conversation.host_id, &conversation.quick_target) {
+        (Some(old), _) if target.is_some() && host_target(v, old).as_ref() == target => None,
+        (Some(old), _) => Some(host_name(v, old).unwrap_or_default()),
+        (None, Some(old)) if host_id.and_then(|id| host_target(v, id)).as_ref() == Some(old) => {
+            None
+        }
+        (None, old) => old.as_ref().map(target_name),
+    }
 }
 
 /// How a stored model is named in a `model_change` note: its display name and ID, or the ID
@@ -2558,9 +2657,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// The notes Hatoba puts before a new message (spec §13.3), in this order:
 ///
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
-///   conversation's host now: `came_from` names it (empty when it no longer exists), and is
-///   `None` when the conversation did not move. `host_now` is the display name of the host (or
-///   quick-connect target) the conversation is on now.
+///   conversation's host now: `came_from` names it (empty when it no longer exists) or the
+///   quick-connect target (HOST-12) they came from, and is `None` when the conversation did not
+///   move. `host_now` is the display name of the host (or the target) the conversation is on now.
 /// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
 ///   `earlier` tells the model, there was none before, or the other way round
 ///   ([`terminal_before`]).

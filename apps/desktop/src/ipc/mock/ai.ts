@@ -1,6 +1,6 @@
 import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
-import { formatTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -18,6 +18,7 @@ import type {
   AiUsage,
   AppError,
   HostView,
+  QuickTarget,
 } from "../types";
 
 type AiApi = Pick<
@@ -61,6 +62,20 @@ interface Conv {
   entries: AiEntryView[];
   /** `?ai=running`: a turn "runs in Rust" until then, started by an earlier page. */
   runningUntil: number;
+  /** Like Rust's `AiConversation.quick_target` (AI-09): the quick-connect target (HOST-12) it is on while `host_id` is null. */
+  quickTarget?: QuickTarget;
+}
+
+/** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
+interface Move {
+  from: string | null;
+  host_id: string | null;
+  quickTarget: QuickTarget | undefined;
+}
+
+/** Like Rust's `AiQuickTarget::new` (AI-09): a target as a conversation records it, the address in lowercase and without brackets. */
+function recorded(t: { address: string; port: number; username: string }): QuickTarget {
+  return { address: t.address.replace(/^\[(.*)\]$/, "$1").toLowerCase(), port: t.port, username: t.username };
 }
 
 interface Turn {
@@ -596,11 +611,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     window.setTimeout(() => void respond(turn), 0);
   }
 
-  /** The user's message after a compaction it waited for, unless the turn was stopped meanwhile (like Rust). */
-  async function storeMessage(c: Conv, turn: Turn, text: string): Promise<AiEntryView> {
+  /**
+   * The user's message after a compaction it waited for, unless the turn was stopped meanwhile, with the thinking
+   * level and the move its note tells of (like Rust).
+   */
+  async function storeMessage(c: Conv, turn: Turn, text: string, context: AiTurnContext, move: Move | null): Promise<AiEntryView> {
     if (!(await compactBefore(c, turn, text))) {
       if (turns.get(c.view.id) === turn) turns.delete(c.view.id);
       fail("cancelled", "the message was stopped before it was sent");
+    }
+    // AI-05: the conversation keeps the level of its last message.
+    if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
+    if (move) {
+      c.view = { ...c.view, host_id: move.host_id, updated_at: Date.now() };
+      c.quickTarget = move.quickTarget;
     }
     const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
     c.entries.push(user_entry);
@@ -610,17 +634,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * Like Rust's `notes_before` (AI-05, AI-09): a `host_change` note when the entries before the message
-   * came from another host than the conversation's now (`cameFrom` names it, `null` without a move), a
+   * came from another host than the one the conversation is on with it (`move`'s, or its own when `move` is
+   * `null`; `cameFrom` names the other, `null` without a move), a
    * `terminal_change` note when the message has the terminal tools and `terminalBefore` says there was
    * none, or the other way round, and a `model_change` note when the newest reply came from another
    * model, unless a message without a reply noted that switch already. Returned as the text that goes
    * before the message.
    */
-  async function notesBefore(c: Conv, earlier: AiEntryView[], cameFrom: string | null, context: AiTurnContext): Promise<string> {
+  async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
     if (earlier.length === 0) return "";
     const hosts = (await deps.hosts?.()) ?? [];
-    const to = hosts.find((h) => h.id === c.view.host_id)?.name ?? (context.target ? formatTarget(context.target) : undefined);
+    const place = move ?? { host_id: c.view.host_id, quickTarget: c.quickTarget };
+    const to = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quickTarget && formatTarget(place.quickTarget));
     if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
     if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
@@ -653,9 +679,36 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return undefined;
   }
 
-  /** The name of a host for a note: empty when it no longer exists. */
-  async function hostName(id: string | null): Promise<string> {
-    return ((await deps.hosts?.()) ?? []).find((h) => h.id === id)?.name ?? "";
+  /**
+   * Like Rust's move in `open_turn` (AI-09): the conversation moves to the tab's host, or to its quick-connect
+   * target (HOST-12), which it records in place of a host, and stays where it was on the home tab; `null`
+   * without a move. `from` is where it came from as Rust's `moved_from` names it: a host's name (empty when it
+   * no longer exists) or the target, and `null` from a home tab chat or between a target and the saved host
+   * it is. `storeMessage` stores it with the message.
+   */
+  async function moveOf(c: Conv, context: AiTurnContext): Promise<Move | null> {
+    const target = !context.host_id && context.target ? recorded(context.target) : undefined;
+    const moves = context.host_id ? context.host_id !== c.view.host_id : target !== undefined && (c.view.host_id !== null || !c.quickTarget || !sameTarget(c.quickTarget, target));
+    if (!moves) return null;
+    const hosts = (await deps.hosts?.()) ?? [];
+    const old = hosts.find((h) => h.id === c.view.host_id);
+    const next = hosts.find((h) => h.id === context.host_id);
+    let from: string | null = null;
+    if (c.view.host_id) {
+      if (!(target && old && sameTarget(old, target))) from = old?.name ?? "";
+    } else if (c.quickTarget && !(next && sameTarget(next, c.quickTarget))) from = formatTarget(c.quickTarget);
+    return { from, host_id: context.host_id, quickTarget: target };
+  }
+
+  /**
+   * Like Rust's `names_server` (AI-09): whether a `host_change` note's `from` names the server the conversation is
+   * on with `move` (or without it): its target's name, or a saved host of that name with its address, port, and user.
+   */
+  async function namesServer(c: Conv, move: Move | null, from: string): Promise<boolean> {
+    const hosts = (await deps.hosts?.()) ?? [];
+    const host = hosts.find((h) => h.id === (move ? move.host_id : c.view.host_id));
+    const here = host ? recorded(host) : move ? move.quickTarget : c.quickTarget;
+    return !!here && (formatTarget(here) === from || hosts.some((h) => h.name === from && sameTarget(h, here)));
   }
 
   /** Like Rust: the call must belong to the newest response and have no result yet. */
@@ -940,25 +993,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           },
           entries: [],
           runningUntil: 0,
+          quickTarget: !input.context.host_id && input.context.target ? recorded(input.context.target) : undefined,
         };
       }
       const turn = startTurn(c, input.context, onEvent, false);
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
-      let cameFrom: string | null = null;
-      if (input.context.host_id && input.context.host_id !== c.view.host_id) {
-        // A chat that had no host (the home tab's) did not come from one.
-        cameFrom = c.view.host_id ? await hostName(c.view.host_id) : null;
-        c.view = { ...c.view, host_id: input.context.host_id, updated_at: Date.now() };
-      } else if (!input.context.host_id && input.context.target && c.view.host_id) {
-        // Like Rust: a quick connection (HOST-12) takes the conversation off its host.
-        cameFrom = await hostName(c.view.host_id);
-        c.view = { ...c.view, host_id: null, updated_at: Date.now() };
-      }
-      // Like Rust: the conversation keeps the level of its last message.
-      if (c.view.effort !== input.context.effort) c.view = { ...c.view, effort: input.context.effort, updated_at: Date.now() };
-      const notes = input.conversation_id ? await notesBefore(c, earlier, cameFrom, input.context) : "";
-      const user_entry = await storeMessage(c, turn, notes + input.text);
+      const move = await moveOf(c, input.context);
+      const notes = input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "";
+      const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move);
       return { conversation: view(c), user_entry };
     },
     ai_retry: async (id, context, onEvent) => {
@@ -1043,16 +1086,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       c.view = { ...c.view, updated_at: Date.now() };
       const turn = startTurn(c, context, onEvent, false);
-      if (context.host_id && context.host_id !== c.view.host_id) {
-        if (cameFrom === null && c.view.host_id) cameFrom = await hostName(c.view.host_id);
-        c.view = { ...c.view, host_id: context.host_id };
-      } else if (!context.host_id && context.target && c.view.host_id) {
-        if (cameFrom === null) cameFrom = await hostName(c.view.host_id);
-        c.view = { ...c.view, host_id: null };
-      }
-      c.view = { ...c.view, effort: context.effort };
-      const notes = await notesBefore(c, [...c.entries], cameFrom, context);
-      const user_entry = await storeMessage(c, turn, notes + text);
+      const move = await moveOf(c, context);
+      // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
+      if (cameFrom !== null && (await namesServer(c, move, cameFrom))) cameFrom = null;
+      else if (cameFrom === null) cameFrom = move?.from ?? null;
+      const notes = await notesBefore(c, [...c.entries], move, cameFrom, context);
+      const user_entry = await storeMessage(c, turn, notes + text, context, move);
       return { conversation: view(c), user_entry };
     },
     // The browser reads dropped files itself (File API); there are no paths to read here.
