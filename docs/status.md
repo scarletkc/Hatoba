@@ -2,7 +2,7 @@
 
 This page tracks implementation progress, items awaiting verification, and follow-up work against the requirement IDs in the [architecture and requirements](hatoba-spec.md). That document defines the requirements, and this page records only their status. Its [§12 Testing](hatoba-spec.md#12-testing) describes what each test suite covers.
 
-✅ Implemented, with tests or hands-on verification. 🟡 Implemented, but needs verification on a real Windows or Linux machine or has not been tried against the real service yet. ⬜ Not implemented.
+✅ Implemented, with tests or hands-on verification. 🟡 Implemented, but needs verification on a real Windows, Linux, or macOS machine or has not been tried against the real service yet. ⬜ Not implemented.
 
 ## Security (§4.3)
 
@@ -81,6 +81,21 @@ This page tracks implementation progress, items awaiting verification, and follo
 | WIN-07 | Mica backdrop | 🟡 | Needs verification on a real machine |
 | WIN-08 | Follow the system light or dark mode | ✅ | |
 | WIN-09 | PuTTY `.ppk` | ✅ | |
+
+## macOS (§9.2)
+
+A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no Mac.
+
+| ID | Name | Status | Notes |
+|---|---|---|---|
+| MAC-01 | Traffic-light buttons in the title bar | ✅ | |
+| MAC-02 | Fonts | ✅ | The Menlo default of a new vault is covered by unit tests only |
+| MAC-03 | Shortcuts | ✅ | |
+| MAC-04 | Secondary click opens the menu | ✅ | |
+| MAC-05 | Retina displays and file drops | 🟡 | Dropping on the SFTP panel tried; dropping on the AI panel not yet |
+| MAC-06 | Closing the window hides it, the Dock reopens it | ✅ | |
+| MAC-07 | Apps opened from Finder or the Dock | 🟡 | The MCP `PATH` tried; the device list with real sync and conflict copies in another language not yet |
+| MAC-08 | Lock before sleep | ⬜ | Only the gap detector notices sleep, after wake ([#52](https://github.com/scarletkc/Hatoba/issues/52)) |
 
 ## Release (§11)
 
