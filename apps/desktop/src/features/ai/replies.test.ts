@@ -3,7 +3,8 @@ import type { AiEntryView } from "@/ipc/types";
 import { replies } from "./replies";
 
 const user = (id: string, text: string, at = 0): AiEntryView => ({ role: "user", entry_id: id, created_at: at, text });
-const assistant = (id: string, text: string, calls = 0, at = 0): AiEntryView => ({
+/** `calls` is how many calls it makes, or their IDs. */
+const assistant = (id: string, text: string, calls: number | string[] = 0, at = 0): AiEntryView => ({
   role: "assistant",
   entry_id: id,
   created_at: at,
@@ -11,8 +12,8 @@ const assistant = (id: string, text: string, calls = 0, at = 0): AiEntryView => 
   model_id: "m",
   text,
   reasoning: "Thinking it over.",
-  tool_calls: Array.from({ length: calls }, (_, i) => ({ id: `${id}c${i}`, name: "run_command", arguments: "{}" })),
-  finish: calls > 0 ? "tool_calls" : "stop",
+  tool_calls: (typeof calls === "number" ? Array.from({ length: calls }, (_, i) => `${id}c${i}`) : calls).map((call) => ({ id: call, name: "run_command", arguments: "{}" })),
+  finish: calls === 0 || (Array.isArray(calls) && calls.length === 0) ? "stop" : "tool_calls",
   usage: null,
 });
 const tool = (id: string, call: string, at = 0): AiEntryView => ({ role: "tool", entry_id: id, created_at: at, tool_call_id: call, status: "ok", content: "output" });
@@ -59,6 +60,22 @@ describe("replies", () => {
     expect([...ends]).toEqual([
       ["a1", { text: "Running.", at: 50 }],
       ["a2", { text: "Done.", at: 60 }],
+    ]);
+  });
+
+  it("gives each call one result, so a reused ID or a duplicate result moves no other reply", () => {
+    const { ends } = replies([
+      user("u1", "First", 1),
+      assistant("a1", "One.", 1, 2),
+      tool("t1", "a1c0", 5),
+      user("u2", "Second", 6),
+      assistant("a2", "Two.", ["a1c0"], 10),
+      tool("t2", "a1c0", 20),
+      tool("t3", "a1c0", 99),
+    ]);
+    expect([...ends]).toEqual([
+      ["a1", { text: "One.", at: 5 }],
+      ["a2", { text: "Two.", at: 20 }],
     ]);
   });
 

@@ -88,7 +88,10 @@
   opacity: 0.7;
 }
 
-/* Copy and Edit (AI-26) sit left of the user's message and show on hover or keyboard focus. */
+/*
+ * Copy and Edit (AI-26) sit left of the user's message and show on hover or keyboard focus. Hidden,
+ * they stay focusable but take no taps, so a tap there on a touch screen only shows them.
+ */
 .userActions {
   flex: none;
   display: flex;
@@ -97,11 +100,13 @@
   min-width: 24px;
   margin-top: 3px;
   opacity: 0;
+  pointer-events: none;
 }
 
 .userRow:hover .userActions,
 .userActions:has(:focus-visible) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .messageAction {

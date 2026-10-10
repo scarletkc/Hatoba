@@ -118,8 +118,9 @@ export function formatRelative(locale: Locale, ms: number, now = Date.now()): st
 export function formatMessageTime(locale: Locale, ms: number, now = Date.now()): string {
   const d = new Date(ms);
   const clock = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
-  if (ms >= startOfDay(now)) return fmt(locale, clock).format(d);
-  if (ms >= startOfDay(now, -1)) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
+  // A time from a later day (another device's clock ahead, say) keeps its date.
+  if (ms >= startOfDay(now) && ms < startOfDay(now, 1)) return fmt(locale, clock).format(d);
+  if (ms >= startOfDay(now, -1) && ms < startOfDay(now)) return translate(locale, "time.yesterdayAt", { time: fmt(locale, clock).format(d) });
   const year = d.getFullYear() === new Date(now).getFullYear() ? {} : ({ year: "numeric" } as const);
   return fmt(locale, { ...year, month: "short", day: "numeric", ...clock }).format(d);
 }

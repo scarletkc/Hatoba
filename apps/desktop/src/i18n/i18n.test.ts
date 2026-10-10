@@ -58,6 +58,7 @@ describe("locale helpers", () => {
     expect(formatMessageTime("zh-CN", at(2026, 9, 7, 23, 59), now)).toBe("昨天 23:59");
     expect(formatMessageTime("en", at(2026, 9, 5, 14, 3), now)).toBe("Oct 5, 14:03");
     expect(formatMessageTime("zh-CN", at(2025, 11, 31, 8, 0), now)).toBe("2025年12月31日 08:00");
+    expect(formatMessageTime("en", at(2026, 9, 9, 1, 0), now)).toBe("Oct 9, 01:00");
   });
 
   it("counts days by the calendar across a DST change", () => {
