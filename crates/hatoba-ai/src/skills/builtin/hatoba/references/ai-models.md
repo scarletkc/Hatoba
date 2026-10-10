@@ -50,7 +50,7 @@ The context meter at the right of the input area is a ring with a percentage (or
 | Context | 上下文窗口 | コンテキスト |
 
 - **Compact** (also **Compact Conversation** in the meter's menu) asks the model to summarize the conversation. The summary becomes the start of the context; earlier messages stay visible, marked "Everything above is outside the context".
-- Hatoba also compacts by itself before a request that would pass 90% of the context window (the status reads "Compacting the conversation…"). **Stop** during that compaction cancels the message and puts it back in the input.
+- Hatoba also compacts by itself before a request that would pass 90% of the context window (the status reads "Compacting the conversation…"). **Stop** during that compaction cancels the message and puts it back in the input. When that happens between tool calls, the summary records where the task stands and the assistant carries on from it.
 - A message with large attachments can be too big to fit: see `references/ai-attachments.md`.
 
 | en | zh-CN | ja |
