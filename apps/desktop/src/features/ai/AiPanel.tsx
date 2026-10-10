@@ -9,13 +9,13 @@ import { useT } from "@/i18n";
 import type { AiPermissionMode, HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import { attachDroppedPaths, attachFiles, connectConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
+import { attachDroppedPaths, attachFiles, connectConversation, continueHomeConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
 import { Composer } from "./Composer";
 import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
 import { conversationModel, hasModels } from "./models";
-import { blankSlot, HOME_SLOT, useAi, type Slot } from "./store";
+import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
 import s from "./AiPanel.module.css";
 
 export const PANEL_DEFAULT_WIDTH = 380;
@@ -259,9 +259,14 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
   );
 }
 
-/** The tab's state: no terminal (AI-09), disconnected (AI-08), or a conversation from another host (AI-09). */
-function Notices({ slot, tab, tabHost, convHost }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; convHost: HostView | undefined }) {
+/**
+ * The tab's state: no terminal (AI-09), disconnected (AI-08), a conversation from another host, or the
+ * home tab's conversation to continue here (AI-09).
+ */
+function Notices({ slotId, slot, tab, tabHost, convHost }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; convHost: HostView | undefined }) {
   const t = useT();
+  // The title of the home tab's conversation while this tab offers to continue it (AI-09).
+  const homeTitle = useAi((st) => (tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null));
   const items: ReactNode[] = [];
   if (!tab) {
     if (convHost)
@@ -297,6 +302,20 @@ function Notices({ slot, tab, tabHost, convHost }: { slotId: string; slot: Slot;
         </Notice>,
       );
     else if (tab.status === "connecting") items.push(<Notice key="state" icon={<Spinner size={12} />}>{t("ai.notice.connecting", { host: name })}</Notice>);
+    if (homeTitle !== null)
+      items.push(
+        <Notice
+          key="home"
+          icon={<Icon name="chats" size={14} />}
+          action={
+            <Button size="xs" icon="arrow-right" onClick={() => continueHomeConversation(slotId)}>
+              {t("ai.continueHere")}
+            </Button>
+          }
+        >
+          {t("ai.notice.homeConversation", { title: homeTitle || t("ai.untitled") })}
+        </Notice>,
+      );
     const convHostId = slot.conversation?.host_id;
     if (convHostId && convHostId !== tab.hostId)
       items.push(

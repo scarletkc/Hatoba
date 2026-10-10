@@ -45,9 +45,11 @@ export default defineMessages({
     // notices (AI-08, AI-09)
     "ai.notice.noTab": "没有终端标签页：助手可以聊天、搜索和阅读网页、使用技能和 MCP 工具，但无法操作终端。",
     "ai.connectTo": "连接到 {host}",
+    "ai.continueHere": "在这里继续",
     "ai.notice.disconnected": "{host} 未连接，连接上之前助手无法操作终端。",
     "ai.notice.connecting": "正在连接 {host}…",
     "ai.notice.moveHost": "这个对话之前在 {from} 上进行。发送下一条消息后，它会转到 {to}。",
+    "ai.notice.homeConversation": "对话“{title}”没有终端，可以在这个标签页里继续。",
 
     // input area
     "ai.input.label": "发给 AI 助手的消息",
@@ -306,9 +308,11 @@ export default defineMessages({
 
     "ai.notice.noTab": "No terminal tab: the assistant can chat, search and read the web, and use skills and MCP tools, but not the terminal.",
     "ai.connectTo": "Connect to {host}",
+    "ai.continueHere": "Continue Here",
     "ai.notice.disconnected": "{host} isn’t connected, so the assistant can’t use the terminal until it connects.",
     "ai.notice.connecting": "Connecting to {host}…",
     "ai.notice.moveHost": "This conversation was on {from}. Your next message moves it to {to}.",
+    "ai.notice.homeConversation": "“{title}” has no terminal. You can continue it in this tab.",
 
     "ai.input.label": "Message to the assistant",
     "ai.input.placeholder": "Ask about this terminal, or what to do…",
@@ -556,9 +560,11 @@ export default defineMessages({
 
     "ai.notice.noTab": "ターミナルのタブがないため、アシスタントは会話、Web の検索と閲覧、スキルと MCP ツールの利用はできますが、ターミナルは操作できません。",
     "ai.connectTo": "{host} に接続",
+    "ai.continueHere": "ここで続ける",
     "ai.notice.disconnected": "{host} に接続されていないため、接続するまでアシスタントはターミナルを操作できません。",
     "ai.notice.connecting": "{host} に接続しています…",
     "ai.notice.moveHost": "この会話は {from} で行われていました。次のメッセージで {to} に移ります。",
+    "ai.notice.homeConversation": "会話「{title}」にはターミナルがありません。このタブで続けられます。",
 
     "ai.input.label": "アシスタントへのメッセージ",
     "ai.input.placeholder": "このターミナルについて質問、または作業を依頼…",
