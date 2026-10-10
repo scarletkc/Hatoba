@@ -61,15 +61,13 @@ interface Conv {
   entries: AiEntryView[];
   /** `?ai=running`: a turn "runs in Rust" until then, started by an earlier page. */
   runningUntil: number;
-  /** Like Rust's `AiConversation.quick_target` (AI-09): the quick-connect target (HOST-12) it is on while `host_id` is null. */
-  quickTarget?: string;
 }
 
 /** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
 interface Move {
   from: string | null;
   host_id: string | null;
-  quickTarget: string | undefined;
+  quick_target: string | null;
 }
 
 /** A quick-connect target's label with its address in lowercase and without brackets, so labels compare as `sameTarget` compares targets (HOST-12). */
@@ -624,8 +622,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       fail("cancelled", "the message was stopped before it was sent");
     }
     if (move) {
-      c.view = { ...c.view, host_id: move.host_id, updated_at: Date.now() };
-      c.quickTarget = move.quickTarget;
+      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, updated_at: Date.now() };
     }
     const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
     c.entries.push(user_entry);
@@ -646,8 +643,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const notes: Note[] = [];
     if (earlier.length === 0) return "";
     const hosts = (await deps.hosts?.()) ?? [];
-    const place = move ?? { host_id: c.view.host_id, quickTarget: c.quickTarget };
-    const to = hosts.find((h) => h.id === place.host_id)?.name ?? place.quickTarget;
+    const place = move ?? c.view;
+    const to = hosts.find((h) => h.id === place.host_id)?.name ?? place.quick_target ?? undefined;
     if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
     if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
@@ -688,9 +685,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * it is. `storeMessage` stores it with the message.
    */
   async function moveOf(c: Conv, context: AiTurnContext): Promise<Move | null> {
-    const target = !context.host_id && context.target ? formatTarget(context.target) : undefined;
-    const same = (a: string | undefined, b: string | undefined) => a !== undefined && b !== undefined && targetKey(a) === targetKey(b);
-    const moves = context.host_id ? context.host_id !== c.view.host_id : target !== undefined && (c.view.host_id !== null || !same(c.quickTarget, target));
+    const target = !context.host_id && context.target ? formatTarget(context.target) : null;
+    const same = (a: string | null | undefined, b: string | null) => !!a && !!b && targetKey(a) === targetKey(b);
+    const moves = context.host_id ? context.host_id !== c.view.host_id : target !== null && (c.view.host_id !== null || !same(c.view.quick_target, target));
     if (!moves) return null;
     const hosts = (await deps.hosts?.()) ?? [];
     const hostTarget = (id: string | null) => {
@@ -700,8 +697,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     let from: string | null = null;
     if (c.view.host_id) {
       if (!same(hostTarget(c.view.host_id), target)) from = hosts.find((h) => h.id === c.view.host_id)?.name ?? "";
-    } else if (c.quickTarget !== undefined && !same(hostTarget(context.host_id), c.quickTarget)) from = c.quickTarget;
-    return { from, host_id: context.host_id, quickTarget: target };
+    } else if (c.view.quick_target !== null && !same(hostTarget(context.host_id), c.view.quick_target)) from = c.view.quick_target;
+    return { from, host_id: context.host_id, quick_target: target };
   }
 
   /** Like Rust: the call must belong to the newest response and have no result yet. */
@@ -810,7 +807,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const at = (offset: number) => created + offset;
       const c: Conv = {
         // The pinned one was last sent at High (AI-05).
-        view: { id, title, host_id: host, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
+        view: { id, title, host_id: host, quick_target: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
         entries: build(at),
         runningUntil: 0,
       };
@@ -910,6 +907,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       ];
     });
 
+    // On a quick connection (HOST-12), which the conversation records by its target (AI-09).
+    const pi = add("c-pi", zh ? "树莓派的温度" : "Raspberry Pi temperature", null, 5 * HOUR, false, (at) => [
+      user(at(0), zh ? "这台树莓派现在多热？" : "How hot is this Pi right now?"),
+      reply(at(MIN), OSS, zh ? "`vcgencmd measure_temp` 显示 52.1°C，在正常范围内。" : "`vcgencmd measure_temp` reads 52.1°C, which is within the normal range.", {
+        usage: { input_tokens: 1800, output_tokens: 60, estimated: false },
+      }),
+    ]);
+    pi.view.quick_target = "pi@raspberrypi.local:22";
+
     const deploy = add("c-deploy", zh ? "盯一下 prod-api 的部署" : "Watch the prod-api deploy", "h-api-tokyo", 20 * MIN, false, (at) => [
       user(at(0), zh ? "部署跑完之后告诉我结果" : "Tell me how the deploy went when it finishes"),
     ]);
@@ -978,6 +984,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             id,
             title: titleOf(input.text),
             host_id: input.context.host_id,
+            quick_target: !input.context.host_id && input.context.target ? formatTarget(input.context.target) : null,
             pinned: false,
             context_start: null,
             effort: input.context.effort,
@@ -986,7 +993,6 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           },
           entries: [],
           runningUntil: 0,
-          quickTarget: !input.context.host_id && input.context.target ? formatTarget(input.context.target) : undefined,
         };
       }
       const turn = startTurn(c, input.context, onEvent, false);

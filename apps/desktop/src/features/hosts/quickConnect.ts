@@ -123,6 +123,12 @@ export function formatTarget(t: { address: string; port: number; username: strin
   return `${t.username ? `${t.username}@` : ""}${bracketHost(t.address)}:${t.port}`;
 }
 
+/** A target as `formatTarget` wrote it, such as a conversation's (AI-09), read back; null when it is not one with a user. */
+export function parseTarget(text: string): QuickTarget | null {
+  const parsed = parseQuickConnect(text);
+  return parsed?.ok && parsed.target.username ? { ...parsed.target, username: parsed.target.username } : null;
+}
+
 const bare = (address: string) => address.replace(/^\[(.*)\]$/, "$1").toLowerCase();
 
 export function sameTarget(a: TypedTarget | QuickTarget, b: TypedTarget | QuickTarget): boolean {

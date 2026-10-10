@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { HostView } from "@/ipc/types";
-import { formatTarget, parseQuickConnect, savedHostFor } from "./quickConnect";
+import { formatTarget, parseQuickConnect, parseTarget, savedHostFor } from "./quickConnect";
 
 const target = (address: string, port: number, username: string | null) => ({ address, port, username });
 
@@ -77,6 +77,18 @@ describe("formatTarget", () => {
     expect(formatTarget(target("db", 22, "root"))).toBe("root@db:22");
     expect(formatTarget(target("2001:db8::1", 2222, "root"))).toBe("root@[2001:db8::1]:2222");
     expect(formatTarget(target("db", 22, null))).toBe("db:22");
+  });
+});
+
+describe("parseTarget", () => {
+  it("reads back what formatTarget wrote", () => {
+    for (const t of [target("db", 2222, "root"), target("2001:db8::1", 22, "root"), target("jump", 22, "me@corp.example")])
+      expect(parseTarget(formatTarget(t))).toEqual(t);
+  });
+
+  it("needs a user", () => {
+    expect(parseTarget("db:22")).toBeNull();
+    expect(parseTarget("not a target")).toBeNull();
   });
 });
 
