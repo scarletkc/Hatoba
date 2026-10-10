@@ -96,8 +96,8 @@ export function FileChange({ state, replaceAll }: { state: FilePreviewState; rep
           {loading && <Spinner size={11} />}
           {stats && (stats.added > 0 || stats.removed > 0) && (
             <span className={s.stats} title={t("ai.approval.diffStats", stats)} aria-label={t("ai.approval.diffStats", stats)}>
-              <span className={s.added}>+{stats.added}</span>
-              <span className={s.removed}>−{stats.removed}</span>
+              {stats.added > 0 && <span className={s.added}>+{stats.added}</span>}
+              {stats.removed > 0 && <span className={s.removed}>−{stats.removed}</span>}
             </span>
           )}
         </div>
