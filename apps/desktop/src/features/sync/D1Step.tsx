@@ -1,6 +1,5 @@
 import { useId } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
-import { Callout } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
@@ -156,10 +155,6 @@ export function D1Step({
             onChange={(id) => void pickDatabase(id)}
           />
         </Field>
-
-        <Callout icon="warning" iconColor="var(--orange)">
-          {t("sync.d1.risk")}
-        </Callout>
       </div>
     </WizardFrame>
   );

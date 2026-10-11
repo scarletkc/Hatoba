@@ -457,7 +457,7 @@ pub trait SyncBackend {
 
 **Worker mode (P0, recommended)**: the user deploys `workers/sync` to their own Cloudflare account, and the client calls the §6.2 API over HTTPS.
 
-**D1 direct mode (P1)**: the user enters an Account ID and an API token and picks one of the account's D1 databases. The client runs SQL directly through `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/d1/database/{database_id}/query`. The schema is the same as in Worker mode (without the `sessions` table), and concurrent writes are detected by running `UPDATE ... WHERE revision = ?` and checking the affected row count. In this mode the API token usually has edit access to every D1 database in the account. The UI must explain this risk, and the token is stored only in the device's credential store.
+**D1 direct mode (P1)**: the user enters an Account ID and an API token and picks one of the account's D1 databases. The client runs SQL directly through `POST https://api.cloudflare.com/client/v4/accounts/{account_id}/d1/database/{database_id}/query`. The schema is the same as in Worker mode (without the `sessions` table), and concurrent writes are detected by running `UPDATE ... WHERE revision = ?` and checking the affected row count. In this mode the API token usually has edit access to every D1 database in the account, which the D1 step of the setup states, and the token is stored only in the device's credential store.
 
 ### 6.2 Worker API
 
@@ -701,7 +701,7 @@ The wizard's **Create token** link opens the dashboard's token form with both pe
 https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=Hatoba%20Sync%20Deploy
 ```
 
-The template allows every account, so the wizard tells the user to narrow **Account Resources** to one account and to set a short expiry, or to delete the token after deploying. An account-owned token with the same permissions also works.
+The template allows every account, so narrowing **Account Resources** to one account and setting a short expiry, or deleting the token after deploying, keeps a leaked token's reach small (§4.4). An account-owned token with the same permissions also works.
 
 The token check calls `GET /user/tokens/verify` and, when that rejects the token, `GET /accounts/{account_id}/tokens/verify` for an account-owned token, as D1 direct mode does. An account-owned token therefore needs the account ID entered first. For a user token the app then calls `GET /accounts`. When the token reaches exactly one account, the wizard fills in its ID, and when it reaches several, the user picks one. Otherwise the user pastes the ID from the dashboard (**Workers & Pages** → **Account Details**). Step 2 below reads from both Workers and D1, so a missing permission shows up before anything is written, and the error names the permission.
 
@@ -862,7 +862,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | ID | Requirement | Priority |
 |---|---|---|
 | VAULT-01 | Create the master password on first launch | P0 |
-| VAULT-02 | Generate a recovery code, and continue only after the user confirms it is saved (for example by re-entering its last group) | P0 |
+| VAULT-02 | Generate a recovery code, and continue only after the user confirms it is saved by re-entering its last group | P0 |
 | VAULT-03 | Unlock screen, with an increasing delay after repeated wrong passwords | P0 |
 | VAULT-04 | Auto-lock (see SEC-02) | P0 |
 | VAULT-05 | Change the master password | P1 |

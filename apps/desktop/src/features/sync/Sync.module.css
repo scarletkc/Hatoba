@@ -349,18 +349,6 @@
   flex: none;
 }
 
-.note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  color: var(--fg2);
-}
-
-.note i {
-  font-size: 15px;
-}
-
 .empty {
   padding: 28px 0;
   text-align: center;

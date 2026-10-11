@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
-import { Checkbox, LinkButton, TextField } from "@/components/controls";
+import { LinkButton, TextField } from "@/components/controls";
 import { toast } from "@/components/overlay";
 import { formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -22,8 +22,7 @@ function normalize(input: string): string {
 
 /**
  * The recovery code as 8 groups with copy / save-as-text / print actions (design §05 step 3), plus the
- * VAULT-02 confirmation: retype the last group and tick "I've saved it". `onConfirmedChange` reports
- * whether both are done.
+ * VAULT-02 confirmation: retype the last group. `onConfirmedChange` reports whether it matches.
  */
 export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string; onConfirmedChange: (ok: boolean) => void }) {
   const t = useT();
@@ -31,12 +30,11 @@ export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string;
   const last = groups[groups.length - 1] ?? "";
   const [copied, setCopied] = useState(false);
   const [lastInput, setLastInput] = useState("");
-  const [saved, setSaved] = useState(false);
 
   const lastOk = normalize(lastInput) === normalize(last) && lastInput.trim() !== "";
   const lastWrong = !lastOk && normalize(lastInput).length >= normalize(last).length;
 
-  useEffect(() => onConfirmedChange(lastOk && saved), [lastOk, saved, onConfirmedChange]);
+  useEffect(() => onConfirmedChange(lastOk), [lastOk, onConfirmedChange]);
   useEffect(() => {
     if (!copied) return;
     const timer = window.setTimeout(() => setCopied(false), 1600);
@@ -113,10 +111,6 @@ export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string;
           </div>
         )}
       </div>
-
-      <Checkbox checked={saved} onChange={setSaved}>
-        {t("vault.code.savedCheck")}
-      </Checkbox>
 
       <PrintableCode groups={groups} />
     </>
