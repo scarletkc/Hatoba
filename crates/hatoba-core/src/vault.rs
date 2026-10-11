@@ -36,7 +36,7 @@ const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
 /// Consecutive wrong passwords allowed before delays start (SEC-06).
 pub const FREE_UNLOCK_ATTEMPTS: u32 = 3;
 /// Upper bound of the unlock delay.
-pub const MAX_UNLOCK_DELAY_SECS: i64 = 300;
+pub const MAX_UNLOCK_DELAY_SECS: i64 = 60;
 
 // ---- clock --------------------------------------------------------------------------------
 
@@ -87,7 +87,7 @@ impl Clock for ManualClock {
 }
 
 /// Delay in milliseconds imposed after `consecutive_failures` wrong passwords (SEC-06):
-/// none for failures 1–3, then `min(2^(n-4), 300)` seconds from the 4th on.
+/// none for failures 1–3, then `min(2^(n-4), 60)` seconds from the 4th on.
 #[must_use]
 pub fn unlock_delay_ms(consecutive_failures: u32) -> i64 {
     if consecutive_failures <= FREE_UNLOCK_ATTEMPTS {
@@ -1499,11 +1499,9 @@ mod tests {
         let secs: Vec<i64> = (0..=16).map(|n| unlock_delay_ms(n) / 1000).collect();
         assert_eq!(
             secs,
-            [
-                0, 0, 0, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 300, 300, 300, 300
-            ]
+            [0, 0, 0, 0, 1, 2, 4, 8, 16, 32, 60, 60, 60, 60, 60, 60, 60]
         );
-        assert_eq!(unlock_delay_ms(u32::MAX), 300_000);
+        assert_eq!(unlock_delay_ms(u32::MAX), 60_000);
     }
 
     #[test]
@@ -1552,7 +1550,7 @@ mod tests {
     }
 
     #[test]
-    fn delay_is_capped_at_five_minutes() {
+    fn delay_is_capped_at_a_minute() {
         let (mut vault, clock, _code) = created();
         vault.lock();
         for _ in 0..20 {
@@ -1561,7 +1559,7 @@ mod tests {
         }
         let status = vault.status();
         assert_eq!(status.failed_attempts, 20);
-        assert_eq!(status.retry_at, Some(clock.now_ms() + 300_000));
+        assert_eq!(status.retry_at, Some(clock.now_ms() + 60_000));
     }
 
     #[test]

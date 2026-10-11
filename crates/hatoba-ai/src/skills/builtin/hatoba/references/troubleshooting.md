@@ -30,11 +30,11 @@ When importing a key, or connecting with one:
 | That recovery code isn’t right. Check it and try again. | 恢复码不正确，请检查后重试。 | リカバリーコードが正しくありません。確認してもう一度お試しください。 |
 | The two passwords don’t match. | 两次输入的主密码不一致。 | 2 つのパスワードが一致しません。 |
 | The master password needs at least 8 characters. | 主密码至少需要 8 个字符。 | マスターパスワードは 8 文字以上にしてください。 |
-| That password is too easy to guess. Choose a longer or less common one. | 这个主密码太容易被猜到，请换一个更长或更不常见的。 | このパスワードは推測されやすすぎます。より長いもの、または一般的でないものにしてください。 |
+| This password is easy to guess. A longer or less common one is safer. | 这个主密码容易被猜到，更长或更不常见的密码会更安全。 | このパスワードは推測されやすいです。より長いもの、または一般的でないもののほうが安全です。 |
 | No vault has been created yet. | 尚未创建保险库。 | 保管庫がまだ作成されていません。 |
 | A vault already exists. | 保险库已存在。 | 保管庫はすでに存在します。 |
 
-- After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay.
+- After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay, up to a minute.
 - A forgotten master password can be reset only with the recovery code (**Forgot it? Use your recovery code**). With neither, the data cannot be recovered, and Hatoba cannot reset it.
 - The recovery code ignores case, dashes and spaces. A new code can be generated in Settings → Security (**Generate New Code…**), after which the old one stops working.
 
