@@ -168,7 +168,7 @@ each item → AES-256-GCM(vault_key)
 | SEC-06 | Increasing delay after repeated local unlock failures: no delay for the first 3, then doubling each time up to 1 minute (`unlock_delay_ms` in `crates/hatoba-core/src/vault.rs`). The failure count is persisted and survives an app restart. Argon2id does not run during the delay | P0 |
 | SEC-07 | Windows Hello unlock: create a Hello credential with `KeyCredentialManager`, sign a fixed challenge, derive a wrapping key from the signature with HKDF, encrypt vault_key with it, and store the ciphertext in Credential Manager. A `UserConsentVerifier` prompt alone does not meet the requirement, because it has no cryptographic binding to vault_key | P1 |
 | SEC-08 | Clear a copied password from the clipboard, if it still holds it, after a delay chosen per device: 30, 60, or 90 seconds (the default), 2 or 5 minutes, or never | P1 |
-| SEC-09 | Show password strength (zxcvbn) when setting the master password, with a warning below a score of 2. Only the minimum of 8 characters blocks it | P1 |
+| SEC-09 | Show password strength (zxcvbn) when setting the master password, with a warning below a score of 2. Only the minimum of 12 characters blocks it | P1 |
 | SEC-10 | Touch ID unlock (with the macOS version): store vault_key in the macOS Keychain with biometric access control | P2 |
 
 ### 4.4 Threat model
@@ -231,7 +231,7 @@ interface Host {
     | { kind: "direct" }
     | { kind: "proxy"; proxy_id: string };
   note: string;
-  ai_notes?: string;            // AI-37, at most 32 KB of UTF-8; absent while empty
+  ai_notes?: string;            // AI-37, at most 16 KB of UTF-8; absent while empty
   updated_at: number;           // Milliseconds since the epoch, used for conflict resolution
   env?: { name: string; value: string }[];  // SSH-14; absent while empty
 }
@@ -1107,7 +1107,7 @@ Attribute values write `&`, `"`, `<`, and `>` as `&amp;`, `&quot;`, `&lt;`, and 
 
 ### 13.4 Tools
 
-In manual approval mode, `read_terminal`, `read_file`, and `web_search` run without asking, and the others wait for approval (§13.5). `read_skill` (§13.8) and MCP tools, with `search_tools` and `call_mcp_tool` (§13.9), are described in their own sections. Every call and its result appear in the conversation as a collapsible block in both modes. A result longer than 30,000 characters keeps its first 7,500 and last 22,500 characters, with a line between them saying how much was left out; an MCP tool's result is cut the same way past 100,000 characters (§13.9). `fetch_url` and `read_file` page through long content instead.
+In manual approval mode, `read_terminal`, `read_file`, and `web_search` run without asking, and the others wait for approval (§13.5). `read_skill` (§13.8) and MCP tools, with `search_tools` and `call_mcp_tool` (§13.9), are described in their own sections. Every call and its result appear in the conversation as a collapsible block in both modes. A result longer than 30,000 characters keeps its first 7,500 and last 22,500 characters, with a line between them saying how much was left out; an MCP tool's result is cut the same way past 50,000 characters (§13.9). `fetch_url` and `read_file` page through long content instead.
 
 | ID | Tool | Behavior | Priority |
 |---|---|---|---|
@@ -1281,4 +1281,4 @@ The user can tell the assistant what it should know in every request: custom ins
 | ID | Requirement | Priority |
 |---|---|---|
 | AI-36 | **Settings → AI** has a **Custom Instructions** box for multi-line text of at most 32 KB of UTF-8, stored as `Settings.ai.custom_instructions`, which syncs. It explains what the text is for, shows its size in bytes and its estimated tokens (AI-20), and says that it is sent to the model provider. The text is saved when typing stops, when the box loses focus, and when the pane closes, and not while it is over the limit; with sync on, text whose settings item would be too large to sync (§6.2), as with many quotes, is refused when saved. Every request carries it in `<user_instructions>`, Compact (AI-21) included | P2 |
-| AI-37 | The host editor has an **AI Notes** box, made the same way, for at most 32 KB of UTF-8 stored on the host as `ai_notes`, so the notes sync, and are backed up and duplicated, with the host; a sync conflict on the host shows them. Every request of a conversation on the host (the terminal tab's host, or the conversation's host without a tab) carries them in `<host_notes host="…">`, Compact included | P2 |
+| AI-37 | The host editor has an **AI Notes** box, made the same way, for at most 16 KB of UTF-8 stored on the host as `ai_notes`, so the notes sync, and are backed up and duplicated, with the host; a sync conflict on the host shows them. Every request of a conversation on the host (the terminal tab's host, or the conversation's host without a tab) carries them in `<host_notes host="…">`, Compact included | P2 |

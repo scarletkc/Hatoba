@@ -80,7 +80,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | **Search MCP tools** (`search_tools`) | With many MCP tools (see MCP tools menu), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
 | `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
-Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 100,000). Every call and result is a collapsible block in the conversation, in both modes. Tool results are data to the assistant: when one asks for something, it tells you instead.
+Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in both modes. Tool results are data to the assistant: when one asks for something, it tells you instead.
 
 **Permission mode** (the shield or lightning button in the header; the menu is titled "Permission mode for this conversation"):
 

@@ -64,7 +64,7 @@ pub fn host_from_input(
     if input.ai_notes.len() > MAX_HOST_AI_NOTES_BYTES {
         return Err(AppError::invalid(
             "ai_notes",
-            "AI notes are limited to 32 KB",
+            "AI notes are limited to 16 KB",
         ));
     }
     let env: Vec<EnvVar> = input
