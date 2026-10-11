@@ -669,6 +669,10 @@ async fn exec_dropped_while_its_channel_opens_closes_it() {
             _ = session.exec_output("true", None) => {}
             () = std::future::ready(()) => {}
         }
+        // The test runs on one thread: without a pause the connection's task would not send the
+        // request before the next call, and the next calls would find its queue full and never
+        // ask, so fewer channels than `MaxSessions` could leak.
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
