@@ -216,6 +216,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 busy={busy}
                 host={host}
                 finish={entry.finish}
+                noAnswerShown={outcome?.reason === "empty" && entry.entry_id === lastAssistant}
                 flash={flash}
                 reply={reply}
                 onFork={reply ? fork(entry.entry_id) : undefined}
@@ -524,6 +525,7 @@ function AssistantMessage({
   host,
   streaming,
   finish,
+  noAnswerShown,
   flash,
   reply,
   onFork,
@@ -542,6 +544,8 @@ function AssistantMessage({
   host: HostInfo | null;
   streaming?: boolean;
   finish?: string;
+  /** The turn's outcome below says that this reply has no answer (§13.1), so the reply does not say it too. */
+  noAnswerShown?: boolean;
   /** The highlighted search hit (AI-24). */
   flash?: string | null;
   /** The finished reply this entry ends: its text for Copy, and when it ended. */
@@ -554,7 +558,8 @@ function AssistantMessage({
     <div className={s.assistant}>
       {reasoning && <Reasoning text={reasoning} active={thinking} />}
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
-      {!text && !reasoning && calls.length === 0 && !streaming && finish !== "tool_calls" && <EmptyReply />}
+      {/* No answer: nothing at all, or only reasoning. */}
+      {!text.trim() && calls.length === 0 && !streaming && finish !== "tool_calls" && !noAnswerShown && <EmptyReply />}
       {calls.map((call) => {
         const reveal = entryId ? callRevealKey(entryId, call.id) : undefined;
         return <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} reveal={reveal} flash={!!reveal && flash === reveal} />;
@@ -1368,6 +1373,11 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
       </div>
     );
   if (!outcome) return null;
+  const retry = slot.conversationId ? (
+    <Button size="sm" icon="arrows-clockwise" onClick={() => void retryTurn(slotId)}>
+      {t("btn.retry")}
+    </Button>
+  ) : null;
   switch (outcome.reason) {
     case "stopped":
       return (
@@ -1380,6 +1390,8 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
       return <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />;
     case "refused":
       return <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />;
+    case "empty":
+      return <Banner icon="chat-circle-slash" tone="warn" text={t("ai.outcome.empty")} action={retry} />;
     case "error":
       return (
         <Banner
@@ -1387,13 +1399,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
           tone="error"
           text={outcome.status ? t("ai.outcome.errorStatus", { status: outcome.status }) : t("ai.outcome.error")}
           detail={outcome.message}
-          action={
-            slot.conversationId ? (
-              <Button size="sm" icon="arrows-clockwise" onClick={() => void retryTurn(slotId)}>
-                {t("btn.retry")}
-              </Button>
-            ) : null
-          }
+          action={retry}
         />
       );
   }

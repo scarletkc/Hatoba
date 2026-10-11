@@ -19,8 +19,9 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 |---|---|---|
 | The response hit the model’s output limit and was cut off. | 回复达到了模型的输出上限，后面的内容被截断了。 | 応答がモデルの出力上限に達したため、途中で切れました。 |
 | The model declined to respond. | 模型拒绝了这次请求。 | モデルが応答を断りました。 |
+| The model ended its reply without an answer. | 模型结束了回复，但没有给出回答。 | モデルが回答を出さずに応答を終えました。 |
 | The request failed | 请求失败 | リクエストに失敗しました |
-| The model returned nothing. | 模型没有返回内容。 | モデルから内容が返されませんでした。 |
+| The model gave no answer. | 模型没有给出回答。 | モデルから回答がありませんでした。 |
 | Add a model in Settings → AI first. | 请先在设置 → AI 中添加模型。 | 先に設定 → AI でモデルを追加してください。 |
 | This conversation can’t be opened. | 无法打开这个对话。 | この会話を開けません。 |
 | History can’t be loaded. | 无法读取历史对话。 | 履歴を読み込めません。 |
@@ -38,7 +39,7 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 | Models | 模型 | モデル |
 
 - "The response hit the model's output limit…": raise **Max Output** for that model (for the Anthropic protocol it is `max_tokens`) or ask for a shorter answer.
-- "The model returned nothing.": the model produced no text; try again or switch model.
+- "The model ended its reply without an answer." under the last reply, with **Retry**: the model sent neither text nor tool calls, at most its reasoning. **Retry** asks again and leaves the empty reply out of the request; if it keeps happening, switch model or choose another **Thinking Level**. Earlier replies without an answer, and a side question's, say "The model gave no answer."
 - Models that do not support tool calls cannot work as the assistant: the provider answers with an error as soon as a request carries tools.
 
 ## Thinking level and reasoning

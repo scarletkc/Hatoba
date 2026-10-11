@@ -100,7 +100,8 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
         if (entry.reasoning?.trim()) blocks.push(quoted(`**${t("ai.reasoning")}**\n\n${entry.reasoning.trim()}`));
         if (entry.text.trim()) blocks.push(entry.text.trim());
         for (const call of entry.tool_calls) blocks.push(toolCall(t, call, results.get(call.id)));
-        if (!entry.text.trim() && !entry.reasoning?.trim() && entry.tool_calls.length === 0) blocks.push(`*${t("ai.emptyReply")}*`);
+        // No answer: nothing at all, or only reasoning.
+        if (!entry.text.trim() && entry.tool_calls.length === 0) blocks.push(`*${t("ai.emptyReply")}*`);
         break;
       }
       case "summary":

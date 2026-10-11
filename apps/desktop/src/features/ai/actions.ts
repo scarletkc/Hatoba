@@ -666,7 +666,7 @@ function discardSideQuestion(slotId: string) {
   patchSlot(slotId, { side: null });
 }
 
-/** Provider error → Retry (§9): the next request from the stored conversation. */
+/** Provider error or a reply without an answer → Retry (§9, §13.1): the next request from the stored conversation. */
 export async function retryTurn(slotId: string) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;

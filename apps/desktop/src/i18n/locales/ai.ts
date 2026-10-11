@@ -178,7 +178,7 @@ export default defineMessages({
     "ai.revert.failed.failed": "撤销失败。",
     "ai.instructions.size": "{n} / {max} 个字符 · 约 {tokens} 个 token",
     "ai.instructions.tooLong": "最多 {max} 个字符，缩短后才能保存。",
-    "ai.emptyReply": "模型没有返回内容。",
+    "ai.emptyReply": "模型没有给出回答。",
 
     // tool calls
     "ai.tool.read_terminal": "读取终端",
@@ -268,6 +268,7 @@ export default defineMessages({
     "ai.outcome.stopped": "已停止",
     "ai.outcome.length": "回复达到了模型的输出上限，后面的内容被截断了。",
     "ai.outcome.refused": "模型拒绝了这次请求。",
+    "ai.outcome.empty": "模型结束了回复，但没有给出回答。",
     "ai.outcome.error": "请求失败",
     "ai.outcome.errorStatus": "服务商返回了错误（HTTP {status}）",
     "ai.effortIgnored": "模型不接受所选的思考程度，这条消息以模型的默认程度发送。",
@@ -537,7 +538,7 @@ export default defineMessages({
     "ai.revert.failed.failed": "Revert failed.",
     "ai.instructions.size": "{n} / {max} characters · about {tokens} tokens",
     "ai.instructions.tooLong": "At most {max} characters. Shorten the text to save it.",
-    "ai.emptyReply": "The model returned nothing.",
+    "ai.emptyReply": "The model gave no answer.",
 
     "ai.tool.read_terminal": "Read terminal",
     "ai.tool.run_command": "Run command",
@@ -624,6 +625,7 @@ export default defineMessages({
     "ai.outcome.stopped": "Stopped",
     "ai.outcome.length": "The response hit the model’s output limit and was cut off.",
     "ai.outcome.refused": "The model declined to respond.",
+    "ai.outcome.empty": "The model ended its reply without an answer.",
     "ai.outcome.error": "The request failed",
     "ai.outcome.errorStatus": "The provider returned an error (HTTP {status})",
     "ai.effortIgnored": "The model doesn’t accept the chosen thinking level, so this message was sent at its default level.",
@@ -887,7 +889,7 @@ export default defineMessages({
     "ai.revert.failed.failed": "元に戻せませんでした。",
     "ai.instructions.size": "{n} / {max} 文字 · 約 {tokens} トークン",
     "ai.instructions.tooLong": "最大 {max} 文字です。短くすると保存できます。",
-    "ai.emptyReply": "モデルから内容が返されませんでした。",
+    "ai.emptyReply": "モデルから回答がありませんでした。",
 
     "ai.tool.read_terminal": "ターミナルを読み取る",
     "ai.tool.run_command": "コマンドを実行",
@@ -973,6 +975,7 @@ export default defineMessages({
     "ai.outcome.stopped": "停止しました",
     "ai.outcome.length": "応答がモデルの出力上限に達したため、途中で切れました。",
     "ai.outcome.refused": "モデルが応答を断りました。",
+    "ai.outcome.empty": "モデルが回答を出さずに応答を終えました。",
     "ai.outcome.error": "リクエストに失敗しました",
     "ai.outcome.errorStatus": "プロバイダーがエラーを返しました（HTTP {status}）",
     "ai.effortIgnored": "モデルが選んだ思考レベルを受け付けないため、このメッセージはモデルの既定のレベルで送信しました。",

@@ -1475,6 +1475,8 @@ pub enum AiTurnEndReason {
     Completed,
     Length,
     Refused,
+    /// The response had neither text nor tool calls, such as a reply of reasoning only (§13.1).
+    Empty,
     Stopped,
     Error,
 }

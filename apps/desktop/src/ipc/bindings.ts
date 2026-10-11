@@ -727,7 +727,9 @@ export type AiTurnContext = {
 	disabled_mcp_servers: string[],
 };
 
-export type AiTurnEndReason = "completed" | "length" | "refused" | "stopped" | "error";
+export type AiTurnEndReason = "completed" | "length" | "refused" | 
+/**  The response had neither text nor tool calls, such as a reply of reasoning only (§13.1). */
+"empty" | "stopped" | "error";
 
 /**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
 export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 

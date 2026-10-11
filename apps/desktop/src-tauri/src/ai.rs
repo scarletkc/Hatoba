@@ -1418,6 +1418,8 @@ impl AiManager {
             // The frontend handles calls only after `done { tool_calls }`; calls of a response that
             // was cut off or declined get cancelled results before the next request.
             let wants_results = finish == Finish::ToolCalls && !response.tool_calls.is_empty();
+            // Neither text nor calls, such as a reply of reasoning only: no answer (§13.1).
+            let empty = response.text.trim().is_empty() && response.tool_calls.is_empty();
             let entry_id = match store_response(vault, env, conversation_id, turn, response) {
                 Ok(entry_id) => entry_id,
                 Err(halt) => return halted(turn, conversation_id, halt),
@@ -1426,6 +1428,7 @@ impl AiManager {
                 return match finish {
                     Finish::Length => AiTurnEndReason::Length,
                     Finish::Refused => AiTurnEndReason::Refused,
+                    Finish::Stop | Finish::ToolCalls if empty => AiTurnEndReason::Empty,
                     Finish::Stop | Finish::ToolCalls => AiTurnEndReason::Completed,
                 };
             }

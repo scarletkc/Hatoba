@@ -1273,6 +1273,62 @@ async fn a_provider_error_ends_the_turn_and_retry_goes_on() {
     assert_eq!(f.requests().await.len(), 2);
 }
 
+#[tokio::test]
+async fn a_reply_without_an_answer_ends_the_turn_as_empty_and_retry_leaves_it_out() {
+    let finish =
+        |reason: &str| json!({"choices": [{"index": 0, "delta": {}, "finish_reason": reason}]});
+    let f = Fixture::new(vec![
+        // Reasoning only.
+        sse(&[
+            json!({"choices": [{"index": 0, "delta": {"role": "assistant", "reasoning_content": "Thinking it over."}}]}),
+            finish("stop"),
+        ]),
+        // Blank text.
+        sse(&[text_delta(" \n "), finish("stop")]),
+        // Cut off before any text: the output limit is what the panel names.
+        sse(&[
+            json!({"choices": [{"index": 0, "delta": {"reasoning_content": "Still thinking."}}]}),
+            finish("length"),
+        ]),
+        answer("Recovered."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "hi").await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Empty);
+    assert!(sink.errors().is_empty());
+    f.idle(&conv).await;
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(&entries[1].body, EntryBody::Assistant(a)
+        if a.text.is_empty() && a.reasoning.as_deref() == Some("Thinking it over.")));
+
+    // The empty reply is no answer, so there is something to retry.
+    let retry = f.retry(&conv, f.context()).unwrap();
+    assert_eq!(retry.ended().await, AiTurnEndReason::Empty);
+    f.idle(&conv).await;
+    let retry = f.retry(&conv, f.context()).unwrap();
+    assert_eq!(retry.ended().await, AiTurnEndReason::Length);
+    f.idle(&conv).await;
+    let retry = f.retry(&conv, f.context()).unwrap();
+    assert_eq!(retry.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 5);
+    assert!(matches!(&entries[4].body, EntryBody::Assistant(a) if a.text == "Recovered."));
+
+    // Every request leaves the empty replies out.
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 4);
+    for body in &requests {
+        let roles: Vec<&str> = messages(body)
+            .iter()
+            .map(|m| m["role"].as_str().unwrap())
+            .collect();
+        assert_eq!(roles, ["system", "user"]);
+    }
+}
+
 /// The level the stored conversation keeps (AI-05).
 fn stored_effort(f: &Fixture, conversation_id: &str) -> Option<CoreEffort> {
     lock(&f.vault)

@@ -30,9 +30,9 @@ export interface TurnState {
   error: { status: number | null; message: string } | null;
 }
 
-/** How the last turn ended, when the panel has something to say about it. */
+/** How the last turn ended, when the panel has something to say about it. `empty`: the reply had no answer (§13.1). */
 export type TurnOutcome =
-  | { reason: "stopped" | "length" | "refused" }
+  | { reason: "stopped" | "length" | "refused" | "empty" }
   | { reason: "error"; status: number | null; message: string };
 
 export interface TurnSnapshot {
