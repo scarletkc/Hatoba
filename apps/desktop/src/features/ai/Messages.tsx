@@ -7,7 +7,18 @@ import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } fr
 import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
+import {
+  askSideQuestion,
+  decideCall,
+  dismissSideQuestion,
+  editAndResend,
+  retrySideQuestion,
+  retryTurn,
+  stopSideQuestion,
+  stopTurn,
+  tooMuchMessage,
+  type Decision,
+} from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
@@ -16,6 +27,7 @@ import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
+import { sideRunning, type SideQuestion } from "./side";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import type { CallState, LiveResponse } from "./turn";
@@ -212,6 +224,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
           {t("ai.effortIgnored")}
         </div>
       )}
+      {slot.side && <SideBubble slotId={slotId} q={slot.side} />}
     </div>
   );
 }
@@ -765,6 +778,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
   const [draft, setDraft] = useState<Draft>(() => draftFrom(kind, args, call.arguments));
   const [reason, setReason] = useState("");
   const [invalid, setInvalid] = useState(false);
+  // AI-42: a side question about the call, which neither runs nor rejects it.
+  const [question, setQuestion] = useState<string | null>(null);
   const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, call.name);
   const bypass = useAi((st) => st.slots[slotId]?.mode === "bypass");
   // AI-39, AI-40: an edit or write shows its diff, which follows the text changed in Edit.
@@ -790,6 +805,9 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
     decideCall(slotId, { kind: "run", edited: same ? null : next.json, allow, refusal });
   };
   const reject = () => decideCall(slotId, { kind: "reject", reason: reason.trim() });
+  const ask = () => {
+    if (question !== null && askSideQuestion(slotId, question, false)) setQuestion(null);
+  };
   const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
 
   return (
@@ -936,6 +954,36 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
         </div>
       )}
 
+      {question !== null && mode !== "reject" && (
+        <div className={s.rejectRow}>
+          <input
+            className={s.input}
+            value={question}
+            aria-label={t("ai.side.question")}
+            onChange={(e) => setQuestion(e.target.value)}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isImeEvent(e)) {
+                e.preventDefault();
+                ask();
+              } else if (e.key === "Escape") {
+                e.stopPropagation();
+                setQuestion(null);
+              }
+            }}
+            autoFocus
+          />
+          <div className={s.actions}>
+            <Button size="sm" onClick={() => setQuestion(null)}>
+              {t("btn.cancel")}
+            </Button>
+            <Button size="sm" variant="primary" icon="chat-teardrop-dots" disabled={!question.trim()} onClick={ask}>
+              {t("ai.side.send")}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {mode === "reject" ? (
         <div className={s.rejectRow}>
           <input
@@ -969,6 +1017,11 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           <LinkButton tone="danger" className={s.rejectLink} onClick={() => setMode("reject")}>
             {t("ai.approval.reject")}
           </LinkButton>
+          {question === null && (
+            <LinkButton tone="muted" icon="chat-teardrop-dots" className={s.rejectLink} title={t("ai.side.askCardHint")} onClick={() => setQuestion(t("ai.side.suggest"))}>
+              {t("ai.side.askCard")}
+            </LinkButton>
+          )}
           <span className={s.gap} />
           {mode === "edit" ? (
             <Button size="sm" onClick={() => setMode("view")}>
@@ -1072,6 +1125,67 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
         />
       );
   }
+}
+
+/**
+ * AI-42: a side question and its answer at the end of the conversation, marked as not saved. Stop (or Esc)
+ * stops only it; × discards it.
+ */
+function SideBubble({ slotId, q }: { slotId: string; q: SideQuestion }) {
+  const t = useT();
+  const running = sideRunning(q);
+  const parts = useMemo(() => parseMessage(q.sent), [q.sent]);
+  return (
+    <div className={s.side} role="region" aria-label={t("ai.side.title")}>
+      <div className={s.sideHead}>
+        <Icon name="chat-teardrop-dots" size={14} className={s.sideIcon} />
+        <span className={s.sideTitle}>{t("ai.side.title")}</span>
+        <span className={s.sideNote} title={t("ai.side.notSavedHint")}>
+          {t("ai.side.notSaved")}
+        </span>
+        <span className={s.gap} />
+        {running ? (
+          <IconButton icon="stop" label={t("ai.side.stop")} size={13} className={s.messageAction} onClick={() => stopSideQuestion(slotId)} />
+        ) : (
+          q.phase === "done" && q.answer.trim() && <CopyButton text={q.answer} />
+        )}
+        <IconButton icon="x" label={t("btn.close")} size={13} className={s.messageAction} onClick={() => dismissSideQuestion(slotId)} />
+      </div>
+      {parts.attachments.map((a, i) => (
+        <AttachmentCardFor key={i} attachment={a} />
+      ))}
+      <div className={cx(s.sideQuestion, "selectable")}>{q.question}</div>
+      {q.answer && <Markdown text={q.answer} streaming={q.phase === "streaming"} />}
+      {(q.phase === "waiting" || q.phase === "thinking") && (
+        <div className={s.status}>
+          <Spinner size={13} />
+          <span className={s.shimmer}>{t(q.phase === "thinking" ? "ai.reasoning.active" : "ai.status.waiting")}</span>
+        </div>
+      )}
+      {q.phase === "stopped" && (
+        <div className={s.status}>
+          <Icon name="stop-circle" size={13} />
+          {t("ai.outcome.stopped")}
+        </div>
+      )}
+      {q.phase === "done" && q.finish === "length" && <Banner icon="scissors" tone="warn" text={t("ai.outcome.length")} />}
+      {q.phase === "done" && q.finish === "refused" && <Banner icon="prohibit" tone="warn" text={t("ai.outcome.refused")} />}
+      {q.phase === "done" && !q.answer.trim() && q.finish !== "refused" && <EmptyReply />}
+      {q.phase === "error" && (
+        <Banner
+          icon="warning-circle"
+          tone="error"
+          text={t("ai.outcome.error")}
+          detail={q.error ?? undefined}
+          action={
+            <Button size="sm" icon="arrows-clockwise" onClick={() => retrySideQuestion(slotId)}>
+              {t("btn.retry")}
+            </Button>
+          }
+        />
+      )}
+    </div>
+  );
 }
 
 function Banner({ icon, tone, text, detail, action }: { icon: string; tone: "warn" | "error"; text: string; detail?: string; action?: ReactNode }) {

@@ -47,6 +47,7 @@ import {
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
+import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
   blankSlot,
   defaultMode,
@@ -452,8 +453,28 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason) {
 // ───────────────────────── turns ─────────────────────────
 
 /**
- * Sends a message (§13.1 step 1). Sending while a turn runs stops that turn first. The tab's
- * selection chip goes with it (AI-10), and is then hidden until the selection changes.
+ * What the input area sends with the typed text (AI-10, AI-35): the diagnostics, the selection chip, then
+ * the pastes and files, which all leave it. `restore` brings back the chips of a message that was not
+ * sent; its pastes and files (`extras`) go back to whichever slot shows the conversation by then.
+ */
+function takeAttachments(slotId: string, typed: string): { text: string; extras: PendingAttachment[]; restore: () => void } {
+  const attachment = selectionAttachment(slotId);
+  const hiddenBefore = tabSelection(slotId).hidden;
+  if (attachment) hideSelection(slotId);
+  const diagnostics = slotId === HOME_SLOT ? null : (useAi.getState().diagnostics[slotId] ?? null);
+  if (diagnostics) removeDiagnostics(slotId);
+  const extras = getSlot(slotId).extras;
+  const text = composeMessage(typed, [...(diagnostics ? [diagnostics] : []), ...(attachment ? [attachment] : []), ...extras.map((x) => x.attachment)]);
+  const restore = () => {
+    if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
+    if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
+  };
+  return { text, extras, restore };
+}
+
+/**
+ * Sends a message (§13.1 step 1). Sending while a turn runs stops that turn first; a side question does
+ * not (AI-42). The tab's selection chip goes with it (AI-10), and is then hidden until the selection changes.
  */
 export async function sendMessage(slotId: string, raw: string): Promise<boolean> {
   const typed = raw.trim();
@@ -469,13 +490,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   }
   runners.get(slotId)?.dispose(); // Rust stops that turn when the message arrives
 
-  const attachment = selectionAttachment(slotId);
-  const hiddenBefore = tabSelection(slotId).hidden;
-  if (attachment) hideSelection(slotId);
-  const diagnostics = slotId === HOME_SLOT ? null : (useAi.getState().diagnostics[slotId] ?? null);
-  if (diagnostics) removeDiagnostics(slotId);
-  const extras = slot.extras;
-  const text = composeMessage(typed, [...(diagnostics ? [diagnostics] : []), ...(attachment ? [attachment] : []), ...extras.map((x) => x.attachment)]);
+  const { text, extras, restore } = takeAttachments(slotId, typed);
   const runner = new TurnRunner(slotId, slot.conversationId);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
@@ -508,12 +523,88 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       draft: s.draft || raw,
       extras: [...extras, ...s.extras],
     }));
-    if (attachment) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
-    if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
+    restore();
     // Stopped before it was stored (during its compaction, AI-22): the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
     return false;
   }
+}
+
+// ───────────────────────── side questions (AI-42) ─────────────────────────
+
+let sideSeq = 0;
+
+/** Updates the side question `id` in the slot that shows its conversation now: it may have moved meanwhile. */
+function patchSide(convId: string, id: number, update: (q: SideQuestion) => SideQuestion) {
+  const target = slotOf(convId);
+  if (target) patchSlot(target, (s) => (s.side?.id === id ? { side: update(s.side) } : {}));
+}
+
+/**
+ * AI-42: asks a side question about the slot's conversation without stopping its turn. From the input area
+ * (`fromInput`) it is what the box holds, with the attachments a message would take, which leave the input
+ * area; from an approval card only the card's text. The answer shows at the end of the conversation and is
+ * not stored. A side question already on its way in the conversation is replaced.
+ */
+export function askSideQuestion(slotId: string, raw: string, fromInput = true): boolean {
+  const slot = getSlot(slotId);
+  const typed = raw.trim();
+  const convId = slot.conversationId;
+  if (!convId || !canAskSide(slot, typed)) return false;
+  const context = turnContext(slotId);
+  if (!context) {
+    toast(t("ai.err.noModel"), "error");
+    return false;
+  }
+  let text = typed;
+  if (fromInput) {
+    text = takeAttachments(slotId, typed).text;
+    patchSlot(slotId, { draft: "", extras: [] });
+  }
+  void runSide(slotId, newSideQuestion(++sideSeq, convId, typed, text), context, approvalCall(slot));
+  return true;
+}
+
+/** Retry on a side question that failed: the same question, with what it took from the input area. */
+export function retrySideQuestion(slotId: string) {
+  const slot = getSlot(slotId);
+  const q = slot.side;
+  if (!q || sideRunning(q) || slot.conversationId !== q.conversationId || !canAskSide(slot, q.sent)) return;
+  const context = turnContext(slotId);
+  if (!context) {
+    toast(t("ai.err.noModel"), "error");
+    return;
+  }
+  void runSide(slotId, newSideQuestion(++sideSeq, q.conversationId, q.question, q.sent), context, approvalCall(slot));
+}
+
+async function runSide(slotId: string, q: SideQuestion, context: AiTurnContext, approval: string | null) {
+  patchSlot(slotId, { side: q });
+  const update = (f: (cur: SideQuestion) => SideQuestion) => patchSide(q.conversationId, q.id, f);
+  try {
+    const answer = await api.ai_side_question({ conversation_id: q.conversationId, text: q.sent, context, approval_call_id: approval }, (ev) =>
+      update((cur) => reduceSideEvent(cur, ev)),
+    );
+    update((cur) => (sideRunning(cur) ? { ...cur, phase: "done", answer: answer.text, finish: answer.finish } : cur));
+  } catch (e) {
+    // Stopped, replaced by a newer side question, or the vault locked.
+    if (toAppError(e).code === "cancelled") update((cur) => (sideRunning(cur) ? { ...cur, phase: "stopped" } : cur));
+    else update((cur) => ({ ...cur, phase: "error", error: aiErrorMessage(e) }));
+  }
+}
+
+/** Stop on the side question, or Esc while it runs (AI-42): only the side question stops, never the turn. */
+export function stopSideQuestion(slotId: string) {
+  const q = getSlot(slotId).side;
+  if (!q || !sideRunning(q)) return;
+  patchSide(q.conversationId, q.id, (cur) => ({ ...cur, phase: "stopped" }));
+  void api.ai_side_stop(q.conversationId).catch(() => {});
+}
+
+/** × on the side question: it goes, and stops first when its answer is still on its way. */
+export function dismissSideQuestion(slotId: string) {
+  stopSideQuestion(slotId);
+  patchSlot(slotId, { side: null });
 }
 
 /** Provider error → Retry (§9): the next request from the stored conversation. */
@@ -642,9 +733,10 @@ export type { Decision };
 
 // ───────────────────────── conversations in slots ─────────────────────────
 
-/** The slot's conversation leaves it: its turn stops. */
+/** The slot's conversation leaves it: its turn and its side question (AI-42) stop. */
 function release(slotId: string) {
   runners.get(slotId)?.abandon();
+  stopSideQuestion(slotId);
 }
 
 /** New conversation (AI-07): stored when its first message is sent. */
@@ -785,7 +877,7 @@ export function resetForLock() {
     slots: Object.fromEntries(
       Object.entries(st.slots).map(([id, s]) => [
         id,
-        { ...s, conversation: null, entries: [], turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, loading: !!s.conversationId },
+        { ...s, conversation: null, entries: [], turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, side: null, loading: !!s.conversationId },
       ]),
     ),
   }));

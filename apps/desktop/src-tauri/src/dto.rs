@@ -1382,6 +1382,54 @@ pub enum AiTurnEvent {
     },
 }
 
+/// AI-42: a side question about a conversation, asked without stopping its turn.
+#[derive(Clone, Deserialize, Type)]
+pub struct AiSideQuestionInput {
+    pub conversation_id: String,
+    /// The question, after the attachment blocks the input area adds (spec §13.3).
+    pub text: String,
+    /// What the next message would be sent with; a running turn's own context wins.
+    pub context: AiTurnContext,
+    /// The call whose approval card waits (AI-17), so its result in the request says so.
+    pub approval_call_id: Option<String>,
+}
+
+impl fmt::Debug for AiSideQuestionInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiSideQuestionInput")
+            .field("conversation_id", &self.conversation_id)
+            .field(
+                "text",
+                &format_args!("<{} chars>", self.text.chars().count()),
+            )
+            .field("context", &self.context)
+            .field("approval_call_id", &self.approval_call_id)
+            .finish()
+    }
+}
+
+/// Streamed on the channel of `ai_side_question` while the answer comes (AI-42).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AiSideEvent {
+    Reasoning {
+        delta: String,
+    },
+    Text {
+        delta: String,
+    },
+    /// The answer called tools, so it was dropped and the question went again without tools:
+    /// what streamed before is discarded.
+    Restarted,
+}
+
+/// The answer to a side question (AI-42), which nothing stores.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiSideAnswer {
+    pub text: String,
+    pub finish: AiFinish,
+}
+
 /// A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17).
 #[derive(Clone, Deserialize, Type)]
 pub struct AiToolResultInput {

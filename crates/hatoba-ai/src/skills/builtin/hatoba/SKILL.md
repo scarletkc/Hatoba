@@ -76,6 +76,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, history, export and edit, the MCP tools menu |
 | `references/ai-models.md` | The model picker, the Thinking Level (Default to Max), the context meter, Compact and automatic compaction, the reasoning display |
 | `references/ai-attachments.md` | What goes with an AI message: the terminal selection, Ask AI about a failed connection, long pastes, text files, size limits and the context-fit note |
+| `references/ai-side-questions.md` | Asking the assistant something while it works or an approval card waits, without stopping it: **Ask a Side Question**, Alt+Enter, **Ask About This** on an approval card, what is not saved, stopping a side question |
 | `references/ai-instructions.md` | Custom Instructions in Settings → AI and a host's AI Notes: what they are for, limits, saving and sync, how the assistant follows them |
 | `references/ai-settings.md` | Settings → AI: providers and models (including each model's thinking levels), web search, default model and thinking level, permission mode, tool call limit, skills (including the built-in `hatoba` skill), MCP servers |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |

@@ -9,6 +9,9 @@ import type {
   AiSendInput,
   AiSendStarted,
   AiSettingsView,
+  AiSideAnswer,
+  AiSideEvent,
+  AiSideQuestionInput,
   AiTestResult,
   AiToolResultInput,
   AiTurnContext,
@@ -283,6 +286,14 @@ export interface HatobaApi {
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
   ai_compact(conversation_id: string, context: AiTurnContext): Promise<AiEntryView>;
+  /**
+   * AI-42: asks a side question about the conversation without stopping its turn. The answer streams to
+   * `onEvent` and comes back whole; nothing is stored. A newer side question of the conversation, `ai_side_stop`
+   * and the lock stop it (`cancelled`).
+   */
+  ai_side_question(input: AiSideQuestionInput, onEvent: (event: AiSideEvent) => void): Promise<AiSideAnswer>;
+  /** AI-42: stops the conversation's side question, if one is on its way; its turn goes on. */
+  ai_side_stop(conversation_id: string): Promise<void>;
 
   /** AI-24: conversations whose title or message text contains `query` (case-insensitive). */
   ai_search(query: string): Promise<AiSearchHit[]>;

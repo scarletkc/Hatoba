@@ -585,6 +585,54 @@
   line-height: 1.5;
 }
 
+/* AI-42: a side question and its answer, set apart from the conversation: nothing stores them. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-radius: var(--radius-panel);
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line2));
+  background: color-mix(in srgb, var(--accent) 4%, var(--win));
+}
+
+.sideHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  margin-right: -5px;
+}
+
+.sideIcon {
+  color: var(--accent);
+}
+
+.sideTitle {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.sideNote {
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.sideQuestion {
+  color: var(--fg2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
 /* Status lines and banners */
 .status {
   display: flex;

@@ -190,6 +190,29 @@
   background: color-mix(in srgb, var(--fg) 85%, var(--win) 15%);
 }
 
+/* AI-42: Ask a Side Question, beside Send / Stop. */
+.side {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg2);
+}
+
+.side:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--accent);
+}
+
+.side:disabled {
+  color: var(--fg3);
+}
+
 /* AI-35: the paperclip, in the look of the tools menu button. */
 .attach {
   flex: none;

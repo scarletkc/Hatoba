@@ -365,6 +365,8 @@ const MAX_SERVER_ID_CHARS: usize = 255;
 pub enum PromptTools {
     /// No tools: the fallback of a Compact request (AI-21).
     None,
+    /// No tools: the fallback of a side question (AI-42).
+    SideQuestion,
     /// No connected terminal tab: `fetch_url`, and `web_search`, `read_skill` and MCP tools
     /// when they are offered.
     NoTerminal,
@@ -594,7 +596,7 @@ const ATTACHMENTS: &str = "<attachments>\n\
 #[must_use]
 pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let terminal = ctx.tools == PromptTools::Terminal;
-    let tools = ctx.tools != PromptTools::None;
+    let tools = matches!(ctx.tools, PromptTools::Terminal | PromptTools::NoTerminal);
     let mut out = String::from("You are the AI assistant built into Hatoba, an SSH client. ");
     out.push_str(match ctx.tools {
         PromptTools::Terminal => {
@@ -614,6 +616,11 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
         PromptTools::None => {
             "This request only asks for a summary of the conversation, so it offers no tools. \
              The conversation's other requests offer them.\n"
+        }
+        // Only the fallback of a side question (AI-42), for the same reason.
+        PromptTools::SideQuestion => {
+            "This request only asks for the answer to a side question of the user, so it offers \
+             no tools. The conversation's other requests offer them.\n"
         }
     });
 
@@ -1154,6 +1161,19 @@ mod tests {
         ] {
             assert!(!bare.contains(absent), "unexpected {absent:?}");
         }
+        // The fallback of a side question says what it asks for instead, and is otherwise the same.
+        let side = system_prompt(&PromptContext {
+            tools: PromptTools::SideQuestion,
+            ..ctx
+        });
+        assert!(side.contains(
+            "only asks for the answer to a side question of the user, so it offers no tools"
+        ));
+        assert!(!side.contains("summary"));
+        assert_eq!(
+            side.split_once('\n').map(|(_, rest)| rest),
+            bare.split_once('\n').map(|(_, rest)| rest)
+        );
 
         // A name cannot add a line or a section of its own.
         let injected = system_prompt(&PromptContext {

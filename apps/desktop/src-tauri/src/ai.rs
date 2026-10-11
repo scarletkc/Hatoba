@@ -11,8 +11,9 @@
 //! which starts the servers that need it, and compacts the context first when the request would
 //! pass 90% of the model's context window (AI-22). A Compact request (AI-21) is the request a
 //! turn would send next with the instruction after it, built by the same function, so it reuses
-//! the prefix the provider cached. History search (AI-24) and edit and resend (AI-26) are here
-//! too.
+//! the prefix the provider cached. A side question (AI-42) forks the same request with the
+//! question after it, and stores nothing. History search (AI-24) and edit and resend (AI-26) are
+//! here too.
 //!
 //! Everything works on a [`SharedVault`] and two small traits, [`EventSink`] (where a turn's
 //! events go) and [`AiEnv`] (the sync trigger and the tab's SSH session), so the turn tests run
@@ -42,7 +43,7 @@ use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfi
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
     self, FetchUrlArgs, PromptContext, PromptModel, PromptTools, ReadSkillArgs, RunCommandArgs,
-    ToolSet, WebSearchArgs,
+    ToolSet, WebSearchArgs, escape_closing_tag,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::Vault;
@@ -60,8 +61,9 @@ use zeroize::Zeroizing;
 
 use crate::dto::{
     AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFilePreview, AiFinish,
-    AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus,
-    AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiSearchHit, AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput,
+    AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
+    AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -110,6 +112,23 @@ const COMPACT_MAX_TOKENS: u64 = 16_000;
 /// a context just under the AI-22 threshold leaves free, less a hundredth for the instruction and
 /// the error of the estimate, so the request stays inside the window.
 const COMPACT_OUTPUT_PERCENT: u64 = 9;
+
+/// What comes before a side question (AI-42), in the last user message of its request. The
+/// request offers the conversation's tools, so it first asks for text only, then for an answer
+/// that leaves the conversation as it is: a turn may be running, and nothing keeps the answer.
+const SIDE_QUESTION_INSTRUCTION: &str = "Respond with text only. Do not call any tools.\n\n\
+     The user asks the side question below while this conversation goes on. Answer it from the \
+     conversation so far, briefly and in the user's language. The answer is shown to the user \
+     once and is not kept in the conversation, and any task in progress goes on without it, so \
+     do not carry on with the task or say that you will do something.";
+
+/// The result a side question's request gives the call whose approval card waits (AI-42).
+const SIDE_AWAITING_APPROVAL: &str =
+    "No result yet: this call is waiting for the user's approval and has not run.";
+
+/// The result a side question's request gives each other call of the running turn without one
+/// (AI-42).
+const SIDE_PENDING: &str = "No result yet: this call is still running, or has not started.";
 
 /// A skill's main file (§13.8).
 const SKILL_MD: &str = "SKILL.md";
@@ -182,6 +201,12 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+    /// The side question (AI-42) on its way in each conversation that has one: its op's id and
+    /// token. A newer side question of the conversation cancels it.
+    sides: Mutex<HashMap<String, (u64, CancellationToken)>>,
+    /// How many compactions of each conversation run now (AI-21, AI-22), which refuse a side
+    /// question meanwhile (AI-42).
+    compacting: Mutex<HashMap<String, usize>>,
 }
 
 struct Op {
@@ -209,6 +234,43 @@ impl OpGuard<'_> {
 impl Drop for OpGuard<'_> {
     fn drop(&mut self) {
         guard(&self.inner.ops).remove(&self.id);
+    }
+}
+
+/// A side question on its way (AI-42): an op outside the conversation's turn, so a stop of the
+/// turn does not reach it. Unregisters itself when dropped.
+struct SideGuard<'a> {
+    op: OpGuard<'a>,
+    conversation_id: String,
+}
+
+impl Drop for SideGuard<'_> {
+    fn drop(&mut self) {
+        let mut sides = guard(&self.op.inner.sides);
+        if sides
+            .get(&self.conversation_id)
+            .is_some_and(|(id, _)| *id == self.op.id)
+        {
+            sides.remove(&self.conversation_id);
+        }
+    }
+}
+
+/// A compaction of a conversation while it runs (AI-21, AI-22); unregisters itself when dropped.
+struct CompactingGuard<'a> {
+    inner: &'a Inner,
+    conversation_id: String,
+}
+
+impl Drop for CompactingGuard<'_> {
+    fn drop(&mut self) {
+        let mut compacting = guard(&self.inner.compacting);
+        if let Some(count) = compacting.get_mut(&self.conversation_id) {
+            *count -= 1;
+            if *count == 0 {
+                compacting.remove(&self.conversation_id);
+            }
+        }
     }
 }
 
@@ -463,6 +525,45 @@ impl AiManager {
         self.register_op(None, None, CancellationToken::new())
     }
 
+    /// Registers a side question of the conversation (AI-42) and cancels the one before it. Its
+    /// op belongs to no conversation, so a stop of the turn leaves it alone and the lock reaches
+    /// it; [`Self::side_stop`] stops it.
+    fn start_side(&self, conversation_id: &str) -> SideGuard<'_> {
+        let cancel = CancellationToken::new();
+        let op = self.register_op(None, None, cancel.clone());
+        let before = guard(&self.0.sides).insert(conversation_id.to_owned(), (op.id, cancel));
+        if let Some((_, cancel)) = before {
+            cancel.cancel();
+        }
+        SideGuard {
+            op,
+            conversation_id: conversation_id.to_owned(),
+        }
+    }
+
+    /// `ai_side_stop` (AI-42): stops the conversation's side question, if one is on its way. Its
+    /// turn goes on.
+    pub fn side_stop(&self, conversation_id: &str) {
+        if let Some((_, cancel)) = guard(&self.0.sides).remove(conversation_id) {
+            cancel.cancel();
+        }
+    }
+
+    /// Marks the conversation as compacting until the guard drops (AI-21, AI-22).
+    fn start_compacting(&self, conversation_id: &str) -> CompactingGuard<'_> {
+        *guard(&self.0.compacting)
+            .entry(conversation_id.to_owned())
+            .or_default() += 1;
+        CompactingGuard {
+            inner: &self.0,
+            conversation_id: conversation_id.to_owned(),
+        }
+    }
+
+    fn is_compacting(&self, conversation_id: &str) -> bool {
+        guard(&self.0.compacting).contains_key(conversation_id)
+    }
+
     fn register_op(
         &self,
         conversation_id: Option<&str>,
@@ -563,7 +664,7 @@ impl AiManager {
     }
 
     /// The vault is about to lock (SEC-02): stops every turn and tool, and every provider request
-    /// outside a conversation, so the assistant never acts behind the lock screen (§13.1). Called
+    /// outside a turn, side questions (AI-42) included, so the assistant never acts behind the lock screen (§13.1). Called
     /// with the vault guard, before `Vault::lock`.
     pub fn stop_all(&self, v: &mut Vault) {
         let running: Vec<String> = guard(&self.0.turns).keys().cloned().collect();
@@ -608,6 +709,7 @@ impl AiManager {
             if let Some(turn) = self.cancel(conversation_id) {
                 turn.end(AiTurnEndReason::Stopped);
             }
+            self.side_stop(conversation_id);
             v.ai_delete_conversation(conversation_id)?;
             self.0.seen.forget(conversation_id);
             self.forget_file_bases(conversation_id);
@@ -1043,7 +1145,13 @@ impl AiManager {
                         return AiTurnEndReason::Stopped;
                     }
                     // The request the turn was about to send, asking where the task stands.
-                    Compact::fork(&v, &turn.context, request, COMPACT_MID_TURN_INSTRUCTION)
+                    Fork::new(
+                        &v,
+                        &turn.context,
+                        request,
+                        COMPACT_MID_TURN_INSTRUCTION,
+                        PromptTools::None,
+                    )
                 };
                 match self
                     .auto_compact(vault, env, conversation_id, turn, compact)
@@ -1476,20 +1584,22 @@ impl AiManager {
     /// or has no text is dropped (none of its calls runs or is stored), and the request goes once
     /// more without tools, with the system prompt that says so. `None` when that answer is no
     /// summary either: an endpoint can still return calls without tools, and their text is then
-    /// only what comes before them.
+    /// only what comes before them. The conversation counts as compacting meanwhile, which
+    /// refuses a side question (AI-42).
     async fn summarize(
         &self,
         conversation_id: &str,
-        compact: Compact,
+        compact: Fork,
         cancel: &CancellationToken,
     ) -> Result<Option<String>, AiError> {
-        let Compact {
+        let _compacting = self.start_compacting(conversation_id);
+        let Fork {
             mut request,
             plain_system,
         } = compact;
         let http = self.http();
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
-        log_compact_usage(conversation_id, false, response.usage);
+        log_fork_usage(conversation_id, COMPACT, false, response.usage);
         if let Some(summary) = summary_of(&response) {
             return Ok(Some(summary));
         }
@@ -1501,7 +1611,7 @@ impl AiManager {
         request.tools = Vec::new();
         request.system = plain_system;
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
-        log_compact_usage(conversation_id, true, response.usage);
+        log_fork_usage(conversation_id, COMPACT, true, response.usage);
         if !response.tool_calls.is_empty() {
             tracing::info!(
                 conversation_id,
@@ -1553,7 +1663,7 @@ impl AiManager {
         env: &dyn AiEnv,
         conversation_id: &str,
         turn: &Turn,
-        compact: Compact,
+        compact: Fork,
     ) -> Result<(), CompactFailure> {
         tracing::info!(conversation_id, "AI context nearly full; compacting");
         let summary = match self.summarize(conversation_id, compact, &turn.cancel).await {
@@ -1605,6 +1715,169 @@ impl AiManager {
         env.changed();
         Ok(())
     }
+
+    // ---- side questions ----
+
+    /// `ai_side_question` (AI-42): asks the conversation's model `input.text` with the request
+    /// the conversation would send next ([`side_request`]), streams the answer to `on_event`, and
+    /// returns it. Stores nothing and leaves a running turn as it is: the turn's stop does not
+    /// reach it, while [`Self::side_stop`], a newer side question of the conversation, deleting
+    /// the conversation and the lock do. Refused while the conversation is compacting.
+    pub async fn side_question(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        input: AiSideQuestionInput,
+        on_event: &(dyn Fn(AiSideEvent) + Send + Sync),
+    ) -> AppResult<AiSideAnswer> {
+        let AiSideQuestionInput {
+            conversation_id,
+            text,
+            context,
+            approval_call_id,
+        } = input;
+        if text.trim().is_empty() {
+            return Err(AppError::invalid("text", "The question is empty."));
+        }
+        let stopped = || AppError::new(ErrorCode::Cancelled, "the side question was stopped");
+        let server_id = turn_server_id(env, &context);
+        let (side, context, server_id) = {
+            let v = unlocked(vault)?;
+            find_conversation(&v, &conversation_id)?;
+            if self.is_compacting(&conversation_id) {
+                return Err(AppError::invalid(
+                    "conversation_id",
+                    "the conversation is being compacted",
+                ));
+            }
+            // The running turn's next request, whose prefix the provider has cached.
+            let (context, server_id) = match self.running(&conversation_id) {
+                Some(turn) => (turn.context.clone(), turn.server_id.clone()),
+                None => (context, server_id),
+            };
+            (self.start_side(&conversation_id), context, server_id)
+        };
+        let cancel = side.op.token().clone();
+        // AI-30: the MCP tools the next request offers, so this request offers them too.
+        let offer = self.0.mcp.offer(vault, &context, &cancel).await;
+        let fork = {
+            let v = unlocked(vault)?;
+            if cancel.is_cancelled() {
+                return Err(stopped());
+            }
+            let open = if self.is_running(&conversation_id) {
+                OpenCalls::Pending {
+                    approval: approval_call_id.as_deref(),
+                }
+            } else {
+                OpenCalls::Cancelled
+            };
+            side_request(
+                &v,
+                &conversation_id,
+                &context,
+                server_id.as_deref(),
+                &offer,
+                open,
+                &text,
+            )?
+        };
+        let response = match self
+            .side_answer(&conversation_id, fork, &cancel, on_event)
+            .await
+        {
+            Ok(response) => response,
+            Err(_) if cancel.is_cancelled() => return Err(stopped()),
+            Err(e) => {
+                tracing::warn!(
+                    conversation_id = %conversation_id,
+                    kind = error_kind(&e),
+                    status = ?e.status(),
+                    "AI side question failed"
+                );
+                return Err(e.into());
+            }
+        };
+        if cancel.is_cancelled() {
+            return Err(stopped());
+        }
+        drop(side);
+        // An endpoint can still return calls without tools; none of them runs.
+        if !response.tool_calls.is_empty() {
+            tracing::info!(
+                conversation_id = %conversation_id,
+                tool_calls = response.tool_calls.len(),
+                "AI side question answered with tool calls again"
+            );
+            return Err(AppError::new(
+                ErrorCode::Ai,
+                "the model answered with tool calls instead of text",
+            ));
+        }
+        tracing::info!(conversation_id = %conversation_id, "AI side question answered");
+        Ok(AiSideAnswer {
+            text: response.text,
+            finish: finish_view(response.finish),
+        })
+    }
+
+    /// Streams the answer to a side question (AI-42). An answer that calls tools is dropped (none
+    /// of its calls runs), `restarted` tells the panel to discard what streamed, and the question
+    /// goes once more without tools, with the system prompt that says so. Returns the last answer.
+    async fn side_answer(
+        &self,
+        conversation_id: &str,
+        fork: Fork,
+        cancel: &CancellationToken,
+        on_event: &(dyn Fn(AiSideEvent) + Send + Sync),
+    ) -> Result<AssistantEntry, AiError> {
+        let Fork {
+            mut request,
+            plain_system,
+        } = fork;
+        let http = self.http();
+        // Nothing reaches the panel once the side question is stopped.
+        let send = |event: AiSideEvent| {
+            if !cancel.is_cancelled() {
+                on_event(event);
+            }
+        };
+        let mut forward = |event: StreamEvent| match event {
+            StreamEvent::Text(delta) => send(AiSideEvent::Text { delta }),
+            StreamEvent::Reasoning(delta) => send(AiSideEvent::Reasoning { delta }),
+            _ => {}
+        };
+        let response = stream_chat(
+            &http,
+            &request.provider,
+            &request.chat(),
+            cancel,
+            &mut forward,
+        )
+        .await?;
+        log_fork_usage(conversation_id, SIDE_QUESTION, false, response.usage);
+        if response.tool_calls.is_empty() {
+            return Ok(response);
+        }
+        tracing::info!(
+            conversation_id,
+            tool_calls = response.tool_calls.len(),
+            "AI side question answered with tool calls; asking again without tools"
+        );
+        send(AiSideEvent::Restarted);
+        request.tools = Vec::new();
+        request.system = plain_system;
+        let response = stream_chat(
+            &http,
+            &request.provider,
+            &request.chat(),
+            cancel,
+            &mut forward,
+        )
+        .await?;
+        log_fork_usage(conversation_id, SIDE_QUESTION, true, response.usage);
+        Ok(response)
+    }
 }
 
 /// Why an automatic compaction did not happen.
@@ -1618,23 +1891,30 @@ enum CompactFailure {
     },
 }
 
-/// A Compact request (AI-21): the conversation's next request, as [`next_request`] builds it for
-/// a turn, with the instruction after it. It offers the same tools with the same system prompt
-/// and replays the same entries, so the provider reads its prefix from the cache the
-/// conversation's requests wrote. Only its output limit differs ([`compact_output_tokens`]),
-/// which is not part of that prefix. `plain_system` is the system prompt of the fallback without
-/// tools ([`AiManager::summarize`]).
-struct Compact {
+/// A Compact request (AI-21) or a side question's (AI-42): the conversation's next request, as
+/// [`next_request`] builds it for a turn, with a last user message after it. It offers the same
+/// tools with the same system prompt and replays the same entries, so the provider reads its
+/// prefix from the cache the conversation's requests wrote. Only its output limit differs
+/// ([`compact_output_tokens`]), which is not part of that prefix. `plain_system` is the system
+/// prompt of the fallback without tools ([`AiManager::summarize`], [`AiManager::side_answer`]).
+struct Fork {
     request: Request,
     plain_system: String,
 }
 
-impl Compact {
-    /// Forks `next`, the request a turn with `context` sends next, by appending `instruction`.
-    fn fork(v: &Vault, context: &AiTurnContext, mut next: Request, instruction: &str) -> Self {
-        next.entries.push(AiEntry::user(now_ms(), instruction));
+impl Fork {
+    /// Forks `next`, the request a turn with `context` sends next, by appending `message`.
+    /// `plain` says what the fallback without tools asks for.
+    fn new(
+        v: &Vault,
+        context: &AiTurnContext,
+        mut next: Request,
+        message: impl Into<String>,
+        plain: PromptTools,
+    ) -> Self {
+        next.entries.push(AiEntry::user(now_ms(), message));
         next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
-        let (plain_system, _) = prompt(v, context, false, None);
+        let (plain_system, _) = prompt(v, context, Some(plain), None);
         Self {
             request: next,
             plain_system,
@@ -1657,14 +1937,63 @@ fn compact_request(
     server_id: Option<&str>,
     offer: &Offer,
     instruction: &str,
-) -> AppResult<Compact> {
+) -> AppResult<Fork> {
     let list = context_entries(v, conversation_id)?;
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));
     }
     let next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
-    Ok(Compact::fork(v, context, next, instruction))
+    Ok(Fork::new(v, context, next, instruction, PromptTools::None))
+}
+
+/// What a side question's request says of the calls without a result (AI-42).
+#[derive(Clone, Copy)]
+enum OpenCalls<'a> {
+    /// No turn runs: they go as cancelled, as in the conversation's next request.
+    Cancelled,
+    /// A turn runs: each gets a result for this request only, which says that the call waits for
+    /// the user's approval (the call `approval`, whose card waits) or has not finished.
+    Pending { approval: Option<&'a str> },
+}
+
+/// A side question's request (AI-42), forked from the next request of a turn with `context` and
+/// `server_id` whose MCP tools are `offer`, like a Compact request: the calls without a result,
+/// answered as `open` says for this request only, then the question after its instruction.
+fn side_request(
+    v: &Vault,
+    conversation_id: &str,
+    context: &AiTurnContext,
+    server_id: Option<&str>,
+    offer: &Offer,
+    open: OpenCalls<'_>,
+    question: &str,
+) -> AppResult<Fork> {
+    let mut list = context_entries(v, conversation_id)?;
+    if let OpenCalls::Pending { approval } = open {
+        let now = now_ms();
+        for call_id in fix_up_missing_results(&list) {
+            let content = if approval == Some(call_id.as_str()) {
+                SIDE_AWAITING_APPROVAL
+            } else {
+                SIDE_PENDING
+            };
+            list.push(AiEntry::tool(now, call_id, ToolStatus::Ok, content));
+        }
+    }
+    let next = next_request(v, context, server_id, offer, list)
+        .map_err(|message| AppError::invalid("model_id", message))?;
+    let message = format!(
+        "{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
+        escape_closing_tag(question.trim(), "side_question")
+    );
+    Ok(Fork::new(
+        v,
+        context,
+        next,
+        message,
+        PromptTools::SideQuestion,
+    ))
 }
 
 /// The conversation's context: its entries from `context_start` on (AI-21).
@@ -1697,19 +2026,24 @@ fn compact_output_tokens(model: &ModelSpec) -> u64 {
     tokens.max(1)
 }
 
-/// Logs the token counts of a Compact response, never its text (SEC-04), so the share the prompt
-/// cache served can be measured.
-fn log_compact_usage(conversation_id: &str, fallback: bool, usage: Option<Usage>) {
+/// What [`log_fork_usage`] logs a forked request as: Compact (AI-21) or a side question (AI-42).
+const COMPACT: &str = "compact";
+const SIDE_QUESTION: &str = "side_question";
+
+/// Logs the token counts of a response to a [`Fork`], never its text (SEC-04), so the share the
+/// prompt cache served can be measured.
+fn log_fork_usage(conversation_id: &str, request: &str, fallback: bool, usage: Option<Usage>) {
     let usage = usage.unwrap_or_default();
     tracing::info!(
         conversation_id,
+        request,
         fallback,
         input_tokens = usage.input_tokens,
         cache_read_tokens = usage.cache_read_tokens,
         cache_write_tokens = usage.cache_write_tokens,
         output_tokens = usage.output_tokens,
         estimated = usage.estimated,
-        "AI compaction response"
+        "AI forked request response"
     );
 }
 
@@ -1861,9 +2195,9 @@ fn prepare_locked(
 }
 
 /// The conversation's next request (§13.1) for its context `entries`: the system prompt that
-/// offers tools, the built-in tools, then the MCP tools of `offer`. Every request of a turn and
-/// every Compact request (AI-21) is built here, so a Compact request has its turn's prefix. The
-/// error is a sentence for the panel.
+/// offers tools, the built-in tools, then the MCP tools of `offer`. Every request of a turn,
+/// every Compact request (AI-21) and every side question's (AI-42) is built here, so the last two
+/// have their turn's prefix. The error is a sentence for the panel.
 fn next_request(
     v: &Vault,
     context: &AiTurnContext,
@@ -1872,7 +2206,7 @@ fn next_request(
     entries: Vec<AiEntry>,
 ) -> Result<Request, String> {
     let (provider, model) = resolve_model(v, &context.provider_id, &context.model_id)?;
-    let (system, mut tools) = prompt(v, context, true, server_id);
+    let (system, mut tools) = prompt(v, context, None, server_id);
     // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09).
     tools.extend(offer.tool_defs(provider.protocol));
     Ok(Request {
@@ -2107,15 +2441,16 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
 
 /// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
 /// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
-/// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `offer_tools`
-/// is false only for the fallback of Compact (AI-21). `server_id` is the tab's SSH server's
-/// identification string.
+/// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `fallback` is
+/// `None` but for the request without tools that a Compact request (AI-21) or a side question
+/// (AI-42) falls back to, whose `PromptTools` says what it asks for. `server_id` is the tab's SSH
+/// server's identification string.
 /// The prompt names the model and its provider, and carries the user's custom instructions
 /// (AI-36) and the host's AI notes (AI-37), each cut to its limit.
 fn prompt(
     v: &Vault,
     context: &AiTurnContext,
-    offer_tools: bool,
+    fallback: Option<PromptTools>,
     server_id: Option<&str>,
 ) -> (String, Vec<ToolDef>) {
     let host = context
@@ -2137,10 +2472,10 @@ fn prompt(
         skills.push((BUILTIN_NAME.to_owned(), builtin_description()));
     }
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let offered = match (offer_tools, context.tab) {
-        (false, _) => PromptTools::None,
-        (true, false) => PromptTools::NoTerminal,
-        (true, true) => PromptTools::Terminal,
+    let offered = match (fallback, context.tab) {
+        (Some(plain), _) => plain,
+        (None, false) => PromptTools::NoTerminal,
+        (None, true) => PromptTools::Terminal,
     };
     let system = tools::system_prompt(&PromptContext {
         model: PromptModel {
@@ -2162,7 +2497,7 @@ fn prompt(
         skills: &skills,
         tools: offered,
     });
-    let defs = if offer_tools {
+    let defs = if fallback.is_none() {
         tools::builtin_tools(&ToolSet {
             terminal: context.tab,
             web_search: chosen_search(v).is_some(),

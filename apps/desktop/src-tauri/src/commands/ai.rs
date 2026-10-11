@@ -1,6 +1,6 @@
 //! AI assistant commands (spec §13): providers, search providers and the synced settings of
 //! Settings → AI, conversations with history search (AI-24), and the turn protocol of §13.1 with
-//! edit and resend (AI-26), which runs in [`crate::ai`]. Skills and MCP servers have their own
+//! edit and resend (AI-26) and side questions (AI-42), which runs in [`crate::ai`]. Skills and MCP servers have their own
 //! modules ([`super::skills`], [`super::mcp`]).
 //! API keys go one way to Rust: views say only whether a key is saved (AI-01).
 
@@ -27,8 +27,9 @@ use crate::ai::{
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFilePreview, AiModel,
     AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
-    AiSendStarted, AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext,
-    AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
+    AiSendStarted, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure,
+    AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent, DroppedFile, SearchKind,
+    SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -859,6 +860,34 @@ pub async fn ai_compact(
         .ai
         .compact(&state.vault, &AppEnv(app), &conversation_id, &context)
         .await
+}
+
+/// AI-42: asks a side question about the conversation without stopping its turn. The answer
+/// streams on `channel` and comes back whole; nothing is stored.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_side_question(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    input: AiSideQuestionInput,
+    channel: Channel<AiSideEvent>,
+) -> AppResult<AiSideAnswer> {
+    // A reloaded WebView drops its channels; the answer then has nowhere to go.
+    let send = move |event: AiSideEvent| {
+        let _ = channel.send(event);
+    };
+    state
+        .ai
+        .side_question(&state.vault, &AppEnv(app), input, &send)
+        .await
+}
+
+/// AI-42: stops the conversation's side question, if one is on its way; its turn goes on.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_side_stop(state: State<'_, AppState>, conversation_id: String) -> AppResult<()> {
+    state.ai.side_stop(&conversation_id);
+    Ok(())
 }
 
 /// AI-24: conversations whose title or message text contains `query`, ignoring case.

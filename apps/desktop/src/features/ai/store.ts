@@ -3,6 +3,7 @@ import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
 import type { DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionState } from "./attachments";
 import type { EffortPick } from "./effort";
+import type { SideQuestion } from "./side";
 import type { TurnOutcome, TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
@@ -40,6 +41,8 @@ export interface Slot {
   mcpOff: string[];
   /** AI-24: an entry to scroll to and highlight once it is shown (a history search hit). */
   reveal: string | null;
+  /** AI-42: the side question shown at the end of the conversation, which nothing stores. */
+  side: SideQuestion | null;
 }
 
 /** A paste or file waiting in the input area; `id` tells their chips apart. */
@@ -122,6 +125,7 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", ex
     extras,
     mcpOff: [],
     reveal: null,
+    side: null,
   };
 }
 

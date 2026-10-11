@@ -256,6 +256,13 @@ export const commands = {
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
 	aiCompact: (conversationId: string, context: AiTurnContext) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context }),
+	/**
+	 *  AI-42: asks a side question about the conversation without stopping its turn. The answer
+	 *  streams on `channel` and comes back whole; nothing is stored.
+	 */
+	aiSideQuestion: (input: AiSideQuestionInput, channel: Channel<AiSideEvent>) => __TAURI_INVOKE<AiSideAnswer>("ai_side_question", { input, channel }),
+	/**  AI-42: stops the conversation's side question, if one is on its way; its turn goes on. */
+	aiSideStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_side_stop", { conversationId }),
 	/**  AI-24: conversations whose title or message text contains `query`, ignoring case. */
 	aiSearch: (query: string) => __TAURI_INVOKE<AiSearchHit[]>("ai_search", { query }),
 	/**
@@ -472,6 +479,31 @@ export type AiSettingsView = {
 	builtin_skill_enabled: boolean,
 	/**  Sent with every request, at most 4,000 characters (AI-36). */
 	custom_instructions: string,
+};
+
+/**  The answer to a side question (AI-42), which nothing stores. */
+export type AiSideAnswer = {
+	text: string,
+	finish: AiFinish,
+};
+
+/**  Streamed on the channel of `ai_side_question` while the answer comes (AI-42). */
+export type AiSideEvent = { kind: "reasoning"; delta: string } | { kind: "text"; delta: string } | 
+/**
+ *  The answer called tools, so it was dropped and the question went again without tools:
+ *  what streamed before is discarded.
+ */
+{ kind: "restarted" };
+
+/**  AI-42: a side question about a conversation, asked without stopping its turn. */
+export type AiSideQuestionInput = {
+	conversation_id: string,
+	/**  The question, after the attachment blocks the input area adds (spec §13.3). */
+	text: string,
+	/**  What the next message would be sent with; a running turn's own context wins. */
+	context: AiTurnContext,
+	/**  The call whose approval card waits (AI-17), so its result in the request says so. */
+	approval_call_id: string | null,
 };
 
 /**  AI-04 Test Connection, also used for the search provider test. */

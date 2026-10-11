@@ -957,6 +957,30 @@ export type AiTurnEvent =
   | { kind: "effort_ignored" }
   | { kind: "turn_ended"; reason: AiTurnEndReason };
 
+/** AI-42: a side question about a conversation, asked without stopping its turn. */
+export interface AiSideQuestionInput {
+  conversation_id: string;
+  /** The question, after the attachment blocks the input area adds (spec §13.3). */
+  text: string;
+  /** What the next message would be sent with; a running turn's own context wins. */
+  context: AiTurnContext;
+  /** The call whose approval card waits (AI-17), so its result in the request says so. */
+  approval_call_id: string | null;
+}
+
+/** Streamed while a side question's answer comes (AI-42). */
+export type AiSideEvent =
+  | { kind: "reasoning"; delta: string }
+  | { kind: "text"; delta: string }
+  /** The answer called tools, so it was dropped and the question went again without tools: what streamed before is discarded. */
+  | { kind: "restarted" };
+
+/** The answer to a side question (AI-42), which nothing stores. */
+export interface AiSideAnswer {
+  text: string;
+  finish: AiFinish;
+}
+
 /** A result the frontend produced: `read_terminal`, `send_input`, or a rejection (AI-17). */
 export interface AiToolResultInput {
   status: AiToolStatus;

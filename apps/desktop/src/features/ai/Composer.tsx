@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useApp } from "@/app/store";
 import { Icon, LinkButton } from "@/components/controls";
 import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { readClipboard } from "@/features/terminal/clipboard";
@@ -6,12 +7,14 @@ import { useT } from "@/i18n";
 import type { AiEffort, AiModelRef } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { addPaste, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
+import { shortcutLabel } from "@/lib/platform";
+import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
+import { canAskSide } from "./side";
 import { getSlot, patchSlot, useAi, type Slot } from "./store";
 import { ToolsButton } from "./ToolsMenu";
 import s from "./Composer.module.css";
@@ -28,9 +31,14 @@ export function insertAtCaret(el: HTMLTextAreaElement | null, value: string, tex
   return { value: value.slice(0, start) + text + value.slice(end), caret: start + text.length };
 }
 
+/** Alt+Enter, or ⌥↩ on macOS: asks what the box holds as a side question (AI-42). */
+function isSideQuestionKey(e: KeyboardEvent): boolean {
+  return e.key === "Enter" && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey;
+}
+
 /**
  * The input area (§9): the attachment chips, a multi-line box, the model selector, the tools menu,
- * the paperclip, the context meter and Send / Stop.
+ * the paperclip, the context meter, Ask a Side Question (AI-42) and Send / Stop.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
@@ -38,7 +46,9 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   const fileRef = useRef<HTMLInputElement>(null);
   const focusTick = useAi((st) => st.focusTick);
   const providers = useAi((st) => st.catalog.providers);
+  const platform = useApp((st) => st.info.platform);
   const busy = !!slot.turn || slot.remoteRunning;
+  const sideKey = shortcutLabel(platform, "Alt+Enter", "⌥↩");
   useTerminalSelection(slotId);
 
   // Focus requests (New conversation, Ask AI, …) put the caret after the draft, or select a
@@ -76,6 +86,12 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     void sendMessage(slotId, slot.draft);
   };
 
+  // AI-42: the turn, if any, goes on; the answer shows at the end of the conversation.
+  const canSide = !!model && !blocked && canAskSide(slot, slot.draft);
+  const askSide = () => {
+    if (canSide) askSideQuestion(slotId, slot.draft);
+  };
+
   /** Puts text into the box at the caret, as typing would. */
   const insertText = (text: string) => {
     const el = ref.current;
@@ -96,7 +112,14 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
       );
       return;
     }
-    // Enter sends, Shift+Enter adds a line, and nothing is sent while an IME is composing.
+    // Enter sends, Alt+Enter asks a side question (AI-42), Shift+Enter adds a line, and nothing is sent
+    // while an IME is composing.
+    if (isSideQuestionKey(e)) {
+      if (isImeEvent(e)) return;
+      e.preventDefault();
+      askSide();
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
     if (isImeEvent(e)) return;
     e.preventDefault();
@@ -141,7 +164,9 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           className={s.input}
           rows={1}
           value={slot.draft}
-          placeholder={tools ? t("ai.input.placeholder") : t("ai.input.placeholderChat")}
+          placeholder={
+            busy && slot.conversationId ? t("ai.input.placeholderBusy", { key: sideKey }) : tools ? t("ai.input.placeholder") : t("ai.input.placeholderChat")
+          }
           aria-label={t("ai.input.label")}
           spellCheck={false}
           onChange={(e) => patchSlot(slotId, { draft: e.target.value })}
@@ -173,6 +198,18 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           />
           <div className={s.grow} />
           <ContextMeter slotId={slotId} slot={slot} m={meter} />
+          {slot.conversationId && (
+            <button
+              type="button"
+              className={s.side}
+              title={t("ai.side.askHint", { key: sideKey })}
+              aria-label={t("ai.side.ask")}
+              disabled={!canSide}
+              onClick={askSide}
+            >
+              <Icon name="chat-teardrop-dots" size={15} />
+            </button>
+          )}
           {busy ? (
             <button type="button" className={cx(s.send, s.stop)} title={t("ai.stopHint")} aria-label={t("ai.stop")} onClick={() => void stopTurn(slotId)}>
               <Icon name="stop" fill size={12} />

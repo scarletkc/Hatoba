@@ -9,13 +9,26 @@ import { useT } from "@/i18n";
 import type { AiPermissionMode, HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
-import { attachDroppedPaths, attachFiles, connectConversation, continueHomeConversation, focusInput, newConversation, reloadSlot, setSlotMode, stopTurn, toggleAiPanel } from "./actions";
+import {
+  attachDroppedPaths,
+  attachFiles,
+  connectConversation,
+  continueHomeConversation,
+  focusInput,
+  newConversation,
+  reloadSlot,
+  setSlotMode,
+  stopSideQuestion,
+  stopTurn,
+  toggleAiPanel,
+} from "./actions";
 import { Composer } from "./Composer";
 import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
 import { conversationModel, hasModels } from "./models";
 import { connectionFor, movedFrom } from "./place";
+import { sideRunning } from "./side";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
 import s from "./AiPanel.module.css";
 
@@ -93,8 +106,13 @@ export function AiPanel({ slotId }: { slotId: string }) {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    // AI-18: Esc while focus is in the panel stops the turn.
-    if (e.key === "Escape" && !e.defaultPrevented && busy) {
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    // AI-42: a side question on its way stops first, and only it.
+    if (sideRunning(slot.side)) {
+      e.preventDefault();
+      stopSideQuestion(slotId);
+    } else if (busy) {
+      // AI-18: Esc while focus is in the panel stops the turn.
       e.preventDefault();
       void stopTurn(slotId);
     }

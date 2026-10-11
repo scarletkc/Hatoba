@@ -153,6 +153,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_file_preview,
             ai_cmd::ai_stop,
             ai_cmd::ai_compact,
+            ai_cmd::ai_side_question,
+            ai_cmd::ai_side_stop,
             ai_cmd::ai_search,
             ai_cmd::ai_edit_resend,
             ai_cmd::ai_read_dropped_files,

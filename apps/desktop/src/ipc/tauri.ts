@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
-import type { AiTurnEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
+import type { AiSideEvent, AiTurnEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -175,6 +175,12 @@ export function createTauriApi(): HatobaApi {
       call("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
     ai_stop: (conversationId) => call("ai_stop", { conversationId }),
     ai_compact: (conversationId, context) => call("ai_compact", { conversationId, context }),
+    ai_side_question: (input, onEvent) => {
+      const channel = new Channel<AiSideEvent>();
+      channel.onmessage = onEvent;
+      return call("ai_side_question", { input, channel });
+    },
+    ai_side_stop: (conversationId) => call("ai_side_stop", { conversationId }),
 
     ai_search: (query) => call("ai_search", { query }),
     ai_edit_resend: (conversationId, entryId, text, context, onEvent) => {
