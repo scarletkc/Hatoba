@@ -258,6 +258,7 @@ export default defineMessages({
     // fork (AI-41)
     "ai.fork": "从这里创建分支",
     "ai.fork.title": "{title}（分支）",
+    "ai.fork.titleNumbered": "{title}（分支 {n}）",
     "ai.fork.done": "已创建分支，原对话仍在历史对话中。",
     "ai.fork.inHistory": "已创建分支，新对话在历史对话中。",
 
@@ -538,6 +539,7 @@ export default defineMessages({
     // fork (AI-41)
     "ai.fork": "Fork from Here",
     "ai.fork.title": "{title} (fork)",
+    "ai.fork.titleNumbered": "{title} (fork {n})",
     "ai.fork.done": "Forked. The original conversation stays in History.",
     "ai.fork.inHistory": "Forked. The new conversation is in History.",
 
@@ -811,6 +813,7 @@ export default defineMessages({
     // fork (AI-41)
     "ai.fork": "ここから分岐",
     "ai.fork.title": "{title}（分岐）",
+    "ai.fork.titleNumbered": "{title}（分岐 {n}）",
     "ai.fork.done": "分岐しました。元の会話は履歴に残っています。",
     "ai.fork.inHistory": "分岐しました。新しい会話は履歴にあります。",
 

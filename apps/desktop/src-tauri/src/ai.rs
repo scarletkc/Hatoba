@@ -36,8 +36,8 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
-    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, Usage,
-    fix_up_missing_results, pair_results,
+    AiEntry, AssistantEntry, EntryBody, EntryPlace, EntryTarget, Finish, ToolCall, ToolStatus,
+    Usage, fix_up_missing_results, pair_results,
 };
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -122,8 +122,9 @@ const AUTO_COMPACT_TENTHS: u64 = 9;
 /// The rough text-to-token ratio of estimates, the same as the panel's meter (AI-20).
 const CHARS_PER_TOKEN: usize = 4;
 
-/// The most characters a conversation's title holds (AI-23), so a fork's title is cut to it.
-const MAX_TITLE_CHARS: usize = 200;
+/// The most characters a conversation's title holds (AI-23): a rename longer is refused and a
+/// fork's title is cut to it.
+pub const MAX_TITLE_CHARS: usize = 200;
 
 /// Characters of a search snippet (AI-24), and how many of them come before the match.
 const SNIPPET_CHARS: usize = 120;
@@ -625,6 +626,10 @@ impl AiManager {
     /// of it without one, into a new conversation titled `title` ([`fork_copies`]), and returns
     /// the new conversation. The original is not touched. Refused while a turn of the
     /// conversation runs, waiting for approval included, or while it is compacted.
+    ///
+    /// Decrypts every entry of the conversation and encrypts every copy, so run it off the async
+    /// runtime. The vault guard is held to read the entries and to write the fork, and released
+    /// while the entries are decoded and the copies chosen.
     pub fn fork_conversation(
         &self,
         vault: &SharedVault,
@@ -637,8 +642,8 @@ impl AiManager {
         if title.is_empty() {
             return Err(AppError::invalid("title", "the title is empty"));
         }
-        let view = {
-            let mut v = unlocked(vault)?;
+        let (original, stored, hosts) = {
+            let v = unlocked(vault)?;
             let original = find_conversation(&v, conversation_id)?;
             if self.busy(conversation_id) {
                 return Err(AppError::invalid(
@@ -646,81 +651,78 @@ impl AiManager {
                     "The conversation can be forked once its turn or compaction has ended.",
                 ));
             }
-            // The stored JSON is copied as it is, raw messages included; the decoded entries
-            // decide what is copied. Unreadable entries are left out, as from every request.
-            let mut ids = Vec::new();
-            let mut jsons = Vec::new();
-            let mut entries = Vec::new();
-            for hatoba_core::StoredEntry { entry_id, json } in v.ai_entries(conversation_id)? {
-                match serde_json::from_str::<AiEntry>(&json) {
-                    Ok(entry) => {
-                        ids.push(entry_id);
-                        jsons.push(json);
-                        entries.push(entry);
-                    }
-                    Err(_) => tracing::warn!(
-                        conversation_id,
-                        entry_id = %entry_id,
-                        "unreadable conversation entry not forked"
-                    ),
+            let hosts: Vec<(String, String)> = v
+                .hosts()
+                .into_iter()
+                .map(|(id, h)| (id, h.name.clone()))
+                .collect();
+            (original, v.ai_entries(conversation_id)?, hosts)
+        };
+        // The stored JSON is copied as it is, raw messages included; the decoded entries decide
+        // what is copied. Unreadable entries are left out, as from every request.
+        let mut ids = Vec::new();
+        let mut jsons = Vec::new();
+        let mut entries = Vec::new();
+        for hatoba_core::StoredEntry { entry_id, json } in stored {
+            match serde_json::from_str::<AiEntry>(&json) {
+                Ok(entry) => {
+                    ids.push(entry_id);
+                    jsons.push(json);
+                    entries.push(entry);
                 }
-            }
-            let at = match entry_id {
-                Some(entry_id) => Some(
-                    ids.iter()
-                        .position(|id| id == entry_id)
-                        .ok_or_else(|| AppError::not_found("message"))?,
+                Err(_) => tracing::warn!(
+                    conversation_id,
+                    entry_id = %entry_id,
+                    "unreadable conversation entry not forked"
                 ),
-                None => entries.len().checked_sub(1),
-            };
-            let Some(at) = at else {
-                return Err(AppError::invalid(
-                    "conversation_id",
-                    "the conversation has no messages",
-                ));
-            };
-            let copies = fork_copies(&entries, at, entry_id.is_none()).ok_or_else(|| {
-                AppError::invalid(
-                    "entry_id",
-                    "A conversation can be forked from one of your messages or from a finished \
-                     reply.",
-                )
-            })?;
-            // Indices up to `at` are copied in place, so they are also their copies' indices.
-            let context_start = original.context_start.as_deref().and_then(|start| {
-                let from = ids.partition_point(|id| id.as_str() < start);
-                if from <= at {
-                    Some(from)
-                } else {
-                    entries[..=at]
-                        .iter()
-                        .rposition(|e| matches!(e.body, EntryBody::Summary { .. }))
-                }
-            });
-            // AI-09: the host the copies came from, which a message after them may have moved
-            // the original away from.
-            let moved = entries[at + 1..].iter().find_map(|e| match &e.body {
-                EntryBody::User { text } => note_attr(text, HOST_CHANGE, "from"),
-                _ => None,
-            });
-            let place = match moved {
-                Some(from) => place_named(&v, &from),
-                None => Place {
-                    host_id: original.host_id.clone(),
-                    quick_target: original.quick_target.clone(),
-                },
-            };
-            let fork = AiConversation {
-                title,
-                host_id: place.host_id,
-                quick_target: place.quick_target,
-                pinned: false,
-                context_start: None,
-                effort: original.effort,
-                created_at: now_ms(),
-                updated_at: 0,
-            };
-            let copied: Vec<&str> = copies.iter().map(|&i| jsons[i].as_str()).collect();
+            }
+        }
+        let at = match entry_id {
+            Some(entry_id) => Some(
+                ids.iter()
+                    .position(|id| id == entry_id)
+                    .ok_or_else(|| AppError::not_found("message"))?,
+            ),
+            None => entries.len().checked_sub(1),
+        };
+        let Some(at) = at else {
+            return Err(AppError::invalid(
+                "conversation_id",
+                "the conversation has no messages",
+            ));
+        };
+        let copies = fork_copies(&entries, at, entry_id.is_none()).ok_or_else(|| {
+            AppError::invalid(
+                "entry_id",
+                "A conversation can be forked from one of your messages or from a finished reply.",
+            )
+        })?;
+        // Indices up to `at` are copied in place, so they are also their copies' indices.
+        let context_start = original.context_start.as_deref().and_then(|start| {
+            let from = ids.partition_point(|id| id.as_str() < start);
+            if from <= at {
+                Some(from)
+            } else {
+                entries[..=at]
+                    .iter()
+                    .rposition(|e| matches!(e.body, EntryBody::Summary { .. }))
+            }
+        });
+        let (place, origin) = fork_place(&entries[at + 1..], &original, &hosts);
+        let fork = AiConversation {
+            title,
+            host_id: place.host_id,
+            quick_target: place.quick_target,
+            origin,
+            pinned: false,
+            context_start: None,
+            effort: original.effort,
+            created_at: now_ms(),
+            updated_at: 0,
+        };
+        let copied: Vec<&str> = copies.iter().map(|&i| jsons[i].as_str()).collect();
+        let view = {
+            let mut v = unlocked(vault)?;
             let (id, _) = v.ai_create_conversation(fork, &copied, context_start)?;
             tracing::info!(
                 conversation_id,
@@ -831,7 +833,7 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (id, turn, compact, notes, moved_to) = registered?;
+        let (id, turn, compact, notes, moved_to, came_from) = registered?;
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
@@ -854,7 +856,11 @@ impl AiManager {
                 ));
             }
             // AI-05, AI-09: Hatoba's notes come before what the panel sent (spec §13.3).
-            let entry = AiEntry::user(now_ms(), format!("{notes}{text}"));
+            let text = format!("{notes}{text}");
+            let entry = match came_from {
+                Some(came_from) => AiEntry::user_from(now_ms(), text, came_from),
+                None => AiEntry::user(now_ms(), text),
+            };
             let entry_id = append(&mut v, &id, &entry)?;
             let mut conversation = find_conversation(&v, &id)?;
             let before = conversation.clone();
@@ -863,6 +869,8 @@ impl AiManager {
             if let Some(place) = moved_to {
                 conversation.host_id = place.host_id;
                 conversation.quick_target = place.quick_target;
+                // AI-41: the move's note named the server a fork's copies came from.
+                conversation.origin = None;
             }
             if conversation != before {
                 v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
@@ -894,9 +902,9 @@ impl AiManager {
     /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host or
     /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the
     /// registered turn, and whether the new message needs a compaction first (AI-22). Returns the
-    /// conversation's id, the turn, that answer, the notes, and the move, which is stored with
-    /// the message, like the thinking level: a stop while the context is compacted stores no
-    /// message.
+    /// conversation's id, the turn, that answer, the notes, the move, which is stored with the
+    /// message, like the thinking level: a stop while the context is compacted stores no message,
+    /// and where the entries before the message came from, which the message records (AI-41).
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -913,7 +921,7 @@ impl AiManager {
     ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, compact, notes, moved_to) = match conversation_id {
+        let (id, compact, notes, moved_to, recorded) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
                 let before = conversation.clone();
@@ -931,10 +939,20 @@ impl AiManager {
                     list: mut earlier,
                 } = Entries::load(&v, &id)?;
                 let mut came_from = None;
+                // AI-41: where the entries before the message came from, which it records: where
+                // the conversation is, or for an edit, what the edited message recorded.
+                let mut recorded = Some(entry_place(&conversation));
                 if let Some((entry_id, summary_before)) = edit {
+                    recorded = None;
                     if let Some(at) = ids.iter().position(|e| *e == entry_id) {
+                        if let EntryBody::User {
+                            came_from: edited, ..
+                        } = &earlier[at].body
+                        {
+                            recorded.clone_from(edited);
+                        }
                         came_from = earlier[at..].iter().find_map(|e| match &e.body {
-                            EntryBody::User { text } => note_attr(text, HOST_CHANGE, "from"),
+                            EntryBody::User { text, .. } => note_attr(text, HOST_CHANGE, "from"),
                             _ => None,
                         });
                         earlier.truncate(at);
@@ -1015,7 +1033,7 @@ impl AiManager {
                 );
                 let full = format!("{notes}{text}");
                 let compact = compaction_before(&v, &id, &context, &full)?;
-                (id, compact, notes, moved_to)
+                (id, compact, notes, moved_to, recorded)
             }
             None => {
                 let id = v.put(
@@ -1024,6 +1042,7 @@ impl AiManager {
                         title: title_of(text),
                         host_id: context.host_id.clone(),
                         quick_target: tab_target(&context),
+                        origin: None,
                         pinned: false,
                         context_start: None,
                         effort: context.effort.map(core_effort),
@@ -1032,7 +1051,7 @@ impl AiManager {
                     }),
                 )?;
                 *stored = true;
-                (id, false, String::new(), None)
+                (id, false, String::new(), None, Some(EntryPlace::default()))
             }
         };
         let turn = self.register(&id, context, server_id, sink);
@@ -1041,7 +1060,7 @@ impl AiManager {
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, compact, notes, moved_to))
+        Ok((id, turn, compact, notes, moved_to, recorded))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -1920,7 +1939,7 @@ fn context_tokens(entries: &[AiEntry]) -> u64 {
 /// The text of an entry the estimate counts (the meter's `entryText`).
 fn entry_text(entry: &AiEntry) -> std::borrow::Cow<'_, str> {
     match &entry.body {
-        EntryBody::User { text } | EntryBody::Summary { text } => text.as_str().into(),
+        EntryBody::User { text, .. } | EntryBody::Summary { text } => text.as_str().into(),
         EntryBody::Tool { content, .. } => content.as_str().into(),
         EntryBody::Assistant(a) => {
             let mut text = a.text.clone();
@@ -3069,24 +3088,76 @@ fn names_server(v: &Vault, from: &str, here: &AiQuickTarget) -> bool {
         })
 }
 
-/// AI-41: the place a `host_change` note's `from` names: the only saved host with that display
-/// name, or else the quick-connect target it writes as `user@host:port`. A display name may look
-/// like a target, so the saved host comes first. Neither when it names none, as for a host that no
-/// longer exists, whose name the note leaves empty.
-fn place_named(v: &Vault, from: &str) -> Place {
-    let mut named = v
-        .hosts()
-        .into_iter()
-        .filter(|(_, h)| !from.is_empty() && h.name == from);
+/// AI-41: where the copies of a fork came from (AI-09), from `later`, the original's entries after
+/// the fork point, and the fork's `origin` (the field's doc). The first later user message that
+/// records where the entries before it came from tells it. In a conversation from before messages
+/// recorded it, the first later `host_change` note does instead, by name ([`place_named`]). With
+/// neither, the original has stayed where the copies came from.
+fn fork_place(
+    later: &[AiEntry],
+    original: &AiConversation,
+    hosts: &[(String, String)],
+) -> (Place, Option<String>) {
+    for entry in later {
+        let EntryBody::User { text, came_from } = &entry.body else {
+            continue;
+        };
+        if let Some(came_from) = came_from {
+            let place = Place {
+                host_id: came_from.host_id.clone(),
+                quick_target: came_from
+                    .quick_target
+                    .as_ref()
+                    .map(|t| AiQuickTarget::new(&t.username, &t.address, t.port)),
+            };
+            return (place, came_from.origin.clone());
+        }
+        if let Some(from) = note_attr(text, HOST_CHANGE, "from") {
+            return place_named(hosts, from);
+        }
+    }
+    let place = Place {
+        host_id: original.host_id.clone(),
+        quick_target: original.quick_target.clone(),
+    };
+    (place, original.origin.clone())
+}
+
+/// AI-41: the place a `host_change` note's `from` names, among `hosts` (ids and display names):
+/// the only saved host with that display name, or else the quick-connect target it writes as
+/// `user@host:port`. A display name may look like a target, so the saved host comes first. When it
+/// names neither, as for a host renamed or deleted since (whose name the note leaves empty) or a
+/// name two hosts share, no place, and `from` as the fork's `origin`.
+fn place_named(hosts: &[(String, String)], from: String) -> (Place, Option<String>) {
+    let mut named = hosts
+        .iter()
+        .filter(|(_, name)| !from.is_empty() && *name == from);
     if let (Some((host_id, _)), None) = (named.next(), named.next()) {
-        return Place {
-            host_id: Some(host_id),
+        let place = Place {
+            host_id: Some(host_id.clone()),
             quick_target: None,
         };
+        return (place, None);
     }
-    Place {
+    let place = Place {
         host_id: None,
-        quick_target: parse_target(from),
+        quick_target: parse_target(&from),
+    };
+    let origin = place.quick_target.is_none().then_some(from);
+    (place, origin)
+}
+
+/// Where a conversation is (AI-09, AI-41), as a user message records where the entries before it
+/// came from.
+fn entry_place(conversation: &AiConversation) -> EntryPlace {
+    EntryPlace {
+        host_id: conversation.host_id.clone(),
+        quick_target: conversation.quick_target.as_ref().map(|t| EntryTarget {
+            username: t.username.clone(),
+            address: t.address.clone(),
+            port: t.port,
+        }),
+        origin: conversation.origin.clone(),
     }
 }
 
@@ -3122,8 +3193,16 @@ struct Place {
 }
 
 /// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, whether the message
-/// needs a compaction first, the notes, and the move.
-type Opened = (String, Arc<Turn>, bool, String, Option<Place>);
+/// needs a compaction first, the notes, the move, and where the entries before the message came
+/// from (AI-41).
+type Opened = (
+    String,
+    Arc<Turn>,
+    bool,
+    String,
+    Option<Place>,
+    Option<EntryPlace>,
+);
 
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {
@@ -3134,9 +3213,9 @@ fn host_name(v: &Vault, host_id: &str) -> Option<String> {
 
 /// Where a conversation that moves to the host `host_id` or the quick-connect `target` (AI-09)
 /// was, as a `host_change` note names it: its host's display name, empty when the host no longer
-/// exists, or its target (HOST-12). `None` when it had neither, as a home tab chat, or when the
-/// move is between a target and the saved host with its address, port, and user (as **Save as
-/// Host…** makes), which is the same server.
+/// exists, or its target (HOST-12), or with neither, a fork's `origin` (AI-41). `None` when it had
+/// none of them, as a home tab chat, or when the move is between a target and the saved host with
+/// its address, port, and user (as **Save as Host…** makes), which is the same server.
 fn moved_from(
     v: &Vault,
     conversation: &AiConversation,
@@ -3149,7 +3228,8 @@ fn moved_from(
         (None, Some(old)) if host_id.and_then(|id| host_target(v, id)).as_ref() == Some(old) => {
             None
         }
-        (None, old) => old.as_ref().map(target_name),
+        (None, Some(old)) => Some(target_name(old)),
+        (None, None) => conversation.origin.clone(),
     }
 }
 
@@ -3199,7 +3279,7 @@ fn notes_before(
                 }
                 break;
             }
-            EntryBody::User { text } if has_note(text, INTERRUPTED) => break,
+            EntryBody::User { text, .. } if has_note(text, INTERRUPTED) => break,
             EntryBody::Summary { .. } => break,
             EntryBody::User { .. } | EntryBody::Tool { .. } => {}
         }
@@ -3222,7 +3302,7 @@ fn notes_before(
                 }
                 break;
             }
-            EntryBody::User { text } => {
+            EntryBody::User { text, .. } => {
                 if note_attr(text, MODEL_CHANGE, "to").is_some_and(|noted| noted == to) {
                     break;
                 }
@@ -3241,7 +3321,7 @@ fn terminal_before(earlier: &[AiEntry]) -> Option<bool> {
     for entry in earlier.iter().rev() {
         match &entry.body {
             EntryBody::Assistant(a) => return a.terminal,
-            EntryBody::User { text } => {
+            EntryBody::User { text, .. } => {
                 if let Some(to) = note_attr(text, TERMINAL_CHANGE, "to") {
                     return Some(to == "attached");
                 }
@@ -3283,7 +3363,7 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
         };
         let in_entries = entries.ids.iter().zip(&entries.list).find_map(|(id, e)| {
             let text = match &e.body {
-                EntryBody::User { text } | EntryBody::Summary { text } => text.as_str(),
+                EntryBody::User { text, .. } | EntryBody::Summary { text } => text.as_str(),
                 EntryBody::Assistant(a) => a.text.as_str(),
                 EntryBody::Tool { .. } => return None,
             };
@@ -3372,6 +3452,7 @@ pub fn conversation_view_at(
             port: t.port,
             username: t.username.clone(),
         }),
+        origin: c.origin.clone(),
         pinned: c.pinned,
         context_start: c.context_start.clone(),
         effort: c.effort.map(effort_view),
@@ -3386,7 +3467,7 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
     let entry_id = entry_id.to_owned();
     let created_at = entry.created_at;
     match &entry.body {
-        EntryBody::User { text } => AiEntryView::User {
+        EntryBody::User { text, .. } => AiEntryView::User {
             entry_id,
             created_at,
             text: text.clone(),

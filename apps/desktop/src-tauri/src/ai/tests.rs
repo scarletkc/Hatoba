@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::time::{Duration, Instant};
 
-use hatoba_ai::entry::{AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus};
+use hatoba_ai::entry::{
+    AiEntry, AssistantEntry, EntryBody, EntryPlace, Finish, ToolCall, ToolStatus,
+};
 use hatoba_core::model::{
     AiConversation, AiEffort as CoreEffort, AiMessage, AiModel, AiProtocol, AiProvider, Item,
     SETTINGS_ID, SearchKind, SearchProvider, Skill, SkillFile,
@@ -988,7 +990,7 @@ async fn sending_while_a_reply_streams_keeps_the_part_that_streamed() {
         matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "Hel" && a.interrupted)
     );
     assert!(
-        matches!(&entries[2].body, EntryBody::User { text } if *text == format!("{}two", interrupted_block()))
+        matches!(&entries[2].body, EntryBody::User { text, .. } if *text == format!("{}two", interrupted_block()))
     );
     assert!(
         matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Done." && !a.interrupted)
@@ -1227,8 +1229,8 @@ async fn sending_while_a_turn_runs_stops_it_first() {
 
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 3);
-    assert!(matches!(&entries[0].body, EntryBody::User { text } if text == "one"));
-    assert!(matches!(&entries[1].body, EntryBody::User { text } if text == "two"));
+    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "one"));
+    assert!(matches!(&entries[1].body, EntryBody::User { text, .. } if text == "two"));
     assert!(matches!(&entries[2].body, EntryBody::Assistant(a) if a.text == "fast"));
     assert!(
         !first
@@ -2334,7 +2336,7 @@ async fn a_new_message_that_would_fill_the_context_is_sent_after_a_compaction() 
     assert!(!next.contains("First answer."));
     let entries = f.entries(&conv);
     assert!(matches!(&entries[2].body, EntryBody::Summary { .. }));
-    assert!(matches!(&entries[3].body, EntryBody::User { text } if *text == long));
+    assert!(matches!(&entries[3].body, EntryBody::User { text, .. } if *text == long));
 }
 
 #[tokio::test]
@@ -2471,7 +2473,7 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
         .entries(&conv)
         .iter()
         .map(|e| match &e.body {
-            EntryBody::User { text } | EntryBody::Summary { text } => text.clone(),
+            EntryBody::User { text, .. } | EntryBody::Summary { text } => text.clone(),
             EntryBody::Assistant(a) => a.text.clone(),
             EntryBody::Tool { content, .. } => content.clone(),
         })
@@ -2511,7 +2513,7 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
     f.idle(&conv).await;
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 2);
-    assert!(matches!(&entries[0].body, EntryBody::User { text } if text == "alpha-edited"));
+    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "alpha-edited"));
     let request = f.requests().await[2].to_string();
     assert!(!request.contains("SUMMARY ONE"));
 }
@@ -2534,7 +2536,7 @@ async fn editing_while_a_turn_runs_stops_it_first() {
     // The open call and its cancelled result went with the edited message.
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 2);
-    assert!(matches!(&entries[0].body, EntryBody::User { text } if text == "edited"));
+    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "edited"));
     assert!(
         !second
             .entries()
@@ -3071,7 +3073,7 @@ async fn a_message_replaced_while_the_context_is_compacted_is_not_stored() {
     f.idle(&conv).await;
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 4);
-    assert!(matches!(&entries[2].body, EntryBody::User { text } if text == "short"));
+    assert!(matches!(&entries[2].body, EntryBody::User { text, .. } if text == "short"));
     assert!(matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Short answer."));
 }
 
@@ -3360,7 +3362,7 @@ impl Fixture {
         self.entries(conversation_id)
             .into_iter()
             .filter_map(|e| match e.body {
-                EntryBody::User { text } => Some(text),
+                EntryBody::User { text, .. } => Some(text),
                 _ => None,
             })
             .collect()
@@ -4644,7 +4646,7 @@ async fn a_fork_point_needs_every_call_answered_and_takes_late_results() {
     let fork = f.fork(&conv, Some(&ids[2]), "fork").unwrap();
     let copies = f.entries(&fork.id);
     assert_eq!(copies.len(), 4);
-    assert!(matches!(&copies[2].body, EntryBody::User { text } if text == "second"));
+    assert!(matches!(&copies[2].body, EntryBody::User { text, .. } if text == "second"));
     assert!(matches!(&copies[3].body, EntryBody::Tool { content, .. } if content == "late"));
 }
 
@@ -4694,7 +4696,7 @@ async fn a_fork_sends_the_copied_context_and_goes_on_by_itself() {
 async fn a_fork_is_on_the_host_its_copies_came_from() {
     use hatoba_ai::tools::host_change_block;
 
-    let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let f = Fixture::new((0..8).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     let staging = f.add_host("staging-web", "");
     let prod = f.add_host("prod-db", "");
     let on = |host: &str| AiTurnContext {
@@ -4704,17 +4706,35 @@ async fn a_fork_is_on_the_host_its_copies_came_from() {
     let (conv, _) = f.exchange(None, "first", on(&staging)).await;
     f.exchange(Some(&conv), "second", on(&prod)).await;
     let first_reply = entry_id(&f.detail(&conv).entries[1]).to_owned();
+    // Each message records where the entries before it came from.
+    let came_from: Vec<Option<EntryPlace>> = f
+        .entries(&conv)
+        .into_iter()
+        .filter_map(|e| match e.body {
+            EntryBody::User { came_from, .. } => Some(came_from),
+            _ => None,
+        })
+        .collect();
+    let on_staging = EntryPlace {
+        host_id: Some(staging.clone()),
+        ..EntryPlace::default()
+    };
+    assert_eq!(came_from, [Some(EntryPlace::default()), Some(on_staging)]);
 
     // The original moved to prod after the first reply. A fork from that reply is on staging,
-    // and its next message on prod notes the move.
+    // renamed since, and not on the host that took its old name. Its next message on prod notes
+    // the move.
+    rename_host(&f, &staging, "staging-old");
+    add_host_at(&f, "staging-web", "10.0.0.2");
     let fork = f.fork(&conv, Some(&first_reply), "fork").unwrap();
     assert_eq!(fork.host_id.as_deref(), Some(staging.as_str()));
+    assert_eq!(fork.origin, None);
     f.exchange(Some(&fork.id), "again", on(&prod)).await;
     assert_eq!(
         f.user_texts(&fork.id),
         [
             "first".to_owned(),
-            format!("{}again", host_change_block("staging-web", "prod-db"))
+            format!("{}again", host_change_block("staging-old", "prod-db"))
         ]
     );
     // A fork from after the move is on prod.
@@ -4731,10 +4751,139 @@ async fn a_fork_is_on_the_host_its_copies_came_from() {
         (None, Some("root@10.0.0.9:22".to_owned()))
     );
 
-    // A host that no longer exists names no place.
+    // On a host deleted since, the fork's next message notes the move from it, without a name.
     lock(&f.vault).delete(&staging).unwrap();
     let fork = f.fork(&conv, Some(&first_reply), "fork").unwrap();
+    assert_eq!(f.recorded_place(&fork.id), (Some(staging.clone()), None));
+    f.exchange(Some(&fork.id), "again", on(&prod)).await;
+    assert_eq!(
+        f.user_texts(&fork.id)[1],
+        format!("{}again", host_change_block("", "prod-db"))
+    );
+}
+
+#[tokio::test]
+async fn a_fork_from_before_its_conversation_had_a_host_has_none() {
+    let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "");
+    let staging = f.add_host("staging-web", "");
+    let on = |host: &str| AiTurnContext {
+        host_id: Some(host.to_owned()),
+        ..f.context()
+    };
+    // A home tab chat that went on in a tab on prod, as after Continue Here: it took the host
+    // without a note.
+    let (conv, _) = f.exchange(None, "first", f.context()).await;
+    f.exchange(Some(&conv), "second", on(&prod)).await;
+    assert_eq!(f.recorded_place(&conv), (Some(prod.clone()), None));
+    assert_eq!(f.user_texts(&conv), ["first", "second"]);
+    let first_reply = entry_id(&f.detail(&conv).entries[1]).to_owned();
+
+    // A fork from the home tab reply has no host, and takes the next tab's without a note too.
+    let fork = f.fork(&conv, Some(&first_reply), "fork").unwrap();
     assert_eq!(f.recorded_place(&fork.id), (None, None));
+    f.exchange(Some(&fork.id), "again", on(&staging)).await;
+    assert_eq!(f.user_texts(&fork.id), ["first", "again"]);
+    // A fork from after the move is on prod.
+    let whole = f.fork(&conv, None, "whole").unwrap();
+    assert_eq!(whole.host_id.as_deref(), Some(prod.as_str()));
+
+    // An edit of the message that took the host keeps what it recorded.
+    let second = entry_id(&f.detail(&conv).entries[2]).to_owned();
+    f.edit_with(&conv, &second, "second, edited", on(&prod))
+        .await;
+    let fork = f.fork(&conv, Some(&first_reply), "fork").unwrap();
+    assert_eq!(f.recorded_place(&fork.id), (None, None));
+}
+
+#[tokio::test]
+async fn a_fork_of_an_older_conversation_goes_by_the_name_its_note_gives() {
+    use hatoba_ai::tools::host_change_block;
+
+    let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let web = f.add_host("web", "");
+    let twin = f.add_host("twin", "");
+    add_host_at(&f, "twin", "10.0.0.3");
+    let on = |host: &str| AiTurnContext {
+        host_id: Some(host.to_owned()),
+        ..f.context()
+    };
+    // Messages from before they recorded where the entries before them came from: a fork from
+    // before a move goes by the name in the move's note.
+    let older = |from: &str| {
+        let (conv, ids) = f.conversation_of(
+            AiConversation {
+                host_id: Some(web.clone()),
+                ..AiConversation::default()
+            },
+            &[
+                AiEntry::user(1, "first"),
+                f.response("One.", &[]),
+                AiEntry::user(3, format!("{}second", host_change_block(from, "web"))),
+            ],
+        );
+        let fork = f.fork(&conv, Some(&ids[1]), "fork").unwrap();
+        let item = super::find_conversation(&lock(&f.vault), &fork.id).unwrap();
+        let place = (
+            item.host_id,
+            item.quick_target.as_ref().map(super::target_name),
+            item.origin,
+        );
+        (fork.id, place)
+    };
+    assert_eq!(older("web").1, (Some(web.clone()), None, None));
+    assert_eq!(
+        older("root@10.0.0.9:22").1,
+        (None, Some("root@10.0.0.9:22".into()), None)
+    );
+    // A name two hosts share, a host renamed since, and one deleted since, whose name the note
+    // left empty: the fork has no host but keeps the name.
+    assert_eq!(older("twin").1, (None, None, Some("twin".into())));
+    assert_eq!(older("").1, (None, None, Some(String::new())));
+    let (fork, place) = older("old-name");
+    assert_eq!(place, (None, None, Some("old-name".into())));
+
+    // A message on the home tab keeps the name and records it, so a fork of the fork keeps it.
+    f.exchange(Some(&fork), "home", f.context()).await;
+    let first_reply = entry_id(&f.detail(&fork).entries[1]).to_owned();
+    for again in [
+        f.fork(&fork, Some(&first_reply), "again").unwrap(),
+        f.fork(&fork, None, "whole").unwrap(),
+    ] {
+        assert_eq!(again.origin.as_deref(), Some("old-name"));
+        assert_eq!(again.host_id, None);
+    }
+    // The next message in a tab on a host notes the move from it, and the move ends it.
+    f.exchange(Some(&fork), "on twin", on(&twin)).await;
+    assert_eq!(
+        f.user_texts(&fork)[2],
+        format!("{}on twin", host_change_block("old-name", "twin"))
+    );
+    let item = super::find_conversation(&lock(&f.vault), &fork).unwrap();
+    assert_eq!((item.host_id, item.origin), (Some(twin), None));
+}
+
+/// Renames a saved host.
+fn rename_host(f: &Fixture, host_id: &str, name: &str) {
+    let mut v = lock(&f.vault);
+    let mut host = v.get(host_id).and_then(Item::as_host).unwrap().clone();
+    host.name = name.into();
+    v.put(Some(host_id), Item::Host(host)).unwrap();
+}
+
+/// Stores a host at `ops@{address}:22`, so two hosts may share a name but not a server.
+fn add_host_at(f: &Fixture, name: &str, address: &str) -> String {
+    lock(&f.vault)
+        .put(
+            None,
+            Item::Host(hatoba_core::model::Host {
+                name: name.into(),
+                address: address.into(),
+                username: "ops".into(),
+                ..hatoba_core::model::Host::default()
+            }),
+        )
+        .unwrap()
 }
 
 #[test]
@@ -4762,26 +4911,35 @@ fn a_note_names_a_target_or_a_single_host() {
     ] {
         assert_eq!(parse_target(label), None, "{label}");
     }
-    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
-    let web = f.add_host("web", "");
-    f.add_host("twin", "");
-    f.add_host("twin", "");
-    // A display name that looks like a target names the saved host.
-    let lookalike = f.add_host("root@prod:22", "");
-    let v = lock(&f.vault);
+    let hosts: Vec<(String, String)> = [
+        ("h-web", "web"),
+        ("h-twin-1", "twin"),
+        ("h-twin-2", "twin"),
+        // A display name that looks like a target names the saved host.
+        ("h-lookalike", "root@prod:22"),
+    ]
+    .into_iter()
+    .map(|(id, name)| (id.to_owned(), name.to_owned()))
+    .collect();
     let place = |from: &str| {
-        let Place {
-            host_id,
-            quick_target,
-        } = place_named(&v, from);
-        (host_id, quick_target.as_ref().map(target_name))
+        let (
+            Place {
+                host_id,
+                quick_target,
+            },
+            origin,
+        ) = place_named(&hosts, from.to_owned());
+        (host_id, quick_target.as_ref().map(target_name), origin)
     };
-    assert_eq!(place("web"), (Some(web), None));
-    assert_eq!(place("twin"), (None, None));
-    assert_eq!(place("root@prod:22"), (Some(lookalike), None));
-    assert_eq!(place(""), (None, None));
+    assert_eq!(place("web"), (Some("h-web".into()), None, None));
+    assert_eq!(place("twin"), (None, None, Some("twin".into())));
+    assert_eq!(
+        place("root@prod:22"),
+        (Some("h-lookalike".into()), None, None)
+    );
+    assert_eq!(place(""), (None, None, Some(String::new())));
     assert_eq!(
         place("root@10.0.0.9:22"),
-        (None, Some("root@10.0.0.9:22".into()))
+        (None, Some("root@10.0.0.9:22".into()), None)
     );
 }

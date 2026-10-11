@@ -4,8 +4,8 @@ import { lastModel, sameModel } from "./models";
 
 type Tr = (key: MessageKey, params?: Params) => string;
 
-/** The most characters a conversation's title holds, as Rust cuts it (AI-23). */
-const MAX_TITLE_CHARS = 200;
+/** The most characters a conversation's title holds, as Rust's `MAX_TITLE_CHARS` (AI-23): a rename and a fork's title. */
+export const MAX_TITLE_CHARS = 200;
 
 /**
  * For each tool call, keyed `entry index:call index`, the index of the result that answers it: the first
@@ -74,14 +74,30 @@ export function forkModel(entries: AiEntryView[], entryId: string): AiModelRef |
   return sameModel(answered, lastModel(entries.slice(0, at + 1))) ? null : answered;
 }
 
+/** A title's fork marks, numbered or not, in every language a device may have marked it in (`forkTitle`). */
+const FORK_MARKS = LOCALES.flatMap((locale) => {
+  const escape = (text: string) => text.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const numbered = escape(translate(locale, "ai.fork.titleNumbered", { title: "", n: "#" })).replace("#", "\\d+");
+  return [new RegExp(`\\s*${escape(translate(locale, "ai.fork.title", { title: "" }))}$`), new RegExp(`\\s*${numbered}$`)];
+});
+
 /**
- * AI-41: a fork's title, "*title* (fork)" in the panel's language, with the original's title cut so the mark
- * still fits in a title. A fork of a fork keeps its title, whichever language marked it, as it synced from
- * a device that may use another.
+ * AI-41: a fork's title in the panel's language: the original's without the fork marks it ends with, in any
+ * language, then "(fork)", or "(fork 2)", "(fork 3)"… for the first that no title in `taken` (History's) has,
+ * with the original's title cut so the whole fits in a title.
  */
-export function forkTitle(t: Tr, title: string): string {
-  const original = title.trim() || t("ai.untitled");
-  if (LOCALES.some((locale) => original.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim()))) return original;
-  const room = MAX_TITLE_CHARS - [...t("ai.fork.title", { title: "" })].length;
-  return t("ai.fork.title", { title: [...original].slice(0, room).join("").trimEnd() });
+export function forkTitle(t: Tr, title: string, taken: Iterable<string>): string {
+  const base = withoutMarks(title.trim()) || t("ai.untitled");
+  const used = new Set(taken);
+  const titled = (title: string, n: number) => (n === 1 ? t("ai.fork.title", { title }) : t("ai.fork.titleNumbered", { title, n }));
+  for (let n = 1; ; n++) {
+    const room = MAX_TITLE_CHARS - [...titled("", n)].length;
+    const candidate = titled([...base].slice(0, room).join("").trimEnd(), n);
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+function withoutMarks(title: string): string {
+  const mark = FORK_MARKS.find((m) => m.test(title));
+  return mark ? withoutMarks(title.replace(mark, "")) : title;
 }

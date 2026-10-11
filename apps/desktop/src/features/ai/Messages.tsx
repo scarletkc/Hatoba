@@ -132,11 +132,12 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   };
 
   // AI-26: the user's stored messages can be edited and sent again while nothing runs; AI-41: the
-  // conversation can be forked from them and from finished replies then too.
+  // conversation can be forked from them and from finished replies then too, unless a fork of it is being made.
   const canEdit = !!slot.conversationId && !turn && !slot.remoteRunning && !slot.compacting && !slot.loading;
   const forkable = useMemo(() => forkPoints(entries), [entries]);
   const conversationId = slot.conversationId;
-  const fork = (entryId: string) => (canEdit && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined);
+  const forking = useAi((st) => !!conversationId && st.forking.includes(conversationId));
+  const fork = (entryId: string) => (canEdit && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined);
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
   // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.

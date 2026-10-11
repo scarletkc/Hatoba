@@ -1075,26 +1075,34 @@ export async function pinConversation(id: string, pinned: boolean) {
 
 /**
  * AI-41: copies a conversation up to the entry `entryId` (all of it with null) into a new conversation, and
- * opens that in the slot as History's Open does (AI-09). Not while the conversation is busy. When the slot
- * moved on while Rust copied (another conversation, a message, a turn or a compaction, even one that has ended
- * since), the fork stays in History.
+ * opens that in the slot as History's Open does (AI-09). Not while the conversation is busy, or while a fork
+ * of it is being made. The fork stays in History when opening it would stop or replace something: the slot
+ * is busy (a turn running or waiting for approval, or a compaction), or was when Fork was chosen, or it moved
+ * on while Rust copied (another conversation, a message, a turn or a compaction, even one that has ended since).
  */
 export async function forkConversation(slotId: string, id: string, entryId: string | null) {
-  if (conversationBusy(id)) return;
+  if (conversationBusy(id) || useAi.getState().forking.includes(id)) return;
+  useAi.setState((st) => ({ forking: [...st.forking, id] }));
   const shown = slotOf(id);
   const source = shown ? getSlot(shown) : null;
   const original = source?.conversation ?? useAi.getState().history?.find((c) => c.id === id) ?? null;
   // A message the original's next reply answered with another model goes on with that model (AI-05).
   const model = entryId && source ? forkModel(source.entries, entryId) : null;
-  const before = getSlot(slotId);
+  // The stored slot itself: one never used is not stored, and getSlot makes a new blank one each time.
+  const before = useAi.getState().slots[slotId];
   const runner = runners.get(slotId);
+  const busy = slotBusy(slotId);
   try {
-    const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? ""));
+    // The number in the title skips those History has (AI-41).
+    if (!useAi.getState().history) await loadHistory();
+    const taken = (useAi.getState().history ?? []).map((c) => c.title);
+    const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? "", taken));
     updateConversation(fork);
     // Every message, stored entry and reload gives the slot a new entries array, so the same array means
     // nothing happened in it meanwhile, however it ended.
-    const now = getSlot(slotId);
-    if (now.conversationId !== before.conversationId || now.entries !== before.entries || runners.get(slotId) !== runner || now.compacting !== before.compacting) {
+    const now = useAi.getState().slots[slotId];
+    const movedOn = now?.conversationId !== before?.conversationId || now?.entries !== before?.entries || runners.get(slotId) !== runner || now?.compacting !== before?.compacting;
+    if (busy || slotBusy(slotId) || movedOn) {
       toast(t("ai.fork.inHistory"), "success");
       return;
     }
@@ -1104,6 +1112,8 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
     focusInput();
   } catch (e) {
     toast(aiErrorMessage(e), "error");
+  } finally {
+    useAi.setState((st) => ({ forking: st.forking.filter((x) => x !== id) }));
   }
 }
 

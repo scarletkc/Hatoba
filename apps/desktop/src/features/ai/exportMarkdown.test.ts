@@ -12,6 +12,7 @@ const conversation: AiConversationView = {
   title: "Disk on prod",
   host_id: "h1",
   quick_target: null,
+  origin: null,
   pinned: false,
   context_start: "s1",
   effort: null,

@@ -73,26 +73,43 @@ describe("forkModel", () => {
 describe("forkTitle", () => {
   const tr = (locale: Locale) => (key: MessageKey, params?: Params) => translate(locale, key, params);
 
-  it("marks the original's title once, in the panel's language", () => {
-    expect(forkTitle(tr("en"), "Disk usage")).toBe("Disk usage (fork)");
-    expect(forkTitle(tr("zh-CN"), "磁盘空间")).toBe("磁盘空间（分支）");
-    expect(forkTitle(tr("en"), "Disk usage (fork)")).toBe("Disk usage (fork)");
-    expect(forkTitle(tr("en"), "  ")).toBe("Untitled conversation (fork)");
+  it("marks the original's title in the panel's language", () => {
+    expect(forkTitle(tr("en"), "Disk usage", [])).toBe("Disk usage (fork)");
+    expect(forkTitle(tr("zh-CN"), "磁盘空间", [])).toBe("磁盘空间（分支）");
+    expect(forkTitle(tr("ja"), "ディスク", [])).toBe("ディスク（分岐）");
+    expect(forkTitle(tr("en"), "  ", [])).toBe("Untitled conversation (fork)");
   });
 
-  it("keeps a title another language marked", () => {
-    expect(forkTitle(tr("ja"), "Disk usage (fork)")).toBe("Disk usage (fork)");
-    expect(forkTitle(tr("en"), "磁盘空间（分支）")).toBe("磁盘空间（分支）");
-    expect(forkTitle(tr("zh-CN"), "ディスク（分岐）")).toBe("ディスク（分岐）");
+  it("numbers a fork whose title History has already", () => {
+    const taken = ["Disk usage", "Disk usage (fork)", "Disk usage (fork 2)", "Other (fork 3)"];
+    expect(forkTitle(tr("en"), "Disk usage", taken)).toBe("Disk usage (fork 3)");
+    expect(forkTitle(tr("zh-CN"), "磁盘空间", ["磁盘空间（分支）"])).toBe("磁盘空间（分支 2）");
+    expect(forkTitle(tr("ja"), "ディスク", ["ディスク（分岐）"])).toBe("ディスク（分岐 2）");
+  });
+
+  it("takes off the marks a fork's title ends with, in any language, numbered or not", () => {
+    const taken = ["Disk usage (fork)"];
+    expect(forkTitle(tr("en"), "Disk usage (fork)", taken)).toBe("Disk usage (fork 2)");
+    expect(forkTitle(tr("en"), "Disk usage (fork 7)", taken)).toBe("Disk usage (fork 2)");
+    expect(forkTitle(tr("en"), "Disk usage（分支 2）", taken)).toBe("Disk usage (fork 2)");
+    expect(forkTitle(tr("zh-CN"), "Disk usage (fork) (fork)", [])).toBe("Disk usage（分支）");
+    expect(forkTitle(tr("ja"), "磁盘空间（分支）", [])).toBe("磁盘空间（分岐）");
+    // Only a mark at the end, and only a whole one.
+    expect(forkTitle(tr("en"), "(fork) of nginx", [])).toBe("(fork) of nginx (fork)");
+    expect(forkTitle(tr("en"), "Disk usage (forks)", [])).toBe("Disk usage (forks) (fork)");
+    expect(forkTitle(tr("en"), "(fork)", [])).toBe("Untitled conversation (fork)");
   });
 
   it("cuts a long title so the mark still fits in 200 characters", () => {
     for (const locale of ["en", "zh-CN", "ja"] as const) {
-      const title = forkTitle(tr(locale), "日".repeat(200));
+      const title = forkTitle(tr(locale), "日".repeat(200), []);
       expect([...title].length).toBe(200);
       expect(title.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim())).toBe(true);
+      const numbered = forkTitle(tr(locale), "日".repeat(200), [title]);
+      expect([...numbered].length).toBe(200);
+      expect(numbered.endsWith(translate(locale, "ai.fork.titleNumbered", { title: "", n: 2 }).trim())).toBe(true);
     }
     // A cut that ends at a space leaves none before the mark.
-    expect(forkTitle(tr("en"), `${"a".repeat(192)} b`)).toBe(`${"a".repeat(192)} (fork)`);
+    expect(forkTitle(tr("en"), `${"a".repeat(192)} b`, [])).toBe(`${"a".repeat(192)} (fork)`);
   });
 });

@@ -185,7 +185,7 @@ fn plan<'a>(req: &ChatRequest<'a>, protocol: Protocol, allow_raw: bool) -> (Vec<
     let mut used_raw = false;
     for (i, entry) in entries.iter().enumerate() {
         match &entry.body {
-            EntryBody::User { text } => turns.push(Turn::User(Cow::Borrowed(text.as_str()))),
+            EntryBody::User { text, .. } => turns.push(Turn::User(Cow::Borrowed(text.as_str()))),
             EntryBody::Summary { text } => turns.push(Turn::User(Cow::Owned(summary_text(text)))),
             EntryBody::Tool { .. } => {}
             EntryBody::Assistant(a) => {

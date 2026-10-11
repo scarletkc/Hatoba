@@ -26,6 +26,7 @@ const view = (host_id: string | null, quick_target: QuickTarget | null): AiConve
   title: "t",
   host_id,
   quick_target,
+  origin: null,
   pinned: false,
   context_start: null,
   effort: null,

@@ -69,6 +69,14 @@ interface Conv {
   runningUntil: number;
 }
 
+/**
+ * Like Rust's `EntryPlace` (AI-41), which a user entry records and the view does not carry: where the conversation
+ * was when the message was stored, before its move.
+ */
+type Recorded = Pick<AiConversationView, "host_id" | "quick_target" | "origin">;
+
+const placeOf = (c: Recorded): Recorded => ({ host_id: c.host_id, quick_target: c.quick_target, origin: c.origin });
+
 /** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
 interface Move {
   from: string | null;
@@ -151,6 +159,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const compacting = new Set<string>();
   /** By reply entry id: whether its request offered the terminal tools (AI-09). */
   const replyTerminal = new Map<string, boolean>();
+  /** By user entry id: where the entries before it came from (`Recorded`). */
+  const cameFrom = new Map<string, Recorded>();
   /** Like Rust's `AssistantEntry.interrupted`, which the view does not carry: replies the user stopped (§13.1). */
   const interrupted = new Set<string>();
   let errorShown = false;
@@ -686,9 +696,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * The user's message after a compaction it waited for, unless the turn was stopped meanwhile, with the thinking
-   * level and the move its note tells of (like Rust).
+   * level, the move its note tells of, and where the entries before it came from, `recorded` (like Rust).
    */
-  async function storeMessage(c: Conv, turn: Turn, text: string, context: AiTurnContext, move: Move | null): Promise<AiEntryView> {
+  async function storeMessage(c: Conv, turn: Turn, text: string, context: AiTurnContext, move: Move | null, recorded: Recorded | null): Promise<AiEntryView> {
     if (!(await compactBefore(c, turn, text))) {
       if (turns.get(c.view.id) === turn) turns.delete(c.view.id);
       fail("cancelled", "the message was stopped before it was sent");
@@ -696,9 +706,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     // AI-05: the conversation keeps the level of its last message.
     if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
     if (move) {
-      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, updated_at: Date.now() };
+      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, origin: null, updated_at: Date.now() };
     }
     const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
+    if (recorded) cameFrom.set(user_entry.entry_id, recorded);
     c.entries.push(user_entry);
     begin(turn);
     return user_entry;
@@ -1010,7 +1021,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const at = (offset: number) => created + offset;
       const c: Conv = {
         // The pinned one was last sent at High (AI-05).
-        view: { id, title, host_id: host, quick_target: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
+        view: { id, title, host_id: host, quick_target: null, origin: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
         entries: build(at),
         runningUntil: 0,
       };
@@ -1192,6 +1203,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const terminal = replyTerminal.get(e.entry_id);
         if (terminal !== undefined) replyTerminal.set(entry_id, terminal);
         if (interrupted.has(e.entry_id)) interrupted.add(entry_id);
+        const recorded = cameFrom.get(e.entry_id);
+        if (recorded) cameFrom.set(entry_id, recorded);
         return { ...e, entry_id };
       });
       // The copy of the entry the original's context starts at, or the newest copied summary.
@@ -1201,22 +1214,28 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const from = c.entries.findIndex((e) => e.entry_id >= origin);
         start = from >= 0 && from <= at ? from : c.entries.slice(0, at + 1).findLastIndex((e) => e.role === "summary");
       }
-      // The place the copies came from: the original's, unless a later message moved it (AI-09).
-      const moved = c.entries
-        .slice(at + 1)
-        .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
-        .find((n) => n.kind === "host_change");
-      let host_id = c.view.host_id;
-      let quick_target = c.view.quick_target;
-      if (moved?.kind === "host_change") {
+      // Like Rust's `fork_place`: what the first later message recorded, or the name its move's note gives, or the
+      // original's place.
+      let place = placeOf(c.view);
+      for (const e of c.entries.slice(at + 1)) {
+        if (e.role !== "user") continue;
+        const recorded = cameFrom.get(e.entry_id);
+        if (recorded) {
+          place = recorded;
+          break;
+        }
+        const moved = parseMessage(e.text).notes.find((n) => n.kind === "host_change");
+        if (moved?.kind !== "host_change") continue;
         const target = /\s/.test(moved.from) ? null : parseQuickConnect(moved.from);
         const named = ((await deps.hosts?.()) ?? []).filter((h) => moved.from && h.name === moved.from);
-        host_id = named.length === 1 ? named[0].id : null;
-        quick_target = !host_id && target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
+        const host_id = named.length === 1 ? named[0].id : null;
+        const quick_target = !host_id && target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
+        place = { host_id, quick_target, origin: host_id || quick_target ? null : moved.from };
+        break;
       }
       const now = Date.now();
       const fork: Conv = {
-        view: { id: newId(), title: name, host_id, quick_target, pinned: false, context_start: copied[start]?.entry_id ?? null, effort: c.view.effort, created_at: now, updated_at: now },
+        view: { id: newId(), title: name, ...place, pinned: false, context_start: copied[start]?.entry_id ?? null, effort: c.view.effort, created_at: now, updated_at: now },
         entries: copied,
         runningUntil: 0,
       };
@@ -1238,6 +1257,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             title: titleOf(input.text),
             host_id: input.context.host_id,
             quick_target: !input.context.host_id && input.context.target ? recordedTarget(input.context.target) : null,
+            origin: null,
             pinned: false,
             context_start: null,
             effort: input.context.effort,
@@ -1253,7 +1273,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
       const notes = input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "";
-      const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move);
+      const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null };
+      const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move, recorded);
       return { conversation: view(c), user_entry };
     },
     ai_retry: async (id, context, onEvent) => {
@@ -1363,7 +1384,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         .slice(i)
         .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
         .find((n) => n.kind === "host_change");
-      let cameFrom: string | null = moved?.kind === "host_change" ? moved.from : null;
+      let noted: string | null = moved?.kind === "host_change" ? moved.from : null;
+      // Like Rust: the message records what the edited one did.
+      const recorded = cameFrom.get(entryId) ?? null;
       c.entries = c.entries.slice(0, i);
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
@@ -1373,10 +1396,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const turn = startTurn(c, context, onEvent, false);
       const move = await moveOf(c, context);
       // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
-      if (cameFrom !== null && (await namesServer(c, move, cameFrom))) cameFrom = null;
-      else if (cameFrom === null) cameFrom = move?.from ?? null;
-      const notes = await notesBefore(c, [...c.entries], move, cameFrom, context);
-      const user_entry = await storeMessage(c, turn, notes + text, context, move);
+      if (noted !== null && (await namesServer(c, move, noted))) noted = null;
+      else if (noted === null) noted = move?.from ?? null;
+      const notes = await notesBefore(c, [...c.entries], move, noted, context);
+      const user_entry = await storeMessage(c, turn, notes + text, context, move, recorded);
       return { conversation: view(c), user_entry };
     },
     // The browser reads dropped files itself (File API); there are no paths to read here.
