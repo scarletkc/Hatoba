@@ -135,5 +135,8 @@
 
 .consequence {
   display: block;
+}
+
+.consequence + .consequence {
   margin-top: 6px;
 }

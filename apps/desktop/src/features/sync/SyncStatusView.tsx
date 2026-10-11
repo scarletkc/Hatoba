@@ -10,7 +10,8 @@ import type { DeviceView, SyncStatus, WorkerUpdate } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, openExternal } from "./external";
-import { ChangePasswordDialog, RecoveryCodeDialog } from "./SyncDialogs";
+import { NewRecoveryDialog, VerifyPasswordDialog } from "@/features/settings/dialogs";
+import { ChangePasswordDialog } from "./SyncDialogs";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";
 import { UpgradeDialog } from "./UpgradeDialog";
 import s from "./Sync.module.css";
@@ -315,6 +316,7 @@ function Devices({ status }: { status: SyncStatus }) {
 function SecurityNote() {
   const t = useT();
   const [dialog, setDialog] = useState<"recovery" | "password" | null>(null);
+  const [newCode, setNewCode] = useState<string | null>(null);
 
   const disconnect = async () => {
     const ok = await confirm({
@@ -336,7 +338,7 @@ function SecurityNote() {
     <div className={s.security}>
       <Icon name="shield-check" className={s.securityIcon} />
       <div className={s.securityText}>
-        <span className={s.securityTitle}>{t("sync.security.title")}</span> {t("sync.security.body")}
+        <span className={s.securityTitle}>{t("sync.security.title")}</span>
         <div className={s.securityLinks}>
           <LinkButton className={s.securityLink} onClick={() => setDialog("recovery")}>
             {t("sync.link.recovery")}
@@ -349,8 +351,15 @@ function SecurityNote() {
           </LinkButton>
         </div>
       </div>
-      {dialog === "recovery" && <RecoveryCodeDialog onClose={() => setDialog(null)} />}
+      {dialog === "recovery" && (
+        <VerifyPasswordDialog
+          body={t("settings.verify.recovery")}
+          onClose={() => setDialog(null)}
+          onVerify={async (pw) => setNewCode(await api.vault_rotate_recovery(pw))}
+        />
+      )}
       {dialog === "password" && <ChangePasswordDialog onClose={() => setDialog(null)} />}
+      {newCode && <NewRecoveryDialog code={newCode} onClose={() => setNewCode(null)} />}
     </div>
   );
 }

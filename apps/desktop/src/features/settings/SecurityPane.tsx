@@ -8,23 +8,29 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
 import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "./dialogs";
-import { Pane, SettingRow, type PaneProps } from "./shared";
+import { durationLabel } from "./durations";
+import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./SecurityPane.module.css";
 
-const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 0];
+const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 240, 480, 0];
+const CLIPBOARD_CLEAR_SECS = [30, 60, 90, 120, 300, 0];
 
 type Dialog = null | "hello" | "recovery" | "password";
 
-/** Settings → Security: auto-lock (SEC-02/03), Windows Hello (SEC-07), password (VAULT-05), recovery code, lock. */
-export function SecurityPane({ settings, update }: PaneProps) {
+/** The choices, plus the stored value when it is none of them. */
+const withValue = (choices: number[], value: number) => (choices.includes(value) ? choices : [...choices, value]);
+
+/**
+ * Settings → Security: auto-lock (SEC-02/03) and clipboard clearing (SEC-08), kept per device, Windows Hello
+ * (SEC-07), password (VAULT-05), recovery code, lock.
+ */
+export function SecurityPane() {
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const vault = useApp((st) => st.vault);
+  const [prefs, setPrefs] = usePrefs();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [newCode, setNewCode] = useState<string | null>(null);
-
-  const minutesLabel = (m: number) => (m === 0 ? t("settings.sec.never") : m === 60 ? t("settings.sec.hour") : t("settings.sec.minutes", { n: m }));
-  const autoLockValues = settings && !AUTO_LOCK_MINUTES.includes(settings.auto_lock_minutes) ? [...AUTO_LOCK_MINUTES, settings.auto_lock_minutes] : AUTO_LOCK_MINUTES;
 
   const mac = platform === "macos";
   const biometricLabel = mac ? t("settings.sec.touchId") : t("settings.sec.hello");
@@ -41,39 +47,49 @@ export function SecurityPane({ settings, update }: PaneProps) {
 
   return (
     <Pane>
-      {settings && (
-        <Group>
-          <SettingRow label={t("settings.sec.autoLock")} hint={t("settings.sec.autoLock.hint")}>
-            <PopupSelect
-              ariaLabel={t("settings.sec.autoLock")}
-              value={settings.auto_lock_minutes}
-              minWidth={140}
-              options={autoLockValues.map((m) => ({ value: m, label: minutesLabel(m) }))}
-              onChange={(auto_lock_minutes) => update({ auto_lock_minutes })}
-            />
+      <Group>
+        <SettingRow label={t("settings.sec.autoLock")}>
+          <PopupSelect
+            ariaLabel={t("settings.sec.autoLock")}
+            value={prefs.auto_lock_minutes}
+            minWidth={140}
+            options={withValue(AUTO_LOCK_MINUTES, prefs.auto_lock_minutes).map((m) => ({ value: m, label: durationLabel(t, m * 60) }))}
+            onChange={(auto_lock_minutes) => setPrefs({ auto_lock_minutes })}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.sec.sleep")}>
+          <Switch label={t("settings.sec.sleep")} checked={prefs.lock_on_sleep} onChange={(lock_on_sleep) => setPrefs({ lock_on_sleep })} />
+        </SettingRow>
+        <SettingRow label={t("settings.sec.disconnect")} hint={t("settings.sec.disconnect.hint")}>
+          <Switch
+            label={t("settings.sec.disconnect")}
+            checked={prefs.lock_disconnects_sessions}
+            onChange={(lock_disconnects_sessions) => setPrefs({ lock_disconnects_sessions })}
+          />
+        </SettingRow>
+        <SettingRow label={t("settings.sec.clipboard")} hint={t("settings.sec.clipboard.hint")}>
+          <PopupSelect
+            ariaLabel={t("settings.sec.clipboard")}
+            value={prefs.clipboard_clear_secs}
+            minWidth={140}
+            options={withValue(CLIPBOARD_CLEAR_SECS, prefs.clipboard_clear_secs).map((n) => ({ value: n, label: durationLabel(t, n) }))}
+            onChange={(clipboard_clear_secs) => setPrefs({ clipboard_clear_secs })}
+          />
+        </SettingRow>
+        {vault?.biometric_available && (
+          <SettingRow label={biometricLabel}>
+            <Switch label={biometricLabel} checked={vault.biometric_enabled} onChange={(on) => void setBiometric(on)} />
           </SettingRow>
-          <SettingRow label={t("settings.sec.disconnect")} hint={t("settings.sec.disconnect.hint")}>
-            <Switch
-              label={t("settings.sec.disconnect")}
-              checked={settings.lock_disconnects_sessions}
-              onChange={(lock_disconnects_sessions) => update({ lock_disconnects_sessions })}
-            />
-          </SettingRow>
-          {vault?.biometric_available && (
-            <SettingRow label={biometricLabel} hint={t("settings.sec.biometric.hint")}>
-              <Switch label={biometricLabel} checked={vault.biometric_enabled} onChange={(on) => void setBiometric(on)} />
-            </SettingRow>
-          )}
-        </Group>
-      )}
+        )}
+      </Group>
 
       <Group>
-        <SettingRow label={t("settings.sec.password")} hint={t("settings.sec.password.hint")}>
+        <SettingRow label={t("settings.sec.password")}>
           <Button icon="lock-key" onClick={() => setDialog("password")}>
             {t("settings.sec.password.button")}
           </Button>
         </SettingRow>
-        <SettingRow label={t("settings.sec.recovery")} hint={t("settings.sec.recovery.hint")}>
+        <SettingRow label={t("settings.sec.recovery")}>
           <Button icon="shield-check" onClick={() => setDialog("recovery")}>
             {t("settings.sec.recovery.button")}
           </Button>
@@ -81,7 +97,7 @@ export function SecurityPane({ settings, update }: PaneProps) {
       </Group>
 
       <Group>
-        <SettingRow label={t("settings.sec.lockNow")} hint={t("settings.sec.lockNow.hint")}>
+        <SettingRow label={t("settings.sec.lockNow")}>
           <Button icon="lock-simple" onClick={() => void useApp.getState().lock()}>
             {t("settings.sec.lockNow.button")}
             <span className={s.kbd}>{shortcutLabel(platform, "Ctrl+Shift+L", "⌘L")}</span>

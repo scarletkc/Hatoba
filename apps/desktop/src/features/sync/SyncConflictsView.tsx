@@ -207,11 +207,6 @@ export function SyncConflictsView({ onClose }: { onClose: () => void }) {
               onResolve={(action) => void resolve(c, action)}
             />
           ))}
-
-          <div className={s.note}>
-            <Icon name="shield-check" />
-            {t("sync.cf.note")}
-          </div>
         </div>
       </div>
     </div>

@@ -51,6 +51,7 @@ import type {
   McpServerStatus,
   McpServerView,
   McpToolInfo,
+  McpProxyInfo,
   ProbeResult,
   ProxyInput,
   ProxyView,
@@ -127,7 +128,7 @@ export interface HatobaApi {
   host_set_favorite(id: string, favorite: boolean): Promise<void>;
   /** TERM-12: show the server's resource usage in this host's terminals (device-local). */
   host_set_show_stats(id: string, on: boolean): Promise<void>;
-  /** SEC-08: Rust copies the saved password to the clipboard and clears it after 30 s. */
+  /** SEC-08: Rust copies the saved password to the clipboard and clears it after this device's delay. */
   host_copy_password(id: string): Promise<void>;
   groups_list(): Promise<GroupView[]>;
   group_save(input: GroupInput): Promise<GroupView>;
@@ -347,11 +348,8 @@ export interface HatobaApi {
   skill_set_enabled(id: string, enabled: boolean): Promise<void>;
   /** Reads a folder or `.zip` the user picked; nothing is saved. */
   skill_import_preview(path: string): Promise<SkillImportPreview>;
-  /**
-   * Imports what the preview showed: reads the path again and refuses it (`invalid_input`) when it no longer
-   * matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a new name.
-   */
-  skill_import(path: string, token: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
+  /** Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename` saves it under a new name. */
+  skill_import(path: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
   /** Writes the skill as a `.zip` to a path the user picked. */
   skill_export(id: string, path: string): Promise<void>;
 
@@ -373,6 +371,12 @@ export interface HatobaApi {
    * else from the running servers. Null when neither has it, or its server was deleted.
    */
   mcp_tool_info(conversation_id: string, name: string): Promise<McpToolInfo | null>;
+  /**
+   * AI-45: the MCP tool a `call_mcp_tool` call with `args` names, resolved as `ai_tool_run` resolves it, and
+   * whether the call runs: one whose arguments do not match the tool's schema, or that names no tool of the
+   * conversation or a deleted server's, gets its error result without asking.
+   */
+  mcp_proxy_info(conversation_id: string, args: string): Promise<McpProxyInfo>;
   /** AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
   mcp_import_preview(json: string): Promise<McpImportPreview>;
   /** Adds every importable server; env and header values move into the vault. */

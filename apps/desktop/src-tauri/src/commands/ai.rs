@@ -606,9 +606,9 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
     }
     settings.ai = ai;
     let item = Item::Settings(settings);
-    // The Worker and D1 would refuse a larger settings item on every sync (§6.2); only
-    // instructions whose JSON is far longer than their text (many quotes) get there.
-    if item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
+    // With sync on, the Worker and D1 would refuse a larger settings item on every sync (§6.2);
+    // only instructions whose JSON is far longer than their text (many quotes) get there.
+    if v.sync_config()?.is_some() && item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
         return Err(AppError::invalid(
             "custom_instructions",
             "the custom instructions are too large to sync",
@@ -1281,11 +1281,19 @@ mod tests {
             ..ai_settings_view(&v.settings().ai)
         };
         save_ai_settings(&mut v, &longest).unwrap();
-        for refused in [
-            format!("{text}z"),
-            // Within the limit, but its JSON does not fit a synced item.
-            "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES),
-        ] {
+        // Within the limit, but its JSON does not fit a synced item: refused only with sync on.
+        let quotes = AiSettingsView {
+            custom_instructions: "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES),
+            ..ai_settings_view(&v.settings().ai)
+        };
+        save_ai_settings(&mut v, &quotes).unwrap();
+        save_ai_settings(&mut v, &longest).unwrap();
+        let config = hatoba_core::sync::SyncConfig::Worker {
+            url: "https://sync.example.workers.dev".into(),
+            deployment: None,
+        };
+        v.set_sync_config(Some(&config)).unwrap();
+        for refused in [format!("{text}z"), quotes.custom_instructions] {
             let too_long = AiSettingsView {
                 custom_instructions: refused,
                 ..ai_settings_view(&v.settings().ai)
@@ -1294,6 +1302,7 @@ mod tests {
             assert_eq!(err.field.as_deref(), Some("custom_instructions"));
             assert_eq!(v.settings().ai.custom_instructions, text);
         }
+        v.set_sync_config(None).unwrap();
 
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);

@@ -143,7 +143,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "proxies" && <ProxiesPane />}
-          {tab === "security" && <SecurityPane {...pane} />}
+          {tab === "security" && <SecurityPane />}
           {tab === "ai" && <AiPane />}
           {tab === "about" && <AboutPane />}
         </div>

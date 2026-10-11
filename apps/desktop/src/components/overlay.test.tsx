@@ -213,6 +213,22 @@ describe("vault lock", () => {
     expect(document.body.querySelector("textarea")?.value).toBe("SECRET-KEY-MARKER");
   });
 
+  it("shows a modal opened on the lock screen", () => {
+    act(() => setOverlaysLocked(true));
+    const onClose = vi.fn();
+    render(
+      <Modal whileLocked onClose={onClose}>
+        <input defaultValue="Recovery code" />
+      </Modal>,
+    );
+    expect(document.body.querySelector("input")?.value).toBe("Recovery code");
+    expect(document.activeElement?.tagName).toBe("INPUT");
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("cancels a pending confirmation when the vault locks", async () => {
     render(<ConfirmHost />);
     let answer: Promise<boolean> | undefined;

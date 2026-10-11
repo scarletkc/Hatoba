@@ -141,10 +141,7 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
         </>
       }
     >
-      <SheetHeader
-        title={proxy ? t("settings.proxy.dlg.editTitle") : t("settings.proxy.dlg.addTitle")}
-        subtitle={t("settings.proxy.dlg.subtitle")}
-      />
+      <SheetHeader title={proxy ? t("settings.proxy.dlg.editTitle") : t("settings.proxy.dlg.addTitle")} />
       <form
         id={ids.form}
         className={s.form}
@@ -164,19 +161,16 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
               onChange={(e) => patch({ name: e.target.value }, "name")}
             />
           </FormRow>
-          <FormRow label={t("settings.proxy.f.kind")} top={form.kind === "http"}>
-            <div className={s.stack}>
-              <Segmented<ProxyKind>
-                ariaLabel={t("settings.proxy.f.kind")}
-                value={form.kind}
-                options={[
-                  { value: "socks5", label: KIND_LABEL.socks5 },
-                  { value: "http", label: KIND_LABEL.http },
-                ]}
-                onChange={setKind}
-              />
-              {form.kind === "http" && <span className={s.hint}>{t("settings.proxy.f.kind.http")}</span>}
-            </div>
+          <FormRow label={t("settings.proxy.f.kind")}>
+            <Segmented<ProxyKind>
+              ariaLabel={t("settings.proxy.f.kind")}
+              value={form.kind}
+              options={[
+                { value: "socks5", label: KIND_LABEL.socks5 },
+                { value: "http", label: KIND_LABEL.http },
+              ]}
+              onChange={setKind}
+            />
           </FormRow>
           <FormRow
             label={t("settings.proxy.f.address")}
@@ -240,7 +234,6 @@ export function ProxyDialog({ proxy, onClose, onSaved }: { proxy: ProxyView | nu
             </FormRow>
           )}
         </Group>
-        <div className={s.hint}>{t("settings.proxy.f.authHint")}</div>
 
         {errors.general && (
           <div className={s.problem} role="alert">

@@ -21,8 +21,8 @@ export const commands = {
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
 	/**
-	 *  Asks GitHub whether a newer version exists (Settings → About). Runs only when the user
-	 *  checks, or after unlock when they turned on the automatic check.
+	 *  Asks GitHub whether a newer version exists (Settings → About). Runs when the user checks,
+	 *  and once after unlock while the automatic check is on.
 	 */
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**
@@ -65,7 +65,8 @@ export const commands = {
 	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
 	/**
 	 *  SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
-	 *  and clears it after 30 s if the clipboard still holds it.
+	 *  and clears it after the device's delay (90 s by default; 0 never clears it) if the clipboard
+	 *  still holds it.
 	 */
 	hostCopyPassword: (id: string) => __TAURI_INVOKE<null>("host_copy_password", { id }),
 	groupsList: () => __TAURI_INVOKE<GroupView[]>("groups_list"),
@@ -344,11 +345,10 @@ export const commands = {
 	/**  Reads a folder or `.zip` the user picked; nothing is saved. */
 	skillImportPreview: (path: string) => __TAURI_INVOKE<SkillImportPreview>("skill_import_preview", { path }),
 	/**
-	 *  Imports what the preview showed: reads the path again and refuses it when it no longer
-	 *  matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
-	 *  new name.
+	 *  Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename`
+	 *  saves it under a new name.
 	 */
-	skillImport: (path: string, token: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, token, replaceId, rename }),
+	skillImport: (path: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, replaceId, rename }),
 	/**  Writes the skill as a `.zip` to a path the user picked. */
 	skillExport: (id: string, path: string) => __TAURI_INVOKE<null>("skill_export", { id, path }),
 	mcpServersList: () => __TAURI_INVOKE<McpServerView[]>("mcp_servers_list"),
@@ -377,6 +377,8 @@ export const commands = {
 	always_ask: boolean,
 	tool: McpToolView,
 } | null>("mcp_tool_info", { conversationId, name }),
+	/**  The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card. */
+	mcpProxyInfo: (conversationId: string, callArguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, callArguments }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */
@@ -761,7 +763,13 @@ export type AiTurnEndReason = "completed" | "length" | "refused" |
 "empty" | "stopped" | "error";
 
 /**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
-export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
+export type AiTurnEvent = 
+/**
+ *  The turn of a new conversation is registered under this id, which the conversation is
+ *  stored under with its message. Sent before the message waits for the MCP servers (AI-45),
+ *  so a stop can name the turn before `ai_send` returns.
+ */
+{ kind: "opened"; conversation_id: string } | { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
 /**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
 { kind: "entry"; entry: AiEntryView } | 
 /**  One response finished. With `tool_calls`, Rust waits for every call's result. */
@@ -795,6 +803,11 @@ export type AppInfo = {
 	version: string,
 	platform: Platform,
 	mica: boolean,
+	/**
+	 *  The local user name, which quick connect (HOST-12) uses when the target names no user;
+	 *  empty when unknown.
+	 */
+	local_user: string,
 };
 
 export type Appearance = "system" | "light" | "dark";
@@ -1185,10 +1198,12 @@ export type LocalPrefs = {
 	density: Density,
 	host_probe: boolean,
 	/**
-	 *  Check GitHub for a newer release once after unlock. Off by default: no request leaves
-	 *  the device unless the user asks for it (spec §11, no telemetry).
+	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
+	 *  On by default. It replaces `auto_update_check`, which was off by default and which the
+	 *  app stored with every other pref, so a stored `false` cannot tell a user who turned it
+	 *  off from one who never changed it; that key is ignored.
 	 */
-	auto_update_check: boolean,
+	check_for_updates: boolean,
 	/**  AI-16: the permission mode new conversations start in on this device. */
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
@@ -1199,6 +1214,20 @@ export type LocalPrefs = {
 	ai_panel_width: number,
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
+	/**
+	 *  SEC-02: minutes without input before the vault locks; 0 never locks. Earlier builds
+	 *  synced it as `Settings::auto_lock_minutes` (`settings::adopt_synced_lock_prefs`).
+	 */
+	auto_lock_minutes: number,
+	/**  SEC-02: lock the vault when the computer sleeps. */
+	lock_on_sleep: boolean,
+	/**
+	 *  SEC-03: disconnect the SSH sessions when the vault locks. Earlier builds synced it as
+	 *  `Settings::lock_disconnects_sessions`.
+	 */
+	lock_disconnects_sessions: boolean,
+	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
+	clipboard_clear_secs: number,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -1219,6 +1248,17 @@ export type McpImportServer = {
 export type McpImportSkipped = {
 	name: string,
 	reason: string,
+};
+
+/**  What the approval card of a `call_mcp_tool` call needs (AI-45). */
+export type McpProxyInfo = {
+	/**
+	 *  The tool the call names, as `mcp_tool_info` gives a direct call's; null when the
+	 *  conversation has no tool of that name or its server was deleted.
+	 */
+	tool: McpToolInfo | null,
+	/**  False when the call cannot run: it then gets its error result without asking. */
+	runs: boolean,
 };
 
 export type McpSecretInput = {
@@ -1417,8 +1457,6 @@ export type SessionStateEvent = {
 
 export type SettingsView = {
 	terminal: TerminalSettings,
-	auto_lock_minutes: number,
-	lock_disconnects_sessions: boolean,
 };
 
 export type SkillDetail = {
@@ -1451,11 +1489,6 @@ export type SkillImportPreview = {
 	existing_id: string | null,
 	/**  The name is the built-in skill's (AI-34): the skill can be imported only under another. */
 	reserved_name: boolean,
-	/**
-	 *  A digest of what was read, which `skill_import` takes back: it imports the source only if
-	 *  it still reads the same, so what is saved is what this preview showed.
-	 */
-	token: string,
 };
 
 export type SkillInput = {

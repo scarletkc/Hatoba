@@ -682,8 +682,6 @@ export interface TerminalSettings {
 /** Synced settings item (spec §5.1 `Settings`). */
 export interface SettingsView {
   terminal: TerminalSettings;
-  auto_lock_minutes: number;
-  lock_disconnects_sessions: boolean;
 }
 
 export type Language = "system" | "zh-CN" | "en" | "ja";
@@ -695,8 +693,8 @@ export interface LocalPrefs {
   density: "regular" | "compact";
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
-  /** Check GitHub Releases once after unlock. Off by default (no telemetry, spec §11). */
-  auto_update_check: boolean;
+  /** Check GitHub Releases once after the first unlock of each launch. On by default (spec §11). */
+  check_for_updates: boolean;
   /** AI-16: the permission mode new conversations start in on this device. */
   ai_permission_mode: AiPermissionMode;
   /** AI-16: the user confirmed the first switch to bypass on this device. */
@@ -707,6 +705,14 @@ export interface LocalPrefs {
   ai_panel_width: number;
   /** SSH-13: the proxy that hosts set to the device default connect through, on this device. */
   default_proxy_id: string | null;
+  /** SEC-02: minutes without input before the vault locks; 0 never locks. */
+  auto_lock_minutes: number;
+  /** SEC-02: lock the vault when the computer sleeps. */
+  lock_on_sleep: boolean;
+  /** SEC-03: disconnect the SSH sessions when the vault locks. */
+  lock_disconnects_sessions: boolean;
+  /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
+  clipboard_clear_secs: number;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -722,6 +728,8 @@ export interface AppInfo {
   platform: "windows" | "macos" | "linux" | "web";
   /** Windows 11 Mica is active (WIN-07). */
   mica: boolean;
+  /** The local user name, which quick connect uses when the target names no user (HOST-12); empty when unknown. */
+  local_user: string;
 }
 
 /** What the update check found (spec §11). */
@@ -958,6 +966,9 @@ export type AiTurnEndReason = "completed" | "length" | "refused" | "empty" | "st
 
 /** Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
 export type AiTurnEvent =
+  /** A new conversation's turn is registered under this id, which it is stored under with its message; sent
+   * before the message waits for the MCP servers (AI-45), so a stop can name the turn before `ai_send` returns. */
+  | { kind: "opened"; conversation_id: string }
   | { kind: "request_started" }
   | { kind: "text"; delta: string }
   | { kind: "reasoning"; delta: string }
@@ -1151,8 +1162,6 @@ export interface SkillImportPreview {
   existing_id: string | null;
   /** The name is the built-in skill's (AI-34): the skill can be imported only under another. */
   reserved_name: boolean;
-  /** A digest of what was read, which `skill_import` takes back: it imports only what this preview showed. */
-  token: string;
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
@@ -1233,6 +1242,14 @@ export interface McpToolInfo {
   server_name: string;
   always_ask: boolean;
   tool: McpToolView;
+}
+
+/** What the approval card of a `call_mcp_tool` call needs (AI-45). */
+export interface McpProxyInfo {
+  /** The tool the call names, as `mcp_tool_info` gives a direct call's; null when the conversation has no tool of that name or its server was deleted. */
+  tool: McpToolInfo | null;
+  /** False when the call cannot run: it then gets its error result without asking. */
+  runs: boolean;
 }
 
 export interface McpImportPreview {

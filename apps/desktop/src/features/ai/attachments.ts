@@ -14,8 +14,9 @@
  *
  * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
  * stopped, moves the conversation to another host, changes whether a terminal is attached, goes to
- * another model, or follows a revert of a file tool's change (`interrupted`, `host_change`,
- * `terminal_change`, `model_change`, `file_revert`); the panel shows those as dividers. The block
+ * another model, follows a revert of a file tool's change, or comes with another list of deferred MCP
+ * tools (`interrupted`, `host_change`, `terminal_change`, `model_change`, `file_revert`,
+ * `mcp_tools`); the panel shows those as dividers. The block
  * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
  * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
  * conversation.
@@ -204,18 +205,20 @@ export function attachmentTokens(a: Attachment): number {
  * A note Hatoba writes before a message (§13.1, AI-05, AI-09, AI-41), never the user: the reply before
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
  * became attached or stopped being attached, it went to another model, or the user reverted the change
- * a file tool call made. `from` of a host change is empty when the earlier host no longer exists; a
- * model is named as `Name (id)`, or by its ID alone. A revert's `path` is the file's path as the call
- * resolved it, and `body` its text for the model.
+ * a file tool call made, or this message lists the deferred MCP tools (AI-45). `from` of a host change
+ * is empty when the earlier host no longer exists; a model is named as `Name (id)`, or by its ID alone. A
+ * revert's `path` is the file's path as the call resolved it, and `body` its text for the model; the
+ * MCP tool list counts its servers and tools, and `body` lists them.
  */
 export type Note =
   | { kind: "interrupted" }
   | { kind: "host_change" | "model_change"; from: string; to: string }
   | { kind: "terminal_change"; to: "attached" | "detached" }
-  | { kind: "file_revert"; path: string; toolCallId: string; body: string };
+  | { kind: "file_revert"; path: string; toolCallId: string; body: string }
+  | { kind: "mcp_tools"; servers: number; tools: number; body: string };
 
 /** The order Hatoba writes its notes in; a `file_revert` comes once for each reverted call. */
-const NOTE_ORDER = ["interrupted", "host_change", "terminal_change", "model_change", "file_revert"] as const satisfies readonly Note["kind"][];
+const NOTE_ORDER = ["interrupted", "host_change", "terminal_change", "model_change", "file_revert", "mcp_tools"] as const satisfies readonly Note["kind"][];
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -271,10 +274,11 @@ const INTERRUPTED_BODY =
 
 /**
  * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`,
- * `model_change_block` and `file_revert_block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a
- * message, and the mock does the same.
+ * `model_change_block`, `file_revert_block` and `deferred::list_block` in crates/hatoba-ai). The panel never sends one; Rust adds
+ * them when it stores a message, and the mock does the same.
  */
 export function noteBlock(n: Note): string {
+  if (n.kind === "mcp_tools") return writeBlock(n.kind, [["servers", String(n.servers)], ["tools", String(n.tools)]], n.body);
   if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
   if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   if (n.kind === "file_revert") return writeBlock(n.kind, [["path", noteText(n.path)], ["tool_call_id", noteText(n.toolCallId)]], n.body);
@@ -324,7 +328,7 @@ export interface MessageParts {
   typed: string;
 }
 
-const OPEN = /^<(interrupted|host_change|terminal_change|model_change|file_revert|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+const OPEN = /^<(interrupted|host_change|terminal_change|model_change|file_revert|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -346,6 +350,10 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     }
     case "file_revert":
       return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;
+    case "mcp_tools":
+      return names === "servers,tools" && DIGITS.test(value(0)) && DIGITS.test(value(1))
+        ? { kind: "note", note: { kind: tag, servers: Number(value(0)), tools: Number(value(1)), body } }
+        : null;
     case TAGS.selection:
       if ((names === "host,lines" || (names === "host,lines,truncated" && value(2) === "true")) && DIGITS.test(value(1)))
         return attachment({ kind: "selection", host: value(0), lines: Number(value(1)), truncated: attrs.length === 3, text: body });

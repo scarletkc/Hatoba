@@ -4,26 +4,6 @@
   gap: 14px;
 }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-}
-
-.hint {
-  padding: 0 4px;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
-.stack .hint {
-  padding: 0;
-}
-
 /* Address and port on one line, as on the host editor. */
 .addrRow {
   display: grid;

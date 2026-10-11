@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
-import { Checkbox, LinkButton, TextField } from "@/components/controls";
+import { Checkbox, LinkButton } from "@/components/controls";
 import { toast } from "@/components/overlay";
 import { formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -15,28 +15,17 @@ export function codeGroups(code: string): string[] {
   return code.match(/.{1,4}/g) ?? [];
 }
 
-/** Crockford base32 is forgiving: O reads as 0, I and L read as 1. */
-function normalize(input: string): string {
-  return input.toUpperCase().replace(/[^0-9A-Z]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
-}
-
 /**
  * The recovery code as 8 groups with copy / save-as-text / print actions (design §05 step 3), plus the
- * VAULT-02 confirmation: retype the last group and tick "I've saved it". `onConfirmedChange` reports
- * whether both are done.
+ * VAULT-02 confirmation: tick "I've saved it". `onConfirmedChange` reports whether it is ticked.
  */
 export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string; onConfirmedChange: (ok: boolean) => void }) {
   const t = useT();
   const groups = codeGroups(code);
-  const last = groups[groups.length - 1] ?? "";
   const [copied, setCopied] = useState(false);
-  const [lastInput, setLastInput] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const lastOk = normalize(lastInput) === normalize(last) && lastInput.trim() !== "";
-  const lastWrong = !lastOk && normalize(lastInput).length >= normalize(last).length;
-
-  useEffect(() => onConfirmedChange(lastOk && saved), [lastOk, saved, onConfirmedChange]);
+  useEffect(() => onConfirmedChange(saved), [saved, onConfirmedChange]);
   useEffect(() => {
     if (!copied) return;
     const timer = window.setTimeout(() => setCopied(false), 1600);
@@ -87,31 +76,6 @@ export function RecoveryCodeSection({ code, onConfirmedChange }: { code: string;
             </span>
           ))}
         </div>
-      </div>
-
-      <div className={s.block}>
-        <label className={s.confirmLabel} htmlFor="recovery-last">
-          {t("vault.code.confirmLast")}
-        </label>
-        <div className={s.confirmField}>
-          <TextField
-            id="recovery-last"
-            mono
-            large
-            autoComplete="off"
-            aria-label={t("vault.code.lastGroup")}
-            placeholder={"·".repeat(last.length)}
-            invalid={lastWrong}
-            maxLength={last.length + 4}
-            value={lastInput}
-            onChange={(e) => setLastInput(e.target.value.toUpperCase())}
-          />
-        </div>
-        {lastWrong && (
-          <div className={s.error} role="alert">
-            {t("vault.code.lastMismatch")}
-          </div>
-        )}
       </div>
 
       <Checkbox checked={saved} onChange={setSaved}>

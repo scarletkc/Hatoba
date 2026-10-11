@@ -109,7 +109,7 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
         </>
       }
     >
-      <WizardTitle title={t("sync.dep.title")} body={t("sync.dep.body")} />
+      <WizardTitle title={t("sync.dep.title")} />
       <Callout icon="key" title={t("sync.dep.token.title")}>
         <span className={s.lossBody}>{t("sync.dep.token.help")}</span>
         <div className={s.calloutLink}>
@@ -126,7 +126,6 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
           label={t("sync.apiToken")}
           htmlFor={tokenId}
           error={form.tokenError ? deployError(t, form.tokenError) : undefined}
-          hint={t("sync.dep.token.memory")}
         >
           <TextField
             id={tokenId}
@@ -236,7 +235,7 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
         </>
       }
     >
-      <WizardTitle title={t("sync.dep.review.title")} body={t("sync.dep.review.body")} />
+      <WizardTitle title={t("sync.dep.review.title")} />
       <div className={s.fields}>
         <Field label={t("sync.dep.account")} htmlFor={accountId}>
           {start.accounts.length > 1 ? (

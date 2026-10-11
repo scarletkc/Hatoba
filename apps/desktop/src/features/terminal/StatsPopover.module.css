@@ -187,13 +187,6 @@
   margin: 4px 8px;
 }
 
-.footnote {
-  padding: 2px 12px 6px;
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  color: var(--fg2);
-}
-
 .hide {
   display: flex;
   align-items: center;

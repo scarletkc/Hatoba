@@ -69,3 +69,41 @@ describe("notes as dividers (AI-05, AI-09)", () => {
     expect(parts.attachments).toHaveLength(1);
   });
 });
+
+describe("the list of deferred MCP tools (AI-45)", () => {
+  // `deferred::list_block` in crates/hatoba-ai/src/mcp/deferred.rs.
+  const stored =
+    '<mcp_tools servers="2" tools="3">\nThe MCP tools you can call with call_mcp_tool from this message on, by server.\n- files (2 tools): mcp__files__echo, mcp__files__env\n- web (1 tool): mcp__web__lookup\n</mcp_tools>\n\nhello';
+
+  it("is a note before the message, read back with its counts", () => {
+    const parts = parseMessage(stored);
+    expect(parts.typed).toBe("hello");
+    expect(parts.notes).toEqual([
+      {
+        kind: "mcp_tools",
+        servers: 2,
+        tools: 3,
+        body: "The MCP tools you can call with call_mcp_tool from this message on, by server.\n- files (2 tools): mcp__files__echo, mcp__files__env\n- web (1 tool): mcp__web__lookup",
+      },
+    ]);
+    expect(composeMessage("hello", [], parts.notes)).toBe(stored);
+    // Counts that are not numbers make it typed text.
+    expect(parseMessage(stored.replace('tools="3"', 'tools="x"')).notes).toEqual([]);
+  });
+
+  it("comes after the other notes", () => {
+    const list = { kind: "mcp_tools", servers: 0, tools: 0, body: "No MCP tools are available from this message on." } as const;
+    const text = composeMessage("q", [], [list, { kind: "interrupted" }]);
+    expect(text.startsWith("<interrupted>")).toBe(true);
+    expect(parseMessage(text).notes.map((n) => n.kind)).toEqual(["interrupted", "mcp_tools"]);
+  });
+
+  it("says how many tools it lists", () => {
+    const note = (tools: number) => ({ kind: "mcp_tools", servers: 1, tools, body: "" }) as const;
+    expect(noteLabel(tr("en"), note(45))).toBe("Listed 45 MCP tools");
+    expect(noteLabel(tr("en"), note(1))).toBe("Listed 1 MCP tool");
+    expect(noteLabel(tr("en"), note(0))).toBe("No MCP tools available");
+    expect(noteLabel(tr("zh-CN"), note(45))).toBe("列出了 45 个 MCP 工具");
+    expect(noteLabel(tr("ja"), note(0))).toBe("使える MCP ツールはありません");
+  });
+});

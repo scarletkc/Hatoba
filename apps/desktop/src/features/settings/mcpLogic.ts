@@ -96,6 +96,8 @@ export interface SecretRow {
   draft: KeyDraft;
   /** From a template (AI-44): what the value looks like, shown while its field is empty. */
   placeholder?: string;
+  /** From a template (AI-44): left without a value, the row is dropped like a blank one. Renaming the row clears it. */
+  optional?: boolean;
 }
 
 let nextUid = 1;
@@ -113,8 +115,9 @@ export interface SecretRowProblem {
   value?: "missing";
 }
 
-/** A row the user added and left empty: it is dropped when saving. */
-export const isBlankRow = (row: SecretRow): boolean => !row.saved && row.key.trim() === "" && row.draft.value.trim() === "";
+/** A row the user added and left empty, or an optional row left without a value: it is dropped when saving. */
+export const isBlankRow = (row: SecretRow): boolean =>
+  !row.saved && row.draft.value.trim() === "" && (row.key.trim() === "" || !!row.optional);
 
 /**
  * Header inputs with `Bearer ` put in front of an `Authorization` value without a space, so the user pastes only the
@@ -245,14 +248,6 @@ export function mcpFormToInput(id: string | null, form: McpForm): McpServerInput
         ? { kind: "stdio", command: form.command.trim(), args: form.args.map((a) => a.value).filter((v) => v !== ""), env: secretInputs(form.env) }
         : { kind: "http", url: form.url.trim(), headers: withBearer(secretInputs(form.headers)) },
     always_ask: form.alwaysAsk,
-  };
-}
-
-/** What the confirmation before saving a `stdio` server shows: the full command line and the names of its variables. */
-export function commandPreview(form: McpForm): { line: string; envNames: string[] } {
-  return {
-    line: formatCommandLine(form.command.trim(), form.args.map((a) => a.value).filter((v) => v !== "")),
-    envNames: form.env.filter((r) => !isBlankRow(r)).map((r) => r.key.trim()),
   };
 }
 

@@ -21,14 +21,13 @@ import s from "./SkillsSection.module.css";
 type Choice = "rename" | "replace";
 
 const SKILL_MD = "SKILL.md";
-/** Up to this many files are open at first; with more, only SKILL.md is. */
-const OPEN_ALL_UP_TO = 6;
 
 /**
- * What importing a folder or `.zip` would save (AI-27), shown in full before anything is saved: every file with its
- * text, the frontmatter fields kept for export, the files skipped for not being text, and every issue, which keeps the
- * import button off. When the name is taken, the user replaces the saved skill or imports under a new name; the
- * built-in skill's name (AI-34) is never replaced, so the skill is imported under a new name.
+ * What importing a folder or `.zip` would save (AI-27), shown before anything is saved: the name and description, every
+ * file (collapsed; each opens to its text), the frontmatter fields kept for export, the files skipped for not being
+ * text, and every issue, which keeps the import button off. When the name is taken, the user replaces the saved skill
+ * or imports under a new name; the built-in skill's name (AI-34) is never replaced, so the skill is imported under a
+ * new name.
  */
 export function SkillImportDialog({
   path,
@@ -61,7 +60,7 @@ export function SkillImportDialog({
       if (!live.current) return;
       setPreview(got);
       setNewName(got.name ? suggestSkillName(got.name, takenNames) : "");
-      setOpen(new Set(got.files.length + 1 <= OPEN_ALL_UP_TO ? [SKILL_MD, ...got.files.map((f) => f.path)] : [SKILL_MD]));
+      setOpen(new Set());
     } catch (e) {
       if (live.current) setLoadError(e);
     }
@@ -97,8 +96,7 @@ export function SkillImportDialog({
     setRejected(null);
     try {
       const replacing = clash && choice === "replace";
-      // The preview's token: Rust saves the files only if they still read as shown here (AI-27).
-      const skill = await api.skill_import(path, preview.token, replacing ? preview.existing_id : null, renaming ? newName.trim() : null);
+      const skill = await api.skill_import(path, replacing ? preview.existing_id : null, renaming ? newName.trim() : null);
       toast(t(replacing ? "aiSettings.skills.imp.replaced" : "aiSettings.skills.imp.done", { name: skill.name }), "success");
       onImported(skill);
       onClose();

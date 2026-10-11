@@ -48,6 +48,8 @@ export function RecoverSheet({ onClose }: { onClose: () => void }) {
     <Sheet
       onClose={busy ? undefined : onClose}
       closeOnBackdrop={false}
+      // Opened from the lock screen, where every other dialog stays hidden.
+      whileLocked
       footer={
         <>
           <FooterSpacer />

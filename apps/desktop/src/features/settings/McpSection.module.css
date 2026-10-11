@@ -442,15 +442,7 @@
   white-space: nowrap;
 }
 
-/* The command line the user confirms before a stdio server is saved. */
-.confirmText {
-  margin: 0 0 8px;
-}
-
-.confirmText:last-child {
-  margin-bottom: 0;
-}
-
+/* A stdio server's command line in full. */
 .commandLine {
   margin: 0 0 8px;
   max-height: 160px;

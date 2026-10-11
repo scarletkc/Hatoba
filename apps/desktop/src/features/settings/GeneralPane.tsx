@@ -50,7 +50,7 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
             onChange={(right_click) => updateTerminal({ right_click })}
           />
         </SettingRow>
-        <SettingRow label={t("settings.confirmPaste")} hint={t("settings.confirmPaste.hint")}>
+        <SettingRow label={t("settings.confirmPaste")}>
           <Switch
             label={t("settings.confirmPaste")}
             checked={settings?.terminal.confirm_multiline_paste ?? true}

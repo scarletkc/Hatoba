@@ -16,10 +16,11 @@ use zeroize::Zeroizing;
 
 use crate::convert::{group_view, host_view};
 use crate::dto::{
-    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult, ProxyMode,
-    SshConfigCandidate, TagCount,
+    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, LocalPrefs, ProbeResult,
+    ProxyMode, SshConfigCandidate, TagCount,
 };
 use crate::error::{AppError, AppResult};
+use crate::platform::system::default_user;
 use crate::state::{AppState, blocking, now_ms};
 use crate::sync;
 
@@ -39,9 +40,6 @@ pub fn host_from_input(
 ) -> AppResult<Host> {
     let name = input.name.trim();
     let address = input.address.trim();
-    if name.is_empty() {
-        return Err(AppError::invalid("name", "name is required"));
-    }
     if name.chars().count() > 128 {
         return Err(AppError::invalid("name", "name is too long"));
     }
@@ -136,7 +134,8 @@ pub fn host_from_input(
         }
     }
     Ok(Host {
-        name: name.to_owned(),
+        // HOST-01: a host without a name is named after its address.
+        name: if name.is_empty() { address } else { name }.to_owned(),
         address: address.to_owned(),
         port: input.port,
         username: input.username.trim().to_owned(),
@@ -186,7 +185,7 @@ pub fn host_save(
             None => None,
         };
         let item = Item::Host(host_from_input(&input, existing.as_ref(), v)?);
-        check_item_size(&item)?;
+        check_item_size(v, &item)?;
         let id = v.put(input.id.as_deref(), item)?;
         Ok(host_view(&id, &find_host(v, &id)?, v))
     })?;
@@ -194,10 +193,10 @@ pub fn host_save(
     Ok(view)
 }
 
-/// Refuses a host too large to sync: the Worker and D1 would reject its envelope on every sync
-/// (§6.2). Long notes or environment variables are what make a host this large.
-fn check_item_size(item: &Item) -> AppResult<()> {
-    if item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
+/// With sync on, refuses a host too large to sync: the Worker and D1 would reject its envelope on
+/// every sync (§6.2). Long notes or environment variables are what make a host this large.
+fn check_item_size(vault: &Vault, item: &Item) -> AppResult<()> {
+    if vault.sync_config()?.is_some() && item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
         return Err(AppError::invalid(
             "host",
             "this host is too large to sync: shorten its notes or environment variables",
@@ -450,12 +449,6 @@ fn read_ssh_config() -> AppResult<Vec<SshConfigHost>> {
         &text,
         home.as_deref(),
     ))
-}
-
-fn default_user() -> String {
-    std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -741,23 +734,31 @@ fn store_identity(
 }
 
 /// SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
-/// and clears it after 30 s if the clipboard still holds it.
+/// and clears it after the device's delay (90 s by default; 0 never clears it) if the clipboard
+/// still holds it.
 #[tauri::command]
 #[specta::specta]
 pub fn host_copy_password(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
-    let password = state.with_unlocked(|v| match find_host(v, &id)?.auth {
-        HostAuth::Password { password } if !password.is_empty() => Ok(password),
+    let (password, prefs) = state.with_unlocked(|v| match find_host(v, &id)?.auth {
+        HostAuth::Password { password } if !password.is_empty() => Ok((password, v.local_prefs()?)),
         _ => Err(AppError::invalid(
             "password",
             "this host has no saved password",
         )),
     })?;
+    let clear_secs = prefs
+        .map(|json| LocalPrefs::from_stored(&json))
+        .unwrap_or_default()
+        .clipboard_clear_secs;
     app.clipboard()
         .write_text(password.as_str())
         .map_err(|e| AppError::internal(e.to_string()))?;
+    if clear_secs == 0 {
+        return Ok(());
+    }
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(clear_secs.into())).await;
         let clipboard = app.clipboard();
         if clipboard
             .read_text()
@@ -1153,9 +1154,9 @@ mod tests {
     }
 
     #[test]
-    fn a_host_too_large_to_sync_is_refused() {
-        let v = vault();
-        let host = |note: String| {
+    fn a_host_too_large_to_sync_is_refused_while_sync_is_on() {
+        let mut v = vault();
+        let host = |v: &Vault, note: String| {
             Item::Host(
                 host_from_input(
                     &HostInput {
@@ -1163,14 +1164,38 @@ mod tests {
                         ..input(String::new())
                     },
                     None,
-                    &v,
+                    v,
                 )
                 .unwrap(),
             )
         };
-        assert!(check_item_size(&host("n".repeat(30_000))).is_ok());
-        let err = check_item_size(&host("n".repeat(MAX_ITEM_PLAINTEXT_BYTES))).unwrap_err();
+        let small = host(&v, "n".repeat(30_000));
+        let large = host(&v, "n".repeat(MAX_ITEM_PLAINTEXT_BYTES));
+        assert!(check_item_size(&v, &large).is_ok());
+
+        let config = hatoba_core::sync::SyncConfig::Worker {
+            url: "https://sync.example.workers.dev".into(),
+            deployment: None,
+        };
+        v.set_sync_config(Some(&config)).unwrap();
+        assert!(check_item_size(&v, &small).is_ok());
+        let err = check_item_size(&v, &large).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("host"));
+    }
+
+    #[test]
+    fn a_host_without_a_name_is_named_after_its_address() {
+        let v = vault();
+        let unnamed = HostInput {
+            name: "  ".into(),
+            ..input(String::new())
+        };
+        assert_eq!(
+            host_from_input(&unnamed, None, &v).unwrap().name,
+            "10.0.0.5"
+        );
+        let named = host_from_input(&input(String::new()), None, &v).unwrap();
+        assert_eq!(named.name, "prod-db");
     }
 
     #[test]

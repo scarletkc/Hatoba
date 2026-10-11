@@ -119,6 +119,7 @@ fn ended(e: &AiTurnEvent) -> Option<AiTurnEndReason> {
 
 fn kind(e: &AiTurnEvent) -> &'static str {
     match e {
+        AiTurnEvent::Opened { .. } => "opened",
         AiTurnEvent::RequestStarted => "request_started",
         AiTurnEvent::Text { .. } => "text",
         AiTurnEvent::Reasoning { .. } => "reasoning",
@@ -6179,3 +6180,5 @@ fn a_note_names_a_target_or_a_single_host() {
         (None, Some("root@10.0.0.9:22".into()), None)
     );
 }
+
+mod deferred;

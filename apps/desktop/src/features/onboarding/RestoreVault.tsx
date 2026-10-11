@@ -2,7 +2,6 @@ import { useState } from "react";
 import { enterUnlocked } from "@/app/boot";
 import { errorMessage } from "@/app/errors";
 import { Button, Icon, Segmented, StatusDot, TextField } from "@/components/controls";
-import { Callout } from "@/components/layout";
 import { FooterSpacer } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -168,9 +167,6 @@ export function RestoreConnect({
             </label>
             <TextField id="restore-token" large secret value={apiToken} onChange={(e) => (setApiToken(e.target.value), reset())} />
           </div>
-          <Callout icon="warning" iconColor="var(--orange)">
-            {t("vault.restore.d1Risk")}
-          </Callout>
         </>
       )}
 

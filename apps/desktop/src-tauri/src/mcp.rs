@@ -4,9 +4,7 @@
 //! - [`DeviceState`]: whether a server is enabled on this device and what it always allows
 //!   (AI-29, AI-31), stored in the vault's device-local meta, readable while locked. A server
 //!   with no entry is enabled iff it uses `http`, so a `stdio` server that arrives from another
-//!   device stays off until the user turns it on here. What this device chose for a `stdio`
-//!   server holds for the command line it was chosen for: one changed on another device is off
-//!   here again, with no Always allow, until the user turns it on here.
+//!   device stays off until the user turns it on here.
 //! - [`McpManager`]: one entry per server started since unlock. A server starts when a request
 //!   needs its tools ([`McpManager::offer`]) or when the user starts it, lists its tools once,
 //!   and lists them again before the next request after `tools/list_changed`. Its state
@@ -14,8 +12,8 @@
 //!   and goes to the WebView as `ai://mcp-status` on every change. Locking the vault and quitting
 //!   stop every server; a server whose configuration changed restarts.
 //! - [`Offer`]: the MCP tools one request offered, with the names the model sees (AI-30). A
-//!   conversation keeps the offer of its latest request, so a call maps back to the server and
-//!   tool that request named.
+//!   conversation keeps the offer of its latest request, or of its latest `search_tools` call
+//!   (AI-45), so a call maps back to the server and tool that request or search named.
 //!
 //! Locks: the vault mutex comes before the manager's own locks, never after; the servers map
 //! before a server's state, and one server's state at a time. Status events read the device
@@ -32,6 +30,7 @@ use std::time::Duration;
 use futures::future::join_all;
 use hatoba_ai::chat::ToolDef;
 use hatoba_ai::entry::ToolStatus;
+use hatoba_ai::mcp::deferred::ListedTool;
 use hatoba_ai::mcp::{self, McpConnection, McpError, McpTool, McpTransportConfig, StderrTail};
 use hatoba_ai::provider::Protocol;
 use hatoba_ai::tools;
@@ -94,27 +93,12 @@ pub struct DeviceServer {
     pub always_allow: bool,
     /// These tools (the server's own names) run without asking in manual mode.
     pub always_allow_tools: Vec<String>,
-    /// [`stdio_fingerprint`] of the command line this entry was chosen for; `None` for `http`.
-    pub stdio: Option<String>,
-}
-
-/// What identifies a `stdio` server's command line: a hash of the command, the arguments and
-/// the environment names. Environment values are secrets and the device state is not encrypted,
-/// so they are left out. `None` for `http`.
-pub fn stdio_fingerprint(transport: &McpTransport) -> Option<String> {
-    let McpTransport::Stdio { command, args, env } = transport else {
-        return None;
-    };
-    let names: Vec<&String> = env.keys().collect();
-    let encoded = serde_json::to_vec(&(command, args, names)).unwrap_or_default();
-    Some(hatoba_core::crypto::sha256_hex(&encoded))
 }
 
 impl DeviceState {
-    /// The stored state; an unreadable one counts as empty. While unlocked, the entry of a
-    /// `stdio` server whose command line is not the one it was chosen for counts as absent.
+    /// The stored state; an unreadable one counts as empty.
     pub fn load(v: &Vault) -> Self {
-        let mut state = match v.mcp_device_state() {
+        match v.mcp_device_state() {
             Ok(Some(json)) => serde_json::from_str(&json).unwrap_or_else(|_| {
                 tracing::warn!("the MCP device state is unreadable; starting from defaults");
                 Self::default()
@@ -124,20 +108,7 @@ impl DeviceState {
                 tracing::warn!("could not read the MCP device state");
                 Self::default()
             }
-        };
-        for (id, server) in v.mcp_servers() {
-            let Some(fingerprint) = stdio_fingerprint(&server.transport) else {
-                continue;
-            };
-            if state
-                .servers
-                .get(&id)
-                .is_some_and(|s| s.stdio.as_ref() != Some(&fingerprint))
-            {
-                state.servers.remove(&id);
-            }
         }
-        state
     }
 
     pub fn save(&self, v: &mut Vault) -> AppResult<()> {
@@ -151,19 +122,9 @@ impl DeviceState {
         self.servers.get(id).cloned().unwrap_or_default()
     }
 
-    /// The entry of a server, to change: what it holds is chosen for `transport`.
-    pub fn server_mut(&mut self, id: &str, transport: &McpTransport) -> &mut DeviceServer {
-        let here = self.servers.entry(id.to_owned()).or_default();
-        here.stdio = stdio_fingerprint(transport);
-        here
-    }
-
-    /// Keeps the entry of a server that is edited on this device, where the form showed the new
-    /// command line (AI-29), chosen for its new transport.
-    pub fn edited(&mut self, id: &str, transport: &McpTransport) {
-        if self.servers.contains_key(id) {
-            self.server_mut(id, transport);
-        }
+    /// The entry of a server, to change.
+    pub fn server_mut(&mut self, id: &str) -> &mut DeviceServer {
+        self.servers.entry(id.to_owned()).or_default()
     }
 
     pub fn remove(&mut self, id: &str) {
@@ -355,6 +316,19 @@ impl Offer {
                 name: t.name.clone(),
                 description: t.tool.description.clone(),
                 input_schema: mcp::clean_schema(&t.tool.input_schema, protocol),
+            })
+            .collect()
+    }
+
+    /// The tools as the deferred list and `search_tools` see them (AI-45), in the offer's order.
+    pub fn listed(&self) -> Vec<ListedTool<'_>> {
+        self.tools
+            .iter()
+            .map(|t| ListedTool {
+                name: &t.name,
+                server_id: &t.server_id,
+                server: &t.server_name,
+                tool: &t.tool,
             })
             .collect()
     }
@@ -748,8 +722,9 @@ impl McpManager {
         }
     }
 
-    /// Stops the servers that run although they are off on this device: a `stdio` server whose
-    /// command line changed on another device (the switch already stops one turned off here).
+    /// Stops the servers that run although they are off on this device: an `http` server not
+    /// chosen here that became a `stdio` server on another device (the switch already stops one
+    /// turned off here).
     fn stop_off(&self, vault: &SharedVault, off: &[String]) {
         for id in off {
             let Some(server) = self.existing(id) else {
@@ -996,22 +971,34 @@ impl McpManager {
         server.settled.notify_waiters();
     }
 
-    /// Keeps the offer a conversation's request was made with, so its calls map back to it.
+    /// Keeps the offer a conversation's calls map back to: that of its latest request, or, once
+    /// its MCP tools are deferred (AI-45), that of its newest message or latest `search_tools`
+    /// call, whose names the model was told.
     pub fn record_offer(&self, conversation_id: &str, offer: Offer) {
         guard(&self.0.offers).insert(conversation_id.to_owned(), Arc::new(offer));
     }
 
-    /// The tool behind `name` in a call of the conversation: from the offer of its latest
-    /// request, or, when this run of the app made none, from the running servers. The approval
-    /// card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve names here, so they
-    /// always name the same server: names are per request, since cleaned server names can
-    /// collide and the tools menu changes which servers a conversation's requests offer.
+    /// Whether an offer is recorded for the conversation: none after a start of the app or the
+    /// lock until its next request, message or `search_tools` call (AI-45).
+    pub fn has_offer(&self, conversation_id: &str) -> bool {
+        guard(&self.0.offers).contains_key(conversation_id)
+    }
+
+    /// The tool behind `name` in a call of the conversation: from the offer recorded last
+    /// ([`Self::record_offer`]), or, when this run of the app recorded none, from the running
+    /// servers. The approval card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve
+    /// names here, so they always name the same server: names are per offer, since cleaned
+    /// server names can collide and the tools menu changes which servers a conversation's
+    /// requests offer.
     pub fn offered(&self, conversation_id: &str, name: &str) -> Option<OfferedTool> {
+        self.latest(conversation_id).find(name).cloned()
+    }
+
+    /// The tools recorded last for the conversation ([`Self::record_offer`]), or, when this run
+    /// of the app recorded none, those of the running servers.
+    pub fn latest(&self, conversation_id: &str) -> Arc<Offer> {
         let offer = guard(&self.0.offers).get(conversation_id).cloned();
-        match offer {
-            Some(offer) => offer.find(name).cloned(),
-            None => self.current_tools().find(name).cloned(),
-        }
+        offer.unwrap_or_else(|| Arc::new(self.current_tools()))
     }
 
     // ---- calls (AI-30, AI-32) ----

@@ -4,7 +4,6 @@ import { PageHeader, SearchField, EmptyState } from "@/components/layout";
 import { confirm, toast } from "@/components/overlay";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
-import { useApp } from "@/app/store";
 import { formatDate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { KeyView } from "@/ipc/types";
@@ -25,7 +24,6 @@ export function KeysPage() {
   const t = useT();
   const keys = useVaultData((st) => st.keys);
   const hosts = useVaultData((st) => st.hosts);
-  const syncOn = useApp((st) => st.sync?.kind !== undefined && st.sync.kind !== "none");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -59,7 +57,7 @@ export function KeysPage() {
       body: (
         <div className={s.confirmBody}>
           <p>{t("keys.delete.body")}</p>
-          {users.length > 0 ? (
+          {users.length > 0 && (
             <>
               <p>{t("keys.delete.used", { n: users.length })}</p>
               <ul className={s.confirmHosts}>
@@ -68,10 +66,7 @@ export function KeysPage() {
                 ))}
               </ul>
             </>
-          ) : (
-            <p>{t("keys.delete.unused")}</p>
           )}
-          {syncOn && <p>{t("keys.delete.synced")}</p>}
         </div>
       ),
     });

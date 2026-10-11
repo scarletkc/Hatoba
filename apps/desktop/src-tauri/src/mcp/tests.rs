@@ -158,7 +158,7 @@ pub(crate) fn stdio_server(name: &str) -> McpServer {
 }
 
 /// A stdio server item whose start never ends ([`hang`]).
-fn hanging_server(name: &str) -> McpServer {
+pub(crate) fn hanging_server(name: &str) -> McpServer {
     mock_server(name, "hang")
 }
 
@@ -412,45 +412,20 @@ fn device_defaults_enable_http_servers_only() {
     // AI-29: a server from another device is enabled iff it uses http.
     assert!(!device.enabled("a", &stdio));
     assert!(device.enabled("a", &http));
-    device.server_mut("a", &stdio).enabled = Some(true);
-    device.server_mut("b", &http).enabled = Some(false);
+    device.server_mut("a").enabled = Some(true);
+    device.server_mut("b").enabled = Some(false);
     assert!(device.enabled("a", &stdio));
     assert!(!device.enabled("b", &http));
 
     // AI-31: per tool, or the whole server.
     assert!(!device.allows("a", "echo"));
     device
-        .server_mut("a", &stdio)
+        .server_mut("a")
         .always_allow_tools
         .push("echo".into());
     assert!(device.allows("a", "echo") && !device.allows("a", "fail"));
-    device.server_mut("b", &http).always_allow = true;
+    device.server_mut("b").always_allow = true;
     assert!(device.allows("b", "anything"));
-
-    // A stdio entry holds for the command line it was chosen for; environment values are not
-    // part of it.
-    let mut rotated = stdio.clone();
-    let McpTransport::Stdio { env, .. } = &mut rotated else {
-        unreachable!("a stdio server");
-    };
-    env.insert("MOCK_TOKEN".into(), Zeroizing::new("rotated".into()));
-    assert_eq!(
-        super::stdio_fingerprint(&stdio),
-        super::stdio_fingerprint(&rotated)
-    );
-    let fingerprint = super::stdio_fingerprint(&stdio).unwrap();
-    assert!(!fingerprint.contains(ENV_SECRET) && fingerprint.len() == 64);
-    for other in [
-        McpTransport::Stdio {
-            command: "other".into(),
-            args: Vec::new(),
-            env: Default::default(),
-        },
-        missing_server("m").transport,
-    ] {
-        assert_ne!(super::stdio_fingerprint(&other), Some(fingerprint.clone()));
-    }
-    assert_eq!(super::stdio_fingerprint(&http), None);
 
     // Stored and read back; garbage reads as the defaults.
     let vault = vault();
@@ -802,11 +777,12 @@ async fn a_server_deleted_elsewhere_is_stopped_by_the_next_request() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
+async fn a_command_line_changed_elsewhere_stays_on_and_keeps_always_allow() {
     let vault = vault();
     let (mcp, events) = manager();
     let files = put_server(&vault, stdio_server("files"));
     set_enabled(&vault, &files, true);
+    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &files, None, true).unwrap();
     let cancel = CancellationToken::new();
     assert_eq!(
         mcp.offer(&vault, &context(&[]), &cancel).await.tools.len(),
@@ -822,8 +798,8 @@ async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
         .await;
     let pid: u32 = pid.parse().unwrap();
 
-    // Another device adds an environment variable: the next request starts nothing, and the
-    // command line this device turned on stops.
+    // Another device adds an environment variable: the server stays on here with its Always
+    // allow, and the next request restarts it with the new command line.
     let mut changed = stdio_server("files");
     let McpTransport::Stdio { env, .. } = &mut changed.transport else {
         unreachable!("a stdio server");
@@ -834,33 +810,18 @@ async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
         .unwrap()
         .put(Some(&files), Item::McpServer(changed))
         .unwrap();
-    assert!(
-        mcp.offer(&vault, &context(&[]), &cancel)
-            .await
-            .tools
-            .is_empty()
-    );
-    eventually("the stop", || {
-        events.states(&files).last() == Some(&McpServerState::Stopped)
-    })
-    .await;
-    eventually("the server process to exit", || !alive(pid)).await;
-    let starts = |events: &Events| {
-        events
-            .states(&files)
-            .iter()
-            .filter(|s| **s == McpServerState::Starting)
-            .count()
-    };
-    assert_eq!(starts(&events), 1);
-
-    // Turned on here again: the new command line runs.
-    set_enabled(&vault, &files, true);
     assert_eq!(
         mcp.offer(&vault, &context(&[]), &cancel).await.tools.len(),
         5
     );
-    assert_eq!(starts(&events), 2);
+    eventually("the old server process to exit", || !alive(pid)).await;
+    let starts = events
+        .states(&files)
+        .iter()
+        .filter(|s| **s == McpServerState::Starting)
+        .count();
+    assert_eq!(starts, 2);
+    assert!(DeviceState::load(&vault.lock().unwrap()).allows(&files, "pid"));
     mcp.shutdown().await;
 }
 

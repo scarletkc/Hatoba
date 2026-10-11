@@ -1,4 +1,4 @@
-# Troubleshooting: keys, vault, files and other messages
+# Troubleshooting: keys, vault, files, updates and other messages
 
 The messages are shown exactly as the app prints them in each language, so a message the user pastes can be matched to a row. Failed SSH connections, jump hosts, host key prompts and dropped connections are in `references/troubleshooting-connections.md`. Sync and Cloudflare errors are in `references/troubleshooting-sync.md`, AI errors in `references/troubleshooting-ai.md`.
 
@@ -30,11 +30,11 @@ When importing a key, or connecting with one:
 | That recovery code isn’t right. Check it and try again. | 恢复码不正确，请检查后重试。 | リカバリーコードが正しくありません。確認してもう一度お試しください。 |
 | The two passwords don’t match. | 两次输入的主密码不一致。 | 2 つのパスワードが一致しません。 |
 | The master password needs at least 8 characters. | 主密码至少需要 8 个字符。 | マスターパスワードは 8 文字以上にしてください。 |
-| That password is too easy to guess. Choose a longer or less common one. | 这个主密码太容易被猜到，请换一个更长或更不常见的。 | このパスワードは推測されやすすぎます。より長いもの、または一般的でないものにしてください。 |
+| This password is easy to guess. A longer or less common one is safer. | 这个主密码容易被猜到，更长或更不常见的密码会更安全。 | このパスワードは推測されやすいです。より長いもの、または一般的でないもののほうが安全です。 |
 | No vault has been created yet. | 尚未创建保险库。 | 保管庫がまだ作成されていません。 |
 | A vault already exists. | 保险库已存在。 | 保管庫はすでに存在します。 |
 
-- After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay.
+- After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay, up to a minute.
 - A forgotten master password can be reset only with the recovery code (**Forgot it? Use your recovery code**). With neither, the data cannot be recovered, and Hatoba cannot reset it.
 - The recovery code ignores case, dashes and spaces. A new code can be generated in Settings → Security (**Generate New Code…**), after which the old one stops working.
 
@@ -61,11 +61,30 @@ When importing a key, or connecting with one:
 - "This item no longer exists." usually means it was deleted on another device; refresh the list or recreate it.
 - "Something went wrong." is a generic failure. Retry once, then use the feedback path below.
 - Port forwarding failures show in the **Port Forwarding** popover; a local port that is already in use is the usual cause (edit the rule, or use local port 0). See `references/port-forwarding.md`.
-- On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`.
+- On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. They record each SSH connection attempt with its host, port, user name, authentication method and kind of error, and never passwords, keys or terminal content.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Port Forwarding | 端口转发 | ポートフォワーディング |
+
+## Updates
+
+These show in Settings → About, in the update row, after **Check for Updates** or **Download and Install**:
+
+| en | zh-CN | ja |
+|---|---|---|
+| Can’t reach GitHub. Check your network and try again. | 无法连接到 GitHub，请检查网络后重试。 | GitHub に接続できません。ネットワークを確認して、もう一度お試しください。 |
+| Couldn’t check for updates. Try again later. | 检查更新失败，请稍后再试。 | アップデートを確認できませんでした。しばらくしてからもう一度お試しください。 |
+| Couldn’t install the update. Try again later. | 无法安装更新，请稍后再试。 | アップデートをインストールできませんでした。しばらくしてからもう一度お試しください。 |
+| The downloaded update isn’t signed by Hatoba, so it wasn’t installed. | 下载的更新没有 Hatoba 的有效签名，已拒绝安装。 | ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。 |
+| Check for Updates | 检查更新 | アップデートを確認 |
+| Download and Install | 下载并安装 | ダウンロードしてインストール |
+| View on GitHub | 在 GitHub 上查看 | GitHub で見る |
+
+- "Can’t reach GitHub." means GitHub did not answer at all: no network, a DNS or firewall problem, or a download that received nothing for 30 seconds. Check the connection and press the button again; a download starts over.
+- "Couldn’t check for updates." means GitHub answered with an error. Try again later.
+- "Couldn’t install the update." means the download or the installer failed for another reason, and the current version keeps running. Press **Download and Install** again. If it keeps failing, open the release page with **View on GitHub** under the release notes, download the installer for the platform and run it, and report the problem with the logs.
+- The signature message means the downloaded file did not match the signature of Hatoba's release key, so nothing was installed. Do not install that version by hand from its release page, which may hold the same rejected file. Report it with **Report a Problem**, keep the current version, and wait for a correctly signed update.
 
 ## Still not solved
 

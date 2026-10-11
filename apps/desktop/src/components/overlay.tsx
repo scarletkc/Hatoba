@@ -327,14 +327,17 @@ export function Modal({
   onClose,
   center,
   closeOnBackdrop = true,
+  whileLocked,
 }: {
   children: ReactNode;
   onClose?: () => void;
   center?: boolean;
   closeOnBackdrop?: boolean;
+  /** Also shows over the lock screen: only for a dialog that shows nothing from the vault. */
+  whileLocked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const locked = useOverlaysLocked();
+  const locked = useOverlaysLocked() && !whileLocked;
   // Captured while rendering: before the effect runs, React has already focused a control with
   // autoFocus inside the dialog.
   const [opener] = useState(() => document.activeElement as HTMLElement | null);
@@ -364,9 +367,9 @@ export function Modal({
     return () => {
       window.removeEventListener("keydown", onKey);
       // Development mode also runs this while the dialog stays open, to run the effect twice.
-      if (!node?.isConnected && !useLockStore.getState().locked) opener?.focus?.();
+      if (!node?.isConnected && (whileLocked || !useLockStore.getState().locked)) opener?.focus?.();
     };
-  }, [opener, locked]);
+  }, [opener, locked, whileLocked]);
   // Kept mounted, so the dialog comes back as it was after unlocking.
   if (locked) return null;
   return createPortal(
@@ -390,15 +393,17 @@ export function Sheet({
   width,
   onClose,
   closeOnBackdrop,
+  whileLocked,
 }: {
   children: ReactNode;
   footer?: ReactNode;
   width?: number;
   onClose?: () => void;
   closeOnBackdrop?: boolean;
+  whileLocked?: boolean;
 }) {
   return (
-    <Modal onClose={onClose} closeOnBackdrop={closeOnBackdrop}>
+    <Modal onClose={onClose} closeOnBackdrop={closeOnBackdrop} whileLocked={whileLocked}>
       <div role="dialog" aria-modal className={o.sheet} style={{ width }}>
         <div className={o.sheetBody}>{children}</div>
         {footer && <div className={o.sheetFooter}>{footer}</div>}

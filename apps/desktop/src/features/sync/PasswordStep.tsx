@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Button, Spinner, TextField } from "@/components/controls";
-import { Callout } from "@/components/layout";
 import { toast } from "@/components/overlay";
 import { useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
@@ -9,7 +8,6 @@ import { useT } from "@/i18n";
 import { isImeEvent } from "@/lib/ime";
 import { refreshSyncStatus } from "./syncUtils";
 import { WizardFrame, WizardTitle } from "./WizardFrame";
-import s from "./Wizard.module.css";
 
 /**
  * Step 3. The vault already exists locally (created at first launch), so this asks for the existing
@@ -84,9 +82,6 @@ export function PasswordStep({ submit, onBack }: { submit: (password: string) =>
           onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void finish()}
         />
       </Field>
-      <Callout icon="info" iconColor="var(--orange)" title={t("sync.loss.title")}>
-        <span className={s.lossBody}>{t("sync.loss.body")}</span>
-      </Callout>
     </WizardFrame>
   );
 }

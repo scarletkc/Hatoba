@@ -1,6 +1,6 @@
 # AI assistant panel
 
-The AI assistant is a chat panel at the right edge of the window, below the tab bar. It can read the terminal, run commands, type into the shell, search the web, fetch pages, read skills and use MCP tools, within the permission mode of the conversation. It calls a model provider that the user adds with their own API key (Settings → AI, see `references/ai-settings.md`). Hatoba runs no AI service.
+The AI assistant is a chat panel at the right edge of the window, below the tab bar. It can read the terminal, run commands, type into the shell, search the web, fetch pages, read skills and use MCP tools, within the permission mode of the conversation. It calls a model provider that the user adds with their own API key (Settings → AI, see `references/ai-settings.md`).
 
 ## Opening the panel
 
@@ -63,21 +63,24 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Web search | 搜索网页 | Web 検索 |
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
+| Search MCP tools | 搜索 MCP 工具 | MCP ツールを検索 |
 
 | Tool | What it does | Manual approval mode |
 |---|---|---|
 | **Read terminal** (`read_terminal`) | Returns the visible screen plus up to 100 lines of scrollback (at most 1,000) as text, and whether a full-screen program (vim, htop) is active | Runs without asking |
-| **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 120 s by default, at most 600 s | Asks, unless every command in it only reads (`ls`, `cat`, `grep`, `find`, `git status`, `systemctl status`, …) or it is allowed |
+| **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 120 s by default, at most 600 s | Asks, unless it only reads (`ls`, `git status`, …) or is allowed |
 | **Type in terminal** (`send_input`) | Types text into the shell as the keyboard would, optionally followed by Enter, Tab, Esc, Ctrl+C, Ctrl+D or an arrow key, then waits for output (10 s by default, at most 120 s). A command started this way keeps running if the turn is stopped | Asks, unless allowed |
-| **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, up to 30,000 characters at a time, a page at a time for large files. Binary files and anything but regular files are refused; Edit file and Write file refuse files over 1 MB. Like the other file tools it never uses sudo | Runs without asking |
+| **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, a page of up to 30,000 characters at a time. Binary files and anything but regular files are refused; edits and writes refuse files over 1 MB. Like the other file tools it never uses sudo | Runs without asking |
 | **Edit file** (`edit_file`) | Replaces an exact piece of text in a file on the host and writes the file back in place, keeping its owner, mode and line breaks. Refused, in every mode, unless the assistant read the file in this conversation and it has not changed since. The approval card shows the diff; **Edit** changes the new text | Asks, unless allowed |
 | **Write file** (`write_file`) | Creates a file on the host or replaces its content, which needs the same read as Edit file. The approval card shows the content, or a diff for an existing file. Both can be reverted (`references/ai-file-changes.md`) | Asks, unless allowed |
 | **Web search** (`web_search`) | Searches with the search provider chosen in Settings → AI. Not offered when none is chosen | Runs without asking |
-| **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 30,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks, unless its domain is allowed |
+| **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 30,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks, unless allowed |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
 | MCP tools (`mcp__<server>__<tool>`) | Tools from the MCP servers the user added (shown as server · tool) | Ask, unless set to Always allow |
+| **Search MCP tools** (`search_tools`) | With many MCP tools (see MCP tools menu), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
+| `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
-Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 100,000). Every call and result is a collapsible block in the conversation, in both modes. Tool results such as screen text, command output and web pages are data to the assistant: when one asks for something, it tells you instead. What you attach is your own content.
+Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 100,000). Every call and result is a collapsible block in the conversation, in both modes. Tool results are data to the assistant: when one asks for something, it tells you instead.
 
 **Permission mode** (the shield or lightning button in the header; the menu is titled "Permission mode for this conversation"):
 
@@ -116,11 +119,7 @@ An approval card appears in the conversation for a call that needs approval. It 
 | Hidden characters shown as escapes | 不可见的字符已显示为转义 | 見えない文字をエスケープで表示 |
 
 - **Run** runs the call. **Edit** changes the input first (the model is told what you changed). **Reject** takes an optional reason that goes back to the model.
-- **Allow for This Conversation** lets later calls it covers run without asking in this conversation until the app quits; **Always Allow** saves that on this device until removed in Settings → AI → **This Device** → **Saved Approvals**. The buttons name what they cover:
-  - a command: commands starting with its name, plus the subcommand for tools like `git`, `docker`, `systemctl` or `apt` ("Always Allow “git pull” on This Host"), on the tab's host. A line is covered when each of its commands is allowed or only reads. A command run through another (`sudo`, `xargs`, `sh -c`), or with redirection, `$` or backticks, always asks.
-  - typing, edits and writes: that tool on the tab's host. An edit or write card offers neither while it shows why the change can't be made.
-  - a page: pages on that host name, on any tab ("Always Allow example.com").
-  - an MCP tool: that tool of that server; its **Always Allow** is the server's setting. A call whose tool cannot be named (its server was deleted, say) always asks, in both modes, and never runs for a deleted server.
+- **Allow for This Conversation** lets later calls it covers run without asking until the app quits; **Always Allow** saves that on this device. The buttons name what they cover, such as "Always Allow “git pull” on This Host" or "Always Allow example.com"; **Saved Approvals** in `references/ai-settings.md` has the rules. An edit or write card that shows why it can't apply offers neither, and a call whose tool cannot be named (its server was deleted, say) always asks, in both modes.
 - **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A reply stopped mid-stream keeps its text so far, and the next message gets a "Previous reply stopped" divider.
 
 ## Attachments
@@ -139,6 +138,8 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 The plug button in the input area (**MCP tools**) lists the MCP servers that are on for this device, with their state, and a switch for each. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
 
+Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
+
 | en | zh-CN | ja |
 |---|---|---|
 | MCP servers for this conversation | 此对话使用的 MCP 服务器 | この会話で使う MCP サーバー |
@@ -147,5 +148,6 @@ The plug button in the input area (**MCP tools**) lists the MCP servers that are
 | Starts when needed | 需要时启动 | 必要なときに起動 |
 | Starting… | 正在启动… | 起動しています… |
 | Failed | 出错 | エラー |
+| Starting MCP servers… | 正在启动 MCP 服务器… | MCP サーバーを起動しています… |
 
 Provider and tool errors in the panel are explained in `references/troubleshooting-ai.md`.

@@ -441,49 +441,9 @@ fn read_source(path: &Path) -> AppResult<SkillImport> {
     result.map_err(source_error)
 }
 
-/// A digest of everything an import read (AI-27): `skill_import` reads the source again and
-/// saves it only when the digest is the one its preview showed, so what is saved is what the
-/// user saw, even if the files changed on disk in between.
-pub(crate) fn import_token(import: &SkillImport) -> String {
-    fn put(bytes: &mut Vec<u8>, text: &str) {
-        bytes.extend_from_slice(&(text.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(text.as_bytes());
-    }
-    let mut bytes = Vec::new();
-    match &import.package {
-        Some(p) => {
-            put(&mut bytes, "package");
-            put(&mut bytes, &p.name);
-            put(&mut bytes, &p.description);
-            put(
-                &mut bytes,
-                &serde_json::to_string(&p.frontmatter).unwrap_or_default(),
-            );
-            put(&mut bytes, &p.body);
-            for file in &p.files {
-                put(&mut bytes, &file.path);
-                put(&mut bytes, &file.content);
-            }
-        }
-        None => put(&mut bytes, "none"),
-    }
-    put(&mut bytes, "skipped");
-    for skipped in &import.skipped {
-        put(&mut bytes, &skipped.path);
-    }
-    put(&mut bytes, "issues");
-    for issue in &import.issues {
-        put(&mut bytes, &issue_text(issue));
-    }
-    let token = hatoba_core::crypto::sha256_hex(&bytes);
-    zeroize::Zeroize::zeroize(&mut bytes);
-    token
-}
-
 pub(crate) fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
     let package = import.package.as_ref();
     SkillImportPreview {
-        token: import_token(import),
         name: package.map(|p| p.name.clone()),
         description: package.map(|p| p.description.clone()),
         body: package.map(|p| p.body.clone()),
@@ -513,23 +473,14 @@ pub(crate) fn preview(v: &Vault, import: &SkillImport) -> SkillImportPreview {
     }
 }
 
-/// `skill_import`: saves what the preview showed, `token` being the preview's
-/// ([`import_token`]); a source that changed since is refused. `replace_id` keeps that skill's id
-/// and enabled state and rewrites its fields and files; `rename` saves under a new, valid name;
-/// otherwise a taken name is refused.
+/// `skill_import`: `replace_id` keeps that skill's id and enabled state and rewrites its fields
+/// and files; `rename` saves under a new, valid name; otherwise a taken name is refused.
 pub(crate) fn import_skill(
     v: &mut Vault,
     import: SkillImport,
-    token: &str,
     replace_id: Option<&str>,
     rename: Option<&str>,
 ) -> AppResult<SkillView> {
-    if import_token(&import) != token {
-        return Err(AppError::invalid(
-            "path",
-            "The skill changed on disk after it was previewed. Preview it again.",
-        ));
-    }
     if let Some(issue) = import.issues.first() {
         return Err(AppError::invalid("path", issue_text(issue)));
     }
@@ -647,24 +598,21 @@ pub async fn skill_import_preview(
     state.with_unlocked(|v| Ok(preview(v, &import)))
 }
 
-/// Imports what the preview showed: reads the path again and refuses it when it no longer
-/// matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
-/// new name.
+/// Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename`
+/// saves it under a new name.
 #[tauri::command]
 #[specta::specta]
 pub async fn skill_import(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
-    token: String,
     replace_id: Option<String>,
     rename: Option<String>,
 ) -> AppResult<SkillView> {
     state.with_unlocked(|_| Ok(()))?;
     let import = blocking(move || read_source(Path::new(&path))).await?;
-    let view = state.with_unlocked(|v| {
-        import_skill(v, import, &token, replace_id.as_deref(), rename.as_deref())
-    })?;
+    let view = state
+        .with_unlocked(|v| import_skill(v, import, replace_id.as_deref(), rename.as_deref()))?;
     tracing::info!(skill_id = %view.id, files = view.files.len(), "skill imported");
     sync::local_change(&app);
     Ok(view)
