@@ -292,7 +292,7 @@ fn enablement_and_always_allow_are_device_local() {
 }
 
 #[test]
-fn a_command_line_changed_on_another_device_is_off_here_until_turned_on() {
+fn a_changed_command_line_keeps_this_devices_choice() {
     let mut v = vault();
     let input = stdio("files", vec![secret("TOKEN", Some(ENV_VALUE))]);
     let id = save_server(&mut v, &input, None).unwrap().view.id;
@@ -303,7 +303,7 @@ fn a_command_line_changed_on_another_device_is_off_here_until_turned_on() {
         view.enabled && view.always_allow
     };
 
-    // Edited here, where the form shows the new command line: still on, still allowed.
+    // Edited here: still on, still allowed.
     let mut edit = stdio("files", Vec::new());
     edit.id = Some(id.clone());
     edit.transport = McpTransportInput::Stdio {
@@ -327,16 +327,11 @@ fn a_command_line_changed_on_another_device_is_off_here_until_turned_on() {
             .map(|(k, v)| ((*k).to_owned(), Zeroizing::new((*v).to_owned())))
             .collect(),
     };
-    // A new environment value from another device leaves the command line as it was.
-    sync(
-        &mut v,
-        synced("uvx", &["mcp-files"], &[("TOKEN", "rotated")]),
-    );
-    assert!(on(&v));
-
-    // Another command, other arguments or other environment names: off here, with no Always
-    // allow, until turned on here again.
+    // Changed on another device: a new environment value, another command, other arguments or
+    // other environment names. Still on here, still allowed.
+    set_always_allow(&mut v, &id, Some("read"), true).unwrap();
     for changed in [
+        synced("uvx", &["mcp-files"], &[("TOKEN", "rotated")]),
         synced("sh", &["mcp-files"], &[("TOKEN", "rotated")]),
         synced("uvx", &["mcp-files", "--all"], &[("TOKEN", "rotated")]),
         synced(
@@ -345,16 +340,10 @@ fn a_command_line_changed_on_another_device_is_off_here_until_turned_on() {
             &[("TOKEN", "rotated"), ("EXTRA", "x")],
         ),
     ] {
-        set_enabled(&mut v, &id, true).unwrap();
-        set_always_allow(&mut v, &id, None, true).unwrap();
-        set_always_allow(&mut v, &id, Some("read"), true).unwrap();
         sync(&mut v, changed);
-        let off = view(&v);
-        assert!(!off.enabled && !off.always_allow && off.always_allow_tools.is_empty());
+        assert!(on(&v));
+        assert_eq!(view(&v).always_allow_tools, ["read"]);
     }
-    set_enabled(&mut v, &id, true).unwrap();
-    let back = view(&v);
-    assert!(back.enabled && !back.always_allow && back.always_allow_tools.is_empty());
 }
 
 const IMPORT: &str = r#"{

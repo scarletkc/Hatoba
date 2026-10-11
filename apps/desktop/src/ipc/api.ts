@@ -340,11 +340,8 @@ export interface HatobaApi {
   skill_set_enabled(id: string, enabled: boolean): Promise<void>;
   /** Reads a folder or `.zip` the user picked; nothing is saved. */
   skill_import_preview(path: string): Promise<SkillImportPreview>;
-  /**
-   * Imports what the preview showed: reads the path again and refuses it (`invalid_input`) when it no longer
-   * matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a new name.
-   */
-  skill_import(path: string, token: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
+  /** Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename` saves it under a new name. */
+  skill_import(path: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
   /** Writes the skill as a `.zip` to a path the user picked. */
   skill_export(id: string, path: string): Promise<void>;
 

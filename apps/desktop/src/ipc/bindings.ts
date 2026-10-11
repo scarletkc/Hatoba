@@ -338,11 +338,10 @@ export const commands = {
 	/**  Reads a folder or `.zip` the user picked; nothing is saved. */
 	skillImportPreview: (path: string) => __TAURI_INVOKE<SkillImportPreview>("skill_import_preview", { path }),
 	/**
-	 *  Imports what the preview showed: reads the path again and refuses it when it no longer
-	 *  matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a
-	 *  new name.
+	 *  Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename`
+	 *  saves it under a new name.
 	 */
-	skillImport: (path: string, token: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, token, replaceId, rename }),
+	skillImport: (path: string, replaceId: string | null, rename: string | null) => __TAURI_INVOKE<SkillView>("skill_import", { path, replaceId, rename }),
 	/**  Writes the skill as a `.zip` to a path the user picked. */
 	skillExport: (id: string, path: string) => __TAURI_INVOKE<null>("skill_export", { id, path }),
 	mcpServersList: () => __TAURI_INVOKE<McpServerView[]>("mcp_servers_list"),
@@ -1424,11 +1423,6 @@ export type SkillImportPreview = {
 	existing_id: string | null,
 	/**  The name is the built-in skill's (AI-34): the skill can be imported only under another. */
 	reserved_name: boolean,
-	/**
-	 *  A digest of what was read, which `skill_import` takes back: it imports the source only if
-	 *  it still reads the same, so what is saved is what this preview showed.
-	 */
-	token: string,
 };
 
 export type SkillInput = {

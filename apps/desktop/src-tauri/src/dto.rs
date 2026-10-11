@@ -1780,9 +1780,6 @@ pub struct SkillImportPreview {
     pub existing_id: Option<String>,
     /// The name is the built-in skill's (AI-34): the skill can be imported only under another.
     pub reserved_name: bool,
-    /// A digest of what was read, which `skill_import` takes back: it imports the source only if
-    /// it still reads the same, so what is saved is what this preview showed.
-    pub token: String,
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────

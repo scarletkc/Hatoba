@@ -282,7 +282,6 @@ pub(crate) fn save_server(
     let changed = existing
         .as_ref()
         .is_none_or(|s| s.name != name || s.transport != transport);
-    // Read before the new transport is stored, which the entry was not chosen for yet.
     let mut device = DeviceState::load(v);
     let id = v.put(
         input.id.as_deref(),
@@ -294,13 +293,8 @@ pub(crate) fn save_server(
         }),
     )?;
     let server = find_server(v, &id)?;
-    let before = device.clone();
     if input.id.is_none() {
-        device.server_mut(&id, &server.transport).enabled = Some(true);
-    } else {
-        device.edited(&id, &server.transport);
-    }
-    if device != before {
+        device.server_mut(&id).enabled = Some(true);
         device.save(v)?;
     }
     Ok(Saved {
@@ -319,9 +313,9 @@ pub(crate) fn delete_server(v: &mut Vault, id: &str) -> AppResult<()> {
 }
 
 pub(crate) fn set_enabled(v: &mut Vault, id: &str, enabled: bool) -> AppResult<()> {
-    let server = find_server(v, id)?;
+    find_server(v, id)?;
     let mut device = DeviceState::load(v);
-    device.server_mut(id, &server.transport).enabled = Some(enabled);
+    device.server_mut(id).enabled = Some(enabled);
     device.save(v)
 }
 
@@ -332,9 +326,9 @@ pub(crate) fn set_always_allow(
     tool: Option<&str>,
     allow: bool,
 ) -> AppResult<()> {
-    let server = find_server(v, id)?;
+    find_server(v, id)?;
     let mut device = DeviceState::load(v);
-    let here = device.server_mut(id, &server.transport);
+    let here = device.server_mut(id);
     match tool.map(str::trim) {
         None => here.always_allow = allow,
         Some("") => return Err(AppError::invalid("tool", "The tool name is empty.")),
@@ -432,12 +426,12 @@ pub(crate) fn import_servers(v: &mut Vault, report: ImportReport) -> AppResult<V
             None,
             Item::McpServer(McpServer {
                 name,
-                transport: transport.clone(),
+                transport,
                 always_ask: false,
                 updated_at: 0,
             }),
         )?;
-        device.server_mut(&id, &transport).enabled = Some(true);
+        device.server_mut(&id).enabled = Some(true);
         ids.push(id);
     }
     device.save(v)?;

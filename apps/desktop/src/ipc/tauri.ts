@@ -203,7 +203,7 @@ export function createTauriApi(): HatobaApi {
     skill_delete: (id) => call("skill_delete", { id }),
     skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),
     skill_import_preview: (path) => call("skill_import_preview", { path }),
-    skill_import: (path, token, replaceId, rename) => call("skill_import", { path, token, replaceId, rename }),
+    skill_import: (path, replaceId, rename) => call("skill_import", { path, replaceId, rename }),
     skill_export: (id, path) => call("skill_export", { id, path }),
 
     mcp_servers_list: () => call("mcp_servers_list"),

@@ -1140,8 +1140,6 @@ export interface SkillImportPreview {
   existing_id: string | null;
   /** The name is the built-in skill's (AI-34): the skill can be imported only under another. */
   reserved_name: boolean;
-  /** A digest of what was read, which `skill_import` takes back: it imports only what this preview showed. */
-  token: string;
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
