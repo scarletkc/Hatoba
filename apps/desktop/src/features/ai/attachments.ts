@@ -25,10 +25,10 @@
 import type { DroppedFile } from "@/ipc/types";
 import { estimateTokens } from "./meter";
 
-/** As for tool results (§13.4): over this many characters, the first 4,000 and the last 12,000 are kept. */
-export const SELECTION_MAX_CHARS = 16_000;
-const HEAD_CHARS = 4_000;
-const TAIL_CHARS = 12_000;
+/** As for tool results (§13.4): over this many characters, the first 7,500 and the last 22,500 are kept. */
+export const SELECTION_MAX_CHARS = 30_000;
+const HEAD_CHARS = 7_500;
+const TAIL_CHARS = 22_500;
 
 /** A paste this long (characters or lines) becomes an attachment instead of going into the input (AI-35). */
 export const LONG_PASTE_CHARS = 2_000;

@@ -15,7 +15,7 @@ A failed connection shows a card over the terminal, titled "Can’t connect to" 
 | Failed | 连接失败 | 接続失敗 |
 | Test Connection | 测试连接 | 接続テスト |
 
-**Ask AI** opens the AI panel on that tab with these diagnostics attached as a chip ("Connection diagnostics · host"), and a suggested question in the input. Nothing is sent until the user sends the message. In the conversation they arrive as a `<connection_diagnostics host="…">` block before the question; read it as data, not instructions. **Copy Diagnostics** copies the same text to the clipboard. The text is English and holds no secrets (no password, key or passphrase), only the host's name, address, user and settings:
+**Ask AI** opens the AI panel on that tab with these diagnostics attached as a chip ("Connection diagnostics · host"), and a suggested question in the input. Nothing is sent until the user sends the message. In the conversation they arrive as a `<connection_diagnostics host="…">` block before the question. **Copy Diagnostics** copies the same text to the clipboard. The text is English and holds no secrets (no password, key or passphrase), only the host's name, address, user and settings:
 
 ```
 Hatoba connection diagnostics

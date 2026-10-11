@@ -84,7 +84,6 @@ export function ForwardsSection({ hostId }: { hostId: string | null }) {
   const remove = async (f: ForwardView) => {
     const ok = await confirm({
       title: t("hosts.fwd.removeTitle", { rule: rule(f) }),
-      body: t("hosts.fwd.removeBody"),
       confirmLabel: t("btn.delete"),
       danger: true,
     });
@@ -172,7 +171,6 @@ export function ForwardsSection({ hostId }: { hostId: string | null }) {
           {addLink}
         </div>
       </Group>
-      <div className={s.hint}>{t("hosts.fwd.hint")}</div>
       {dialog && (
         <ForwardDialog
           hostId={hostId}

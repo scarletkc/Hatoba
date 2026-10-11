@@ -139,7 +139,6 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
             <div className={s.empty}>
               <Icon name="chats" size={26} className={s.emptyIcon} />
               <div className={s.emptyTitle}>{t("ai.history.empty")}</div>
-              <div className={s.emptyBody}>{t("ai.history.emptyBody")}</div>
             </div>
           )}
           {list?.map((c) => {

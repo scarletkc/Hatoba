@@ -6,7 +6,7 @@ import s from "./InstructionsField.module.css";
 
 /**
  * A text area for what the user tells the assistant (AI-36 custom instructions, AI-37 host notes),
- * with its size: the characters against the limit and the tokens it adds to every request. Text
+ * with its size: the bytes against the limit and the tokens it adds to every request. Text
  * over the limit is marked and says so; its owner does not save it. `error`: another problem to show.
  */
 export function InstructionsField({
@@ -52,7 +52,7 @@ export function InstructionsField({
       <div className={s.foot}>
         {problem && <span className={s.problem}>{problem}</span>}
         <span id={sizeId} className={cx(s.size, size.over && s.over)}>
-          {t("ai.instructions.size", { n: nf.format(size.chars), max: nf.format(max), tokens: nf.format(size.tokens) })}
+          {t("ai.instructions.size", { n: nf.format(size.bytes), max: nf.format(max), tokens: nf.format(size.tokens) })}
         </span>
       </div>
     </div>

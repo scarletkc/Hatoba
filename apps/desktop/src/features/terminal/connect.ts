@@ -44,11 +44,11 @@ export async function connectHost(hostId: string): Promise<void> {
 
 /**
  * Quick connect (HOST-12): open a terminal tab on a target typed into the hosts search field, without
- * saving a host. Without a user name, ask for one first.
+ * saving a host. Without a user name, log in as the local user, as ssh does; ask only when that is unknown.
  */
 export async function connectTarget(typed: { address: string; port: number; username: string | null }): Promise<void> {
   startSessionListeners();
-  const username = typed.username ?? (await askUsername(formatTarget(typed)))?.trim();
+  const username = typed.username ?? (useApp.getState().info.local_user || (await askUsername(formatTarget(typed)))?.trim());
   if (!username) return;
   const target: QuickTarget = { address: typed.address, port: typed.port, username };
   useTabs.getState().openSession({ hostId: null, target }, `${username}@${target.address}`);

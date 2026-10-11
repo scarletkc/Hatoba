@@ -63,6 +63,9 @@ pub mod meta {
     /// the remote's settings item, which wins over any local edit made meanwhile. A disconnect
     /// keeps it, so reconnecting before that pull still lets the remote's settings win.
     pub const ADOPT_REMOTE_SETTINGS: &str = "adopt_remote_settings";
+    /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
+    /// vault key because they name hosts. Device-local, never synced.
+    pub const AI_ALLOWANCES: &str = "ai_allowances";
 }
 
 /// One row of the `items` table.

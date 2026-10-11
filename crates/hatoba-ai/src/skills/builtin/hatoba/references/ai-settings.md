@@ -16,7 +16,7 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 
 ## Providers
 
-The assistant calls the providers added here directly from the device, with the user's own API keys. Hatoba runs no AI service, and nothing is sent until a provider is added and a message is sent. The provider must support tool calls. Local servers such as Ollama and LM Studio work.
+The assistant calls the providers added here directly from the device, with the user's own API keys. Nothing is sent until a provider is added and a message is sent. The provider must support tool calls. Local servers such as Ollama and LM Studio work.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -46,7 +46,7 @@ The assistant calls the providers added here directly from the device, with the 
 
 - **Add Provider** (shown at the top once a provider exists, or in the empty state) opens the form; click a provider's row to edit it, and the bin icon deletes it. Deleting removes its API key and model list from the vault and from the other devices; existing conversations stay but need another model to continue.
 - **Protocol**: **OpenAI Chat Completions** (OpenAI, Gemini through its OpenAI-compatible endpoint, local servers, most other services) or **Anthropic Messages** (Claude and vendors with an Anthropic-compatible endpoint). The form picks Anthropic for `api.anthropic.com` and for base URLs ending in `/anthropic`.
-- **Base URL**: for Chat Completions include the API version, such as `https://api.openai.com/v1`. For Anthropic use the address the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com`. HTTPS is required; plain HTTP is allowed only for local and private-network addresses.
+- **Base URL**: for Chat Completions include the API version, such as `https://api.openai.com/v1`. For Anthropic use the address the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com`. Plain HTTP works too.
 - **API Key**: stored encrypted in the vault and synced to the other devices. After saving it shows **Saved** and can be replaced or cleared but never viewed. It may stay empty for a server that needs none.
 - **Auth Header** (Anthropic protocol only): `x-api-key` (most services) or `Authorization: Bearer` (a few).
 - **Models**: type a model ID and press Enter (or **Add**), or use **Fetch Models** to list the provider's models and pick from them. Each model has a display name, an optional **Context** window and **Max Output** in tokens (enter 200000 or 200K). The context window drives the usage meter and compaction. **Thinking** lists the thinking levels the model accepts (Low, Medium, High, Extra High, Max). Its button opens a menu titled "Levels this model accepts" where each level is ticked or not; **None** means the model offers only Default. A model typed in by hand, or one whose list gave no levels, shows Low, Medium and High. **Fetch Models** fills the levels in from the provider's list when it gives them (Anthropic's does), also for models already in the form that have none yet. The output limit becomes `max_tokens` for Anthropic requests (16,000 when unknown).
@@ -91,7 +91,7 @@ A skill is a set of instructions for the assistant in the Agent Skills format: a
 | Replace Skill | 替换技能 | スキルを置き換え |
 
 - **New Skill** writes one in the app: a name (1 to 64 lowercase letters, digits and hyphens), a description (at most 1,024 characters; tells the assistant what the skill does and when to use it), the **Instructions** (the Markdown body of `SKILL.md`, at most 32 KB) and extra files added with **Add File** (relative paths, each at most 32 KB; at most 200 files and 5 MB in all).
-- **Import** has **Import Folder…** and **Import .zip…** for a folder or archive with a `SKILL.md` at its top. **Import Skill** lists every file to be saved before anything is stored, and saves only what it showed: if the files changed on disk in between, the import asks to preview them again. Files that are not UTF-8 text are skipped and listed, and a file over 32 KB or too large to sync once encoded is refused. If the name is taken, choose **Replace it** or **Import under a new name**.
+- **Import** has **Import Folder…** and **Import .zip…** for a folder or archive with a `SKILL.md` at its top. **Import Skill** shows the skill's name and description and lists every file to be saved before anything is stored; click a file to see its text. Files that are not UTF-8 text are skipped and listed, and a file over 32 KB or too large to sync once encoded is refused. If the name is taken, choose **Replace it** or **Import under a new name**.
 - Each row of your own skills has an enable switch, an export button (saves a `.zip`), and a delete button. Click the row to edit it.
 
 *The built-in skill.* The first row is always the `hatoba` skill that ships with the app (this documentation). It carries a **Built-in** badge, its description and file count, an enable switch, and a view button (an eye icon, labelled "View hatoba"; clicking the row does the same) that opens a read-only viewer titled **Built-in skill** with `SKILL.md` and every other file. It is on by default, and the switch syncs to the other devices; switched off, the assistant no longer sees it and cannot answer from it. It comes with the app and changes with each version, so it cannot be edited, deleted, exported or replaced.
@@ -125,16 +125,14 @@ MCP (Model Context Protocol) servers add tools to the assistant. Hatoba uses too
 | URL | URL | URL |
 | Headers | 请求头 | ヘッダー |
 | Always ask | 始终询问 | 常に確認 |
-| Save this command? | 保存这条命令？ | このコマンドを保存しますか？ |
-| Save Server | 保存服务器 | サーバーを保存 |
 | Import MCP Servers | 导入 MCP 服务器 | MCP サーバーをインポート |
 | Preview | 预览 | プレビュー |
 
-- **Add Server**: give it a **Name** and choose the **Type**. For **Command**: the program (looked up on `PATH` like a shell does, so `npx` finds `npx.cmd` on Windows), the **Arguments** (one per row; if a whole command line is pasted into the command, **Split Into Arguments** separates them) and **Environment** variables. For **HTTP**: the **URL** (HTTPS required; HTTP only for local and private addresses) and **Headers** such as `Authorization`. Environment and header values are stored encrypted, can't be viewed after saving, and only the program or the server receives them. Saving a Command server first shows **Save this command?** with the full command line.
+- **Add Server**: give it a **Name** and choose the **Type**. For **Command**: the program (looked up on `PATH` like a shell does, so `npx` finds `npx.cmd` on Windows), the **Arguments** (one per row; if a whole command line is pasted into the command, **Split Into Arguments** separates them) and **Environment** variables. For **HTTP**: the **URL** (HTTPS or HTTP) and **Headers** such as `Authorization`. Environment and header values are stored encrypted, can't be viewed after saving, and only the program or the server receives them.
 - **Add from Template** fills in **Add MCP Server** for GitHub, Linear, Context7 or Cloudflare (HTTP servers that take a token, built into the app): the name, the URL and the `Authorization` header, with a link under it to where the token is created. Paste only the token: an `Authorization` value without a space is saved with `Bearer ` in front of it (for any HTTP server, also when it replaces a saved value). **Always ask** starts off. The saved server is an ordinary one.
 - **Always ask** makes this server's tools ask before every call, even in Bypass mode. It syncs with the server.
 - **Import** reads pasted JSON or a JSON file in the `mcpServers` format of Claude Desktop, Claude Code and Cursor (or VS Code's `servers` key), shows a **Preview**, and imports; values move into the vault. **Export** writes the same format with placeholders instead of the secret values.
-- The server list syncs. Whether a server is on, and any **Always allow**, stay on each device. A server added on another device arrives on if it is HTTP and off if it is a Command. A Command server whose command, arguments or environment variable names change on another device turns off here and loses its **Always allow** until it is switched on here again.
+- The server list syncs. Whether a server is on, and any **Always allow**, stay on each device. A server added on another device arrives on if it is HTTP and off if it is a Command. Editing a server, here or on another device, keeps whether it is on and its **Always allow**, except that an HTTP server changed into a Command on another device turns off here, as a new Command server arrives.
 - A Command server starts when a conversation first needs its tools and stops when the app quits or the vault locks. Click a row to see its state, start, restart or stop it, read the error with the last lines of stderr, and see its tools with their hints (Read-only, Destructive, Idempotent, Open-world). Hints never change whether a call asks.
 
 | en | zh-CN | ja |
@@ -156,15 +154,16 @@ MCP (Model Context Protocol) servers add tools to the assistant. Hatoba uses too
 
 ## This Device
 
-These two settings stay on this device and are not synced.
+These settings stay on this device and are not synced.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Default Permission Mode | 默认权限模式 | 既定の権限モード |
 | Manual approval | 手动批准 | 手動承認 |
 | Bypass | 绕过批准 | 承認をバイパス |
-| Tool Call Limit | 工具调用上限 | ツール呼び出しの上限 |
 | Turn On Bypass | 开启绕过模式 | バイパスをオンにする |
+| Saved Approvals | 已保存的批准 | 保存済みの許可 |
+| Remove | 移除 | 削除 |
 
 - **Default Permission Mode**: **Manual approval** (default) or **Bypass**. New conversations start in it. Choosing Bypass the first time asks for confirmation.
-- **Tool Call Limit**: a turn pauses after this many tool calls and goes on only when you press Continue. From 1 to 200, default 25.
+- **Saved Approvals**: what **Always Allow** on an approval card saved (`references/ai-panel.md`): commands starting with a prefix and the typing, edit and write tools, each for a host or quick connection, and page domains for every tab. They are sealed in the vault and kept until **Remove** (×) deletes one. A command's prefix is its name, plus the subcommand for tools like `git` or `systemctl` ("git pull"); a command line runs without asking when each of its commands is allowed or only reads, and `sudo`, `sh -c`, redirection, `$` or backticks always ask. Interpreters (`python3` …), `rm`, `dd`, `chmod`, `kill`, `curl`, `scp` and the like, also as `/bin/rm` or `python3.12`, get Allow for This Conversation only. Allow for This Conversation covers the same, until the app quits. An MCP tool's **Always allow** is its server's setting (above).

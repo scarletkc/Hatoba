@@ -110,7 +110,7 @@ pub struct Host {
     /// Free-form note.
     pub note: String,
     /// What the AI assistant is told about this host in its system prompt (AI-37), at most
-    /// [`MAX_HOST_AI_NOTES_CHARS`] characters. Absent while empty.
+    /// [`MAX_HOST_AI_NOTES_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub ai_notes: String,
     /// Last modification, Unix ms. Drives last-writer-wins conflict resolution.
@@ -121,8 +121,10 @@ pub struct Host {
     pub env: Vec<EnvVar>,
 }
 
-/// The longest [`Host::ai_notes`], in characters (AI-37).
-pub const MAX_HOST_AI_NOTES_CHARS: usize = 2_000;
+/// The longest [`Host::ai_notes`], in bytes of UTF-8 (AI-37). Notes this long fit an item beside
+/// the most environment variables a host can have, unless much of the text needs escaping in JSON;
+/// while sync is on, saving a host that does not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
+pub const MAX_HOST_AI_NOTES_BYTES: usize = 16 * 1024;
 
 /// One of a host's environment variables (SSH-14).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
@@ -1176,13 +1178,15 @@ pub struct AiSettings {
     /// before it existed.
     pub builtin_skill_enabled: bool,
     /// The user's instructions, sent with every request (AI-36), at most
-    /// [`MAX_CUSTOM_INSTRUCTIONS_CHARS`] characters. Absent while empty.
+    /// [`MAX_CUSTOM_INSTRUCTIONS_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub custom_instructions: String,
 }
 
-/// The longest [`AiSettings::custom_instructions`], in characters (AI-36).
-pub const MAX_CUSTOM_INSTRUCTIONS_CHARS: usize = 4_000;
+/// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
+/// fits the settings item; text whose JSON is much longer (many quotes or backslashes) may not,
+/// and saving settings that do not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
+pub const MAX_CUSTOM_INSTRUCTIONS_BYTES: usize = 32 * 1024;
 
 impl Default for AiSettings {
     fn default() -> Self {
@@ -1197,31 +1201,15 @@ impl Default for AiSettings {
 }
 
 /// The user's synced settings. There is exactly one, with the fixed id [`SETTINGS_ID`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Settings {
     /// Terminal appearance.
     pub terminal: TerminalSettings,
-    /// Idle minutes before auto-lock (0 disables).
-    pub auto_lock_minutes: u32,
-    /// Disconnect SSH sessions when the vault locks.
-    pub lock_disconnects_sessions: bool,
     /// AI assistant settings.
     pub ai: AiSettings,
     /// Last modification, Unix ms.
     pub updated_at: i64,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            terminal: TerminalSettings::default(),
-            auto_lock_minutes: 15,
-            lock_disconnects_sessions: false,
-            ai: AiSettings::default(),
-            updated_at: 0,
-        }
-    }
 }
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
@@ -1801,7 +1789,9 @@ mod tests {
     #[test]
     fn the_largest_host_env_fits_an_item() {
         // SSH-14: a host whose variables use the whole budget, with the escaping that costs most
-        // (every value byte a quote), still fits the plaintext a synced item may have.
+        // (every value byte a quote), still fits the plaintext a synced item may have, with 6,000
+        // bytes of AI notes beside them. Longer notes and such variables together may not fit,
+        // and saving the host while sync is on then says so.
         let quotes = "\"".repeat(MAX_ENV_VALUE_CHARS);
         let mut env: Vec<EnvVar> = (0..4)
             .map(|i| EnvVar::new(format!("N{i}"), quotes.clone()))
@@ -1812,13 +1802,39 @@ mod tests {
         }
         assert_eq!(check_host_env(&env), Ok(()));
         let item = Item::Host(Host {
-            ai_notes: "日".repeat(MAX_HOST_AI_NOTES_CHARS),
+            ai_notes: "日".repeat(2_000),
             env,
             ..sample_host()
         });
         let len = item.plaintext_len().unwrap();
         assert_eq!(len, item.to_plaintext().unwrap().len());
         assert!(len <= MAX_ITEM_PLAINTEXT_BYTES, "{len}");
+    }
+
+    #[test]
+    fn the_longest_notes_and_instructions_fit_an_item() {
+        // AI-36, AI-37: as plain text, whose JSON is as long as the text. The longest notes fit
+        // beside environment variables that use the whole budget (SSH-14).
+        let value = "v".repeat(MAX_ENV_VALUE_CHARS);
+        let mut env: Vec<EnvVar> = (0..4)
+            .map(|i| EnvVar::new(format!("N{i}"), value.clone()))
+            .collect();
+        env.extend((4..MAX_HOST_ENV_VARS).map(|i| EnvVar::new(format!("N{i}"), "")));
+        while env_bytes(&env) > MAX_HOST_ENV_BYTES {
+            env[3].value.pop();
+        }
+        assert_eq!(env_bytes(&env), MAX_HOST_ENV_BYTES);
+        assert_eq!(check_host_env(&env), Ok(()));
+        let host = Item::Host(Host {
+            ai_notes: "日".repeat(MAX_HOST_AI_NOTES_BYTES / 3),
+            env,
+            ..sample_host()
+        });
+        assert!(host.plaintext_len().unwrap() <= MAX_ITEM_PLAINTEXT_BYTES);
+        let mut settings = Settings::default();
+        settings.ai.custom_instructions = "x".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES);
+        let settings = Item::Settings(settings);
+        assert!(settings.plaintext_len().unwrap() <= MAX_ITEM_PLAINTEXT_BYTES);
     }
 
     #[test]
@@ -2333,8 +2349,6 @@ mod tests {
         assert_eq!(s.terminal.scrollback, 10_000);
         assert_eq!(s.terminal.right_click(), RightClick::platform_default());
         assert!(s.terminal.confirm_multiline_paste());
-        assert_eq!(s.auto_lock_minutes, 15);
-        assert!(!s.lock_disconnects_sessions);
         let value = serde_json::to_value(Item::Settings(s)).unwrap();
         assert_eq!(value["terminal"]["theme"], "dark");
         assert_eq!(value["terminal"]["cursor_style"], "block");
@@ -2421,7 +2435,6 @@ mod tests {
         let s = item.as_settings().unwrap();
         assert_eq!(s.terminal.theme, ThemeMode::System);
         assert_eq!(s.terminal.cursor_style, CursorStyle::Block);
-        assert_eq!(s.auto_lock_minutes, 15);
     }
 
     #[test]

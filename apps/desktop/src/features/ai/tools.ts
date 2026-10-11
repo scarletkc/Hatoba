@@ -1,5 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
-import type { AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
+import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
+import { allowancePrefixes, commandAllowed, savablePrefixes } from "./commandRules";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -88,56 +89,165 @@ export function needsSession(kind: ToolKind): boolean {
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `web_search`, `read_skill` and `search_tools` (AI-45) run without asking and
- * everything else waits for the user, `read_file` included (it can send `~/.ssh` or `.env` to the
- * provider); bypass runs everything. Unknown tools never run, so never ask.
+ * §13.5: in manual approval mode `read_terminal`, `read_file`, `web_search`, `read_skill` and `search_tools`
+ * (AI-45) run without asking and everything else waits for the user; bypass runs everything. Unknown tools
+ * never run, so never ask.
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
-  return kind === "run_command" || kind === "send_input" || isFileTool(kind) || kind === "fetch_url" || kind === "mcp";
+  return kind === "run_command" || kind === "send_input" || kind === "edit_file" || kind === "write_file" || kind === "fetch_url" || kind === "mcp";
 }
 
 /** What decides whether a call waits for the user. */
 export interface AskInput {
   kind: ToolKind;
   mode: AiPermissionMode;
-  /** AI-19: the user chose Allow for this conversation on an earlier call of this tool. */
-  allowedHere: boolean;
+  /** AI-19: an approval covers the call (`callAllowed`), or it is a `run_command` call that only reads. */
+  allowed: boolean;
   /** An MCP call's tool (`mcp_tool_info`), or null when no offer or running server has it. */
   mcp?: McpToolInfo | null;
 }
 
 /**
- * §13.5 with AI-19 and AI-31. Allow for this conversation wins, since the user chose it on a card of
- * this very tool. An MCP tool asks in manual mode unless it is set to Always allow on this device, and
- * in bypass mode only when its server is set to Always ask. An MCP call whose tool `mcp_tool_info`
- * cannot name asks in both modes: nothing says which server it would reach.
+ * §13.5 with AI-19 and AI-31. An approval the user chose wins, also over an MCP server's Always ask,
+ * since the user chose it on a card of this very tool. An MCP tool asks in manual mode unless it is set
+ * to Always allow on this device, and in bypass mode only when its server is set to Always ask. An MCP
+ * call whose tool `mcp_tool_info` cannot name asks in both modes: nothing says which server it would reach.
  */
-export function mustAsk({ kind, mode, allowedHere, mcp }: AskInput): boolean {
-  if (allowedHere) return false;
+export function mustAsk({ kind, mode, allowed, mcp }: AskInput): boolean {
+  if (allowed) return false;
   if (kind !== "mcp") return needsApproval(kind, mode);
   if (!mcp) return true;
   return mode === "bypass" ? mcp.always_ask : !mcp.tool.always_allow;
 }
 
 /**
- * What AI-19 Allow for this conversation remembers for a call: a built-in tool by name, an MCP tool by
- * its server and the server's own tool name (the name the model calls depends on the servers a request
- * offered, so it can mean another server later). Null for an MCP call whose tool is unknown, which
- * cannot be allowed ahead.
+ * What Allow for this conversation and Always allow on a call's approval card cover (AI-19, AI-31): the
+ * prefixes of a `run_command` call's commands (`allowancePrefixes`), the host name of a `fetch_url` call's
+ * URL, the tool of an `edit_file`, `write_file` or `send_input` call, and an MCP call's tool by its server
+ * and the server's own tool name (the name the model calls depends on the servers a request offered, so it
+ * can mean another server later).
  */
-export function grantKey(kind: ToolKind, name: string, mcp: McpToolInfo | null | undefined): string | null {
-  if (kind !== "mcp") return name;
-  return mcp ? `mcp:${mcp.server_id}:${mcp.tool.tool}` : null;
+export type Scope =
+  | { kind: "command"; prefixes: string[]; savable: boolean }
+  | { kind: "domain"; domain: string }
+  | { kind: "tool"; tool: ToolKind }
+  | { kind: "mcp"; key: string };
+
+/** The host a saved approval is for (AI-19): a saved host by id, or a quick-connect target (`user@host:port`). */
+export interface HostRef {
+  host_id: string | null;
+  target: string | null;
+}
+
+/** Whether a saved approval is for the host. */
+export function onHost(a: AiAllowance, host: HostRef | null): boolean {
+  if (!host) return false;
+  return host.host_id !== null ? a.host_id === host.host_id : a.host_id === null && a.target === host.target;
+}
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+/** The host name of an `http` or `https` URL, in lowercase; null for anything else. */
+export function urlDomain(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    return (u.protocol === "http:" || u.protocol === "https:") && u.hostname ? u.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Whether an approval card offers Allow for this conversation (AI-19). Not for an MCP call whose tool is
- * unknown, which cannot be allowed ahead, nor for an edit or write whose card shows `refusal`, why it
- * cannot apply (AI-39, AI-40): the user saw no change of the tool's.
+ * The scope of a call's approvals; null when its card offers none: an MCP tool that is unknown, which
+ * cannot be allowed ahead, a command line with no prefix to name, a URL with no host name, or a tool
+ * that never asks.
  */
-export function offersAllowHere(kind: ToolKind, mcp: McpToolInfo | null | undefined, refusal: string | undefined): boolean {
-  return (kind !== "mcp" || !!mcp) && refusal === undefined;
+export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mcp: McpToolInfo | null | undefined): Scope | null {
+  switch (kind) {
+    case "run_command": {
+      const prefixes = allowancePrefixes(str(args.command));
+      return prefixes ? { kind: "command", prefixes, savable: savablePrefixes(prefixes) } : null;
+    }
+    case "fetch_url": {
+      const domain = urlDomain(str(args.url));
+      return domain ? { kind: "domain", domain } : null;
+    }
+    case "edit_file":
+    case "write_file":
+    case "send_input":
+      return { kind: "tool", tool: kind };
+    case "mcp":
+      return mcp ? { kind: "mcp", key: `mcp:${mcp.server_id}:${mcp.tool.tool}` } : null;
+    default:
+      return null;
+  }
+}
+
+/** What Allow for this conversation keeps for a scope until the app quits (AI-19). */
+export function grantKeys(scope: Scope): string[] {
+  switch (scope.kind) {
+    case "command":
+      return scope.prefixes.map((p) => `run_command:${p}`);
+    case "domain":
+      return [`fetch_url:${scope.domain}`];
+    case "tool":
+      return [scope.tool];
+    case "mcp":
+      return [scope.key];
+  }
+}
+
+/**
+ * What Always allow saves on this device for a scope (AI-19): commands and tools for the tab's host, a
+ * domain for every tab. An MCP tool's Always allow is its server's setting (AI-31), not one of these.
+ */
+export function savedFor(scope: Scope, host: HostRef | null): AiAllowance[] {
+  switch (scope.kind) {
+    case "command":
+      return host && scope.savable ? scope.prefixes.map((value) => ({ kind: "command", ...host, value })) : [];
+    case "tool":
+      return host ? [{ kind: "tool", ...host, value: scope.tool }] : [];
+    case "domain":
+      return [{ kind: "domain", host_id: null, target: null, value: scope.domain }];
+    case "mcp":
+      return [];
+  }
+}
+
+/**
+ * AI-19 with §13.5: whether a call runs without asking, by `grants` (Allow for this conversation) or
+ * `saved` (this device's approvals, of `host` for commands and tools): a command line whose every command
+ * only reads or starts with an allowed prefix, a URL on an allowed domain, an allowed tool, or an allowed
+ * MCP tool. An MCP tool's Always allow is in `mcp`, and `mustAsk` reads it.
+ */
+export function callAllowed(
+  kind: ToolKind,
+  args: Record<string, unknown>,
+  mcp: McpToolInfo | null | undefined,
+  grants: readonly string[],
+  saved: readonly AiAllowance[],
+  host: HostRef | null,
+): boolean {
+  switch (kind) {
+    case "run_command": {
+      const here = grants.flatMap((g) => (g.startsWith("run_command:") ? [g.slice("run_command:".length)] : []));
+      const device = saved.filter((a) => a.kind === "command" && onHost(a, host)).map((a) => a.value);
+      return commandAllowed(str(args.command), [...here, ...device]);
+    }
+    case "fetch_url": {
+      const domain = urlDomain(str(args.url));
+      return !!domain && (grants.includes(`fetch_url:${domain}`) || saved.some((a) => a.kind === "domain" && a.value === domain));
+    }
+    case "edit_file":
+    case "write_file":
+    case "send_input":
+      return grants.includes(kind) || saved.some((a) => a.kind === "tool" && a.value === kind && onHost(a, host));
+    case "mcp":
+      return !!mcp && grants.includes(`mcp:${mcp.server_id}:${mcp.tool.tool}`);
+    default:
+      return false;
+  }
 }
 
 /**

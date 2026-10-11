@@ -70,10 +70,10 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 | Test Connection | 测试连接 | 接続をテスト |
 | The provider rejected the API key. Check the key, and for the Anthropic protocol the auth header. | 服务商拒绝了 API 密钥。请检查密钥，Anthropic 协议还要检查认证头。 | プロバイダーが API キーを拒否しました。キーを確認してください。Anthropic プロトコルでは認証ヘッダーも確認してください。 |
 | Couldn’t reach the server. Check the base URL and your network. | 连不上服务器。请检查基础 URL 和网络。 | サーバーに接続できません。ベース URL とネットワークを確認してください。 |
-| The base URL can’t be used. It must be HTTPS, and only local and private network addresses can use HTTP. | 基础 URL 不可用：必须使用 HTTPS，只有本机和内网地址可以用 HTTP。 | ベース URL は使えません。HTTPS が必要で、HTTP が使えるのはローカルとプライベートネットワークのアドレスだけです。 |
+| The base URL can’t be used. Check it, and leave out any user name or password. | 基础 URL 不可用。请检查它，并去掉其中的用户名或密码。 | ベース URL は使えません。URL を確認し、ユーザー名やパスワードを含めないでください。 |
 | The provider returned an error. | 服务商返回了错误。 | プロバイダーがエラーを返しました。 |
-| Enter a full address that starts with https://. A local server can use http://. | 请输入以 https:// 开头的完整地址，本地服务器可以用 http://。 | https:// で始まる完全なアドレスを入力してください。ローカルサーバーは http:// も使えます。 |
-| The base URL must use HTTPS. Only local and private network addresses can use HTTP. | 基础 URL 必须使用 HTTPS，只有本机和内网地址可以用 HTTP。 | ベース URL には HTTPS が必要です。HTTP が使えるのは、ローカルとプライベートネットワークのアドレスだけです。 |
+| Enter a full address that starts with https:// or http://. | 请输入以 https:// 或 http:// 开头的完整地址。 | https:// または http:// で始まる完全なアドレスを入力してください。 |
+| The base URL can’t contain a user name or password. | 基础 URL 不能包含用户名或密码。 | ベース URL にユーザー名やパスワードは含められません。 |
 | Enter an API key. | 请输入 API 密钥。 | API キーを入力してください。 |
 | Couldn’t load the model list. You can still type model IDs. | 无法获取模型列表。你仍然可以手动输入模型 ID。 | モデル一覧を取得できませんでした。モデル ID は手動で入力できます。 |
 | Enter a number of tokens, such as 200000 or 200K. | 请输入 token 数，例如 200000 或 200K。 | トークン数を入力してください。例: 200000 または 200K |
@@ -98,7 +98,7 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | SearXNG | SearXNG | SearXNG |
 
 - For **SearXNG** the instance must allow the JSON output format (`search.formats` includes `json` in its settings).
-- "Fetch page" refuses addresses on private, loopback or link-local networks, pages that are not text, HTML, JSON or XML, and needs approval in manual mode.
+- "Fetch page" refuses addresses on private, loopback or link-local networks, pages that are not text, HTML, JSON or XML, and needs approval in manual mode unless its domain is allowed.
 
 ## Skills
 
@@ -131,7 +131,7 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | Failed | 失败 | 失敗 |
 | Last lines of stderr | stderr 的最后几行 | stderr の最後の行 |
 | Enter the command. | 请输入命令。 | コマンドを入力してください。 |
-| The URL must use HTTPS. Only local and private network addresses can use HTTP. | URL 必须使用 HTTPS，只有本机和内网地址可以用 HTTP。 | URL には HTTPS が必要です。HTTP が使えるのは、ローカルとプライベートネットワークのアドレスだけです。 |
+| The URL can’t contain a user name or password. | URL 不能包含用户名或密码。 | URL にユーザー名やパスワードは含められません。 |
 | This looks like a whole command line. Put only the program here, and each argument on its own row. | 这像是一整行命令。请在这里只填程序，每个参数单独占一行。 | コマンドライン全体のようです。ここにはプログラムだけを入力し、引数は 1 行ずつ分けてください。 |
 | Split Into Arguments | 拆成参数 | 引数に分割 |
 | A quote isn’t closed. Check the command. | 有引号没有闭合，请检查。 | 閉じられていない引用符があります。コマンドを確認してください。 |
@@ -141,7 +141,7 @@ Without a search provider the assistant has no web search tool. In Settings → 
 
 - A server that fails to start shows **Failed** with the error and the last lines of stderr, in Settings → AI → **MCP Servers** (click its row) and in the **MCP tools** menu of the panel. Its tool calls return errors meanwhile. Read the stderr, fix the command or the environment, then **Restart**.
 - Command servers are started like a shell would: `npx` finds `npx.cmd` on Windows. Put only the program in **Command** and each argument on its own row; if the whole command line was pasted, use **Split Into Arguments**. A missing program or a wrong `PATH` is the usual cause of a failed start.
-- An HTTP server needs HTTPS (plain HTTP only for local and private addresses). Servers that need OAuth sign-in are not supported; use a token in **Headers** if the service allows it. When a server with an `Authorization` header fails with "the token is invalid or has expired (HTTP 401)", **Replace** the header's value with a valid token; a token pasted without a scheme is saved with `Bearer ` in front of it.
+- Servers that need OAuth sign-in are not supported; use a token in **Headers** if the service allows it. When a server with an `Authorization` header fails with "the token is invalid or has expired (HTTP 401)", **Replace** the header's value with a valid token; a token pasted without a scheme is saved with `Bearer ` in front of it.
 - Servers start when a conversation first needs their tools and stop on quit or lock; after unlocking they start again when needed. A server switched off for this device, or for the conversation in the **MCP tools** menu, offers no tools.
 - A server added on another device arrives off if it is a Command server, and a Command server turns off here when its command, arguments or environment variable names change on another device (its **Always allow** is cleared too); switch it on here after checking the command.
 

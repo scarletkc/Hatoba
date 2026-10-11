@@ -54,7 +54,7 @@ use hatoba_ai::tools::{
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
-    AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS, MAX_HOST_AI_NOTES_CHARS,
+    AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES,
     SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
@@ -3122,11 +3122,11 @@ fn prompt(
             .or(context.target.as_ref().map(|t| t.username.as_str())),
         server_id,
         date: &date,
-        instructions: chars_prefix(
+        instructions: bytes_prefix(
             &settings.ai.custom_instructions,
-            MAX_CUSTOM_INSTRUCTIONS_CHARS,
+            MAX_CUSTOM_INSTRUCTIONS_BYTES,
         ),
-        host_notes: host.map_or("", |h| chars_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_CHARS)),
+        host_notes: host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
         skills: &skills,
         tools: offered,
     });
@@ -3149,9 +3149,14 @@ fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
     })
 }
 
-/// The first `max` characters of `s`. Saving refuses longer text; one synced from elsewhere is cut.
-fn chars_prefix(s: &str, max: usize) -> &str {
-    s.char_indices().nth(max).map_or(s, |(i, _)| &s[..i])
+/// At most the first `max` bytes of `s`, cut at a character. Saving refuses longer text; text
+/// synced from elsewhere (an older build counted characters) is cut.
+fn bytes_prefix(s: &str, max: usize) -> &str {
+    let mut end = max.min(s.len());
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 /// §13.1: the identification string of the tab's SSH server, read once when a turn starts, so

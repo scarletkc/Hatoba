@@ -9,7 +9,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | ID | Name | Status | Notes |
 |---|---|---|---|
 | SEC-01 | Secrets only in Rust memory | ✅ | |
-| SEC-02 | Auto-lock | ✅ | |
+| SEC-02 | Auto-lock | 🟡 | The system-wide idle time on Windows (`GetLastInputInfo`) and macOS (`CGEventSourceSecondsSinceLastEventType`) needs verification on real machines; on Linux only input in Hatoba's window counts |
 | SEC-03 | Keep sessions while locked | ✅ | |
 | SEC-04 | No secrets in logs | ✅ | Confirmed by scanning the logs after the end-to-end test |
 | SEC-05 | Tauri hardening | ✅ | |
@@ -122,8 +122,8 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-41 | Revert a file tool's change | 🟡 | The delete script runs against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
-| AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ✅ | |
-| AI-19 | Allow a tool for the rest of a conversation | ✅ | |
+| AI-16…18 | Manual approval and bypass modes, read-only commands without asking, approval card, Stop | ✅ | |
+| AI-19 | Allow commands by prefix, pages by domain, or a tool, for a conversation or saved on the device | ✅ | |
 | AI-20, 21 | Context meter, compaction | ✅ | |
 | AI-22 | Automatic compaction | ✅ | |
 | AI-23 | Conversation history | ✅ | |

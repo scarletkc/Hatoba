@@ -96,7 +96,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
       const text = document.body.textContent ?? "";
       expect(text).toContain("Connect it to admin@10.0.0.9:22");
       expect(text).toContain("The file no longer holds what the call wrote.");
-      expect(text).toContain("Send Anyway deletes this device’s copies of those changes, so they can no longer be reverted; Cancel keeps them.");
+      expect(text).toContain("Send Anyway drops their saved changes.");
       expect(button("Keep Files and Send")).toBeUndefined();
       await click(choice);
       await expect(answer).resolves.toBe(sent);
@@ -120,8 +120,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
       );
     });
     expect(button("Revert and Send").disabled).toBe(true);
-    expect(document.body.textContent).toContain("The tab is disconnected, so none of these files can be reverted now.");
-    expect(document.body.textContent).toContain("reconnect the tab and send again");
+    expect(document.body.textContent).toContain("Reconnect the tab to revert these files.");
     expect(button("Keep Files and Send").disabled).toBe(false);
     await click("Cancel");
     await expect(answer).resolves.toBe(false);
@@ -157,7 +156,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     render();
     act(() => void ask([change("c2", "/etc/hosts", false, other)], reverted));
     expect(button("Revert and Send").disabled).toBe(true);
-    expect(document.body.textContent).toContain(`This tab is connected to ${SERVER}, so it cannot revert any of these files.`);
+    expect(document.body.textContent).toContain(`Connect to ${SERVER} to revert these files.`);
   });
 
   it("lists each file once, with how many changes it has and the lines a revert adds and removes", async () => {

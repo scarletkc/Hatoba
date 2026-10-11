@@ -52,7 +52,3 @@ export function SettingRow({
 export function Pane({ children }: { children: ReactNode }) {
   return <div className={s.pane}>{children}</div>;
 }
-
-export function PaneHint({ children }: { children: ReactNode }) {
-  return <div className={s.paneHint}>{children}</div>;
-}

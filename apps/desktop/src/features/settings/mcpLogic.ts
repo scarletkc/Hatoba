@@ -251,14 +251,6 @@ export function mcpFormToInput(id: string | null, form: McpForm): McpServerInput
   };
 }
 
-/** What the confirmation before saving a `stdio` server shows: the full command line and the names of its variables. */
-export function commandPreview(form: McpForm): { line: string; envNames: string[] } {
-  return {
-    line: formatCommandLine(form.command.trim(), form.args.map((a) => a.value).filter((v) => v !== "")),
-    envNames: form.env.filter((r) => !isBlankRow(r)).map((r) => r.key.trim()),
-  };
-}
-
 // ───────────────────────── Servers and their state (AI-31, AI-32) ─────────────────────────
 
 /** A server's transport on one line: the command line, or the URL. */

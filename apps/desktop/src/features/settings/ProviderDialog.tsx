@@ -253,7 +253,7 @@ export function ProviderDialog({
         </>
       }
     >
-      <SheetHeader title={provider ? t("aiSettings.dlg.editTitle") : t("aiSettings.dlg.addTitle")} subtitle={t("aiSettings.dlg.subtitle")} />
+      <SheetHeader title={provider ? t("aiSettings.dlg.editTitle") : t("aiSettings.dlg.addTitle")} />
       <form
         id={ids.form}
         className={s.form}
@@ -292,7 +292,6 @@ export function ProviderDialog({
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
               <span className={s.hint}>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</span>
-              <span className={s.hint}>{t("aiSettings.f.baseUrl.https")}</span>
             </div>
           </FormRow>
           <FormRow label={t("aiSettings.f.apiKey")} htmlFor={ids.key}>

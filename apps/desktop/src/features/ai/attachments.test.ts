@@ -57,11 +57,11 @@ describe("the terminal selection (AI-10)", () => {
     expect(att("a\nb\nc  \n")).toEqual({ kind: "selection", host: "prod-api", lines: 3, text: "a\nb\nc", truncated: false });
   });
 
-  it("keeps the first 4,000 and last 12,000 characters of a long selection, like tool results", () => {
-    const text = "a".repeat(5_000) + "b".repeat(5_000) + "c".repeat(12_000);
+  it("keeps the first 7,500 and last 22,500 characters of a long selection, like tool results", () => {
+    const text = "a".repeat(8_500) + "b".repeat(5_000) + "c".repeat(22_500);
     const clipped = clipText(text);
     expect(clipped.truncated).toBe(true);
-    expect(clipped.text).toBe(`${"a".repeat(4_000)}\n\n[… 6000 characters left out …]\n\n${"c".repeat(12_000)}`);
+    expect(clipped.text).toBe(`${"a".repeat(7_500)}\n\n[… 6000 characters left out …]\n\n${"c".repeat(22_500)}`);
     expect(clipText("x".repeat(SELECTION_MAX_CHARS))).toEqual({ text: "x".repeat(SELECTION_MAX_CHARS), truncated: false });
     // Characters, not UTF-16 units.
     expect(clipText("磁".repeat(SELECTION_MAX_CHARS)).truncated).toBe(false);
@@ -97,7 +97,7 @@ describe("the stored blocks", () => {
   });
 
   it("marks a truncated selection", () => {
-    const stored = composeMessage("q", [att("y".repeat(20_000))]);
+    const stored = composeMessage("q", [att("y".repeat(40_000))]);
     expect(stored.startsWith('<terminal_selection host="prod-api" lines="1" truncated="true">\n')).toBe(true);
     expect(parseMessage(stored).attachments[0]).toMatchObject({ kind: "selection", truncated: true });
   });
@@ -139,7 +139,7 @@ describe("connection diagnostics (AI-10)", () => {
   it("attaches nothing without text, and clips long text like a selection", () => {
     expect(makeDiagnostics("h", " \r\n ")).toBeNull();
     expect(makeDiagnostics("h", "a\r\nb\r\n")).toEqual({ kind: "diagnostics", host: "h", text: "a\nb" });
-    expect(makeDiagnostics("h", "z".repeat(20_000))!.text).toContain("[… 4000 characters left out …]");
+    expect(makeDiagnostics("h", "z".repeat(34_000))!.text).toContain("[… 4000 characters left out …]");
   });
 
   it("escapes its own closing tag, not the selection's", () => {

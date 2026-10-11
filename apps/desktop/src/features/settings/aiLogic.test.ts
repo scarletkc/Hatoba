@@ -12,7 +12,6 @@ import {
   parseBaseUrl,
   parseModelIds,
   parseTokenCount,
-  parseToolLimit,
   removeModel,
   sanitizeSettings,
   sameSettings,
@@ -296,18 +295,5 @@ describe("searchProviderFor", () => {
     expect(searchProviderFor(list, "tavily", null)?.id).toBe("new");
     expect(searchProviderFor(list, "tavily", "old")?.id).toBe("old");
     expect(searchProviderFor(list, "tavily", "b")?.id).toBe("new");
-  });
-});
-
-describe("parseToolLimit", () => {
-  it("accepts whole numbers and clamps them to 1-200", () => {
-    expect(parseToolLimit("25")).toBe(25);
-    expect(parseToolLimit(" 7 ")).toBe(7);
-    expect(parseToolLimit("0")).toBe(1);
-    expect(parseToolLimit("500")).toBe(200);
-  });
-
-  it("rejects anything that is not a number", () => {
-    for (const bad of ["", "abc", "-3", "2.5", "1e2"]) expect(parseToolLimit(bad), bad).toBeNull();
   });
 });

@@ -442,7 +442,7 @@ async fn join_merges_another_vault_into_the_cloud() {
     a.put(host("cloud-host"));
     a.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
-            s.auto_lock_minutes = 42;
+            s.terminal.font_size = 42;
         }
     });
     enable(&a).await;
@@ -453,6 +453,7 @@ async fn join_merges_another_vault_into_the_cloud() {
     let gone = c.put(host("deleted-host"));
     c.v().delete(&gone).unwrap();
     c.v().set_recent_targets("[\"root@local\"]").unwrap();
+    c.v().set_ai_allowances("[\"allowed\"]").unwrap();
     let chat = c.put(conversation("local-chat"));
     let response = c
         .v()
@@ -468,7 +469,7 @@ async fn join_merges_another_vault_into_the_cloud() {
         .unwrap();
     c.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
-            s.auto_lock_minutes = 7;
+            s.terminal.font_size = 7;
         }
     });
     let device_id = c.v().device_id();
@@ -478,11 +479,11 @@ async fn join_merges_another_vault_into_the_cloud() {
         .unwrap();
     // Until the first pull, the local settings stay, and they are not queued to overwrite the
     // cloud's, even when edited meanwhile.
-    assert_eq!(c.v().settings().auto_lock_minutes, 7);
+    assert_eq!(c.v().settings().terminal.font_size, 7);
     c.clock.advance(60_000);
     c.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
-            s.auto_lock_minutes = 9;
+            s.terminal.font_size = 9;
         }
     });
     assert_eq!(
@@ -507,7 +508,7 @@ async fn join_merges_another_vault_into_the_cloud() {
         ]
     );
     assert_eq!(
-        c.v().settings().auto_lock_minutes,
+        c.v().settings().terminal.font_size,
         42,
         "the cloud's settings win"
     );
@@ -520,6 +521,10 @@ async fn join_merges_another_vault_into_the_cloud() {
     assert_eq!(
         c.v().recent_targets().unwrap().as_deref(),
         Some("[\"root@local\"]")
+    );
+    assert_eq!(
+        c.v().ai_allowances().unwrap().as_deref(),
+        Some("[\"allowed\"]")
     );
     assert!(c.v().conflicts(false).unwrap().is_empty());
     assert!(
@@ -535,7 +540,7 @@ async fn join_merges_another_vault_into_the_cloud() {
     // The local data reaches the other device, readable under the cloud's vault key.
     a.sync().await;
     assert_eq!(
-        a.v().settings().auto_lock_minutes,
+        a.v().settings().terminal.font_size,
         42,
         "the cloud kept its settings"
     );
@@ -564,7 +569,7 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
     let (server, clock, a, _b) = world();
     a.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
-            s.auto_lock_minutes = 42;
+            s.terminal.font_size = 42;
         }
     });
     enable(&a).await;
@@ -579,16 +584,16 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
     c.clock.advance(60_000);
     c.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
-            s.auto_lock_minutes = 9;
+            s.terminal.font_size = 9;
         }
     });
     c.v().set_sync_config(None).unwrap();
 
     let joined = join(&c).await;
     assert!(!joined.rekeyed);
-    assert_eq!(c.v().settings().auto_lock_minutes, 42);
+    assert_eq!(c.v().settings().terminal.font_size, 42);
     a.sync().await;
-    assert_eq!(a.v().settings().auto_lock_minutes, 42);
+    assert_eq!(a.v().settings().terminal.font_size, 42);
 }
 
 #[tokio::test]
@@ -1466,10 +1471,10 @@ async fn settings_item_syncs_like_any_other() {
     let (_server, clock, a, b) = two_devices().await;
     clock.advance(1000);
     let mut s = a.v().settings();
-    s.auto_lock_minutes = 42;
+    s.terminal.scrollback = 42_000;
     a.v().put(None, Item::Settings(s)).unwrap();
     converge(&a, &b).await;
-    assert_eq!(b.v().settings().auto_lock_minutes, 42);
+    assert_eq!(b.v().settings().terminal.scrollback, 42_000);
 }
 
 #[tokio::test]
@@ -1479,7 +1484,6 @@ async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_ed
     clock.advance(1000);
     let mut s = a.v().settings();
     s.terminal.font_size = 16;
-    s.auto_lock_minutes = 42;
     s.terminal.right_click = Some(RightClick::CopyPaste);
     a.v().put(None, Item::Settings(s)).unwrap();
     a.sync().await;
@@ -1499,7 +1503,6 @@ async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_ed
     assert_eq!(s.terminal.right_click, Some(RightClick::CopyPaste));
     assert_eq!(s.terminal.confirm_multiline_paste, Some(false));
     assert_eq!(s.terminal.font_size, 16);
-    assert_eq!(s.auto_lock_minutes, 42);
     // B wrote on top of A's version, so nothing had to be resolved.
     assert!(b.v().conflicts(false).unwrap().is_empty());
 }

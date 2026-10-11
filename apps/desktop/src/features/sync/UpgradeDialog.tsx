@@ -263,7 +263,6 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
       <Dialog
         title={t("sync.up.review.title")}
         icon="arrow-circle-up"
-        body={t("sync.up.review.body")}
         onClose={onClose}
         actions={
           <>
@@ -377,7 +376,7 @@ export function UpgradeDialog({ bundled, onClose }: { bundled: string; onClose: 
             </LinkButton>
           </div>
         </Callout>
-        <Field label={t("sync.apiToken")} htmlFor={tokenId} error={error ? deployError(t, error) : undefined} hint={t("sync.dep.token.memory")}>
+        <Field label={t("sync.apiToken")} htmlFor={tokenId} error={error ? deployError(t, error) : undefined}>
           <TextField
             id={tokenId}
             secret

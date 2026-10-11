@@ -108,21 +108,25 @@ fn lines(text: &str) -> Vec<&str> {
         .collect()
 }
 
-/// One numbered line as `cat -n` prints it, cut to [`MAX_LINE_CHARS`]. Returns whether it was
-/// cut.
-fn numbered(out: &mut String, number: usize, line: &str) -> bool {
+/// One numbered line as `cat -n` prints it, cut to [`MAX_LINE_CHARS`]. `open`: the line goes on
+/// past what was read, so its length is not known. Returns whether it was cut.
+fn numbered(out: &mut String, number: usize, line: &str, open: bool) -> bool {
     let total = line.chars().count();
     out.push_str(&format!("{number:>6}\t"));
-    if total > MAX_LINE_CHARS {
+    if total > MAX_LINE_CHARS || open {
         let end = line
             .char_indices()
             .nth(MAX_LINE_CHARS)
             .map_or(line.len(), |(i, _)| i);
         out.push_str(&line[..end]);
-        out.push_str(&format!(
-            " [… cut: {} more characters]\n",
-            total - MAX_LINE_CHARS
-        ));
+        if open {
+            out.push_str(" [… cut]\n");
+        } else {
+            out.push_str(&format!(
+                " [… cut: {} more characters]\n",
+                total - MAX_LINE_CHARS
+            ));
+        }
         true
     } else {
         out.push_str(line);
@@ -131,9 +135,13 @@ fn numbered(out: &mut String, number: usize, line: &str) -> bool {
     }
 }
 
+/// The most bytes of a file over [`MAX_FILE_BYTES`] that one `read_file` call reads from the host,
+/// from the line it starts at: more than a page shows.
+pub const MAX_PAGE_BYTES: u64 = 256 * 1024;
+
 /// AI-38: the page of `file` that `read_file` returns, from line `offset` (1-based, 1 by default),
-/// at most `limit` lines, and at most 16,000 characters in all. `path` is the path as the model
-/// gave it. An error is the message for the model.
+/// at most `limit` lines, and at most [`MAX_RESULT_CHARS`] characters in all. `path` is the path as
+/// the model gave it. An error is the message for the model.
 pub fn read_page(
     path: &str,
     file: &TextFile,
@@ -147,23 +155,101 @@ pub fn read_page(
     }
     let first = usize::try_from(offset.unwrap_or(1).max(1)).unwrap_or(usize::MAX);
     if first > total {
-        return Err(format!(
-            "{path} has {total} lines, so offset {first} is past its end."
-        ));
+        return Err(past_end(path, total, first));
     }
+    Ok(page(
+        path,
+        &all[first - 1..],
+        first,
+        total,
+        limit,
+        file.crlf,
+        false,
+    ))
+}
+
+/// AI-38: a page of a file over [`MAX_FILE_BYTES`], which `read_file` reads a part at a time:
+/// `bytes` are the file's bytes from the start of line `offset` on, `cut` when more of the file
+/// followed them, and `total` is its line count. Shown as [`read_page`] shows a page, with a note
+/// that the file is too large for `edit_file` and `write_file`.
+pub fn read_large_page(
+    path: &str,
+    offset: u64,
+    total: u64,
+    bytes: &[u8],
+    cut: bool,
+    limit: Option<u64>,
+) -> Result<String, String> {
+    let total = usize::try_from(total).unwrap_or(usize::MAX);
+    if total == 0 {
+        return Ok(format!("{path} is empty.\n"));
+    }
+    let first = usize::try_from(offset.max(1)).unwrap_or(usize::MAX);
+    let not_text = |why: &str| {
+        format!("{path} cannot be read as text: {why}. The file tools read UTF-8 text files only.")
+    };
+    if bytes.contains(&0) {
+        return Err(not_text("it has NUL bytes, so it is not a text file"));
+    }
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => text,
+        // The part read can end inside a character.
+        Err(e) if cut && e.error_len().is_none() => {
+            std::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or_default()
+        }
+        Err(_) => return Err(not_text("it is not valid UTF-8 text")),
+    };
+    let text = if first == 1 {
+        text.strip_prefix(BOM).unwrap_or(text)
+    } else {
+        text
+    };
+    let mut shown = lines(text);
+    // The last line goes on past what was read: it shows only when it is the only one, and the
+    // next page starts with it otherwise.
+    let mut open = cut && !text.ends_with('\n');
+    if open && shown.len() > 1 {
+        shown.pop();
+        open = false;
+    }
+    if first > total || shown.is_empty() {
+        return Err(past_end(path, total, first));
+    }
+    let mut out = page(path, &shown, first, total, limit, mostly_crlf(text), open);
+    out.push_str("[The file is larger than 1 MB, so edit_file and write_file do not change it.]\n");
+    Ok(out)
+}
+
+fn past_end(path: &str, total: usize, first: usize) -> String {
+    format!("{path} has {total} lines, so offset {first} is past its end.")
+}
+
+/// A page's text: the header, the numbered lines of `shown` (the lines from `first` on that are at
+/// hand) that fit `limit` and the size of a result, and how to read on. `open`: the last of
+/// `shown` goes on past what was read.
+fn page(
+    path: &str,
+    shown: &[&str],
+    first: usize,
+    total: usize,
+    limit: Option<u64>,
+    crlf: bool,
+    open: bool,
+) -> String {
     let limit = limit
         .map(|l| usize::try_from(l.max(1)).unwrap_or(usize::MAX))
         .unwrap_or(usize::MAX);
-    let crlf = if file.crlf { ", CRLF line breaks" } else { "" };
+    let crlf = if crlf { ", CRLF line breaks" } else { "" };
     // The header and the closing notes take at most this much of the page.
     let budget = MAX_RESULT_CHARS - 400 - path.chars().count();
     let mut body = String::new();
     let mut used = 0;
     let mut last = first - 1;
     let mut cut = false;
-    for (i, line) in all.iter().enumerate().skip(first - 1).take(limit) {
+    for (i, line) in shown.iter().enumerate().take(limit) {
+        let number = first + i;
         let mut next = String::new();
-        let was_cut = numbered(&mut next, i + 1, line);
+        let was_cut = numbered(&mut next, number, line, open && i + 1 == shown.len());
         let size = next.chars().count();
         if used + size > budget && last >= first {
             break;
@@ -171,7 +257,7 @@ pub fn read_page(
         used += size;
         body.push_str(&next);
         cut |= was_cut;
-        last = i + 1;
+        last = number;
     }
     let mut out = if first == 1 && last == total {
         format!("{path}: {}{crlf}\n", line_count(total))
@@ -192,7 +278,7 @@ pub fn read_page(
              whole, for example with sed -n.]\n"
         ));
     }
-    Ok(out)
+    out
 }
 
 /// The result of an `edit_file` replacement.
@@ -336,7 +422,7 @@ pub fn edit_result(path: &str, edit: &Edit) -> String {
     let mut last = from;
     for (i, line) in all.iter().enumerate().take(to).skip(from) {
         let mut next = String::new();
-        numbered(&mut next, i + 1, line);
+        numbered(&mut next, i + 1, line, false);
         if body.chars().count() + next.chars().count() > EDIT_SNIPPET_CHARS && last > from {
             break;
         }
@@ -441,7 +527,7 @@ mod tests {
             "a.txt has 3 lines, so offset 4 is past its end."
         );
 
-        // A long file stops at 16,000 characters, on a whole line.
+        // A long file stops at the size of a result, on a whole line.
         let text: String = (0..5_000).map(|i| format!("line {i}\n")).collect();
         let page = read_page("big", &file(&text), None, None).unwrap();
         assert!(page.chars().count() <= MAX_RESULT_CHARS, "{}", page.len());
@@ -459,6 +545,49 @@ mod tests {
         assert!(page.contains(" [… cut: 5 more characters]\n"));
         assert!(page.contains("are cut. run_command"));
         assert_eq!(page.matches('日').count(), MAX_LINE_CHARS);
+    }
+
+    #[test]
+    fn large_files_are_read_a_part_at_a_time() {
+        const LARGE: &str = "[The file is larger than 1 MB, so edit_file and write_file do not \
+                             change it.]\n";
+        // Lines 41 on of a file of 90 lines, the part ending inside line 43 and inside a character.
+        let part = "forty-one\nforty-two\nforty-日".as_bytes();
+        let part = &part[..part.len() - 1];
+        assert_eq!(
+            read_large_page("big.log", 41, 90, part, true, None).unwrap(),
+            format!(
+                "big.log: lines 41–42 of 90\n    41\tforty-one\n    42\tforty-two\n[Lines 43–90 \
+                 are not shown. To read on, call read_file with offset 43.]\n{LARGE}"
+            )
+        );
+        // The end of the file, its last line without a line break.
+        assert_eq!(
+            read_large_page("big.log", 90, 90, b"ninety", false, Some(5)).unwrap(),
+            format!("big.log: lines 90–90 of 90\n    90\tninety\n{LARGE}")
+        );
+        // A line longer than what one call reads shows cut, and the next call goes past it.
+        let long = format!("\u{feff}{}", "a".repeat(5_000));
+        let page = read_large_page("min.js", 1, 2, long.as_bytes(), true, None).unwrap();
+        assert!(
+            page.starts_with("min.js: lines 1–1 of 2\n     1\ta"),
+            "{page}"
+        );
+        assert!(page.contains(
+            " [… cut]\n[Lines 2–2 are not shown. To read on, call read_file \
+                               with offset 2.]\n"
+        ));
+
+        assert_eq!(
+            read_large_page("e", 1, 0, b"", false, None).unwrap(),
+            "e is empty.\n"
+        );
+        assert_eq!(
+            read_large_page("big.log", 91, 90, b"", false, None).unwrap_err(),
+            "big.log has 90 lines, so offset 91 is past its end."
+        );
+        assert!(read_large_page("blob", 1, 3, b"a\0b\n", true, None).is_err());
+        assert!(read_large_page("blob", 1, 3, b"\xff\xfeab\n", true, None).is_err());
     }
 
     #[test]

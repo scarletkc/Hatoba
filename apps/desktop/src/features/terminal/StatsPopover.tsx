@@ -98,7 +98,6 @@ export function StatsPopover({
       </div>
       {body}
       <div className={s.separator} />
-      {state.kind !== "unsupported" && <div className={s.footnote}>{t("terminal.stats.note")}</div>}
       <button
         type="button"
         className={s.hide}

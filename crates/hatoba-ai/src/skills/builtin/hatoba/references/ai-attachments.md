@@ -13,7 +13,7 @@ A message carries at most one diagnostics attachment and one selection, and any 
 
 ## Terminal selection
 
-Text selected in the tab's terminal appears as a chip above the input while the panel shows that tab's conversation. It follows the selection as it changes. **Ask AI** in the terminal's menus (`references/terminal.md`) opens the panel with the input focused. Hover or click the chip to preview the first lines, and press × to leave it out. Very long selections are cut like a long tool result (first 4,000 and last 12,000 characters) and marked "truncated". After a message takes the selection, the chip comes back only when the selection changes.
+Text selected in the tab's terminal appears as a chip above the input while the panel shows that tab's conversation. It follows the selection as it changes. **Ask AI** in the terminal's menus (`references/terminal.md`) opens the panel with the input focused. Hover or click the chip to preview the first lines, and press × to leave it out. Very long selections are cut like a long tool result (first 7,500 and last 22,500 characters) and marked "truncated". After a message takes the selection, the chip comes back only when the selection changes.
 
 | en | zh-CN | ja |
 |---|---|---|

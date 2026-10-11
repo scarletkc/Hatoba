@@ -9,7 +9,7 @@ export interface LiveResponse {
 }
 
 /** What the current tool call is waiting for. */
-export type CallState = "approval" | "running" | "limit";
+export type CallState = "approval" | "running";
 
 /** The tool call being handled. */
 export interface CallInfo {
@@ -24,8 +24,6 @@ export interface TurnState {
   phase: "starting" | "waiting" | "streaming" | "tools";
   live: LiveResponse | null;
   call: CallInfo | null;
-  /** Tool calls handled since the turn started or the user chose Continue (AI-18). */
-  toolCount: number;
   /** An `error` event, reported when the turn ends. */
   error: { status: number | null; message: string } | null;
 }
@@ -46,7 +44,7 @@ export interface TurnSnapshot {
 }
 
 export function newTurn(): TurnState {
-  return { phase: "starting", live: null, call: null, toolCount: 0, error: null };
+  return { phase: "starting", live: null, call: null, error: null };
 }
 
 const emptyLive = (): LiveResponse => ({ text: "", reasoning: "", toolCalls: [], usage: null });

@@ -14,6 +14,20 @@ use crate::platform::biometric;
 use crate::state::{AppState, blocking};
 use crate::{lock, sync};
 
+/// SEC-09: the one requirement a new master password has; a weak one only gets a warning.
+const MIN_PASSWORD_CHARS: usize = 12;
+
+/// Refuses a new master password shorter than [`MIN_PASSWORD_CHARS`] as invalid `field`.
+fn check_new_password(field: &str, password: &str) -> AppResult<()> {
+    if password.chars().count() < MIN_PASSWORD_CHARS {
+        return Err(AppError::invalid(
+            field,
+            format!("the master password must have at least {MIN_PASSWORD_CHARS} characters"),
+        ));
+    }
+    Ok(())
+}
+
 /// Common work after any successful unlock (password, recovery code, biometrics, restore).
 fn after_unlock(app: &AppHandle, state: &AppState) {
     // Only when sync is off; otherwise `sync::run_round` does it after pulling.
@@ -69,12 +83,7 @@ pub async fn vault_create(
     state: State<'_, AppState>,
     password: String,
 ) -> AppResult<String> {
-    if password.chars().count() < 8 {
-        return Err(AppError::invalid(
-            "password",
-            "the master password must have at least 8 characters",
-        ));
-    }
+    check_new_password("password", &password)?;
     let password = Zeroizing::new(password);
     let vault = state.vault.clone();
     let code = blocking(move || {
@@ -152,12 +161,7 @@ pub async fn vault_change_password(
     current: String,
     next: String,
 ) -> AppResult<()> {
-    if next.chars().count() < 8 {
-        return Err(AppError::invalid(
-            "next",
-            "the master password must have at least 8 characters",
-        ));
-    }
+    check_new_password("next", &next)?;
     match state.sync.backend() {
         Some(backend) => {
             flows::change_password_remote(&state.vault, backend.as_ref(), &current, &next).await?
@@ -195,12 +199,7 @@ pub async fn vault_recover(
     recovery_code: String,
     new_password: String,
 ) -> AppResult<()> {
-    if new_password.chars().count() < 8 {
-        return Err(AppError::invalid(
-            "new_password",
-            "the master password must have at least 8 characters",
-        ));
-    }
+    check_new_password("new_password", &new_password)?;
     let config = state.vault().sync_config()?;
     match config {
         Some(cfg) => {
@@ -321,4 +320,22 @@ pub async fn biometric_enable(
 #[specta::specta]
 pub fn biometric_disable(state: State<'_, AppState>) -> AppResult<()> {
     biometric::remove(state.secrets.as_ref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_master_password_needs_twelve_characters() {
+        let err = check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS - 1)).unwrap_err();
+        assert_eq!(
+            (err.code, err.field.as_deref()),
+            (ErrorCode::InvalidInput, Some("next"))
+        );
+        assert!(check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS)).is_ok());
+        // Characters, not bytes: twelve CJK characters are enough, eleven are not.
+        assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS)).is_ok());
+        assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS - 1)).is_err());
+    }
 }

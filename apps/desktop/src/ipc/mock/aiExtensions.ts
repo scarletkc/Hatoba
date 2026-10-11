@@ -335,19 +335,7 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     }
   };
 
-  /** Like Rust's digest of what an import read (AI-27): the same files give the same token. */
-  const tokenOf = (preview: Omit<SkillImportPreview, "token">): string => {
-    let hash = 0x811c9dc5;
-    for (const ch of JSON.stringify({ ...preview, existing_id: null, reserved_name: false })) hash = Math.imul(hash ^ ch.charCodeAt(0), 0x01000193) >>> 0;
-    return hash.toString(16).padStart(8, "0");
-  };
-
   const previewFor = (path: string): SkillImportPreview => {
-    const read = readPreview(path);
-    return { ...read, token: tokenOf(read) };
-  };
-
-  const readPreview = (path: string): Omit<SkillImportPreview, "token"> => {
     const lower = path.toLowerCase();
     if (lower.includes("empty")) {
       return { name: null, description: null, body: null, files: [], frontmatter_keys: [], skipped: [], issues: [{ kind: "missing_skill_md" }], existing_id: null, reserved_name: false };
@@ -514,8 +502,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         return fail("invalid_input", "the URL is not valid", "url");
       }
     })();
-    const local = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\])/.test(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) fail("invalid_input", "the URL must use https unless it is a local address", "url");
+    if (url.protocol !== "https:" && url.protocol !== "http:") fail("invalid_input", "the URL must start with https:// or http://", "url");
+    if (url.username || url.password) fail("invalid_input", "the URL must not contain a user name or password", "url");
     const saved = old?.transport.kind === "http" ? old.transport.header_keys : [];
     return { kind: "http", url: input.url, header_keys: secretKeys(input.headers, saved) };
   };
@@ -614,10 +602,9 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       await wait(350);
       return structuredClone(previewFor(path));
     },
-    skill_import: async (path, token, replaceId, rename) => {
+    skill_import: async (path, replaceId, rename) => {
       await wait(300);
       const p = previewFor(path);
-      if (p.token !== token) fail("invalid_input", "The skill changed on disk after it was previewed. Preview it again.", "path");
       if (p.issues.length || p.name === null || p.description === null || p.body === null) fail("invalid_input", "the import has issues", "path");
       const name = rename ?? p.name;
       if (!NAME_RULE.test(name)) fail("invalid_input", "the new name is not valid", "rename");

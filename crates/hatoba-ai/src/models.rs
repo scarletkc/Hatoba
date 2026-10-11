@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{Effort, Protocol, ProviderConfig, client_for, validate_base_url};
+use crate::provider::{Effort, Protocol, ProviderConfig, validate_base_url};
 
 /// A model from the provider's list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,26 +157,13 @@ pub async fn list_models(
         .unwrap_or_else(|_| Err(AiError::Network("the request timed out".into())))
 }
 
-/// [`validate_base_url`], giving up as soon as `cancel` fires.
-async fn checked_base(
-    provider: &ProviderConfig,
-    cancel: &CancellationToken,
-) -> Result<url::Url, AiError> {
-    tokio::select! {
-        biased;
-        () = cancel.cancelled() => Err(AiError::Cancelled),
-        base = validate_base_url(&provider.base_url) => base,
-    }
-}
-
 async fn list_models_inner(
     http: &reqwest::Client,
     provider: &ProviderConfig,
     cancel: &CancellationToken,
 ) -> Result<Vec<ModelInfo>, AiError> {
-    let base = checked_base(provider, cancel).await?;
+    let base = validate_base_url(&provider.base_url)?;
     let headers = provider.headers()?;
-    let http = client_for(http, &base);
     let mut models: Vec<ModelInfo> = Vec::new();
     let push = |model: ModelInfo, models: &mut Vec<ModelInfo>| {
         if !models.iter().any(|m| m.id == model.id) {
@@ -370,9 +357,8 @@ async fn probe_model(
     model: &str,
     cancel: &CancellationToken,
 ) -> Result<(), AiError> {
-    let base = checked_base(provider, cancel).await?;
+    let base = validate_base_url(&provider.base_url)?;
     let headers = provider.headers()?;
-    let http = client_for(http, &base);
     let messages = json!([{"role": "user", "content": "Hi"}]);
     let (url, body) = match provider.protocol {
         // No token limit: OpenAI's newer models refuse `max_tokens`, and the field name differs

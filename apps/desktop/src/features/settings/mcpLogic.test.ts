@@ -3,7 +3,6 @@ import type { McpServerView, McpToolAnnotations, McpToolView } from "@/ipc/types
 import {
   annotationKeys,
   argRows,
-  commandPreview,
   formatCommandLine,
   freeServerName,
   hasMcpProblems,
@@ -285,13 +284,6 @@ describe("the form", () => {
   it("keeps the other transport's rows out of the input", () => {
     const f = { ...initialMcpForm(stdioServer()), kind: "http" as const, url: "https://x.test/mcp" };
     expect(mcpFormToInput("m1", f).transport).toEqual({ kind: "http", url: "https://x.test/mcp", headers: [] });
-  });
-
-  it("previews the command line and the variable names, never the values", () => {
-    const f = valid({ command: "npx", args: argRows(["-y", "My Docs"]), env: [row("TOKEN", "super-secret"), savedSecretRows(["OLD"])[0]] });
-    const p = commandPreview(f);
-    expect(p).toEqual({ line: 'npx -y "My Docs"', envNames: ["TOKEN", "OLD"] });
-    expect(JSON.stringify(p)).not.toContain("super-secret");
   });
 });
 

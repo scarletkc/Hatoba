@@ -3,7 +3,7 @@
 `smoke.mjs` drives the real app (Rust backend + WebView) through WebDriver and walks the main
 path against a real OpenSSH server:
 
-1. first launch → create a vault, read the recovery code, confirm its last group (VAULT-01/02);
+1. first launch → create a vault, read the recovery code, confirm it is saved (VAULT-01/02);
 2. create a password-auth host (HOST-01);
 3. connect → first-connection host-key dialog (SSH-04, the fingerprint must match the server's)
    → run a command and print UTF-8 text over the binary terminal channel

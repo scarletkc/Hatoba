@@ -6,39 +6,44 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_specta::Event;
 
-use crate::dto::{LockReason, VaultLockedEvent};
+use crate::dto::{LocalPrefs, LockReason, VaultLockedEvent};
 use crate::state::{AppState, state};
 use crate::sync;
 
-/// Copied out of the synced settings while unlocked, because they must be honoured after the
-/// vault (and with it the settings item) is locked.
+/// The device's lock settings (SEC-02/03), copied out of the device-local prefs so that each
+/// decision reads them without the vault's mutex.
 #[derive(Default)]
 pub struct LockPolicy {
     auto_lock_minutes: AtomicU32,
     disconnect_on_lock: AtomicBool,
+    lock_on_sleep: AtomicBool,
 }
 
+/// Reads the policy from the prefs, which are readable while locked. Runs after unlock and
+/// whenever the prefs are saved.
 pub fn refresh_policy(state: &AppState) {
-    let vault = state.vault();
-    if vault.is_unlocked() {
-        let s = vault.settings();
-        state
-            .lock_policy
-            .auto_lock_minutes
-            .store(s.auto_lock_minutes, Ordering::Relaxed);
-        state
-            .lock_policy
-            .disconnect_on_lock
-            .store(s.lock_disconnects_sessions, Ordering::Relaxed);
-    }
+    let stored = state.vault().local_prefs().ok().flatten();
+    let prefs = stored
+        .map(|json| LocalPrefs::from_stored(&json))
+        .unwrap_or_default();
+    let policy = &state.lock_policy;
+    policy
+        .auto_lock_minutes
+        .store(prefs.auto_lock_minutes, Ordering::Relaxed);
+    policy
+        .disconnect_on_lock
+        .store(prefs.lock_disconnects_sessions, Ordering::Relaxed);
+    policy
+        .lock_on_sleep
+        .store(prefs.lock_on_sleep, Ordering::Relaxed);
 }
 
-/// Runs a sync round, then refreshes the policy from whatever settings it pulled. The refresh
-/// also runs when the round fails, because pages applied before the failure stay applied.
-pub async fn refresh_after_sync<T>(state: &AppState, round: impl Future<Output = T>) -> T {
-    let result = round.await;
-    refresh_policy(state);
-    result
+/// How long the user has been away: the system's idle time where the platform reports it
+/// (`platform::idle`), never more than the time since the last activity in Hatoba's window,
+/// which is all there is elsewhere.
+fn idle_time(state: &AppState) -> Duration {
+    let window = state.idle_for();
+    crate::platform::idle::system_idle().map_or(window, |system| system.min(window))
 }
 
 /// Whether the vault has been idle past the timeout. A policy of 0 minutes never locks.
@@ -51,6 +56,10 @@ fn idle_lock_due(state: &AppState, idle: Duration) -> bool {
 
 fn disconnects_on_lock(state: &AppState) -> bool {
     state.lock_policy.disconnect_on_lock.load(Ordering::Relaxed)
+}
+
+fn locks_on_sleep(state: &AppState) -> bool {
+    state.lock_policy.lock_on_sleep.load(Ordering::Relaxed)
 }
 
 /// Locks the vault: wipes keys and decrypted items from memory (zeroize, SEC-01), stops sync and
@@ -105,7 +114,7 @@ pub fn spawn_watchers(app: AppHandle) {
         loop {
             tokio::time::sleep(Duration::from_secs(15)).await;
             let state = state(&idle_app);
-            if idle_lock_due(&state, state.idle_for()) {
+            if idle_lock_due(&state, idle_time(&state)) {
                 lock_vault(&idle_app, LockReason::Idle).await;
             }
         }
@@ -113,7 +122,8 @@ pub fn spawn_watchers(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut sleeps = crate::platform::power::watch_sleep();
         while sleeps.recv().await.is_some() {
-            if state(&app).vault().is_unlocked() {
+            let state = state(&app);
+            if locks_on_sleep(&state) && state.vault().is_unlocked() {
                 lock_vault(&app, LockReason::Sleep).await;
             }
         }
@@ -124,69 +134,48 @@ pub fn spawn_watchers(app: AppHandle) {
 mod tests {
     use std::time::Duration;
 
-    use hatoba_core::model::{Item, SETTINGS_ID};
-    use hatoba_core::{Error, KdfParams, Vault};
+    use hatoba_core::{KdfParams, Vault};
+    use serde_json::json;
 
-    use super::{disconnects_on_lock, idle_lock_due, refresh_after_sync, refresh_policy};
+    use super::{disconnects_on_lock, idle_lock_due, locks_on_sleep, refresh_policy};
     use crate::state::AppState;
 
     const PW: &str = "correct horse battery staple";
+    const IDLE: Duration = Duration::from_secs(75);
 
-    /// An unlocked vault whose policy was cached as "never lock, keep sessions".
-    fn unlocked_with_old_policy() -> AppState {
+    fn unlocked() -> AppState {
         let mut vault = Vault::open_in_memory().unwrap();
         vault
             .create_with_params(PW, KdfParams::for_tests())
             .unwrap();
-        let mut settings = vault.settings();
-        settings.auto_lock_minutes = 0;
-        settings.lock_disconnects_sessions = false;
-        vault
-            .put(Some(SETTINGS_ID), Item::Settings(settings))
-            .unwrap();
-        let state = AppState::new(vault, false);
+        AppState::new(vault, false)
+    }
+
+    #[test]
+    fn the_policy_follows_the_device_prefs() {
+        let state = unlocked();
         refresh_policy(&state);
-        state
-    }
-
-    /// What applying a pulled settings item does to the local vault.
-    fn apply_remote_settings(state: &AppState) {
-        let mut vault = state.vault();
-        let mut settings = vault.settings();
-        settings.auto_lock_minutes = 1;
-        settings.lock_disconnects_sessions = true;
-        vault
-            .put(Some(SETTINGS_ID), Item::Settings(settings))
-            .unwrap();
-    }
-
-    const IDLE: Duration = Duration::from_secs(75);
-
-    #[tokio::test]
-    async fn pulled_settings_take_effect_after_the_round() {
-        let state = unlocked_with_old_policy();
+        // The defaults: 15 minutes, lock on sleep, keep the sessions.
         assert!(!idle_lock_due(&state, IDLE));
-        assert!(!disconnects_on_lock(&state));
+        assert!(idle_lock_due(&state, Duration::from_secs(15 * 60)));
+        assert!(locks_on_sleep(&state) && !disconnects_on_lock(&state));
 
-        refresh_after_sync(&state, async { apply_remote_settings(&state) }).await;
-
+        let prefs = json!({
+            "auto_lock_minutes": 1,
+            "lock_on_sleep": false,
+            "lock_disconnects_sessions": true,
+        });
+        state.vault().set_local_prefs(&prefs.to_string()).unwrap();
+        refresh_policy(&state);
         assert!(idle_lock_due(&state, IDLE));
         assert!(!idle_lock_due(&state, Duration::from_secs(30)));
-        assert!(disconnects_on_lock(&state));
-    }
+        assert!(!locks_on_sleep(&state) && disconnects_on_lock(&state));
 
-    #[tokio::test]
-    async fn settings_pulled_before_a_failure_still_take_effect() {
-        let state = unlocked_with_old_policy();
-
-        let result = refresh_after_sync(&state, async {
-            apply_remote_settings(&state);
-            Err::<(), _>(Error::Protocol("pull cursor did not advance".into()))
-        })
-        .await;
-
-        assert!(result.is_err());
-        assert!(idle_lock_due(&state, IDLE));
-        assert!(disconnects_on_lock(&state));
+        state
+            .vault()
+            .set_local_prefs(r#"{"auto_lock_minutes":0}"#)
+            .unwrap();
+        refresh_policy(&state);
+        assert!(!idle_lock_due(&state, Duration::from_secs(24 * 60 * 60)));
     }
 }

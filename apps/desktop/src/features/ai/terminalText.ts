@@ -130,7 +130,7 @@ export function cleanOutput(raw: string): string {
 /**
  * Collects terminal output for `send_input`, keeping the first `headMax` and the last `tailMax`
  * characters so a command that prints without end cannot use unbounded memory. (Rust trims the
- * stored result to 16,000 characters anyway, §13.4.)
+ * stored result to 30,000 characters anyway, §13.4.)
  */
 export class OutputCapture {
   private head = "";

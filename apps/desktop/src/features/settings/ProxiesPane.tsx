@@ -123,7 +123,6 @@ export function ProxiesPane() {
             </div>
           ))}
         </div>
-        <div className={s.sectionHint}>{t("settings.proxy.hint")}</div>
       </section>
 
       {dialog && <ProxyDialog proxy={dialog.proxy} onClose={() => setDialog(null)} onSaved={() => void saved()} />}
