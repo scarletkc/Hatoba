@@ -294,11 +294,12 @@ function UserMessage({ text, at, pending, onResend }: { text: string; at: number
   );
 }
 
-const NOTE_ICONS = { host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise" } as const;
+const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise" } as const;
 
 /**
- * A note Hatoba stored before a message: the conversation moved to another host, a terminal became
- * attached or went away, it went to another model, or the user reverted a file tool's change.
+ * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
+ * to another host, a terminal became attached or went away, it went to another model, or the user
+ * reverted a file tool's change.
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();

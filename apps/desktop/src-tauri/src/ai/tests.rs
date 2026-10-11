@@ -29,7 +29,7 @@ use super::{
     AiEnv, AiManager, COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION, DISCONNECTED, EDIT_NOTE,
     Entries, EventSink,
 };
-use super::{Halt, Turn, append, lock, title_of, wait_for_results};
+use super::{Halt, Streamed, Turn, append, lock, title_of, wait_for_results};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileRevert, AiFinish, AiRevertFailure,
     AiSendInput, AiSendStarted, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
@@ -207,23 +207,79 @@ fn calls(calls: &[(&str, &str, Value)]) -> ResponseTemplate {
     ])
 }
 
-/// A server that sends the headers and one text event, then nothing (the stream stays open).
-async fn stalling_server() -> String {
+/// The delta of a Chat Completions stream that carries `text`.
+fn text_delta(text: &str) -> Value {
+    json!({"choices": [{"index": 0, "delta": {"content": text}}]})
+}
+
+/// A server whose first response sends the headers and `events`, then nothing (the stream stays
+/// open), and whose later responses answer "Done.". Returns its base URL and the body of every
+/// request it received.
+async fn stalling_server(events: &[Value]) -> (String, Arc<Mutex<Vec<Value>>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    let bodies = Arc::new(Mutex::new(Vec::new()));
+    let received = bodies.clone();
+    let first: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
     tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut buf = vec![0u8; 64 * 1024];
-        let _ = socket.read(&mut buf).await;
-        let event = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"}}]}\n\n";
-        let head = format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n{:x}\r\n{event}\r\n",
-            event.len()
-        );
-        socket.write_all(head.as_bytes()).await.unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        let mut stalled = Vec::new();
+        loop {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let body = request_body(&mut socket).await;
+            received
+                .lock()
+                .unwrap()
+                .push(serde_json::from_slice::<Value>(&body).unwrap());
+            if stalled.is_empty() {
+                let mut head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\
+                                transfer-encoding: chunked\r\n\r\n"
+                    .to_owned();
+                if !first.is_empty() {
+                    head.push_str(&format!("{:x}\r\n{first}\r\n", first.len()));
+                }
+                socket.write_all(head.as_bytes()).await.unwrap();
+                stalled.push(socket);
+            } else {
+                let sse = [
+                    text_delta("Done."),
+                    json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}),
+                ]
+                .iter()
+                .map(|e| format!("data: {e}\n\n"))
+                .collect::<String>()
+                    + "data: [DONE]\n\n";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\n\
+                     connection: close\r\n\r\n{sse}",
+                    sse.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        }
     });
-    format!("http://{addr}/v1")
+    (format!("http://{addr}/v1"), bodies)
+}
+
+/// Reads one HTTP request from `socket` and returns its body.
+async fn request_body(socket: &mut tokio::net::TcpStream) -> Vec<u8> {
+    let mut data = Vec::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = socket.read(&mut buf).await.unwrap();
+        assert!(n > 0, "the request ended early");
+        data.extend_from_slice(&buf[..n]);
+        let Some(end) = data.windows(4).position(|w| w == b"\r\n\r\n") else {
+            continue;
+        };
+        let head = String::from_utf8_lossy(&data[..end]).to_ascii_lowercase();
+        let length: usize = head
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length:"))
+            .map_or(0, |value| value.trim().parse().unwrap());
+        if data.len() >= end + 4 + length {
+            return data[end + 4..end + 4 + length].to_vec();
+        }
+    }
 }
 
 struct Fixture {
@@ -688,18 +744,25 @@ async fn a_rejection_sends_the_users_reason() {
     assert!(content.contains("not on prod"), "{content}");
 }
 
+/// Waits until the turn of `sink` has streamed `text`.
+async fn streamed(sink: &Sink, text: &str) {
+    sink.until("text", |e| {
+        e.contains(&AiTurnEvent::Text { delta: text.into() })
+    })
+    .await;
+}
+
 #[tokio::test]
-async fn stopping_mid_stream_ends_the_turn_and_stores_nothing() {
-    let base_url = stalling_server().await;
+async fn stopping_mid_stream_keeps_the_text_that_streamed() {
+    let (base_url, _) = stalling_server(&[
+        json!({"choices": [{"index": 0, "delta": {"reasoning_content": "Thinking"}}]}),
+        text_delta("Hel"),
+    ])
+    .await;
     let f = Fixture::with_base_url(None, base_url);
     let (started, sink) = f.send(None, "hello").await;
     let conv = started.conversation.id;
-    sink.until("text", |e| {
-        e.contains(&AiTurnEvent::Text {
-            delta: "Hel".into(),
-        })
-    })
-    .await;
+    streamed(&sink, "Hel").await;
 
     let at = Instant::now();
     f.manager.stop(&f.vault, f.env.as_ref(), &conv);
@@ -709,9 +772,285 @@ async fn stopping_mid_stream_ends_the_turn_and_stores_nothing() {
     // The task notices the cancellation and sends nothing more.
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+
+    // What the user saw is stored, marked, without the reasoning or a `raw` to replay.
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(&entries[0].body, EntryBody::User { .. }));
+    assert_eq!(
+        entries[1].body,
+        EntryBody::Assistant(AssistantEntry {
+            provider_id: f.provider_id.clone(),
+            model_id: "m1".into(),
+            text: "Hel".into(),
+            terminal: Some(true),
+            interrupted: true,
+            ..AssistantEntry::default()
+        })
+    );
+    // It reaches the panel before the end of the turn.
+    let events = sink.events();
+    assert!(matches!(
+        &events[events.len() - 2],
+        AiTurnEvent::Entry { entry: AiEntryView::Assistant { text, .. } } if text == "Hel"
+    ));
+    assert_eq!(f.detail(&conv).entries.len(), 2);
+}
+
+#[test]
+fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
+    let streamed = |text: &str, tool_calls: Vec<ToolCall>| Streamed {
+        provider_id: "p".into(),
+        model_id: "m".into(),
+        text: text.into(),
+        tool_calls,
+    };
+    let call = ToolCall {
+        id: "c1".into(),
+        name: "run_command".into(),
+        arguments: r#"{"command":"df -h"}"#.into(),
+    };
+    let entry = streamed("Checking.", vec![call.clone()])
+        .into_entry(false)
+        .unwrap();
+    assert_eq!(
+        entry,
+        AssistantEntry {
+            provider_id: "p".into(),
+            model_id: "m".into(),
+            text: "Checking.".into(),
+            tool_calls: vec![call.clone()],
+            finish: Finish::ToolCalls,
+            terminal: Some(false),
+            interrupted: true,
+            ..AssistantEntry::default()
+        }
+    );
+    // A call alone was shown too; its result is the cancelled one the stop stores.
+    let entry = streamed("", vec![call]).into_entry(true).unwrap();
+    assert!(entry.text.is_empty() && entry.finish == Finish::ToolCalls);
+    assert_eq!(
+        streamed("Hi", vec![]).into_entry(true).unwrap().finish,
+        Finish::Stop
+    );
+    // Nothing but white space: nothing to keep.
+    assert_eq!(streamed(" \n", vec![]).into_entry(true), None);
+}
+
+/// The turn's task runs on another thread and acts the moment a stop cancels it: its request ends,
+/// it drops what streamed and ends the turn. The test makes that happen after the stop's cancel
+/// and before the stop stores anything, the order that lost the text or its `entry` event. The
+/// stop still stores the text, and sends it before the one `turn_ended`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "the lock holds the stop while the task, which never takes it, runs on another thread"
+)]
+async fn a_stop_keeps_the_text_when_the_task_acts_first() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let conv = {
+        let mut v = lock(&f.vault);
+        let conv = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "race".into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        append(&mut v, &conv, &AiEntry::user(1, "df?")).unwrap();
+        conv
+    };
+    let sink = Arc::new(Sink::default());
+    let turn = f.manager.register(&conv, f.context(), None, sink.clone());
+    *turn.streamed.lock().unwrap() = Some(Streamed {
+        provider_id: f.provider_id.clone(),
+        model_id: "m1".into(),
+        text: "The disk is 4".into(),
+        tool_calls: Vec::new(),
+    });
+    // What the turn loop and `task` do when the request returns cancelled.
+    let task = {
+        let turn = turn.clone();
+        tokio::spawn(async move {
+            turn.cancel.cancelled().await;
+            turn.streamed.lock().unwrap().take();
+            turn.finish(AiTurnEndReason::Stopped);
+        })
+    };
+
+    // Right after its cancel the stop forgets the conversation's file bases; holding their lock
+    // keeps it there until the task has acted.
+    let file_bases = f.manager.0.file_bases.lock().unwrap();
+    let stop = {
+        let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env.clone());
+        let conv = conv.clone();
+        tokio::task::spawn_blocking(move || manager.stop(&vault, env.as_ref(), &conv))
+    };
+    tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("the stop cancels the turn before it forgets the file bases")
+        .unwrap();
+    assert!(sink.events().is_empty());
+    drop(file_bases);
+    stop.await.unwrap();
+
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(
+        matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "The disk is 4" && a.interrupted)
+    );
+    assert_eq!(kinds(&sink.events()), ["entry", "turn_ended"]);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+}
+
+#[tokio::test]
+async fn stopping_before_any_text_stores_nothing() {
+    let (base_url, _) = stalling_server(&[json!(
+        {"choices": [{"index": 0, "delta": {"reasoning_content": "Thinking"}}]}
+    )])
+    .await;
+    let f = Fixture::with_base_url(None, base_url);
+    let (started, sink) = f.send(None, "hello").await;
+    let conv = started.conversation.id;
+    sink.until("reasoning", |e| {
+        e.iter().any(|e| matches!(e, AiTurnEvent::Reasoning { .. }))
+    })
+    .await;
+
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    f.idle(&conv).await;
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 1);
     assert!(matches!(&entries[0].body, EntryBody::User { .. }));
+    assert!(sink.entries().is_empty());
+}
+
+#[tokio::test]
+async fn the_message_after_a_stopped_reply_says_it_was_interrupted() {
+    use hatoba_ai::tools::interrupted_block;
+
+    let (base_url, bodies) = stalling_server(&[text_delta("The disk is 4")]).await;
+    let f = Fixture::with_base_url(None, base_url);
+    let (started, sink) = f.send(None, "df?").await;
+    let conv = started.conversation.id;
+    streamed(&sink, "The disk is 4").await;
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    f.idle(&conv).await;
+
+    let context = f.context();
+    assert_eq!(
+        f.exchange(Some(&conv), "never mind", context.clone())
+            .await
+            .1,
+        AiTurnEndReason::Completed
+    );
+    // Noted once: the reply after it was not stopped.
+    f.exchange(Some(&conv), "thanks", context).await;
+    let noted = format!("{}never mind", interrupted_block());
+    assert_eq!(
+        f.user_texts(&conv),
+        ["df?".to_owned(), noted.clone(), "thanks".to_owned()]
+    );
+
+    // The model gets the part it wrote, rebuilt, then the note with the message.
+    let bodies = bodies.lock().unwrap().clone();
+    assert_eq!(bodies.len(), 3);
+    let sent = messages(&bodies[1]);
+    assert_eq!(sent.len(), 4);
+    assert_eq!(
+        sent[2],
+        json!({"role": "assistant", "content": "The disk is 4"})
+    );
+    assert_eq!(sent[3], json!({"role": "user", "content": noted}));
+}
+
+#[tokio::test]
+async fn sending_while_a_reply_streams_keeps_the_part_that_streamed() {
+    use hatoba_ai::tools::interrupted_block;
+
+    let (base_url, _) = stalling_server(&[text_delta("Hel")]).await;
+    let f = Fixture::with_base_url(None, base_url);
+    let (started, first) = f.send(None, "one").await;
+    let conv = started.conversation.id;
+    streamed(&first, "Hel").await;
+
+    let (_, second) = f.send(Some(&conv), "two").await;
+    assert_eq!(first.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(second.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 4);
+    assert!(
+        matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "Hel" && a.interrupted)
+    );
+    assert!(
+        matches!(&entries[2].body, EntryBody::User { text } if *text == format!("{}two", interrupted_block()))
+    );
+    assert!(
+        matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Done." && !a.interrupted)
+    );
+    // The panel listens to the new turn's channel by then, so the stopped reply goes there too.
+    assert!(matches!(
+        second.entries().first(),
+        Some(AiEntryView::Assistant { text, .. }) if text == "Hel"
+    ));
+}
+
+#[tokio::test]
+async fn a_stop_noted_on_a_message_without_a_reply_is_not_noted_again() {
+    use hatoba_ai::tools::interrupted_block;
+
+    let f = Fixture::new(vec![
+        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
+        answer("Two."),
+        answer("Three."),
+    ])
+    .await;
+    let conv = {
+        let mut v = lock(&f.vault);
+        let conv = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "stopped".into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        append(&mut v, &conv, &AiEntry::user(1, "one")).unwrap();
+        let stopped = AssistantEntry {
+            provider_id: f.provider_id.clone(),
+            model_id: "m1".into(),
+            text: "Partly".into(),
+            terminal: Some(true),
+            interrupted: true,
+            ..AssistantEntry::default()
+        };
+        append(&mut v, &conv, &AiEntry::assistant(2, stopped)).unwrap();
+        conv
+    };
+    let (_, failed) = f.exchange(Some(&conv), "two", f.context()).await;
+    assert_eq!(failed, AiTurnEndReason::Error);
+    // A retry stores no message, so nothing is noted.
+    assert_eq!(
+        f.retry(&conv, f.context()).unwrap().ended().await,
+        AiTurnEndReason::Completed
+    );
+    f.idle(&conv).await;
+    f.exchange(Some(&conv), "three", f.context()).await;
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            "one".to_owned(),
+            format!("{}two", interrupted_block()),
+            "three".to_owned()
+        ]
+    );
 }
 
 #[tokio::test]
@@ -2273,7 +2612,8 @@ fn titles_skip_the_attachment_blocks_a_message_starts_with() {
     );
 
     // AI-05, AI-09: Hatoba's notes come first and never title the conversation.
-    let notes = "<host_change from=\"staging-web\" to=\"prod-db\">\nThe conversation moved.\n\
+    let notes = "<interrupted>\nStopped.\n</interrupted>\n\n\
+                 <host_change from=\"staging-web\" to=\"prod-db\">\nThe conversation moved.\n\
                  </host_change>\n\n<model_change from=\"A (a)\" to=\"B (b)\">\nOther model.\n\
                  </model_change>\n\n";
     assert_eq!(
@@ -3882,6 +4222,7 @@ fn bare_turn(f: &Fixture) -> Turn {
         server_id: None,
         results: Notify::new(),
         ended: AtomicBool::new(false),
+        streamed: Mutex::new(None),
     }
 }
 

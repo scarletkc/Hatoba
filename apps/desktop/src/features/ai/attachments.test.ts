@@ -278,9 +278,14 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
   const moved: Note = { kind: "host_change", from: "staging-web", to: "prod-db" };
   const switched: Note = { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" };
   const attached: Note = { kind: "terminal_change", to: "attached" };
+  const stopped: Note = { kind: "interrupted" };
 
   it("are written exactly as Rust writes them", () => {
-    // host_change_block, terminal_change_block and model_change_block in crates/hatoba-ai/src/tools.rs.
+    // interrupted_block, host_change_block, terminal_change_block and model_change_block in
+    // crates/hatoba-ai/src/tools.rs.
+    expect(noteBlock(stopped)).toBe(
+      "<interrupted>\nThe user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.\n</interrupted>",
+    );
     expect(noteBlock(moved)).toBe(
       '<host_change from="staging-web" to="prod-db">\nThe conversation moved to another host. Screens and command output before this message came from "staging-web".\n</host_change>',
     );
@@ -301,16 +306,17 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     );
   });
 
-  it("come first, the host's, the terminal's, then the model's, then the attachments and the typed text", () => {
+  it("come first, the stop's, the host's, the terminal's, then the model's, then the attachments and the typed text", () => {
     const d = diag();
     const s = att("$ psql");
     const p = paste("a long paste");
-    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, attached, moved]);
-    expect(stored.indexOf("<host_change")).toBe(0);
-    expect(stored.indexOf("<terminal_change")).toBeGreaterThan(0);
+    const stored = composeMessage("Why is it slow?", [p, s, d], [switched, attached, moved, stopped]);
+    expect(stored.indexOf("<interrupted>")).toBe(0);
+    expect(stored.indexOf("<host_change")).toBeGreaterThan(0);
+    expect(stored.indexOf("<terminal_change")).toBeGreaterThan(stored.indexOf("<host_change"));
     expect(stored.indexOf("<terminal_change")).toBeLessThan(stored.indexOf("<model_change"));
     expect(stored.indexOf("<model_change")).toBeLessThan(stored.indexOf("<connection_diagnostics"));
-    expect(parseMessage(stored)).toEqual({ notes: [moved, attached, switched], attachments: [d, s, p], typed: "Why is it slow?" });
+    expect(parseMessage(stored)).toEqual({ notes: [stopped, moved, attached, switched], attachments: [d, s, p], typed: "Why is it slow?" });
     // Without attachments, and a message that is only notes.
     expect(parseMessage(composeMessage("hi", [], [moved]))).toEqual({ notes: [moved], attachments: [], typed: "hi" });
     expect(parseMessage(composeMessage("", [], [moved, switched]))).toEqual({ notes: [moved, switched], attachments: [], typed: "" });
@@ -334,6 +340,7 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
       '<model_change from="a">\nx\n</model_change>\n\nq',
       '<terminal_change to="gone">\nx\n</terminal_change>\n\nq',
       '<terminal_change from="detached" to="attached">\nx\n</terminal_change>\n\nq',
+      '<interrupted at="1">\nx\n</interrupted>\n\nq',
     ]) {
       expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
     }

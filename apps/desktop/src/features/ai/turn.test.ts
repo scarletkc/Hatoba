@@ -70,6 +70,22 @@ describe("reduceTurnEvent (§13.1)", () => {
     expect(run([{ kind: "turn_ended", reason: "completed" }]).outcome).toBeNull();
   });
 
+  it("keeps the part of a stopped reply that Rust stored, and says it was stopped", () => {
+    const user: AiEntryView = { role: "user", entry_id: "e1", created_at: 0, text: "df?" };
+    const stopped: AiEntryView = { ...assistant, text: "The disk is 4", reasoning: null, tool_calls: [], finish: "stop", usage: null };
+    const s = run([
+      { kind: "request_started" },
+      { kind: "reasoning", delta: "Thinking" },
+      { kind: "text", delta: "The disk is 4" },
+      // Rust stores what streamed and sends it before the end of the turn (§13.1).
+      { kind: "entry", entry: stopped },
+      { kind: "turn_ended", reason: "stopped" },
+    ], { ...start, entries: [user] });
+    expect(s.entries).toEqual([user, stopped]);
+    expect(s.turn).toBeNull();
+    expect(s.outcome).toEqual({ reason: "stopped" });
+  });
+
   it("clears the last outcome when a new request starts", () => {
     const s = run([{ kind: "request_started" }], { entries: [], turn: newTurn(), outcome: { reason: "refused" }, contextStart: null });
     expect(s.outcome).toBeNull();

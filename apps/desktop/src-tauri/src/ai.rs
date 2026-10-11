@@ -224,6 +224,43 @@ struct Turn {
     results: Notify,
     /// `turn_ended` was sent; nothing else is sent after it.
     ended: AtomicBool,
+    /// What the response being streamed has sent so far, from its request until it is stored or
+    /// fails. A stop takes it under the vault guard and stores what the user saw (§13.1).
+    streamed: Mutex<Option<Streamed>>,
+}
+
+/// The part of a response that has streamed so far, kept for a stop.
+struct Streamed {
+    provider_id: String,
+    model_id: String,
+    text: String,
+    /// Calls whose arguments are complete; a call still streaming has sent nothing yet.
+    tool_calls: Vec<ToolCall>,
+}
+
+impl Streamed {
+    /// The `interrupted` entry a stop stores (§13.1): the text and complete calls, without the
+    /// reasoning (a signed thinking block cannot be replayed half done) or a `raw`, so later
+    /// requests rebuild it from its fields. `None` when no text or call has arrived.
+    fn into_entry(self, terminal: bool) -> Option<AssistantEntry> {
+        if self.text.trim().is_empty() && self.tool_calls.is_empty() {
+            return None;
+        }
+        Some(AssistantEntry {
+            provider_id: self.provider_id,
+            model_id: self.model_id,
+            text: self.text,
+            finish: if self.tool_calls.is_empty() {
+                Finish::Stop
+            } else {
+                Finish::ToolCalls
+            },
+            tool_calls: self.tool_calls,
+            terminal: Some(terminal),
+            interrupted: true,
+            ..AssistantEntry::default()
+        })
+    }
 }
 
 impl Turn {
@@ -237,6 +274,15 @@ impl Turn {
     fn end(&self, reason: AiTurnEndReason) {
         if !self.ended.swap(true, Ordering::AcqRel) {
             self.sink.send(AiTurnEvent::TurnEnded { reason });
+        }
+    }
+
+    /// Ends a turn whose task has finished. A cancelled turn is ended by what cancelled it (a
+    /// stop or a deletion), after the entries a stop stores, so its task never sends
+    /// `turn_ended` before them.
+    fn finish(&self, reason: AiTurnEndReason) {
+        if !self.cancel.is_cancelled() {
+            self.end(reason);
         }
     }
 }
@@ -344,6 +390,7 @@ impl AiManager {
             server_id,
             results: Notify::new(),
             ended: AtomicBool::new(false),
+            streamed: Mutex::new(None),
         });
         guard(&self.0.turns).insert(conversation_id.to_owned(), Arc::clone(&turn));
         turn
@@ -439,19 +486,38 @@ impl AiManager {
     }
 
     /// Stops a conversation with the vault guard held (§13.1): cancels its turn and running
-    /// tools, stores a cancelled result for every call without one, and sends those entries and
-    /// `turn_ended { stopped }` on the turn's channel. Returns the cancelled results it stored.
+    /// tools, stores what a response being streamed has shown as an `interrupted` entry, stores a
+    /// cancelled result for every call without one, and sends those entries and
+    /// `turn_ended { stopped }` on the turn's channel. Returns the entries it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
+        // Taken before the cancel wakes the turn's task, which drops what streamed when its
+        // request ends.
+        let streamed = self
+            .running(conversation_id)
+            .and_then(|turn| guard(&turn.streamed).take().map(|s| (s, turn.context.tab)));
         let turn = self.cancel(conversation_id);
         self.forget_file_bases(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
+            if let Some(response) =
+                streamed.and_then(|(streamed, terminal)| streamed.into_entry(terminal))
+            {
+                let entry = AiEntry::assistant(now_ms(), response);
+                match append(v, conversation_id, &entry) {
+                    Ok(entry_id) => stored.push(entry_view(&entry_id, &entry)),
+                    Err(e) => tracing::warn!(
+                        conversation_id,
+                        code = ?e.code,
+                        "could not store the stopped response"
+                    ),
+                }
+            }
             let cancelled = Entries::load(v, conversation_id).and_then(|entries| {
                 let writing = self.running_writes(conversation_id, &entries);
                 cancel_open_calls(v, conversation_id, &entries, &writing)
             });
             match cancelled {
-                Ok(views) => stored = views,
+                Ok(views) => stored.extend(views),
                 Err(e) => tracing::warn!(
                     conversation_id,
                     code = ?e.code,
@@ -764,7 +830,7 @@ impl AiManager {
                     // The deleted entries held what the model read of files (AI-38…40).
                     self.0.seen.forget(&id);
                     *stored = true;
-                    // The cancelled results came after the edited message: deleted too.
+                    // What the stop stored came after the edited message: deleted too.
                     cancelled.clear();
                     if conversation
                         .context_start
@@ -859,7 +925,7 @@ impl AiManager {
             }
         };
         let turn = self.register(&id, context, server_id, sink);
-        // The panel stopped listening to the previous turn's channel, so the results the stop
+        // The panel stopped listening to the previous turn's channel, so the entries the stop
         // stored reach it on this one.
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
@@ -961,7 +1027,7 @@ impl AiManager {
                         .await
                 }
             };
-            turn.end(reason);
+            turn.finish(reason);
             manager.forget(&conversation_id, &turn);
             tracing::info!(conversation_id = %conversation_id, ?reason, "AI turn ended");
         })
@@ -1011,8 +1077,23 @@ impl AiManager {
             self.0.mcp.record_offer(conversation_id, offer);
             turn.emit(AiTurnEvent::RequestStarted);
             let http = self.http();
+            *guard(&turn.streamed) = Some(Streamed {
+                provider_id: request.provider_id.clone(),
+                model_id: request.model.id.clone(),
+                text: String::new(),
+                tool_calls: Vec::new(),
+            });
             let result = {
-                let mut forward = |event: StreamEvent| turn.emit(stream_event(event));
+                let mut forward = |event: StreamEvent| {
+                    if let Some(streamed) = guard(&turn.streamed).as_mut() {
+                        match &event {
+                            StreamEvent::Text(delta) => streamed.text.push_str(delta),
+                            StreamEvent::ToolCall(call) => streamed.tool_calls.push(call.clone()),
+                            _ => {}
+                        }
+                    }
+                    turn.emit(stream_event(event));
+                };
                 stream_chat(
                     &http,
                     &request.provider,
@@ -1022,6 +1103,12 @@ impl AiManager {
                 )
                 .await
             };
+            // A stop took what had streamed before it cancelled the request; a failed request
+            // stores nothing. A complete response stays until it is stored, so a stop before that
+            // keeps it.
+            if result.is_err() {
+                guard(&turn.streamed).take();
+            }
             let response = match result {
                 Ok(response) => response,
                 Err(_) if turn.cancel.is_cancelled() => return AiTurnEndReason::Stopped,
@@ -1929,6 +2016,8 @@ fn store_response(
         if turn.cancel.is_cancelled() || !v.is_unlocked() {
             return Err(Halt::Stopped);
         }
+        // Stored whole now, so a stop no longer stores the part that streamed.
+        guard(&turn.streamed).take();
         let entry = AiEntry::assistant(now_ms(), response);
         let entry_id = append(&mut v, conversation_id, &entry)?;
         turn.emit(AiTurnEvent::Entry {
@@ -2711,6 +2800,9 @@ fn title_of(text: &str) -> String {
     line.chars().take(60).collect()
 }
 
+/// The tag of the note Hatoba puts before the first message after a reply the user stopped
+/// (§13.1).
+const INTERRUPTED: &str = "interrupted";
 /// The tag of the note Hatoba puts before a message that moves the conversation to another
 /// host (AI-09).
 const HOST_CHANGE: &str = "host_change";
@@ -2751,6 +2843,12 @@ fn attribute_text(value: &str) -> String {
 /// The blocks a user entry may start with. Hatoba writes the notes here, before the blocks the
 /// panel writes (`features/ai/attachments.ts`), whose parser follows the same rules.
 const ATTACHMENTS: &[AttachmentKind] = &[
+    AttachmentKind {
+        tag: INTERRUPTED,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| attrs.is_empty(),
+    },
     AttachmentKind {
         tag: HOST_CHANGE,
         note: true,
@@ -2845,6 +2943,15 @@ fn note_attr(text: &str, tag: &str, name: &str) -> Option<String> {
         .find(|b| b.kind.tag == tag)
         .and_then(|b| b.attrs.iter().find(|(n, _)| *n == name))
         .map(|(_, value)| attribute_text(value))
+}
+
+/// Whether a user entry starts with the note `tag` among its notes.
+fn has_note(text: &str, tag: &str) -> bool {
+    leading_blocks(text)
+        .0
+        .iter()
+        .take_while(|b| b.kind.note)
+        .any(|b| b.kind.tag == tag)
 }
 
 /// The block `text` starts with (spec §13.3), and the text after it: the opening tag with its
@@ -2979,6 +3086,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 
 /// The notes Hatoba puts before a new message (spec §13.3), in this order:
 ///
+/// - `interrupted` (§13.1) when the newest reply in `earlier` is one the user stopped while it
+///   streamed. A stop that an earlier message noted already, which got no reply, is not noted
+///   again, and neither is one before a summary, which replaced it.
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
 ///   conversation's host now: `came_from` names it (empty when it no longer exists) or the
 ///   quick-connect target (HOST-12) they came from, and is `None` when the conversation did not
@@ -3002,6 +3112,19 @@ fn notes_before(
     // A message with nothing before it has no earlier screens or replies to tell apart.
     if earlier.is_empty() {
         return notes;
+    }
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::Assistant(a) => {
+                if a.interrupted {
+                    notes.push_str(&tools::interrupted_block());
+                }
+                break;
+            }
+            EntryBody::User { text } if has_note(text, INTERRUPTED) => break,
+            EntryBody::Summary { .. } => break,
+            EntryBody::User { .. } | EntryBody::Tool { .. } => {}
+        }
     }
     if let (Some(from), Some(to)) = (came_from, host_now)
         && from != to
