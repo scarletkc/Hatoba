@@ -1010,22 +1010,25 @@ impl McpManager {
         server.settled.notify_waiters();
     }
 
-    /// Keeps the offer a conversation's request was made with, so its calls map back to it.
+    /// Keeps the offer a conversation's calls map back to: that of its latest request, or, once
+    /// its MCP tools are deferred (AI-45), that of its newest message or latest `search_tools`
+    /// call, whose names the model was told.
     pub fn record_offer(&self, conversation_id: &str, offer: Offer) {
         guard(&self.0.offers).insert(conversation_id.to_owned(), Arc::new(offer));
     }
 
-    /// The tool behind `name` in a call of the conversation: from the offer of its latest
-    /// request, or, when this run of the app made none, from the running servers. The approval
-    /// card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve names here, so they
-    /// always name the same server: names are per request, since cleaned server names can
-    /// collide and the tools menu changes which servers a conversation's requests offer.
+    /// The tool behind `name` in a call of the conversation: from the offer recorded last
+    /// ([`Self::record_offer`]), or, when this run of the app recorded none, from the running
+    /// servers. The approval card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve
+    /// names here, so they always name the same server: names are per offer, since cleaned
+    /// server names can collide and the tools menu changes which servers a conversation's
+    /// requests offer.
     pub fn offered(&self, conversation_id: &str, name: &str) -> Option<OfferedTool> {
         self.latest(conversation_id).find(name).cloned()
     }
 
-    /// The tools of the conversation's latest request or `search_tools` call (AI-45), or, when
-    /// this run of the app made neither, of the running servers.
+    /// The tools recorded last for the conversation ([`Self::record_offer`]), or, when this run
+    /// of the app recorded none, those of the running servers.
     pub fn latest(&self, conversation_id: &str) -> Arc<Offer> {
         let offer = guard(&self.0.offers).get(conversation_id).cloned();
         offer.unwrap_or_else(|| Arc::new(self.current_tools()))

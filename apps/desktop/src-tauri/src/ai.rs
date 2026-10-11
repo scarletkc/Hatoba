@@ -964,11 +964,11 @@ impl AiManager {
         .await
     }
 
-    /// Registers the turn, starts the MCP servers its requests use (AI-45), compacts first when
-    /// the new message needs it (AI-22), stores the user's message (in place of `replace` and the
-    /// entries after it, for an edit) with the thinking level (AI-05), the move its note tells of
-    /// (AI-09) and the list of deferred MCP tools (AI-45), and returns the turn's task. A new
-    /// conversation is created with its message.
+    /// Registers the turn, starts the MCP servers its requests use (AI-45), deletes the entries an
+    /// edit replaces (AI-26), compacts first when the new message needs it (AI-22), stores the
+    /// user's message with the thinking level (AI-05), the move its note tells of (AI-09) and the
+    /// list of deferred MCP tools (AI-45), and returns the turn's task. A new conversation is
+    /// created with its message.
     #[expect(
         clippy::too_many_arguments,
         reason = "the two commands that start a turn pass their own pieces"
@@ -1000,7 +1000,7 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (id, turn, notes, moved_to, came_from, created) = registered?;
+        let (id, turn, notes, moved_to, came_from, created, edit) = registered?;
         let stopped = || {
             AppError::new(
                 ErrorCode::Cancelled,
@@ -1013,22 +1013,46 @@ impl AiManager {
         // them and lists them. A server that fails offers no tools, as for any request.
         let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
 
-        // AI-22: whether the context needs a compaction before the message, with the notes it
-        // would start with. A new conversation has nothing to compact.
+        // AI-26: an edit deletes its message and the entries after it now, so a stop while the
+        // servers started leaves them. AI-22: whether the context needs a compaction before the
+        // message, with the notes it would start with. A new conversation has nothing to compact.
+        let mut deleted = false;
         let compact = match created {
             Some(_) => Ok(false),
             None => (|| {
-                let v = unlocked(vault)?;
+                let mut v = unlocked(vault)?;
                 if turn.cancel.is_cancelled() {
                     return Err(stopped());
+                }
+                if let Some((entry_id, summary_before)) = &edit {
+                    delete_edited(&mut v, &id, entry_id, summary_before.as_deref())?;
+                    // The deleted entries held what the model read of files (AI-38…40).
+                    self.0.seen.forget(&id);
+                    deleted = true;
                 }
                 let conversation = find_conversation(&v, &id)?;
                 let entries = Entries::load(&v, &id)?;
                 let from = entries.context_from(conversation.context_start.as_deref());
                 let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
-                compaction_before(&v, &id, &turn.context, &format!("{notes}{listed}{text}"))
+                // AI-45: the message that defers the MCP tools takes their definitions out of its
+                // requests, which the last response's usage counts.
+                let saved = if !listed.is_empty() && !mcp_deferred(&entries.list) {
+                    deferred_saving(&v, &turn.context, &self.0.mcp.latest(&id))
+                } else {
+                    0
+                };
+                compaction_before(
+                    &v,
+                    &id,
+                    &turn.context,
+                    &format!("{notes}{listed}{text}"),
+                    saved,
+                )
             })(),
         };
+        if deleted {
+            env.changed();
+        }
         let compact = match compact {
             Ok(compact) => compact,
             Err(e) => {
@@ -1066,12 +1090,19 @@ impl AiManager {
                 let entries = Entries::load(&v, &id)?;
                 let from = entries.context_from(conversation.context_start.as_deref());
                 let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
-                if !listed.is_empty() && !mcp_deferred(&entries.list) {
+                let deferred = mcp_deferred(&entries.list);
+                if !listed.is_empty() && !deferred {
                     tracing::info!(
                         conversation_id = %id,
                         tools = offer.listed().len(),
                         "AI conversation's MCP tools deferred"
                     );
+                }
+                // AI-45: once deferred, names resolve through the tools the model was told of,
+                // which this message lists (or listed before, unchanged), until a search finds
+                // others; the turn's requests change them no more.
+                if deferred || !listed.is_empty() {
+                    self.0.mcp.record_offer(&id, offer.clone());
                 }
                 listed
             };
@@ -1142,11 +1173,10 @@ impl AiManager {
     ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, notes, moved_to, recorded, created) = match conversation_id {
+        let (id, notes, moved_to, recorded, created, edit) = match conversation_id {
             Some(id) => {
-                let mut conversation = find_conversation(&v, &id)?;
+                let conversation = find_conversation(&v, &id)?;
                 self.not_reverting(&id)?;
-                let before = conversation.clone();
                 // Checked before the stop, so a refused edit leaves the turn running.
                 let edit = match replace {
                     Some(entry_id) => Some(edited_entry(&v, &id, entry_id)?),
@@ -1164,9 +1194,9 @@ impl AiManager {
                 // AI-43: where the entries before the message came from, which it records: where
                 // the conversation is, or for an edit, what the edited message recorded.
                 let mut recorded = Some(entry_place(&conversation));
-                if let Some((entry_id, summary_before)) = edit {
+                if let Some((entry_id, _)) = &edit {
                     recorded = None;
-                    if let Some(at) = ids.iter().position(|e| *e == entry_id) {
+                    if let Some(at) = ids.iter().position(|e| e == entry_id) {
                         if let EntryBody::User {
                             came_from: edited, ..
                         } = &earlier[at].body
@@ -1179,19 +1209,9 @@ impl AiManager {
                         });
                         earlier.truncate(at);
                     }
-                    v.ai_delete_entries_from(&id, &entry_id)?;
-                    // The deleted entries held what the model read of files (AI-38…40).
-                    self.0.seen.forget(&id);
-                    *stored = true;
-                    // What the stop stored came after the edited message: deleted too.
+                    // What the stop stored came after the edited message, which goes with it
+                    // once the MCP servers run ([`delete_edited`]).
                     cancelled.clear();
-                    if conversation
-                        .context_start
-                        .as_deref()
-                        .is_some_and(|start| start >= entry_id.as_str())
-                    {
-                        conversation.context_start = summary_before;
-                    }
                 }
                 let noted = came_from.is_some();
                 // AI-09: the next message moves the conversation to the tab's host, or to its
@@ -1213,10 +1233,6 @@ impl AiManager {
                         host_id: context.host_id.clone(),
                         quick_target: target,
                     });
-                }
-                if conversation != before {
-                    v.put(Some(&id), Item::AiConversation(conversation.clone()))?;
-                    *stored = true;
                 }
                 let (host_id, quick_target) = match &moved_to {
                     Some(place) => (&place.host_id, &place.quick_target),
@@ -1248,7 +1264,7 @@ impl AiManager {
                     &context,
                     &reverts,
                 );
-                (id, notes, moved_to, recorded, None)
+                (id, notes, moved_to, recorded, None, edit)
             }
             None => {
                 let created = AiConversation {
@@ -1269,6 +1285,7 @@ impl AiManager {
                     None,
                     Some(EntryPlace::default()),
                     Some(created),
+                    None,
                 )
             }
         };
@@ -1278,7 +1295,7 @@ impl AiManager {
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, notes, moved_to, recorded, created))
+        Ok((id, turn, notes, moved_to, recorded, created, edit))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -1326,7 +1343,7 @@ impl AiManager {
                 )?;
                 stored = true;
             }
-            let compact = compaction_before(&v, &conversation_id, &context, "")?;
+            let compact = compaction_before(&v, &conversation_id, &context, "", 0)?;
             let turn = self.register(&conversation_id, context, server_id, sink);
             for entry in cancelled {
                 turn.emit(AiTurnEvent::Entry { entry });
@@ -1422,8 +1439,13 @@ impl AiManager {
                     }
                 }
             }
-            // Calls of this response map back through the names this request offered.
-            self.0.mcp.record_offer(conversation_id, offer);
+            // Calls of this response map back through the names this request offered, or, once
+            // the conversation's MCP tools are deferred (AI-45), through the names the model was
+            // told of: by the newest message's list or the latest search, which record their own,
+            // so a name the model read keeps meaning that tool when servers change mid-turn.
+            if !offers_deferred(&request.tools) {
+                self.0.mcp.record_offer(conversation_id, offer);
+            }
             turn.emit(AiTurnEvent::RequestStarted);
             let http = self.http();
             *guard(&turn.streamed) = Some(Streamed {
@@ -2582,6 +2604,7 @@ fn compaction_before(
     conversation_id: &str,
     context: &AiTurnContext,
     text: &str,
+    saved: u64,
 ) -> AppResult<bool> {
     let Ok((_, model)) = resolve_model(v, &context.provider_id, &context.model_id) else {
         return Ok(false);
@@ -2598,8 +2621,31 @@ fn compaction_before(
     {
         return Ok(false);
     }
-    let tokens = context_tokens(&list).saturating_add(estimate_tokens(text));
+    let mut tokens = context_tokens(&list).saturating_add(estimate_tokens(text));
+    // `saved`: tool definitions the last response's usage counts and the message's requests leave
+    // out (AI-45). Without a usage, the estimate counted no tool definitions.
+    if list
+        .iter()
+        .any(|e| matches!(&e.body, EntryBody::Assistant(a) if a.usage.is_some()))
+    {
+        tokens = tokens.saturating_sub(saved);
+    }
     Ok(over_threshold(tokens, window))
+}
+
+/// AI-45: the tokens of tool definitions a message that defers the MCP tools takes out of its
+/// requests, against the last request, which offered the tools of `last` directly.
+fn deferred_saving(v: &Vault, context: &AiTurnContext, last: &Offer) -> u64 {
+    let Ok((provider, _)) = resolve_model(v, &context.provider_id, &context.model_id) else {
+        return 0;
+    };
+    let size = |defs: &[ToolDef]| estimate_tokens(&serde_json::to_string(defs).unwrap_or_default());
+    size(&last.tool_defs(provider.protocol)).saturating_sub(size(&tools::deferred_mcp_tools()))
+}
+
+/// Whether a request's tools are those of a conversation whose MCP tools are deferred (AI-45).
+fn offers_deferred(tools: &[ToolDef]) -> bool {
+    tools.iter().any(|t| t.name == tools::CALL_MCP_TOOL)
 }
 
 fn over_threshold(tokens: u64, window: u64) -> bool {
@@ -3356,8 +3402,8 @@ impl Job {
 }
 
 /// AI-45: the MCP tool a `call_mcp_tool` call with `arguments` calls in the conversation, with the
-/// tool's arguments, resolved as a direct call is (from the conversation's latest request or
-/// search, AI-30). The error is the call's result when it cannot run, so it neither asks nor
+/// tool's arguments, resolved through the offer recorded last (the newest message's or the latest
+/// search's, AI-30). The error is the call's result when it cannot run, so it neither asks nor
 /// runs: arguments that cannot be read, a name the conversation has no tool of, a server that was
 /// deleted, or arguments that do not match the tool's input schema. The approval card
 /// (`mcp_proxy_info`) and the run (`ai_tool_run`) both resolve here.
@@ -4069,8 +4115,9 @@ struct Place {
 }
 
 /// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, the notes, the move,
-/// where the entries before the message came from (AI-43), and a new conversation to create with
-/// the message.
+/// where the entries before the message came from (AI-43), a new conversation to create with the
+/// message, and an edit's message with the summary before it (AI-26), which [`delete_edited`]
+/// deletes with the entries after it.
 type Opened = (
     String,
     Arc<Turn>,
@@ -4078,7 +4125,31 @@ type Opened = (
     Option<Place>,
     Option<EntryPlace>,
     Option<AiConversation>,
+    Option<(String, Option<String>)>,
 );
+
+/// AI-26: deletes an edit's message `entry_id` and the entries after it, and moves the context's
+/// start back to `summary_before` when it was at one of them. Done once the MCP servers run, just
+/// before the context is checked for a compaction (AI-45), so a stop while they start leaves the
+/// conversation as it was.
+fn delete_edited(
+    v: &mut Vault,
+    conversation_id: &str,
+    entry_id: &str,
+    summary_before: Option<&str>,
+) -> AppResult<()> {
+    v.ai_delete_entries_from(conversation_id, entry_id)?;
+    let mut conversation = find_conversation(v, conversation_id)?;
+    if conversation
+        .context_start
+        .as_deref()
+        .is_some_and(|start| start >= entry_id)
+    {
+        conversation.context_start = summary_before.map(str::to_owned);
+        v.put(Some(conversation_id), Item::AiConversation(conversation))?;
+    }
+    Ok(())
+}
 
 /// A host's display name, when the host exists.
 fn host_name(v: &Vault, host_id: &str) -> Option<String> {

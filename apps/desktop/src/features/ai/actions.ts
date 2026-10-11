@@ -786,8 +786,9 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
     runner.dispose();
     const target = settleFailedStart(id, { entries: now.entries });
     if (target) {
-      // Stopped before it was stored (during its compaction, AI-22): the message and what followed it
-      // are deleted already, so the edited text goes back into the input instead of being lost.
+      // Stopped before it was stored: while the MCP servers started (AI-45), which leaves the message
+      // and what followed it, or during its compaction (AI-22), which has deleted them. Either way the
+      // edited text goes back into the input instead of being lost.
       if (toAppError(e).code === "cancelled") restoreDraft(target, text);
       void reloadSlot(target);
     }

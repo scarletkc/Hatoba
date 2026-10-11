@@ -458,6 +458,106 @@ async fn a_deferred_conversation_keeps_its_tools_when_servers_go() {
     f.mcp.shutdown().await;
 }
 
+/// A Streamable HTTP MCP server named `twin` with one tool, `act`, whose result names `label`.
+async fn twin(f: &Fixture, label: &'static str) -> (String, MockServer) {
+    let server = MockServer::start().await;
+    Mock::given(path("/mcp"))
+        .respond_with(move |request: &Request| {
+            match request.method.as_str() {
+                "GET" => return ResponseTemplate::new(405),
+                "DELETE" => return ResponseTemplate::new(200),
+                _ => {}
+            }
+            let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
+            let Some(id) = body.get("id").cloned() else {
+                return ResponseTemplate::new(202);
+            };
+            match body["method"].as_str().unwrap_or_default() {
+                "initialize" => mcp_reply(
+                    &id,
+                    json!({
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "twin", "version": "1.0.0"}
+                    }),
+                ),
+                "tools/list" => mcp_reply(
+                    &id,
+                    json!({"tools": [{"name": "act", "description": "Acts.",
+                                      "inputSchema": {"type": "object"}}]}),
+                ),
+                "tools/call" => mcp_reply(
+                    &id,
+                    json!({"content": [{"type": "text", "text": format!("twin {label}")}]}),
+                ),
+                _ => mcp_reply(&id, json!({})),
+            }
+        })
+        .mount(&server)
+        .await;
+    let id = put_server(
+        &f.vault,
+        McpServer {
+            name: "twin".into(),
+            ..big_server(&server)
+        },
+    );
+    (id, server)
+}
+
+/// AI-30 numbers colliding names in the order of the servers a request offers, so a server that
+/// goes away mid-turn renames the other's tool. The model was told the names by the message's
+/// list, so a call by such a name still means the tool the list named.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_name_keeps_its_tool_when_a_server_goes_mid_turn() {
+    let f = Fixture::new(vec![
+        calls_of(&[call_proxy("c1", "mcp__files__echo", json!({"text": "x"}))]),
+        calls_of(&[call_proxy("c2", "mcp__twin__act", json!({}))]),
+        answer("Done."),
+    ])
+    .await;
+    f.set_context_window(WINDOW);
+    let (_files, _big, _mock) = servers(&f).await;
+    let (a, _a_mock) = twin(&f, "a").await;
+    let (b, _b_mock) = twin(&f, "b").await;
+    let (started, sink) = f.send(None, "twins").await;
+    let conv = started.conversation.id;
+    sink.tool_calls_done(1).await;
+    let texts = user_texts(&f, &conv);
+    assert!(
+        texts[0].contains("- twin (1 tool): mcp__twin__act\n- twin (1 tool): mcp__twin__act_2"),
+        "{}",
+        texts[0]
+    );
+    // The server whose tool the list names `mcp__twin__act` goes away.
+    let first = f.mcp.offered(&conv, "mcp__twin__act").unwrap().server_id;
+    let (gone, stays) = if first == a { (&a, "b") } else { (&b, "a") };
+    lock(&f.vault).delete(gone).unwrap();
+    f.run(&conv, "c1", None, None).await.unwrap();
+    sink.tool_calls_done(2).await;
+
+    let info = proxy_info(
+        &lock(&f.vault),
+        &f.mcp,
+        &conv,
+        r#"{"tool": "mcp__twin__act", "arguments": {}}"#,
+    );
+    assert!(!info.runs);
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c2),
+        (
+            "c2",
+            AiToolStatus::Error,
+            "The MCP server \"twin\" was deleted, so the tool did not run."
+        )
+    );
+    assert!(!view_content(&c2).2.contains(&format!("twin {stays}")));
+    sink.ended().await;
+    f.idle(&conv).await;
+    f.mcp.shutdown().await;
+}
+
 /// After a compaction the summary leaves the list out, so the next message lists the tools again,
 /// although they did not change. The Compact request and a side question offer the
 /// conversation's tools, so they keep its prefix, and the side question lists nothing.
@@ -495,8 +595,47 @@ async fn a_compaction_lists_the_tools_again_and_keeps_the_prefix() {
     f.mcp.shutdown().await;
 }
 
-/// A message waits for the MCP servers before it is stored; a stop meanwhile stores nothing, and
-/// the lock meanwhile creates no conversation.
+/// The message that defers the MCP tools takes their definitions out of its requests, so the
+/// check for a compaction (AI-22) does not count them, though the last response's usage does.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_message_that_defers_does_not_compact_for_the_tools_it_drops() {
+    let used = sse(&[
+        json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": "One."}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": 26_900, "completion_tokens": 5}}),
+    ]);
+    let f = Fixture::new(vec![used, answer("Two.")]).await;
+    // A window large enough for the tools, then a model with a smaller one.
+    f.set_context_window(100_000);
+    let (_files, _big, _mock) = servers(&f).await;
+    let (conv, _) = f.exchange(None, "hello", f.context()).await;
+    assert_eq!(user_texts(&f, &conv), ["hello"]);
+    f.set_context_window(WINDOW);
+    f.exchange(Some(&conv), "again", f.context()).await;
+
+    // 26,905 tokens and the message pass 90% of 30,000, but not without the tools' definitions.
+    assert!(
+        !f.entries(&conv)
+            .iter()
+            .any(|e| matches!(e.body, EntryBody::Summary { .. }))
+    );
+    let texts = user_texts(&f, &conv);
+    assert!(texts[1].starts_with("<mcp_tools servers=\"2\" tools=\"45\">"));
+    assert_eq!(f.requests().await.len(), 2);
+    f.mcp.shutdown().await;
+}
+
+/// Waits until a turn is registered, which then waits on the MCP servers its message starts.
+async fn turn_registered(f: &Fixture) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while crate::ai::guard(&f.manager.0.turns).is_empty() {
+        assert!(Instant::now() < deadline, "no turn was registered");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// A message waits for the MCP servers before it is stored; a stop meanwhile stores nothing (an
+/// edit's message and the entries after it stay), and the lock meanwhile creates no conversation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_message_stopped_while_the_servers_start_is_not_stored() {
     use crate::dto::McpServerState;
@@ -522,6 +661,34 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
     assert_eq!(stopped.code, ErrorCode::Cancelled);
     assert_eq!(user_texts(&f, &conv), ["hello"]);
 
+    // AI-26: an edit stopped meanwhile leaves the message it edits and the reply after it.
+    let entries = f.entries(&conv);
+    let hello = f.user_ids(&conv)[0].clone();
+    let edit = {
+        let (manager, vault, env, context) =
+            (f.manager.clone(), f.vault.clone(), f.env(), f.context());
+        let conv = conv.clone();
+        tokio::spawn(async move {
+            manager
+                .edit_resend(
+                    &vault,
+                    env,
+                    conv,
+                    &hello,
+                    "hello again".into(),
+                    context,
+                    Arc::new(Sink::default()),
+                )
+                .await
+                .map(|(started, _)| started)
+        })
+    };
+    turn_registered(&f).await;
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    let stopped = edit.await.unwrap().unwrap_err();
+    assert_eq!(stopped.code, ErrorCode::Cancelled);
+    assert_eq!(f.entries(&conv), entries);
+
     // A new conversation, then the lock, while the server is still starting.
     let sink = Arc::new(Sink::default());
     let (manager, vault, env, context) = (f.manager.clone(), f.vault.clone(), f.env(), f.context());
@@ -540,7 +707,7 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
             .await
             .map(|(started, _)| started)
     });
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    turn_registered(&f).await;
     {
         let mut v = lock(&f.vault);
         f.manager.stop_all(&mut v);

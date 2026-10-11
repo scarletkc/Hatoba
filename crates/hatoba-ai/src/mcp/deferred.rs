@@ -13,7 +13,7 @@
 //! Everything here is deterministic: the same tools and query give the same text.
 
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde_json::{Map, Value};
 
@@ -205,25 +205,32 @@ pub fn parse_search(arguments: &str) -> Result<SearchArgs, String> {
 
 /// The tools a search returns, by their index in `tools`, best first, at most `max`: the tools a
 /// word of `query` names (the whole name or the server's own name, in any letter case), in the
-/// order the query names them, then the others BM25 ranks above zero, ties in list order.
+/// order the query names them, then the others BM25 ranks above zero by the other words, ties in
+/// list order. A word that is a tool's whole name ranks nothing: it asks for that tool, and its
+/// words would rank the other tools of its server.
 #[must_use]
 pub fn search(tools: &[ListedTool<'_>], query: &str, max: usize) -> Vec<usize> {
     let mut found: Vec<usize> = Vec::new();
+    let mut ranked: Vec<&str> = Vec::new();
     for word in query
         .split(|c: char| c.is_whitespace() || matches!(c, ',' | ';'))
         .map(|w| w.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '(' | ')')))
         .filter(|w| !w.is_empty())
     {
+        let mut whole = false;
         for (i, tool) in tools.iter().enumerate() {
-            let named =
-                tool.name.eq_ignore_ascii_case(word) || tool.tool.name.eq_ignore_ascii_case(word);
-            if named && !found.contains(&i) {
+            let full = tool.name.eq_ignore_ascii_case(word);
+            whole |= full;
+            if (full || tool.tool.name.eq_ignore_ascii_case(word)) && !found.contains(&i) {
                 found.push(i);
             }
         }
+        if !whole {
+            ranked.push(word);
+        }
     }
     let docs: Vec<Vec<String>> = tools.iter().map(document).collect();
-    let terms = tokens(query);
+    let terms = tokens(&ranked.join(" "));
     for i in rank(&docs, &terms) {
         if !found.contains(&i) {
             found.push(i);
@@ -234,11 +241,13 @@ pub fn search(tools: &[ListedTool<'_>], query: &str, max: usize) -> Vec<usize> {
 }
 
 /// The words a tool is found by: its name and its server's name three and two times, its
-/// parameter names twice, its description once, so a match in a name counts most.
+/// parameter names twice, its description once, so a match in a name counts most. The name's
+/// `mcp__` is left out: every tool has it, so `mcp` in a query would match them all.
 fn document(tool: &ListedTool<'_>) -> Vec<String> {
+    let name = tool.name.strip_prefix("mcp__").unwrap_or(tool.name);
     let mut words = Vec::new();
     for _ in 0..3 {
-        words.extend(tokens(tool.name));
+        words.extend(tokens(name));
         words.extend(tokens(&tool.tool.name));
     }
     for _ in 0..2 {
@@ -312,7 +321,10 @@ fn rank(docs: &[Vec<String>], terms: &[String]) -> Vec<usize> {
     if docs.is_empty() || terms.is_empty() {
         return Vec::new();
     }
-    let unique: HashSet<&str> = terms.iter().map(String::as_str).collect();
+    // Sorted, so the scores add up in the same order every time and ties stay ties.
+    let mut unique: Vec<&str> = terms.iter().map(String::as_str).collect();
+    unique.sort_unstable();
+    unique.dedup();
     let n = docs.len() as f64;
     let average = docs.iter().map(Vec::len).sum::<usize>() as f64 / n;
     let counts: Vec<HashMap<&str, usize>> = docs
@@ -388,6 +400,14 @@ pub fn search_result(tools: &[ListedTool<'_>], matches: &[usize], query: &str) -
             format!("{} matches", matches.len())
         }
     );
+    let end = format!("\n\nCall the tool you need with {CALL_MCP_TOOL}, or answer the user.");
+    // Room for the names of every match after the first, in case none of them fits, and the end.
+    let tail = LEFT_OUT.chars().count()
+        + matches[1..]
+            .iter()
+            .map(|&i| tools[i].name.chars().count() + 2)
+            .sum::<usize>()
+        + end.chars().count();
     let mut left: Vec<&str> = Vec::new();
     for (n, &i) in matches.iter().enumerate() {
         let tool = &tools[i];
@@ -403,7 +423,7 @@ pub fn search_result(tools: &[ListedTool<'_>], matches: &[usize], query: &str) -
             },
             serde_json::to_string(&tool.tool.input_schema).unwrap_or_default()
         );
-        let fits = out.chars().count() + section.chars().count() <= MAX_RESULT_CHARS - 600;
+        let fits = out.chars().count() + section.chars().count() + tail <= MAX_RESULT_CHARS;
         if n == 0 || (left.is_empty() && fits) {
             out.push_str(&section);
         } else {
@@ -411,17 +431,17 @@ pub fn search_result(tools: &[ListedTool<'_>], matches: &[usize], query: &str) -
         }
     }
     if !left.is_empty() {
-        out.push_str(&format!(
-            "\n\nAlso matching, left out to keep this result short; search for one by its name to \
-             see it: {}.",
-            left.join(", ")
-        ));
+        out.push_str(LEFT_OUT);
+        out.push_str(&left.join(", "));
+        out.push('.');
     }
-    out.push_str(&format!(
-        "\n\nCall the tool you need with {CALL_MCP_TOOL}, or answer the user."
-    ));
+    out.push_str(&end);
     out
 }
+
+/// What comes before the names of the matches a search result leaves out.
+const LEFT_OUT: &str = "\n\nAlso matching, left out to keep this result short; search for one by \
+                        its name to see it: ";
 
 // ───────────────────────── call_mcp_tool ─────────────────────────
 
@@ -538,6 +558,26 @@ fn kind_of(value: &Value) -> &'static str {
     }
 }
 
+/// Whether two values are equal as JSON Schema compares them: numbers by their value, so `1.0`
+/// is `1`, as it is an integer.
+fn same(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => {
+            x == y
+                || x.as_f64()
+                    .zip(y.as_f64())
+                    .is_some_and(|(x, y)| x.total_cmp(&y).is_eq())
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same(x, y))
+        }
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same(v, w)))
+        }
+        _ => a == b,
+    }
+}
+
 fn is_type(value: &Value, kind: &str) -> bool {
     match kind {
         "null" => value.is_null(),
@@ -591,6 +631,11 @@ impl Checker<'_> {
             Value::Object(schema) => schema,
             _ => return,
         };
+        // OpenAPI's `nullable`, which some servers write (and schema.rs keeps), allows null
+        // besides what the rest of the schema allows.
+        if value.is_null() && schema.get("nullable").and_then(Value::as_bool) == Some(true) {
+            return;
+        }
         if let Some(target) = schema
             .get("$ref")
             .and_then(Value::as_str)
@@ -623,7 +668,7 @@ impl Checker<'_> {
             }
         }
         if let Some(allowed) = schema.get("enum").and_then(Value::as_array)
-            && !allowed.contains(value)
+            && !allowed.iter().any(|v| same(v, value))
         {
             let listed = allowed
                 .iter()
@@ -633,7 +678,7 @@ impl Checker<'_> {
             self.problem(format!("{} must be one of {listed}.", place(path)));
         }
         if let Some(constant) = schema.get("const")
-            && constant != value
+            && !same(constant, value)
         {
             self.problem(format!(
                 "{} must be {}.",
@@ -886,6 +931,11 @@ mod tests {
         // The server's own name, in another letter case, names it too.
         let found = search(&c.listed(), "GETISSUE", 1);
         assert_eq!(names(&c, &found), ["mcp__jira__getIssue"]);
+        // A whole name asks for that tool alone, not for the rest of its server, and `mcp`, which
+        // every name starts with, matches nothing.
+        let found = search(&c.listed(), "mcp__github__list_issues", DEFAULT_MATCHES);
+        assert_eq!(names(&c, &found), ["mcp__github__list_issues"]);
+        assert!(search(&c.listed(), "mcp", DEFAULT_MATCHES).is_empty());
     }
 
     #[test]
@@ -909,6 +959,26 @@ mod tests {
         assert!(!text.contains("## mcp__big__b") && !text.contains("## mcp__big__c"));
         assert!(text.contains("search for one by its name to see it: mcp__big__b, mcp__big__c."));
         assert!(text.chars().count() <= MAX_RESULT_CHARS);
+
+        // The names of the matches left out fit too, however long they are.
+        let first = "z".repeat(14_000);
+        let mut entries = vec![("long", "first".to_owned(), first.as_str())];
+        for i in 0..19 {
+            entries.push(("long", format!("tool_{i:02}_{}", "x".repeat(48)), "small"));
+        }
+        let long = Catalog::new(
+            &entries
+                .iter()
+                .map(|(server, name, description)| {
+                    (*server, name.as_str(), *description, json!({}))
+                })
+                .collect::<Vec<_>>(),
+        );
+        let many = long.listed();
+        let all: Vec<usize> = (0..many.len()).collect();
+        let text = search_result(&many, &all, "long");
+        assert!(text.chars().count() <= MAX_RESULT_CHARS, "{}", text.len());
+        assert!(text.contains(&format!("tool_18_{}.", "x".repeat(48))));
 
         assert!(search_result(&listed, &[], "nothing").starts_with("No tool of the 3 MCP tools"));
         assert_eq!(
@@ -1097,6 +1167,19 @@ mod tests {
             .is_empty()
         );
         assert!(check_arguments(&json!(true), &object(json!({"any": 1}))).is_empty());
+        // OpenAPI's `nullable` allows null, and numbers equal by value.
+        let open_api = json!({"type": "object", "properties": {
+            "name": {"type": "string", "nullable": true, "enum": ["a"]},
+            "size": {"type": "integer", "enum": [1, 2]},
+            "step": {"const": 2}
+        }});
+        assert!(
+            check_arguments(
+                &open_api,
+                &object(json!({"name": null, "size": 1.0, "step": 2.0}))
+            )
+            .is_empty()
+        );
         assert!(check_arguments(&json!({}), &object(json!({"any": 1}))).is_empty());
         let text = mismatch_result(
             "mcp__a__b",

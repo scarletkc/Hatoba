@@ -1161,7 +1161,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         await wait(300);
         const words = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
         const found: string[] = [];
-        for (const sv of (await deps.mcp?.servers().catch(() => [])) ?? []) {
+        const servers = (await deps.mcp?.servers().catch(() => [])) ?? [];
+        for (const sv of servers.filter((x) => x.enabled && !turn?.context.disabled_mcp_servers.includes(x.id))) {
           const status = await deps.mcp!.status(sv.id).catch(() => null);
           for (const tool of status?.state === "running" ? status.tools : []) {
             const text = `${tool.name} ${tool.description}`.toLowerCase();
@@ -1180,7 +1181,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         // AI-45: `call_mcp_tool` runs the tool it names with that tool's arguments.
         if (x.name === "call_mcp_tool") {
           const named = typeof args.tool === "string" ? args.tool : "";
-          args = (args.arguments && typeof args.arguments === "object" ? args.arguments : {}) as Record<string, unknown>;
+          // Like Rust: an object, or a string that holds one.
+          let inner: unknown = args.arguments;
+          if (typeof inner === "string") {
+            try {
+              inner = JSON.parse(inner);
+            } catch {
+              inner = null;
+            }
+          }
+          args = (inner && typeof inner === "object" && !Array.isArray(inner) ? inner : {}) as Record<string, unknown>;
           x = { ...x, name: named };
         }
         const info = (await deps.mcp?.toolInfo(c.view.id, x.name).catch(() => null)) ?? null;
@@ -1684,7 +1694,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
       if (noted !== null && (await namesServer(c, move, noted))) noted = null;
       else if (noted === null) noted = move?.from ?? null;
-      const notes = await notesBefore(c, [...c.entries], move, noted, context);
+      const notes = (await notesBefore(c, [...c.entries], move, noted, context)) + (await deferredList(context, text));
       const user_entry = await storeMessage(c, turn, notes + text, context, move, recorded);
       return { conversation: view(c), user_entry };
     },
