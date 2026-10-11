@@ -33,7 +33,9 @@ const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// `cksum` output (`crc size`). Prints the marker and the resolved path. Exit statuses:
 /// 2 no such directory, 3 directory, 4 not writable, 6 not a regular file, 7 not in the
 /// expected state, 8 a symbolic link to nothing (writing would create its target, wherever that
-/// is), 9 no path.
+/// is), 9 no path. A file that passed the checks and still cannot be opened or written (a
+/// read-only file system, a full disk) is status 1, with the message on stderr: dash would exit
+/// with 2 for the failed redirection, which reads as a missing directory.
 ///
 /// The check and the write run in one command, so a change made since the caller read the file
 /// is caught. A write by another process in the moment between the check and `cat` is not: an
@@ -46,7 +48,7 @@ const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; 
      [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; fi; \
-     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\"";
+     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1";
 
 /// What a write checks right before it writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

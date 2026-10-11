@@ -25,6 +25,12 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const DISCONNECTED: &str = "The terminal tab is disconnected, so the tool did not run. Ask the \
      user to reconnect the tab.";
 
+/// The cancelled result of an `edit_file` or `write_file` call that ran when the turn stopped:
+/// its write, if it had begun, was not cut off.
+pub(super) const WRITE_STOPPED: &str = "If Hatoba had begun writing the file when the user \
+     stopped, the write ran to its end, so the file may have changed. Read it with read_file \
+     before you change it.";
+
 /// A call of a file tool, with its arguments.
 pub(super) enum FileJob {
     Read(ReadFileArgs),
@@ -63,24 +69,52 @@ fn server(session: &SshSession) -> String {
     )
 }
 
-/// What the model has seen of each file, by conversation: the POSIX `cksum` checksum and size by
-/// server and resolved path (§13.4, "What the model has seen"). In memory only, until the app
-/// quits; compaction and edit and resend forget a conversation's.
+/// What the model has seen of each file, by conversation (§13.4, "What the model has seen"). In
+/// memory only, until the app quits; compaction, edit and resend, and deleting the conversation
+/// free a conversation's.
 #[derive(Default)]
 pub(super) struct Seen(Mutex<HashMap<String, SeenFiles>>);
 
-/// One conversation's record: POSIX `cksum` checksum and size by server and resolved path.
-type SeenFiles = HashMap<(String, String), (u32, u64)>;
+/// One conversation's record, by server and resolved path.
+type SeenFiles = HashMap<(String, String), Sight>;
+
+/// A file as the model last saw it.
+struct Sight {
+    /// Its POSIX `cksum` checksum and size.
+    sum: (u32, u64),
+    /// The response whose call read or wrote it: the sight counts while that response is in the
+    /// conversation's context.
+    response: String,
+}
+
+/// Where a call of a file tool is in its conversation: the response that made it and the ids of
+/// the entries in the conversation's context, in order.
+#[derive(Default)]
+pub(super) struct Place {
+    pub response: String,
+    pub context: Vec<String>,
+}
 
 impl Seen {
-    /// The model has seen `bytes` as the file at `path` on `server`.
-    pub(super) fn record(&self, conversation_id: &str, server: &str, path: &str, bytes: &[u8]) {
+    /// The model has seen `bytes` as the file at `path` on `server`, in a result of a call that
+    /// `response` made.
+    pub(super) fn record(
+        &self,
+        conversation_id: &str,
+        response: &str,
+        server: &str,
+        path: &str,
+        bytes: &[u8],
+    ) {
         guard(&self.0)
             .entry(conversation_id.to_owned())
             .or_default()
             .insert(
                 (server.to_owned(), path.to_owned()),
-                remote_file::cksum(bytes),
+                Sight {
+                    sum: remote_file::cksum(bytes),
+                    response: response.to_owned(),
+                },
             );
     }
 
@@ -95,21 +129,49 @@ impl Seen {
     pub(super) fn knows(&self, conversation_id: &str) -> bool {
         guard(&self.0).contains_key(conversation_id)
     }
+}
 
-    /// AI-39, AI-40: `tool` may change `file` on `server` only when the model saw it as it is.
-    /// `given` is the path as the model wrote it.
+/// Where a file tool records and checks what the model has seen: the conversation's record, and
+/// where the call is in the conversation.
+#[derive(Clone, Copy)]
+pub(super) struct SeenBy<'a> {
+    pub seen: &'a Seen,
+    pub conversation_id: &'a str,
+    pub place: &'a Place,
+}
+
+impl SeenBy<'_> {
+    /// The call's result shows the model `bytes` as the file at `path` on `server`.
+    fn record(&self, server: &str, path: &str, bytes: &[u8]) {
+        self.seen.record(
+            self.conversation_id,
+            &self.place.response,
+            server,
+            path,
+            bytes,
+        );
+    }
+
+    /// AI-39, AI-40: `tool` may change `file` on `server` only when the model saw it as it is, in
+    /// a result that is still in the conversation's context. `given` is the path as the model
+    /// wrote it.
     fn check(
         &self,
-        conversation_id: &str,
         server: &str,
         file: &RemoteFile,
         tool: &str,
         given: &str,
     ) -> Result<(), String> {
-        let seen = guard(&self.0)
-            .get(conversation_id)
+        let seen = guard(&self.seen.0)
+            .get(self.conversation_id)
             .and_then(|files| files.get(&(server.to_owned(), file.path.clone())))
-            .copied();
+            .filter(|sight| {
+                self.place
+                    .context
+                    .binary_search_by(|id| id.as_str().cmp(&sight.response))
+                    .is_ok()
+            })
+            .map(|sight| sight.sum);
         match seen {
             Some(sum) if sum == remote_file::cksum(&file.bytes) => Ok(()),
             Some(_) => Err(format!(
@@ -123,14 +185,6 @@ impl Seen {
             )),
         }
     }
-}
-
-/// Where a file tool records and checks what the model has seen: the conversation's record and
-/// the server of the tab's session.
-#[derive(Clone, Copy)]
-pub(super) struct SeenBy<'a> {
-    pub seen: &'a Seen,
-    pub conversation_id: &'a str,
 }
 
 /// What the approval card read for a call: the file as read, or `None` when it did not exist,
@@ -237,9 +291,7 @@ pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFile
         _ => tools::WRITE_FILE,
     };
     if let Some(file) = &base.file
-        && let Err(message) = seen
-            .seen
-            .check(seen.conversation_id, &base.server, file, tool, path)
+        && let Err(message) = seen.check(&base.server, file, tool, path)
     {
         return failed_preview(path, message);
     }
@@ -297,12 +349,7 @@ async fn read(
         args.offset,
         args.limit,
     )?;
-    seen.seen.record(
-        seen.conversation_id,
-        &server(session),
-        &file.path,
-        &file.bytes,
-    );
+    seen.record(&server(session), &file.path, &file.bytes);
     Ok(page)
 }
 
@@ -314,21 +361,18 @@ async fn edit(
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
     let server = server(session);
-    let (file, from_card) =
-        unless_cancelled(cancel, current(session, &server, &args.path, base)).await?;
+    let (file, from_card) = unless_cancelled(
+        cancel,
+        current(session, &server, &args.path, base, tools::EDIT_FILE),
+    )
+    .await?;
     let file = file.ok_or_else(|| missing_for_edit(&args.path))?;
-    seen.seen.check(
-        seen.conversation_id,
-        &server,
-        &file,
-        tools::EDIT_FILE,
-        &args.path,
-    )?;
+    seen.check(&server, &file, tools::EDIT_FILE, &args.path)?;
     let edit = files::apply_edit(&args.path, &decode(&args.path, &file.bytes)?, args)?;
     let new = edit.file.encode();
     let expect = Expect::Content(&file.bytes);
     let path = write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
-    seen.seen.record(seen.conversation_id, &server, &path, &new);
+    wrote(seen, cancel, &server, &path, &new);
     Ok(files::edit_result(&args.path, &edit))
 }
 
@@ -340,17 +384,14 @@ async fn write(
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
     let server = server(session);
-    let (file, from_card) =
-        unless_cancelled(cancel, current(session, &server, &args.path, base)).await?;
+    let (file, from_card) = unless_cancelled(
+        cancel,
+        current(session, &server, &args.path, base, tools::WRITE_FILE),
+    )
+    .await?;
     // Replacing a file needs a record of it; creating one does not.
     if let Some(file) = &file {
-        seen.seen.check(
-            seen.conversation_id,
-            &server,
-            file,
-            tools::WRITE_FILE,
-            &args.path,
-        )?;
+        seen.check(&server, file, tools::WRITE_FILE, &args.path)?;
     }
     let before = file
         .as_ref()
@@ -362,9 +403,17 @@ async fn write(
         .as_ref()
         .map_or(Expect::Missing, |f| Expect::Content(&f.bytes));
     let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel).await?;
-    seen.seen
-        .record(seen.conversation_id, &server, &path, &bytes);
+    wrote(seen, cancel, &server, &path, &bytes);
     Ok(files::write_result(&args.path, &new, file.is_none()))
+}
+
+/// Records what a call wrote. A stop that came during the write gave the call a cancelled result
+/// instead, which does not show the file, so the record stays as it was and the next change needs
+/// a read.
+fn wrote(seen: SeenBy<'_>, cancel: &CancellationToken, server: &str, path: &str, bytes: &[u8]) {
+    if !cancel.is_cancelled() {
+        seen.record(server, path, bytes);
+    }
 }
 
 /// The file `write_file` writes: `content` in the style of the file it replaces.
@@ -377,21 +426,44 @@ fn new_content(path: &str, before: Option<&TextFile>, content: &str) -> Result<T
             crlf: false,
         },
     };
-    files::check_size(path, &file)?;
+    files::check_result(path, &file)?;
     Ok(file)
 }
 
-/// The file to change: what the approval card read for this path on this server, or the file as
-/// it is now. The flag says it came from the card.
+/// The file to change: what the approval card read, or without a card, the file as it is now.
+/// The flag says it came from the card.
 async fn current(
     session: &SshSession,
     server: &str,
     path: &str,
     base: Option<Base>,
+    tool: &str,
 ) -> Result<(Option<RemoteFile>, bool), String> {
-    match base.filter(|b| b.path == path && b.server == server) {
-        Some(base) => Ok((base.file, true)),
+    match card_read(base, server, path, tool)? {
+        Some(file) => Ok((file, true)),
         None => Ok((read_bytes(session, path).await?, false)),
+    }
+}
+
+/// What the approval card read for the call (the file, or `None` when it did not exist), or
+/// `None` when no card read one. A card that read another path, or the file on another server
+/// than the tab is connected to now, showed the user a diff of something else, so the call
+/// writes nothing.
+fn card_read(
+    base: Option<Base>,
+    server: &str,
+    path: &str,
+    tool: &str,
+) -> Result<Option<Option<RemoteFile>>, String> {
+    match base {
+        None => Ok(None),
+        Some(base) if base.path == path && base.server == server => Ok(Some(base.file)),
+        Some(base) => Err(format!(
+            "{path} was not changed: the approval card showed the change to {} on {}, and the \
+             tab is now connected to {server}. Call {tool} again so that the user reviews the \
+             change on this server.",
+            base.path, base.server
+        )),
     }
 }
 
@@ -586,6 +658,15 @@ mod tests {
         preview_job(name, arguments).ok().unwrap().0
     }
 
+    /// A call of response `e3`, with `e1` to `e3` in the conversation's context: a summary
+    /// replaced what came before `e1`.
+    fn place() -> Place {
+        Place {
+            response: "e3".into(),
+            context: vec!["e1".into(), "e2".into(), "e3".into()],
+        }
+    }
+
     #[tokio::test]
     async fn previews_show_the_change_against_what_was_read() {
         // Without a session nothing is read, and the card says why.
@@ -596,12 +677,20 @@ mod tests {
         }
 
         let seen = Seen::default();
+        let place = place();
         let by = SeenBy {
             seen: &seen,
             conversation_id: "c1",
+            place: &place,
         };
         let hosts = base("~/hosts", Some(b"127.0.0.1 a\r\n::1 a\r\n"));
-        seen.record("c1", SERVER, "/home/ops/hosts", b"127.0.0.1 a\r\n::1 a\r\n");
+        seen.record(
+            "c1",
+            "e2",
+            SERVER,
+            "/home/ops/hosts",
+            b"127.0.0.1 a\r\n::1 a\r\n",
+        );
         let edit = job(
             tools::EDIT_FILE,
             r#"{"path":"~/hosts","old_string":"::1 a\n","new_string":""}"#,
@@ -630,7 +719,7 @@ mod tests {
         let error = preview_of(&edit_missing, &missing, by).error.unwrap();
         assert!(error.contains("Use write_file"), "{error}");
         let binary = base("/bin/ls", Some(b"\x7fELF\0"));
-        seen.record("c1", SERVER, "/bin/ls", b"\x7fELF\0");
+        seen.record("c1", "e2", SERVER, "/bin/ls", b"\x7fELF\0");
         let replace_ls = job(tools::WRITE_FILE, r#"{"path":"/bin/ls","content":"x"}"#);
         let error = preview_of(&replace_ls, &binary, by).error.unwrap();
         assert!(error.contains("cannot be read as text"), "{error}");
@@ -645,9 +734,11 @@ mod tests {
     #[test]
     fn files_change_only_as_the_model_last_saw_them() {
         let seen = Seen::default();
+        let place = place();
         let by = SeenBy {
             seen: &seen,
             conversation_id: "c1",
+            place: &place,
         };
         let conf = base("~/app.conf", Some(b"port = 80\n"));
         let edit = job(
@@ -670,12 +761,27 @@ mod tests {
         }
 
         // Read (in any conversation but this one, or on another server): still refused.
-        seen.record("c2", SERVER, "/home/ops/app.conf", b"port = 80\n");
-        seen.record("c1", "ops@other:22", "/home/ops/app.conf", b"port = 80\n");
+        seen.record("c2", "e2", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        seen.record(
+            "c1",
+            "e2",
+            "ops@other:22",
+            "/home/ops/app.conf",
+            b"port = 80\n",
+        );
         assert!(preview_of(&edit, &conf, by).error.is_some());
+        // Read in a response the context no longer holds (a compaction or an edit, maybe on
+        // another device): refused too.
+        seen.record("c1", "e0", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        assert!(
+            preview_of(&edit, &conf, by)
+                .error
+                .unwrap()
+                .contains("has not been read")
+        );
 
         // Read here: allowed.
-        seen.record("c1", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        seen.record("c1", "e2", SERVER, "/home/ops/app.conf", b"port = 80\n");
         assert_eq!(preview_of(&edit, &conf, by).error, None);
         assert_eq!(preview_of(&overwrite, &conf, by).error, None);
 
@@ -686,7 +792,7 @@ mod tests {
         assert!(preview_of(&overwrite, &changed, by).error.is_some());
 
         // Its own write is what it saw last, so it can edit again; the old content no longer passes.
-        seen.record("c1", SERVER, "/home/ops/app.conf", b"port = 8080\n");
+        seen.record("c1", "e3", SERVER, "/home/ops/app.conf", b"port = 8080\n");
         let after_edit = base("~/app.conf", Some(b"port = 8080\n"));
         let again = job(
             tools::EDIT_FILE,
@@ -706,7 +812,31 @@ mod tests {
         let other = SeenBy {
             seen: &seen,
             conversation_id: "c2",
+            place: &place,
         };
         assert_eq!(preview_of(&edit, &conf, other).error, None);
+    }
+
+    /// A run writes over what its approval card read, and only on the server the card read it on.
+    #[test]
+    fn runs_write_over_what_the_card_showed() {
+        let conf = || Some(base("/etc/app.conf", Some(b"x\n")));
+        let read = card_read(conf(), SERVER, "/etc/app.conf", tools::EDIT_FILE).unwrap();
+        assert_eq!(read.unwrap().unwrap().bytes, b"x\n");
+        let missing = Some(base("/srv/new.txt", None));
+        assert_eq!(
+            card_read(missing, SERVER, "/srv/new.txt", tools::WRITE_FILE).unwrap(),
+            Some(None)
+        );
+        // Without a card, the run reads the file itself.
+        assert_eq!(
+            card_read(None, SERVER, "/etc/app.conf", tools::EDIT_FILE).unwrap(),
+            None
+        );
+        // The tab reconnected to another server since the card read the file.
+        let error = card_read(conf(), "ops@db2:22", "/etc/app.conf", tools::EDIT_FILE).unwrap_err();
+        assert!(error.contains("now connected to ops@db2:22"), "{error}");
+        assert!(error.contains("Call edit_file again"), "{error}");
+        assert!(card_read(conf(), SERVER, "/etc/other.conf", tools::EDIT_FILE).is_err());
     }
 }

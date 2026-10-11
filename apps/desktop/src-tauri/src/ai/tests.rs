@@ -1454,6 +1454,55 @@ async fn file_tools_need_a_live_session() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
 }
 
+/// §13.4, "File tools": a stop does not cut off a write that has begun, so the cancelled result of
+/// an edit or write that was running tells the model the file may have changed.
+#[tokio::test]
+async fn a_stop_while_a_file_tool_runs_says_the_file_may_have_changed() {
+    let f = Fixture::new(vec![calls(&[
+        (
+            "w1",
+            "write_file",
+            json!({"path": "/tmp/x", "content": "y"}),
+        ),
+        ("r1", "read_file", json!({"path": "/tmp/x"})),
+        ("w2", "edit_file", json!({"path": "/tmp/x"})),
+    ])])
+    .await;
+    let (started, sink) = f.send(None, "write it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // w1 and r1 run; w2 has not started.
+    let _write = f.manager.start_call(&conv, "w1").unwrap();
+    let _read = f.manager.start_call(&conv, "r1").unwrap();
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+
+    let results: Vec<(String, ToolStatus, String)> = f
+        .entries(&conv)
+        .into_iter()
+        .filter_map(|e| match e.body {
+            EntryBody::Tool {
+                tool_call_id,
+                status,
+                content,
+            } => Some((tool_call_id, status, content)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        results,
+        [
+            (
+                "w1".into(),
+                ToolStatus::Cancelled,
+                super::files::WRITE_STOPPED.into()
+            ),
+            ("r1".into(), ToolStatus::Cancelled, String::new()),
+            ("w2".into(), ToolStatus::Cancelled, String::new()),
+        ]
+    );
+}
+
 #[tokio::test]
 async fn tools_that_run_in_rust_report_failures_as_error_results() {
     let f = Fixture::new(vec![
@@ -1561,7 +1610,7 @@ fn remember_a_file(f: &Fixture, conv: &str, call: &str) {
     f.manager
         .0
         .seen
-        .record(conv, "ops@db:22", "/etc/hosts", b"x");
+        .record(conv, "response", "ops@db:22", "/etc/hosts", b"x");
     super::guard(&f.manager.0.file_bases).insert(
         (conv.to_owned(), call.to_owned()),
         super::files::Base {
@@ -2072,7 +2121,7 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
     f.manager
         .0
         .seen
-        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
+        .record(&conv, "response", "ops@db:22", "/etc/hosts", b"x");
     let (started, sink) = f.edit(&conv, &ids[6], "gamma-edited").await.unwrap();
     assert!(!f.manager.0.seen.knows(&conv));
     assert_eq!(

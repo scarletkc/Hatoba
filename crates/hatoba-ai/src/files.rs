@@ -208,9 +208,9 @@ pub struct Edit {
     span: usize,
 }
 
-/// AI-39: replaces `old_string` with `new_string` in `file`. In a file whose line breaks are
-/// mostly CRLF, the line breaks of both strings are matched and written as CRLF. An error is the
-/// message for the model.
+/// AI-39: replaces `old_string` with `new_string` in `file`. `old_string` matches CRLF and LF line
+/// breaks alike, as `read_file` shows neither; in a file whose line breaks are mostly CRLF,
+/// `new_string`'s are written as CRLF. An error is the message for the model.
 pub fn apply_edit(path: &str, file: &TextFile, args: &EditFileArgs) -> Result<Edit, String> {
     if args.old_string.is_empty() {
         return Err(
@@ -218,17 +218,29 @@ pub fn apply_edit(path: &str, file: &TextFile, args: &EditFileArgs) -> Result<Ed
                 .to_owned(),
         );
     }
-    let (old, new) = if file.crlf {
-        (to_crlf(&args.old_string), to_crlf(&args.new_string))
-    } else {
-        (args.old_string.clone(), args.new_string.clone())
-    };
-    if old == new {
+    let old = args.old_string.replace("\r\n", "\n");
+    if old == args.new_string.replace("\r\n", "\n") {
         return Err(
             "old_string and new_string are the same, so there is nothing to change.".to_owned(),
         );
     }
-    let count = file.text.matches(old.as_str()).count();
+    let new = if file.crlf {
+        to_crlf(&args.new_string)
+    } else {
+        args.new_string.clone()
+    };
+    // The file with each CRLF as LF, where the CRLFs were in it, and where a byte of it is in the
+    // file: a CRLF's LF is at its CR, so a match that takes the line break takes both bytes.
+    let lf = file.text.replace("\r\n", "\n");
+    let crlfs: Vec<usize> = file
+        .text
+        .match_indices("\r\n")
+        .enumerate()
+        .map(|(k, (at, _))| at - k)
+        .collect();
+    let in_file = |at: usize| at + crlfs.partition_point(|&c| c < at);
+    let found: Vec<usize> = lf.match_indices(old.as_str()).map(|(at, _)| at).collect();
+    let count = found.len();
     if count == 0 {
         return Err(format!(
             "old_string was not found in {path}, so nothing was changed. It must match the file \
@@ -244,28 +256,37 @@ pub fn apply_edit(path: &str, file: &TextFile, args: &EditFileArgs) -> Result<Ed
              occurrence."
         ));
     }
-    let at = file.text.find(old.as_str()).unwrap_or_default();
-    let text = if replace_all {
-        file.text.replace(old.as_str(), &new)
-    } else {
-        file.text.replacen(old.as_str(), &new, 1)
-    };
+    let mut text = String::with_capacity(file.text.len());
+    let mut copied = 0;
+    for &at in &found[..if replace_all { count } else { 1 }] {
+        text.push_str(&file.text[copied..in_file(at)]);
+        text.push_str(&new);
+        copied = in_file(at + old.len());
+    }
+    text.push_str(&file.text[copied..]);
     let edited = TextFile {
         text,
         bom: file.bom,
         crlf: file.crlf,
     };
-    check_size(path, &edited)?;
+    check_result(path, &edited)?;
     Ok(Edit {
-        first_line: file.text[..at].matches('\n').count(),
+        first_line: lf[..found[0]].matches('\n').count(),
         span: new.matches('\n').count() + 1,
         file: edited,
         count,
     })
 }
 
-/// Refuses a result over [`MAX_FILE_BYTES`].
-pub fn check_size(path: &str, file: &TextFile) -> Result<(), String> {
+/// Refuses a result over [`MAX_FILE_BYTES`] or with a NUL byte: the tools write text files only,
+/// as they read only those.
+pub fn check_result(path: &str, file: &TextFile) -> Result<(), String> {
+    if file.text.contains('\0') {
+        return Err(format!(
+            "{path} would have a NUL byte, and the file tools write text files only, so nothing \
+             was written."
+        ));
+    }
     let size = file.text.len() + if file.bom { 3 } else { 0 };
     if size as u64 > MAX_FILE_BYTES {
         Err(format!(
@@ -477,9 +498,29 @@ mod tests {
             e.file.encode(),
             "\u{feff}[a]\r\nx=1\r\ny=3\r\nz=4\r\n".as_bytes()
         );
-        // An LF file is matched as given.
-        let lf = file("a\nb\n");
-        assert!(apply_edit("p", &lf, &edit("a\r\nb", "c", false)).is_err());
+        // Line breaks match whichever kind the file has at that line, as read_file shows neither.
+        let mixed = file("a\nb\r\nc\n");
+        assert!(!mixed.crlf);
+        let e = apply_edit("p", &mixed, &edit("a\nb\nc", "a\nB\nc", false)).unwrap();
+        assert_eq!(e.file.text, "a\nB\nc\n");
+        let e = apply_edit("p", &mixed, &edit("b", "B", false)).unwrap();
+        assert_eq!(e.file.text, "a\nB\r\nc\n");
+        assert_eq!(
+            apply_edit("p", &file("a\nb\n"), &edit("a\r\nb", "c", false))
+                .unwrap()
+                .file
+                .text,
+            "c\n"
+        );
+        let crlf_with_lf = file("[a]\r\nx=1\ny=2\r\nx=1\r\ny=2\r\n");
+        assert!(crlf_with_lf.crlf);
+        let e = apply_edit("p", &crlf_with_lf, &edit("x=1\ny=2", "x=0", true)).unwrap();
+        assert_eq!(e.count, 2);
+        assert_eq!(e.file.text, "[a]\r\nx=0\r\nx=0\r\n");
+        // A match that starts with a line break takes the whole CRLF.
+        let e = apply_edit("p", &crlf_with_lf, &edit("]\nx=1\n", "]\nx=9\n", false)).unwrap();
+        assert_eq!(e.file.text, "[a]\r\nx=9\r\ny=2\r\nx=1\r\ny=2\r\n");
+        assert_eq!(e.first_line, 0);
     }
 
     #[test]
@@ -491,7 +532,13 @@ mod tests {
                 .unwrap_err()
                 .contains("1 MB")
         );
-        assert!(check_size("p", &file(&"y".repeat(MAX_FILE_BYTES as usize))).is_ok());
+        assert!(check_result("p", &file(&"y".repeat(MAX_FILE_BYTES as usize))).is_ok());
+        // What the tools write, they can read back.
+        assert!(
+            apply_edit("p", &f, &edit("x", "x\0", false))
+                .unwrap_err()
+                .contains("NUL")
+        );
         assert_eq!(
             write_result("/tmp/n", &file("a\nb"), true),
             "Created /tmp/n (2 lines).\n"

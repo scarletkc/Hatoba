@@ -443,8 +443,10 @@ impl AiManager {
         self.forget_file_bases(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
-            let cancelled = Entries::load(v, conversation_id)
-                .and_then(|entries| cancel_open_calls(v, conversation_id, &entries));
+            let cancelled = Entries::load(v, conversation_id).and_then(|entries| {
+                let writing = self.running_writes(conversation_id, &entries);
+                cancel_open_calls(v, conversation_id, &entries, &writing)
+            });
             match cancelled {
                 Ok(views) => stored = views,
                 Err(e) => tracing::warn!(
@@ -464,6 +466,23 @@ impl AiManager {
             tracing::info!(conversation_id, "AI turn stopped");
         }
         stored
+    }
+
+    /// The `edit_file` and `write_file` calls of the conversation's newest response that run now:
+    /// a stop does not cut off a write that has begun (§13.4, "File tools").
+    fn running_writes(&self, conversation_id: &str, entries: &Entries) -> Vec<String> {
+        let newest = entries.list.iter().rev().find_map(|e| match &e.body {
+            EntryBody::Assistant(a) => Some(a),
+            _ => None,
+        });
+        newest.map_or_else(Vec::new, |a| {
+            a.tool_calls
+                .iter()
+                .filter(|c| matches!(c.name.as_str(), tools::EDIT_FILE | tools::WRITE_FILE))
+                .filter(|c| self.call_running(conversation_id, &c.id))
+                .map(|c| c.id.clone())
+                .collect()
+        })
     }
 
     /// `ai_stop`: stops the conversation's turn and tools, if any, and cancels its open calls.
@@ -1075,10 +1094,11 @@ impl AiManager {
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiEntryView> {
-        let (job, op) = {
+        let (job, op, place) = {
             let v = unlocked(vault)?;
-            find_conversation(&v, conversation_id)?;
-            let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
+            let conversation = find_conversation(&v, conversation_id)?;
+            let entries = Entries::load(&v, conversation_id)?;
+            let call = open_call(&entries, tool_call_id)?;
             let op = self.start_call(conversation_id, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
             let mut job = if call.name.starts_with(MCP_PREFIX) {
@@ -1091,15 +1111,18 @@ impl AiManager {
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
+            let mut place = files::Place::default();
             if let Job::File(_, base) = &mut job {
                 *base = guard(&self.0.file_bases)
                     .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
+                place = file_place(&conversation, &entries);
             }
-            (job, op)
+            (job, op, place)
         };
         let seen = files::SeenBy {
             seen: &self.0.seen,
             conversation_id,
+            place: &place,
         };
         let (status, content) = job
             .run(
@@ -1145,11 +1168,13 @@ impl AiManager {
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiFilePreview> {
-        let (call, op) = {
+        let (call, op, place) = {
             let v = unlocked(vault)?;
-            find_conversation(&v, conversation_id)?;
-            let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
-            (call, self.start_op(conversation_id))
+            let conversation = find_conversation(&v, conversation_id)?;
+            let entries = Entries::load(&v, conversation_id)?;
+            let call = open_call(&entries, tool_call_id)?;
+            let place = file_place(&conversation, &entries);
+            (call, self.start_op(conversation_id), place)
         };
         let (job, path) =
             match files::preview_job(&call.name, edited_arguments.unwrap_or(&call.arguments)) {
@@ -1199,6 +1224,7 @@ impl AiManager {
         let seen = files::SeenBy {
             seen: &self.0.seen,
             conversation_id,
+            place: &place,
         };
         Ok(files::preview_of(&job, &base, seen))
     }
@@ -1323,7 +1349,7 @@ impl AiManager {
             return Err(AppError::invalid("conversation_id", "a turn is running"));
         }
         let entries = Entries::load(&v, conversation_id)?;
-        if !cancel_open_calls(&mut v, conversation_id, &entries)?.is_empty() {
+        if !cancel_open_calls(&mut v, conversation_id, &entries, &[])?.is_empty() {
             *stored = true;
         }
         self.forget_file_bases(conversation_id);
@@ -1707,7 +1733,7 @@ fn prepare_locked(
     let conversation = find_conversation(v, conversation_id)
         .map_err(|_| Halt::Failed("The conversation no longer exists.".into()))?;
     let mut entries = Entries::load(v, conversation_id)?;
-    let cancelled = cancel_open_calls(v, conversation_id, &entries)?;
+    let cancelled = cancel_open_calls(v, conversation_id, &entries, &[])?;
     if !cancelled.is_empty() {
         *stored = true;
         for entry in cancelled {
@@ -1883,6 +1909,20 @@ fn shared_call_ids(calls: &[ToolCall]) -> Vec<(String, usize)> {
 /// Results answer the calls with their id in order (`fix_up_missing_results`), so of calls that
 /// share an id (stored before such calls got their results in [`store_response`]), the open one
 /// is the first that no result answers.
+/// Where an open call is, for the file tools' record of what the model has seen (§13.4): the
+/// response that made it, which is the newest, and the entries in the conversation's context.
+fn file_place(conversation: &AiConversation, entries: &Entries) -> files::Place {
+    let newest = entries
+        .list
+        .iter()
+        .rposition(|e| matches!(e.body, EntryBody::Assistant(_)));
+    let from = entries.context_from(conversation.context_start.as_deref());
+    files::Place {
+        response: newest.map(|i| entries.ids[i].clone()).unwrap_or_default(),
+        context: entries.ids[from..].to_vec(),
+    }
+}
+
 fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
     let newest = entries
         .list
@@ -2478,16 +2518,28 @@ impl Entries {
 }
 
 /// Stores a cancelled result for every stored call that has none (§13.1) and returns them.
+/// `writing`: file tool calls that may be writing now, whose result says the file may have
+/// changed.
 fn cancel_open_calls(
     v: &mut Vault,
     conversation_id: &str,
     entries: &Entries,
+    writing: &[String],
 ) -> AppResult<Vec<AiEntryView>> {
     let now = now_ms();
     fix_up_missing_results(&entries.list)
         .into_iter()
         .map(|call_id| {
-            let entry = AiEntry::cancelled_result(now, call_id);
+            let entry = if writing.contains(&call_id) {
+                AiEntry::tool(
+                    now,
+                    call_id,
+                    ToolStatus::Cancelled,
+                    files::WRITE_STOPPED.to_owned(),
+                )
+            } else {
+                AiEntry::cancelled_result(now, call_id)
+            };
             let entry_id = append(v, conversation_id, &entry)?;
             Ok(entry_view(&entry_id, &entry))
         })
