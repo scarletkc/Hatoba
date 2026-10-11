@@ -29,10 +29,41 @@ use crate::model::{
 use crate::recovery::RecoveryCode;
 use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
 use crate::sync::SyncConfig;
-use crate::sync::backend::VaultMeta;
+use crate::sync::backend::{RemoteItem, VaultMeta};
 use crate::sync::conflict::{ConflictEntry, Resolution};
+use crate::sync::engine::remote_row;
 
 const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
+
+/// Device-local values kept in the meta table, sealed under the vault key and never synced. They
+/// are read and written only through [`Vault::local_secret`] and [`Vault::set_local_secret`],
+/// and a join that changes the vault key seals each one in [`LocalSecret::ALL`] again, so a new
+/// value needs nothing more than a variant here, listed in `ALL`.
+#[derive(Clone, Copy, Debug)]
+enum LocalSecret {
+    /// The shell's list of recent quick-connect targets (HOST-12), which names hosts.
+    RecentTargets,
+    /// The shell's AI approvals saved on this device (AI-19), which name hosts.
+    AiAllowances,
+}
+
+impl LocalSecret {
+    const ALL: [Self; 2] = [Self::RecentTargets, Self::AiAllowances];
+
+    const fn meta_key(self) -> &'static str {
+        match self {
+            Self::RecentTargets => meta::RECENT_TARGETS,
+            Self::AiAllowances => meta::AI_ALLOWANCES,
+        }
+    }
+
+    const fn aad(self) -> &'static [u8] {
+        match self {
+            Self::RecentTargets => AAD_RECENT_TARGETS.as_bytes(),
+            Self::AiAllowances => AAD_AI_ALLOWANCES.as_bytes(),
+        }
+    }
+}
 /// Consecutive wrong passwords allowed before delays start (SEC-06).
 pub const FREE_UNLOCK_ATTEMPTS: u32 = 3;
 /// Upper bound of the unlock delay.
@@ -1031,15 +1062,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn recent_targets(&self) -> Result<Option<String>> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let Some(sealed) = self.store.get_meta(meta::RECENT_TARGETS)? else {
-            return Ok(None);
-        };
-        Ok(
-            crypto::open_json(&unlocked.vault_key, AAD_RECENT_TARGETS.as_bytes(), &sealed)
-                .ok()
-                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
-        )
+        self.local_secret(LocalSecret::RecentTargets)
     }
 
     /// Stores the recent quick-connect targets, sealed under the vault key.
@@ -1047,13 +1070,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_recent_targets(&mut self, json: &str) -> Result<()> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let sealed = seal(
-            &unlocked.vault_key,
-            AAD_RECENT_TARGETS.as_bytes(),
-            json.as_bytes(),
-        )?;
-        self.store.set_meta(meta::RECENT_TARGETS, &sealed.to_json())
+        self.set_local_secret(LocalSecret::RecentTargets, json)
     }
 
     /// The AI approvals saved on this device (opaque JSON owned by the shell, AI-19). Never
@@ -1063,15 +1080,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn ai_allowances(&self) -> Result<Option<String>> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let Some(sealed) = self.store.get_meta(meta::AI_ALLOWANCES)? else {
-            return Ok(None);
-        };
-        Ok(
-            crypto::open_json(&unlocked.vault_key, AAD_AI_ALLOWANCES.as_bytes(), &sealed)
-                .ok()
-                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
-        )
+        self.local_secret(LocalSecret::AiAllowances)
     }
 
     /// Stores the AI approvals saved on this device, sealed under the vault key.
@@ -1079,13 +1088,25 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_ai_allowances(&mut self, json: &str) -> Result<()> {
+        self.set_local_secret(LocalSecret::AiAllowances, json)
+    }
+
+    /// A [`LocalSecret`]; a value this vault key cannot open reads as `None`.
+    fn local_secret(&self, which: LocalSecret) -> Result<Option<String>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let sealed = seal(
-            &unlocked.vault_key,
-            AAD_AI_ALLOWANCES.as_bytes(),
-            json.as_bytes(),
-        )?;
-        self.store.set_meta(meta::AI_ALLOWANCES, &sealed.to_json())
+        let Some(sealed) = self.store.get_meta(which.meta_key())? else {
+            return Ok(None);
+        };
+        Ok(crypto::open_json(&unlocked.vault_key, which.aad(), &sealed)
+            .ok()
+            .and_then(|plain| String::from_utf8(plain.to_vec()).ok()))
+    }
+
+    /// Stores a [`LocalSecret`], sealed under the vault key.
+    fn set_local_secret(&mut self, which: LocalSecret, json: &str) -> Result<()> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let sealed = seal(&unlocked.vault_key, which.aad(), json.as_bytes())?;
+        self.store.set_meta(which.meta_key(), &sealed.to_json())
     }
 
     // ---- backup ----
@@ -1296,13 +1317,11 @@ impl Vault {
     ///
     /// When the remote is this same vault (a device that synced before), every item is queued
     /// again so the next round reconciles both sides. Otherwise each live item is sealed under
-    /// the remote vault key and queued as new. The local settings are sealed again but not
-    /// queued, at revision 0, so the app never shows defaults meanwhile, and the remote's settings
-    /// replace them on the first pull even if they were edited in between
-    /// ([`meta::ADOPT_REMOTE_SETTINGS`]). Tombstones, items that cannot be decrypted, and the
-    /// conflict log are dropped, and the device-local data sealed under the vault key is sealed
-    /// again. Returns whether the vault key changed, so the caller can drop what still holds the
-    /// old one (biometric unlock).
+    /// the remote vault key and queued as new, except the settings: `cloud_settings`, the
+    /// remote's settings item as read just before, replaces the local one, which is queued only
+    /// when the remote has none. Tombstones, items that cannot be decrypted, and the conflict log
+    /// are dropped, and every [`LocalSecret`] is sealed again. Returns whether the vault key
+    /// changed, so the caller can drop what still holds the old one (biometric unlock).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
     /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
@@ -1311,6 +1330,7 @@ impl Vault {
         remote: &VaultMeta,
         vault_key: Key32,
         config: &SyncConfig,
+        cloud_settings: Option<&RemoteItem>,
     ) -> Result<bool> {
         let old = self.vault_key_copy()?;
         let rekey = !self.verify_vault_key(&vault_key)?;
@@ -1318,25 +1338,25 @@ impl Vault {
         // Device-local values sealed under the vault key, sealed again (`None`: dropped).
         let mut local = Vec::new();
         if rekey {
-            for (key, aad) in [
-                (meta::RECENT_TARGETS, AAD_RECENT_TARGETS),
-                (meta::AI_ALLOWANCES, AAD_AI_ALLOWANCES),
-            ] {
-                let resealed = match self.store.get_meta(key)? {
-                    Some(sealed) => crypto::open_json(&old, aad.as_bytes(), &sealed)
+            for which in LocalSecret::ALL {
+                let resealed = match self.store.get_meta(which.meta_key())? {
+                    Some(sealed) => crypto::open_json(&old, which.aad(), &sealed)
                         .ok()
-                        .map(|plain| seal(&vault_key, aad.as_bytes(), &plain))
+                        .map(|plain| seal(&vault_key, which.aad(), &plain))
                         .transpose()?
                         .map(|env| env.to_json()),
                     None => None,
                 };
-                local.push((key, resealed));
+                local.push((which.meta_key(), resealed));
             }
         }
         let check = seal_vault_check(&vault_key)?;
         self.store.transaction(|tx| {
             if rekey {
                 for row in tx.item_rows()? {
+                    if row.id == SETTINGS_ID && cloud_settings.is_some() {
+                        continue;
+                    }
                     let plain = row
                         .envelope
                         .as_deref()
@@ -1352,12 +1372,14 @@ impl Vault {
                     tx.upsert_item_row(&ItemRow {
                         envelope: Some(envelope.to_json()),
                         revision: 0,
-                        dirty: row.id != SETTINGS_ID,
+                        dirty: true,
                         ..row
                     })?;
                 }
+                if let Some(remote) = cloud_settings {
+                    tx.upsert_item_row(&remote_row(remote))?;
+                }
                 tx.clear_conflicts()?;
-                tx.set_meta(meta::ADOPT_REMOTE_SETTINGS, &config)?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
                 for (key, resealed) in &local {
                     match resealed {

@@ -24,14 +24,14 @@ use crate::crypto::{
     open_json, seal, unwrap_key,
 };
 use crate::error::{Error, Result};
-use crate::model::new_id;
+use crate::model::{SETTINGS_ID, new_id};
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
 use crate::store::{StoreOps, meta};
 use crate::sync::backend::{
     DeviceLogin, RecoveryUpdate, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
-use crate::sync::engine::{SyncOptions, sync_round};
+use crate::sync::engine::{SyncOptions, find_remote_item, sync_round};
 use crate::sync::{SharedVault, SyncConfig, lock_vault};
 use crate::vault::{PasswordChange, Vault};
 
@@ -264,10 +264,12 @@ pub struct Joined {
 
 /// Flow C: connects this device's vault to a remote that already holds a vault.
 ///
-/// Signs in with the remote's master password under this device's id, then merges locally
-/// (see `Vault::join_remote_vault`): a remote that holds this same vault is reconciled item by
-/// item, and any other vault receives every local item as a new one. Either way the local master
-/// password becomes the remote's and `config` is recorded. The vault must be unlocked.
+/// Signs in with the remote's master password under this device's id, reads the remote's
+/// settings item, then merges locally in one transaction (see `Vault::join_remote_vault`): a
+/// remote that holds this same vault is reconciled item by item, and any other vault receives
+/// every local item as a new one and replaces the local settings with its own. Either way the
+/// local master password becomes the remote's and `config` is recorded. The vault must be
+/// unlocked.
 ///
 /// `keep_credentials` stores the session (and whatever else the backend needs, such as a D1 API
 /// token) after sign-in, under the vault lock and only while the vault is still unlocked, right
@@ -298,12 +300,15 @@ pub async fn join_remote_vault(
         return Err(Error::RemoteNotInitialized);
     }
     let auth = authenticate(backend, password, &device_id, &device).await?;
+    // Settings are one item, so another vault's cannot be merged with this device's: the join
+    // takes them as they stand now, and the commit never leaves this device's in their place.
+    let settings = find_remote_item(backend, SETTINGS_ID).await?;
     let rekeyed = with_vault(vault, |v| {
         if !v.is_unlocked() {
             return Err(Error::Locked);
         }
         keep_credentials(&auth.session)?;
-        v.join_remote_vault(&auth.meta, auth.vault_key, config)
+        v.join_remote_vault(&auth.meta, auth.vault_key, config, settings.as_ref())
     })?;
     Ok(Joined {
         session: auth.session,

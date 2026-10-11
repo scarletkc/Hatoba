@@ -59,13 +59,6 @@ pub mod meta {
     /// Envelope JSON: the shell's list of recent quick-connect targets (HOST-12), sealed under
     /// the vault key because it names hosts. Device-local, never synced.
     pub const RECENT_TARGETS: &str = "recent_targets";
-    /// The sync backend (as in [`SYNC_BACKEND`]) this device joined another vault on (flow C),
-    /// until the two agree on settings: a pull from that backend installed its settings item,
-    /// which wins over any local edit made meanwhile, or, when it had none, it accepted the local
-    /// one. A disconnect keeps it, so reconnecting to that backend before then still lets its
-    /// settings win; any other backend, such as a new remote this vault sets up (flow A), syncs
-    /// settings as usual.
-    pub const ADOPT_REMOTE_SETTINGS: &str = "adopt_remote_settings";
     /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
     /// vault key because they name hosts. Device-local, never synced.
     pub const AI_ALLOWANCES: &str = "ai_allowances";

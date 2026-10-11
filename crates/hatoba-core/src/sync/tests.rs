@@ -477,20 +477,9 @@ async fn join_merges_another_vault_into_the_cloud() {
     let joined = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
         .await
         .unwrap();
-    // Until the first pull, the local settings stay, and they are not queued to overwrite the
-    // cloud's, even when edited meanwhile.
-    assert_eq!(c.v().settings().terminal.font_size, 7);
-    c.clock.advance(60_000);
-    c.edit(SETTINGS_ID, |item| {
-        if let Item::Settings(s) = item {
-            s.terminal.font_size = 9;
-        }
-    });
-    assert_eq!(
-        c.pending(),
-        5,
-        "local host, key, chat, message and the edited settings"
-    );
+    // The cloud's settings are in place as soon as the join commits; only the local items wait.
+    assert_eq!(c.v().settings().terminal.font_size, 42);
+    assert_eq!(c.pending(), 4, "local host, key, chat and message");
     c.sync().await;
     assert!(joined.rekeyed);
     assert!(!joined.session.token.is_empty());
@@ -565,19 +554,33 @@ async fn join_merges_another_vault_into_the_cloud() {
 }
 
 #[tokio::test]
-async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
+async fn settings_edited_after_joining_sync_as_usual() {
     let (server, clock, a, _b) = world();
+    a.put(host("cloud-host-1"));
+    a.put(host("cloud-host-2"));
+    enable(&a).await;
+    // The settings come last in the cloud, and the join reads it one item per page.
     a.edit(SETTINGS_ID, |item| {
         if let Item::Settings(s) = item {
             s.terminal.font_size = 42;
         }
     });
-    enable(&a).await;
+    a.sync().await;
+    server.set_pull_page_cap(1);
+    let cloud_scrollback = a.v().settings().terminal.scrollback;
+
     let c = own_vault_device(&server, &clock);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.scrollback = cloud_scrollback + 1;
+        }
+    });
     join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
         .await
         .unwrap();
-    // The first pull never happens; settings change, and sync is disconnected.
+    assert_eq!(c.v().settings().terminal.font_size, 42);
+    // The first round fails, and the settings are edited meanwhile: the edit builds on the
+    // cloud's settings, so none of this device's earlier values travel with it.
     server.set_offline(true);
     assert!(matches!(c.try_sync().await, Err(Error::Offline)));
     server.set_offline(false);
@@ -587,13 +590,12 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
             s.terminal.font_size = 9;
         }
     });
-    c.v().set_sync_config(None).unwrap();
-
-    let joined = join(&c).await;
-    assert!(!joined.rekeyed);
-    assert_eq!(c.v().settings().terminal.font_size, 42);
+    c.sync().await;
     a.sync().await;
-    assert_eq!(a.v().settings().terminal.font_size, 42);
+    let settings = a.v().settings();
+    assert_eq!(settings.terminal.font_size, 9);
+    assert_eq!(settings.terminal.scrollback, cloud_scrollback);
+    assert_eq!(a.snapshot(), c.snapshot());
 }
 
 #[tokio::test]
@@ -622,88 +624,6 @@ async fn join_uploads_the_local_settings_when_the_cloud_has_none() {
 
     restore(&b).await;
     assert_eq!(b.v().settings().terminal.font_size, 7);
-}
-
-#[tokio::test]
-async fn cloud_settings_uploaded_before_the_joined_device_gets_to_still_win() {
-    let (server, clock, a, _b) = world();
-    a.edit(SETTINGS_ID, |item| {
-        if let Item::Settings(s) = item {
-            s.terminal.font_size = 42;
-        }
-    });
-    server.fail_next("login");
-    assert!(
-        enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
-            .await
-            .is_err()
-    );
-    server.set_offline(false);
-
-    // The joined device finds no settings in the cloud, but its upload fails...
-    let c = own_vault_device(&server, &clock);
-    join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
-        .await
-        .unwrap();
-    let offline = Arc::clone(&server);
-    c.backend.on_next_pull(move || offline.set_offline(true));
-    assert!(matches!(c.try_sync().await, Err(Error::Offline)));
-    server.set_offline(false);
-    // ...and the first device uploads its settings before the joined device, edited later, retries.
-    enable(&a).await;
-    c.clock.advance(60_000);
-    c.edit(SETTINGS_ID, |item| {
-        if let Item::Settings(s) = item {
-            s.terminal.font_size = 9;
-        }
-    });
-    c.sync().await;
-    assert_eq!(c.v().settings().terminal.font_size, 42);
-    a.sync().await;
-    assert_eq!(a.v().settings().terminal.font_size, 42);
-}
-
-#[tokio::test]
-async fn a_new_remote_syncs_settings_as_usual_after_a_pending_join() {
-    let (server, clock, a, _b) = world();
-    enable(&a).await;
-    let c = own_vault_device(&server, &clock);
-    join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
-        .await
-        .unwrap();
-    // The first pull never happens, and this vault moves to a new, empty remote; the first
-    // setup's response is lost, so the retry resumes on a remote that already holds this vault.
-    c.v().set_sync_config(None).unwrap();
-    c.v().rotate_recovery(PW).unwrap();
-    let other = FakeServer::new();
-    let backend = FakeBackend::new(&other);
-    other.fail_next("setup");
-    assert!(
-        enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
-            .await
-            .is_err()
-    );
-    enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
-        .await
-        .unwrap();
-    c.v()
-        .set_sync_config(Some(&SyncConfig::Worker {
-            url: "https://other.example.workers.dev".into(),
-            deployment: None,
-        }))
-        .unwrap();
-
-    // A settings edit before the next round is kept, not replaced by the uploaded copy.
-    c.clock.advance(60_000);
-    c.edit(SETTINGS_ID, |item| {
-        if let Item::Settings(s) = item {
-            s.terminal.font_size = 21;
-        }
-    });
-    sync_round(&c.vault, &backend, &SyncOptions::default())
-        .await
-        .unwrap();
-    assert_eq!(c.v().settings().terminal.font_size, 21);
 }
 
 #[tokio::test]
@@ -737,6 +657,11 @@ async fn join_errors_leave_the_local_vault_alone() {
     assert!(matches!(err, Error::RemoteNotInitialized));
 
     enable(&a).await;
+    server.fail_next("pull");
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Offline));
     // The caller's operation ended while signing in (a lock, say): nothing local changes.
     let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| {
         Err(Error::Cancelled)
