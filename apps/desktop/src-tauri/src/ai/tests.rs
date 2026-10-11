@@ -837,55 +837,67 @@ fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
 }
 
 /// The turn's task runs on another thread and acts the moment a stop cancels it: its request ends,
-/// it drops what streamed and ends the turn. The stop still stores the text, and sends it before
-/// the one `turn_ended`.
+/// it drops what streamed and ends the turn. The test makes that happen after the stop's cancel
+/// and before the stop stores anything, the order that lost the text or its `entry` event. The
+/// stop still stores the text, and sends it before the one `turn_ended`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_stop_keeps_the_text_however_the_task_races_it() {
-    for _ in 0..20 {
-        let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
-        let conv = {
-            let mut v = lock(&f.vault);
-            let conv = v
-                .put(
-                    None,
-                    Item::AiConversation(AiConversation {
-                        title: "race".into(),
-                        ..AiConversation::default()
-                    }),
-                )
-                .unwrap();
-            append(&mut v, &conv, &AiEntry::user(1, "df?")).unwrap();
-            conv
-        };
-        let sink = Arc::new(Sink::default());
-        let turn = f.manager.register(&conv, f.context(), None, sink.clone());
-        *turn.streamed.lock().unwrap() = Some(Streamed {
-            provider_id: f.provider_id.clone(),
-            model_id: "m1".into(),
-            text: "The disk is 4".into(),
-            tool_calls: Vec::new(),
-        });
-        // What the turn loop and `task` do when the request returns cancelled.
-        let task = {
-            let turn = turn.clone();
-            tokio::spawn(async move {
-                turn.cancel.cancelled().await;
-                turn.streamed.lock().unwrap().take();
-                turn.finish(AiTurnEndReason::Stopped);
-            })
-        };
+async fn a_stop_keeps_the_text_when_the_task_acts_first() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let conv = {
+        let mut v = lock(&f.vault);
+        let conv = v
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "race".into(),
+                    ..AiConversation::default()
+                }),
+            )
+            .unwrap();
+        append(&mut v, &conv, &AiEntry::user(1, "df?")).unwrap();
+        conv
+    };
+    let sink = Arc::new(Sink::default());
+    let turn = f.manager.register(&conv, f.context(), None, sink.clone());
+    *turn.streamed.lock().unwrap() = Some(Streamed {
+        provider_id: f.provider_id.clone(),
+        model_id: "m1".into(),
+        text: "The disk is 4".into(),
+        tool_calls: Vec::new(),
+    });
+    // What the turn loop and `task` do when the request returns cancelled.
+    let task = {
+        let turn = turn.clone();
+        tokio::spawn(async move {
+            turn.cancel.cancelled().await;
+            turn.streamed.lock().unwrap().take();
+            turn.finish(AiTurnEndReason::Stopped);
+        })
+    };
 
-        f.manager.stop(&f.vault, f.env.as_ref(), &conv);
-        task.await.unwrap();
+    // Right after its cancel the stop forgets the conversation's file bases; holding their lock
+    // keeps it there until the task has acted.
+    let file_bases = f.manager.0.file_bases.lock().unwrap();
+    let stop = {
+        let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env.clone());
+        let conv = conv.clone();
+        tokio::task::spawn_blocking(move || manager.stop(&vault, env.as_ref(), &conv))
+    };
+    tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("the stop cancels the turn before it forgets the file bases")
+        .unwrap();
+    assert!(sink.events().is_empty());
+    drop(file_bases);
+    stop.await.unwrap();
 
-        let entries = f.entries(&conv);
-        assert_eq!(entries.len(), 2);
-        assert!(
-            matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "The disk is 4" && a.interrupted)
-        );
-        assert_eq!(kinds(&sink.events()), ["entry", "turn_ended"]);
-        assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
-    }
+    let entries = f.entries(&conv);
+    assert_eq!(entries.len(), 2);
+    assert!(
+        matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "The disk is 4" && a.interrupted)
+    );
+    assert_eq!(kinds(&sink.events()), ["entry", "turn_ended"]);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 }
 
 #[tokio::test]
