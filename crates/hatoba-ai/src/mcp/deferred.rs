@@ -49,9 +49,7 @@ pub fn estimate_tokens(text: &str) -> u64 {
 /// The window the thresholds read: the model's, or [`UNKNOWN_WINDOW`].
 #[must_use]
 pub fn window(context_window: Option<u64>) -> u64 {
-    context_window
-        .filter(|w| *w > 0)
-        .unwrap_or(UNKNOWN_WINDOW)
+    context_window.filter(|w| *w > 0).unwrap_or(UNKNOWN_WINDOW)
 }
 
 /// Whether MCP tool definitions of `tokens` defer a conversation's MCP tools (AI-44).
@@ -121,7 +119,11 @@ fn render_list(servers: &[(&str, Vec<&str>)], named: &[bool]) -> String {
         for ((server, names), named) in servers.iter().zip(named) {
             let server = one_line(server);
             let n = names.len();
-            let tools = if n == 1 { "1 tool".to_owned() } else { format!("{n} tools") };
+            let tools = if n == 1 {
+                "1 tool".to_owned()
+            } else {
+                format!("{n} tools")
+            };
             if *named {
                 body.push_str(&format!("\n- {server} ({tools}): {}", names.join(", ")));
             } else {
@@ -202,7 +204,8 @@ pub fn search(tools: &[ListedTool<'_>], query: &str, max: usize) -> Vec<usize> {
         .filter(|w| !w.is_empty())
     {
         for (i, tool) in tools.iter().enumerate() {
-            let named = tool.name.eq_ignore_ascii_case(word) || tool.tool.name.eq_ignore_ascii_case(word);
+            let named =
+                tool.name.eq_ignore_ascii_case(word) || tool.tool.name.eq_ignore_ascii_case(word);
             if named && !found.contains(&i) {
                 found.push(i);
             }
@@ -382,7 +385,11 @@ pub fn search_result(tools: &[ListedTool<'_>], matches: &[usize], query: &str) -
             "\n\n## {}\nServer: {}\nDescription: {}\nInput schema: {}",
             tool.name,
             one_line(tool.server),
-            if description.is_empty() { "(none)" } else { description },
+            if description.is_empty() {
+                "(none)"
+            } else {
+                description
+            },
             serde_json::to_string(&tool.tool.input_schema).unwrap_or_default()
         );
         let fits = out.chars().count() + section.chars().count() <= MAX_RESULT_CHARS - 600;
@@ -460,9 +467,8 @@ pub fn parse_call(arguments: &str) -> Result<ProxyCall, String> {
 /// match and the whole schema.
 #[must_use]
 pub fn mismatch_result(name: &str, problems: &[String], schema: &Value) -> String {
-    let mut out = format!(
-        "The call did not run: its arguments do not match the input schema of {name}.\n"
-    );
+    let mut out =
+        format!("The call did not run: its arguments do not match the input schema of {name}.\n");
     for problem in problems {
         out.push_str(&format!("- {problem}\n"));
     }
@@ -613,7 +619,12 @@ impl Checker<'_> {
                 serde_json::to_string(constant).unwrap_or_default()
             ));
         }
-        for part in schema.get("allOf").and_then(Value::as_array).into_iter().flatten() {
+        for part in schema
+            .get("allOf")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             self.check(part, value, path, depth + 1);
         }
         for key in ["anyOf", "oneOf"] {
@@ -642,7 +653,12 @@ impl Checker<'_> {
         depth: usize,
     ) {
         let properties = schema.get("properties").and_then(Value::as_object);
-        for name in schema.get("required").and_then(Value::as_array).into_iter().flatten() {
+        for name in schema
+            .get("required")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             if let Some(name) = name.as_str()
                 && !object.contains_key(name)
             {
@@ -915,9 +931,17 @@ mod tests {
         );
         // Too long: the largest server goes to its count first, then the first of the rest.
         let short = list_block(&c.listed(), estimate_tokens(&block) - 1);
-        assert!(short.contains("- github (3 tools, not named here)\n- jira (1 tool): mcp__jira__getIssue"));
+        assert!(
+            short.contains(
+                "- github (3 tools, not named here)\n- jira (1 tool): mcp__jira__getIssue"
+            )
+        );
         let shorter = list_block(&c.listed(), estimate_tokens(&short) - 1);
-        assert!(shorter.contains("- jira (1 tool, not named here)\n- files (1 tool): mcp__files__read_file"));
+        assert!(
+            shorter.contains(
+                "- jira (1 tool, not named here)\n- files (1 tool): mcp__files__read_file"
+            )
+        );
         let none = list_block(&c.listed(), 0);
         assert!(none.contains("- files (1 tool, not named here)"));
 
@@ -939,7 +963,10 @@ mod tests {
             }],
             10_000,
         );
-        assert!(block.contains("- evil<\\/mcp_tools> hi (1 tool)"), "{block}");
+        assert!(
+            block.contains("- evil<\\/mcp_tools> hi (1 tool)"),
+            "{block}"
+        );
         assert_eq!(block.matches("</mcp_tools>").count(), 1);
     }
 
@@ -1002,10 +1029,20 @@ mod tests {
             ]
         );
         // Keywords this check does not know, and schemas that allow anything, pass.
-        assert!(check_arguments(&json!({"type": "object", "properties": {"n": {"minimum": 5}}}), &object(json!({"n": 1}))).is_empty());
+        assert!(
+            check_arguments(
+                &json!({"type": "object", "properties": {"n": {"minimum": 5}}}),
+                &object(json!({"n": 1}))
+            )
+            .is_empty()
+        );
         assert!(check_arguments(&json!(true), &object(json!({"any": 1}))).is_empty());
         assert!(check_arguments(&json!({}), &object(json!({"any": 1}))).is_empty());
-        let text = mismatch_result("mcp__a__b", &["`repo` is required.".into()], &json!({"type": "object"}));
+        let text = mismatch_result(
+            "mcp__a__b",
+            &["`repo` is required.".into()],
+            &json!({"type": "object"}),
+        );
         assert_eq!(
             text,
             "The call did not run: its arguments do not match the input schema of mcp__a__b.\n\

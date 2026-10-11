@@ -6123,3 +6123,5 @@ fn a_note_names_a_target_or_a_single_host() {
         (None, Some("root@10.0.0.9:22".into()), None)
     );
 }
+
+mod deferred;
