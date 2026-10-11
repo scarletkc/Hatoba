@@ -215,7 +215,6 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 change={(call) => changes.get(`${entry.entry_id}:${call.id}`)}
                 busy={busy}
                 host={host}
-                finish={entry.finish}
                 noAnswerShown={outcome?.reason === "empty" && entry.entry_id === lastAssistant}
                 flash={flash}
                 reply={reply}
@@ -524,7 +523,6 @@ function AssistantMessage({
   busy,
   host,
   streaming,
-  finish,
   noAnswerShown,
   flash,
   reply,
@@ -543,7 +541,6 @@ function AssistantMessage({
   busy?: boolean;
   host: HostInfo | null;
   streaming?: boolean;
-  finish?: string;
   /** The turn's outcome below says that this reply has no answer (§13.1), so the reply does not say it too. */
   noAnswerShown?: boolean;
   /** The highlighted search hit (AI-24). */
@@ -559,7 +556,7 @@ function AssistantMessage({
       {reasoning && <Reasoning text={reasoning} active={thinking} />}
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {/* No answer: nothing at all, or only reasoning. */}
-      {!text.trim() && calls.length === 0 && !streaming && finish !== "tool_calls" && !noAnswerShown && <EmptyReply />}
+      {!text.trim() && calls.length === 0 && !streaming && !noAnswerShown && <EmptyReply />}
       {calls.map((call) => {
         const reveal = entryId ? callRevealKey(entryId, call.id) : undefined;
         return <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} reveal={reveal} flash={!!reveal && flash === reveal} />;
