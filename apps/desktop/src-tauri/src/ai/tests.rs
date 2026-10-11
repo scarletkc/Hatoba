@@ -1549,6 +1549,28 @@ fn anthropic_answer(text: &str) -> ResponseTemplate {
                "usage": {"output_tokens": 5}}),
         json!({"type": "message_stop"}),
     ];
+    anthropic_stream(&events)
+}
+
+/// An Anthropic response that calls `name` with no input, as the call `id`.
+fn anthropic_call(id: &str, name: &str) -> ResponseTemplate {
+    let events = [
+        json!({"type": "message_start", "message": {"id": "msg_1", "type": "message",
+               "role": "assistant", "model": "m1", "content": [], "stop_reason": null,
+               "usage": {"input_tokens": 20, "cache_read_input_tokens": 80, "output_tokens": 1}}}),
+        json!({"type": "content_block_start", "index": 0,
+               "content_block": {"type": "tool_use", "id": id, "name": name, "input": {}}}),
+        json!({"type": "content_block_delta", "index": 0,
+               "delta": {"type": "input_json_delta", "partial_json": "{}"}}),
+        json!({"type": "content_block_stop", "index": 0}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"},
+               "usage": {"output_tokens": 5}}),
+        json!({"type": "message_stop"}),
+    ];
+    anthropic_stream(&events)
+}
+
+fn anthropic_stream(events: &[Value]) -> ResponseTemplate {
     let mut body = String::new();
     for event in events {
         body.push_str(&format!(
@@ -1624,6 +1646,52 @@ async fn an_anthropic_compact_request_keeps_the_prefix_and_asks_for_less_output(
             json!({"role": "user", "content": [{"type": "text", "text": COMPACT_INSTRUCTION}]}),
         ]
     );
+}
+
+/// AI-22 on Anthropic: the compaction between tool calls asks for the output of a Compact
+/// request too, 9% of the window here, not the model's whole limit as the turn's requests do.
+#[tokio::test]
+async fn an_anthropic_compaction_between_tool_calls_asks_for_less_output() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(Script(Mutex::new(
+            vec![
+                anthropic_call("c1", "read_terminal"),
+                anthropic_answer("SUMMARY: the screen."),
+                anthropic_answer("Done."),
+            ]
+            .into(),
+        )))
+        .mount(&server)
+        .await;
+    let base_url = server.uri();
+    let f = Fixture::with_base_url(Some(server), base_url);
+    {
+        let mut v = lock(&f.vault);
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .cloned()
+            .unwrap();
+        provider.protocol = AiProtocol::Anthropic;
+        provider.models[0].context_window = Some(1_000);
+        provider.models[0].max_output_tokens = Some(64_000);
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+    let (started, sink) = f.send(None, "look at the screen").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // The screen alone is about 1,000 tokens.
+    f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    assert_eq!(summaries(&sink).len(), 1);
+
+    let requests = f.requests().await;
+    let max_tokens: Vec<&Value> = requests.iter().map(|r| &r["max_tokens"]).collect();
+    assert_eq!(max_tokens, [&json!(64_000), &json!(90), &json!(64_000)]);
 }
 
 /// AI-21: an answer to a Compact request that calls tools, or has no text, is dropped (nothing

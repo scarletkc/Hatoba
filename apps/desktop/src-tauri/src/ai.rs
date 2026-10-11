@@ -1345,13 +1345,7 @@ impl AiManager {
                         return AiTurnEndReason::Stopped;
                     }
                     // The request the turn was about to send, asking where the task stands.
-                    SideRequest::new(
-                        &v,
-                        &turn.context,
-                        request,
-                        COMPACT_MID_TURN_INSTRUCTION,
-                        PromptTools::None,
-                    )
+                    SideRequest::compact(&v, &turn.context, request, COMPACT_MID_TURN_INSTRUCTION)
                 };
                 match self
                     .auto_compact(vault, env, conversation_id, turn, compact)
@@ -2267,6 +2261,13 @@ impl SideRequest {
             plain_system,
         }
     }
+
+    /// A Compact request (AI-21, AI-22): `next` with `instruction` appended, asking for less
+    /// output, so that the summary fits beside a nearly full context.
+    fn compact(v: &Vault, context: &AiTurnContext, mut next: Request, instruction: &str) -> Self {
+        next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
+        Self::new(v, context, next, instruction, PromptTools::None)
+    }
 }
 
 /// The summary in an answer to a Compact request: its text, when it has some and calls no tools.
@@ -2289,16 +2290,9 @@ fn compact_request(
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));
     }
-    let mut next = next_request(v, context, server_id, offer, list)
+    let next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
-    next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
-    Ok(SideRequest::new(
-        v,
-        context,
-        next,
-        instruction,
-        PromptTools::None,
-    ))
+    Ok(SideRequest::compact(v, context, next, instruction))
 }
 
 /// When a side question is asked (AI-42), which decides what its request adds for this request
