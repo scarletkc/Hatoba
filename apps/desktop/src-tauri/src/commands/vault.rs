@@ -328,14 +328,14 @@ mod tests {
 
     #[test]
     fn a_new_master_password_needs_twelve_characters() {
-        let err = check_new_password("next", "elevenchars").unwrap_err();
+        let err = check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS - 1)).unwrap_err();
         assert_eq!(
             (err.code, err.field.as_deref()),
             (ErrorCode::InvalidInput, Some("next"))
         );
-        assert!(check_new_password("next", "twelve-chars").is_ok());
+        assert!(check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS)).is_ok());
         // Characters, not bytes: twelve CJK characters are enough, eleven are not.
-        assert!(check_new_password("password", &"日".repeat(12)).is_ok());
-        assert!(check_new_password("password", &"日".repeat(11)).is_err());
+        assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS)).is_ok());
+        assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS - 1)).is_err());
     }
 }
