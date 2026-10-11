@@ -609,16 +609,22 @@ async fn setting_up_a_new_remote_ends_a_pending_settings_adoption() {
     c.v().rotate_recovery(PW).unwrap();
     let other = FakeServer::new();
     let backend = FakeBackend::new(&other);
-    enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
-        .await
-        .unwrap();
-    assert!(
+    let marker = || {
         c.v()
             .store
             .get_meta(crate::store::meta::ADOPT_REMOTE_SETTINGS)
             .unwrap()
-            .is_none()
-    );
+    };
+    // A setup that fails leaves the adoption pending, for a reconnect to the joined vault.
+    let err = enable_sync(&c.vault, &backend, PW, Some("wrong-token"), c.info())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::InvalidSetupToken));
+    assert!(marker().is_some());
+    enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
+        .await
+        .unwrap();
+    assert!(marker().is_none());
 
     // A settings edit before the next round is kept, not replaced by the uploaded copy.
     c.clock.advance(60_000);

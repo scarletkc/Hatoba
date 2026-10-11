@@ -109,13 +109,11 @@ pub async fn enable_sync(
         ensure_own_kdf(backend, &material.meta).await?;
     } else {
         // The remote is brand new: everything local is "never synced". Queue it before `setup`
-        // so that an attempt interrupted after `setup` leaves the vault ready to upload. Its
-        // settings come from this vault, so an earlier join's pending adoption no longer applies.
+        // so that an attempt interrupted after `setup` leaves the vault ready to upload.
         with_vault(vault, |v| {
             v.store.transaction(|tx| {
                 tx.mark_all_dirty_for_upload()?;
-                tx.delete_meta(meta::SYNC_CURSOR)?;
-                tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)
+                tx.delete_meta(meta::SYNC_CURSOR)
             })
         })?;
         let setup = backend
@@ -133,7 +131,12 @@ pub async fn enable_sync(
         match setup {
             // Initialised since `health`: by a retried request of ours, or by someone else.
             Err(Error::RemoteInitialized) => ensure_own_kdf(backend, &material.meta).await?,
-            other => other?,
+            other => {
+                other?;
+                // The new remote's settings come from this vault, so an earlier join's pending
+                // adoption no longer applies. Until `setup` succeeded, it still might.
+                with_vault(vault, |v| v.store.delete_meta(meta::ADOPT_REMOTE_SETTINGS))?;
+            }
         }
     }
 
