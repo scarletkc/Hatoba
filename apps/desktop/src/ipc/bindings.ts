@@ -372,7 +372,7 @@ export const commands = {
 	tool: McpToolView,
 } | null>("mcp_tool_info", { conversationId, name }),
 	/**  The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card. */
-	mcpProxyInfo: (conversationId: string, arguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, arguments }),
+	mcpProxyInfo: (conversationId: string, callArguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, callArguments }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */

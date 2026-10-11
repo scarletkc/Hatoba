@@ -616,9 +616,10 @@ pub(crate) fn proxy_info(
 pub async fn mcp_proxy_info(
     state: State<'_, AppState>,
     conversation_id: String,
-    arguments: String,
+    // Not `arguments`, which the generated TypeScript binding could not name a parameter.
+    call_arguments: String,
 ) -> AppResult<McpProxyInfo> {
-    state.with_unlocked(|v| Ok(proxy_info(v, &state.mcp, &conversation_id, &arguments)))
+    state.with_unlocked(|v| Ok(proxy_info(v, &state.mcp, &conversation_id, &call_arguments)))
 }
 
 /// AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add.
