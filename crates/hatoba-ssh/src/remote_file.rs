@@ -1,5 +1,5 @@
-//! Reading and writing a file on the host over an exec channel (spec §13.4, "File tools"; the
-//! SFTP panel's editor, SFTP-05, is meant to use it too).
+//! Reading, writing and deleting a file on the host over an exec channel (spec §13.4, "File
+//! tools", and AI-41's revert; the SFTP panel's editor, SFTP-05, is meant to use it too).
 //!
 //! Each operation runs a fixed `sh -c` script. The path, and for a write the expected state and
 //! the content, travel on stdin, so nothing the caller passes goes through the quoting of the
@@ -49,6 +49,19 @@ const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; 
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; fi; \
      echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1";
+
+/// Deletes the file named on stdin's first line, resolved as the read script resolves it, if it
+/// is a regular file (not a symbolic link) whose `cksum` output is stdin's second line. Prints
+/// the marker and the resolved path. Exit statuses: 2 missing, 3 directory, 4 not deletable,
+/// 6 not a regular file, 7 not in the expected state (a symbolic link in its place included),
+/// 9 no path; 1 when `rm` fails after the checks, with its message on stderr. Like a write, a
+/// change in the moment between the check and `rm` is not caught.
+const DELETE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
+     [ -L \"$f\" ] && exit 7; [ -d \"$f\" ] && exit 3; [ -e \"$f\" ] || exit 2; \
+     [ -f \"$f\" ] || exit 6; c=$(cksum < \"$f\") || exit 4; set -- $c; \
+     [ \"$1 $2\" = \"$g\" ] || exit 7; d=$(dirname -- \"$f\"); [ -w \"$d\" ] || exit 4; \
+     echo hatoba-file; printf %s \"$f\"; echo; rm -f -- \"$f\" || exit 1";
 
 /// What a write checks right before it writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -163,6 +176,22 @@ pub async fn write(
     parse_write(&out)
 }
 
+/// Deletes the file at `path` if it still holds `expect`, compared by POSIX `cksum` checksum and
+/// size, and returns the path as resolved. A symbolic link in the file's place counts as a
+/// change: the link is not what was checked.
+pub async fn delete(
+    session: &SshSession,
+    path: &str,
+    expect: &[u8],
+) -> Result<String, RemoteFileError> {
+    let (command, stdin) = delete_request(path, expect)?;
+    let out = session
+        .exec_output(&command, Some(stdin))
+        .await
+        .map_err(RemoteFileError::Ssh)?;
+    parse_delete(&out)
+}
+
 /// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
 fn command(script: &str, arg: Option<&str>) -> String {
     debug_assert!(!script.contains(['\'', '\\', '\n']));
@@ -207,6 +236,16 @@ fn write_request(
     let mut stdin = format!("{path}\n{state}\n").into_bytes();
     stdin.extend_from_slice(content);
     Ok((command(WRITE_SCRIPT, None), stdin))
+}
+
+/// The command and stdin of a deletion.
+fn delete_request(path: &str, expect: &[u8]) -> Result<(String, Vec<u8>), RemoteFileError> {
+    check_path(path)?;
+    let (crc, size) = cksum(expect);
+    Ok((
+        command(DELETE_SCRIPT, None),
+        format!("{path}\n{crc} {size}\n").into_bytes(),
+    ))
 }
 
 fn last_line(stderr: &[u8]) -> String {
@@ -286,6 +325,21 @@ fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
     }
 }
 
+/// The resolved path of a deletion that succeeded, as for [`parse_write`].
+fn parse_delete(out: &ExecOutput) -> Result<String, RemoteFileError> {
+    match out.exit_status {
+        Some(0) => after_marker(&out.stdout)
+            .map(|(path, _)| path)
+            .ok_or_else(|| failed(out)),
+        Some(2) => Err(RemoteFileError::NotFound),
+        Some(3) => Err(RemoteFileError::IsDirectory),
+        Some(4) => Err(RemoteFileError::PermissionDenied),
+        Some(6) => Err(RemoteFileError::NotRegular),
+        Some(7) => Err(RemoteFileError::Changed),
+        _ => Err(failed(out)),
+    }
+}
+
 /// The checksum and size POSIX `cksum` prints for `data`: CRC-32 with the polynomial
 /// `0x04C11DB7`, most significant bit first, over the data and then its length in as few bytes as
 /// it takes, least significant first, inverted.
@@ -326,7 +380,7 @@ mod tests {
 
     #[test]
     fn scripts_survive_any_login_shell() {
-        for script in [READ_SCRIPT, WRITE_SCRIPT] {
+        for script in [READ_SCRIPT, WRITE_SCRIPT, DELETE_SCRIPT] {
             // `!` too: csh expands it even inside single quotes when its history is on.
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
@@ -340,6 +394,12 @@ mod tests {
         ));
         let (_, stdin) = write_request("/tmp/x", b"body", Expect::Content(b"123456789")).unwrap();
         assert_eq!(stdin, b"/tmp/x\n930766865 9\nbody");
+        assert!(matches!(
+            delete_request("a\rb", b""),
+            Err(RemoteFileError::InvalidPath)
+        ));
+        let (_, stdin) = delete_request("~/new.txt", b"123456789").unwrap();
+        assert_eq!(stdin, b"~/new.txt\n930766865 9\n");
     }
 
     #[test]
@@ -378,6 +438,22 @@ mod tests {
         assert!(matches!(
             parse_write(&out(b"", 0)),
             Err(RemoteFileError::Failed { .. })
+        ));
+        assert_eq!(
+            parse_delete(&out(b"motd\nhatoba-file\n/srv/a\n", 0)).unwrap(),
+            "/srv/a"
+        );
+        assert!(matches!(
+            parse_delete(&out(b"", 0)),
+            Err(RemoteFileError::Failed { .. })
+        ));
+        assert!(matches!(
+            parse_delete(&out(b"", 7)),
+            Err(RemoteFileError::Changed)
+        ));
+        assert!(matches!(
+            parse_delete(&out(b"", 2)),
+            Err(RemoteFileError::NotFound)
         ));
         let mut big = out(b"", 5);
         big.stderr = b"1048577\n".to_vec();
@@ -451,6 +527,11 @@ mod tests {
             expect: Expect<'_>,
         ) -> Result<(), RemoteFileError> {
             write_file(home, path, content, expect).map(|_| ())
+        }
+
+        fn delete_file(home: &Path, path: &str, expect: &[u8]) -> Result<String, RemoteFileError> {
+            let (command, stdin) = delete_request(path, expect)?;
+            parse_delete(&run(home, &command, &stdin))
         }
 
         fn is_root() -> bool {
@@ -601,6 +682,61 @@ mod tests {
                     write(home, "ro", b"y", Expect::Content(b"x")),
                     Err(RemoteFileError::PermissionDenied)
                 ));
+            }
+        }
+
+        #[test]
+        fn deletes_only_the_file_as_expected() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            let path = home.join("new.conf");
+            std::fs::write(&path, b"made\n").unwrap();
+
+            // Changed since: kept.
+            assert!(matches!(
+                delete_file(home, "new.conf", b"other\n"),
+                Err(RemoteFileError::Changed)
+            ));
+            assert!(path.exists());
+            assert_eq!(
+                delete_file(home, "~/new.conf", b"made\n").unwrap(),
+                path.to_str().unwrap()
+            );
+            assert!(!path.exists());
+            assert!(matches!(
+                delete_file(home, "new.conf", b"made\n"),
+                Err(RemoteFileError::NotFound)
+            ));
+            assert!(matches!(
+                delete_file(home, ".", b""),
+                Err(RemoteFileError::IsDirectory)
+            ));
+            assert!(matches!(
+                delete_file(home, "/dev/null", b""),
+                Err(RemoteFileError::NotRegular)
+            ));
+
+            // A link put in the file's place is not the file: neither it nor its target goes.
+            let target = home.join("target");
+            std::fs::write(&target, b"made\n").unwrap();
+            std::os::unix::fs::symlink(&target, &path).unwrap();
+            assert!(matches!(
+                delete_file(home, "new.conf", b"made\n"),
+                Err(RemoteFileError::Changed)
+            ));
+            assert!(path.exists() && target.exists());
+
+            if !is_root() {
+                let locked = home.join("locked");
+                std::fs::create_dir(&locked).unwrap();
+                std::fs::write(locked.join("x"), b"x").unwrap();
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+                assert!(matches!(
+                    delete_file(home, "locked/x", b"x"),
+                    Err(RemoteFileError::PermissionDenied)
+                ));
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+                assert!(locked.join("x").exists());
             }
         }
     }

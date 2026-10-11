@@ -737,6 +737,18 @@ async fn remote_files_are_read_and_written_in_place() {
     .await
     .unwrap();
     assert_eq!(std::fs::read(&new).unwrap(), pseudo_random(256 * 1024, 5));
+
+    // Revert (AI-41) deletes a file the tools created, only while it holds what they wrote.
+    assert!(matches!(
+        remote_file::delete(&session, new_name, b"other").await,
+        Err(RemoteFileError::Changed)
+    ));
+    assert!(new.exists());
+    let deleted = remote_file::delete(&session, new_name, &pseudo_random(256 * 1024, 5))
+        .await
+        .unwrap();
+    assert_eq!(deleted, new_name);
+    assert!(!new.exists());
 }
 
 // --------------------------------------------------------------------------- probe & errors on a live server

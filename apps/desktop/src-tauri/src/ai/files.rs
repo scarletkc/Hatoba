@@ -1,7 +1,7 @@
 //! The file tools on the tab's host (AI-38…40), the preview the approval card shows for
-//! `edit_file` and `write_file`, and the record of what the model has seen of each file (spec
-//! §13.4, "File tools"). The text work is in `hatoba_ai::files`, the exec scripts in
-//! `hatoba_ssh::remote_file`.
+//! `edit_file` and `write_file`, the record of what the model has seen of each file (spec §13.4,
+//! "File tools"), and the revert of a change those calls made (AI-41). The text work is in
+//! `hatoba_ai::files`, the exec scripts in `hatoba_ssh::remote_file`.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -15,8 +15,11 @@ use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
 use tokio_util::sync::CancellationToken;
 
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
 use super::{guard, parse};
-use crate::dto::AiFilePreview;
+use crate::dto::{AiFilePreview, AiFileRevert, AiRevertFailure};
 
 /// How long a read or a write may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,8 +62,9 @@ impl FileJob {
     }
 }
 
-/// The server a session is connected to, as the record of what the model has seen names it.
-fn server(session: &SshSession) -> String {
+/// The server a session is connected to, as the record of what the model has seen and the file
+/// snapshots name it.
+pub(super) fn server(session: &SshSession) -> String {
     format!(
         "{}@{}:{}",
         session.username(),
@@ -102,6 +106,8 @@ pub(super) struct Shown {
     server: String,
     path: String,
     sum: (u32, u64),
+    /// What an `edit_file` or `write_file` call changed, for its snapshot (AI-41).
+    pub change: Option<Change>,
 }
 
 impl Shown {
@@ -110,7 +116,83 @@ impl Shown {
             server: server.to_owned(),
             path: path.to_owned(),
             sum: remote_file::cksum(bytes),
+            change: None,
         }
+    }
+}
+
+/// What a snapshot says about a change (AI-41): stored sealed as its `meta`, and listed.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(super) struct ChangeMeta {
+    /// The server the call wrote on, as [`server`] names it.
+    pub server: String,
+    /// The path as the write script resolved it.
+    pub path: String,
+    /// `edit_file` or `write_file`.
+    pub tool: String,
+    /// The call created the file.
+    pub created: bool,
+}
+
+/// The file's content around a change: stored sealed as the snapshot's `content`. Both are UTF-8,
+/// as the file tools write text files only.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(super) struct ChangeContent {
+    /// What the file held before the call, byte order mark included; `None` when it did not
+    /// exist.
+    pub before: Option<String>,
+    /// What the call wrote.
+    pub after: String,
+}
+
+impl std::fmt::Debug for ChangeContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChangeContent")
+            .field("before_bytes", &self.before.as_ref().map(String::len))
+            .field("after_bytes", &self.after.len())
+            .finish()
+    }
+}
+
+/// A change an `edit_file` or `write_file` call made: what its snapshot keeps.
+#[derive(Clone, Debug)]
+pub(super) struct Change {
+    pub meta: ChangeMeta,
+    pub content: ChangeContent,
+}
+
+impl Change {
+    fn new(
+        server: &str,
+        path: &str,
+        tool: &str,
+        before: Option<&[u8]>,
+        after: &[u8],
+    ) -> Option<Self> {
+        let text = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).ok();
+        Some(Self {
+            meta: ChangeMeta {
+                server: server.to_owned(),
+                path: path.to_owned(),
+                tool: tool.to_owned(),
+                created: before.is_none(),
+            },
+            content: ChangeContent {
+                before: match before {
+                    Some(bytes) => Some(text(bytes)?),
+                    None => None,
+                },
+                after: text(after)?,
+            },
+        })
+    }
+
+    /// The snapshot's `meta` and `content` as stored, sealed by the vault.
+    pub fn encode(&self) -> Option<(String, Zeroizing<String>)> {
+        Some((
+            serde_json::to_string(&self.meta).ok()?,
+            Zeroizing::new(serde_json::to_string(&self.content).ok()?),
+        ))
     }
 }
 
@@ -149,6 +231,14 @@ impl Seen {
         guard(&self.0).remove(conversation_id);
     }
 
+    /// Forgets what the conversation has seen of one file: a revert put back other content
+    /// (AI-41), so the model reads it again before it changes it.
+    pub(super) fn forget_file(&self, conversation_id: &str, server: &str, path: &str) {
+        if let Some(files) = guard(&self.0).get_mut(conversation_id) {
+            files.remove(&(server.to_owned(), path.to_owned()));
+        }
+    }
+
     /// The conversation has a record of some file.
     #[cfg(test)]
     pub(super) fn knows(&self, conversation_id: &str) -> bool {
@@ -171,6 +261,14 @@ impl SeenBy<'_> {
     /// The call's result shows the model `bytes` as the file at `path` on `server`.
     fn shows(&self, server: &str, path: &str, bytes: &[u8]) {
         *guard(self.shown) = Some(Shown::new(server, path, bytes));
+    }
+
+    /// `tool` wrote `after` over `before` (`None`: it created the file) at `path` on `server`:
+    /// the result shows the model the file as written, and the change gets a snapshot (AI-41).
+    fn wrote(&self, server: &str, path: &str, tool: &str, before: Option<&[u8]>, after: &[u8]) {
+        let mut shown = Shown::new(server, path, after);
+        shown.change = Change::new(server, path, tool, before, after);
+        *guard(self.shown) = Some(shown);
     }
 
     /// AI-39, AI-40: `tool` may change `file` on `server` only when the model saw it as it is, in
@@ -436,7 +534,7 @@ async fn edit(
     let new = edit.file.encode();
     let expect = Expect::Content(&file.bytes);
     let path = write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
-    seen.shows(&server, &path, &new);
+    seen.wrote(&server, &path, tools::EDIT_FILE, Some(&file.bytes), &new);
     Ok(files::edit_result(&args.path, &edit))
 }
 
@@ -467,7 +565,8 @@ async fn write(
         .as_ref()
         .map_or(Expect::Missing, |f| Expect::Content(&f.bytes));
     let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel).await?;
-    seen.shows(&server, &path, &bytes);
+    let before = file.as_ref().map(|f| f.bytes.as_slice());
+    seen.wrote(&server, &path, tools::WRITE_FILE, before, &bytes);
     Ok(files::write_result(&args.path, &new, file.is_none()))
 }
 
@@ -650,6 +749,143 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
         }
         RemoteFileError::Ssh(e) => format!("Could not {verb} {path}: {}.", e.message),
     }
+}
+
+// ---- revert (AI-41) ----
+
+fn revert_failed(reason: AiRevertFailure, detail: Option<String>) -> AiFileRevert {
+    AiFileRevert::Failed { reason, detail }
+}
+
+/// The file at `path` as a revert finds it: its bytes, `None` when it does not exist, or why the
+/// revert stops here.
+async fn current_file(session: &SshSession, path: &str) -> Result<Option<Vec<u8>>, AiFileRevert> {
+    match tokio::time::timeout(TIMEOUT, remote_file::read(session, path, MAX_FILE_BYTES)).await {
+        Err(_) => Err(revert_failed(AiRevertFailure::TimedOut, None)),
+        Ok(Ok(file)) => Ok(Some(file.bytes)),
+        Ok(Err(RemoteFileError::NotFound)) => Ok(None),
+        Ok(Err(RemoteFileError::PermissionDenied)) => {
+            Err(revert_failed(AiRevertFailure::PermissionDenied, None))
+        }
+        // It changed into something the tools do not read, so there is no diff to show.
+        Ok(Err(
+            RemoteFileError::IsDirectory
+            | RemoteFileError::NotRegular
+            | RemoteFileError::DanglingLink
+            | RemoteFileError::TooLarge(_),
+        )) => Err(revert_failed(AiRevertFailure::NotText, None)),
+        Ok(Err(_)) if session.is_closed() => {
+            Err(revert_failed(AiRevertFailure::Disconnected, None))
+        }
+        Ok(Err(e)) => Err(revert_failed(AiRevertFailure::Failed, Some(e.to_string()))),
+    }
+}
+
+/// The text the panel diffs: CRLF line breaks as `\n`, like the approval card's.
+fn shown_text(bytes: &[u8]) -> Option<String> {
+    TextFile::decode(bytes).ok().map(|f| f.display_text())
+}
+
+/// The outcome when the file no longer holds what the call wrote: the diff from that to `current`.
+fn changed(change: &Change, current: Option<&[u8]>) -> AiFileRevert {
+    let written = shown_text(change.content.after.as_bytes()).unwrap_or_default();
+    match current.map(shown_text) {
+        Some(None) => revert_failed(AiRevertFailure::NotText, None),
+        current => AiFileRevert::Changed {
+            path: change.meta.path.clone(),
+            written,
+            current: current.flatten(),
+        },
+    }
+}
+
+/// Reads the file again after a write or deletion found it changed, for the diff.
+async fn changed_now(session: &SshSession, change: &Change) -> AiFileRevert {
+    match current_file(session, &change.meta.path).await {
+        Ok(current) => changed(change, current.as_deref()),
+        Err(outcome) => outcome,
+    }
+}
+
+/// AI-41: puts back what the file held before `change`, or deletes the file the change created,
+/// only while it holds exactly what the call wrote, by `cksum` checksum and size. `None` when
+/// `cancel` (the lock) fired before anything was written; once a write or deletion has begun, it
+/// runs to its end.
+pub(super) async fn revert(
+    session: Option<SshSession>,
+    change: &Change,
+    cancel: &CancellationToken,
+) -> Option<AiFileRevert> {
+    let Some(session) = session else {
+        return Some(revert_failed(AiRevertFailure::Disconnected, None));
+    };
+    if server(&session) != change.meta.server {
+        return Some(revert_failed(
+            AiRevertFailure::OtherServer,
+            Some(change.meta.server.clone()),
+        ));
+    }
+    let path = &change.meta.path;
+    let after = change.content.after.as_bytes();
+    let current = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return None,
+        current = current_file(&session, path) => current,
+    };
+    let current = match current {
+        Ok(current) => current,
+        Err(outcome) => return Some(outcome),
+    };
+    if current
+        .as_deref()
+        .is_none_or(|bytes| remote_file::cksum(bytes) != remote_file::cksum(after))
+    {
+        return Some(changed(change, current.as_deref()));
+    }
+    if cancel.is_cancelled() {
+        return None;
+    }
+    let outcome = match &change.content.before {
+        Some(before) => {
+            let write =
+                remote_file::write(&session, path, before.as_bytes(), Expect::Content(after));
+            match tokio::time::timeout(TIMEOUT, write).await {
+                Err(_) => revert_failed(AiRevertFailure::Unfinished, None),
+                Ok(Ok(_)) => AiFileRevert::Reverted,
+                Ok(Err(RemoteFileError::Changed)) => changed_now(&session, change).await,
+                Ok(Err(RemoteFileError::PermissionDenied)) => {
+                    revert_failed(AiRevertFailure::PermissionDenied, None)
+                }
+                Ok(Err(
+                    RemoteFileError::IsDirectory
+                    | RemoteFileError::NotRegular
+                    | RemoteFileError::DanglingLink,
+                )) => revert_failed(AiRevertFailure::NotText, None),
+                // The command may have begun writing when it failed or the connection went.
+                Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+                    revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
+                }
+                Ok(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+            }
+        }
+        None => {
+            match tokio::time::timeout(TIMEOUT, remote_file::delete(&session, path, after)).await {
+                Err(_) => revert_failed(AiRevertFailure::TimedOut, None),
+                Ok(Ok(_)) => AiFileRevert::Reverted,
+                Ok(Err(RemoteFileError::Changed | RemoteFileError::NotFound)) => {
+                    changed_now(&session, change).await
+                }
+                Ok(Err(RemoteFileError::PermissionDenied)) => {
+                    revert_failed(AiRevertFailure::PermissionDenied, None)
+                }
+                Ok(Err(RemoteFileError::IsDirectory | RemoteFileError::NotRegular)) => {
+                    revert_failed(AiRevertFailure::NotText, None)
+                }
+                Ok(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+            }
+        }
+    };
+    Some(outcome)
 }
 
 #[cfg(test)]
@@ -901,6 +1137,100 @@ mod tests {
             shown: &Mutex::default(),
         };
         assert_eq!(preview_of(&edit, &conf, other).error, None);
+    }
+
+    /// AI-41: what a write keeps for its revert, and what a revert shows when the file changed.
+    #[tokio::test]
+    async fn changes_are_kept_and_reverted_only_as_written() {
+        let seen = Seen::default();
+        let place = place();
+        let shown = Mutex::default();
+        let by = SeenBy {
+            seen: &seen,
+            conversation_id: "c1",
+            place: &place,
+            shown: &shown,
+        };
+        by.wrote(
+            SERVER,
+            "/etc/app.conf",
+            tools::EDIT_FILE,
+            Some(b"a\r\n"),
+            b"b\r\n",
+        );
+        let change = guard(&shown).take().unwrap().change.unwrap();
+        assert_eq!(
+            change.meta,
+            ChangeMeta {
+                server: SERVER.into(),
+                path: "/etc/app.conf".into(),
+                tool: tools::EDIT_FILE.into(),
+                created: false,
+            }
+        );
+        assert_eq!(change.content.before.as_deref(), Some("a\r\n"));
+        let (meta, content) = change.encode().unwrap();
+        assert!(meta.contains("\"created\":false"), "{meta}");
+        assert!(
+            content.contains("\"after\":\"b\\r\\n\""),
+            "{}",
+            content.as_str()
+        );
+        by.wrote(SERVER, "/srv/new", tools::WRITE_FILE, None, b"x");
+        assert!(guard(&shown).take().unwrap().change.unwrap().meta.created);
+
+        // Without a live session nothing is read or written.
+        let cancel = CancellationToken::new();
+        assert_eq!(
+            revert(None, &change, &cancel).await,
+            Some(AiFileRevert::Failed {
+                reason: AiRevertFailure::Disconnected,
+                detail: None
+            })
+        );
+
+        // The diff from what the call wrote to the file now, line breaks as the card shows them.
+        assert_eq!(
+            changed(&change, Some(b"c\r\n")),
+            AiFileRevert::Changed {
+                path: "/etc/app.conf".into(),
+                written: "b\n".into(),
+                current: Some("c\n".into()),
+            }
+        );
+        assert!(matches!(
+            changed(&change, None),
+            AiFileRevert::Changed { current: None, .. }
+        ));
+        assert_eq!(
+            changed(&change, Some(b"\0bin")),
+            AiFileRevert::Failed {
+                reason: AiRevertFailure::NotText,
+                detail: None
+            }
+        );
+
+        // A revert ends the record of that file only.
+        seen.record("c1", "e2", SERVER, "/etc/app.conf", b"b\r\n");
+        seen.record("c1", "e2", SERVER, "/etc/other.conf", b"o");
+        seen.forget_file("c1", SERVER, "/etc/app.conf");
+        let conf = base("/etc/app.conf", Some(b"b\r\n"));
+        let edit = job(
+            tools::EDIT_FILE,
+            r#"{"path":"/etc/app.conf","old_string":"b","new_string":"c"}"#,
+        );
+        assert!(
+            preview_of(&edit, &conf, by)
+                .error
+                .unwrap()
+                .contains("has not been read")
+        );
+        let other = base("/etc/other.conf", Some(b"o"));
+        let edit_other = job(
+            tools::EDIT_FILE,
+            r#"{"path":"/etc/other.conf","old_string":"o","new_string":"p"}"#,
+        );
+        assert_eq!(preview_of(&edit_other, &other, by).error, None);
     }
 
     /// A lock that disconnects sessions waits for the edits and writes that run on each.

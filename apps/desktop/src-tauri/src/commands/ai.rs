@@ -25,10 +25,11 @@ use crate::ai::{
     effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFilePreview, AiModel,
-    AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
-    AiSendStarted, AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext,
-    AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
+    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
+    AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView,
+    AiSearchHit, AiSendInput, AiSendStarted, AiSettingsView, AiTestFailure, AiTestResult,
+    AiToolResultInput, AiTurnContext, AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput,
+    SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -805,6 +806,42 @@ pub async fn ai_file_preview(
             &tool_call_id,
             session_id.as_deref(),
             edited_arguments.as_deref(),
+        )
+        .await
+}
+
+/// The changes of the conversation's `edit_file` and `write_file` calls that this device keeps
+/// and can revert, or has reverted (AI-41).
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_changes(
+    state: State<'_, AppState>,
+    conversation_id: String,
+) -> AppResult<Vec<AiFileChange>> {
+    state.ai.file_changes(&state.vault, &conversation_id)
+}
+
+/// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
+/// `session_id`. A file the call created is deleted, so the panel asks first.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_revert(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: String,
+    response_id: String,
+    tool_call_id: String,
+    session_id: Option<String>,
+) -> AppResult<AiFileRevert> {
+    state
+        .ai
+        .file_revert(
+            &state.vault,
+            &AppEnv(app),
+            &conversation_id,
+            &response_id,
+            &tool_call_id,
+            session_id.as_deref(),
         )
         .await
 }

@@ -1,0 +1,411 @@
+//! Snapshots of what the AI assistant's file tools changed, kept so the user can revert a change
+//! (spec AI-41, §5.2).
+//!
+//! A snapshot belongs to one `edit_file` or `write_file` call: its conversation, the response
+//! that made the call, and the call's id. Its description and the file's content are opaque
+//! strings to this module, each sealed under the vault key with an AAD that names the row and the
+//! column. Snapshots stay on this device: they are not items, so they never sync, and they are
+//! not part of the conversation's entries, so they never reach the model.
+
+use std::collections::HashSet;
+
+use zeroize::Zeroizing;
+
+use crate::crypto::{self, AAD_AI_FILE_SNAPSHOT_PREFIX, seal};
+use crate::error::{Error, Result};
+use crate::model::Item;
+use crate::store::{SnapshotRow, StoreOps};
+use crate::vault::Vault;
+
+/// The most bytes of content the snapshots hold together; storing one deletes the oldest until
+/// they fit.
+pub const AI_SNAPSHOTS_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Which call a snapshot belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SnapshotKey<'a> {
+    /// The conversation.
+    pub conversation_id: &'a str,
+    /// The entry id of the response that made the call.
+    pub response_id: &'a str,
+    /// The call's id.
+    pub tool_call_id: &'a str,
+}
+
+/// A snapshot as listed: its call and its description, without the content.
+#[derive(Clone, PartialEq, Eq)]
+pub struct FileSnapshot {
+    /// The entry id of the response that made the call.
+    pub response_id: String,
+    /// The call's id.
+    pub tool_call_id: String,
+    /// The description the caller stored, opened.
+    pub meta: Zeroizing<String>,
+    /// When the change was reverted, Unix ms.
+    pub reverted_at: Option<i64>,
+}
+
+impl std::fmt::Debug for FileSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileSnapshot")
+            .field("response_id", &self.response_id)
+            .field("tool_call_id", &self.tool_call_id)
+            .field("reverted_at", &self.reverted_at)
+            .finish_non_exhaustive()
+    }
+}
+
+fn aad(part: &str, key: &SnapshotKey<'_>) -> String {
+    let ids = serde_json::to_string(&[key.conversation_id, key.response_id, key.tool_call_id])
+        .unwrap_or_default();
+    format!("{AAD_AI_FILE_SNAPSHOT_PREFIX}{part}/{ids}")
+}
+
+fn key_of(row: &SnapshotRow) -> SnapshotKey<'_> {
+    SnapshotKey {
+        conversation_id: &row.conversation_id,
+        response_id: &row.response_id,
+        tool_call_id: &row.tool_call_id,
+    }
+}
+
+fn open(
+    vault_key: &[u8; 32],
+    part: &str,
+    key: &SnapshotKey<'_>,
+    sealed: &str,
+) -> Option<Zeroizing<String>> {
+    let plain = crypto::open_json(vault_key, aad(part, key).as_bytes(), sealed).ok()?;
+    String::from_utf8(plain.to_vec()).ok().map(Zeroizing::new)
+}
+
+impl Vault {
+    /// Stores the snapshot of a call's change, replacing one the call has already, then deletes
+    /// the oldest snapshots that still hold content until all of them hold at most
+    /// [`AI_SNAPSHOTS_MAX_BYTES`].
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; [`Error::ItemNotFound`] if the conversation does not exist; storage
+    /// errors.
+    pub fn ai_put_file_snapshot(
+        &mut self,
+        key: &SnapshotKey<'_>,
+        meta: &str,
+        content: &str,
+    ) -> Result<()> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        if !matches!(self.get(key.conversation_id), Some(Item::AiConversation(_))) {
+            return Err(Error::ItemNotFound(key.conversation_id.to_owned()));
+        }
+        let row = SnapshotRow {
+            conversation_id: key.conversation_id.to_owned(),
+            response_id: key.response_id.to_owned(),
+            tool_call_id: key.tool_call_id.to_owned(),
+            meta: seal(
+                &unlocked.vault_key,
+                aad("meta", key).as_bytes(),
+                meta.as_bytes(),
+            )?
+            .to_json(),
+            content: Some(
+                seal(
+                    &unlocked.vault_key,
+                    aad("content", key).as_bytes(),
+                    content.as_bytes(),
+                )?
+                .to_json(),
+            ),
+            size: content.len() as u64,
+            created_at: self.clock.now_ms(),
+            reverted_at: None,
+        };
+        self.store.transaction(|tx| {
+            tx.put_snapshot(&row)?;
+            tx.trim_snapshots(AI_SNAPSHOTS_MAX_BYTES)?;
+            Ok(())
+        })
+    }
+
+    /// The snapshots of a conversation, oldest first, with their descriptions opened. One this
+    /// vault key cannot open is left out.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_file_snapshots(&self, conversation_id: &str) -> Result<Vec<FileSnapshot>> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        Ok(self
+            .store
+            .snapshot_list(Some(conversation_id))?
+            .into_iter()
+            .filter_map(|row| {
+                let meta = open(&unlocked.vault_key, "meta", &key_of(&row), &row.meta)?;
+                Some(FileSnapshot {
+                    response_id: row.response_id,
+                    tool_call_id: row.tool_call_id,
+                    meta,
+                    reverted_at: row.reverted_at,
+                })
+            })
+            .collect())
+    }
+
+    /// A call's snapshot: its description, and its content until the change was reverted.
+    /// `None` when there is none, or this vault key cannot open it.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    #[expect(
+        clippy::type_complexity,
+        reason = "the two opened parts of one row, the second absent once reverted"
+    )]
+    pub fn ai_file_snapshot(
+        &self,
+        key: &SnapshotKey<'_>,
+    ) -> Result<Option<(Zeroizing<String>, Option<Zeroizing<String>>)>> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let Some(row) =
+            self.store
+                .snapshot(key.conversation_id, key.response_id, key.tool_call_id)?
+        else {
+            return Ok(None);
+        };
+        let Some(meta) = open(&unlocked.vault_key, "meta", key, &row.meta) else {
+            return Ok(None);
+        };
+        let content = match &row.content {
+            Some(sealed) => match open(&unlocked.vault_key, "content", key, sealed) {
+                Some(content) => Some(content),
+                None => return Ok(None),
+            },
+            None => None,
+        };
+        Ok(Some((meta, content)))
+    }
+
+    /// Records that a call's change was reverted: the snapshot keeps its description and drops
+    /// the content. Returns whether it was there and not reverted yet.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_mark_file_reverted(&mut self, key: &SnapshotKey<'_>) -> Result<bool> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        let now = self.clock.now_ms();
+        self.store.set_snapshot_reverted(
+            key.conversation_id,
+            key.response_id,
+            key.tool_call_id,
+            now,
+        )
+    }
+
+    /// Deletes the snapshots whose conversation or response is gone, as when another device
+    /// deleted the conversation or edited a message before the call (AI-26), and those this vault
+    /// key cannot open. Returns how many it deleted.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_sweep_file_snapshots(&mut self) -> Result<usize> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let rows = self.store.snapshot_list(None)?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        let mut responses: HashSet<(&str, &str)> = HashSet::new();
+        for (_, item) in self.items() {
+            if let Item::AiMessage(m) = item {
+                responses.insert((m.conversation_id.as_str(), m.entry_id.as_str()));
+            }
+        }
+        let gone: Vec<&SnapshotRow> = rows
+            .iter()
+            .filter(|row| {
+                !matches!(
+                    self.get(&row.conversation_id),
+                    Some(Item::AiConversation(_))
+                ) || !responses.contains(&(row.conversation_id.as_str(), row.response_id.as_str()))
+                    || open(&unlocked.vault_key, "meta", &key_of(row), &row.meta).is_none()
+            })
+            .collect();
+        if gone.is_empty() {
+            return Ok(0);
+        }
+        let count = gone.len();
+        self.store.transaction(|tx| {
+            for row in gone {
+                tx.delete_snapshot(&row.conversation_id, &row.response_id, &row.tool_call_id)?;
+            }
+            Ok(())
+        })?;
+        Ok(count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::crypto::KdfParams;
+    use crate::model::AiConversation;
+    use crate::vault::ManualClock;
+
+    fn vault() -> Vault {
+        let clock = Arc::new(ManualClock::new(1_700_000_000_000));
+        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock);
+        vault
+            .create_with_params("snapshot-test-password", KdfParams::for_tests())
+            .unwrap();
+        vault
+    }
+
+    fn conversation(vault: &mut Vault) -> String {
+        vault
+            .put(
+                None,
+                Item::AiConversation(AiConversation {
+                    title: "t".into(),
+                    host_id: None,
+                    quick_target: None,
+                    pinned: false,
+                    context_start: None,
+                    effort: None,
+                    created_at: 1,
+                    updated_at: 0,
+                }),
+            )
+            .unwrap()
+    }
+
+    fn key<'a>(conversation_id: &'a str, response_id: &'a str, call: &'a str) -> SnapshotKey<'a> {
+        SnapshotKey {
+            conversation_id,
+            response_id,
+            tool_call_id: call,
+        }
+    }
+
+    #[test]
+    fn snapshots_are_sealed_and_kept_on_the_device() {
+        let mut vault = vault();
+        let c = conversation(&mut vault);
+        let response = vault
+            .ai_append_entry(&c, r#"{"role":"assistant"}"#)
+            .unwrap();
+        let k = key(&c, &response, "call_1");
+        let pending = vault.pending_count();
+        vault.ai_put_file_snapshot(&k, "META", "CONTENT").unwrap();
+
+        // Nothing readable in the database, and nothing to sync.
+        let row = vault
+            .store
+            .snapshot(&c, &response, "call_1")
+            .unwrap()
+            .unwrap();
+        assert!(!row.meta.contains("META") && !row.content.unwrap().contains("CONTENT"));
+        assert_eq!(row.size, 7);
+        assert_eq!(vault.pending_count(), pending);
+
+        let listed = vault.ai_file_snapshots(&c).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(
+            (listed[0].tool_call_id.as_str(), listed[0].meta.as_str()),
+            ("call_1", "META")
+        );
+        let (meta, content) = vault.ai_file_snapshot(&k).unwrap().unwrap();
+        assert_eq!(
+            (meta.as_str(), content.as_deref().map(String::as_str)),
+            ("META", Some("CONTENT"))
+        );
+
+        // An envelope opens only in its own row.
+        let mut moved = vault
+            .store
+            .snapshot(&c, &response, "call_1")
+            .unwrap()
+            .unwrap();
+        moved.tool_call_id = "call_2".into();
+        vault.store.put_snapshot(&moved).unwrap();
+        assert!(
+            vault
+                .ai_file_snapshot(&key(&c, &response, "call_2"))
+                .unwrap()
+                .is_none()
+        );
+
+        // Reverted: the description stays, the content goes.
+        assert!(vault.ai_mark_file_reverted(&k).unwrap());
+        assert!(!vault.ai_mark_file_reverted(&k).unwrap());
+        let (_, content) = vault.ai_file_snapshot(&k).unwrap().unwrap();
+        assert!(content.is_none());
+        assert!(
+            vault.ai_file_snapshots(&c).unwrap()[0]
+                .reverted_at
+                .is_some()
+        );
+
+        vault.lock();
+        assert!(matches!(vault.ai_file_snapshots(&c), Err(Error::Locked)));
+        assert!(matches!(
+            vault.ai_put_file_snapshot(&k, "m", "c"),
+            Err(Error::Locked)
+        ));
+    }
+
+    #[test]
+    fn snapshots_go_with_their_conversation_and_response() {
+        let mut vault = vault();
+        let c = conversation(&mut vault);
+        assert!(matches!(
+            vault.ai_put_file_snapshot(&key("missing", "r", "x"), "m", "c"),
+            Err(Error::ItemNotFound(_))
+        ));
+        let first = vault
+            .ai_append_entry(&c, r#"{"role":"assistant"}"#)
+            .unwrap();
+        let user = vault.ai_append_entry(&c, r#"{"role":"user"}"#).unwrap();
+        let second = vault
+            .ai_append_entry(&c, r#"{"role":"assistant"}"#)
+            .unwrap();
+        vault
+            .ai_put_file_snapshot(&key(&c, &first, "a"), "1", "x")
+            .unwrap();
+        vault
+            .ai_put_file_snapshot(&key(&c, &second, "b"), "2", "y")
+            .unwrap();
+
+        // An edit of the user's message deletes the snapshots of the responses after it.
+        vault.ai_delete_entries_from(&c, &user).unwrap();
+        let left: Vec<String> = vault
+            .ai_file_snapshots(&c)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.tool_call_id)
+            .collect();
+        assert_eq!(left, ["a"]);
+
+        // A response deleted elsewhere is swept, and so is an unreadable row.
+        let other = conversation(&mut vault);
+        let kept = vault
+            .ai_append_entry(&other, r#"{"role":"assistant"}"#)
+            .unwrap();
+        vault
+            .ai_put_file_snapshot(&key(&other, &kept, "k"), "k", "k")
+            .unwrap();
+        vault
+            .ai_put_file_snapshot(&key(&other, "gone", "g"), "g", "g")
+            .unwrap();
+        let mut bad = vault.store.snapshot(&other, &kept, "k").unwrap().unwrap();
+        bad.tool_call_id = "bad".into();
+        vault.store.put_snapshot(&bad).unwrap();
+        assert_eq!(vault.ai_sweep_file_snapshots().unwrap(), 2);
+        assert_eq!(vault.ai_file_snapshots(&other).unwrap().len(), 1);
+        assert_eq!(vault.ai_sweep_file_snapshots().unwrap(), 0);
+
+        // Deleting the conversation deletes the rest.
+        vault.ai_delete_conversation(&c).unwrap();
+        assert!(vault.store.snapshot_list(Some(&c)).unwrap().is_empty());
+        assert_eq!(vault.ai_file_snapshots(&other).unwrap().len(), 1);
+    }
+}

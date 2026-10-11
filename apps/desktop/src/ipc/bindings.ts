@@ -252,6 +252,16 @@ export const commands = {
 	 *  card, if they did.
 	 */
 	aiFilePreview: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiFilePreview>("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
+	/**
+	 *  The changes of the conversation's `edit_file` and `write_file` calls that this device keeps
+	 *  and can revert, or has reverted (AI-41).
+	 */
+	aiFileChanges: (conversationId: string) => __TAURI_INVOKE<AiFileChange[]>("ai_file_changes", { conversationId }),
+	/**
+	 *  Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
+	 *  `session_id`. A file the call created is deleted, so the panel asks first.
+	 */
+	aiFileRevert: (conversationId: string, responseId: string, toolCallId: string, sessionId: string | null) => __TAURI_INVOKE<AiFileRevert>("ai_file_revert", { conversationId, responseId, toolCallId, sessionId }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -342,6 +352,11 @@ export type AiConversationDetail = {
 	entries: AiEntryView[],
 	/**  A turn of this conversation is running (its events go to the channel that started it). */
 	running: boolean,
+	/**
+	 *  The changes of its `edit_file` and `write_file` calls that this device can revert, or
+	 *  has reverted (AI-41).
+	 */
+	file_changes: AiFileChange[],
 };
 
 export type AiConversationView = {
@@ -372,6 +387,22 @@ export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
 
 /**
+ *  A change an `edit_file` or `write_file` call made, kept on this device so the user can revert
+ *  it (AI-41).
+ */
+export type AiFileChange = {
+	/**  The entry id of the response that made the call. */
+	response_id: string,
+	tool_call_id: string,
+	/**  The file's path as the call resolved it. */
+	path: string,
+	/**  The call created the file, so a revert deletes it. */
+	created: boolean,
+	/**  The change was reverted. */
+	reverted: boolean,
+};
+
+/**
  *  The change an `edit_file` or `write_file` call would make, for its approval card (AI-39,
  *  AI-40). The texts show CRLF line breaks as `\n`; `crlf` says the write keeps them as CRLF.
  */
@@ -390,6 +421,20 @@ export type AiFilePreview = {
 	/**  Most of the file's line breaks are CRLF, and the write keeps them. */
 	crlf: boolean,
 };
+
+/**  The outcome of a revert (AI-41). */
+export type AiFileRevert = 
+/**  The file holds what it held before the call again, or is deleted. */
+{ status: "reverted" } | 
+/**
+ *  The file no longer holds what the call wrote, so nothing was written. The texts show CRLF
+ *  line breaks as `\n`.
+ */
+{ status: "changed"; path: string; 
+/**  What the call wrote. */
+written: string; 
+/**  What the file holds now; `None` when it no longer exists. */
+current: string | null } | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
 
@@ -441,6 +486,26 @@ export type AiProviderView = {
 	models: AiModel[],
 	updated_at: number,
 };
+
+/**  Why a revert did not happen (AI-41), for the panel to say in the user's language. */
+export type AiRevertFailure = 
+/**  The conversation's tab is not connected. */
+"disconnected" | 
+/**  The tab is connected to another server than the one the call wrote on; `detail` names it. */
+"other_server" | 
+/**  The user the tab is logged in as cannot write or delete the file. */
+"permission_denied" | 
+/**
+ *  The file changed since the call wrote it into something that is not a text file Hatoba
+ *  can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
+ */
+"not_text" | 
+/**  Reading the file did not finish within 30 seconds; nothing was written. */
+"timed_out" | 
+/**  Writing failed after it may have begun: the file may be cut short. `detail` says why. */
+"unfinished" | 
+/**  Anything else; `detail` says what. */
+"failed";
 
 export type AiSearchHit = {
 	conversation_id: string,

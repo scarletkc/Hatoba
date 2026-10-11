@@ -1280,6 +1280,93 @@ pub struct AiConversationDetail {
     pub entries: Vec<AiEntryView>,
     /// A turn of this conversation is running (its events go to the channel that started it).
     pub running: bool,
+    /// The changes of its `edit_file` and `write_file` calls that this device can revert, or
+    /// has reverted (AI-41).
+    pub file_changes: Vec<AiFileChange>,
+}
+
+/// A change an `edit_file` or `write_file` call made, kept on this device so the user can revert
+/// it (AI-41).
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiFileChange {
+    /// The entry id of the response that made the call.
+    pub response_id: String,
+    pub tool_call_id: String,
+    /// The file's path as the call resolved it.
+    pub path: String,
+    /// The call created the file, so a revert deletes it.
+    pub created: bool,
+    /// The change was reverted.
+    pub reverted: bool,
+}
+
+impl fmt::Debug for AiFileChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiFileChange")
+            .field("response_id", &self.response_id)
+            .field("tool_call_id", &self.tool_call_id)
+            .field("created", &self.created)
+            .field("reverted", &self.reverted)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Why a revert did not happen (AI-41), for the panel to say in the user's language.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiRevertFailure {
+    /// The conversation's tab is not connected.
+    Disconnected,
+    /// The tab is connected to another server than the one the call wrote on; `detail` names it.
+    OtherServer,
+    /// The user the tab is logged in as cannot write or delete the file.
+    PermissionDenied,
+    /// The file changed since the call wrote it into something that is not a text file Hatoba
+    /// can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
+    NotText,
+    /// Reading the file did not finish within 30 seconds; nothing was written.
+    TimedOut,
+    /// Writing failed after it may have begun: the file may be cut short. `detail` says why.
+    Unfinished,
+    /// Anything else; `detail` says what.
+    Failed,
+}
+
+/// The outcome of a revert (AI-41).
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AiFileRevert {
+    /// The file holds what it held before the call again, or is deleted.
+    Reverted,
+    /// The file no longer holds what the call wrote, so nothing was written. The texts show CRLF
+    /// line breaks as `\n`.
+    Changed {
+        path: String,
+        /// What the call wrote.
+        written: String,
+        /// What the file holds now; `None` when it no longer exists.
+        current: Option<String>,
+    },
+    Failed {
+        reason: AiRevertFailure,
+        detail: Option<String>,
+    },
+}
+
+impl fmt::Debug for AiFileRevert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Reverted => f.write_str("Reverted"),
+            Self::Changed { current, .. } => f
+                .debug_struct("Changed")
+                .field("exists", &current.is_some())
+                .finish_non_exhaustive(),
+            Self::Failed { reason, .. } => f
+                .debug_struct("Failed")
+                .field("reason", reason)
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// What a request is made with. The frontend owns the tab, so it says what the turn may act on.

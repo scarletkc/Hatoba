@@ -45,13 +45,13 @@ use hatoba_ai::tools::{
     ToolSet, WebSearchArgs,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
-use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
     AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS, MAX_HOST_AI_NOTES_CHARS,
     SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
+use hatoba_core::{SnapshotKey, Vault};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use tokio::sync::Notify;
@@ -59,9 +59,9 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFilePreview, AiFinish,
-    AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus,
-    AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange, AiFilePreview,
+    AiFileRevert, AiFinish, AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput,
+    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -526,7 +526,20 @@ impl AiManager {
             conversation: conversation_view(&v, conversation_id, &conversation),
             entries: entries.views(),
             running: self.is_running(conversation_id),
+            file_changes: file_changes(&v, conversation_id),
         })
+    }
+
+    /// The changes of the conversation's `edit_file` and `write_file` calls that this device
+    /// keeps (AI-41), for the panel to offer Revert after a call ran.
+    pub fn file_changes(
+        &self,
+        vault: &SharedVault,
+        conversation_id: &str,
+    ) -> AppResult<Vec<AiFileChange>> {
+        let v = unlocked(vault)?;
+        find_conversation(&v, conversation_id)?;
+        Ok(file_changes(&v, conversation_id))
     }
 
     /// Deletes a conversation and its entries, stopping its turn first.
@@ -814,12 +827,14 @@ impl AiManager {
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
                     .or_else(|| quick_target.as_ref().map(target_name));
+                let reverts = pending_reverts(&v, &id, &ids[..earlier.len()], &earlier);
                 let notes = notes_before(
                     &v,
                     &earlier,
                     came_from.as_deref(),
                     host_now.as_deref(),
                     &context,
+                    &reverts,
                 );
                 let full = format!("{notes}{text}");
                 let compact = compaction_before(&v, &id, &context, &full)?;
@@ -1145,9 +1160,21 @@ impl AiManager {
             )
             .await;
         let content = result_content(status, content, edited_arguments);
+        let shown = guard(&shown).take();
         let view = {
             let mut v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
+            // The file was written even when a stop stored a cancelled result meanwhile, so the
+            // change can be reverted either way (AI-41).
+            if let Some(change) = shown.as_ref().and_then(|s| s.change.as_ref()) {
+                store_snapshot(
+                    &mut v,
+                    conversation_id,
+                    &place.response,
+                    tool_call_id,
+                    change,
+                );
+            }
             if let Err(e) = open_call(&Entries::load(&v, conversation_id)?, tool_call_id) {
                 // A stop stored a cancelled result while the tool ran.
                 return Err(if op.cancel.is_cancelled() {
@@ -1159,7 +1186,7 @@ impl AiManager {
             let view = self.store_result(&mut v, conversation_id, tool_call_id, status, content)?;
             // The model sees the file now that the result is stored (AI-38…40), under the guard
             // that a stop or the lock would have taken first.
-            if let Some(shown) = guard(&shown).take() {
+            if let Some(shown) = shown {
                 self.0.seen.insert(conversation_id, &place.response, shown);
             }
             view
@@ -1251,6 +1278,84 @@ impl AiManager {
     /// "File tools").
     pub async fn file_writes_ended(&self, session_id: &str) {
         self.0.writes.ended(session_id).await;
+    }
+
+    /// `ai_file_revert` (AI-41): reverts the change the call `tool_call_id` of the response
+    /// `response_id` made, on the conversation's tab `session_id`, while the conversation is idle.
+    /// The read is an op of the conversation, which the lock ends; a write that has begun runs to
+    /// its end, and a lock that disconnects SSH sessions waits for it. A revert ends the model's
+    /// record of the file, and the next message notes it.
+    pub async fn file_revert(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        response_id: &str,
+        tool_call_id: &str,
+        session_id: Option<&str>,
+    ) -> AppResult<AiFileRevert> {
+        let key = SnapshotKey {
+            conversation_id,
+            response_id,
+            tool_call_id,
+        };
+        let (change, op, _writing) = {
+            let v = unlocked(vault)?;
+            find_conversation(&v, conversation_id)?;
+            if self.busy(conversation_id) {
+                return Err(AppError::invalid(
+                    "conversation_id",
+                    "The conversation is busy; revert the change once it is idle.",
+                ));
+            }
+            let Some((meta, content)) = v.ai_file_snapshot(&key)? else {
+                return Err(AppError::not_found("file change"));
+            };
+            let Some(content) = content else {
+                return Err(AppError::invalid(
+                    "tool_call_id",
+                    "the change was reverted already",
+                ));
+            };
+            let unreadable = |_| AppError::internal("unreadable file snapshot");
+            let change = files::Change {
+                meta: serde_json::from_str(&meta).map_err(unreadable)?,
+                content: serde_json::from_str(&content).map_err(unreadable)?,
+            };
+            // Counted under the guard a lock takes first, so the lock sees the write.
+            let writing = session_id.map(|id| self.0.writes.begin(id));
+            (change, self.start_op(conversation_id), writing)
+        };
+        let Some(outcome) = files::revert(live_session(env, session_id), &change, op.token()).await
+        else {
+            return Err(AppError::new(
+                ErrorCode::Cancelled,
+                "the revert was stopped",
+            ));
+        };
+        if outcome == AiFileRevert::Reverted {
+            match unlocked(vault).and_then(|mut v| Ok(v.ai_mark_file_reverted(&key)?)) {
+                Ok(_) => {}
+                Err(e) => tracing::warn!(
+                    conversation_id,
+                    code = ?e.code,
+                    "could not record a reverted file change"
+                ),
+            }
+            self.0
+                .seen
+                .forget_file(conversation_id, &change.meta.server, &change.meta.path);
+            tracing::info!(conversation_id, "AI file change reverted");
+        }
+        Ok(outcome)
+    }
+
+    /// A turn, a tool, a preview, a compaction or a revert of the conversation runs.
+    fn busy(&self, conversation_id: &str) -> bool {
+        self.is_running(conversation_id)
+            || guard(&self.0.ops)
+                .values()
+                .any(|op| op.conversation_id.as_deref() == Some(conversation_id))
     }
 
     /// Drops what the approval cards of the conversation read (AI-39): none of its calls waits for
@@ -2614,6 +2719,9 @@ const HOST_CHANGE: &str = "host_change";
 const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
+/// The tag of the note Hatoba puts before the first message after the user reverted a change of
+/// a file tool call (AI-41), one for each call.
+const FILE_REVERT: &str = "file_revert";
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
@@ -2662,6 +2770,12 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
     },
     AttachmentKind {
+        tag: FILE_REVERT,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("path", _), ("tool_call_id", _)]),
+    },
+    AttachmentKind {
         tag: "terminal_selection",
         note: false,
         title: |_| "Terminal selection".to_owned(),
@@ -2703,15 +2817,16 @@ struct Block<'a> {
 }
 
 /// The blocks `text` starts with, in order, and the text after them. Notes come first, at most
-/// one of each kind: a note after an attachment, or a second one of a kind, is typed text.
+/// one of each kind but `file_revert`, which comes once for each reverted call: a note after an
+/// attachment, or a second one of another kind, is typed text.
 fn leading_blocks(text: &str) -> (Vec<Block<'_>>, &str) {
     let mut blocks: Vec<Block<'_>> = Vec::new();
     let mut rest = text;
     while let Some((block, after)) = leading_block(rest) {
         if block.kind.note
-            && blocks
-                .iter()
-                .any(|b| !b.kind.note || b.kind.tag == block.kind.tag)
+            && blocks.iter().any(|b| {
+                !b.kind.note || (b.kind.tag == block.kind.tag && block.kind.tag != FILE_REVERT)
+            })
         {
             break;
         }
@@ -2874,12 +2989,14 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
+/// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
 fn notes_before(
     v: &Vault,
     earlier: &[AiEntry],
     came_from: Option<&str>,
     host_now: Option<&str>,
     context: &AiTurnContext,
+    reverts: &[(String, files::ChangeMeta)],
 ) -> String {
     let mut notes = String::new();
     // A message with nothing before it has no earlier screens or replies to tell apart.
@@ -2912,7 +3029,120 @@ fn notes_before(
             EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
         }
     }
+    for (tool_call_id, meta) in reverts {
+        notes.push_str(&tools::file_revert_block(
+            &meta.path,
+            tool_call_id,
+            &meta.tool,
+            meta.created,
+        ));
+    }
     notes
+}
+
+/// The calls whose `file_revert` notes (AI-41) a user entry starts with.
+fn noted_reverts(text: &str) -> Vec<String> {
+    leading_blocks(text)
+        .0
+        .iter()
+        .take_while(|b| b.kind.note)
+        .filter(|b| b.kind.tag == FILE_REVERT)
+        .filter_map(|b| b.attrs.iter().find(|(n, _)| *n == "tool_call_id"))
+        .map(|(_, value)| attribute_text(value))
+        .collect()
+}
+
+/// The reverts (AI-41) a new message notes: of the calls in `earlier` (the entries before it, with
+/// their `ids`) whose change this device reverted, those that no user entry after the call notes
+/// yet, oldest call first, each with its call id and what its snapshot says.
+fn pending_reverts(
+    v: &Vault,
+    conversation_id: &str,
+    ids: &[String],
+    earlier: &[AiEntry],
+) -> Vec<(String, files::ChangeMeta)> {
+    let snapshots = match v.ai_file_snapshots(conversation_id) {
+        Ok(snapshots) => snapshots,
+        Err(e) => {
+            tracing::warn!(conversation_id, "could not read the file snapshots: {e}");
+            return Vec::new();
+        }
+    };
+    let mut reverts = Vec::new();
+    for snapshot in snapshots.iter().filter(|s| s.reverted_at.is_some()) {
+        let Some(at) = ids.iter().position(|id| *id == snapshot.response_id) else {
+            continue;
+        };
+        let Some(EntryBody::Assistant(response)) = earlier.get(at).map(|e| &e.body) else {
+            continue;
+        };
+        let Some(order) = response
+            .tool_calls
+            .iter()
+            .position(|c| c.id == snapshot.tool_call_id)
+        else {
+            continue;
+        };
+        let noted = earlier[at + 1..].iter().any(|e| match &e.body {
+            EntryBody::User { text } => noted_reverts(text).contains(&snapshot.tool_call_id),
+            _ => false,
+        });
+        let meta = serde_json::from_str::<files::ChangeMeta>(&snapshot.meta);
+        if let (false, Ok(meta)) = (noted, meta) {
+            reverts.push(((at, order), snapshot.tool_call_id.clone(), meta));
+        }
+    }
+    reverts.sort_by_key(|(place, ..)| *place);
+    reverts
+        .into_iter()
+        .map(|(_, id, meta)| (id, meta))
+        .collect()
+}
+
+/// The changes of a conversation's file tool calls this device keeps (AI-41).
+fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
+    let snapshots = match v.ai_file_snapshots(conversation_id) {
+        Ok(snapshots) => snapshots,
+        Err(e) => {
+            tracing::warn!(conversation_id, "could not read the file snapshots: {e}");
+            return Vec::new();
+        }
+    };
+    snapshots
+        .into_iter()
+        .filter_map(|s| {
+            let meta: files::ChangeMeta = serde_json::from_str(&s.meta).ok()?;
+            Some(AiFileChange {
+                response_id: s.response_id,
+                tool_call_id: s.tool_call_id,
+                path: meta.path,
+                created: meta.created,
+                reverted: s.reverted_at.is_some(),
+            })
+        })
+        .collect()
+}
+
+/// Stores the snapshot of a change a file tool call made (AI-41). A failure is logged: the call
+/// itself succeeded.
+fn store_snapshot(
+    v: &mut Vault,
+    conversation_id: &str,
+    response_id: &str,
+    tool_call_id: &str,
+    change: &files::Change,
+) {
+    let Some((meta, content)) = change.encode() else {
+        return;
+    };
+    let key = SnapshotKey {
+        conversation_id,
+        response_id,
+        tool_call_id,
+    };
+    if let Err(e) = v.ai_put_file_snapshot(&key, &meta, &content) {
+        tracing::warn!(conversation_id, "could not store a file snapshot: {e}");
+    }
 }
 
 /// Whether a terminal was attached as far as `earlier` (the entries before a new message) tells

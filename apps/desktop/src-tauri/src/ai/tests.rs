@@ -31,8 +31,9 @@ use super::{
 };
 use super::{Halt, Turn, append, lock, title_of, wait_for_results};
 use crate::dto::{
-    AiConversationDetail, AiEffort, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
-    AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, QuickTarget,
+    AiConversationDetail, AiEffort, AiEntryView, AiFileRevert, AiFinish, AiRevertFailure,
+    AiSendInput, AiSendStarted, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
+    AiTurnEvent, QuickTarget,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -4096,4 +4097,240 @@ async fn waiting_for_results_stops_and_fails_as_before() {
         wait_once(&f, &conv, &turn, &entry_id).await,
         Poll::Ready(Err(Halt::Stopped))
     ));
+}
+
+/// A change `call` of the response `response_id` made, kept as its snapshot (AI-41): the file tools
+/// store one when they write, which needs a live SSH session.
+fn keep_a_change(f: &Fixture, conv: &str, response_id: &str, call: &str, path: &str, tool: &str) {
+    let created = tool == "write_file";
+    let change = super::files::Change {
+        meta: super::files::ChangeMeta {
+            server: "ops@db:22".into(),
+            path: path.into(),
+            tool: tool.into(),
+            created,
+        },
+        content: super::files::ChangeContent {
+            before: (!created).then(|| "old\n".to_owned()),
+            after: "new\n".into(),
+        },
+    };
+    super::store_snapshot(&mut lock(&f.vault), conv, response_id, call, &change);
+}
+
+fn revert_key<'a>(
+    conv: &'a str,
+    response_id: &'a str,
+    call: &'a str,
+) -> hatoba_core::SnapshotKey<'a> {
+    hatoba_core::SnapshotKey {
+        conversation_id: conv,
+        response_id,
+        tool_call_id: call,
+    }
+}
+
+/// The user entry's text as the request after it sent it.
+fn last_user_message(body: &Value) -> String {
+    messages(body)
+        .iter()
+        .rev()
+        .find(|m| m["role"] == "user")
+        .and_then(|m| m["content"].as_str())
+        .unwrap()
+        .to_owned()
+}
+
+/// AI-41: the changes of the file tools are listed for Revert, which waits until the conversation
+/// is idle and needs the tab connected; the next message notes each revert once, oldest call
+/// first, and an edit of that message notes them again.
+#[tokio::test]
+async fn reverted_file_changes_are_noted_once_on_the_next_message() {
+    let f = Fixture::new(vec![
+        calls(&[
+            (
+                "e1",
+                "edit_file",
+                json!({"path": "app.conf", "old_string": "old", "new_string": "new"}),
+            ),
+            (
+                "w1",
+                "write_file",
+                json!({"path": "/srv/new.conf", "content": "new\n"}),
+            ),
+        ]),
+        answer("Changed both."),
+        answer("Noted."),
+        answer("Fine."),
+        answer("Noted again."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "change them").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let response = f
+        .detail(&conv)
+        .entries
+        .iter()
+        .find(|e| matches!(e, AiEntryView::Assistant { .. }))
+        .map(|e| entry_id(e).to_owned())
+        .unwrap();
+    keep_a_change(&f, &conv, &response, "w1", "/srv/new.conf", "write_file");
+    keep_a_change(
+        &f,
+        &conv,
+        &response,
+        "e1",
+        "/home/ops/app.conf",
+        "edit_file",
+    );
+    let revert = |call: &'static str| {
+        let response = response.clone();
+        let conv = conv.clone();
+        let f = &f;
+        async move {
+            f.manager
+                .file_revert(
+                    &f.vault,
+                    f.env.as_ref(),
+                    &conv,
+                    &response,
+                    call,
+                    Some("tab-1"),
+                )
+                .await
+        }
+    };
+
+    // Not while the turn runs.
+    assert_eq!(
+        revert("e1").await.unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+    f.result(&conv, "e1", AiToolStatus::Ok, "Edited app.conf", None)
+        .unwrap();
+    f.result(&conv, "w1", AiToolStatus::Ok, "Created /srv/new.conf", None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let listed = |f: &Fixture| {
+        f.detail(&conv)
+            .file_changes
+            .into_iter()
+            .map(|c| (c.tool_call_id, c.path, c.created, c.reverted))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        listed(&f),
+        [
+            ("w1".into(), "/srv/new.conf".into(), true, false),
+            ("e1".into(), "/home/ops/app.conf".into(), false, false),
+        ]
+    );
+    assert_eq!(f.manager.file_changes(&f.vault, &conv).unwrap().len(), 2);
+    // No connected tab: nothing happens, and the change can still be reverted later.
+    assert_eq!(
+        revert("e1").await.unwrap(),
+        AiFileRevert::Failed {
+            reason: AiRevertFailure::Disconnected,
+            detail: None
+        }
+    );
+    assert_eq!(revert("nope").await.unwrap_err().code, ErrorCode::NotFound);
+    assert!(!listed(&f)[1].3);
+
+    // Reverted on the host (the scripts' part needs SSH): recorded, and not offered again.
+    for call in ["e1", "w1"] {
+        assert!(
+            lock(&f.vault)
+                .ai_mark_file_reverted(&revert_key(&conv, &response, call))
+                .unwrap()
+        );
+    }
+    assert!(listed(&f).iter().all(|c| c.3));
+    assert_eq!(
+        revert("e1").await.unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+
+    // The next message notes both, oldest call first, before what the user typed.
+    let notes = format!(
+        "{}{}",
+        hatoba_ai::tools::file_revert_block("/home/ops/app.conf", "e1", "edit_file", false),
+        hatoba_ai::tools::file_revert_block("/srv/new.conf", "w1", "write_file", true),
+    );
+    let (second, sink) = f.send(Some(&conv), "why did you change them?").await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let requests = f.requests().await;
+    assert_eq!(
+        last_user_message(&requests[2]),
+        format!("{notes}why did you change them?")
+    );
+    assert_eq!(super::title_of(&format!("{notes}typed")), "typed");
+    assert_eq!(super::noted_reverts(&format!("{notes}typed")), ["e1", "w1"]);
+
+    // Noted once.
+    let (_, sink) = f.send(Some(&conv), "ok").await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(last_user_message(&f.requests().await[3]), "ok");
+
+    // An edit of the message that noted them deletes the note with it, so the new one notes
+    // them again.
+    let (_, sink) = f
+        .edit(&conv, entry_id(&second.user_entry), "why?")
+        .await
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    assert_eq!(
+        last_user_message(&f.requests().await[4]),
+        format!("{notes}why?")
+    );
+}
+
+/// AI-41: deleting the response that made a call, by an edit, deletes the call's snapshot.
+#[tokio::test]
+async fn an_edit_before_a_call_deletes_its_snapshot() {
+    let f = Fixture::new(vec![
+        calls(&[(
+            "e1",
+            "edit_file",
+            json!({"path": "app.conf", "old_string": "old", "new_string": "new"}),
+        )]),
+        answer("Edited."),
+        answer("Fresh start."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "edit it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let response = f
+        .detail(&conv)
+        .entries
+        .iter()
+        .find(|e| matches!(e, AiEntryView::Assistant { .. }))
+        .map(|e| entry_id(e).to_owned())
+        .unwrap();
+    keep_a_change(
+        &f,
+        &conv,
+        &response,
+        "e1",
+        "/home/ops/app.conf",
+        "edit_file",
+    );
+    f.result(&conv, "e1", AiToolStatus::Ok, "Edited", None)
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(f.detail(&conv).file_changes.len(), 1);
+
+    let (_, sink) = f
+        .edit(&conv, entry_id(&started.user_entry), "never mind")
+        .await
+        .unwrap();
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    assert!(f.detail(&conv).file_changes.is_empty());
 }

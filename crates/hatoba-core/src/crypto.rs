@@ -53,6 +53,10 @@ pub const AAD_RECOVERY_AUTH: &str = "hatoba/recovery-auth/v1";
 pub const AAD_VAULT_CHECK: &str = "hatoba/vault-check/v1";
 /// AAD of the local-only `recent_targets` meta value (recent quick-connect targets).
 pub const AAD_RECENT_TARGETS: &str = "hatoba/recent-targets/v1";
+/// Prefix of the AAD of a local-only file snapshot's envelopes (AI-41):
+/// `hatoba/ai-file-snapshot/v1/{part}/{key}`, with the part (`meta` or `content`) and the row's
+/// key as a JSON array, so an envelope opens only in its own row and column.
+pub const AAD_AI_FILE_SNAPSHOT_PREFIX: &str = "hatoba/ai-file-snapshot/v1/";
 
 /// AAD for the item with the given id. Conflict-log copies reuse the item AAD of their item.
 #[must_use]
