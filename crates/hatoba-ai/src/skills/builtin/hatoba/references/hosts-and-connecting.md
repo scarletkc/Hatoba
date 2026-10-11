@@ -186,9 +186,8 @@ A connection opens a new terminal tab (orange dot while connecting). The connect
 | Enter the key passphrase | 输入私钥口令 | 秘密鍵のパスフレーズを入力 |
 | Key passphrase | 私钥口令 | 鍵のパスフレーズ |
 
-- First connection: verify the shown fingerprint with the administrator. **Trust and Connect** saves it to the vault and syncs it; **Cancel** stops the connection.
-- Saved types are preferred per host:port and hop. A new type needs administrator verification and **Trust and Connect**; the dialog shows and keeps the other saved key.
-- **Host key has changed** blocks a changed key of a saved type, showing both fingerprints. **Disconnect** is default. After verifying it, **Update Fingerprint and Connect** replaces only that type. Saved keys have no list or delete screen.
+- First connection to a server: compare the shown fingerprint with the administrator's, then **Trust and Connect** (saved to the vault and synced) or **Cancel**.
+- **New host key for …** appears when a hop offers none of the key types saved for it, and **Host key has changed** blocks a saved type's changed key (**Disconnect** is the default). See `references/troubleshooting-connections.md` for both.
 - **Ask Each Time** hosts show a password prompt; **Connect** continues. A wrong key passphrase asks again.
 
 ## When a connection fails or ends

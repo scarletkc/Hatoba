@@ -51,7 +51,7 @@ describe("host key dialogs", () => {
   it.each(["en", "zh-CN", "ja"] as const)("shows the other trusted key when asking to trust a new key type in %s", (locale) => {
     const dialog = show({ known_key_type: "ssh-rsa", known_fingerprint: "SHA256:trusted-demo-rsa" }, locale);
     expect(dialog.textContent).toContain(t("terminal.hostkey.additionalTitle", { host: "demo.example", port: 22 }));
-    expect(dialog.textContent).toContain(t("terminal.hostkey.additionalBody", { keyType: "ssh-ed25519" }));
+    expect(dialog.textContent).toContain(t("terminal.hostkey.additionalBody"));
     expect(document.activeElement?.textContent).toBe(t("btn.cancel"));
     expect(dialog.textContent).toContain("ssh-rsa");
     expect(dialog.textContent).toContain("SHA256:trusted-demo-rsa");

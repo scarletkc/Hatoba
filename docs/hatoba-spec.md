@@ -822,7 +822,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | TERM-01 | Multiple tabs, one session per tab, and several tabs for the same host at once | P0 |
 | TERM-02 | `xterm-256color` and truecolor, UTF-8. **Chinese and Japanese wide characters must render correctly, and Windows input methods such as Microsoft Pinyin and the Microsoft Japanese IME must place the candidate window and commit text correctly** | P0 |
 | TERM-03 | Sync the PTY size when the window or a panel resizes | P0 |
-| TERM-04 | Copy and paste: trim trailing CR/LF characters from single-line pastes without executing the command or asking for confirmation, preserving spaces. Preserve multi-line text and confirm before pasting it unless the user disables that check | P0 |
+| TERM-04 | Copy and paste. A single-line paste drops its trailing line breaks, so the command does not run, and needs no confirmation. Multi-line text is pasted unchanged after a confirmation, which the user can turn off | P0 |
 | TERM-05 | Scrollback of 10,000 lines by default, configurable | P0 |
 | TERM-06 | Font, font size, and theme (light, dark, or system) | P0 |
 | TERM-07 | Search in the terminal | P1 |
