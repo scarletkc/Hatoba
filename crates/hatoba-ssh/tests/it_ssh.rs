@@ -630,6 +630,32 @@ async fn exec_status_stdout_stderr_and_stdin() {
     );
 }
 
+/// A call dropped midway, as a timeout or a stop drops it, closes its channel. The command then
+/// gets the end of its stdin rather than waiting for the rest for good, as `cat > path` in a file
+/// tool's write cut off by its timeout would (AI-39, AI-40).
+#[tokio::test]
+async fn exec_dropped_midway_closes_its_channel() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let done = server.area("exec_dropped").join("done");
+    // Nothing reads stdin for a while, so 16 MiB of it stops at the channel's window.
+    let command = format!("sleep 2; cat > /dev/null; touch '{}'", done.display());
+    let call = session.exec_output(&command, Some(vec![b'x'; 16 << 20]));
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), call)
+            .await
+            .is_err()
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !done.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "the command still waits for its stdin"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
 /// The file tools' read and write (AI-38…40) through sshd and the user's login shell.
 #[tokio::test]
 async fn remote_files_are_read_and_written_in_place() {

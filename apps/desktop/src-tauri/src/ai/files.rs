@@ -208,31 +208,43 @@ impl SeenBy<'_> {
     }
 }
 
-/// The `edit_file` and `write_file` calls running now. A write that has begun is not cut off, so
-/// a lock that disconnects SSH sessions waits for them, at most the 30 seconds of a write (§13.4,
-/// "File tools").
+/// The `edit_file` and `write_file` calls running now, by SSH session id. A write that has begun is
+/// not cut off, so a lock that disconnects sessions closes a session once its calls have ended, at
+/// most the 30 seconds of a write (§13.4, "File tools").
 #[derive(Default)]
-pub(super) struct Writes(tokio::sync::watch::Sender<usize>);
+pub(super) struct Writes(tokio::sync::watch::Sender<HashMap<String, usize>>);
 
 impl Writes {
-    /// A call that may write runs until the returned guard drops.
-    pub(super) fn begin(&self) -> Writing<'_> {
-        self.0.send_modify(|n| *n += 1);
-        Writing(self)
+    /// A call that may write on the session runs until the returned guard drops.
+    pub(super) fn begin(&self, session_id: &str) -> Writing<'_> {
+        self.0
+            .send_modify(|runs| *runs.entry(session_id.to_owned()).or_default() += 1);
+        Writing(self, session_id.to_owned())
     }
 
-    /// Returns once no call that may write runs.
-    pub(super) async fn ended(&self) {
+    /// Returns once no call that may write runs on the session.
+    pub(super) async fn ended(&self, session_id: &str) {
         // The sender lives as long as `self`, so the wait cannot fail.
-        let _ = self.0.subscribe().wait_for(|&n| n == 0).await;
+        let _ = self
+            .0
+            .subscribe()
+            .wait_for(|runs| !runs.contains_key(session_id))
+            .await;
     }
 }
 
-pub(super) struct Writing<'a>(&'a Writes);
+pub(super) struct Writing<'a>(&'a Writes, String);
 
 impl Drop for Writing<'_> {
     fn drop(&mut self) {
-        self.0.0.send_modify(|n| *n -= 1);
+        self.0.0.send_modify(|runs| {
+            if let Some(n) = runs.get_mut(&self.1) {
+                *n -= 1;
+                if *n == 0 {
+                    runs.remove(&self.1);
+                }
+            }
+        });
     }
 }
 
@@ -891,19 +903,24 @@ mod tests {
         assert_eq!(preview_of(&edit, &conf, other).error, None);
     }
 
-    /// A lock that disconnects sessions waits for the edits and writes that run.
+    /// A lock that disconnects sessions waits for the edits and writes that run on each.
     #[tokio::test]
-    async fn writes_are_waited_for() {
+    async fn writes_are_waited_for_by_session() {
         let writes = Writes::default();
-        writes.ended().await;
-        let first = writes.begin();
-        let second = writes.begin();
-        let wait = || tokio::time::timeout(Duration::from_millis(50), writes.ended());
-        assert!(wait().await.is_err());
+        writes.ended("s1").await;
+        let first = writes.begin("s1");
+        let second = writes.begin("s1");
+        let other = writes.begin("s2");
+        let wait = |id| tokio::time::timeout(Duration::from_millis(50), writes.ended(id));
+        assert!(wait("s1").await.is_err());
+        assert!(wait("s3").await.is_ok());
         drop(first);
-        assert!(wait().await.is_err());
+        assert!(wait("s1").await.is_err());
         drop(second);
-        assert!(wait().await.is_ok());
+        assert!(wait("s1").await.is_ok());
+        assert!(wait("s2").await.is_err());
+        drop(other);
+        assert!(wait("s2").await.is_ok());
     }
 
     /// A run writes over what its approval card read, and only on the server the card read it on.

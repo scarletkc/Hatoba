@@ -179,8 +179,8 @@ struct Inner {
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
     /// What the model has seen of each file, by conversation (AI-38…40).
     seen: files::Seen,
-    /// The `edit_file` and `write_file` calls running now, which a lock that disconnects SSH
-    /// sessions waits for.
+    /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
+    /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
 }
 
@@ -1116,8 +1116,9 @@ impl AiManager {
             };
             let mut place = files::Place::default();
             // Counted under the guard a lock takes first, so the lock sees every write.
-            let writing = matches!(job, Job::File(FileJob::Edit(_) | FileJob::Write(_), _))
-                .then(|| self.0.writes.begin());
+            let writing = session_id
+                .filter(|_| matches!(job, Job::File(FileJob::Edit(_) | FileJob::Write(_), _)))
+                .map(|id| self.0.writes.begin(id));
             if let Job::File(_, base) = &mut job {
                 *base = guard(&self.0.file_bases)
                     .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
@@ -1245,10 +1246,11 @@ impl AiManager {
         Ok(files::preview_of(&job, &base, seen))
     }
 
-    /// Returns once no `edit_file` or `write_file` call runs: a write that has begun runs to its
-    /// end, within 30 seconds, so a lock closes the SSH sessions after it (§13.4, "File tools").
-    pub async fn file_writes_ended(&self) {
-        self.0.writes.ended().await;
+    /// Returns once no `edit_file` or `write_file` call runs on the SSH session: a write that has
+    /// begun runs to its end, within 30 seconds, so a lock closes the session after it (§13.4,
+    /// "File tools").
+    pub async fn file_writes_ended(&self, session_id: &str) {
+        self.0.writes.ended(session_id).await;
     }
 
     /// Drops what the approval cards of the conversation read (AI-39): none of its calls waits for

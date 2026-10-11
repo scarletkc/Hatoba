@@ -138,12 +138,9 @@ impl SshManager {
         lock(&self.sessions).remove(id)
     }
 
-    /// SEC-03 "lock disconnects sessions".
-    pub async fn disconnect_all(&self) {
-        let all: Vec<Arc<LiveSession>> = lock(&self.sessions).drain().map(|(_, s)| s).collect();
-        for live in all {
-            live.close().await;
-        }
+    /// SEC-03 "lock disconnects sessions": takes every session out, by id, for the lock to close.
+    pub fn take_all(&self) -> Vec<(String, Arc<LiveSession>)> {
+        lock(&self.sessions).drain().collect()
     }
 
     pub fn answer_hostkey(&self, request_id: &str, accept: bool) {
