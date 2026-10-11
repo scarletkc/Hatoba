@@ -841,6 +841,10 @@ fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
 /// and before the stop stores anything, the order that lost the text or its `entry` event. The
 /// stop still stores the text, and sends it before the one `turn_ended`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "the lock holds the stop while the task, which never takes it, runs on another thread"
+)]
 async fn a_stop_keeps_the_text_when_the_task_acts_first() {
     let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
     let conv = {
