@@ -959,9 +959,11 @@ mod tests {
         assert!(text.contains(r#""required":["repo","title"]"#));
         assert!(text.ends_with("Call the tool you need with call_mcp_tool, or answer the user."));
 
+        // Each description takes more than half of a result.
+        let half = MAX_RESULT_CHARS * 9 / 16;
         let huge = Catalog::new(&[
-            ("big", "a", &"x".repeat(9_000), json!({})),
-            ("big", "b", &"y".repeat(9_000), json!({})),
+            ("big", "a", &"x".repeat(half), json!({})),
+            ("big", "b", &"y".repeat(half), json!({})),
             ("big", "c", "small", json!({})),
         ]);
         let listed = huge.listed();
@@ -972,7 +974,7 @@ mod tests {
         assert!(text.chars().count() <= MAX_RESULT_CHARS);
 
         // The names of the matches left out fit too, however long they are.
-        let first = "z".repeat(14_000);
+        let first = "z".repeat(MAX_RESULT_CHARS * 7 / 8);
         let mut entries = vec![("long", "first".to_owned(), first.as_str())];
         for i in 0..19 {
             entries.push(("long", format!("tool_{i:02}_{}", "x".repeat(48)), "small"));

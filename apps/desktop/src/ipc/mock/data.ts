@@ -270,8 +270,6 @@ export const SETTINGS: SettingsView = {
     right_click: "copy_paste",
     confirm_multiline_paste: true,
   },
-  auto_lock_minutes: 15,
-  lock_disconnects_sessions: false,
 };
 
 export const PREFS: LocalPrefs = {
@@ -279,13 +277,16 @@ export const PREFS: LocalPrefs = {
   appearance: "system",
   density: "regular",
   host_probe: true,
-  auto_update_check: false,
+  auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
-  ai_tool_call_limit: 25,
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
+  auto_lock_minutes: 15,
+  lock_on_sleep: true,
+  lock_disconnects_sessions: false,
+  clipboard_clear_secs: 90,
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

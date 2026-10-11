@@ -427,31 +427,6 @@ fn device_defaults_enable_http_servers_only() {
     device.server_mut("b", &http).always_allow = true;
     assert!(device.allows("b", "anything"));
 
-    // A stdio entry holds for the command line it was chosen for; environment values are not
-    // part of it.
-    let mut rotated = stdio.clone();
-    let McpTransport::Stdio { env, .. } = &mut rotated else {
-        unreachable!("a stdio server");
-    };
-    env.insert("MOCK_TOKEN".into(), Zeroizing::new("rotated".into()));
-    assert_eq!(
-        super::stdio_fingerprint(&stdio),
-        super::stdio_fingerprint(&rotated)
-    );
-    let fingerprint = super::stdio_fingerprint(&stdio).unwrap();
-    assert!(!fingerprint.contains(ENV_SECRET) && fingerprint.len() == 64);
-    for other in [
-        McpTransport::Stdio {
-            command: "other".into(),
-            args: Vec::new(),
-            env: Default::default(),
-        },
-        missing_server("m").transport,
-    ] {
-        assert_ne!(super::stdio_fingerprint(&other), Some(fingerprint.clone()));
-    }
-    assert_eq!(super::stdio_fingerprint(&http), None);
-
     // Stored and read back; garbage reads as the defaults.
     let vault = vault();
     let mut v = vault.lock().unwrap();
@@ -459,6 +434,49 @@ fn device_defaults_enable_http_servers_only() {
     assert_eq!(DeviceState::load(&v), device);
     v.set_mcp_device_state("not json").unwrap();
     assert_eq!(DeviceState::load(&v), DeviceState::default());
+}
+
+#[test]
+fn a_choice_made_for_http_does_not_hold_once_the_server_uses_stdio() {
+    let vault = vault();
+    let http = McpServer {
+        name: "web".into(),
+        transport: McpTransport::Http {
+            url: "https://mcp.example.com/mcp".into(),
+            headers: Default::default(),
+        },
+        always_ask: false,
+        updated_at: 0,
+    };
+    let id = put_server(&vault, http);
+    set_enabled(&vault, &id, true);
+    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &id, None, true).unwrap();
+
+    // Another device makes it a stdio server: it arrives off here, as a new stdio server does
+    // (AI-29), and without the Always allow chosen for the http server.
+    let stdio = stdio_server("web");
+    vault
+        .lock()
+        .unwrap()
+        .put(Some(&id), Item::McpServer(stdio.clone()))
+        .unwrap();
+    let device = DeviceState::load(&vault.lock().unwrap());
+    assert!(!device.enabled(&id, &stdio.transport));
+    assert!(!device.allows(&id, "echo"));
+
+    // Turned on here, it stays on when its command line changes elsewhere.
+    set_enabled(&vault, &id, true);
+    let mut changed = stdio_server("web");
+    let McpTransport::Stdio { args, .. } = &mut changed.transport else {
+        unreachable!("a stdio server");
+    };
+    args.push("--verbose".into());
+    vault
+        .lock()
+        .unwrap()
+        .put(Some(&id), Item::McpServer(changed.clone()))
+        .unwrap();
+    assert!(DeviceState::load(&vault.lock().unwrap()).enabled(&id, &changed.transport));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -802,11 +820,12 @@ async fn a_server_deleted_elsewhere_is_stopped_by_the_next_request() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
+async fn a_command_line_changed_elsewhere_stays_on_and_keeps_always_allow() {
     let vault = vault();
     let (mcp, events) = manager();
     let files = put_server(&vault, stdio_server("files"));
     set_enabled(&vault, &files, true);
+    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &files, None, true).unwrap();
     let cancel = CancellationToken::new();
     assert_eq!(
         mcp.offer(&vault, &context(&[]), &cancel).await.tools.len(),
@@ -822,8 +841,8 @@ async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
         .await;
     let pid: u32 = pid.parse().unwrap();
 
-    // Another device adds an environment variable: the next request starts nothing, and the
-    // command line this device turned on stops.
+    // Another device adds an environment variable: the server stays on here with its Always
+    // allow, and the next request restarts it with the new command line.
     let mut changed = stdio_server("files");
     let McpTransport::Stdio { env, .. } = &mut changed.transport else {
         unreachable!("a stdio server");
@@ -834,33 +853,18 @@ async fn a_command_line_changed_elsewhere_runs_only_once_turned_on_here() {
         .unwrap()
         .put(Some(&files), Item::McpServer(changed))
         .unwrap();
-    assert!(
-        mcp.offer(&vault, &context(&[]), &cancel)
-            .await
-            .tools
-            .is_empty()
-    );
-    eventually("the stop", || {
-        events.states(&files).last() == Some(&McpServerState::Stopped)
-    })
-    .await;
-    eventually("the server process to exit", || !alive(pid)).await;
-    let starts = |events: &Events| {
-        events
-            .states(&files)
-            .iter()
-            .filter(|s| **s == McpServerState::Starting)
-            .count()
-    };
-    assert_eq!(starts(&events), 1);
-
-    // Turned on here again: the new command line runs.
-    set_enabled(&vault, &files, true);
     assert_eq!(
         mcp.offer(&vault, &context(&[]), &cancel).await.tools.len(),
         5
     );
-    assert_eq!(starts(&events), 2);
+    eventually("the old server process to exit", || !alive(pid)).await;
+    let starts = events
+        .states(&files)
+        .iter()
+        .filter(|s| **s == McpServerState::Starting)
+        .count();
+    assert_eq!(starts, 2);
+    assert!(DeviceState::load(&vault.lock().unwrap()).allows(&files, "pid"));
     mcp.shutdown().await;
 }
 

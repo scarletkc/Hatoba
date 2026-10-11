@@ -4,9 +4,10 @@
 //! Nothing here logs a URL, a header or a body (SEC-04). Error messages describe the failure
 //! without the URL, and HTTP errors carry the provider's own message.
 
+use std::collections::HashSet;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::{Arc, Once};
+use std::sync::{Arc, Mutex, Once};
 
 use futures::future::BoxFuture;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
@@ -73,8 +74,8 @@ fn is_cgnat(v4: Ipv4Addr) -> bool {
     o[0] == 100 && (o[1] & 0xc0) == 64
 }
 
-/// Whether a base URL may use plain `http` with this address (AI-02): loopback, unspecified,
-/// RFC 1918, link-local, CGNAT, unique local IPv6 and IPv4-mapped forms of these.
+/// Whether this is a local network address, which [`is_blocked`] refuses among others: loopback,
+/// unspecified, RFC 1918, link-local, CGNAT, unique local IPv6 and IPv4-mapped forms of these.
 pub(crate) fn is_local_network(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -144,20 +145,28 @@ pub(crate) fn system_lookup() -> Lookup {
     })
 }
 
-/// A resolver that refuses a name when any of its addresses is not allowed, and otherwise
-/// returns exactly the addresses it checked (the connection is pinned to them, so the answer
-/// cannot change between the check and the connection).
+/// A resolver that refuses a name in `targets` when any of its addresses is not allowed, and
+/// otherwise returns exactly the addresses it checked (the connection is pinned to them, so the
+/// answer cannot change between the check and the connection). Any other name it is asked for is
+/// the proxy's, which the client connects to on the user's behalf, so it resolves unchecked.
 ///
 /// `refusal` builds the error, which [`network_error`] recognises in reqwest's error chain.
 pub(crate) struct GuardedResolver {
     pub(crate) allowed: fn(IpAddr) -> bool,
     pub(crate) lookup: Lookup,
     pub(crate) refusal: fn() -> Box<dyn std::error::Error + Send + Sync>,
+    /// The host names the requests go to, in lowercase.
+    pub(crate) targets: Arc<Mutex<HashSet<String>>>,
 }
 
 impl Resolve for GuardedResolver {
     fn resolve(&self, name: Name) -> Resolving {
         let host = name.as_str().to_owned();
+        let guarded = self
+            .targets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&host.to_ascii_lowercase());
         let allowed = self.allowed;
         let refusal = self.refusal;
         let lookup = Arc::clone(&self.lookup);
@@ -166,7 +175,7 @@ impl Resolve for GuardedResolver {
             if addrs.is_empty() {
                 return Err(io::Error::new(io::ErrorKind::NotFound, "no addresses").into());
             }
-            if addrs.iter().any(|ip| !allowed(*ip)) {
+            if guarded && addrs.iter().any(|ip| !allowed(*ip)) {
                 return Err(refusal());
             }
             let addrs: Addrs = Box::new(addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)));
@@ -317,8 +326,7 @@ pub(crate) fn clean_message(message: &str) -> String {
 }
 
 /// Maps a transport-level failure (no usable HTTP response) to [`AiError::Network`], without
-/// the URL. A refusal by `fetch_url`'s address guard becomes [`AiError::Blocked`], and one by the
-/// guard of an `http` base URL becomes [`AiError::InvalidUrl`].
+/// the URL. A refusal by `fetch_url`'s address guard becomes [`AiError::Blocked`].
 pub(crate) fn network_error(err: &reqwest::Error) -> AiError {
     use std::error::Error as _;
 
@@ -327,9 +335,6 @@ pub(crate) fn network_error(err: &reqwest::Error) -> AiError {
     while let Some(cause) = source {
         if cause.downcast_ref::<BlockedAddress>().is_some() {
             return AiError::Blocked(BLOCKED_MESSAGE.into());
-        }
-        if cause.downcast_ref::<NotLocalAddress>().is_some() {
-            return AiError::InvalidUrl(NOT_LOCAL_MESSAGE.into());
         }
         innermost = Some(cause);
         source = cause.source();
@@ -374,29 +379,6 @@ pub(crate) fn refuse_blocked() -> Box<dyn std::error::Error + Send + Sync> {
     Box::new(BlockedAddress)
 }
 
-/// Message for an `http` base URL whose host name resolves to a public address when connecting,
-/// after it resolved to local addresses when the URL was checked (DNS rebinding, or a changed
-/// network). The URL is left out.
-pub(crate) const NOT_LOCAL_MESSAGE: &str = "the host name now resolves to a public address, and \
-     http is allowed only for loopback and private network addresses; use https";
-
-/// The refusal of the resolver that guards `http` base URLs, recognised by [`network_error`].
-#[derive(Debug)]
-pub(crate) struct NotLocalAddress;
-
-impl std::fmt::Display for NotLocalAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(NOT_LOCAL_MESSAGE)
-    }
-}
-
-impl std::error::Error for NotLocalAddress {}
-
-/// Builds the [`NotLocalAddress`] refusal of the resolver that guards `http` base URLs.
-pub(crate) fn refuse_not_local() -> Box<dyn std::error::Error + Send + Sync> {
-    Box::new(NotLocalAddress)
-}
-
 /// `{base}{suffix}` with the base path's trailing slashes removed; the query (e.g. Azure's
 /// `api-version`) is kept and the fragment dropped.
 pub(crate) fn endpoint(base: &url::Url, suffix: &str) -> url::Url {
@@ -416,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn local_network_addresses_for_http_base_urls() {
+    fn local_network_addresses() {
         for local in [
             "127.0.0.1",
             "127.8.9.10",

@@ -170,7 +170,7 @@ export type Activity = "idle" | "running" | "waiting";
 export function slotActivity(slot: Slot | undefined): Activity {
   if (!slot) return "idle";
   const call = slot.turn?.call;
-  if (call && (call.state === "approval" || call.state === "limit")) return "waiting";
+  if (call?.state === "approval") return "waiting";
   return slot.turn || slot.remoteRunning ? "running" : "idle";
 }
 

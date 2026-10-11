@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { Button, IconButton, LinkButton, Segmented, Switch, TextField } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Sheet, SheetHeader, confirm } from "@/components/overlay";
+import { FooterSpacer, Sheet, SheetHeader } from "@/components/overlay";
 import { openExternal } from "@/features/sync/external";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -12,7 +12,6 @@ import { isImeEvent } from "@/lib/ime";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
-  commandPreview,
   hasMcpProblems,
   initialMcpForm,
   looksLikeCommandLine,
@@ -52,8 +51,7 @@ interface TokenLink {
 const rowFieldId = (prefix: string, uid: number, part: "key" | "value"): string => `${prefix}-${part}-${uid}`;
 
 /**
- * Add or edit one MCP server (AI-29). Saved straight to the backend. Before a `stdio` server is saved, a confirmation
- * shows the full command line, because the server is a program that runs on this device with the user's privileges.
+ * Add or edit one MCP server (AI-29). Saved straight to the backend.
  * A template (AI-44) only fills in the form of a new server and adds its token link; saving is the same.
  */
 export function McpServerDialog({
@@ -88,18 +86,9 @@ export function McpServerDialog({
   const [rejected, setRejected] = useState<Rejected>({});
   const [splitFailed, setSplitFailed] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [asking, setAsking] = useState(false);
   const [focusUid, setFocusUid] = useState<number | null>(null);
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
 
   const problems = validateMcpForm(form, otherNames);
-  const busy = saving || asking;
 
   const patch = (p: Partial<McpForm>) => {
     setForm((f) => ({ ...f, ...p }));
@@ -127,7 +116,7 @@ export function McpServerDialog({
   };
 
   const save = async () => {
-    if (busy) return;
+    if (saving) return;
     setSubmitted(true);
     if (hasMcpProblems(problems)) {
       if (problems.name) document.getElementById(ids.name)?.focus();
@@ -139,28 +128,6 @@ export function McpServerDialog({
         if (i >= 0) document.getElementById(rowFieldId(ids.rows, rows[i].uid, problems.secrets[i]?.key ? "key" : "value"))?.focus();
       }
       return;
-    }
-    if (form.kind === "stdio") {
-      const { line, envNames } = commandPreview(form);
-      setAsking(true);
-      const ok = await confirm({
-        title: t("aiSettings.mcp.confirm.title"),
-        body: (
-          <>
-            <p className={s.confirmText}>{t("aiSettings.mcp.confirm.body")}</p>
-            <pre className={cx(s.commandLine, "selectable")}>{line}</pre>
-            <p className={s.confirmText}>
-              {envNames.length ? t("aiSettings.mcp.confirm.env", { names: envNames.join(", ") }) : t("aiSettings.mcp.confirm.noEnv")}
-            </p>
-          </>
-        ),
-        confirmLabel: t("aiSettings.mcp.confirm.submit"),
-        icon: "terminal-window",
-        iconColor: "var(--orange)",
-      });
-      if (!live.current) return;
-      setAsking(false);
-      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -191,21 +158,21 @@ export function McpServerDialog({
   return (
     <Sheet
       width={680}
-      onClose={busy ? undefined : onClose}
+      onClose={saving ? undefined : onClose}
       closeOnBackdrop={false}
       footer={
         <>
           <FooterSpacer />
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={saving}>
             {t("btn.cancel")}
           </Button>
-          <Button variant="primary" type="submit" form={ids.form} busy={saving} disabled={asking}>
+          <Button variant="primary" type="submit" form={ids.form} busy={saving}>
             {t("btn.save")}
           </Button>
         </>
       }
     >
-      <SheetHeader title={server ? t("aiSettings.mcp.dlg.editTitle") : t("aiSettings.mcp.dlg.addTitle")} subtitle={t("aiSettings.mcp.dlg.subtitle")} />
+      <SheetHeader title={server ? t("aiSettings.mcp.dlg.editTitle") : t("aiSettings.mcp.dlg.addTitle")} />
       <form
         id={ids.form}
         className={s.form}
@@ -309,14 +276,13 @@ export function McpServerDialog({
                   placeholder={t("aiSettings.mcp.f.urlPlaceholder")}
                   onChange={(e) => patch({ url: e.target.value })}
                 />
-                <span className={s.hint}>{t("aiSettings.mcp.f.urlHint")}</span>
               </div>
             </FormRow>
           )}
         </Group>
 
         <Section title={form.kind === "stdio" ? t("aiSettings.mcp.f.env") : t("aiSettings.mcp.f.headers")}>
-          <div className={s.hint}>{form.kind === "stdio" ? t("aiSettings.mcp.f.envHint") : t("aiSettings.mcp.f.headersHint")}</div>
+          {form.kind === "http" && <div className={s.hint}>{t("aiSettings.mcp.f.headersHint")}</div>}
           <SecretRows
             // The two transports keep their own rows; switching must not carry one's focus or values into the other.
             key={form.kind}

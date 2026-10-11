@@ -11,7 +11,7 @@ Two boxes tell the assistant what it should know in every request, without repea
 
 Settings → AI → **Custom Instructions**, between Web Search and Skills. Good for preferences that hold everywhere: the language to answer in, the tone, how much to explain, the operating systems, shells and tools you use.
 
-- Up to 4,000 characters, multi-line. Below the box: the character count and an estimate of the tokens it adds to every request (about 4 characters a token). Text over the limit turns red, says "At most 4,000 characters. Shorten the text to save it.", and is not saved.
+- Up to 32 KB of text (UTF-8 bytes), multi-line. Below the box: the size in bytes and an estimate of the tokens it adds to every request (about 4 characters a token). Text over the limit turns red, says how many bytes are allowed, and is not saved.
 - It saves by itself a moment after you stop typing, when the box loses focus, and when you switch to another Settings tab or close Settings. There is no Save button.
 - It syncs to your other devices with the settings.
 - Every request carries it, in every conversation and in Compact.
@@ -20,12 +20,12 @@ Settings → AI → **Custom Instructions**, between Web Search and Skills. Good
 
 The host editor (`references/hosts-and-connecting.md`) has an **AI Notes** section after **Notes**. Good for what the assistant should know about that host: what runs there, important paths and services, what to avoid (for example "never restart postgresql during business hours").
 
-- Up to 2,000 characters, with the same count and token estimate. Text over the limit keeps the host from being saved until it is shortened.
+- Up to 16 KB, with the same size and token estimate. Text over the limit keeps the host from being saved until it is shortened.
 - The notes are part of the host: they save with **Save**, sync with the host, and are copied by **Duplicate** in the host's row menu. The host's **Notes** section is for you and never goes to the assistant; **AI Notes** does.
 - Every request of a conversation on that host carries them: the terminal tab's host, or the conversation's host on the home tab. When a conversation moves to another host, the next requests carry the new host's notes.
 
 ## How the assistant uses them
 
-The assistant follows custom instructions and host notes unless they conflict with Hatoba's own rules. A language, tone or format they ask for replaces the defaults (answering in your language, briefly, in Markdown). They cannot change approvals: in manual mode, commands still wait for your approval, whatever the text says. They are instructions, so write only what you mean the model to do, and leave out passwords, keys and tokens, since the text goes to the model provider.
+The assistant follows custom instructions and host notes, and where they differ from Hatoba's default rules (answering in your language, briefly, in Markdown, and so on), they win. They cannot change approvals: in manual mode, a call that asks still waits for you, whatever the text says. They are instructions, so write only what you mean the model to do, and leave out passwords, keys and tokens, since the text goes to the model provider.
 
 If the assistant seems to ignore them, check that the text was saved (reopen Settings → AI or the host), that the conversation is on the host whose notes you edited, and whether the model is small or the instructions are long or contradict each other.

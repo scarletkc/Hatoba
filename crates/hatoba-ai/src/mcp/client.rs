@@ -31,7 +31,6 @@ use super::stdio::{self, ChildGuard, StderrTail};
 use super::{McpError, McpTool, McpToolResult, McpTransportConfig, ToolAnnotations};
 use crate::error::AiError;
 use crate::net::{clean_message, network_error};
-use crate::provider::client_for;
 
 /// How long a stdio server gets to exit by itself after its stdin closes, and an HTTP session to
 /// be deleted, before shutdown kills or drops it.
@@ -164,11 +163,8 @@ impl McpConnection {
     /// inherits the environment plus `env`, gets no console window on Windows, and its stderr
     /// goes to an in-memory ring of the last [`super::STDERR_LINES`] lines that is never logged.
     ///
-    /// HTTP: `headers` go with every request; the URL must be `https`, or `http` for a loopback
-    /// or private network address (the provider base URL rules, AI-02). `http` is the shared
-    /// client from [`crate::provider::http_client`], except for an `http` URL with a host name:
-    /// that gets its own client, which resolves the name again when connecting and refuses a
-    /// public address (DNS rebinding) and does not use the system proxy.
+    /// HTTP: `headers` go with every request; the URL must be `http` or `https` (the provider base
+    /// URL rules, AI-02). `http` is the shared client from [`crate::provider::http_client`].
     ///
     /// On failure a started child is killed and its stderr is lost; use
     /// [`Self::connect_with_stderr`] to keep it.
@@ -514,16 +510,14 @@ async fn connect_http(
     http: &reqwest::Client,
     timeout: Duration,
 ) -> Result<McpConnection, McpError> {
-    let url = server_url(url).await?;
+    let url = server_url(url)?;
     let token = headers
         .iter()
         .any(|(name, _)| name.trim().eq_ignore_ascii_case("authorization"));
     let headers = header_map(headers)?;
     let config =
         StreamableHttpClientTransportConfig::with_uri(url.as_str()).custom_headers(headers);
-    // An `http` URL with a host name gets a client that keeps to local addresses at connect time.
-    let transport =
-        StreamableHttpClientTransport::with_client(client_for(http, &url).into_owned(), config);
+    let transport = StreamableHttpClientTransport::with_client(http.clone(), config);
     let tools_changed = Arc::new(AtomicBool::new(false));
     let transport = Watched {
         inner: transport,
@@ -544,16 +538,13 @@ async fn connect_http(
 }
 
 /// AI-02's base URL rules, with messages about the server URL.
-async fn server_url(url: &str) -> Result<url::Url, McpError> {
-    crate::provider::validate_base_url(url)
-        .await
-        .map_err(|e| match e {
-            AiError::InvalidUrl(message) => {
-                McpError::InvalidUrl(message.replace("base URL", "server URL"))
-            }
-            AiError::Network(message) => McpError::Connect(message),
-            other => McpError::InvalidUrl(other.to_string()),
-        })
+fn server_url(url: &str) -> Result<url::Url, McpError> {
+    crate::provider::validate_base_url(url).map_err(|e| match e {
+        AiError::InvalidUrl(message) => {
+            McpError::InvalidUrl(message.replace("base URL", "server URL"))
+        }
+        other => McpError::InvalidUrl(other.to_string()),
+    })
 }
 
 /// The configured headers as sensitive header values. Messages name the header, never its value.

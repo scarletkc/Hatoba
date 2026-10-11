@@ -45,20 +45,6 @@
   user-select: text;
 }
 
-.confirmLabel {
-  font-size: var(--text-sm);
-  font-weight: 500;
-}
-
-.confirmField {
-  width: 160px;
-}
-
-.error {
-  font-size: 11.5px;
-  color: var(--red);
-}
-
 /* Printable recovery sheet: invisible on screen, the only thing on the page when printing. */
 .print {
   display: none;

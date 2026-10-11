@@ -1,5 +1,6 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { errorMessage } from "@/app/errors";
+import { useApp } from "@/app/store";
 import { Button, TextField } from "@/components/controls";
 import { Dialog, FooterSpacer, Sheet, SheetHeader, toast } from "@/components/overlay";
 import { NewPasswordFields, useNewPassword } from "@/features/onboarding/PasswordStrength";
@@ -82,9 +83,10 @@ export function VerifyPasswordDialog({
   );
 }
 
-/** VAULT-05: change the master password. */
+/** VAULT-05: change the master password. With sync on, it says that the other devices sign in again. */
 export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
+  const syncOn = useApp((st) => st.sync?.kind !== undefined && st.sync.kind !== "none");
   const pw = useNewPassword();
   const [current, setCurrent] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,7 +129,7 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <SheetHeader title={t("settings.change.title")} subtitle={t("settings.change.subtitle")} />
+      <SheetHeader title={t("settings.change.title")} subtitle={syncOn ? t("sync.password.body") : undefined} />
       <form className={s.form} onSubmit={(e) => void submit(e)}>
         <div className={s.field}>
           <label className={s.label} htmlFor="current-password">

@@ -45,7 +45,6 @@ export function CreatePassword({
       steps={steps}
       current={2}
       title={t("vault.create.title")}
-      body={t("vault.create.body")}
       onSubmit={() => void submit()}
       footer={
         <>

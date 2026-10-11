@@ -1,29 +1,33 @@
 import { describe, expect, it } from "vitest";
-import type { McpToolInfo } from "@/ipc/types";
+import type { AiAllowance, McpToolInfo } from "@/ipc/types";
 import {
   allowanceOf,
+  allowanceScope,
+  callAllowed,
   callFileChange,
   callSummary,
   exitStatusOf,
-  grantKey,
+  grantKeys,
   isFileTool,
   keySequence,
   mcpOffResult,
   mustAsk,
   needsApproval,
   needsSession,
-  offersAllowHere,
   parseArgs,
   parseReadTerminal,
   parseSendInput,
   proxyArguments,
   proxyCall,
   runsInFrontend,
+  savedFor,
   shownCall,
   shownText,
   splitMcpName,
   toolKind,
   toolLabel,
+  urlDomain,
+  type HostRef,
 } from "./tools";
 
 describe("the approval card's view of an input (AI-17)", () => {
@@ -84,14 +88,13 @@ describe("tool kinds", () => {
 describe("permission modes (§13.5)", () => {
   it("asks in manual mode for everything but reading and searching", () => {
     expect(needsApproval("read_terminal", "manual")).toBe(false);
+    expect(needsApproval("read_file", "manual")).toBe(false);
     expect(needsApproval("web_search", "manual")).toBe(false);
     expect(needsApproval("read_skill", "manual")).toBe(false);
     expect(needsApproval("run_command", "manual")).toBe(true);
     expect(needsApproval("send_input", "manual")).toBe(true);
     expect(needsApproval("fetch_url", "manual")).toBe(true);
     expect(needsApproval("mcp", "manual")).toBe(true);
-    // read_file asks too: it can send ~/.ssh or .env to the provider.
-    expect(needsApproval("read_file", "manual")).toBe(true);
     expect(needsApproval("edit_file", "manual")).toBe(true);
     expect(needsApproval("write_file", "manual")).toBe(true);
   });
@@ -188,53 +191,55 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
   });
 
   it("asks for MCP tools in manual mode unless the tool is always allowed on this device", () => {
-    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(false, false) })).toBe(true);
-    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(true, false) })).toBe(false);
-    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: info(true, true) })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowed: false, mcp: info(false, false) })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowed: false, mcp: info(true, false) })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowed: false, mcp: info(true, true) })).toBe(false);
   });
 
   it("asks for MCP tools in bypass mode only when the server is set to Always ask", () => {
-    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: info(false, false) })).toBe(false);
-    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: info(true, true) })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: false, mcp: info(false, false) })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: false, mcp: info(true, true) })).toBe(true);
   });
 
   it("asks in both modes for an MCP call whose tool cannot be named", () => {
-    expect(mustAsk({ kind: "mcp", mode: "manual", allowedHere: false, mcp: null })).toBe(true);
-    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: false, mcp: null })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "manual", allowed: false, mcp: null })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: false, mcp: null })).toBe(true);
   });
 
   it("remembers Allow for this conversation per MCP server and tool, not per called name", () => {
-    expect(grantKey("run_command", "run_command", null)).toBe("run_command");
-    expect(grantKey("mcp", "mcp__github__list_issues", info(false, false))).toBe("mcp:s1:list_issues");
+    const scope = allowanceScope("mcp", {}, info(false, false));
+    expect(scope && grantKeys(scope)).toEqual(["mcp:s1:list_issues"]);
     // The same name can mean another server in a later request (cleaned names collide, the tools menu
     // changes the suffixes), and then it is another grant.
     const other = { ...info(false, false), server_id: "s2" };
-    expect(grantKey("mcp", "mcp__github__list_issues", other)).toBe("mcp:s2:list_issues");
-    expect(grantKey("mcp", "mcp__github__list_issues", null)).toBeNull();
+    expect(callAllowed("mcp", {}, other, ["mcp:s1:list_issues"], [], null)).toBe(false);
+    expect(callAllowed("mcp", {}, info(false, false), ["mcp:s1:list_issues"], [], null)).toBe(true);
+    expect(allowanceScope("mcp", {}, null)).toBeNull();
+  });
+
+  it("allows a call through call_mcp_tool as the tool it names (AI-45)", () => {
+    const kind = toolKind("call_mcp_tool");
+    const args = parseArgs('{"tool":"mcp__github__list_issues","arguments":{}}') ?? {};
+    const scope = allowanceScope(kind, args, info(false, false));
+    expect(scope && grantKeys(scope)).toEqual(["mcp:s1:list_issues"]);
+    expect(scope && savedFor(scope, { host_id: "h1", target: null })).toEqual([]);
+    expect(callAllowed(kind, args, info(false, false), ["mcp:s1:list_issues"], [], null)).toBe(true);
+    expect(mustAsk({ kind, mode: "manual", allowed: false, mcp: info(true, false) })).toBe(false);
   });
 
   it("tells the model when a server was switched off during the turn (AI-30)", () => {
     expect(mcpOffResult("github")).toBe('The MCP server "github" was switched off for this conversation, so the tool did not run.');
   });
 
-  it("runs any tool allowed for this conversation without asking", () => {
-    expect(mustAsk({ kind: "run_command", mode: "manual", allowedHere: true })).toBe(false);
-    expect(mustAsk({ kind: "mcp", mode: "bypass", allowedHere: true, mcp: info(false, true) })).toBe(false);
-    expect(mustAsk({ kind: "run_command", mode: "manual", allowedHere: false })).toBe(true);
-    expect(mustAsk({ kind: "web_search", mode: "manual", allowedHere: false })).toBe(false);
-    // AI-19 per tool: allowing edit_file leaves write_file asking.
-    expect(grantKey("edit_file", "edit_file", null)).toBe("edit_file");
-    expect(grantKey("write_file", "write_file", null)).not.toBe(grantKey("edit_file", "edit_file", null));
+  it("runs any call an approval covers without asking", () => {
+    expect(mustAsk({ kind: "run_command", mode: "manual", allowed: true })).toBe(false);
+    expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: true, mcp: info(false, true) })).toBe(false);
+    expect(mustAsk({ kind: "run_command", mode: "manual", allowed: false })).toBe(true);
+    expect(mustAsk({ kind: "web_search", mode: "manual", allowed: false })).toBe(false);
   });
 
   it("allows nothing ahead from a file change's card that shows why it cannot apply (AI-39, AI-40)", () => {
     const refusal = "/etc/motd has not been read in this conversation, so edit_file did not change it.";
-    // The card: Run and Reject stay, Allow for this conversation goes.
-    expect(offersAllowHere("edit_file", null, undefined)).toBe(true);
-    expect(offersAllowHere("edit_file", null, refusal)).toBe(false);
-    expect(offersAllowHere("write_file", null, refusal)).toBe(false);
-    expect(offersAllowHere("mcp", info(false, false), undefined)).toBe(true);
-    expect(offersAllowHere("mcp", null, undefined)).toBe(false);
     // The runner: a decision with a refusal stores no allowance, whatever it asked for.
     expect(allowanceOf({ allow: "conversation" })).toBe("conversation");
     expect(allowanceOf({ allow: "conversation", refusal })).toBeUndefined();
@@ -247,6 +252,86 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     expect(toolLabel(t, "run_command")).toBe("ai.tool.run_command");
     expect(toolLabel(t, "mcp__github__list_issues")).toBe('ai.tool.mcp:{"server":"github","tool":"list_issues"}');
     expect(toolLabel(t, "rm_rf")).toBe("rm_rf");
+  });
+});
+
+describe("approvals of commands, pages and tools (AI-19)", () => {
+  const web: HostRef = { host_id: "h-web", target: null };
+  const quick: HostRef = { host_id: null, target: "root@10.0.0.5:22" };
+  const saved: AiAllowance[] = [
+    { kind: "command", host_id: "h-web", target: null, value: "systemctl restart" },
+    { kind: "command", host_id: null, target: "root@10.0.0.5:22", value: "apt install" },
+    { kind: "tool", host_id: "h-web", target: null, value: "edit_file" },
+    { kind: "domain", host_id: null, target: null, value: "docs.example.com" },
+  ];
+  const cmd = (command: string) => ({ command });
+
+  it("runs commands that only read, and those a prefix of the tab's host or the conversation allows", () => {
+    expect(callAllowed("run_command", cmd("ls -la && git status"), null, [], [], null)).toBe(true);
+    expect(callAllowed("run_command", cmd("systemctl restart nginx"), null, [], saved, web)).toBe(true);
+    expect(callAllowed("run_command", cmd("systemctl restart nginx"), null, [], saved, quick)).toBe(false);
+    expect(callAllowed("run_command", cmd("apt install -y jq"), null, [], saved, quick)).toBe(true);
+    expect(callAllowed("run_command", cmd("systemctl stop nginx"), null, [], saved, web)).toBe(false);
+    expect(callAllowed("run_command", cmd("git pull"), null, ["run_command:git pull"], [], null)).toBe(true);
+    // A tool allowed for the conversation does not allow commands.
+    expect(callAllowed("run_command", cmd("rm -rf /tmp/x"), null, ["run_command", "edit_file"], [], web)).toBe(false);
+  });
+
+  it("allows a page by its exact host name", () => {
+    expect(callAllowed("fetch_url", { url: "https://docs.example.com/a" }, null, [], saved, null)).toBe(true);
+    expect(callAllowed("fetch_url", { url: "https://evil.docs.example.com.attacker.net/" }, null, [], saved, null)).toBe(false);
+    expect(callAllowed("fetch_url", { url: "https://example.com/" }, null, [], saved, null)).toBe(false);
+    expect(callAllowed("fetch_url", { url: "https://example.com/x" }, null, ["fetch_url:example.com"], [], null)).toBe(true);
+    expect(callAllowed("fetch_url", { url: "not a url" }, null, ["fetch_url"], [], null)).toBe(false);
+  });
+
+  it("allows edits, writes and input per tool and host", () => {
+    expect(callAllowed("edit_file", {}, null, [], saved, web)).toBe(true);
+    expect(callAllowed("write_file", {}, null, [], saved, web)).toBe(false);
+    expect(callAllowed("edit_file", {}, null, [], saved, quick)).toBe(false);
+    expect(callAllowed("send_input", {}, null, ["send_input"], [], quick)).toBe(true);
+  });
+
+  it("names what a card's approvals cover", () => {
+    expect(allowanceScope("run_command", cmd("cd /srv && git pull && systemctl restart app"), null)).toEqual({
+      kind: "command",
+      prefixes: ["git pull", "systemctl restart"],
+      savable: true,
+    });
+    // Interpreters, deleting and network transfers are allowed for the conversation only, also when
+    // named with a directory or a version.
+    for (const line of [
+      "rm -rf build",
+      "/bin/rm -rf build",
+      "python3 deploy.py",
+      "/usr/bin/python3 deploy.py",
+      "python3.12 deploy.py",
+      "curl -X POST https://example.com",
+      "/usr/bin/curl -X POST https://example.com",
+      "mkfs.ext4 /dev/sdb1",
+      "/sbin/mkfs.ext4 /dev/sdb1",
+      "git pull && rm x",
+    ])
+      expect(allowanceScope("run_command", cmd(line), null), line).toMatchObject({ kind: "command", savable: false });
+    expect(allowanceScope("run_command", cmd("/usr/bin/git pull"), null)).toMatchObject({ kind: "command", savable: true });
+    expect(allowanceScope("run_command", cmd("sudo reboot"), null)).toBeNull();
+    expect(allowanceScope("fetch_url", { url: "https://Docs.Example.com/x?y" }, null)).toEqual({ kind: "domain", domain: "docs.example.com" });
+    expect(allowanceScope("fetch_url", { url: "ftp://x" }, null)).toBeNull();
+    expect(allowanceScope("write_file", {}, null)).toEqual({ kind: "tool", tool: "write_file" });
+    expect(allowanceScope("read_file", {}, null)).toBeNull();
+    expect(grantKeys({ kind: "command", prefixes: ["git pull", "make"], savable: true })).toEqual(["run_command:git pull", "run_command:make"]);
+    expect(grantKeys({ kind: "domain", domain: "a.com" })).toEqual(["fetch_url:a.com"]);
+  });
+
+  it("saves commands and tools for the host, and domains for every tab", () => {
+    expect(savedFor({ kind: "command", prefixes: ["git pull"], savable: true }, quick)).toEqual([
+      { kind: "command", host_id: null, target: "root@10.0.0.5:22", value: "git pull" },
+    ]);
+    expect(savedFor({ kind: "command", prefixes: ["rm"], savable: false }, quick)).toEqual([]);
+    expect(savedFor({ kind: "tool", tool: "send_input" }, web)).toEqual([{ kind: "tool", host_id: "h-web", target: null, value: "send_input" }]);
+    expect(savedFor({ kind: "domain", domain: "a.com" }, web)).toEqual([{ kind: "domain", host_id: null, target: null, value: "a.com" }]);
+    expect(savedFor({ kind: "mcp", key: "mcp:s1:x" }, web)).toEqual([]);
+    expect(urlDomain(" http://[::1]:8080/x ")).toBe("[::1]");
   });
 });
 

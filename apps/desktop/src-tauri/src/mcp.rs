@@ -4,9 +4,9 @@
 //! - [`DeviceState`]: whether a server is enabled on this device and what it always allows
 //!   (AI-29, AI-31), stored in the vault's device-local meta, readable while locked. A server
 //!   with no entry is enabled iff it uses `http`, so a `stdio` server that arrives from another
-//!   device stays off until the user turns it on here. What this device chose for a `stdio`
-//!   server holds for the command line it was chosen for: one changed on another device is off
-//!   here again, with no Always allow, until the user turns it on here.
+//!   device stays off until the user turns it on here. What this device chose for a server while
+//!   it used `http` does not hold once another device makes it a `stdio` server; a changed
+//!   command line of a `stdio` server keeps the choice.
 //! - [`McpManager`]: one entry per server started since unlock. A server starts when a request
 //!   needs its tools ([`McpManager::offer`]) or when the user starts it, lists its tools once,
 //!   and lists them again before the next request after `tools/list_changed`. Its state
@@ -95,25 +95,14 @@ pub struct DeviceServer {
     pub always_allow: bool,
     /// These tools (the server's own names) run without asking in manual mode.
     pub always_allow_tools: Vec<String>,
-    /// [`stdio_fingerprint`] of the command line this entry was chosen for; `None` for `http`.
-    pub stdio: Option<String>,
-}
-
-/// What identifies a `stdio` server's command line: a hash of the command, the arguments and
-/// the environment names. Environment values are secrets and the device state is not encrypted,
-/// so they are left out. `None` for `http`.
-pub fn stdio_fingerprint(transport: &McpTransport) -> Option<String> {
-    let McpTransport::Stdio { command, args, env } = transport else {
-        return None;
-    };
-    let names: Vec<&String> = env.keys().collect();
-    let encoded = serde_json::to_vec(&(command, args, names)).unwrap_or_default();
-    Some(hatoba_core::crypto::sha256_hex(&encoded))
+    /// This entry was chosen while the server used `stdio`.
+    pub stdio: bool,
 }
 
 impl DeviceState {
     /// The stored state; an unreadable one counts as empty. While unlocked, the entry of a
-    /// `stdio` server whose command line is not the one it was chosen for counts as absent.
+    /// `stdio` server that was chosen while the server used `http` counts as absent, so the
+    /// server is off here, with no Always allow, until the user turns it on here (AI-29).
     pub fn load(v: &Vault) -> Self {
         let mut state = match v.mcp_device_state() {
             Ok(Some(json)) => serde_json::from_str(&json).unwrap_or_else(|_| {
@@ -127,13 +116,8 @@ impl DeviceState {
             }
         };
         for (id, server) in v.mcp_servers() {
-            let Some(fingerprint) = stdio_fingerprint(&server.transport) else {
-                continue;
-            };
-            if state
-                .servers
-                .get(&id)
-                .is_some_and(|s| s.stdio.as_ref() != Some(&fingerprint))
+            if matches!(server.transport, McpTransport::Stdio { .. })
+                && state.servers.get(&id).is_some_and(|s| !s.stdio)
             {
                 state.servers.remove(&id);
             }
@@ -155,12 +139,12 @@ impl DeviceState {
     /// The entry of a server, to change: what it holds is chosen for `transport`.
     pub fn server_mut(&mut self, id: &str, transport: &McpTransport) -> &mut DeviceServer {
         let here = self.servers.entry(id.to_owned()).or_default();
-        here.stdio = stdio_fingerprint(transport);
+        here.stdio = matches!(transport, McpTransport::Stdio { .. });
         here
     }
 
-    /// Keeps the entry of a server that is edited on this device, where the form showed the new
-    /// command line (AI-29), chosen for its new transport.
+    /// Keeps the entry of a server that is edited on this device, chosen for its new transport:
+    /// the user typed it here (AI-29).
     pub fn edited(&mut self, id: &str, transport: &McpTransport) {
         if self.servers.contains_key(id) {
             self.server_mut(id, transport);
@@ -762,8 +746,8 @@ impl McpManager {
         }
     }
 
-    /// Stops the servers that run although they are off on this device: a `stdio` server whose
-    /// command line changed on another device (the switch already stops one turned off here).
+    /// Stops the servers that run although they are off on this device: an `http` server that
+    /// became a `stdio` server on another device (the switch already stops one turned off here).
     fn stop_off(&self, vault: &SharedVault, off: &[String]) {
         for id in off {
             let Some(server) = self.existing(id) else {
@@ -1096,7 +1080,10 @@ impl McpManager {
                 } else {
                     ToolStatus::Ok
                 };
-                (status, tools::truncate_result(&result.content))
+                (
+                    status,
+                    tools::truncate_result_to(&result.content, tools::MAX_MCP_RESULT_CHARS),
+                )
             }
             Err(McpError::Cancelled) => (ToolStatus::Cancelled, String::new()),
             Err(McpError::Closed) => {

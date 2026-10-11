@@ -170,10 +170,7 @@ export function SkillDialog({
         </>
       }
     >
-      <SheetHeader
-        title={id ? t("aiSettings.skills.dlg.editTitle") : t("aiSettings.skills.dlg.newTitle")}
-        subtitle={t("aiSettings.skills.dlg.subtitle")}
-      />
+      <SheetHeader title={id ? t("aiSettings.skills.dlg.editTitle") : t("aiSettings.skills.dlg.newTitle")} />
 
       {loading && (
         <div className={s.loading} role="status">

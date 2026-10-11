@@ -195,6 +195,9 @@ export function createTauriApi(): HatobaApi {
       return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
     },
     ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
+    ai_allowances_list: () => call("ai_allowances_list"),
+    ai_allowance_add: (allowance) => call("ai_allowance_add", { allowance }),
+    ai_allowance_remove: (allowance) => call("ai_allowance_remove", { allowance }),
 
     skills_list: () => call("skills_list"),
     skill_get: (id) => call("skill_get", { id }),
@@ -203,7 +206,7 @@ export function createTauriApi(): HatobaApi {
     skill_delete: (id) => call("skill_delete", { id }),
     skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),
     skill_import_preview: (path) => call("skill_import_preview", { path }),
-    skill_import: (path, token, replaceId, rename) => call("skill_import", { path, token, replaceId, rename }),
+    skill_import: (path, replaceId, rename) => call("skill_import", { path, replaceId, rename }),
     skill_export: (id, path) => call("skill_export", { id, path }),
 
     mcp_servers_list: () => call("mcp_servers_list"),

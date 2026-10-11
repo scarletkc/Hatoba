@@ -12,8 +12,8 @@ use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS,
-    SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
+    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    MAX_ITEM_PLAINTEXT_BYTES, SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
@@ -195,14 +195,12 @@ fn api_key(input: Option<&str>, saved: Option<&Zeroizing<String>>) -> Zeroizing<
 }
 
 /// AI-02: checks a base URL and returns it as entered, trimmed.
-async fn checked_base_url(base_url: &str) -> AppResult<String> {
+fn checked_base_url(base_url: &str) -> AppResult<String> {
     let base_url = base_url.trim();
     if base_url.is_empty() {
         return Err(AppError::invalid("base_url", "the base URL is required"));
     }
-    validate_base_url(base_url)
-        .await
-        .map_err(|e| AppError::invalid("base_url", e.to_string()))?;
+    validate_base_url(base_url).map_err(|e| AppError::invalid("base_url", e.to_string()))?;
     Ok(base_url.to_owned())
 }
 
@@ -334,7 +332,7 @@ pub async fn ai_provider_save(
     state: State<'_, AppState>,
     input: AiProviderInput,
 ) -> AppResult<AiProviderView> {
-    let base_url = checked_base_url(&input.base_url).await?;
+    let base_url = checked_base_url(&input.base_url)?;
     let view = state.with_unlocked(|v| save_provider(v, &input, base_url))?;
     sync::local_change(&app);
     Ok(view)
@@ -501,9 +499,9 @@ pub async fn search_provider_save(
     input: SearchProviderInput,
 ) -> AppResult<SearchProviderView> {
     let base_url = match input.kind {
-        SearchKind::Searxng => {
-            Some(checked_base_url(input.base_url.as_deref().unwrap_or_default()).await?)
-        }
+        SearchKind::Searxng => Some(checked_base_url(
+            input.base_url.as_deref().unwrap_or_default(),
+        )?),
         SearchKind::Brave | SearchKind::Tavily => None,
     };
     let view = state.with_unlocked(|v| save_search_provider(v, &input, base_url))?;
@@ -590,10 +588,10 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         }
         other => other.clone(),
     };
-    if input.custom_instructions.chars().count() > MAX_CUSTOM_INSTRUCTIONS_CHARS {
+    if input.custom_instructions.len() > MAX_CUSTOM_INSTRUCTIONS_BYTES {
         return Err(AppError::invalid(
             "custom_instructions",
-            "custom instructions are limited to 4,000 characters",
+            "custom instructions are limited to 32 KB",
         ));
     }
     let ai = AiSettings {
@@ -607,7 +605,16 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         return Ok(());
     }
     settings.ai = ai;
-    v.put(Some(SETTINGS_ID), Item::Settings(settings))?;
+    let item = Item::Settings(settings);
+    // With sync on, the Worker and D1 would refuse a larger settings item on every sync (§6.2);
+    // only instructions whose JSON is far longer than their text (many quotes) get there.
+    if v.sync_config()?.is_some() && item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
+        return Err(AppError::invalid(
+            "custom_instructions",
+            "the custom instructions are too large to sync",
+        ));
+    }
+    v.put(Some(SETTINGS_ID), item)?;
     Ok(())
 }
 
@@ -1255,7 +1262,7 @@ mod tests {
         save_ai_settings(&mut v, &default).unwrap();
         assert_eq!(v.settings().ai.default_effort, None);
 
-        // AI-36: custom instructions are stored with them, up to 4,000 characters.
+        // AI-36: custom instructions are stored with them.
         let instructions = AiSettingsView {
             custom_instructions: "Answer in English.\n<host> means the tab's host.".into(),
             ..ai_settings_view(&v.settings().ai)
@@ -1266,18 +1273,36 @@ mod tests {
             "Answer in English.\n<host> means the tab's host."
         );
         assert_eq!(ai_settings_view(&v.settings().ai), instructions);
+        // Up to 32 KB of UTF-8.
+        let text = format!("{}xy", "日".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES / 3));
+        assert_eq!(text.len(), MAX_CUSTOM_INSTRUCTIONS_BYTES);
         let longest = AiSettingsView {
-            custom_instructions: "日".repeat(4_000),
+            custom_instructions: text.clone(),
             ..ai_settings_view(&v.settings().ai)
         };
         save_ai_settings(&mut v, &longest).unwrap();
-        let too_long = AiSettingsView {
-            custom_instructions: "日".repeat(4_001),
+        // Within the limit, but its JSON does not fit a synced item: refused only with sync on.
+        let quotes = AiSettingsView {
+            custom_instructions: "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES),
             ..ai_settings_view(&v.settings().ai)
         };
-        let err = save_ai_settings(&mut v, &too_long).unwrap_err();
-        assert_eq!(err.field.as_deref(), Some("custom_instructions"));
-        assert_eq!(v.settings().ai.custom_instructions, "日".repeat(4_000));
+        save_ai_settings(&mut v, &quotes).unwrap();
+        save_ai_settings(&mut v, &longest).unwrap();
+        let config = hatoba_core::sync::SyncConfig::Worker {
+            url: "https://sync.example.workers.dev".into(),
+            deployment: None,
+        };
+        v.set_sync_config(Some(&config)).unwrap();
+        for refused in [format!("{text}z"), quotes.custom_instructions] {
+            let too_long = AiSettingsView {
+                custom_instructions: refused,
+                ..ai_settings_view(&v.settings().ai)
+            };
+            let err = save_ai_settings(&mut v, &too_long).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("custom_instructions"));
+            assert_eq!(v.settings().ai.custom_instructions, text);
+        }
+        v.set_sync_config(None).unwrap();
 
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);

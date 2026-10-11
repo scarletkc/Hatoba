@@ -6,7 +6,7 @@ import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, T
 import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
 import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { charCount, HOST_NOTES_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
@@ -140,7 +140,6 @@ export function HostEditPage({
 
   const validate = (): Errors => {
     const e: Errors = {};
-    if (!form.name.trim()) e.name = t("hosts.err.nameRequired");
     if (!form.address.trim()) e.address = t("hosts.err.addressRequired");
     const port = Number(form.port);
     if (!/^\d+$/.test(form.port.trim()) || port < 1 || port > 65535) e.port = t("hosts.err.portInvalid");
@@ -152,7 +151,7 @@ export function HostEditPage({
     // Ignored behind a jump host, so it only matters without one.
     if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
     // The field says so itself; this only keeps the form from saving.
-    if (charCount(form.aiNotes) > HOST_NOTES_MAX_CHARS) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_CHARS.toLocaleString(t.locale) });
+    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
     return e;
   };
 
@@ -366,7 +365,7 @@ export function HostEditPage({
                   autoFocus
                   value={form.name}
                   invalid={!!errors.name}
-                  placeholder={t("hosts.f.namePlaceholder")}
+                  placeholder={form.address.trim() || t("hosts.f.namePlaceholder")}
                   onChange={(e) => patch({ name: e.target.value }, "name")}
                 />
               </FormRow>
@@ -488,11 +487,6 @@ export function HostEditPage({
                   <span className={s.hint}>{t("hosts.f.askHint")}</span>
                 </FormRow>
               )}
-              {form.authKind === "agent" && (
-                <FormRow label="">
-                  <span className={s.hint}>{t("hosts.f.agentHint")}</span>
-                </FormRow>
-              )}
             </Group>
           </Section>
 
@@ -549,7 +543,7 @@ export function HostEditPage({
                     </div>
                     <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
                   </div>
-                  <span className={s.jumpHint}>{form.jumpHostId ? t("hosts.f.proxyJumpHint") : t("hosts.f.proxyHint")}</span>
+                  {form.jumpHostId && <span className={s.jumpHint}>{t("hosts.f.proxyJumpHint")}</span>}
                 </div>
               </FormRow>
             </Group>
@@ -582,13 +576,12 @@ export function HostEditPage({
                 id="host-aiNotes"
                 label={t("hosts.f.aiNotes")}
                 value={form.aiNotes}
-                max={HOST_NOTES_MAX_CHARS}
+                max={HOST_NOTES_MAX_BYTES}
                 rows={4}
                 placeholder={t("hosts.f.aiNotesPlaceholder")}
                 error={errors.aiNotes}
                 onChange={(aiNotes) => patch({ aiNotes }, "aiNotes")}
               />
-              <span className={s.aiPrivacy}>{t("hosts.f.aiNotesPrivacy")}</span>
             </div>
           </Section>
 

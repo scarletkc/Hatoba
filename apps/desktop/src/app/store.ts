@@ -33,13 +33,16 @@ export const DEFAULT_PREFS: LocalPrefs = {
   appearance: "system",
   density: "regular",
   host_probe: true,
-  auto_update_check: false,
+  auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
-  ai_tool_call_limit: 25,
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
+  auto_lock_minutes: 15,
+  lock_on_sleep: true,
+  lock_disconnects_sessions: false,
+  clipboard_clear_secs: 90,
 };
 
 interface AppState {
@@ -71,7 +74,7 @@ interface AppState {
 
 export const useApp = create<AppState>((set, get) => ({
   phase: "boot",
-  info: { version: "0.0.0", platform: "web", mica: false },
+  info: { version: "0.0.0", platform: "web", mica: false, local_user: "" },
   floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,

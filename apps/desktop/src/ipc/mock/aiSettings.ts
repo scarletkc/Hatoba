@@ -1,6 +1,7 @@
-import { INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import type { HatobaApi } from "../api";
 import type {
+  AiAllowance,
   AiEffort,
   AiModel,
   AiProviderInput,
@@ -31,6 +32,9 @@ type AiSettingsApi = Pick<
   | "search_provider_test"
   | "ai_settings_get"
   | "ai_settings_save"
+  | "ai_allowances_list"
+  | "ai_allowance_add"
+  | "ai_allowance_remove"
 >;
 
 /**
@@ -45,7 +49,7 @@ type AiSettingsApi = Pick<
  * model selector shows two groups. Inside the editor a few inputs trigger the other states:
  *   a base URL on a `.invalid` host        Test Connection fails with a network error
  *   a first model ID containing `nope`      Test Connection fails with an unknown model (404)
- *   an `http://` URL outside localhost      Test Connection reports an invalid URL, and saving is rejected
+ *   a URL with a user name or password      Test Connection reports an invalid URL, and saving is rejected
  *   a non-local provider with no API key    Test Connection fails with an authentication error
  *   a base URL containing `openrouter`      Fetch Models returns 150 models, to try the picker's filter
  * Fetch Models takes half a second and Test Connection 700 ms, so the busy states can be seen.
@@ -96,6 +100,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
   };
 
+  let allowances: AiAllowance[] = [];
+
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const copyModel = (m: AiModel): AiModel => ({ ...m, efforts: m.efforts ? [...m.efforts] : null });
@@ -108,7 +114,7 @@ export function createAiSettingsMock(): AiSettingsApi {
       return null;
     }
   };
-  /** Loopback and private network addresses, the only ones that may use plain HTTP (AI-02). */
+  /** Loopback and private network addresses: local model servers, which need no API key. */
   const isLocalHost = (host: string) =>
     host === "localhost" ||
     host === "[::1]" ||
@@ -116,10 +122,12 @@ export function createAiSettingsMock(): AiSettingsApi {
     /^10\./.test(host) ||
     /^192\.168\./.test(host) ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  /** Like Rust (AI-02): `http` or `https` with a host, and no user name or password. */
   const urlProblem = (url: string): "invalid" | null => {
     const host = hostOf(url);
     if (!host || !/^https?:\/\//i.test(url.trim())) return "invalid";
-    return /^http:/i.test(url.trim()) && !isLocalHost(host) ? "invalid" : null;
+    const parsed = new URL(url.trim());
+    return parsed.username || parsed.password ? "invalid" : null;
   };
 
   const savedKey = (input: { id: string | null; api_key: string | null }, list: { id: string; has_api_key: boolean }[]) =>
@@ -178,7 +186,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_providers_list: async () => providers.map(clone),
     ai_provider_save: async (input) => {
       if (urlProblem(input.base_url)) {
-        const err: AppError = { code: "invalid_input", detail: "the base URL must use https unless it is a local address", field: "base_url" };
+        const err: AppError = { code: "invalid_input", detail: "the base URL must not contain a user name or password", field: "base_url" };
         throw err;
       }
       await wait(150);
@@ -255,9 +263,29 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_settings_get: async () => structuredClone(settings),
     ai_settings_save: async (next) => {
       // Like Rust (AI-36).
-      if ([...next.custom_instructions].length > INSTRUCTIONS_MAX_CHARS)
-        throw { code: "invalid_input", detail: "custom instructions are limited to 4,000 characters", field: "custom_instructions" } satisfies AppError;
+      if (byteCount(next.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
+        throw { code: "invalid_input", detail: "custom instructions are limited to 32 KB", field: "custom_instructions" } satisfies AppError;
       settings = structuredClone(next);
+    },
+    // AI-19: the approvals saved on this device, kept until the page reloads.
+    ai_allowances_list: async () => allowances.map((a) => ({ ...a })),
+    ai_allowance_add: async (allowance) => {
+      const a = normalizeAllowance(allowance);
+      if (!allowances.some((x) => sameAllowance(x, a))) allowances = [...allowances, a];
+      return allowances.map((x) => ({ ...x }));
+    },
+    ai_allowance_remove: async (allowance) => {
+      const a = normalizeAllowance(allowance);
+      allowances = allowances.filter((x) => !sameAllowance(x, a));
+      return allowances.map((x) => ({ ...x }));
     },
   };
 }
+
+/** Like Rust: trimmed, and a domain in lowercase. */
+function normalizeAllowance(a: AiAllowance): AiAllowance {
+  const value = a.value.trim();
+  return { kind: a.kind, host_id: a.host_id?.trim() || null, target: a.target?.trim() || null, value: a.kind === "domain" ? value.toLowerCase() : value };
+}
+
+const sameAllowance = (a: AiAllowance, b: AiAllowance) => a.kind === b.kind && a.host_id === b.host_id && a.target === b.target && a.value === b.value;

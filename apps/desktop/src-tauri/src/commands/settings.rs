@@ -19,6 +19,8 @@ use crate::{lock, sync};
 const LEGACY_RIGHT_CLICK: &str = "right_click";
 const LEGACY_CONFIRM_PASTE: &str = "confirm_multiline_paste";
 
+const MAX_AUTO_LOCK_MINUTES: u32 = 24 * 60;
+
 pub fn settings_view(s: &Settings) -> SettingsView {
     SettingsView {
         terminal: TerminalSettings {
@@ -41,8 +43,6 @@ pub fn settings_view(s: &Settings) -> SettingsView {
             },
             confirm_multiline_paste: s.terminal.confirm_multiline_paste(),
         },
-        auto_lock_minutes: s.auto_lock_minutes,
-        lock_disconnects_sessions: s.lock_disconnects_sessions,
     }
 }
 
@@ -101,15 +101,12 @@ pub fn settings_save(
         terminal.set_confirm_multiline_paste(t.confirm_multiline_paste);
         let model = Settings {
             terminal,
-            auto_lock_minutes: settings.auto_lock_minutes.min(24 * 60),
-            lock_disconnects_sessions: settings.lock_disconnects_sessions,
-            ai: v.settings().ai,
             updated_at: 0,
+            ..v.settings()
         };
         v.put(Some(SETTINGS_ID), Item::Settings(model))?;
         Ok(())
     })?;
-    lock::refresh_policy(&state);
     sync::local_change(&app);
     Ok(())
 }
@@ -126,10 +123,14 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn prefs_save(state: State<'_, AppState>, prefs: LocalPrefs) -> AppResult<()> {
-    let mut vault = state.vault();
-    let json = merge_prefs(vault.local_prefs()?.as_deref(), &prefs)?;
-    vault.set_local_prefs(&json)?;
+pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResult<()> {
+    prefs.auto_lock_minutes = prefs.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
+    {
+        let mut vault = state.vault();
+        let json = merge_prefs(vault.local_prefs()?.as_deref(), &prefs)?;
+        vault.set_local_prefs(&json)?;
+    }
+    lock::refresh_policy(&state);
     Ok(())
 }
 
@@ -300,7 +301,7 @@ mod tests {
         assert!(prefs.get("confirm_multiline_paste").is_none());
         let kept = LocalPrefs::from_stored(&prefs.to_string());
         assert_eq!(kept.language, Language::Ja);
-        assert!(!kept.host_probe && kept.auto_update_check);
+        assert!(!kept.host_probe);
     }
 
     #[test]

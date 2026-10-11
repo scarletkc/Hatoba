@@ -95,7 +95,6 @@ async function main() {
   console.log("  recovery code groups:", groups.length);
   if (groups.length !== 8) throw new Error("expected 8 recovery groups, got " + JSON.stringify(groups));
   await shot("recovery-code");
-  await type(`//input[@aria-label="Last group of the recovery code"]`, groups[7]);
   await click(`//*[@role="checkbox"]`);
   await click(btn("Finish Setup"));
   await find(textEl("No hosts yet"), 20000);

@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Icon, IconButton, Segmented, Spinner, TextField, controlStyles } from "@/components/controls";
+import { useVaultData } from "@/app/data";
+import { Button, Icon, IconButton, Segmented, Spinner, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { charCount, INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
+import { toolLabel } from "@/features/ai/tools";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
+import type { AiAllowance, AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
-import {
-  TOOL_LIMIT_DEFAULT,
-  modelChoices,
-  parseBaseUrl,
-  parseToolLimit,
-  resolveSettings,
-  sameRef,
-  sameSettings,
-  sanitizeSettings,
-} from "./aiLogic";
+import { modelChoices, parseBaseUrl, resolveSettings, sameRef, sameSettings, sanitizeSettings } from "./aiLogic";
 import { aiErrorMessage } from "./aiShared";
 import { McpSection } from "./McpSection";
 import { ProviderDialog } from "./ProviderDialog";
@@ -42,8 +35,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), custom instructions (AI-36), and the permission mode and tool call limit of this
- * device (AI-16, AI-18).
+ * web search (AI-14), custom instructions (AI-36), and the permission mode and saved approvals of this
+ * device (AI-16, AI-19).
  */
 export function AiPane() {
   const t = useT();
@@ -160,7 +153,6 @@ export function AiPane() {
             <ProviderRow key={p.id} provider={p} onEdit={() => setDialog({ provider: p })} onDelete={() => void removeProvider(p)} />
           ))}
         </div>
-        <div className={s.sectionHint}>{t("aiSettings.providers.hint")}</div>
       </section>
 
       {data && (
@@ -170,7 +162,7 @@ export function AiPane() {
             <Group>
               <SettingRow
                 label={t("aiSettings.default.row")}
-                hint={modelChoices(providers).length === 0 ? t("aiSettings.default.empty") : t("aiSettings.default.hint")}
+                hint={modelChoices(providers).length === 0 ? t("aiSettings.default.empty") : undefined}
               >
                 <ModelSelect
                   providers={providers}
@@ -348,7 +340,7 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   const commit = useCallback(() => {
     const { draft, value, onSave } = latest.current;
     editing.current = false;
-    if (draft !== value && charCount(draft) <= INSTRUCTIONS_MAX_CHARS) onSave(draft);
+    if (draft !== value && byteCount(draft) <= INSTRUCTIONS_MAX_BYTES) onSave(draft);
   }, []);
 
   useEffect(() => {
@@ -366,7 +358,7 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
         id="ai-custom-instructions"
         label={t("aiSettings.instructions")}
         value={draft}
-        max={INSTRUCTIONS_MAX_CHARS}
+        max={INSTRUCTIONS_MAX_BYTES}
         rows={6}
         placeholder={t("aiSettings.instructions.placeholder")}
         onChange={(text) => {
@@ -375,32 +367,54 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
         }}
         onBlur={commit}
       />
-      <div className={s.sectionHint}>{t("aiSettings.instructions.privacy")}</div>
     </section>
   );
 }
 
-/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the tool call limit (AI-18). */
+const ALLOWANCE_ICON: Record<string, string> = { command: "terminal", domain: "globe", edit_file: "note-pencil", write_file: "file-plus", send_input: "keyboard" };
+
+/** AI-19: the approvals saved with Always Allow on approval cards, as rows that Remove deletes. */
+function SavedApprovals() {
+  const t = useT();
+  const list = useAllowances((st) => st.list);
+  const hosts = useVaultData((st) => st.hosts);
+  useEffect(() => {
+    savedAllowances().catch((e) => toast(aiErrorMessage(t, e), "error"));
+  }, [t]);
+
+  const hostName = (a: AiAllowance) => (a.host_id !== null ? (hosts.find((h) => h.id === a.host_id)?.name ?? t("ai.history.hostGone")) : (a.target ?? ""));
+  const what = (a: AiAllowance) =>
+    a.kind === "command" ? t("aiSettings.allowances.command", { prefix: a.value }) : a.kind === "domain" ? t("aiSettings.allowances.domain", { domain: a.value }) : toolLabel(t, a.value);
+  const remove = (a: AiAllowance) => removeAllowance(a).catch((e) => toast(aiErrorMessage(t, e), "error"));
+
+  return (
+    <>
+      <SettingRow label={t("aiSettings.allowances")} hint={list?.length === 0 ? t("aiSettings.allowances.empty") : undefined} />
+      {list?.map((a) => (
+        <div key={`${a.kind}\n${a.host_id ?? ""}\n${a.target ?? ""}\n${a.value}`} className={s.allowance}>
+          <Icon name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"} className={s.allowanceIcon} />
+          <span className={s.allowanceText}>
+            <span className={s.allowanceWhat}>{what(a)}</span>
+            {a.kind !== "domain" && <span className={s.allowanceHost}>{hostName(a)}</span>}
+          </span>
+          <IconButton icon="x" label={t("btn.remove")} onClick={() => void remove(a)} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals (AI-19). */
 function DeviceSection() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
-  const limit = prefs.ai_tool_call_limit ?? TOOL_LIMIT_DEFAULT;
-  const [limitText, setLimitText] = useState(String(limit));
-  useEffect(() => setLimitText(String(limit)), [limit]);
-
-  const commitLimit = () => {
-    const n = parseToolLimit(limitText);
-    if (n === null) return setLimitText(String(limit));
-    setLimitText(String(n));
-    if (n !== limit) setPrefs({ ai_tool_call_limit: n });
-  };
 
   const chooseMode = async (mode: AiPermissionMode) => {
     if (mode === prefs.ai_permission_mode) return;
     if (mode === "bypass" && !prefs.ai_bypass_confirmed) {
       const ok = await confirm({
         title: t("aiSettings.bypass.title"),
-        body: t("aiSettings.bypass.body"),
+        body: t("ai.bypass.body"),
         confirmLabel: t("aiSettings.bypass.confirm"),
         danger: true,
       });
@@ -425,21 +439,8 @@ function DeviceSection() {
             onChange={(mode) => void chooseMode(mode)}
           />
         </SettingRow>
-        <SettingRow label={t("aiSettings.limit")} hint={t("aiSettings.limit.hint")} top>
-          <div className={s.limitField}>
-            <TextField
-              mono
-              inputMode="numeric"
-              aria-label={t("aiSettings.limit")}
-              value={limitText}
-              onChange={(e) => setLimitText(e.target.value)}
-              onBlur={commitLimit}
-              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && commitLimit()}
-            />
-          </div>
-        </SettingRow>
+        <SavedApprovals />
       </Group>
-      <div className={s.sectionHint}>{t("aiSettings.device.hint")}</div>
     </section>
   );
 }

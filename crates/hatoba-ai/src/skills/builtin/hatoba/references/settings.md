@@ -77,7 +77,9 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | en | zh-CN | ja |
 |---|---|---|
 | Auto-Lock | 自动锁定 | 自動ロック |
+| Lock when the computer sleeps | 电脑睡眠时锁定 | コンピュータのスリープ時にロック |
 | Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
+| Clear Clipboard | 清除剪贴板 | クリップボードの消去 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 | Windows Hello でロック解除 |
 | Master Password | 主密码 | マスターパスワード |
 | Change… | 更改主密码… | 変更… |
@@ -86,7 +88,7 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | Lock Now | 立即锁定 | 今すぐロック |
 | Lock | 锁定 | ロック |
 
-Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by default), **Unlock with Windows Hello** (Windows only), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
+Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
 
 ## About
 
@@ -110,8 +112,8 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 
 - The page shows the version; click it to copy.
 - **Software Update** → **Check for Updates** asks GitHub whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available.", or an offline or failure message. A newer version's release notes show below the setting, with **View on GitHub** for its release page.
-- **Download and Install** asks first, and says how many open SSH sessions and running file transfers closing Hatoba will end. After **Install and Restart**, Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run. Update error messages are in `references/troubleshooting.md`.
-- **Automatically check for updates at startup** is off by default. When on, Hatoba asks GitHub once after each unlock; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
+- **Download and Install** asks first only when SSH sessions are open or file transfers are running, and says how many closing Hatoba will end. After **Install and Restart** (or right away when nothing would end), Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run. Update error messages are in `references/troubleshooting.md`.
+- **Automatically check for updates at startup** is on by default. When on, Hatoba asks GitHub once after the first unlock of each launch; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
 - When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
 - **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
 - A card in the sidebar (**Enjoying Hatoba?**) asks once for a GitHub star, a day after first use and after a session has connected. **Star** opens the repository, **Report a Problem** opens the bug form, and the × closes it for good.
@@ -120,4 +122,4 @@ Auto-Lock (default 15 minutes), **Disconnect all sessions when locked** (off by 
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), Auto-Lock, Disconnect all sessions when locked, the default AI model, the search provider, the built-in skill's switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the update check switch, the AI permission mode, the tool call limit, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the search provider, the built-in skill's switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |

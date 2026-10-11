@@ -1,4 +1,5 @@
 import type {
+  AiAllowance,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
@@ -127,7 +128,7 @@ export interface HatobaApi {
   host_set_favorite(id: string, favorite: boolean): Promise<void>;
   /** TERM-12: show the server's resource usage in this host's terminals (device-local). */
   host_set_show_stats(id: string, on: boolean): Promise<void>;
-  /** SEC-08: Rust copies the saved password to the clipboard and clears it after 30 s. */
+  /** SEC-08: Rust copies the saved password to the clipboard and clears it after this device's delay. */
   host_copy_password(id: string): Promise<void>;
   groups_list(): Promise<GroupView[]>;
   group_save(input: GroupInput): Promise<GroupView>;
@@ -329,6 +330,12 @@ export interface HatobaApi {
    * in order, named by the file's base name.
    */
   ai_read_dropped_files(paths: string[]): Promise<DroppedFile[]>;
+  /** AI-19: the approvals saved on this device, oldest first. */
+  ai_allowances_list(): Promise<AiAllowance[]>;
+  /** AI-19: saves an approval on this device; resolves to them all. */
+  ai_allowance_add(allowance: AiAllowance): Promise<AiAllowance[]>;
+  /** AI-19: removes a saved approval; resolves to what is left. */
+  ai_allowance_remove(allowance: AiAllowance): Promise<AiAllowance[]>;
 
   // AI skills (§13.8)
   skills_list(): Promise<SkillView[]>;
@@ -341,11 +348,8 @@ export interface HatobaApi {
   skill_set_enabled(id: string, enabled: boolean): Promise<void>;
   /** Reads a folder or `.zip` the user picked; nothing is saved. */
   skill_import_preview(path: string): Promise<SkillImportPreview>;
-  /**
-   * Imports what the preview showed: reads the path again and refuses it (`invalid_input`) when it no longer
-   * matches the preview's `token`. `replace_id` replaces that skill; `rename` saves it under a new name.
-   */
-  skill_import(path: string, token: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
+  /** Imports the skill at `path`, reading it again. `replace_id` replaces that skill; `rename` saves it under a new name. */
+  skill_import(path: string, replace_id: string | null, rename: string | null): Promise<SkillView>;
   /** Writes the skill as a `.zip` to a path the user picked. */
   skill_export(id: string, path: string): Promise<void>;
 

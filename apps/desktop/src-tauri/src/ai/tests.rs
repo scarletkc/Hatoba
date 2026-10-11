@@ -1,6 +1,6 @@
 //! Turn tests (spec §12, AI bullet): the turn engine against a mock Chat Completions provider,
 //! without Tauri. Approval, edit, rejection, stop, lock and the cancelled results of calls left
-//! without one, and side questions (AI-42); the tool call limit is the frontend's (AI-18).
+//! without one, and side questions (AI-42).
 
 use std::collections::VecDeque;
 use std::future::Future;
@@ -3572,7 +3572,7 @@ async fn the_prompt_names_the_model_and_the_server_and_carries_instructions_and_
         "The terminal tab is connected to the host \"prod-db\" as the user \"ops\".\n\
          The SSH server identifies itself as \"SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5\".\n\
          </context>",
-        "- Follow the user's instructions and the host notes below unless",
+        "- Follow the user's instructions and the host notes below; where they differ",
         "</rules>\n\n<user_instructions>\nAnswer in English.\n</user_instructions>\n\n\
          <host_notes host=\"prod-db\">\nPostgreSQL 16 primary.\nAsk before <restarting> it.\n\
          </host_notes>\n\n<attachments>",

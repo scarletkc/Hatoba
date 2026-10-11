@@ -1,6 +1,7 @@
 //! Tauri commands (spec §10.1). Every command returns `AppResult`, serialized as `AppError`.
 
 pub mod ai;
+pub mod allowances;
 pub mod app;
 pub mod deploy;
 pub mod forwards;

@@ -17,9 +17,9 @@ use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::crypto::{
-    self, AAD_RECENT_TARGETS, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY, AAD_VAULT_CHECK,
-    AAD_VAULT_KEY, KdfParams, Key32, MasterKeys, b64_encode, decode_salt, item_aad, random_key,
-    random_salt, seal, unwrap_key, wrap_key,
+    self, AAD_AI_ALLOWANCES, AAD_RECENT_TARGETS, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY,
+    AAD_VAULT_CHECK, AAD_VAULT_KEY, KdfParams, Key32, MasterKeys, b64_encode, decode_salt,
+    item_aad, random_key, random_salt, seal, unwrap_key, wrap_key,
 };
 use crate::error::{Error, Result};
 use crate::model::{
@@ -36,7 +36,7 @@ const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
 /// Consecutive wrong passwords allowed before delays start (SEC-06).
 pub const FREE_UNLOCK_ATTEMPTS: u32 = 3;
 /// Upper bound of the unlock delay.
-pub const MAX_UNLOCK_DELAY_SECS: i64 = 300;
+pub const MAX_UNLOCK_DELAY_SECS: i64 = 60;
 
 // ---- clock --------------------------------------------------------------------------------
 
@@ -87,7 +87,7 @@ impl Clock for ManualClock {
 }
 
 /// Delay in milliseconds imposed after `consecutive_failures` wrong passwords (SEC-06):
-/// none for failures 1–3, then `min(2^(n-4), 300)` seconds from the 4th on.
+/// none for failures 1–3, then `min(2^(n-4), 60)` seconds from the 4th on.
 #[must_use]
 pub fn unlock_delay_ms(consecutive_failures: u32) -> i64 {
     if consecutive_failures <= FREE_UNLOCK_ATTEMPTS {
@@ -1056,6 +1056,38 @@ impl Vault {
         self.store.set_meta(meta::RECENT_TARGETS, &sealed.to_json())
     }
 
+    /// The AI approvals saved on this device (opaque JSON owned by the shell, AI-19). Never
+    /// synced, and sealed under the vault key because they name hosts. A value this vault key
+    /// cannot open reads as `None`.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn ai_allowances(&self) -> Result<Option<String>> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let Some(sealed) = self.store.get_meta(meta::AI_ALLOWANCES)? else {
+            return Ok(None);
+        };
+        Ok(
+            crypto::open_json(&unlocked.vault_key, AAD_AI_ALLOWANCES.as_bytes(), &sealed)
+                .ok()
+                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
+        )
+    }
+
+    /// Stores the AI approvals saved on this device, sealed under the vault key.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn set_ai_allowances(&mut self, json: &str) -> Result<()> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let sealed = seal(
+            &unlocked.vault_key,
+            AAD_AI_ALLOWANCES.as_bytes(),
+            json.as_bytes(),
+        )?;
+        self.store.set_meta(meta::AI_ALLOWANCES, &sealed.to_json())
+    }
+
     // ---- backup ----
 
     /// Writes an encrypted backup (VAULT-07). Only envelopes and key blobs are written; the
@@ -1499,11 +1531,9 @@ mod tests {
         let secs: Vec<i64> = (0..=16).map(|n| unlock_delay_ms(n) / 1000).collect();
         assert_eq!(
             secs,
-            [
-                0, 0, 0, 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 300, 300, 300, 300
-            ]
+            [0, 0, 0, 0, 1, 2, 4, 8, 16, 32, 60, 60, 60, 60, 60, 60, 60]
         );
-        assert_eq!(unlock_delay_ms(u32::MAX), 300_000);
+        assert_eq!(unlock_delay_ms(u32::MAX), 60_000);
     }
 
     #[test]
@@ -1552,7 +1582,7 @@ mod tests {
     }
 
     #[test]
-    fn delay_is_capped_at_five_minutes() {
+    fn delay_is_capped_at_a_minute() {
         let (mut vault, clock, _code) = created();
         vault.lock();
         for _ in 0..20 {
@@ -1561,7 +1591,7 @@ mod tests {
         }
         let status = vault.status();
         assert_eq!(status.failed_attempts, 20);
-        assert_eq!(status.retry_at, Some(clock.now_ms() + 300_000));
+        assert_eq!(status.retry_at, Some(clock.now_ms() + 60_000));
     }
 
     #[test]
@@ -1714,9 +1744,9 @@ mod tests {
             Err(Error::InvalidItem(_))
         ));
         let mut s = vault.settings();
-        s.auto_lock_minutes = 5;
+        s.terminal.scrollback = 5_000;
         assert_eq!(vault.put(None, Item::Settings(s)).unwrap(), SETTINGS_ID);
-        assert_eq!(vault.settings().auto_lock_minutes, 5);
+        assert_eq!(vault.settings().terminal.scrollback, 5_000);
     }
 
     #[test]
@@ -1971,6 +2001,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(vault.recent_targets().unwrap(), None);
+    }
+
+    #[test]
+    fn ai_allowances_are_sealed_and_need_the_vault_unlocked() {
+        let (mut vault, _clock, _code) = created();
+        assert_eq!(vault.ai_allowances().unwrap(), None);
+        let json = r#"[{"kind":"command","target":"deploy@db.internal.example:22","value":"git"}]"#;
+        vault.set_ai_allowances(json).unwrap();
+        assert_eq!(vault.ai_allowances().unwrap().as_deref(), Some(json));
+        let raw = vault.store.get_meta(meta::AI_ALLOWANCES).unwrap().unwrap();
+        assert!(!raw.contains("db.internal.example"), "{raw}");
+        // Device-local: nothing to push.
+        assert_eq!(vault.pending_count(), 1);
+
+        vault.lock();
+        assert!(matches!(vault.ai_allowances(), Err(Error::Locked)));
+        assert!(matches!(vault.set_ai_allowances("[]"), Err(Error::Locked)));
+        vault.unlock(PW).unwrap();
+        assert_eq!(vault.ai_allowances().unwrap().as_deref(), Some(json));
+
+        // Sealed under another key (a vault replaced since): reads as nothing.
+        vault
+            .store
+            .set_meta(
+                meta::AI_ALLOWANCES,
+                &seal(&random_key().unwrap(), AAD_AI_ALLOWANCES.as_bytes(), b"[]")
+                    .unwrap()
+                    .to_json(),
+            )
+            .unwrap();
+        assert_eq!(vault.ai_allowances().unwrap(), None);
     }
 
     #[test]

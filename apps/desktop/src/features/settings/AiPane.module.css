@@ -205,6 +205,36 @@
   gap: 14px;
 }
 
-.limitField {
-  width: 76px;
+/* Saved approvals (AI-19) */
+.allowance {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 8px 6px 14px;
+}
+
+.allowanceIcon {
+  flex: none;
+  color: var(--fg2);
+}
+
+.allowanceText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.allowanceWhat {
+  overflow-wrap: anywhere;
+}
+
+.allowanceHost {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--fg2);
 }

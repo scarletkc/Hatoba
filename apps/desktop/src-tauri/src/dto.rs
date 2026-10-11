@@ -106,7 +106,7 @@ pub struct HostInput {
     /// Required when `proxy_mode` is `proxy`, ignored otherwise.
     pub proxy_id: Option<String>,
     pub note: String,
-    /// At most 2,000 characters (AI-37).
+    /// At most 16 KB of UTF-8 (AI-37).
     pub ai_notes: String,
     /// Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14).
     pub env: Vec<HostEnvVar>,
@@ -784,8 +784,6 @@ pub struct TerminalSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SettingsView {
     pub terminal: TerminalSettings,
-    pub auto_lock_minutes: u32,
-    pub lock_disconnects_sessions: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -822,21 +820,27 @@ pub struct LocalPrefs {
     pub appearance: Appearance,
     pub density: Density,
     pub host_probe: bool,
-    /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
-    /// the device unless the user asks for it (spec §11, no telemetry).
+    /// Check GitHub for a newer release once after the first unlock of each launch (spec §11).
+    /// On by default; the request carries no identifier.
     pub auto_update_check: bool,
     /// AI-16: the permission mode new conversations start in on this device.
     pub ai_permission_mode: AiPermissionMode,
     /// AI-16: the user confirmed the first switch to bypass on this device.
     pub ai_bypass_confirmed: bool,
-    /// AI-18: a turn pauses after this many tool calls.
-    pub ai_tool_call_limit: u32,
     /// The AI panel is open (§9).
     pub ai_panel_open: bool,
     /// The AI panel's width in CSS pixels.
     pub ai_panel_width: u32,
     /// SSH-13: the proxy that hosts set to the device default connect through, on this device.
     pub default_proxy_id: Option<String>,
+    /// SEC-02: minutes without input before the vault locks; 0 never locks.
+    pub auto_lock_minutes: u32,
+    /// SEC-02: lock the vault when the computer sleeps.
+    pub lock_on_sleep: bool,
+    /// SEC-03: disconnect the SSH sessions when the vault locks.
+    pub lock_disconnects_sessions: bool,
+    /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
+    pub clipboard_clear_secs: u32,
 }
 
 impl Default for LocalPrefs {
@@ -846,13 +850,16 @@ impl Default for LocalPrefs {
             appearance: Appearance::System,
             density: Density::Regular,
             host_probe: true,
-            auto_update_check: false,
+            auto_update_check: true,
             ai_permission_mode: AiPermissionMode::Manual,
             ai_bypass_confirmed: false,
-            ai_tool_call_limit: 25,
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
+            auto_lock_minutes: 15,
+            lock_on_sleep: true,
+            lock_disconnects_sessions: false,
+            clipboard_clear_secs: 90,
         }
     }
 }
@@ -903,6 +910,9 @@ pub struct AppInfo {
     pub version: String,
     pub platform: Platform,
     pub mica: bool,
+    /// The local user name, which quick connect (HOST-12) uses when the target names no user;
+    /// empty when unknown.
+    pub local_user: String,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,
@@ -1185,7 +1195,7 @@ pub struct AiSettingsView {
     pub search_provider_id: Option<String>,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
-    /// Sent with every request, at most 4,000 characters (AI-36).
+    /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
     pub custom_instructions: String,
 }
 
@@ -1194,6 +1204,31 @@ pub struct AiSettingsView {
 pub enum AiPermissionMode {
     Manual,
     Bypass,
+}
+
+/// What an AI approval saved on this device lets run without asking (AI-19).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiAllowanceKind {
+    /// `run_command` calls whose command starts with `value`, on one host.
+    Command,
+    /// Every call of the tool `value` (`edit_file`, `write_file` or `send_input`), on one host.
+    Tool,
+    /// `fetch_url` calls of pages on the host name `value`, on any tab.
+    Domain,
+}
+
+/// An AI approval saved on this device (AI-19): never synced, kept until the user removes it.
+/// A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiAllowance {
+    pub kind: AiAllowanceKind,
+    /// The saved host the approval is for.
+    pub host_id: Option<String>,
+    /// The quick-connect target (`user@host:port`) the approval is for, without a saved host.
+    pub target: Option<String>,
+    /// The command prefix, the tool's name, or the domain.
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
@@ -1786,9 +1821,6 @@ pub struct SkillImportPreview {
     pub existing_id: Option<String>,
     /// The name is the built-in skill's (AI-34): the skill can be imported only under another.
     pub reserved_name: bool,
-    /// A digest of what was read, which `skill_import` takes back: it imports the source only if
-    /// it still reads the same, so what is saved is what this preview showed.
-    pub token: String,
 }
 
 // ───────────────────────── AI assistant: MCP servers (§13.9) ─────────────────────────
@@ -1985,12 +2017,28 @@ mod tests {
     use super::{AiPermissionMode, LocalPrefs};
 
     #[test]
-    fn prefs_from_an_older_version_leave_the_update_check_off() {
+    fn the_update_check_is_on_unless_turned_off() {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja","host_probe":false}"#);
-        assert!(!prefs.auto_update_check);
-        assert!(!prefs.host_probe);
-        let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":true}"#);
         assert!(prefs.auto_update_check);
+        assert!(!prefs.host_probe);
+        let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":false}"#);
+        assert!(!prefs.auto_update_check);
+    }
+
+    #[test]
+    fn device_security_prefs_have_defaults() {
+        let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
+        assert_eq!(prefs.auto_lock_minutes, 15);
+        assert!(prefs.lock_on_sleep && !prefs.lock_disconnects_sessions);
+        assert_eq!(prefs.clipboard_clear_secs, 90);
+        let prefs = LocalPrefs::from_stored(
+            r#"{"auto_lock_minutes":0,"lock_on_sleep":false,"clipboard_clear_secs":0}"#,
+        );
+        assert_eq!(
+            (prefs.auto_lock_minutes, prefs.clipboard_clear_secs),
+            (0, 0)
+        );
+        assert!(!prefs.lock_on_sleep);
     }
 
     #[test]
@@ -1998,22 +2046,23 @@ mod tests {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
         assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
-        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (25, 380));
+        assert_eq!(prefs.ai_panel_width, 380);
 
+        // The tool call limit an older version stored is ignored.
         let prefs = LocalPrefs::from_stored(
             r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
                 "ai_panel_open":true,"ai_panel_width":520}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
         assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
-        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (40, 520));
+        assert_eq!(prefs.ai_panel_width, 520);
 
         // A mode a newer build added, or a broken value, is read as the default.
         let prefs = LocalPrefs::from_stored(
-            r#"{"ai_permission_mode":"auto","ai_tool_call_limit":-1,"host_probe":false}"#,
+            r#"{"ai_permission_mode":"auto","ai_panel_width":-1,"host_probe":false}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
-        assert_eq!(prefs.ai_tool_call_limit, 25);
+        assert_eq!(prefs.ai_panel_width, 380);
         assert!(!prefs.host_probe);
     }
 }

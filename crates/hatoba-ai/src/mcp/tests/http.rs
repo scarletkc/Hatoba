@@ -246,7 +246,10 @@ async fn http_errors_name_no_secret_or_url() {
     );
 
     for (url, expected) in [
-        ("http://8.8.8.8/mcp", "use https"),
+        (
+            "http://user:pw@mcp.example.com/mcp",
+            "user name or password",
+        ),
         ("ftp://example.com/mcp", "server URL"),
         ("not a url", "server URL"),
     ] {

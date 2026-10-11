@@ -202,7 +202,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
               </LinkButton>
             </div>
           ) : (
-            <MessageList key={`${slotId}:${slot.conversationId ?? ""}`} slotId={slotId} slot={slot} host={hostInfo(tabHost)} empty={<EmptyConversation tab={tab} host={tabHost} mode={slot.mode} />} />
+            <MessageList key={`${slotId}:${slot.conversationId ?? ""}`} slotId={slotId} slot={slot} host={hostInfo(tabHost)} empty={<EmptyConversation tab={tab} host={tabHost} />} />
           )}
           <Composer slotId={slotId} slot={slot} model={model} tools={!!tab} />
         </>
@@ -347,7 +347,7 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
   return items.length > 0 ? <div className={s.notices}>{items}</div> : null;
 }
 
-function EmptyConversation({ tab, host, mode }: { tab: SessionTab | undefined; host: HostView | undefined; mode: AiPermissionMode }) {
+function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: HostView | undefined }) {
   const t = useT();
   return (
     <div className={s.empty}>
@@ -356,7 +356,6 @@ function EmptyConversation({ tab, host, mode }: { tab: SessionTab | undefined; h
       </div>
       <div className={s.emptyTitle}>{tab ? t("ai.empty.title", { host: host?.name ?? tab.title }) : t("ai.empty.homeTitle")}</div>
       <div className={s.emptyBody}>{tab ? t("ai.empty.body") : t("ai.empty.homeBody")}</div>
-      {tab && <div className={s.emptyNote}>{mode === "bypass" ? t("ai.empty.bypass") : t("ai.empty.manual")}</div>}
     </div>
   );
 }
@@ -370,7 +369,7 @@ function NoProvider({ none }: { none: boolean }) {
         <Icon name="plug" size={20} />
       </div>
       <div className={s.emptyTitle}>{none ? t("ai.noProvider.title") : t("ai.noModels.title")}</div>
-      <div className={s.emptyBody}>{none ? t("ai.noProvider.body") : t("ai.noModels.body")}</div>
+      {!none && <div className={s.emptyBody}>{t("ai.noModels.body")}</div>}
       <Button variant="primary" size="sm" icon="gear-six" onClick={() => useApp.getState().openSettings(true, "ai")}>
         {t("ai.noProvider.open")}
       </Button>
@@ -383,7 +382,7 @@ export function AiPanelButton({ className, activeClassName, dotClassName }: { cl
   const t = useT();
   const open = useApp((st) => st.prefs.ai_panel_open);
   const platform = useApp((st) => st.info.platform);
-  const waiting = useAi((st) => Object.values(st.slots).some((x) => x.turn?.call?.state === "approval" || x.turn?.call?.state === "limit"));
+  const waiting = useAi((st) => Object.values(st.slots).some((x) => x.turn?.call?.state === "approval"));
   const label = `${t(open ? "ai.hide" : "ai.show")} (${shortcutLabel(platform, "Ctrl+Shift+A", "⌘⇧A")})`;
   return (
     <button type="button" className={cx(className, open && activeClassName)} title={label} aria-label={label} aria-pressed={open} onClick={() => toggleAiPanel()}>

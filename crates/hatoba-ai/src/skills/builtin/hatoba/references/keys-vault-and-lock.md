@@ -15,9 +15,9 @@ On first launch the window offers two ways to start:
 | Recovery | 恢复码 | リカバリー |
 | Connect | 连接 | 接続 |
 
-- **Create a New Vault** sets a master password (at least 8 characters, with a strength hint: Weak, Fair, Strong, Very strong; a password that is too easy to guess is refused) and then shows a recovery code.
+- **Create a New Vault** sets a master password (at least 12 characters, with a strength hint: Weak, Fair, Strong, Very strong; a password that is easy to guess gets a warning but can be used) and then shows a recovery code.
 - **Restore from Cloud** is for a new device that should join an existing sync setup. See `references/sync.md`.
-- The recovery code is shown once. **Save as Text** or **Print** it, then type its last group to confirm; **Finish Setup** completes the setup. It is the only way back in if the master password is forgotten. A new code can be generated in Settings → Security (**Generate New Code…**), and then the old one stops working.
+- The recovery code is shown once. **Save as Text** or **Print** it, then tick the box to confirm it is saved; **Finish Setup** completes the setup. It is the only way back in if the master password is forgotten. A new code can be generated in Settings → Security (**Generate New Code…**), and then the old one stops working.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -36,9 +36,9 @@ On first launch the window offers two ways to start:
 
 ## Locking and unlocking
 
-Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on macOS), or Settings → Security → **Lock Now**. Hatoba also locks after the idle time set in **Auto-Lock**, and whenever the computer goes to sleep.
+Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on macOS), or Settings → Security → **Lock Now**. Hatoba also locks when the computer has had no keyboard or mouse input for the time set in **Auto-Lock** (on Linux, only input in Hatoba's window counts), and when the computer goes to sleep, unless **Lock when the computer sleeps** is off.
 
-- Auto-Lock offers 1, 5, 15 (the default), 30 minutes, 1 hour, or Never. It is a synced setting.
+- Auto-Lock offers 1, 5, 15 (the default), 30 minutes, 1, 4 or 8 hours, or Never. Auto-Lock, **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** and **Clear Clipboard** are kept on each device and do not sync.
 - Open SSH sessions stay connected behind the lock screen ("N sessions stay connected in the background"), unless **Disconnect all sessions when locked** is on. The AI assistant stops working and MCP servers stop when the vault locks.
 - The lock screen asks for the master password (**Unlock**). After wrong attempts the field is disabled for a growing delay, with a countdown such as "Too many attempts. Try again in 30 s."
 - **Forgot it? Use your recovery code** opens **Reset with Recovery Code**: enter the recovery code (case and dashes do not matter) and a new master password, then **Reset and Unlock**. It works offline and loses no data.
@@ -47,6 +47,7 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 | en | zh-CN | ja |
 |---|---|---|
 | Auto-Lock | 自动锁定 | 自動ロック |
+| Lock when the computer sleeps | 电脑睡眠时锁定 | コンピュータのスリープ時にロック |
 | Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
 | Lock Now | 立即锁定 | 今すぐロック |
 | Lock | 锁定 | ロック |
@@ -66,10 +67,11 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 
 - Settings → Security → **Master Password** → **Change…** re-encrypts only the vault key; saved hosts and keys are untouched. With Cloud Sync on, the other devices are signed out and need the new password. The Cloud Sync page has the same action.
 - Settings → General → **Export Encrypted Backup** → **Export…** saves the vault as one `hatoba-backup-YYYY-MM-DD.hatoba` file that only the master password opens. The app has no screen to import a backup file.
-- **Copy Password** on a host clears the clipboard 30 seconds after copying.
+- **Copy Password** on a host clears the copied password from the clipboard after the time set in Settings → Security → **Clear Clipboard**: 90 seconds by default, or Never.
 
 | en | zh-CN | ja |
 |---|---|---|
+| Clear Clipboard | 清除剪贴板 | クリップボードの消去 |
 | Master Password | 主密码 | マスターパスワード |
 | Change… | 更改主密码… | 変更… |
 | Change Master Password | 更改主密码 | マスターパスワードを変更 |

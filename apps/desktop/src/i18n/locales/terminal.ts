@@ -51,7 +51,6 @@ export default defineMessages({
     "terminal.stats.unsupported": "资源占用只支持 Linux 服务器。",
     "terminal.stats.unsupportedSystem": "资源占用只支持 Linux 服务器，这台服务器运行的是 {system}。",
     "terminal.stats.failed": "资源占用读取已停止：{error}",
-    "terminal.stats.note": "每 2 秒通过这个连接读取服务器的 /proc。",
 
     // overflow / context menu
     "terminal.menu.reconnect": "重新连接",
@@ -99,25 +98,22 @@ export default defineMessages({
 
     // credential prompts (SSH-03)
     "terminal.password.title": "输入 {name} 的密码",
-    "terminal.password.body": "{target} 设置为“每次连接时询问”。密码只用于这一次连接，不会被保存。",
+    "terminal.password.body": "{target} 设置为“每次连接时询问”。",
     "terminal.password.label": "密码",
-    "terminal.password.oneOffBody": "密码只用于这一次连接，不会被保存。",
     "terminal.user.title": "登录 {target} 的用户名",
-    "terminal.user.body": "没有指定用户名。输入要登录的用户名。",
     "terminal.user.label": "用户名",
     "terminal.passphrase.title": "输入私钥口令",
-    "terminal.passphrase.body": "连接 {name} 使用的私钥受口令保护。口令只用于这一次连接，不会被保存。",
+    "terminal.passphrase.body": "{name} 使用的私钥受口令保护。",
     "terminal.passphrase.wrong": "口令不正确，请重试。",
     "terminal.passphrase.label": "私钥口令",
     "terminal.connect": "连接",
 
     // host key dialogs (SSH-04)
     "terminal.hostkey.newTitle": "首次连接到 {host}:{port}",
-    "terminal.hostkey.newBody":
-      "Hatoba 还不认识这台服务器。请把下面的指纹与服务器管理员提供的指纹核对。信任后，指纹会保存到保险库并随云同步到你的其他设备。",
+    "terminal.hostkey.newBody": "信任之前，请确认这个指纹与你的服务器的指纹一致。",
     "terminal.hostkey.additionalTitle": "{host}:{port} 提供了新的主机密钥",
     "terminal.hostkey.additionalBody":
-      "这台服务器已保存其他类型的主机密钥，但还没有信任 {keyType} 类型的密钥。请向服务器管理员核对新指纹后再信任。已信任的密钥会保留。",
+      "已信任这台服务器另一种类型的密钥。信任之前，请确认现在收到的指纹与你的服务器的指纹一致。",
     "terminal.hostkey.keyType": "密钥类型",
     "terminal.hostkey.fingerprint": "指纹",
     "terminal.hostkey.trust": "信任并连接",
@@ -224,7 +220,6 @@ export default defineMessages({
     "terminal.stats.unsupported": "Resource usage is available only for Linux servers.",
     "terminal.stats.unsupportedSystem": "Resource usage is available only for Linux servers. This server runs {system}.",
     "terminal.stats.failed": "Resource usage stopped: {error}",
-    "terminal.stats.note": "Read from /proc on the server every 2 seconds over this connection.",
 
     "terminal.menu.reconnect": "Reconnect",
     "terminal.menu.disconnect": "Disconnect",
@@ -268,24 +263,21 @@ export default defineMessages({
     "terminal.clipboardDenied": "Can’t access the clipboard.",
 
     "terminal.password.title": "Enter the password for {name}",
-    "terminal.password.body": "{target} is set to ask every time. The password is used for this connection only and is never saved.",
+    "terminal.password.body": "{target} is set to ask every time.",
     "terminal.password.label": "Password",
-    "terminal.password.oneOffBody": "The password is used for this connection only and is never saved.",
     "terminal.user.title": "Username for {target}",
-    "terminal.user.body": "No username was given. Enter the one to log in as.",
     "terminal.user.label": "Username",
     "terminal.passphrase.title": "Enter the key passphrase",
-    "terminal.passphrase.body": "The private key used for {name} is protected by a passphrase. It is used for this connection only and is never saved.",
+    "terminal.passphrase.body": "The key for {name} is protected by a passphrase.",
     "terminal.passphrase.wrong": "Incorrect passphrase. Try again.",
     "terminal.passphrase.label": "Key passphrase",
     "terminal.connect": "Connect",
 
     "terminal.hostkey.newTitle": "First connection to {host}:{port}",
-    "terminal.hostkey.newBody":
-      "Hatoba doesn’t know this server yet. Compare the fingerprint below with the one your server administrator gave you. If you trust it, it is saved to your vault and synced to your other devices.",
+    "terminal.hostkey.newBody": "Check that this fingerprint matches your server’s before you trust it.",
     "terminal.hostkey.additionalTitle": "New host key for {host}:{port}",
     "terminal.hostkey.additionalBody":
-      "A key of another type is already trusted for this server, but its {keyType} key is not yet trusted. Verify the new fingerprint with the server administrator before trusting it. The existing key will be kept.",
+      "A key of another type is already trusted for this server. Check that the received fingerprint matches your server’s before you trust it.",
     "terminal.hostkey.keyType": "Key type",
     "terminal.hostkey.fingerprint": "Fingerprint",
     "terminal.hostkey.trust": "Trust and Connect",
@@ -388,7 +380,6 @@ export default defineMessages({
     "terminal.stats.unsupported": "リソース使用状況は Linux サーバーでのみ表示できます。",
     "terminal.stats.unsupportedSystem": "リソース使用状況は Linux サーバーでのみ表示できます。このサーバーは {system} です。",
     "terminal.stats.failed": "リソース使用状況の読み取りが止まりました: {error}",
-    "terminal.stats.note": "この接続でサーバーの /proc を 2 秒ごとに読み取ります。",
 
     "terminal.menu.reconnect": "再接続",
     "terminal.menu.disconnect": "切断",
@@ -431,24 +422,21 @@ export default defineMessages({
     "terminal.clipboardDenied": "クリップボードにアクセスできません。",
 
     "terminal.password.title": "{name} のパスワードを入力",
-    "terminal.password.body": "{target} は「毎回確認」に設定されています。パスワードはこの接続にのみ使用され、保存されません。",
+    "terminal.password.body": "{target} は「毎回確認」に設定されています。",
     "terminal.password.label": "パスワード",
-    "terminal.password.oneOffBody": "パスワードはこの接続にのみ使用され、保存されません。",
     "terminal.user.title": "{target} のユーザー名",
-    "terminal.user.body": "ユーザー名が指定されていません。ログインするユーザー名を入力してください。",
     "terminal.user.label": "ユーザー名",
     "terminal.passphrase.title": "秘密鍵のパスフレーズを入力",
-    "terminal.passphrase.body": "{name} への接続に使う秘密鍵はパスフレーズで保護されています。パスフレーズはこの接続にのみ使用され、保存されません。",
+    "terminal.passphrase.body": "{name} の鍵はパスフレーズで保護されています。",
     "terminal.passphrase.wrong": "パスフレーズが正しくありません。もう一度お試しください。",
     "terminal.passphrase.label": "鍵のパスフレーズ",
     "terminal.connect": "接続",
 
     "terminal.hostkey.newTitle": "{host}:{port} への初回接続",
-    "terminal.hostkey.newBody":
-      "Hatoba はこのサーバーをまだ知りません。以下のフィンガープリントを、サーバー管理者から受け取ったものと照合してください。信頼すると、保管庫に保存され、他のデバイスにも同期されます。",
+    "terminal.hostkey.newBody": "信頼する前に、このフィンガープリントがサーバーのものと一致することを確認してください。",
     "terminal.hostkey.additionalTitle": "{host}:{port} の新しいホストキー",
     "terminal.hostkey.additionalBody":
-      "このサーバーでは別の種類の鍵を信頼済みですが、{keyType} の鍵はまだ信頼されていません。信頼する前に、新しいフィンガープリントをサーバー管理者に確認してください。信頼済みの鍵は保持されます。",
+      "このサーバーでは別の種類の鍵を信頼済みです。信頼する前に、今回受信したフィンガープリントがサーバーのものと一致することを確認してください。",
     "terminal.hostkey.keyType": "鍵の種類",
     "terminal.hostkey.fingerprint": "フィンガープリント",
     "terminal.hostkey.trust": "信頼して接続",

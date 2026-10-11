@@ -511,15 +511,26 @@ pub(super) fn failed_preview(path: &str, message: String) -> AiFilePreview {
     }
 }
 
-/// `read_file`: a page of the file. The model has now seen the whole file as it was read.
+/// `read_file`: a page of the file. The model has now seen the whole file as it was read. A file
+/// over 1 MB is read a part at a time instead, and recorded as seen by no one: the other file
+/// tools do not change it.
 async fn read(
     session: &SshSession,
     args: &ReadFileArgs,
     seen: SeenBy<'_>,
 ) -> Result<String, String> {
-    let file = read_bytes(session, &args.path)
-        .await?
-        .ok_or_else(|| format!("{} does not exist.", args.path))?;
+    let file = match tokio::time::timeout(
+        TIMEOUT,
+        remote_file::read(session, &args.path, MAX_FILE_BYTES),
+    )
+    .await
+    {
+        Err(_) => return Err(timed_out(&args.path, Op::Read)),
+        Ok(Ok(file)) => file,
+        Ok(Err(RemoteFileError::TooLarge(_))) => return read_large(session, args).await,
+        Ok(Err(RemoteFileError::NotFound)) => return Err(format!("{} does not exist.", args.path)),
+        Ok(Err(e)) => return Err(describe(&args.path, Op::Read, e, false)),
+    };
     let page = files::read_page(
         &args.path,
         &decode(&args.path, &file.bytes)?,
@@ -528,6 +539,30 @@ async fn read(
     )?;
     seen.shows(&server(session), &file.path, &file.bytes);
     Ok(page)
+}
+
+/// `read_file` on a file over 1 MB (AI-38): at most [`files::MAX_PAGE_BYTES`] of it from the line
+/// asked for, whatever the file's size.
+async fn read_large(session: &SshSession, args: &ReadFileArgs) -> Result<String, String> {
+    let from = args.offset.unwrap_or(1).max(1);
+    match tokio::time::timeout(
+        TIMEOUT,
+        remote_file::read_lines(session, &args.path, from, files::MAX_PAGE_BYTES),
+    )
+    .await
+    {
+        Err(_) => Err(timed_out(&args.path, Op::Read)),
+        Ok(Ok(part)) => files::read_large_page(
+            &args.path,
+            from,
+            part.lines,
+            &part.bytes,
+            part.cut,
+            args.limit,
+        ),
+        Ok(Err(RemoteFileError::NotFound)) => Err(format!("{} does not exist.", args.path)),
+        Ok(Err(e)) => Err(describe(&args.path, Op::Read, e, false)),
+    }
 }
 
 async fn edit(
@@ -781,9 +816,10 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
              tools never use sudo. To go on, use send_input to run a command with sudo in the \
              terminal's shell, where the user can enter a password, or ask the user."
         ),
+        // Only edit_file and write_file read a file whole; read_file reads a large one in parts.
         RemoteFileError::TooLarge(size) => format!(
-            "{path} is {size} bytes, and the file tools read files up to 1 MB. Use run_command \
-             with grep, head, tail or sed -n to read parts of it."
+            "{path} is {size} bytes, and edit_file and write_file change files up to 1 MB. Use \
+             run_command or send_input to change it, for example with sed."
         ),
         RemoteFileError::Changed if from_card => format!(
             "{path} changed on the host after Hatoba read it for the approval card, so nothing \

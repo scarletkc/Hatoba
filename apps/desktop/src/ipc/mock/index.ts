@@ -15,6 +15,7 @@ import type {
   SyncStatus,
   VaultStatus,
 } from "../types";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
@@ -212,7 +213,7 @@ export function createMockApi(): HatobaApi {
       },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
-    app_info: async () => ({ version, platform, mica: false }),
+    app_info: async () => ({ version, platform, mica: false, local_user: "demo" }),
     update_check: async () => {
       await delay(800);
       if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");
@@ -245,7 +246,7 @@ export function createMockApi(): HatobaApi {
     }),
     vault_create: async (password) => {
       await delay(600);
-      if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
+      if (password.length < 12) fail("invalid_input", "password too short", { field: "password" });
       vaultState = "unlocked";
       hosts = [];
       groups = [];
@@ -319,9 +320,8 @@ export function createMockApi(): HatobaApi {
     },
     host_save: async (input) => {
       needUnlocked();
-      if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));
@@ -330,7 +330,7 @@ export function createMockApi(): HatobaApi {
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
-        name: input.name.trim(),
+        name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
         address: input.address.trim(),
         port: input.port || 22,
         username: input.username.trim(),

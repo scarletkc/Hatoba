@@ -24,13 +24,12 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 
 ## Edit and Resend
 
-**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**, or the question in `references/ai-file-changes.md` when those messages changed files). A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with. To keep the messages after it, fork from the message instead.
+**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, without asking, unless those messages changed files: then the question in `references/ai-file-changes.md` comes first. A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with. To keep the messages after it, fork from the message instead.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Edit and Resend | 编辑并重新发送 | 編集して再送信 |
 | Resend | 重新发送 | 再送信 |
-| Delete and Resend | 删除并重新发送 | 削除して再送信 |
 
 ## Fork a conversation
 
@@ -40,12 +39,12 @@ A fork copies a conversation up to a point into a new, separate conversation, wh
 - **Fork** in a conversation's History menu copies the whole conversation.
 - Neither is offered while that conversation is working, waiting for approval, compacting or reverting a file edit, or while a fork of it is being made.
 - The fork's title is the original's followed by "(fork)", in the interface language, or "(fork 2)", "(fork 3)" and so on when History has that title already; a fork of a fork drops the earlier mark first. It keeps the original's model and thinking level, and the host the copied messages came from: a fork from before a home tab chat went on in a terminal tab has no host. On a tab of another host, the panel says so, and the fork's next message moves it there with a divider.
-- The fork starts like a new conversation: **Allow for This Conversation** asks again, the permission mode is the default of this device, every MCP server is on, and the assistant has to read a file again before it can edit or replace it. **Revert** on the file edits it copied stays in the original (`references/ai-file-changes.md`).
+- The fork starts like a new conversation: what **Allow for This Conversation** allowed asks again (saved approvals still apply), the permission mode is the default of this device, every MCP server is on, and the assistant has to read a file again before it can edit or replace it. **Revert** on the file edits it copied stays in the original (`references/ai-file-changes.md`).
 - After that, the two conversations are independent: nothing added to one appears in the other, on any device. A conversation has no branches to switch between; each fork is a conversation of its own in History.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Fork from Here | 从这里创建分支 | ここから分岐 |
-| Forked. The original conversation stays in History. | 已创建分支，原对话仍在历史对话中。 | 分岐しました。元の会話は履歴に残っています。 |
+| Forked | 已创建分支 | 分岐しました |
 | Forked. The new conversation is in History. | 已创建分支，新对话在历史对话中。 | 分岐しました。新しい会話は履歴にあります。 |
 | Allow for This Conversation | 在此对话中允许 | この会話では許可 |

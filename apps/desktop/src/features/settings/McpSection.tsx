@@ -430,20 +430,17 @@ function ServerDetails({
       {tools.length === 0 ? (
         state !== "starting" && <div className={s.noTools}>{t("aiSettings.mcp.tools.none")}</div>
       ) : (
-        <>
-          <div className={s.hint}>{t("aiSettings.mcp.tools.hint")}</div>
-          <div className={s.tools}>
-            {tools.map((tool) => (
-              <ToolItem
-                key={tool.name}
-                tool={tool}
-                allowed={toolAllowed(server, tool)}
-                locked={server.always_allow}
-                onChange={(allow) => onAlwaysAllow(tool.tool, allow)}
-              />
-            ))}
-          </div>
-        </>
+        <div className={s.tools}>
+          {tools.map((tool) => (
+            <ToolItem
+              key={tool.name}
+              tool={tool}
+              allowed={toolAllowed(server, tool)}
+              locked={server.always_allow}
+              onChange={(allow) => onAlwaysAllow(tool.tool, allow)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
