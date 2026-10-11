@@ -200,7 +200,12 @@ export function McpSection() {
           entries={MCP_TEMPLATES.map((template) => ({
             label: template.label,
             icon: template.icon,
-            onSelect: () => setEditing({ server: null, template }),
+            onSelect: () => {
+              // A click leaves the focus on the menu item, which is gone by the time the dialog closes and gives the
+              // focus back. The button stays, so it takes the focus first.
+              templateButton.current?.focus();
+              setEditing({ server: null, template });
+            },
           }))}
         />
       )}
