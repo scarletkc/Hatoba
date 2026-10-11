@@ -33,7 +33,7 @@ function pairResults(entries: AiEntryView[]): Map<string, number> {
 }
 
 /**
- * AI-41: the entries a fork from the entry at `at` copies, by index, in order, like Rust's `fork_copies`:
+ * AI-43: the entries a fork from the entry at `at` copies, by index, in order, like Rust's `fork_copies`:
  * every entry up to it, it included, and each tool result stored after it that answers a call of a copied
  * reply, so no copied call loses its result. null when `at` is no fork point: one of the user's stored
  * messages, or a reply entry whose every call has a result.
@@ -50,7 +50,7 @@ export function forkCopies(entries: AiEntryView[], at: number): number[] | null 
   return [...entries.keys()].filter((i) => i <= at).concat(late);
 }
 
-/** The entries a fork may start from (`forkCopies`), by ID: where the panel offers Fork from Here (AI-41). */
+/** The entries a fork may start from (`forkCopies`), by ID: where the panel offers Fork from Here (AI-43). */
 export function forkPoints(entries: AiEntryView[]): Set<string> {
   const pairs = pairResults(entries);
   const points = new Set<string>();
@@ -62,7 +62,7 @@ export function forkPoints(entries: AiEntryView[]): Set<string> {
 }
 
 /**
- * AI-41: the model a fork opens with in the selector, or null to follow its newest copied reply (AI-05). A
+ * AI-43: the model a fork opens with in the selector, or null to follow its newest copied reply (AI-05). A
  * user message that the original's next reply answered with another model goes on with that model.
  */
 export function forkModel(entries: AiEntryView[], entryId: string): AiModelRef | null {
@@ -82,7 +82,7 @@ const FORK_MARKS = LOCALES.flatMap((locale) => {
 });
 
 /**
- * AI-41: a fork's title in the panel's language: the original's without the fork marks it ends with, in any
+ * AI-43: a fork's title in the panel's language: the original's without the fork marks it ends with, in any
  * language, then "(fork)", or "(fork 2)", "(fork 3)"… for the first that no title in `taken` (History's) has,
  * with the original's title cut so the whole fits in a title.
  */

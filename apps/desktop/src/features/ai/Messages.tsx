@@ -4,10 +4,10 @@ import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/cont
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { decideCall, editAndResend, forkConversation, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
+import { decideCall, editAndResend, fileChangeDiff, forkConversation, retryTurn, revertFileChange, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
@@ -17,9 +17,10 @@ import { forkPoints } from "./fork";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
+import { revertFailure } from "./revertText";
 import { patchSlot, useAi, type Slot } from "./store";
-import { callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
-import type { CallState, LiveResponse } from "./turn";
+import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
+import { callRevealKey, editedFiles, revealKey, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -92,6 +93,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return null;
   }, [entries]);
   const replies = useMemo(() => findReplies(entries), [entries]);
+  // AI-41: the changes of file tool calls this device keeps, by response and call.
+  const changes = useMemo(() => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])), [slot.fileChanges]);
 
   // Follow new content while the view is at the bottom.
   useLayoutEffect(() => {
@@ -110,10 +113,10 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       if (!slot.loading && entries.length > 0) patchSlot(slotId, { reveal: null }); // not in this conversation (any more)
       return;
     }
-    const key = entry.role === "tool" ? `call:${entry.tool_call_id}` : `entry:${entry.entry_id}`;
-    const el = list.querySelector(`[data-reveal="${CSS.escape(key)}"]`);
+    const key = revealKey(entries, entry);
+    const el = key && list.querySelector(`[data-reveal="${CSS.escape(key)}"]`);
     patchSlot(slotId, { reveal: null });
-    if (!el) return;
+    if (!key || !el) return;
     stick.current = false;
     el.scrollIntoView({ block: "center" });
     setFlash(key);
@@ -131,17 +134,21 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return newest && turn ? { kind: "queued" } : { kind: "none" };
   };
 
-  // AI-26: the user's stored messages can be edited and sent again while nothing runs; AI-41: the
-  // conversation can be forked from them and from finished replies then too, unless a fork of it is being made.
+  // AI-26: the user's stored messages can be edited and sent again while nothing runs; AI-43: the
+  // conversation can be forked from them and from finished replies then too, unless a file change is being
+  // reverted (AI-41) or a fork of it is being made.
   const canEdit = !!slot.conversationId && !turn && !slot.remoteRunning && !slot.compacting && !slot.loading;
   const forkable = useMemo(() => forkPoints(entries), [entries]);
   const conversationId = slot.conversationId;
   const forking = useAi((st) => !!conversationId && st.forking.includes(conversationId));
-  const fork = (entryId: string) => (canEdit && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined);
+  const fork = (entryId: string) =>
+    canEdit && !slot.reverting && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined;
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
   // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
   const running = !!turn || slot.remoteRunning;
+  // AI-41: a revert waits until the conversation is idle, so the next message tells the model before it acts again.
+  const busy = running || slot.compacting || slot.loading || slot.reverting;
 
   return (
     <div
@@ -175,6 +182,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 pending={pending}
                 onResend={canEdit && !pending ? (text) => editAndResend(slotId, entry.entry_id, text) : undefined}
                 onFork={fork(entry.entry_id)}
+                untracked={() => editedFiles(entries, slot.fileChanges, entry.entry_id).untracked}
               />
             );
             break;
@@ -184,10 +192,13 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             body = (
               <AssistantMessage
                 slotId={slotId}
+                entryId={entry.entry_id}
                 text={entry.text}
                 reasoning={entry.reasoning}
                 calls={entry.tool_calls}
                 view={(call) => callView(call, entry.entry_id === lastAssistant)}
+                change={(call) => changes.get(`${entry.entry_id}:${call.id}`)}
+                busy={busy}
                 host={host}
                 finish={entry.finish}
                 flash={flash}
@@ -257,7 +268,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-/** AI-41: copies the conversation up to this message into a new one, which opens in its place. */
+/** AI-43: copies the conversation up to this message into a new one, which opens in its place. */
 function ForkButton({ onFork }: { onFork: () => void }) {
   const t = useT();
   return <IconButton icon="git-fork" label={t("ai.fork")} size={13} className={s.messageAction} onClick={onFork} />;
@@ -266,9 +277,10 @@ function ForkButton({ onFork }: { onFork: () => void }) {
 /**
  * The user's message. Copy takes what was typed, without the attachments. With `onResend`, Edit
  * replaces it and sends it again (AI-26), and with `onFork`, Fork from Here copies the conversation up
- * to it into a new one (AI-41). The notes Hatoba stored before it (AI-05, AI-09) are dividers above
+ * to it into a new one (AI-43). The notes Hatoba stored before it (AI-05, AI-09) are dividers above
  * it, not part of the bubble; an edit shows them while it is sent, and Rust works them out again for
- * the new message.
+ * the new message. `untracked` counts the file changes of the calls an edit deletes that this device
+ * cannot revert (AI-41).
  */
 function UserMessage({
   text,
@@ -276,12 +288,14 @@ function UserMessage({
   pending,
   onResend,
   onFork,
+  untracked,
 }: {
   text: string;
   at: number;
   pending: boolean;
   onResend?: (text: string) => Promise<boolean>;
   onFork?: () => void;
+  untracked: () => number;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -292,7 +306,7 @@ function UserMessage({
     return (
       <>
         {notes}
-        <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
+        <EditMessage parts={parts} untracked={untracked() > 0} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
       </>
     );
   return (
@@ -316,11 +330,12 @@ function UserMessage({
   );
 }
 
-const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap" } as const;
+const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise" } as const;
 
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
- * to another host, a terminal became attached or went away, or it went to another model.
+ * to another host, a terminal became attached or went away, it went to another model, or the user
+ * reverted a file tool's change.
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
@@ -337,15 +352,18 @@ function NoteDivider({ note }: { note: Note }) {
 
 /**
  * AI-26: edits the typed text; what was attached to it stays unless its chip is removed. A long
- * paste becomes another attachment, as in the input box (AI-35).
+ * paste becomes another attachment, as in the input box (AI-35). With `untracked`, the calls the edit
+ * deletes changed files this device cannot revert (AI-41), and the box says those changes stay.
  */
 function EditMessage({
   parts,
+  untracked,
   onCancel,
   onSend,
   onSent,
 }: {
   parts: MessageParts;
+  untracked: boolean;
   onCancel: () => void;
   onSend: (text: string) => Promise<boolean>;
   onSent: () => void;
@@ -444,6 +462,12 @@ function EditMessage({
           }
         }}
       />
+      {untracked && (
+        <div className={s.editWarning} role="note">
+          <Icon name="warning" size={13} />
+          <span>{t("ai.editFiles.untracked")}</span>
+        </div>
+      )}
       <div className={s.actions}>
         <Button size="sm" onClick={onCancel}>
           {t("btn.cancel")}
@@ -474,10 +498,13 @@ function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveRespons
 
 function AssistantMessage({
   slotId,
+  entryId,
   text,
   reasoning,
   calls,
   view,
+  change,
+  busy,
   host,
   streaming,
   finish,
@@ -486,10 +513,16 @@ function AssistantMessage({
   onFork,
 }: {
   slotId: string;
+  /** The stored entry; a reply still streaming has none. */
+  entryId?: string;
   text: string;
   reasoning: string | null;
   calls: AiToolCall[];
   view: (call: AiToolCall) => CallView;
+  /** AI-41: the change a call made that this device keeps, to revert. */
+  change?: (call: AiToolCall) => AiFileChange | undefined;
+  /** The conversation is not idle, so nothing is reverted now. */
+  busy?: boolean;
   host: HostInfo | null;
   streaming?: boolean;
   finish?: string;
@@ -497,7 +530,7 @@ function AssistantMessage({
   flash?: string | null;
   /** The finished reply this entry ends: its text for Copy, and when it ended. */
   reply?: ReplyEnd;
-  /** AI-41: Fork from Here under the finished reply. */
+  /** AI-43: Fork from Here under the finished reply. */
   onFork?: () => void;
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
@@ -506,9 +539,10 @@ function AssistantMessage({
       {reasoning && <Reasoning text={reasoning} active={thinking} />}
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {!text && !reasoning && calls.length === 0 && !streaming && finish !== "tool_calls" && <EmptyReply />}
-      {calls.map((call) => (
-        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} host={host} flash={flash === `call:${call.id}`} />
-      ))}
+      {calls.map((call) => {
+        const reveal = entryId ? callRevealKey(entryId, call.id) : undefined;
+        return <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} reveal={reveal} flash={!!reveal && flash === reveal} />;
+      })}
       {reply && (
         <div className={s.replyFoot}>
           {reply.text && <CopyButton text={reply.text} />}
@@ -603,12 +637,62 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
   }
 }
 
-/** Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. */
-function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: AiToolCall; view: CallView; host: HostInfo | null; flash?: boolean }) {
+/** AI-41: the revert of a call's change, which the Revert in the block's header and the one in its body share. */
+function useRevert(slotId: string, change: AiFileChange | undefined) {
+  const [running, setRunning] = useState<"revert" | "restore" | null>(null);
+  const [outcome, setOutcome] = useState<{ result: AiFileRevert; restore: boolean } | null>(null);
+  const run = async (restore: boolean) => {
+    if (!change) return;
+    try {
+      const next = await revertFileChange(slotId, change, {
+        restore,
+        recreate: outcome?.result.status === "changed" && outcome.result.current === null,
+        onStart: () => {
+          setRunning(restore ? "restore" : "revert");
+          if (!restore) setOutcome(null);
+        },
+      });
+      if (next) setOutcome({ result: next, restore });
+    } finally {
+      setRunning(null);
+    }
+  };
+  return { running, outcome, run };
+}
+
+type RevertState = ReturnType<typeof useRevert>;
+
+/**
+ * Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. An
+ * `edit_file` or `write_file` call shows its change as a diff. A change of a file tool call this device keeps
+ * can be reverted from the block's header, on hover or focus, or from its body (AI-41).
+ */
+function ToolBlock({
+  slotId,
+  call,
+  view,
+  change,
+  busy,
+  host,
+  reveal,
+  flash,
+}: {
+  slotId: string;
+  call: AiToolCall;
+  view: CallView;
+  change?: AiFileChange;
+  busy: boolean;
+  host: HostInfo | null;
+  /** The key a search hit or a link reveals the block by (AI-24). */
+  reveal?: string;
+  flash?: boolean;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const kind = toolKind(call.name);
   const summary = callSummary(call.name, call.arguments);
+  const revertible = change?.state === "written" || change?.state === "unfinished";
+  const revert = useRevert(slotId, change);
   useEffect(() => {
     if (flash) setOpen(true);
   }, [flash]);
@@ -616,27 +700,174 @@ function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: 
   if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} />;
 
   return (
-    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={`call:${call.id}`}>
-      <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
-        <span className={s.toolName}>{toolLabel(t, call.name)}</span>
-        <span className={s.toolSummary}>{summary}</span>
-        <StatusChip view={view} name={call.name} />
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
-      </button>
+    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={reveal}>
+      <div className={s.toolHeadRow}>
+        <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
+          <span className={s.toolName}>{toolLabel(t, call.name)}</span>
+          <span className={s.toolSummary}>{summary}</span>
+          {change?.state === "reverted" ? (
+            <span className={s.chip}>
+              <Icon name="arrow-counter-clockwise" size={11} />
+              {t("ai.revert.reverted")}
+            </span>
+          ) : (
+            <StatusChip view={view} name={call.name} />
+          )}
+          <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
+        </button>
+        {revertible && (
+          <IconButton
+            icon="arrow-counter-clockwise"
+            size={13}
+            label={t("ai.revert.action")}
+            title={busy ? t("ai.revert.busy") : t("ai.revert.action")}
+            className={cx(s.toolHeadAction, revert.running && s.toolHeadActionOn)}
+            disabled={busy || !!revert.running}
+            onClick={() => {
+              setOpen(true);
+              void revert.run(false);
+            }}
+          />
+        )}
+      </div>
       {open && (
         <div className={s.toolBody}>
-          <div className={s.label}>{t("ai.call.input")}</div>
-          <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+          {kind === "edit_file" || kind === "write_file" ? (
+            <CallChange slotId={slotId} call={call} change={change} />
+          ) : (
+            <>
+              <div className={s.label}>{t("ai.call.input")}</div>
+              <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+            </>
+          )}
           {view.kind === "result" && (
             <>
               <div className={s.label}>{t("ai.call.output")}</div>
               <pre className={cx(s.pre, s.output, "selectable")}>{view.entry.content || t("ai.call.noOutput")}</pre>
             </>
           )}
+          {revertible && <RevertChange slotId={slotId} change={change} busy={busy} revert={revert} />}
+          {change?.state === "dropped" && (
+            <div className={s.revert}>
+              <span className={s.meta}>{t("ai.revert.dropped")}</span>
+            </div>
+          )}
         </div>
       )}
       {view.kind === "limit" && <LimitCard slotId={slotId} />}
+    </div>
+  );
+}
+
+/**
+ * AI-39, AI-40: the change an `edit_file` or `write_file` call made, as a diff: from its snapshot while this
+ * device keeps one (AI-41), otherwise from the call's arguments. The arguments themselves are one click away.
+ */
+function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall; change?: AiFileChange }) {
+  const t = useT();
+  const [input, setInput] = useState(false);
+  const keeps = change?.state === "written" || change?.state === "unfinished";
+  // undefined while it loads; "failed" when the snapshot could not be read, so nothing stands in for it.
+  const [kept, setKept] = useState<AiFilePreview | null | undefined | "failed">(undefined);
+  // Read once per change and state: a refresh of the slot's file changes gives the same change a new object.
+  const [responseId, callId, state] = [change?.response_id, change?.tool_call_id, change?.state];
+  useEffect(() => {
+    if (!responseId || !callId || (state !== "written" && state !== "unfinished")) return;
+    let live = true;
+    fileChangeDiff(slotId, { response_id: responseId, tool_call_id: callId }).then(
+      (preview) => live && setKept(preview),
+      () => live && setKept("failed"),
+    );
+    return () => {
+      live = false;
+    };
+  }, [slotId, responseId, callId, state]);
+  const failed = keeps && kept === "failed";
+  const preview = failed ? null : ((keeps && kept !== "failed" ? kept : null) ?? callFileChange(call.name, call.arguments));
+  return (
+    <>
+      <div className={s.labelRow}>
+        <span className={s.label}>{t("ai.call.change")}</span>
+        <LinkButton tone="muted" className={s.labelLink} aria-expanded={input} onClick={() => setInput((v) => !v)}>
+          {t(input ? "ai.call.hideInput" : "ai.call.showInput")}
+        </LinkButton>
+      </div>
+      {failed && <div className={s.fieldError}>{t("ai.call.changeUnreadable")}</div>}
+      {preview && <FileChange state={{ preview, loading: keeps && kept === undefined, failure: null }} />}
+      {(input || !preview) && <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>}
+    </>
+  );
+}
+
+/**
+ * AI-41: Revert on the block of a file tool call that wrote, or whose write failed after it may have begun; its
+ * confirmation says what it restores and what it does not. When the file holds neither what the call wrote nor
+ * what it held before, the block shows the diff from what it holds now back to that, links the later call that
+ * wrote it too, and offers Restore anyway over exactly what the diff shows; or the failure.
+ */
+function RevertChange({ slotId, change, busy, revert }: { slotId: string; change: AiFileChange; busy: boolean; revert: RevertState }) {
+  const t = useT();
+  const { running, outcome, run } = revert;
+  const result = outcome?.result;
+  // The result of the newest later call that wrote the same file, which the diff can jump to.
+  const laterEntry = useAi((st) => {
+    const slot = st.slots[slotId];
+    if (!slot) return null;
+    const at = slot.fileChanges.findIndex((c) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id);
+    const later = slot.fileChanges
+      .slice(at + 1)
+      .filter((c) => c.server === change.server && c.path === change.path && (c.state === "written" || c.state === "unfinished"))
+      .at(-1);
+    if (!later) return null;
+    return slot.entries.find((e) => e.role === "tool" && e.tool_call_id === later.tool_call_id && e.entry_id > later.response_id)?.entry_id ?? null;
+  });
+  return (
+    <div className={s.revert}>
+      <div className={s.revertRow}>
+        <Button size="sm" icon="arrow-counter-clockwise" busy={running === "revert"} disabled={busy || !!running} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void run(false)}>
+          {t(running === "revert" ? "ai.revert.reverting" : "ai.revert.action")}
+        </Button>
+      </div>
+      {change.state === "unfinished" && (
+        <div className={s.revertWarn}>
+          <Icon name="warning" size={13} />
+          <span>{t("ai.revert.unfinished")}</span>
+        </div>
+      )}
+      {result?.status === "changed" && (
+        <>
+          <div className={s.fieldError} role="alert">
+            {outcome?.restore && `${t("ai.revert.changedAgain")} `}
+            {t(result.before === null ? "ai.revert.changedCreated" : result.current === null ? "ai.revert.gone" : "ai.revert.changed")}
+          </div>
+          {result.later && (
+            <div className={s.meta}>
+              {t("ai.revert.later")}
+              {laterEntry && (
+                <>
+                  {" "}
+                  <LinkButton className={s.inlineLink} onClick={() => patchSlot(slotId, { reveal: laterEntry })}>
+                    {t("ai.revert.goLater")}
+                  </LinkButton>
+                </>
+              )}
+            </div>
+          )}
+          <FileChange state={{ preview: { path: result.path, before: result.current, after: result.before ?? "", error: null, crlf: false }, loading: false, failure: null }} />
+          <div className={s.revertRow}>
+            <Button size="sm" variant="danger" icon={result.before === null ? "trash" : "arrow-counter-clockwise"} busy={running === "restore"} disabled={busy || !!running} onClick={() => void run(true)}>
+              {t(result.before === null ? "ai.revert.deleteAnyway" : "ai.revert.restore")}
+            </Button>
+          </div>
+        </>
+      )}
+      {result?.status === "failed" && (
+        <div className={s.fieldError} role="alert">
+          {revertFailure(t, result.reason, result.detail)}
+          {result.detail && result.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{result.detail}</div>}
+        </div>
+      )}
     </div>
   );
 }

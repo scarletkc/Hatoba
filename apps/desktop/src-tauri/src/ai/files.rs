@@ -1,7 +1,7 @@
 //! The file tools on the tab's host (AI-38…40), the preview the approval card shows for
-//! `edit_file` and `write_file`, and the record of what the model has seen of each file (spec
-//! §13.4, "File tools"). The text work is in `hatoba_ai::files`, the exec scripts in
-//! `hatoba_ssh::remote_file`.
+//! `edit_file` and `write_file`, the record of what the model has seen of each file (spec §13.4,
+//! "File tools"), and the revert of a change those calls made (AI-41). The text work is in
+//! `hatoba_ai::files`, the exec scripts in `hatoba_ssh::remote_file`.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -15,8 +15,11 @@ use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
 use tokio_util::sync::CancellationToken;
 
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
 use super::{guard, parse};
-use crate::dto::AiFilePreview;
+use crate::dto::{AiFilePreview, AiFileRevert, AiRevertFailure};
 
 /// How long a read or a write may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,8 +62,9 @@ impl FileJob {
     }
 }
 
-/// The server a session is connected to, as the record of what the model has seen names it.
-fn server(session: &SshSession) -> String {
+/// The server a session is connected to, as the record of what the model has seen and the file
+/// snapshots name it.
+pub(super) fn server(session: &SshSession) -> String {
     format!(
         "{}@{}:{}",
         session.username(),
@@ -114,6 +118,103 @@ impl Shown {
     }
 }
 
+/// What a snapshot says about a change (AI-41): stored sealed as its `meta`, and listed.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(super) struct ChangeMeta {
+    /// The server the call wrote on, as [`server`] names it.
+    pub server: String,
+    /// The path as the write script resolved it.
+    pub path: String,
+    /// `edit_file` or `write_file`.
+    pub tool: String,
+    /// The call created the file.
+    pub created: bool,
+    /// The file's permission bits before the call, which Restore anyway gives it when it creates
+    /// the file again; `None` when the call created it or they could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
+}
+
+/// The file's content around a change: stored sealed as the snapshot's `content`. Both are UTF-8,
+/// as the file tools write text files only.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(super) struct ChangeContent {
+    /// What the file held before the call, byte order mark included; `None` when it did not
+    /// exist.
+    pub before: Option<String>,
+    /// What the call wrote.
+    pub after: String,
+}
+
+impl std::fmt::Debug for ChangeContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChangeContent")
+            .field("before_bytes", &self.before.as_ref().map(String::len))
+            .field("after_bytes", &self.after.len())
+            .finish()
+    }
+}
+
+/// A change an `edit_file` or `write_file` call makes: what its snapshot keeps.
+#[derive(Clone, Debug)]
+pub(super) struct Change {
+    pub meta: ChangeMeta,
+    pub content: ChangeContent,
+}
+
+/// Where the snapshot of a change goes (AI-41): kept before the write begins, so a write that
+/// fails midway can be reverted too, and marked once the write ended.
+pub(super) trait Keep: Sync {
+    /// Keeps `change` before its write begins. `Err` when the vault locked: the write does not
+    /// begin.
+    fn keep(&self, change: &Change) -> Result<(), Stop>;
+    /// The write ended: it wrote the file at the path it resolved, or it never began (`None`). A
+    /// write that failed after it may have begun leaves the snapshot unfinished.
+    fn ended(&self, resolved: Option<&str>);
+}
+
+impl Change {
+    pub(super) fn new(
+        server: &str,
+        path: &str,
+        tool: &str,
+        before: Option<&[u8]>,
+        after: &[u8],
+    ) -> Option<Self> {
+        let text = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).ok();
+        Some(Self {
+            meta: ChangeMeta {
+                server: server.to_owned(),
+                path: path.to_owned(),
+                tool: tool.to_owned(),
+                created: before.is_none(),
+                mode: None,
+            },
+            content: ChangeContent {
+                before: match before {
+                    Some(bytes) => Some(text(bytes)?),
+                    None => None,
+                },
+                after: text(after)?,
+            },
+        })
+    }
+
+    /// The change, with the permission bits the file had before it.
+    pub(super) fn with_mode(mut self, mode: Option<u32>) -> Self {
+        self.meta.mode = mode;
+        self
+    }
+
+    /// The snapshot's `meta` and `content` as stored, sealed by the vault.
+    pub fn encode(&self) -> Option<(String, Zeroizing<String>)> {
+        Some((
+            serde_json::to_string(&self.meta).ok()?,
+            Zeroizing::new(serde_json::to_string(&self.content).ok()?),
+        ))
+    }
+}
+
 impl Seen {
     /// The model has seen `bytes` as the file at `path` on `server`, in a result of a call that
     /// `response` made.
@@ -149,6 +250,14 @@ impl Seen {
         guard(&self.0).remove(conversation_id);
     }
 
+    /// Forgets what the conversation has seen of one file: a revert put back other content
+    /// (AI-41), so the model reads it again before it changes it.
+    pub(super) fn forget_file(&self, conversation_id: &str, server: &str, path: &str) {
+        if let Some(files) = guard(&self.0).get_mut(conversation_id) {
+            files.remove(&(server.to_owned(), path.to_owned()));
+        }
+    }
+
     /// The conversation has a record of some file.
     #[cfg(test)]
     pub(super) fn knows(&self, conversation_id: &str) -> bool {
@@ -165,10 +274,13 @@ pub(super) struct SeenBy<'a> {
     pub place: &'a Place,
     /// What the call's result shows of a file, for `tool_run` to record once it stores it.
     pub shown: &'a Mutex<Option<Shown>>,
+    /// Where the snapshot of what an `edit_file` or `write_file` call changes goes (AI-41).
+    pub keep: Option<&'a dyn Keep>,
 }
 
 impl SeenBy<'_> {
-    /// The call's result shows the model `bytes` as the file at `path` on `server`.
+    /// The call's result shows the model `bytes` as the file at `path` on `server`: it read the
+    /// file, or wrote it.
     fn shows(&self, server: &str, path: &str, bytes: &[u8]) {
         *guard(self.shown) = Some(Shown::new(server, path, bytes));
     }
@@ -260,6 +372,7 @@ pub(super) struct Base {
 }
 
 /// Why a file tool or a preview ended without a result of its own.
+#[derive(Debug)]
 pub(super) enum Stop {
     /// The turn stopped or the vault locked before a write began.
     Cancelled,
@@ -435,7 +548,16 @@ async fn edit(
     let edit = files::apply_edit(&args.path, &decode(&args.path, &file.bytes)?, args)?;
     let new = edit.file.encode();
     let expect = Expect::Content(&file.bytes);
-    let path = write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
+    let change = Change::new(
+        &server,
+        &file.path,
+        tools::EDIT_FILE,
+        Some(&file.bytes),
+        &new,
+    )
+    .map(|c| c.with_mode(file.mode));
+    let keep = seen.keep.zip(change.as_ref());
+    let path = write_bytes(session, &args.path, &new, expect, from_card, cancel, keep).await?;
     seen.shows(&server, &path, &new);
     Ok(files::edit_result(&args.path, &edit))
 }
@@ -466,7 +588,18 @@ async fn write(
     let expect = file
         .as_ref()
         .map_or(Expect::Missing, |f| Expect::Content(&f.bytes));
-    let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel).await?;
+    // A file the call creates has its path resolved by the write.
+    let change = Change::new(
+        &server,
+        file.as_ref()
+            .map_or(args.path.as_str(), |f| f.path.as_str()),
+        tools::WRITE_FILE,
+        file.as_ref().map(|f| f.bytes.as_slice()),
+        &bytes,
+    )
+    .map(|c| c.with_mode(file.as_ref().and_then(|f| f.mode)));
+    let keep = seen.keep.zip(change.as_ref());
+    let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel, keep).await?;
     seen.shows(&server, &path, &bytes);
     Ok(files::write_result(&args.path, &new, file.is_none()))
 }
@@ -535,7 +668,7 @@ async fn read_bytes(session: &SshSession, path: &str) -> Result<Option<RemoteFil
 /// Writes `bytes` if the file is as `expect` says, and returns the path as resolved. `from_card`:
 /// `expect` is what the approval card read. A stop before the write prevents it; once it has
 /// begun it runs to the end (or the timeout), because closing the channel midway leaves the file
-/// cut short.
+/// cut short. `keep` keeps the snapshot of the change before the write begins (AI-41).
 async fn write_bytes(
     session: &SshSession,
     path: &str,
@@ -543,11 +676,25 @@ async fn write_bytes(
     expect: Expect<'_>,
     from_card: bool,
     cancel: &CancellationToken,
+    keep: Option<(&dyn Keep, &Change)>,
 ) -> Result<String, Stop> {
     if cancel.is_cancelled() {
         return Err(Stop::Cancelled);
     }
-    match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await {
+    if let Some((keep, change)) = keep {
+        keep.keep(change)?;
+        // A stop or the lock may have come while the snapshot was stored: the write never begins.
+        if cancel.is_cancelled() {
+            keep.ended(None);
+            return Err(Stop::Cancelled);
+        }
+    }
+    let result = match tokio::time::timeout(
+        TIMEOUT,
+        remote_file::write(session, path, bytes, expect, None),
+    )
+    .await
+    {
         Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
         Ok(Ok(resolved)) => Ok(resolved),
         // The command may have begun writing when it failed or the connection went.
@@ -555,7 +702,15 @@ async fn write_bytes(
             Err(Stop::Unfinished(unfinished(path, &e, session.is_closed())))
         }
         Ok(Err(e)) => Err(Stop::Failed(describe(path, Op::Write, e, from_card))),
+    };
+    if let Some((keep, _)) = keep {
+        match &result {
+            Ok(resolved) => keep.ended(Some(resolved)),
+            Err(Stop::Unfinished(_)) => {}
+            Err(_) => keep.ended(None),
+        }
     }
+    result
 }
 
 /// The message for a write that failed after it may have begun.
@@ -619,6 +774,8 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
              {verb} it: writing would create the link's target, which may be anywhere. Use the \
              path the link should point to, or ask the user."
         ),
+        // Only a deletion (AI-41's revert) refuses a link.
+        RemoteFileError::SymbolicLink => format!("{path} is a symbolic link."),
         RemoteFileError::PermissionDenied => format!(
             "Permission denied: the user this tab is logged in as cannot {verb} {path}. The file \
              tools never use sudo. To go on, use send_input to run a command with sudo in the \
@@ -649,6 +806,272 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
             message
         }
         RemoteFileError::Ssh(e) => format!("Could not {verb} {path}: {}.", e.message),
+    }
+}
+
+// ---- revert (AI-41) ----
+
+fn revert_failed(reason: AiRevertFailure, detail: Option<String>) -> Revert {
+    Revert::from(AiFileRevert::Failed { reason, detail })
+}
+
+/// What a revert found the file holding when it showed the diff: what Restore anyway writes over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Found {
+    Missing,
+    /// Its POSIX `cksum` checksum and size.
+    File((u32, u64)),
+}
+
+impl Found {
+    fn of(current: Option<&[u8]>) -> Self {
+        current.map_or(Self::Missing, |bytes| Self::File(remote_file::cksum(bytes)))
+    }
+}
+
+/// What a revert did: the outcome, and for a diff, what the file held as it showed it.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Revert {
+    pub outcome: AiFileRevert,
+    pub found: Option<Found>,
+}
+
+impl From<AiFileRevert> for Revert {
+    fn from(outcome: AiFileRevert) -> Self {
+        Self {
+            outcome,
+            found: None,
+        }
+    }
+}
+
+/// What a revert does with the file it read.
+#[derive(Debug, PartialEq, Eq)]
+enum Plan {
+    /// Writes back what the file held before the call, or deletes the file the call created, over
+    /// what it holds now: what the call wrote, or with Restore anyway, what the diff showed.
+    Restore,
+    /// The file holds what it held before the call, or the file the call created is gone: there
+    /// is nothing to write, as after a revert whose result was lost.
+    Done,
+    /// The file holds something else: an unfinished write or revert, or a change by the user,
+    /// another program or a later call. The diff shows it.
+    Show,
+}
+
+/// The plan for the file as read (`None`: it does not exist). `shown` is what the diff showed when
+/// the user chose Restore anyway.
+fn plan(change: &Change, current: Option<&[u8]>, shown: Option<Found>) -> Plan {
+    let sum = remote_file::cksum;
+    match (current, change.content.before.as_deref()) {
+        (Some(bytes), _) if sum(bytes) == sum(change.content.after.as_bytes()) => Plan::Restore,
+        (None, None) => Plan::Done,
+        (Some(bytes), Some(before)) if sum(bytes) == sum(before.as_bytes()) => Plan::Done,
+        _ if shown == Some(Found::of(current)) => Plan::Restore,
+        _ => Plan::Show,
+    }
+}
+
+/// The file at `path` as a revert finds it: its bytes, `None` when it does not exist, or why the
+/// revert stops here.
+async fn current_file(session: &SshSession, path: &str) -> Result<Option<Vec<u8>>, Revert> {
+    match tokio::time::timeout(TIMEOUT, remote_file::read(session, path, MAX_FILE_BYTES)).await {
+        Err(_) => Err(revert_failed(AiRevertFailure::TimedOut, None)),
+        Ok(Ok(file)) => Ok(Some(file.bytes)),
+        Ok(Err(RemoteFileError::NotFound)) => Ok(None),
+        Ok(Err(RemoteFileError::PermissionDenied)) => {
+            Err(revert_failed(AiRevertFailure::PermissionDenied, None))
+        }
+        // It changed into something the tools do not read, so there is no diff to show.
+        Ok(Err(
+            RemoteFileError::IsDirectory
+            | RemoteFileError::NotRegular
+            | RemoteFileError::DanglingLink
+            | RemoteFileError::TooLarge(_),
+        )) => Err(revert_failed(AiRevertFailure::NotText, None)),
+        Ok(Err(_)) if session.is_closed() => {
+            Err(revert_failed(AiRevertFailure::Disconnected, None))
+        }
+        Ok(Err(e)) => Err(revert_failed(AiRevertFailure::Failed, Some(e.to_string()))),
+    }
+}
+
+/// The text the panel diffs: CRLF line breaks as `\n`, like the approval card's.
+fn shown_text(bytes: &[u8]) -> Option<String> {
+    TextFile::decode(bytes).ok().map(|f| f.display_text())
+}
+
+/// The change as the panel diffs it, from what the file held before the call (`None`: the call
+/// created it) to what the call wrote.
+pub(super) fn change_preview(change: &Change) -> AiFilePreview {
+    let before = change
+        .content
+        .before
+        .as_deref()
+        .map(|before| TextFile::decode(before.as_bytes()));
+    AiFilePreview {
+        path: change.meta.path.clone(),
+        before: before.as_ref().map(|file| {
+            file.as_ref()
+                .map(TextFile::display_text)
+                .unwrap_or_default()
+        }),
+        after: Some(shown_text(change.content.after.as_bytes()).unwrap_or_default()),
+        error: None,
+        crlf: before.is_some_and(|file| file.is_ok_and(|f| f.crlf)),
+    }
+}
+
+/// The diff from what the file holds now to what it held before the call, which Restore anyway
+/// writes, and what the file held as the diff shows it.
+fn show(change: &Change, current: Option<&[u8]>) -> Revert {
+    let text = match current.map(shown_text) {
+        Some(None) => return revert_failed(AiRevertFailure::NotText, None),
+        text => text.flatten(),
+    };
+    Revert {
+        outcome: AiFileRevert::Changed {
+            path: change.meta.path.clone(),
+            current: text,
+            before: change
+                .content
+                .before
+                .as_deref()
+                .map(|before| shown_text(before.as_bytes()).unwrap_or_default()),
+            later: false,
+        },
+        found: Some(Found::of(current)),
+    }
+}
+
+/// Reads the file again after a write or deletion found it changed since the read: done when it
+/// holds what it held before the call, otherwise the diff.
+async fn found_again(session: &SshSession, change: &Change) -> Revert {
+    match current_file(session, &change.meta.path).await {
+        Ok(current) if plan(change, current.as_deref(), None) == Plan::Done => {
+            AiFileRevert::Reverted { wrote: false }.into()
+        }
+        Ok(current) => show(change, current.as_deref()),
+        Err(revert) => revert,
+    }
+}
+
+/// The permission bits a file Restore anyway creates again gets when its snapshot has none (it
+/// was taken before snapshots kept them, or `ls` showed none): readable by its owner only.
+const RECREATED_MODE: u32 = 0o600;
+
+/// Writes back what the file held before the call, or deletes the file the call created, only
+/// while it holds exactly `current`, by `cksum` checksum and size. A file deleted since is created
+/// again with the permission bits it had, owned by the user the tab is logged in as.
+async fn restore(session: &SshSession, change: &Change, current: Option<&[u8]>) -> Revert {
+    let path = &change.meta.path;
+    let ended = match &change.content.before {
+        None => {
+            let Some(current) = current else {
+                return AiFileRevert::Reverted { wrote: false }.into();
+            };
+            let delete = remote_file::delete(session, path, current);
+            deleted(tokio::time::timeout(TIMEOUT, delete).await.ok())
+        }
+        Some(before) => {
+            let expect = current.map_or(Expect::Missing, Expect::Content);
+            let mode = current
+                .is_none()
+                .then(|| change.meta.mode.unwrap_or(RECREATED_MODE));
+            let write = remote_file::write(session, path, before.as_bytes(), expect, mode);
+            written(tokio::time::timeout(TIMEOUT, write).await.ok())
+        }
+    };
+    match ended {
+        Some(revert) => revert,
+        None => found_again(session, change).await,
+    }
+}
+
+/// What the end of a revert's deletion means (`None`: it timed out), or `None` when the file
+/// changed since it was read, so it is read again.
+fn deleted(result: Option<Result<String, RemoteFileError>>) -> Option<Revert> {
+    Some(match result {
+        Some(Ok(_)) => AiFileRevert::Reverted { wrote: true }.into(),
+        Some(Err(RemoteFileError::Changed | RemoteFileError::NotFound)) => return None,
+        // Neither the link nor its target is deleted. Reading through the link again would show
+        // its target, which may hold what the call wrote, so there is nothing to show.
+        Some(Err(RemoteFileError::SymbolicLink)) => {
+            revert_failed(AiRevertFailure::SymbolicLink, None)
+        }
+        Some(Err(RemoteFileError::PermissionDenied)) => {
+            revert_failed(AiRevertFailure::PermissionDenied, None)
+        }
+        Some(Err(RemoteFileError::IsDirectory | RemoteFileError::NotRegular)) => {
+            revert_failed(AiRevertFailure::NotText, None)
+        }
+        // `rm` may have run before the time ran out, the command failed or the connection went.
+        None => revert_failed(AiRevertFailure::Unfinished, None),
+        Some(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
+        }
+        Some(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+    })
+}
+
+/// What the end of a revert's write means (`None`: it timed out), or `None` when the file changed
+/// since it was read, so it is read again.
+fn written(result: Option<Result<String, RemoteFileError>>) -> Option<Revert> {
+    Some(match result {
+        Some(Ok(_)) => AiFileRevert::Reverted { wrote: true }.into(),
+        Some(Err(RemoteFileError::Changed)) => return None,
+        Some(Err(RemoteFileError::PermissionDenied)) => {
+            revert_failed(AiRevertFailure::PermissionDenied, None)
+        }
+        Some(Err(
+            RemoteFileError::IsDirectory
+            | RemoteFileError::NotRegular
+            | RemoteFileError::DanglingLink,
+        )) => revert_failed(AiRevertFailure::NotText, None),
+        // The write may have begun before the time ran out, the command failed or the connection
+        // went.
+        None => revert_failed(AiRevertFailure::Unfinished, None),
+        Some(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
+        }
+        Some(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+    })
+}
+
+/// AI-41: puts back what the file held before `change`, or deletes the file the change created.
+/// It writes only over what the call wrote, or with Restore anyway (`shown`), over what the diff
+/// showed, by `cksum` checksum and size. A file that holds what it held before the call already is
+/// left as it is and counts as reverted. `None` when `cancel` (the lock) fired before anything was
+/// written; once a write or deletion has begun, it runs to its end.
+pub(super) async fn revert(
+    session: Option<SshSession>,
+    change: &Change,
+    shown: Option<Found>,
+    cancel: &CancellationToken,
+) -> Option<Revert> {
+    let Some(session) = session else {
+        return Some(revert_failed(AiRevertFailure::Disconnected, None));
+    };
+    if server(&session) != change.meta.server {
+        return Some(revert_failed(
+            AiRevertFailure::OtherServer,
+            Some(change.meta.server.clone()),
+        ));
+    }
+    let current = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return None,
+        current = current_file(&session, &change.meta.path) => current,
+    };
+    let current = match current {
+        Ok(current) => current,
+        Err(revert) => return Some(revert),
+    };
+    match plan(change, current.as_deref(), shown) {
+        Plan::Done => Some(AiFileRevert::Reverted { wrote: false }.into()),
+        Plan::Show => Some(show(change, current.as_deref())),
+        Plan::Restore if cancel.is_cancelled() => None,
+        Plan::Restore => Some(restore(&session, change, current.as_deref()).await),
     }
 }
 
@@ -725,6 +1148,7 @@ mod tests {
             file: bytes.map(|b| RemoteFile {
                 path: resolved,
                 bytes: b.to_vec(),
+                mode: Some(0o644),
             }),
         }
     }
@@ -758,6 +1182,7 @@ mod tests {
             conversation_id: "c1",
             place: &place,
             shown: &Mutex::default(),
+            keep: None,
         };
         let hosts = base("~/hosts", Some(b"127.0.0.1 a\r\n::1 a\r\n"));
         seen.record(
@@ -816,6 +1241,7 @@ mod tests {
             conversation_id: "c1",
             place: &place,
             shown: &Mutex::default(),
+            keep: None,
         };
         let conf = base("~/app.conf", Some(b"port = 80\n"));
         let edit = job(
@@ -899,8 +1325,242 @@ mod tests {
             conversation_id: "c2",
             place: &place,
             shown: &Mutex::default(),
+            keep: None,
         };
         assert_eq!(preview_of(&edit, &conf, other).error, None);
+    }
+
+    /// AI-41: what a write keeps for its revert, before the write begins.
+    #[tokio::test]
+    async fn changes_are_kept_with_what_the_file_held_before() {
+        let change = Change::new(
+            SERVER,
+            "/etc/app.conf",
+            tools::EDIT_FILE,
+            Some(b"a\r\n"),
+            b"b\r\n",
+        )
+        .unwrap();
+        assert_eq!(
+            change.meta,
+            ChangeMeta {
+                server: SERVER.into(),
+                path: "/etc/app.conf".into(),
+                tool: tools::EDIT_FILE.into(),
+                created: false,
+                mode: None,
+            }
+        );
+        assert_eq!(change.content.before.as_deref(), Some("a\r\n"));
+        let (meta, content) = change.encode().unwrap();
+        assert!(meta.contains("\"created\":false"), "{meta}");
+        assert!(!meta.contains("mode"), "{meta}");
+        // The permission bits the file had go with it, for Restore anyway to create it again.
+        let (with_mode, _) = change.clone().with_mode(Some(0o640)).encode().unwrap();
+        assert!(with_mode.contains("\"mode\":416"), "{with_mode}");
+        assert_eq!(
+            serde_json::from_str::<ChangeMeta>(&with_mode).unwrap().mode,
+            Some(0o640)
+        );
+        assert_eq!(
+            serde_json::from_str::<ChangeMeta>(&meta).unwrap().mode,
+            None
+        );
+        assert!(
+            content.contains("\"after\":\"b\\r\\n\""),
+            "{}",
+            content.as_str()
+        );
+        let created = Change::new(SERVER, "new", tools::WRITE_FILE, None, b"x").unwrap();
+        assert!(created.meta.created && created.content.before.is_none());
+
+        // Without a live session nothing is read or written.
+        let cancel = CancellationToken::new();
+        assert_eq!(
+            revert(None, &change, None, &cancel).await,
+            Some(Revert::from(AiFileRevert::Failed {
+                reason: AiRevertFailure::Disconnected,
+                detail: None
+            }))
+        );
+    }
+
+    /// AI-41: how the end of a revert's write or deletion reads. One that may have begun is
+    /// unfinished, a timeout included; a symbolic link in a created file's place stops the revert
+    /// rather than showing its target again.
+    #[test]
+    fn reverts_tell_what_their_write_or_deletion_did() {
+        let failed = |reason| {
+            Some(Revert::from(AiFileRevert::Failed {
+                reason,
+                detail: None,
+            }))
+        };
+        let done = Some(Revert::from(AiFileRevert::Reverted { wrote: true }));
+        assert_eq!(deleted(Some(Ok("/srv/new".into()))), done);
+        assert_eq!(written(Some(Ok("/etc/app.conf".into()))), done);
+        assert_eq!(deleted(None), failed(AiRevertFailure::Unfinished));
+        assert_eq!(written(None), failed(AiRevertFailure::Unfinished));
+        let gone = || {
+            RemoteFileError::Ssh(hatoba_ssh::SshError::new(
+                hatoba_ssh::SshErrorKind::Disconnected,
+                "the connection closed",
+            ))
+        };
+        for result in [deleted(Some(Err(gone()))), written(Some(Err(gone())))] {
+            assert!(matches!(
+                result,
+                Some(Revert {
+                    outcome: AiFileRevert::Failed {
+                        reason: AiRevertFailure::Unfinished,
+                        detail: Some(_),
+                    },
+                    found: None,
+                })
+            ));
+        }
+        // Changed since the read: read again.
+        assert_eq!(deleted(Some(Err(RemoteFileError::Changed))), None);
+        assert_eq!(deleted(Some(Err(RemoteFileError::NotFound))), None);
+        assert_eq!(written(Some(Err(RemoteFileError::Changed))), None);
+        assert_eq!(
+            deleted(Some(Err(RemoteFileError::SymbolicLink))),
+            failed(AiRevertFailure::SymbolicLink)
+        );
+        assert_eq!(
+            deleted(Some(Err(RemoteFileError::PermissionDenied))),
+            failed(AiRevertFailure::PermissionDenied)
+        );
+    }
+
+    /// AI-41: what a revert does with the file it reads. It writes only over what the call wrote,
+    /// or with Restore anyway over what its diff showed; a file that holds what it held before
+    /// counts as reverted, so a revert whose result was lost can be done again.
+    #[test]
+    fn reverts_write_only_over_what_they_can_tell() {
+        let edit = Change::new(
+            SERVER,
+            "/etc/app.conf",
+            tools::EDIT_FILE,
+            Some(b"a\n"),
+            b"b\n",
+        )
+        .unwrap();
+        let created = Change::new(SERVER, "/srv/new", tools::WRITE_FILE, None, b"x\n").unwrap();
+
+        // (a) The file holds what the call wrote: written back, or deleted.
+        assert_eq!(plan(&edit, Some(b"b\n"), None), Plan::Restore);
+        assert_eq!(plan(&created, Some(b"x\n"), None), Plan::Restore);
+        // (b) It holds what it held before, or the file the call created is gone: nothing to
+        // write. So a revert whose result was lost is done when tried again, and so is an
+        // unfinished write that never changed the file.
+        assert_eq!(plan(&edit, Some(b"a\n"), None), Plan::Done);
+        assert_eq!(plan(&created, None, None), Plan::Done);
+        // (c) Anything else is shown: changed since, a write cut short, a missing file the call
+        // did not create.
+        for current in [Some(&b"c\n"[..]), Some(&b"b"[..]), None] {
+            assert_eq!(plan(&edit, current, None), Plan::Show, "{current:?}");
+        }
+        assert_eq!(plan(&created, Some(b"y\n"), None), Plan::Show);
+
+        // The diff goes from the file now to what it held before, which Restore anyway writes.
+        let shown = show(&edit, Some(b"b"));
+        assert_eq!(
+            shown,
+            Revert {
+                outcome: AiFileRevert::Changed {
+                    path: "/etc/app.conf".into(),
+                    current: Some("b".into()),
+                    before: Some("a\n".into()),
+                    later: false,
+                },
+                found: Some(Found::File(remote_file::cksum(b"b"))),
+            }
+        );
+        // Restore anyway writes over exactly that, and over nothing else: a file that changed
+        // again since the diff is shown again.
+        assert_eq!(plan(&edit, Some(b"b"), shown.found), Plan::Restore);
+        assert_eq!(plan(&edit, Some(b"bb"), shown.found), Plan::Show);
+        assert_eq!(plan(&edit, None, shown.found), Plan::Show);
+        // A missing file is put back, a changed file the call created deleted, each only as shown.
+        let gone = show(&edit, None);
+        assert!(matches!(
+            gone.outcome,
+            AiFileRevert::Changed {
+                current: None,
+                before: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(plan(&edit, None, gone.found), Plan::Restore);
+        assert_eq!(plan(&edit, Some(b"c\n"), gone.found), Plan::Show);
+        let changed = show(&created, Some(b"y\n"));
+        assert!(matches!(
+            changed.outcome,
+            AiFileRevert::Changed { before: None, .. }
+        ));
+        assert_eq!(plan(&created, Some(b"y\n"), changed.found), Plan::Restore);
+
+        // A revert whose own write was cut short leaves the file neither way: shown, and then
+        // restored anyway over what it holds; tried again after that, it is done.
+        let cut = show(&edit, Some(b""));
+        assert_eq!(plan(&edit, Some(b""), cut.found), Plan::Restore);
+        assert_eq!(plan(&edit, Some(b"a\n"), cut.found), Plan::Done);
+
+        // Line breaks as the card shows them; nothing to diff for a file that is not text.
+        let crlf = Change::new(
+            SERVER,
+            "/etc/c.conf",
+            tools::EDIT_FILE,
+            Some(b"a\r\n"),
+            b"b\r\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            show(&crlf, Some(b"c\r\n")).outcome,
+            AiFileRevert::Changed { current: Some(ref c), before: Some(ref b), .. } if c == "c\n" && b == "a\n"
+        ));
+        assert_eq!(
+            show(&edit, Some(b"\0bin")),
+            Revert::from(AiFileRevert::Failed {
+                reason: AiRevertFailure::NotText,
+                detail: None
+            })
+        );
+    }
+
+    /// AI-41: a revert ends the model's record of that file only.
+    #[test]
+    fn a_revert_forgets_what_the_model_saw_of_the_file() {
+        let seen = Seen::default();
+        let place = place();
+        let by = SeenBy {
+            seen: &seen,
+            conversation_id: "c1",
+            place: &place,
+            shown: &Mutex::default(),
+            keep: None,
+        };
+        seen.record("c1", "e2", SERVER, "/etc/app.conf", b"b\r\n");
+        seen.record("c1", "e2", SERVER, "/etc/other.conf", b"o");
+        seen.forget_file("c1", SERVER, "/etc/app.conf");
+        let conf = base("/etc/app.conf", Some(b"b\r\n"));
+        let edit = job(
+            tools::EDIT_FILE,
+            r#"{"path":"/etc/app.conf","old_string":"b","new_string":"c"}"#,
+        );
+        assert!(
+            preview_of(&edit, &conf, by)
+                .error
+                .unwrap()
+                .contains("has not been read")
+        );
+        let other = base("/etc/other.conf", Some(b"o"));
+        let edit_other = job(
+            tools::EDIT_FILE,
+            r#"{"path":"/etc/other.conf","old_string":"o","new_string":"p"}"#,
+        );
+        assert_eq!(preview_of(&edit_other, &other, by).error, None);
     }
 
     /// A lock that disconnects sessions waits for the edits and writes that run on each.

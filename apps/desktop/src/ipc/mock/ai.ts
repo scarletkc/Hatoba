@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
+import { fileRevertNote, noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -10,6 +10,8 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFileChange,
+  AiFileRevert,
   AiFinish,
   AiSearchHit,
   AiToolCall,
@@ -37,6 +39,10 @@ type AiApi = Pick<
   | "ai_tool_result"
   | "ai_tool_run"
   | "ai_file_preview"
+  | "ai_file_changes"
+  | "ai_file_change_diff"
+  | "ai_file_revert"
+  | "ai_session_server"
   | "ai_stop"
   | "ai_compact"
   | "ai_search"
@@ -50,6 +56,8 @@ export interface AiMockDeps {
   settings: HatobaApi["ai_settings_get"];
   /** The hosts mock's list, whose names the notes of a move to another host carry (AI-09). */
   hosts?: () => Promise<HostView[]>;
+  /** The server a live session of the shell mock is connected to, as file changes name it (AI-41). */
+  sessionServer?: (sessionId: string) => string | null;
   /** The MCP servers of the extensions mock, whose tools the fake model calls. */
   mcp?: {
     servers: HatobaApi["mcp_servers_list"];
@@ -70,7 +78,7 @@ interface Conv {
 }
 
 /**
- * Like Rust's `EntryPlace` (AI-41), which a user entry records and the view does not carry: where the conversation
+ * Like Rust's `EntryPlace` (AI-43), which a user entry records and the view does not carry: where the conversation
  * was when the message was stored, before its move.
  */
 type Recorded = Pick<AiConversationView, "host_id" | "quick_target" | "origin">;
@@ -101,6 +109,10 @@ interface Turn {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
+/** The file the "cutshort" write leaves cut short (AI-41). */
+const CUT_SHORT = "/srv/app/conf.d/cache.conf";
+/** The file "write" creates, which "symlink" puts a link in the place of (AI-41). */
+const MAINTENANCE = "/srv/app/public/maintenance.html";
 
 /**
  * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
@@ -122,6 +134,14 @@ const DAY = 24 * HOUR;
  *   "unread"          edit_file of a file the conversation has not read, which is refused
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
+ *   "cutshort"        write_file whose write fails halfway, leaving the file cut short
+ *   "rmfile"          run_command `rm /etc/motd`     "symlink"  run_command that puts a link in the place
+ *                     of the file "write" creates, so reverting "motd" offers to create the file again and
+ *                     reverting "write" stops at the link (AI-41)
+ * An edit or write that ran, or failed after it may have begun, can be reverted from its block while the
+ * conversation is idle (AI-41), and the next message notes it. "listen" then "edit" changes one file twice:
+ * reverting the first then shows the diff, says the later call is in the way, and offers Restore Anyway.
+ * The mock keeps few snapshots, so "bigfile" after another change drops the older one.
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
  * Keywords come from the typed text. A message without one gets an answer about what it carries:
  * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
@@ -143,7 +163,7 @@ const DAY = 24 * HOUR;
  *              screenshots and demo video show: two commands, a fix, `curl` typed into the shell, a summary
  *   noprovider (Settings → AI mock) no provider is configured
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
- * A fork (AI-41) copies a conversation into a new one, like Rust: Fork from Here on a message or under a
+ * A fork (AI-43) copies a conversation into a new one, like Rust: Fork from Here on a message or under a
  * reply, or Fork in History.
  * Like Rust, a message that moves the conversation to another host (AI-09) or goes to another model
  * than the last reply (AI-05) is stored with Hatoba's note before it, which the panel shows as a
@@ -442,10 +462,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
         if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
         if (want("write", "写入", "書き込"))
-          calls.push(call("write_file", { path: "/srv/app/public/maintenance.html", content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
+          calls.push(call("write_file", { path: MAINTENANCE, content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
         if (want("bigfile"))
           calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
         if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
+        if (want("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
+        if (want("rmfile")) calls.push(call("run_command", { command: "rm /etc/motd" }));
+        if (want("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
@@ -753,6 +776,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
     }
+    notes.push(...pendingReverts(c.view.id, earlier));
     return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
   }
 
@@ -847,6 +871,57 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ["/etc/motd", "Welcome to prod-api.\nMaintenance window: Sundays 02:00–04:00 UTC.\n"],
     ["/srv/app/web.config", '<?xml version="1.0"?>\r\n<configuration>\r\n  <appSettings>\r\n    <add key="mode" value="production" />\r\n  </appSettings>\r\n</configuration>\r\n'],
   ]);
+  /** AI-41: what each edit or write that ran changed, by conversation, like Rust's snapshots. */
+  interface Snapshot {
+    change: AiFileChange;
+    tool: string;
+    before: string | null;
+    after: string;
+    /** What the diff of the last revert showed the file holding: Restore anyway writes only over that. */
+    shown?: string | null;
+  }
+  const snapshots = new Map<string, Snapshot[]>();
+  /** Rust keeps 32 MB; the mock keeps just over what "bigfile" writes, so it drops the changes before it. */
+  const SNAPSHOT_CAP = 15_800;
+  /** Like Rust's trim: drops what the oldest changes held until the kept ones fit; true when it dropped any. */
+  function trimSnapshots(): boolean {
+    const kept = [...snapshots.values()].flat().filter((s) => s.change.state === "written" || s.change.state === "unfinished");
+    let total = kept.reduce((n, s) => n + (s.before?.length ?? 0) + s.after.length, 0);
+    let dropped = false;
+    for (const s of kept) {
+      if (total <= SNAPSHOT_CAP) break;
+      total -= (s.before?.length ?? 0) + s.after.length;
+      s.change = { ...s.change, state: "dropped" };
+      dropped = true;
+    }
+    return dropped;
+  }
+  /** Files a link was put in the place of ("symlink"), which reads go through and a revert's deletion refuses. */
+  const remoteLinks = new Set<string>();
+  /** Calls whose snapshot dropped older ones, as `ai_tool_run` reports it. */
+  const droppedBy = new Set<string>();
+  const fileChangesOf = (convId: string) => (snapshots.get(convId) ?? []).map((s) => ({ ...s.change }));
+  /** Like Rust's `pending_reverts`: reverted calls in `earlier` that no user entry after the call notes yet, oldest call first. */
+  function pendingReverts(convId: string, earlier: AiEntryView[]): Note[] {
+    const at = (s: Snapshot) => earlier.findIndex((e) => e.entry_id === s.change.response_id);
+    const order = (s: Snapshot) => {
+      const e = earlier[at(s)];
+      return e?.role === "assistant" ? e.tool_calls.findIndex((x) => x.id === s.change.tool_call_id) : -1;
+    };
+    return (snapshots.get(convId) ?? [])
+      .filter((s) => s.change.state === "reverted" && at(s) >= 0 && order(s) >= 0)
+      // A note is about the call of the newest response before it with that id.
+      .filter((s) => {
+        const id = s.change.tool_call_id;
+        return !earlier.some((e, j) => {
+          if (j <= at(s) || e.role !== "user" || !parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === id)) return false;
+          return earlier.slice(0, j).findLastIndex((x) => x.role === "assistant" && x.tool_calls.some((c) => c.id === id)) === at(s);
+        });
+      })
+      .sort((a, b) => at(a) - at(b) || order(a) - order(b))
+      .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created));
+  }
+
   /** What each approval card read, like Rust's: the call writes only over it (AI-39). */
   const fileBases = new Map<string, string | null>();
   /** What the model has seen of each file, by conversation and resolved path, like Rust's (§13.4). */
@@ -932,6 +1007,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       case "run_command": {
         if (!sessionId) return { status: "error", content: "The terminal tab is not connected." };
         const command = String(args.command ?? "");
+        // AI-41: files changed behind a call's back, for its revert to find.
+        if (command === "rm /etc/motd") remoteFiles.delete("/etc/motd");
+        if (command.startsWith("ln -sfn ") && remoteFiles.has(MAINTENANCE)) remoteLinks.add(MAINTENANCE);
         const secs = Number(/sleep\s+(\d+)/.exec(command)?.[1] ?? 0);
         await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
         const r = exec(command);
@@ -969,8 +1047,25 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (refused) return { status: "error", content: refused };
         const after = fileAfter(x.name, args, current);
         if ("error" in after) return { status: "error", content: after.error };
+        // Like Rust: the snapshot is kept before the write begins, unfinished until it ends.
+        const response = c.entries.find((e) => e.role === "assistant" && e.tool_calls.some((t) => t.id === x.id));
+        let snapshot: Snapshot | null = null;
+        if (response) {
+          const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
+          const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
+          const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : "root@localhost:22";
+          const change: AiFileChange = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, state: "unfinished" };
+          snapshot = { change, tool: x.name, before: current, after: after.text };
+          snapshots.set(c.view.id, [...kept, snapshot]);
+          if (trimSnapshots()) droppedBy.add(x.id);
+        }
+        if (key === CUT_SHORT) {
+          remoteFiles.set(key, after.text.slice(0, Math.ceil(after.text.length / 2)));
+          return { status: "error", content: `Writing ${path} failed: the connection closed. The file may be unchanged, cut short or empty, so read it with read_file before you change it.` };
+        }
         remoteFiles.set(key, after.text);
         seenFiles.set(seenKey(c.view.id, path), after.text);
+        if (snapshot?.change.state === "unfinished") snapshot.change = { ...snapshot.change, state: "written" };
         const count = fileLines(after.text).length;
         if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
         return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
@@ -1168,7 +1263,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await delay(120);
       const c = need(id);
       settleRemote(c);
-      return { conversation: view(c), entries: c.entries.map((e) => ({ ...e })), running: turns.has(id) || c.runningUntil > Date.now() };
+      return {
+        conversation: view(c),
+        entries: c.entries.map((e) => ({ ...e })),
+        running: turns.has(id) || c.runningUntil > Date.now(),
+        file_changes: fileChangesOf(id),
+      };
     },
     ai_conversation_rename: async (id, title) => {
       const c = need(id);
@@ -1183,6 +1283,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ai_conversation_delete: async (id) => {
       stopTurn(id);
       convs.delete(id);
+      snapshots.delete(id);
     },
     ai_conversation_fork: async (id, entryId, title) => {
       await delay(120);
@@ -1300,8 +1401,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const x = openCall(c, callId);
       const r = await runTool(c, x, sessionId, edited);
       // A stop stored a cancelled result while the tool ran.
+      const dropped = droppedBy.delete(callId);
       if (answered(c).has(callId)) fail("cancelled", "the tool call was stopped");
-      return storeResult(c, callId, r.status, r.content, edited);
+      return { entry: storeResult(c, callId, r.status, r.content, edited), dropped_file_changes: dropped };
     },
     ai_file_preview: async (id, callId, sessionId, edited) => {
       const c = need(id);
@@ -1330,6 +1432,56 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const shown = (text: string) => (crlf ? text.replace(/\r\n/g, "\n") : text);
       return { path, before: before === null ? null : shown(before), after: shown(after.text), error: null, crlf };
     },
+    ai_file_changes: async (id) => {
+      need(id);
+      return fileChangesOf(id);
+    },
+    ai_file_change_diff: async (id, responseId, callId) => {
+      need(id);
+      const snapshot = (snapshots.get(id) ?? []).find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      if (!snapshot) return fail("not_found", "file change not found");
+      if (snapshot.change.state !== "written" && snapshot.change.state !== "unfinished") return null;
+      const shown = (text: string) => text.replace(/\r\n/g, "\n");
+      const crlf = snapshot.before !== null && crlfOf(snapshot.before);
+      return { path: snapshot.change.path, before: snapshot.before === null ? null : shown(snapshot.before), after: shown(snapshot.after), error: null, crlf };
+    },
+    ai_file_revert: async (id, responseId, callId, sessionId, restore) => {
+      const c = need(id);
+      if (turns.has(id) || c.runningUntil > Date.now()) fail("invalid_input", "The conversation is busy; revert the change once it is idle.", { field: "conversation_id" });
+      const list = snapshots.get(id) ?? [];
+      const snapshot = list.find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      if (!snapshot) return fail("not_found", "file change not found");
+      if (snapshot.change.state === "reverted") fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
+      if (snapshot.change.state === "dropped") fail("invalid_input", "the change can no longer be reverted: the snapshot limit dropped it", { field: "tool_call_id" });
+      if (!sessionId) return { status: "failed", reason: "disconnected", detail: null } satisfies AiFileRevert;
+      await delay(500);
+      const path = snapshot.change.path;
+      const current = remoteFiles.get(path) ?? null;
+      const shown = (text: string) => text.replace(/\r\n/g, "\n");
+      const reverted = (wrote: boolean) => {
+        snapshot.change = { ...snapshot.change, state: "reverted" };
+        delete snapshot.shown;
+        // The model reads the file again before it changes it.
+        seenFiles.delete(`${id}:${path}`);
+        return { status: "reverted", wrote } satisfies AiFileRevert;
+      };
+      // Like Rust: (b) the file holds what it held before, or the file the call created is gone.
+      if (current === snapshot.before) return reverted(false);
+      // (a) It holds what the call wrote; or with Restore anyway, what the diff showed.
+      if (current === snapshot.after || (restore && snapshot.shown !== undefined && current === snapshot.shown)) {
+        // Like Rust's delete script: a link in the place of the file the call created is not deleted.
+        if (snapshot.before === null && remoteLinks.has(path)) return { status: "failed", reason: "symbolic_link", detail: null } satisfies AiFileRevert;
+        if (snapshot.before === null) remoteFiles.delete(path);
+        else remoteFiles.set(path, snapshot.before);
+        return reverted(true);
+      }
+      // (c) Anything else: the diff to what it held before.
+      snapshot.shown = current;
+      const at = list.indexOf(snapshot);
+      const later = list.slice(at + 1).some((s) => s.change.path === path && (s.change.state === "written" || s.change.state === "unfinished"));
+      return { status: "changed", path, current: current === null ? null : shown(current), before: snapshot.before === null ? null : shown(snapshot.before), later } satisfies AiFileRevert;
+    },
+    ai_session_server: async (sessionId) => (sessionId ? (deps.sessionServer?.(sessionId) ?? null) : null),
     ai_stop: async (id) => {
       const c = convs.get(id);
       if (c?.runningUntil) c.runningUntil = 0;
@@ -1388,6 +1540,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: the message records what the edited one did.
       const recorded = cameFrom.get(entryId) ?? null;
       c.entries = c.entries.slice(0, i);
+      // Like Rust: the snapshots of the calls the deleted responses made go with them (AI-41).
+      snapshots.set(id, (snapshots.get(id) ?? []).filter((s) => c.entries.some((e) => e.entry_id === s.change.response_id)));
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
         c.view = { ...c.view, context_start: summary?.entry_id ?? null };

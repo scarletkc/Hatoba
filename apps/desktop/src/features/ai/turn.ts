@@ -1,4 +1,4 @@
-import type { AiEntryView, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
 
 /** A response while it streams, before Rust stores it as an entry (§13.1 step 2). */
 export interface LiveResponse {
@@ -164,6 +164,55 @@ export function entriesBefore(entries: AiEntryView[], entryId: string): AiEntryV
 export function laterMessages(entries: AiEntryView[], entryId: string): number {
   const i = entries.findIndex((e) => e.entry_id === entryId);
   return i < 0 ? 0 : entries.slice(i + 1).filter((e) => e.role !== "tool").length;
+}
+
+/** What an edit of the user's message would do to files the assistant changed (AI-26, AI-41). */
+export interface EditedFiles {
+  /** The changes of the calls the edit deletes that this device can still revert, oldest call first. */
+  revert: AiFileChange[];
+  /**
+   * The `edit_file` and `write_file` calls the edit deletes that wrote, by their result, and whose change this
+   * device does not keep: another device ran them, or the size limit dropped it.
+   */
+  untracked: number;
+}
+
+/** The file changes an edit of `entryId` deletes the calls of: those this device can revert, and how many others stay on the host. */
+export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], entryId: string): EditedFiles {
+  const i = entries.findIndex((e) => e.entry_id === entryId);
+  if (i < 0) return { revert: [], untracked: 0 };
+  const deleted = entries.slice(i + 1);
+  const responses = new Set(deleted.flatMap((e) => (e.role === "assistant" ? [e.entry_id] : [])));
+  const kept = changes.filter((c) => responses.has(c.response_id));
+  const keyOf = (c: AiFileChange) => `${c.response_id}:${c.tool_call_id}`;
+  const known = new Set(kept.filter((c) => c.state !== "dropped").map(keyOf));
+  // A dropped change stays on the host too, also one whose write failed partway (its result is an error).
+  const staying = new Set(kept.filter((c) => c.state === "dropped").map(keyOf));
+  let response: (AiEntryView & { role: "assistant" }) | null = null;
+  for (const e of deleted) {
+    if (e.role === "assistant") response = e;
+    if (e.role !== "tool" || e.status !== "ok" || !response) continue;
+    const call = response.tool_calls.find((c) => c.id === e.tool_call_id);
+    const key = `${response.entry_id}:${e.tool_call_id}`;
+    if ((call?.name === "edit_file" || call?.name === "write_file") && !known.has(key)) staying.add(key);
+  }
+  return { revert: kept.filter((c) => c.state === "written" || c.state === "unfinished"), untracked: staying.size };
+}
+
+/** The `data-reveal` key of a call's block: by its response too, since responses may reuse call ids. */
+export function callRevealKey(responseId: string, callId: string): string {
+  return `call:${responseId}:${callId}`;
+}
+
+/**
+ * What a reveal of `entry` scrolls to and highlights (AI-24, AI-41): the entry, or for a tool result the block of
+ * its call, in the newest response before it with that call id. Null for a result without one.
+ */
+export function revealKey(entries: AiEntryView[], entry: AiEntryView): string | null {
+  if (entry.role !== "tool") return `entry:${entry.entry_id}`;
+  const at = entries.indexOf(entry);
+  const response = entries.slice(0, at < 0 ? entries.length : at).findLast((e) => e.role === "assistant" && e.tool_calls.some((c) => c.id === entry.tool_call_id));
+  return response ? callRevealKey(response.entry_id, entry.tool_call_id) : null;
 }
 
 /**

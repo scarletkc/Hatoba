@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { McpToolInfo } from "@/ipc/types";
 import {
   allowanceOf,
+  callFileChange,
   callSummary,
   exitStatusOf,
   grantKey,
@@ -243,5 +244,16 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     expect(toolLabel(t, "run_command")).toBe("ai.tool.run_command");
     expect(toolLabel(t, "mcp__github__list_issues")).toBe('ai.tool.mcp:{"server":"github","tool":"list_issues"}');
     expect(toolLabel(t, "rm_rf")).toBe("rm_rf");
+  });
+});
+
+describe("the change of a file call from its arguments (AI-41)", () => {
+  it("shows an edit's replaced text and a write's content, and nothing for other tools", () => {
+    const edit = callFileChange("edit_file", JSON.stringify({ path: "/etc/a.conf", old_string: "port 80\n", new_string: "port 8080\n" }));
+    expect(edit).toEqual({ path: "/etc/a.conf", before: "port 80\n", after: "port 8080\n", error: null, crlf: false });
+    // Whether the write created the file is not in its arguments: the content shows as added, not as a new file.
+    expect(callFileChange("write_file", JSON.stringify({ path: "b", content: "x\n" }))).toMatchObject({ before: "", after: "x\n" });
+    expect(callFileChange("read_file", JSON.stringify({ path: "b" }))).toBeNull();
+    expect(callFileChange("edit_file", "{")).toBeNull();
   });
 });

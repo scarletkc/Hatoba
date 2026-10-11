@@ -95,7 +95,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     e.stopPropagation();
     setMenuEntries([
       { label: t("ai.history.open"), icon: "chat-circle-dots", onSelect: () => open(c) },
-      // AI-41: a copy of the whole conversation, which opens here; not while it is busy in its tab or a fork of it is being made.
+      // AI-43: a copy of the whole conversation, which opens here; not while it is busy in its tab or a fork of it is being made.
       { label: t("ai.history.fork"), icon: "git-fork", disabled: conversationBusy(c.id) || useAi.getState().forking.includes(c.id), onSelect: () => fork(c) },
       { label: t("btn.rename"), icon: "pencil-simple", onSelect: () => setRenaming(c.id) },
       { label: t(c.pinned ? "ai.history.unpin" : "ai.history.pin"), icon: c.pinned ? "push-pin-slash" : "push-pin", onSelect: () => void pinConversation(c.id, !c.pinned) },

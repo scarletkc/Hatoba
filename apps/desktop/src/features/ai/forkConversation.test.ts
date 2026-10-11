@@ -50,12 +50,12 @@ beforeEach(() => {
   get.mockReset();
   list.mockReset();
   toast.mockReset();
-  get.mockResolvedValue({ conversation: copy, entries: [entry], running: false });
+  get.mockResolvedValue({ conversation: copy, entries: [entry], running: false, file_changes: [] });
   list.mockResolvedValue([original]);
   useAi.setState({ history: null, forking: [], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: original.id, conversation: original, entries: [entry] } } });
 });
 
-describe("forkConversation (AI-41)", () => {
+describe("forkConversation (AI-43)", () => {
   it("opens the fork in the slot", async () => {
     fork.mockResolvedValue(copy);
     await forkConversation(HOME_SLOT, original.id, entry.entry_id);

@@ -42,6 +42,14 @@ pub fn window_snap_overlay() {
     platform::window::snap_overlay();
 }
 
+/// Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
+/// or tiled, false without a compositor, and false on other platforms.
+#[tauri::command]
+#[specta::specta]
+pub fn window_floating() -> bool {
+    platform::window::floating()
+}
+
 /// The extensions `save_text_file` writes: the recovery code (.txt), a conversation export (.md,
 /// AI-25) and the MCP server export (.json).
 const TEXT_EXTENSIONS: [&str; 3] = ["txt", "md", "json"];

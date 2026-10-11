@@ -1,0 +1,78 @@
+/* Linux painted window chrome: the input shape keeps the painted surface plus a --win-resize
+   ring around it, and these handles occupy that ring. Keep the geometry in step with
+   WIN_PAD / RESIZE_BAND in src-tauri/src/platform/linux_chrome.rs. */
+.handle {
+  position: fixed;
+  z-index: 10000; /* above .toasts (1100), the current maximum */
+  display: none;
+}
+
+:root[data-floating] .handle {
+  display: block;
+}
+
+/* Edges sit just outside the painted edge and leave the corners to the corner handles. */
+.handle[data-direction="North"] {
+  top: calc(var(--win-pad) - var(--win-resize));
+  height: var(--win-resize);
+  left: calc(var(--win-pad) + var(--win-resize));
+  right: calc(var(--win-pad) + var(--win-resize));
+  cursor: ns-resize;
+}
+
+.handle[data-direction="South"] {
+  bottom: calc(var(--win-pad) - var(--win-resize));
+  height: var(--win-resize);
+  left: calc(var(--win-pad) + var(--win-resize));
+  right: calc(var(--win-pad) + var(--win-resize));
+  cursor: ns-resize;
+}
+
+.handle[data-direction="East"] {
+  right: calc(var(--win-pad) - var(--win-resize));
+  width: var(--win-resize);
+  top: calc(var(--win-pad) + var(--win-resize));
+  bottom: calc(var(--win-pad) + var(--win-resize));
+  cursor: ew-resize;
+}
+
+.handle[data-direction="West"] {
+  left: calc(var(--win-pad) - var(--win-resize));
+  width: var(--win-resize);
+  top: calc(var(--win-pad) + var(--win-resize));
+  bottom: calc(var(--win-pad) + var(--win-resize));
+  cursor: ew-resize;
+}
+
+/* Corners are 2x-band squares whose outer corner sits at --win-pad - --win-resize. */
+.handle[data-direction="NorthWest"] {
+  top: calc(var(--win-pad) - var(--win-resize));
+  left: calc(var(--win-pad) - var(--win-resize));
+  width: calc(var(--win-resize) * 2);
+  height: calc(var(--win-resize) * 2);
+  cursor: nwse-resize;
+}
+
+.handle[data-direction="NorthEast"] {
+  top: calc(var(--win-pad) - var(--win-resize));
+  right: calc(var(--win-pad) - var(--win-resize));
+  width: calc(var(--win-resize) * 2);
+  height: calc(var(--win-resize) * 2);
+  cursor: nesw-resize;
+}
+
+.handle[data-direction="SouthWest"] {
+  bottom: calc(var(--win-pad) - var(--win-resize));
+  left: calc(var(--win-pad) - var(--win-resize));
+  width: calc(var(--win-resize) * 2);
+  height: calc(var(--win-resize) * 2);
+  cursor: nesw-resize;
+}
+
+.handle[data-direction="SouthEast"] {
+  bottom: calc(var(--win-pad) - var(--win-resize));
+  right: calc(var(--win-pad) - var(--win-resize));
+  width: calc(var(--win-resize) * 2);
+  height: calc(var(--win-resize) * 2);
+  cursor: nwse-resize;
+}

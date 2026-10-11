@@ -1,0 +1,17 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.server {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
+.diff {
+  max-height: min(48vh, 420px);
+  overflow: auto;
+}

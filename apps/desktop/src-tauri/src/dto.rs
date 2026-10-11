@@ -905,6 +905,15 @@ pub struct AppInfo {
     pub mica: bool,
 }
 
+/// Whether the Linux main window shows its painted chrome right now: off while maximized,
+/// fullscreen or tiled, and off without a compositor. The WebView mirrors it to
+/// `:root[data-floating]`; `window_floating` reports the same value.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://chrome")]
+pub struct WindowChromeEvent {
+    pub floating: bool,
+}
+
 /// What the update check found (spec §11).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct UpdateCheck {
@@ -1196,7 +1205,7 @@ pub struct AiConversationView {
     /// The quick-connect target (HOST-12) it last worked on while `host_id` is `None` (AI-09),
     /// as the conversation records it: the address in lowercase and without brackets.
     pub quick_target: Option<QuickTarget>,
-    /// AI-41: with neither, the name of the server a fork's copies came from, when the fork could
+    /// AI-43: with neither, the name of the server a fork's copies came from, when the fork could
     /// not tell which it is; its next message on a tab of a host or target notes the move from it.
     pub origin: Option<String>,
     pub pinned: bool,
@@ -1243,6 +1252,16 @@ pub struct AiUsage {
     pub estimated: bool,
 }
 
+/// What `ai_tool_run` stored: the call's result entry.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiToolRun {
+    pub entry: AiEntryView,
+    /// AI-41: keeping the snapshot of this call's change dropped older ones over the size limit,
+    /// of this or another conversation, so the panel reads the file changes of its other
+    /// conversations again.
+    pub dropped_file_changes: bool,
+}
+
 /// A stored conversation entry (§13.7), without the provider's raw message.
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "role", rename_all = "snake_case")]
@@ -1283,6 +1302,122 @@ pub struct AiConversationDetail {
     pub entries: Vec<AiEntryView>,
     /// A turn of this conversation is running (its events go to the channel that started it).
     pub running: bool,
+    /// The changes of its `edit_file` and `write_file` calls that this device can revert, or
+    /// has reverted (AI-41).
+    pub file_changes: Vec<AiFileChange>,
+}
+
+/// A change an `edit_file` or `write_file` call made, kept on this device so the user can revert
+/// it (AI-41).
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiFileChange {
+    /// The entry id of the response that made the call.
+    pub response_id: String,
+    pub tool_call_id: String,
+    /// The server the call wrote on, as `user@host:port`.
+    pub server: String,
+    /// The file's path as the call resolved it.
+    pub path: String,
+    /// The call created the file, so a revert deletes it.
+    pub created: bool,
+    pub state: AiFileChangeState,
+}
+
+/// Where a file tool call's change stands on this device (AI-41).
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFileChangeState {
+    /// The call wrote the file.
+    Written,
+    /// The write failed after it may have begun, or its end was never recorded: the file may be
+    /// cut short. It can be reverted like a written one.
+    Unfinished,
+    /// The user reverted the change.
+    Reverted,
+    /// The 32 MB limit dropped what the file held before, so the change can no longer be
+    /// reverted.
+    Dropped,
+}
+
+impl fmt::Debug for AiFileChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiFileChange")
+            .field("response_id", &self.response_id)
+            .field("tool_call_id", &self.tool_call_id)
+            .field("created", &self.created)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Why a revert did not happen (AI-41), for the panel to say in the user's language.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiRevertFailure {
+    /// The conversation's tab is not connected.
+    Disconnected,
+    /// The tab is connected to another server than the one the call wrote on; `detail` names it.
+    OtherServer,
+    /// The user the tab is logged in as cannot write or delete the file.
+    PermissionDenied,
+    /// The file changed since the call wrote it into something that is not a text file Hatoba
+    /// can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
+    NotText,
+    /// A symbolic link is in the place of the file the call created, so neither the link nor its
+    /// target was deleted.
+    SymbolicLink,
+    /// Reading the file did not finish within 30 seconds; nothing was written.
+    TimedOut,
+    /// Writing or deleting failed after it may have begun, a timeout included: the file may be
+    /// cut short, or deleted. `detail` says why, when there was an error.
+    Unfinished,
+    /// Anything else; `detail` says what.
+    Failed,
+}
+
+/// The outcome of a revert (AI-41).
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AiFileRevert {
+    /// The file holds what it held before the call again, or no longer exists when the call
+    /// created it. `wrote`: the revert wrote or deleted it; otherwise it was so already, as after
+    /// a revert whose result was lost.
+    Reverted { wrote: bool },
+    /// The file holds neither what the call wrote nor what it held before, so nothing was
+    /// written: the diff from `current` to `before` is what Restore anyway would do. The texts
+    /// show CRLF line breaks as `\n`.
+    Changed {
+        path: String,
+        /// What the file holds now; `None` when it does not exist.
+        current: Option<String>,
+        /// What it held before the call; `None` when the call created it, so Restore anyway
+        /// deletes it.
+        before: Option<String>,
+        /// A later call of this conversation wrote the file too, so reverting the later changes
+        /// first, newest first, may bring it back to what this call wrote.
+        later: bool,
+    },
+    Failed {
+        reason: AiRevertFailure,
+        detail: Option<String>,
+    },
+}
+
+impl fmt::Debug for AiFileRevert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Reverted { wrote } => f.debug_struct("Reverted").field("wrote", wrote).finish(),
+            Self::Changed { current, later, .. } => f
+                .debug_struct("Changed")
+                .field("exists", &current.is_some())
+                .field("later", later)
+                .finish_non_exhaustive(),
+            Self::Failed { reason, .. } => f
+                .debug_struct("Failed")
+                .field("reason", reason)
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// What a request is made with. The frontend owns the tab, so it says what the turn may act on.

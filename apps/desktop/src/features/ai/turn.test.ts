@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { AiEntryView, AiTurnEvent } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiTurnEvent } from "@/ipc/types";
 import {
+  callRevealKey,
+  editedFiles,
   entriesBefore,
   laterContextStart,
   laterMessages,
@@ -8,6 +10,7 @@ import {
   newTurn,
   placeUserEntry,
   reduceTurnEvent,
+  revealKey,
   unansweredCalls,
   upsertEntry,
   type TurnSnapshot,
@@ -151,6 +154,73 @@ describe("edit and resend (AI-26)", () => {
     expect(laterMessages(entries, "u1")).toBe(2);
     expect(laterMessages(entries, "u2")).toBe(0);
     expect(laterMessages(entries, "missing")).toBe(0);
+  });
+});
+
+describe("the file changes an edit deletes (AI-26, AI-41)", () => {
+  const response = (id: string, calls: [string, string][]): AiEntryView => ({
+    ...assistant,
+    entry_id: id,
+    tool_calls: calls.map(([callId, name]) => ({ id: callId, name, arguments: "{}" })),
+  });
+  const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: callId, status, content: "" });
+  const change = (responseId: string, callId: string, state: AiFileChange["state"] = "written"): AiFileChange => ({
+    response_id: responseId,
+    tool_call_id: callId,
+    server: "root@10.0.0.5:22",
+    path: "/etc/app.conf",
+    created: false,
+    state,
+  });
+  const entries: AiEntryView[] = [
+    { role: "user", entry_id: "u1", created_at: 0, text: "first" },
+    response("a1", [["c1", "edit_file"]]),
+    result("t1", "c1"),
+    { role: "user", entry_id: "u2", created_at: 0, text: "second" },
+    response("a2", [
+      ["c2", "write_file"],
+      ["c3", "edit_file"],
+      ["c4", "run_command"],
+      ["c5", "write_file"],
+      ["c6", "edit_file"],
+    ]),
+    result("t2", "c2"),
+    result("t3", "c3"),
+    result("t4", "c4"),
+    result("t5", "c5", "error"),
+    result("t6", "c6"),
+  ];
+
+  it("offers to revert the kept changes of the deleted calls, oldest first, unfinished ones too", () => {
+    const changes = [change("a1", "c1"), change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "unfinished"), change("a2", "c6", "dropped")];
+    expect(editedFiles(entries, changes, "u2").revert).toEqual([change("a2", "c2"), change("a2", "c5", "unfinished")]);
+    expect(editedFiles(entries, changes, "u1").revert).toEqual([change("a1", "c1"), change("a2", "c2"), change("a2", "c5", "unfinished")]);
+  });
+
+  it("counts the calls that wrote and whose change this device does not keep, or dropped", () => {
+    // c6 wrote and has no change here; c5 failed, c4 is no file tool, and c2 and c3 are kept.
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted")], "u2").untracked).toBe(1);
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c6", "dropped")], "u2").untracked).toBe(1);
+    expect(editedFiles(entries, [], "u2").untracked).toBe(3);
+    expect(editedFiles(entries, [], "u1").untracked).toBe(4);
+    // c5 failed partway: its dropped change stays on the host as well, and counts once with c6.
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "dropped")], "u2").untracked).toBe(2);
+  });
+
+  it("finds nothing after the newest message or for one it does not have", () => {
+    expect(editedFiles(entries, [change("a2", "c2")], "missing")).toEqual({ revert: [], untracked: 0 });
+    const last: AiEntryView[] = [...entries, { role: "user", entry_id: "u3", created_at: 0, text: "third" }];
+    expect(editedFiles(last, [change("a2", "c2")], "u3")).toEqual({ revert: [], untracked: 0 });
+  });
+
+  it("reveals a result in the block of its own response's call when responses reuse call ids", () => {
+    const reused: AiEntryView[] = [...entries, { role: "user", entry_id: "u3", created_at: 0, text: "third" }, response("a3", [["c1", "edit_file"]]), result("t7", "c1")];
+    const at = (id: string) => reused.find((e) => e.entry_id === id)!;
+    expect(revealKey(reused, at("t1"))).toBe(callRevealKey("a1", "c1"));
+    expect(revealKey(reused, at("t7"))).toBe(callRevealKey("a3", "c1"));
+    expect(revealKey(reused, at("u2"))).toBe("entry:u2");
+    expect(revealKey(reused, at("a2"))).toBe("entry:a2");
+    expect(revealKey([result("t9", "c9")], result("t9", "c9"))).toBeNull();
   });
 });
 

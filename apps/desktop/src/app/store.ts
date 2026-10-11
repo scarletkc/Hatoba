@@ -45,6 +45,8 @@ export const DEFAULT_PREFS: LocalPrefs = {
 interface AppState {
   phase: Phase;
   info: AppInfo;
+  /** Whether the Linux window shows its painted chrome right now (`:root[data-floating]`). */
+  floating: boolean;
   prefs: LocalPrefs;
   vault: VaultStatus | null;
   sync: SyncStatus | null;
@@ -70,6 +72,7 @@ interface AppState {
 export const useApp = create<AppState>((set, get) => ({
   phase: "boot",
   info: { version: "0.0.0", platform: "web", mica: false },
+  floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,
   sync: null,

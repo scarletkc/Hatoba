@@ -156,6 +156,21 @@
   --side: var(--side-translucent);
 }
 
+/* Linux gets no shadow or rounding from the compositor on an undecorated window, so the app
+   paints its own chrome: --win-pad leaves room for the shadow in the transparent margin and
+   --win-resize is the resize band just outside the painted edge. Keep --win-pad and
+   --win-resize in step with WIN_PAD and RESIZE_BAND in src-tauri/src/platform/linux_chrome.rs.
+   The shadow's offset + blur must stay within --win-pad or the window edge clips it. */
+:root[data-platform="linux"] {
+  --win-pad: 22px;
+  --win-resize: 8px;
+  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.24), 0 1px 4px rgba(0, 0, 0, 0.16);
+}
+
+:root[data-platform="linux"][data-theme="dark"] {
+  --shadow-window: 0 6px 16px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.36);
+}
+
 /* CJK font order: Japanese UI should prefer Yu Gothic over YaHei for unified Han glyphs */
 :root:lang(ja) {
   --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont,

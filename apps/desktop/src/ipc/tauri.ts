@@ -174,6 +174,11 @@ export function createTauriApi(): HatobaApi {
       call("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
     ai_file_preview: (conversationId, toolCallId, sessionId, editedArguments) =>
       call("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
+    ai_file_changes: (conversationId) => call("ai_file_changes", { conversationId }),
+    ai_file_change_diff: (conversationId, responseId, toolCallId) => call("ai_file_change_diff", { conversationId, responseId, toolCallId }),
+    ai_file_revert: (conversationId, responseId, toolCallId, sessionId, restore) =>
+      call("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
+    ai_session_server: (sessionId) => call("ai_session_server", { sessionId }),
     ai_stop: (conversationId) => call("ai_stop", { conversationId }),
     ai_compact: (conversationId, context) => call("ai_compact", { conversationId, context }),
 
@@ -209,6 +214,7 @@ export function createTauriApi(): HatobaApi {
     mcp_export: () => call("mcp_export"),
 
     window_snap_overlay: () => call("window_snap_overlay"),
+    window_floating: () => call("window_floating"),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),

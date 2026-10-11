@@ -120,13 +120,14 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |
 | AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
+| AI-41 | Revert a file tool's change | 🟡 | The delete script runs against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ✅ | |
 | AI-19 | Allow a tool for the rest of a conversation | ✅ | |
 | AI-20, 21 | Context meter, compaction | ✅ | |
 | AI-22 | Automatic compaction | ✅ | |
 | AI-23 | Conversation history | ✅ | |
 | AI-24…26 | History search, Markdown export, edit and resend | ✅ | |
-| AI-41 | Fork a conversation from a message or from History | ✅ | |
+| AI-43 | Fork a conversation from a message or from History | ✅ | |
 | AI-27, 28, 34 | Skills: management, import and export, `read_skill`, the built-in `hatoba` skill | ✅ | A test checks every label the built-in skill quotes against the i18n tables |
 | AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | 🟡 | Tests run mock `stdio` and Streamable HTTP servers. Not yet tried with real servers on Windows, such as ones started with `npx` |
 | AI-36, 37 | Custom instructions, AI notes of a host | ✅ | |

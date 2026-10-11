@@ -4,6 +4,16 @@
   display: flex;
 }
 
+/* Linux paints its own window chrome while floating: a rounded, shadowed surface in the
+   transparent margin, full-bleed again while maximized, fullscreen or tiled. overflow: hidden
+   keeps children (terminal background, caption-hover fills) inside the corner radius. */
+:root[data-floating] .main {
+  inset: var(--win-pad);
+  border-radius: var(--radius-window);
+  overflow: hidden;
+  box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
+}
+
 .window {
   flex: 1;
   min-width: 0;

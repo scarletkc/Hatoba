@@ -10,6 +10,7 @@ export async function boot() {
     root.dataset.platform = info.platform;
     if (info.mica) root.dataset.material = "mica";
     useApp.setState({ info });
+    if (info.platform === "linux") useApp.setState({ floating: await api.window_floating().catch(() => false) });
 
     const prefs = { ...DEFAULT_PREFS, ...(await api.prefs_get()) };
     useApp.setState({ prefs });

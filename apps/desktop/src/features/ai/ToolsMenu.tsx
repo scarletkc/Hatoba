@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "@/app/store";
 import { Icon, Spinner, Switch } from "@/components/controls";
-import { useOverlaysLocked } from "@/components/overlay";
+import { useOverlaysLocked, windowSurface } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -90,10 +90,11 @@ function ToolsPopover({ anchor, slotId, rows, onClose }: { anchor: DOMRect; slot
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - r.width - 8));
+    const b = windowSurface();
+    const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
     let top = anchor.top - r.height - 6;
-    if (top < 8) top = Math.min(anchor.bottom + 6, window.innerHeight - r.height - 8);
-    setPos({ left, top: Math.max(8, top) });
+    if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
+    setPos({ left, top: Math.max(b.top + 8, top) });
   }, [anchor, rows, loaded, failed]);
 
   useEffect(() => {

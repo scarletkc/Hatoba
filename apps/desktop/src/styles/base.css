@@ -19,8 +19,12 @@ html {
   background: var(--win);
 }
 
+/* Mica (Windows 11) and the CSS-painted window chrome on a floating Linux window need a
+   transparent page. A maximized, tiled or compositor-less Linux window keeps the page opaque. */
 :root[data-material="mica"],
-:root[data-material="mica"] body {
+:root[data-material="mica"] body,
+:root[data-floating],
+:root[data-floating] body {
   background: transparent;
 }
 

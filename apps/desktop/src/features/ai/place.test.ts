@@ -39,7 +39,7 @@ describe("movedFrom (AI-09)", () => {
     expect(movedFrom(onHost("h-prod"), hostTab("h-prod"), hosts)).toBeNull();
   });
 
-  it("names the server a fork's copies came from when the fork could not tell which it is (AI-41)", () => {
+  it("names the server a fork's copies came from when the fork could not tell which it is (AI-43)", () => {
     const fork = (origin: string) => ({ ...homeChat, origin });
     expect(movedFrom(fork("old-name"), hostTab("h-web"), hosts)).toEqual({ from: "old-name", to: "web-1" });
     expect(movedFrom(fork(""), quickTab("10.0.0.7"), hosts)).toEqual({ from: "", to: "root@10.0.0.7:22" });

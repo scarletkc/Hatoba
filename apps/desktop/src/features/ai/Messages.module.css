@@ -168,6 +168,21 @@
 }
 
 /* Two classes: it overrides `.input` and `.textarea` below. */
+.editWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.editWarning > i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--orange);
+}
+
 .editMessage .editInput {
   min-height: 34px;
   font-family: var(--font-sans);
@@ -268,6 +283,54 @@
 
 .toolAttention {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 55%, transparent);
+}
+
+.toolHeadRow {
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+  min-width: 0;
+}
+
+.toolHeadRow:hover {
+  background: var(--fill);
+}
+
+.toolHeadRow > .toolHead {
+  flex: 1;
+}
+
+.toolHeadRow > .toolHead:hover {
+  background: transparent;
+}
+
+/* AI-41: Revert in the header, shown while the pointer or focus is on the header. */
+.toolHeadAction {
+  flex: none;
+  margin-right: 5px;
+  opacity: 0;
+}
+
+.toolHeadRow:hover > .toolHeadAction,
+.toolHeadRow:focus-within > .toolHeadAction,
+.toolHeadActionOn {
+  opacity: 1;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.labelLink {
+  font-size: var(--text-xs);
+}
+
+.inlineLink {
+  display: inline;
+  font-size: inherit;
 }
 
 .toolHead {
@@ -377,6 +440,51 @@
 
 .output {
   max-height: 320px;
+}
+
+/* Revert a file tool's change (AI-41) */
+.revert {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--line);
+  min-width: 0;
+}
+
+.revertRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.revertRow > span {
+  flex: 1 1 180px;
+  line-height: 1.45;
+}
+
+.revertWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.revertWarn > i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--orange);
+}
+
+.revertDetail {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  color: var(--fg2);
+  overflow-wrap: anywhere;
 }
 
 .command {

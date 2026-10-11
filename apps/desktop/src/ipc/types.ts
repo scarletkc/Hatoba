@@ -853,7 +853,7 @@ export interface AiConversationView {
   host_id: string | null;
   /** The quick-connect target (HOST-12) it last worked on while `host_id` is null (AI-09), the address in lowercase and without brackets. */
   quick_target: QuickTarget | null;
-  /** AI-41: with neither, the name of the server a fork's copies came from, when the fork could not tell which it is; its next message on a tab of a host or target notes the move from it. */
+  /** AI-43: with neither, the name of the server a fork's copies came from, when the fork could not tell which it is; its next message on a tab of a host or target notes the move from it. */
   origin: string | null;
   pinned: boolean;
   /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
@@ -905,6 +905,8 @@ export interface AiConversationDetail {
   entries: AiEntryView[];
   /** A turn of this conversation is running in Rust (its events go to the channel that started it). */
   running: boolean;
+  /** The changes of its `edit_file` and `write_file` calls that this device can revert, or has reverted (AI-41). */
+  file_changes: AiFileChange[];
 }
 
 /** What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
@@ -982,6 +984,55 @@ export interface AiFilePreview {
   error: string | null;
   /** Most of the file's line breaks are CRLF, and the write keeps them. */
   crlf: boolean;
+}
+
+/** A change an `edit_file` or `write_file` call made, kept on this device so the user can revert it (AI-41). */
+export interface AiFileChange {
+  /** The entry id of the response that made the call. */
+  response_id: string;
+  tool_call_id: string;
+  /** The server the call wrote on, as `user@host:port`. */
+  server: string;
+  /** The file's path as the call resolved it. */
+  path: string;
+  /** The call created the file, so a revert deletes it. */
+  created: boolean;
+  state: AiFileChangeState;
+}
+
+/**
+ * Where a call's change stands on this device (AI-41). `unfinished`: the write failed after it may have begun,
+ * or its end was never recorded, so the file may be cut short; it can be reverted like a written one. `dropped`:
+ * the 32 MB limit dropped what the file held before, so it can no longer be reverted.
+ */
+export type AiFileChangeState = "written" | "unfinished" | "reverted" | "dropped";
+
+/**
+ * Why a revert did not happen (AI-41). `detail` names the server for `other_server`, and what failed for
+ * `unfinished` (when an error ended it rather than the time) and `failed`. `symbolic_link`: a link is in the place
+ * of the file the call created, and neither it nor its target is deleted.
+ */
+export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "symbolic_link" | "timed_out" | "unfinished" | "failed";
+
+/**
+ * The outcome of a revert (AI-41). `reverted`: the file holds what it held before the call again, or no longer
+ * exists when the call created it; `wrote` is false when it was so already. `changed`: it holds neither what the
+ * call wrote nor what it held before, so nothing was written; the diff from `current` (null: it does not exist)
+ * to `before` (null: the call created it, so Restore anyway deletes it) is what Restore anyway does. `later`: a
+ * later call of the conversation wrote the file too.
+ */
+export type AiFileRevert =
+  | { status: "reverted"; wrote: boolean }
+  | { status: "changed"; path: string; current: string | null; before: string | null; later: boolean }
+  | { status: "failed"; reason: AiRevertFailure; detail: string | null };
+
+/**
+ * What `ai_tool_run` stored: the call's result. `dropped_file_changes` (AI-41): keeping the snapshot of this call's
+ * change dropped older ones over the size limit, of this or another conversation.
+ */
+export interface AiToolRun {
+  entry: AiEntryView;
+  dropped_file_changes: boolean;
 }
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
@@ -1174,6 +1225,11 @@ export interface VaultLockedEvent {
   reason: "manual" | "idle" | "sleep";
 }
 
+/** Whether the Linux main window shows its painted chrome (off maximized, fullscreen, tiled, or without a compositor). */
+export interface WindowChromeEvent {
+  floating: boolean;
+}
+
 export interface EventMap {
   "vault://locked": VaultLockedEvent;
   "sync://status": SyncStatus;
@@ -1184,4 +1240,5 @@ export interface EventMap {
   "ssh://forward": ForwardStatusEvent;
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
+  "window://chrome": WindowChromeEvent;
 }

@@ -29,7 +29,7 @@ pub enum EntryBody {
         /// The message text.
         #[serde(default)]
         text: String,
-        /// Where the entries before the message came from (AI-09, AI-41). `None` (absent) in
+        /// Where the entries before the message came from (AI-09, AI-43). `None` (absent) in
         /// entries from before it was recorded.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         came_from: Option<EntryPlace>,
@@ -72,7 +72,7 @@ pub struct EntryPlace {
     /// records it: the address in lowercase and without brackets.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quick_target: Option<EntryTarget>,
-    /// With neither, the name of the server, for a fork that knows only that (AI-41: the
+    /// With neither, the name of the server, for a fork that knows only that (AI-43: the
     /// conversation item's `origin`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,

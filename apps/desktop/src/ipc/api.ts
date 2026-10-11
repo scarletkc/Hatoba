@@ -2,7 +2,9 @@ import type {
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
+  AiFileChange,
   AiFilePreview,
+  AiFileRevert,
   AiModel,
   AiProviderInput,
   AiProviderView,
@@ -11,6 +13,7 @@ import type {
   AiSettingsView,
   AiTestResult,
   AiToolResultInput,
+  AiToolRun,
   AiTurnContext,
   AiTurnEvent,
   AiSearchHit,
@@ -265,7 +268,7 @@ export interface HatobaApi {
   ai_conversation_rename(id: string, title: string): Promise<AiConversationView>;
   ai_conversation_pin(id: string, pinned: boolean): Promise<AiConversationView>;
   ai_conversation_delete(id: string): Promise<void>;
-  /** AI-41: copies the conversation up to the entry `entry_id`, or all of it with null, into a new conversation titled `title`. */
+  /** AI-43: copies the conversation up to the entry `entry_id`, or all of it with null, into a new conversation titled `title`. */
   ai_conversation_fork(id: string, entry_id: string | null, title: string): Promise<AiConversationView>;
   /** Stores the user's message and starts a turn; events stream to `onEvent` until `turn_ended` (§13.1). */
   ai_send(input: AiSendInput, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
@@ -273,14 +276,32 @@ export interface HatobaApi {
   ai_retry(conversation_id: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<void>;
   /** Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
   ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
-  /** Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...) and stores its result. */
-  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiEntryView>;
+  /**
+   * Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...)
+   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41).
+   */
+  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiToolRun>;
   /**
    * AI-39, AI-40: the change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
    * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file
    * once per call and the call writes only over what it read.
    */
   ai_file_preview(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiFilePreview>;
+  /** AI-41: the changes of the conversation's `edit_file` and `write_file` calls that this device keeps. */
+  ai_file_changes(conversation_id: string): Promise<AiFileChange[]>;
+  /**
+   * AI-41: what the call `tool_call_id` of the response `response_id` changed, from the snapshot this device
+   * keeps, from the file before the call to what it wrote; null once the change was reverted or dropped.
+   */
+  ai_file_change_diff(conversation_id: string, response_id: string, tool_call_id: string): Promise<AiFilePreview | null>;
+  /**
+   * AI-41: reverts the change of the call `tool_call_id` of the response `response_id` on the conversation's
+   * tab `session_id`, only while the file holds what the call wrote, or with `restore` (Restore anyway), what
+   * the diff of the last revert showed. A file the call created is deleted, so the panel asks first.
+   */
+  ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null, restore: boolean): Promise<AiFileRevert>;
+  /** AI-41: the server a revert on the tab `session_id` runs on, as `AiFileChange.server` names it; null while the tab is not connected. */
+  ai_session_server(session_id: string | null): Promise<string | null>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -343,6 +364,11 @@ export interface HatobaApi {
 
   // window (Windows custom title bar, WIN-01)
   window_snap_overlay(): Promise<void>;
+  /**
+   * Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
+   * or tiled, without a compositor, and on other platforms.
+   */
+  window_floating(): Promise<boolean>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 
