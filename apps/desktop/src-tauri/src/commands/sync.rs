@@ -207,7 +207,7 @@ pub async fn sync_join(
         },
     )
     .await?;
-    joined_remote(&app, &state, backend, joined.rekeyed).await;
+    joined_remote(&app, &state, backend, joined.rekeyed, generation).await;
     Ok(())
 }
 
@@ -215,11 +215,16 @@ pub async fn sync_join(
 /// and runs the first round. A failed round shows in the sync status and is retried like any
 /// other, so the join itself has succeeded. A vault the join left locked (it could not reload)
 /// goes to the lock screen instead, and unlocking with the remote's password starts sync.
+///
+/// The backend is installed only while the connection is still `generation`: a lock or a
+/// disconnect after the join committed keeps sync stopped (§6.3), and the next unlock or setup
+/// starts it from the recorded configuration.
 pub(crate) async fn joined_remote(
     app: &AppHandle,
     state: &AppState,
     backend: Arc<dyn SyncBackend>,
     rekeyed: bool,
+    generation: u64,
 ) {
     if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
         tracing::warn!("could not remove the biometric unlock: {}", e.detail);
@@ -232,7 +237,10 @@ pub(crate) async fn joined_remote(
         .emit(app);
         return;
     }
-    state.sync.set_backend(Some(backend));
+    if !state.sync.set_backend_if(generation, backend) {
+        tracing::info!("sync ended while joining; the joined vault stays configured");
+        return;
+    }
     sync::emit_status(app);
     let _ = sync::run_round(app).await;
 }
