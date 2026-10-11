@@ -84,7 +84,7 @@ These show in Settings → About, in the update row, after **Check for Updates**
 - "Can’t reach GitHub." means GitHub did not answer at all: no network, a DNS or firewall problem, or a download that received nothing for 30 seconds. Check the connection and press the button again; a download starts over.
 - "Couldn’t check for updates." means GitHub answered with an error. Try again later.
 - "Couldn’t install the update." means the download or the installer failed for another reason, and the current version keeps running. Press **Download and Install** again. If it keeps failing, open the release page with **View on GitHub** under the release notes, download the installer for the platform and run it, and report the problem with the logs.
-- The signature message means the downloaded file did not match the signature of Hatoba's release key, so nothing was installed. Check again later. If it happens again, report it with **Report a Problem**, and install Hatoba only from its GitHub release page.
+- The signature message means the downloaded file did not match the signature of Hatoba's release key, so nothing was installed. Do not install that version by hand from its release page, which may hold the same rejected file. Report it with **Report a Problem**, keep the current version, and wait for a correctly signed update.
 
 ## Still not solved
 
