@@ -5,13 +5,19 @@ use tauri::State;
 
 use crate::dto::QuickTarget;
 use crate::error::{AppError, AppResult};
+use crate::platform::system::default_user;
 use crate::state::AppState;
 
 /// Recent targets kept on this device.
 const RECENT_LIMIT: usize = 8;
 
 /// Trims the target and checks it can be connected to. An IPv6 address may come in brackets.
+/// Without a user name, the local one is used, as OpenSSH does.
 pub fn validate(target: QuickTarget) -> AppResult<QuickTarget> {
+    validate_as(target, &default_user())
+}
+
+fn validate_as(target: QuickTarget, local_user: &str) -> AppResult<QuickTarget> {
     let address = target.address.trim();
     let address = address
         .strip_prefix('[')
@@ -25,7 +31,10 @@ pub fn validate(target: QuickTarget) -> AppResult<QuickTarget> {
         return Err(AppError::invalid("address", "the address is not valid"));
     }
     // A user name may contain '@' (`ssh user@domain@host`), but never whitespace.
-    let username = target.username.trim();
+    let username = match target.username.trim() {
+        "" => local_user.trim(),
+        name => name,
+    };
     if username.is_empty() {
         return Err(AppError::invalid("username", "the user name is empty"));
     }
@@ -124,9 +133,22 @@ mod tests {
         assert_eq!(field(target("", 22, "root")), "address");
         assert_eq!(field(target("a b", 22, "root")), "address");
         assert_eq!(field(target("root@db", 22, "root")), "address");
-        assert_eq!(field(target("db", 22, "  ")), "username");
         assert_eq!(field(target("db", 22, "ro ot")), "username");
         assert_eq!(field(target("db", 0, "root")), "port");
+    }
+
+    #[test]
+    fn a_target_without_a_user_logs_in_as_the_local_user() {
+        assert_eq!(
+            validate_as(target("db", 22, "  "), "alice").unwrap(),
+            target("db", 22, "alice")
+        );
+        assert_eq!(
+            validate_as(target("db", 22, "root"), "alice").unwrap(),
+            target("db", 22, "root")
+        );
+        let err = validate_as(target("db", 22, ""), "").unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("username"));
     }
 
     #[test]

@@ -767,6 +767,11 @@ export type AppInfo = {
 	version: string,
 	platform: Platform,
 	mica: boolean,
+	/**
+	 *  The local user name, which quick connect (HOST-12) uses when the target names no user;
+	 *  empty when unknown.
+	 */
+	local_user: string,
 };
 
 export type Appearance = "system" | "light" | "dark";

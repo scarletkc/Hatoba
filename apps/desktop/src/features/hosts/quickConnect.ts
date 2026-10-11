@@ -20,6 +20,12 @@ export type QuickParse =
 
 /** OpenSSH options that take an argument, so their value is not mistaken for the destination. */
 const WITH_ARGUMENT = new Set("bceilmopBDEFIJLOPQRSwW".split(""));
+/**
+ * OpenSSH options that change nothing Hatoba does, so they are ignored: the address family, compression,
+ * quiet and verbose output, terminal allocation (a tab always has one), and turning off agent or X11
+ * forwarding and GSSAPI delegation, which Hatoba never does.
+ */
+const IGNORED = new Set("46aCkqtTvx".split(""));
 const HOSTNAME = /^[\p{L}\p{N}_](?:[\p{L}\p{N}._-]*)$/u;
 const IPV6 = /^[0-9a-f]*:[0-9a-f:.]*(?:%[\w.-]+)?$/i;
 
@@ -86,13 +92,20 @@ export function parseQuickConnect(input: string): QuickParse | null {
     const token = tokens[i];
     // Options may follow the destination, but everything after the next word is the remote command.
     if (positionals.length < 2 && token.length > 1 && token.startsWith("-")) {
-      const flag = token[1];
-      const attached = token.slice(2);
-      const value = WITH_ARGUMENT.has(flag) ? attached || tokens[++i] : undefined;
-      if (WITH_ARGUMENT.has(flag) && value === undefined) return null; // still typing the value
-      if (flag === "p") portOption = parsePort(value!);
-      else if (flag === "l") userOption = value!;
-      else problem ??= { kind: "option", option: `-${flag}` };
+      // Flags may be grouped (-4v); one that takes an argument ends the group, and the rest is its value.
+      for (let j = 1; j < token.length; j++) {
+        const flag = token[j];
+        if (!WITH_ARGUMENT.has(flag)) {
+          if (!IGNORED.has(flag)) problem ??= { kind: "option", option: `-${flag}` };
+          continue;
+        }
+        const value = token.slice(j + 1) || tokens[++i];
+        if (value === undefined) return null; // still typing the value
+        if (flag === "p") portOption = parsePort(value);
+        else if (flag === "l") userOption = value;
+        else problem ??= { kind: "option", option: `-${flag}` };
+        break;
+      }
       continue;
     }
     positionals.push(token);

@@ -212,7 +212,7 @@ export function createMockApi(): HatobaApi {
       },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
-    app_info: async () => ({ version, platform, mica: false }),
+    app_info: async () => ({ version, platform, mica: false, local_user: "demo" }),
     update_check: async () => {
       await delay(800);
       if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");
@@ -319,7 +319,6 @@ export function createMockApi(): HatobaApi {
     },
     host_save: async (input) => {
       needUnlocked();
-      if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
       if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
@@ -330,7 +329,7 @@ export function createMockApi(): HatobaApi {
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
-        name: input.name.trim(),
+        name: input.name.trim() || input.address.trim(),
         address: input.address.trim(),
         port: input.port || 22,
         username: input.username.trim(),

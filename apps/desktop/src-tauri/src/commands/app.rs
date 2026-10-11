@@ -16,6 +16,7 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
         version: app.package_info().version.to_string(),
         platform: platform::platform(),
         mica: state.mica,
+        local_user: platform::system::default_user(),
     }
 }
 

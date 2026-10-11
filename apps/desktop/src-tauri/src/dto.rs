@@ -917,6 +917,9 @@ pub struct AppInfo {
     pub version: String,
     pub platform: Platform,
     pub mica: bool,
+    /// The local user name, which quick connect (HOST-12) uses when the target names no user;
+    /// empty when unknown.
+    pub local_user: String,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,

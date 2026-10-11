@@ -140,7 +140,6 @@ export function HostEditPage({
 
   const validate = (): Errors => {
     const e: Errors = {};
-    if (!form.name.trim()) e.name = t("hosts.err.nameRequired");
     if (!form.address.trim()) e.address = t("hosts.err.addressRequired");
     const port = Number(form.port);
     if (!/^\d+$/.test(form.port.trim()) || port < 1 || port > 65535) e.port = t("hosts.err.portInvalid");
@@ -366,7 +365,7 @@ export function HostEditPage({
                   autoFocus
                   value={form.name}
                   invalid={!!errors.name}
-                  placeholder={t("hosts.f.namePlaceholder")}
+                  placeholder={form.address.trim() || t("hosts.f.namePlaceholder")}
                   onChange={(e) => patch({ name: e.target.value }, "name")}
                 />
               </FormRow>

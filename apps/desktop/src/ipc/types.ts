@@ -730,6 +730,8 @@ export interface AppInfo {
   platform: "windows" | "macos" | "linux" | "web";
   /** Windows 11 Mica is active (WIN-07). */
   mica: boolean;
+  /** The local user name, which quick connect uses when the target names no user (HOST-12); empty when unknown. */
+  local_user: string;
 }
 
 /** What the update check found (spec §11). */

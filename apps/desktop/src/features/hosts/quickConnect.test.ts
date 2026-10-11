@@ -59,15 +59,25 @@ describe("parseQuickConnect", () => {
       search: "root@db",
     });
     expect(parseQuickConnect("ssh -J jump root@db")).toMatchObject({ problem: { kind: "option", option: "-J" } });
-    expect(parseQuickConnect("ssh -vA root@db")).toMatchObject({ problem: { kind: "option", option: "-v" } });
+    expect(parseQuickConnect("ssh -vA root@db")).toMatchObject({ problem: { kind: "option", option: "-A" } });
+    expect(parseQuickConnect("ssh -X root@db")).toMatchObject({ problem: { kind: "option", option: "-X" } });
+    // The value of an option in a group is not mistaken for the destination.
+    expect(parseQuickConnect("ssh -vi key root@db")).toMatchObject({ problem: { kind: "option", option: "-i" }, search: "root@db" });
     expect(parseQuickConnect("root@db -L 8080:localhost:80")).toMatchObject({ problem: { kind: "option", option: "-L" } });
     expect(parseQuickConnect("ssh root@db uptime -p")).toMatchObject({ problem: { kind: "command" } });
     expect(parseQuickConnect("ssh -p 70000 root@db")).toMatchObject({ problem: { kind: "port" } });
     expect(parseQuickConnect("root@db:http")).toMatchObject({ problem: { kind: "port" }, search: "root@db" });
   });
 
+  it("ignores options that change nothing, also in groups", () => {
+    expect(parseQuickConnect("ssh -v -4 -C root@db")).toEqual({ ok: true, target: target("db", 22, "root"), search: "root@db" });
+    expect(parseQuickConnect("ssh -tt root@db -q")).toMatchObject({ ok: true, target: target("db", 22, "root") });
+    expect(parseQuickConnect("ssh -6vp2222 root@db")).toMatchObject({ ok: true, target: target("db", 2222, "root") });
+    expect(parseQuickConnect("ssh -Cl deploy db")).toMatchObject({ ok: true, target: target("db", 22, "deploy") });
+  });
+
   it("waits for an ssh command to be complete", () => {
-    for (const q of ["ssh ", "ssh -p", "ssh -p 2222", "ssh -l deploy", "ssh -i", "ssh root@", "ssh bad!host"])
+    for (const q of ["ssh ", "ssh -p", "ssh -p 2222", "ssh -l deploy", "ssh -i", "ssh -vp", "ssh root@", "ssh bad!host"])
       expect(parseQuickConnect(q), q).toBeNull();
   });
 });
