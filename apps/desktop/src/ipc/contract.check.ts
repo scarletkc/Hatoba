@@ -82,6 +82,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.McpServerStatus, Ui.EventMap["ai://mcp-status"]>>,
   Check<Assignable<Rust.McpToolInfo, Ui.McpToolInfo>>,
   Check<Assignable<Rust.McpImportPreview, Ui.McpImportPreview>>,
+  Check<Assignable<Rust.AiAllowance, Ui.AiAllowance>>,
 ];
 
 /** UI → Rust: command arguments. */
@@ -111,4 +112,5 @@ export type InputsMatch = [
   Check<Assignable<Ui.McpServerInput, Rust.McpServerInput>>,
   Check<Assignable<Ui.McpTransportInput, Rust.McpTransportInput>>,
   Check<Assignable<Ui.McpSecretInput, Rust.McpSecretInput>>,
+  Check<Assignable<Ui.AiAllowance, Rust.AiAllowance>>,
 ];

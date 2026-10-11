@@ -1,4 +1,5 @@
 import type {
+  AiAllowance,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
@@ -328,6 +329,12 @@ export interface HatobaApi {
    * in order, named by the file's base name.
    */
   ai_read_dropped_files(paths: string[]): Promise<DroppedFile[]>;
+  /** AI-19: the approvals saved on this device, oldest first. */
+  ai_allowances_list(): Promise<AiAllowance[]>;
+  /** AI-19: saves an approval on this device; resolves to them all. */
+  ai_allowance_add(allowance: AiAllowance): Promise<AiAllowance[]>;
+  /** AI-19: removes a saved approval; resolves to what is left. */
+  ai_allowance_remove(allowance: AiAllowance): Promise<AiAllowance[]>;
 
   // AI skills (§13.8)
   skills_list(): Promise<SkillView[]>;

@@ -195,6 +195,9 @@ export function createTauriApi(): HatobaApi {
       return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
     },
     ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
+    ai_allowances_list: () => call("ai_allowances_list"),
+    ai_allowance_add: (allowance) => call("ai_allowance_add", { allowance }),
+    ai_allowance_remove: (allowance) => call("ai_allowance_remove", { allowance }),
 
     skills_list: () => call("skills_list"),
     skill_get: (id) => call("skill_get", { id }),

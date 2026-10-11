@@ -164,5 +164,8 @@ These settings stay on this device and are not synced.
 | Manual approval | 手动批准 | 手動承認 |
 | Bypass | 绕过批准 | 承認をバイパス |
 | Turn On Bypass | 开启绕过模式 | バイパスをオンにする |
+| Saved Approvals | 已保存的批准 | 保存済みの許可 |
+| Remove | 移除 | 削除 |
 
 - **Default Permission Mode**: **Manual approval** (default) or **Bypass**. New conversations start in it. Choosing Bypass the first time asks for confirmation.
+- **Saved Approvals**: what **Always Allow** on an approval card saved (`references/ai-panel.md`): commands starting with a prefix and the typing, edit and write tools, each for a host or quick connection, and page domains for every tab. They are sealed in the vault and kept until **Remove** (×) deletes one.

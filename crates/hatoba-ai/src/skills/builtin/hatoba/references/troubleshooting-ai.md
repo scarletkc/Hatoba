@@ -98,7 +98,7 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | SearXNG | SearXNG | SearXNG |
 
 - For **SearXNG** the instance must allow the JSON output format (`search.formats` includes `json` in its settings).
-- "Fetch page" refuses addresses on private, loopback or link-local networks, pages that are not text, HTML, JSON or XML, and needs approval in manual mode.
+- "Fetch page" refuses addresses on private, loopback or link-local networks, pages that are not text, HTML, JSON or XML, and needs approval in manual mode unless its domain is allowed.
 
 ## Skills
 

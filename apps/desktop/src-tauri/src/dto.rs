@@ -1193,6 +1193,31 @@ pub enum AiPermissionMode {
     Bypass,
 }
 
+/// What an AI approval saved on this device lets run without asking (AI-19).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiAllowanceKind {
+    /// `run_command` calls whose command starts with `value`, on one host.
+    Command,
+    /// Every call of the tool `value` (`edit_file`, `write_file` or `send_input`), on one host.
+    Tool,
+    /// `fetch_url` calls of pages on the host name `value`, on any tab.
+    Domain,
+}
+
+/// An AI approval saved on this device (AI-19): never synced, kept until the user removes it.
+/// A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+pub struct AiAllowance {
+    pub kind: AiAllowanceKind,
+    /// The saved host the approval is for.
+    pub host_id: Option<String>,
+    /// The quick-connect target (`user@host:port`) the approval is for, without a saved host.
+    pub target: Option<String>,
+    /// The command prefix, the tool's name, or the domain.
+    pub value: String,
+}
+
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct AiConversationView {
     pub id: String,

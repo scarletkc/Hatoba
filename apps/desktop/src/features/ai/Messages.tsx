@@ -32,7 +32,21 @@ import { replies as findReplies, type ReplyEnd } from "./replies";
 import { revertFailure } from "./revertText";
 import { sideRunning, type SideQuestion } from "./side";
 import { patchSlot, useAi, type Slot } from "./store";
-import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
+import {
+  allowanceScope,
+  callFileChange,
+  callSummary,
+  exitStatusOf,
+  parseArgs,
+  prettyArgs,
+  SEND_KEYS,
+  shownText,
+  toolKind,
+  toolLabel,
+  type Scope,
+  type SendKey,
+  type ToolKind,
+} from "./tools";
 import { callRevealKey, editedFiles, revealKey, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
@@ -1004,10 +1018,56 @@ function ShownInput({ text, command }: { text: string; command?: boolean }) {
   );
 }
 
+interface AllowLabels {
+  here: string;
+  hereHint: string;
+  /** Null for an MCP server set to Always ask in bypass mode, which asks anyway. */
+  always: string | null;
+  alwaysHint: string;
+}
+
+/** The labels of a card's Allow for this conversation and Always allow (AI-19, AI-31), which name what they cover. */
+function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp: McpToolInfo | null, bypass: boolean): AllowLabels {
+  switch (scope.kind) {
+    case "command": {
+      const prefix = scope.prefixes.join(", ");
+      return {
+        here: t("ai.approval.allowCommandHere", { prefix }),
+        hereHint: t("ai.approval.allowCommandHereHint", { prefix }),
+        always: t("ai.approval.alwaysAllowCommand", { prefix }),
+        alwaysHint: t("ai.approval.alwaysAllowCommandHint", { prefix }),
+      };
+    }
+    case "domain": {
+      const { domain } = scope;
+      return {
+        here: t("ai.approval.allowDomainHere", { domain }),
+        hereHint: t("ai.approval.allowDomainHereHint", { domain }),
+        always: t("ai.approval.alwaysAllowDomain", { domain }),
+        alwaysHint: t("ai.approval.alwaysAllowDomainHint", { domain }),
+      };
+    }
+    case "tool":
+      return {
+        here: t("ai.approval.allowHere"),
+        hereHint: t("ai.approval.allowHereHint", { tool }),
+        always: t("ai.approval.alwaysAllowHost"),
+        alwaysHint: t("ai.approval.alwaysAllowHostHint", { tool }),
+      };
+    case "mcp":
+      return {
+        here: t("ai.approval.allowHere"),
+        hereHint: t("ai.approval.allowHereHint", { tool }),
+        always: mcp && !(bypass && mcp.always_ask) ? t("ai.approval.alwaysAllow") : null,
+        alwaysHint: t("ai.approval.alwaysAllowHint", { tool }),
+      };
+  }
+}
+
 /**
  * AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. An MCP call (AI-31)
- * shows its server, the tool's description and hints in place of the host, and offers Always allow.
- * Allow for this conversation (AI-19) is on every card.
+ * shows its server, the tool's description and hints in place of the host. Allow for this conversation
+ * and Always allow (AI-19) name what they cover: a command's prefixes, a page's domain, or the tool.
  */
 function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToolCall; host: HostInfo | null; mcp: McpToolInfo | null }) {
   const t = useT();
@@ -1035,6 +1095,14 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
   // file that comes back meanwhile is not written without a diff; without any answer, it waits.
   const holdRun = fileChange && (file.loading || !file.preview);
   const refusal = fileChange ? (file.preview?.error ?? undefined) : undefined;
+  // AI-19: what Allow for this conversation and Always allow cover, for the input that would run; nothing
+  // when the card shows why an edit or write cannot apply, since it showed no change.
+  let allow: AllowLabels | null = null;
+  if (refusal === undefined) {
+    const next = mode === "edit" ? argsFrom(kind, args, draft) : null;
+    const scope = allowanceScope(kind, next && "json" in next ? (parseArgs(next.json) ?? args) : args, mcp);
+    allow = scope && allowLabels(t, scope, label, mcp, bypass);
+  }
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
     if (holdRun) return;
     if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow, refusal });
@@ -1273,21 +1341,15 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           </Button>
         </div>
       )}
-      {mode !== "reject" && offersAllowHere(kind, mcp, refusal) && (
+      {mode !== "reject" && allow && (
         <div className={s.allowRow}>
-          <LinkButton
-            tone="muted"
-            icon="chat-circle-dots"
-            title={t("ai.approval.allowHereHint", { tool: label })}
-            disabled={holdRun}
-            onClick={() => run("conversation")}
-          >
-            {t("ai.approval.allowHere")}
+          <LinkButton tone="muted" icon="chat-circle-dots" title={allow.hereHint} disabled={holdRun} onClick={() => run("conversation")}>
+            {allow.here}
           </LinkButton>
-          {/* Always allow covers manual mode; a server set to Always ask still asks in bypass mode. */}
-          {mcp && !(bypass && mcp.always_ask) && (
-            <LinkButton tone="muted" icon="check-circle" title={t("ai.approval.alwaysAllowHint", { tool: label })} onClick={() => run("always")}>
-              {t("ai.approval.alwaysAllow")}
+          {/* Always allow covers manual mode; an MCP server set to Always ask still asks in bypass mode. */}
+          {allow.always && (
+            <LinkButton tone="muted" icon="check-circle" title={allow.alwaysHint} disabled={holdRun} onClick={() => run("always")}>
+              {allow.always}
             </LinkButton>
           )}
         </div>

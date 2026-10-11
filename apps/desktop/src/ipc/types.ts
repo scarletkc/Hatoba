@@ -844,6 +844,19 @@ export interface AiSettingsView {
 
 export type AiPermissionMode = "manual" | "bypass";
 
+/**
+ * An AI approval saved on this device (AI-19), never synced: `run_command` calls that start with the
+ * prefix `value` on a host, every call of the tool `value` (`edit_file`, `write_file`, `send_input`) on
+ * a host, or `fetch_url` calls of pages on the domain `value`. A host is a saved host's id, or the
+ * quick-connect target (`user@host:port`) of a tab without one.
+ */
+export interface AiAllowance {
+  kind: "command" | "tool" | "domain";
+  host_id: string | null;
+  target: string | null;
+  value: string;
+}
+
 export interface AiConversationView {
   id: string;
   title: string;

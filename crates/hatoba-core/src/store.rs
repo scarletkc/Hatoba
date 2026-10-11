@@ -59,6 +59,9 @@ pub mod meta {
     /// Envelope JSON: the shell's list of recent quick-connect targets (HOST-12), sealed under
     /// the vault key because it names hosts. Device-local, never synced.
     pub const RECENT_TARGETS: &str = "recent_targets";
+    /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
+    /// vault key because they name hosts. Device-local, never synced.
+    pub const AI_ALLOWANCES: &str = "ai_allowances";
 }
 
 /// One row of the `items` table.

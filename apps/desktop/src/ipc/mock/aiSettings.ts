@@ -1,6 +1,7 @@
 import { INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
 import type { HatobaApi } from "../api";
 import type {
+  AiAllowance,
   AiEffort,
   AiModel,
   AiProviderInput,
@@ -31,6 +32,9 @@ type AiSettingsApi = Pick<
   | "search_provider_test"
   | "ai_settings_get"
   | "ai_settings_save"
+  | "ai_allowances_list"
+  | "ai_allowance_add"
+  | "ai_allowance_remove"
 >;
 
 /**
@@ -95,6 +99,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     builtin_skill_enabled: true,
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
   };
+
+  let allowances: AiAllowance[] = [];
 
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -259,5 +265,25 @@ export function createAiSettingsMock(): AiSettingsApi {
         throw { code: "invalid_input", detail: "custom instructions are limited to 4,000 characters", field: "custom_instructions" } satisfies AppError;
       settings = structuredClone(next);
     },
+    // AI-19: the approvals saved on this device, kept until the page reloads.
+    ai_allowances_list: async () => allowances.map((a) => ({ ...a })),
+    ai_allowance_add: async (allowance) => {
+      const a = normalizeAllowance(allowance);
+      if (!allowances.some((x) => sameAllowance(x, a))) allowances = [...allowances, a];
+      return allowances.map((x) => ({ ...x }));
+    },
+    ai_allowance_remove: async (allowance) => {
+      const a = normalizeAllowance(allowance);
+      allowances = allowances.filter((x) => !sameAllowance(x, a));
+      return allowances.map((x) => ({ ...x }));
+    },
   };
 }
+
+/** Like Rust: trimmed, and a domain in lowercase. */
+function normalizeAllowance(a: AiAllowance): AiAllowance {
+  const value = a.value.trim();
+  return { kind: a.kind, host_id: a.host_id?.trim() || null, target: a.target?.trim() || null, value: a.kind === "domain" ? value.toLowerCase() : value };
+}
+
+const sameAllowance = (a: AiAllowance, b: AiAllowance) => a.kind === b.kind && a.host_id === b.host_id && a.target === b.target && a.value === b.value;

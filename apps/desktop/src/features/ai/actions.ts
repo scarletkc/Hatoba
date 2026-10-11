@@ -46,6 +46,7 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
+import { addAllowances, hostRefOf, resetAllowances, savedAllowances } from "./allowances";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
@@ -70,7 +71,22 @@ import {
   type TabSelection,
 } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
-import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
+import {
+  allowanceOf,
+  allowanceScope,
+  callAllowed,
+  grantKeys,
+  mcpOffResult,
+  mustAsk,
+  needsApproval,
+  needsSession,
+  parseArgs,
+  savedFor,
+  toolKind,
+  type HostRef,
+  type Scope,
+  type ToolKind,
+} from "./tools";
 import {
   editedFiles,
   entriesBefore,
@@ -157,7 +173,8 @@ function withContext(s: Slot, view: AiConversationView): AiConversationView {
 // ───────────────────────── the turn runner ─────────────────────────
 
 /**
- * `allow`: AI-19 Allow for this conversation, or AI-31 Always allow (MCP tools, on this device).
+ * `allow`: AI-19 Allow for this conversation, or Always allow on this device (AI-19, and AI-31 for MCP
+ * tools), for the call's `allowanceScope`.
  * `refusal`: the error the approval card of an `edit_file` or `write_file` call showed in place of a diff
  * (AI-39, AI-40); the call answers with it instead of running, so nothing is written that the user did
  * not see as a diff.
@@ -167,16 +184,13 @@ type Decision =
   | { kind: "reject"; reason: string }
   | { kind: "stop" };
 
-/** AI-19: later calls of the tool in this conversation run without asking until the app quits. `grant` is its `grantKey`. */
-function allowInConversation(convId: string, grant: string) {
+/** AI-19: later calls the grants cover run without asking in this conversation until the app quits. `grants` are `grantKeys`. */
+function allowInConversation(convId: string, grants: string[]) {
   useAi.setState((st) => {
     const list = st.allowed[convId] ?? [];
-    return list.includes(grant) ? {} : { allowed: { ...st.allowed, [convId]: [...list, grant] } };
+    const added = grants.filter((g) => !list.includes(g));
+    return added.length === 0 ? {} : { allowed: { ...st.allowed, [convId]: [...list, ...added] } };
   });
-}
-
-function allowedInConversation(convId: string, grant: string | null): boolean {
-  return grant !== null && (useAi.getState().allowed[convId]?.includes(grant) ?? false);
 }
 
 const runners = new Map<string, TurnRunner>();
@@ -345,10 +359,16 @@ class TurnRunner {
       // AI-30: a server switched off in the tools menu runs nothing more, in this turn too.
       if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
     }
-    const grant = grantKey(kind, call.name, mcp);
-    const allowedHere = allowedInConversation(convId, grant);
+    // AI-19: the approvals the user chose for this conversation and saved on this device, which name the
+    // tab's host for commands and tools; and §13.5's commands that only read.
+    const target = this.target();
+    const host = target ? hostRefOf(target.tab) : null;
+    const mode = getSlot(this.slotId).mode;
+    const saved = kind !== "mcp" && needsApproval(kind, mode) ? await savedAllowances().catch(() => []) : [];
+    if (!this.acting) return;
+    const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host);
     let edited: string | null = null;
-    if (mustAsk({ kind, mode: getSlot(this.slotId).mode, allowedHere, mcp })) {
+    if (mustAsk({ kind, mode, allowed, mcp })) {
       const d = await this.wait(call.id, "approval", mcp);
       if (!this.acting || d.kind === "stop") return;
       if (d.kind === "reject") {
@@ -358,8 +378,10 @@ class TurnRunner {
       }
       edited = d.edited;
       const allow = allowanceOf(d);
-      if (allow === "conversation" && grant) allowInConversation(convId, grant);
-      else if (allow === "always" && mcp) await this.alwaysAllow(mcp);
+      // What the card offered, for the input that runs: an edited command names its own prefixes.
+      const scope = allow ? allowanceScope(kind, parseArgs(edited ?? call.arguments) ?? {}, mcp) : null;
+      if (allow === "conversation" && scope) allowInConversation(convId, grantKeys(scope));
+      else if (allow === "always" && scope) await this.alwaysAllow(scope, host, mcp);
       if (d.refusal !== undefined) {
         if (!this.acting) return;
         this.setCall({ id: call.id, state: "running" });
@@ -378,10 +400,11 @@ class TurnRunner {
     await this.report(convId, callId, { status: "error", content, edited_arguments: null });
   }
 
-  /** AI-31 Always allow on the card: stored on this device, then the call runs. */
-  private async alwaysAllow(mcp: McpToolInfo) {
+  /** Always allow on the card (AI-19, AI-31): stored on this device, then the call runs. */
+  private async alwaysAllow(scope: Scope, host: HostRef | null, mcp: McpToolInfo | null) {
     try {
-      await api.mcp_set_always_allow(mcp.server_id, mcp.tool.tool, true);
+      if (scope.kind === "mcp" && mcp) await api.mcp_set_always_allow(mcp.server_id, mcp.tool.tool, true);
+      else await addAllowances(savedFor(scope, host));
     } catch (e) {
       // The user approved this call, so it runs; only the setting failed.
       toast(aiErrorMessage(e), "error");
@@ -1055,6 +1078,7 @@ export function detachSlot(slotId: string) {
 export function resetForLock() {
   for (const runner of [...runners.values()]) runner.dispose();
   runners.clear();
+  resetAllowances();
   useAi.setState((st) => ({
     history: null,
     slots: Object.fromEntries(

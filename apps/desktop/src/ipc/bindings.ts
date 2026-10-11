@@ -327,6 +327,12 @@ export const commands = {
 	 *  naming the file by its base name. The per-message total stays the panel's to check.
 	 */
 	aiReadDroppedFiles: (paths: string[]) => __TAURI_INVOKE<DroppedFile[]>("ai_read_dropped_files", { paths }),
+	/**  The AI approvals saved on this device, oldest first. */
+	aiAllowancesList: () => __TAURI_INVOKE<AiAllowance[]>("ai_allowances_list"),
+	/**  Saves an approval on this device and returns them all. */
+	aiAllowanceAdd: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_add", { allowance }),
+	/**  Removes a saved approval and returns what is left. */
+	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
 	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
 	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
 	/**  The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
@@ -393,6 +399,29 @@ export const events = {
 };
 
 /* Types */
+/**
+ *  An AI approval saved on this device (AI-19): never synced, kept until the user removes it.
+ *  A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab.
+ */
+export type AiAllowance = {
+	kind: AiAllowanceKind,
+	/**  The saved host the approval is for. */
+	host_id: string | null,
+	/**  The quick-connect target (`user@host:port`) the approval is for, without a saved host. */
+	target: string | null,
+	/**  The command prefix, the tool's name, or the domain. */
+	value: string,
+};
+
+/**  What an AI approval saved on this device lets run without asking (AI-19). */
+export type AiAllowanceKind = 
+/**  `run_command` calls whose command starts with `value`, on one host. */
+"command" | 
+/**  Every call of the tool `value` (`edit_file`, `write_file` or `send_input`), on one host. */
+"tool" | 
+/**  `fetch_url` calls of pages on the host name `value`, on any tab. */
+"domain";
+
 export type AiAuthHeader = "x-api-key" | "authorization";
 
 export type AiConversationDetail = {

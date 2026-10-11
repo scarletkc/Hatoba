@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useVaultData } from "@/app/data";
 import { Button, Icon, IconButton, Segmented, Spinner, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { InstructionsField } from "@/features/ai/InstructionsField";
 import { charCount, INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
+import { toolLabel } from "@/features/ai/tools";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
+import type { AiAllowance, AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import {
-  modelChoices,
-  parseBaseUrl,
-  resolveSettings,
-  sameRef,
-  sameSettings,
-  sanitizeSettings,
-} from "./aiLogic";
+import { modelChoices, parseBaseUrl, resolveSettings, sameRef, sameSettings, sanitizeSettings } from "./aiLogic";
 import { aiErrorMessage } from "./aiShared";
 import { McpSection } from "./McpSection";
 import { ProviderDialog } from "./ProviderDialog";
@@ -39,7 +35,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), custom instructions (AI-36), and the permission mode of this device (AI-16).
+ * web search (AI-14), custom instructions (AI-36), and the permission mode and saved approvals of this
+ * device (AI-16, AI-19).
  */
 export function AiPane() {
   const t = useT();
@@ -376,7 +373,40 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   );
 }
 
-/** Settings that stay on this device and are not synced: the permission mode (AI-16). */
+const ALLOWANCE_ICON: Record<string, string> = { command: "terminal", domain: "globe", edit_file: "note-pencil", write_file: "file-plus", send_input: "keyboard" };
+
+/** AI-19: the approvals saved with Always Allow on approval cards, as rows that Remove deletes. */
+function SavedApprovals() {
+  const t = useT();
+  const list = useAllowances((st) => st.list);
+  const hosts = useVaultData((st) => st.hosts);
+  useEffect(() => {
+    savedAllowances().catch((e) => toast(aiErrorMessage(t, e), "error"));
+  }, [t]);
+
+  const hostName = (a: AiAllowance) => (a.host_id !== null ? (hosts.find((h) => h.id === a.host_id)?.name ?? t("ai.history.hostGone")) : (a.target ?? ""));
+  const what = (a: AiAllowance) =>
+    a.kind === "command" ? t("aiSettings.allowances.command", { prefix: a.value }) : a.kind === "domain" ? t("aiSettings.allowances.domain", { domain: a.value }) : toolLabel(t, a.value);
+  const remove = (a: AiAllowance) => removeAllowance(a).catch((e) => toast(aiErrorMessage(t, e), "error"));
+
+  return (
+    <>
+      <SettingRow label={t("aiSettings.allowances")} hint={list?.length === 0 ? t("aiSettings.allowances.empty") : undefined} />
+      {list?.map((a) => (
+        <div key={`${a.kind}\n${a.host_id ?? ""}\n${a.target ?? ""}\n${a.value}`} className={s.allowance}>
+          <Icon name={ALLOWANCE_ICON[a.kind === "tool" ? a.value : a.kind] ?? "check-circle"} className={s.allowanceIcon} />
+          <span className={s.allowanceText}>
+            <span className={s.allowanceWhat}>{what(a)}</span>
+            {a.kind !== "domain" && <span className={s.allowanceHost}>{hostName(a)}</span>}
+          </span>
+          <IconButton icon="x" label={t("btn.remove")} onClick={() => void remove(a)} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals (AI-19). */
 function DeviceSection() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
@@ -411,6 +441,7 @@ function DeviceSection() {
             onChange={(mode) => void chooseMode(mode)}
           />
         </SettingRow>
+        <SavedApprovals />
       </Group>
     </section>
   );
