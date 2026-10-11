@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Icon, IconButton, Spinner, Switch } from "@/components/controls";
 import { layoutStyles } from "@/components/layout";
-import { confirm, toast } from "@/components/overlay";
+import { Menu, confirm, toast, useMenu } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpToolView } from "@/ipc/types";
@@ -11,6 +11,7 @@ import { aiErrorMessage } from "./aiShared";
 import { McpImportDialog } from "./McpImportDialog";
 import { McpServerDialog } from "./McpServerDialog";
 import { annotationKeys, serverState, stderrText, toolAllowed, transportSummary, upsertServer, withAlwaysAllow } from "./mcpLogic";
+import { MCP_TEMPLATES, type McpTemplate } from "./mcpTemplates";
 import { EmptyBlock, StatusRow } from "./sectionParts";
 import a from "./AiPane.module.css";
 import s from "./McpSection.module.css";
@@ -18,7 +19,8 @@ import s from "./McpSection.module.css";
 /**
  * Settings → AI → MCP servers (spec §13.9, AI-29 to AI-33): the servers with a live state dot and the switch that turns
  * one on for this device, a status area per server (start, stop, the error and stderr of a failed one, the tools with
- * their Always allow switches), add and edit in a dialog, import from other clients' JSON, and export.
+ * their Always allow switches), add and edit in a dialog, add from a template (AI-44), import from other clients'
+ * JSON, and export.
  */
 export function McpSection() {
   const t = useT();
@@ -28,8 +30,10 @@ export function McpSection() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   /** Servers with a start or stop in flight, for the busy button. */
   const [working, setWorking] = useState<Record<string, "start" | "stop">>({});
-  const [editing, setEditing] = useState<{ server: McpServerView | null } | null>(null);
+  const [editing, setEditing] = useState<{ server: McpServerView | null; template?: McpTemplate } | null>(null);
   const [importing, setImporting] = useState(false);
+  const templateMenu = useMenu();
+  const templateButton = useRef<HTMLButtonElement>(null);
   const live = useRef(true);
 
   const setOneStatus = useCallback((next: McpServerStatus) => {
@@ -171,6 +175,16 @@ export function McpSection() {
                 {t("aiSettings.mcp.export")}
               </Button>
             )}
+            <Button
+              ref={templateButton}
+              size="sm"
+              icon="squares-four"
+              aria-haspopup="menu"
+              aria-expanded={!!templateMenu.anchor}
+              onClick={() => templateButton.current && templateMenu.openBelow(templateButton.current, true)}
+            >
+              {t("aiSettings.mcp.templates")}
+            </Button>
             {list.length > 0 && (
               <Button size="sm" icon="plus" onClick={() => setEditing({ server: null })}>
                 {t("aiSettings.mcp.add")}
@@ -179,6 +193,22 @@ export function McpSection() {
           </div>
         )}
       </div>
+      {templateMenu.anchor && (
+        <Menu
+          anchor={templateMenu.anchor}
+          onClose={templateMenu.close}
+          entries={MCP_TEMPLATES.map((template) => ({
+            label: template.label,
+            icon: template.icon,
+            onSelect: () => {
+              // A click leaves the focus on the menu item, which is gone by the time the dialog closes and gives the
+              // focus back. The button stays, so it takes the focus first.
+              templateButton.current?.focus();
+              setEditing({ server: null, template });
+            },
+          }))}
+        />
+      )}
 
       <div className={cx(layoutStyles.group, a.clip)}>
         {!loaded && !loadError && <StatusRow icon={<Spinner />}>{t("aiSettings.loading")}</StatusRow>}
@@ -222,6 +252,7 @@ export function McpSection() {
       {editing && (
         <McpServerDialog
           server={editing.server}
+          template={editing.template}
           otherNames={list.filter((x) => x.id !== editing.server?.id).map((x) => x.name)}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {

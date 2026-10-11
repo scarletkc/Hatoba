@@ -114,7 +114,10 @@ impl<T: Transport<RoleClient>> Transport<RoleClient> for Watched<T> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Stdio,
-    Http,
+    /// `token`: the configuration sends an `Authorization` header (see [`http_error_message`]).
+    Http {
+        token: bool,
+    },
 }
 
 struct Inner {
@@ -374,7 +377,10 @@ impl McpConnection {
             ServiceError::TransportClosed => McpError::Closed,
             // A stdio write fails only when the child's stdin is gone.
             ServiceError::TransportSend(_) if self.inner.kind == Kind::Stdio => McpError::Closed,
-            ServiceError::TransportSend(e) => McpError::Connect(describe(e.error.as_ref())),
+            ServiceError::TransportSend(e) => McpError::Connect(describe(
+                e.error.as_ref(),
+                self.inner.kind == Kind::Http { token: true },
+            )),
             ServiceError::UnexpectedResponse => {
                 McpError::Protocol("the answer does not match the request".into())
             }
@@ -479,12 +485,13 @@ fn stdio_init_error(
         | ClientInitializeError::TransportError { .. } => {
             McpError::Spawn("the server closed its output before it finished starting".into())
         }
-        other => init_error(other),
+        other => init_error(other, false),
     }
 }
 
-/// The errors both transports share; transport failures are mapped by the caller.
-fn init_error(err: &ClientInitializeError) -> McpError {
+/// The errors both transports share; transport failures are mapped by the caller. `token` as
+/// in [`http_error_message`].
+fn init_error(err: &ClientInitializeError, token: bool) -> McpError {
     match err {
         ClientInitializeError::JsonRpcError(data) => McpError::Server(server_message(data)),
         ClientInitializeError::Cancelled => McpError::Cancelled,
@@ -492,7 +499,7 @@ fn init_error(err: &ClientInitializeError) -> McpError {
             McpError::Connect("the connection closed before the server answered".into())
         }
         ClientInitializeError::TransportError { error, .. } => {
-            McpError::Connect(describe(error.error.as_ref()))
+            McpError::Connect(describe(error.error.as_ref(), token))
         }
         ClientInitializeError::NoCompatibleProtocolVersion { .. } => {
             McpError::Protocol("the server supports no protocol version Hatoba speaks".into())
@@ -508,6 +515,9 @@ async fn connect_http(
     timeout: Duration,
 ) -> Result<McpConnection, McpError> {
     let url = server_url(url).await?;
+    let token = headers
+        .iter()
+        .any(|(name, _)| name.trim().eq_ignore_ascii_case("authorization"));
     let headers = header_map(headers)?;
     let config =
         StreamableHttpClientTransportConfig::with_uri(url.as_str()).custom_headers(headers);
@@ -521,14 +531,14 @@ async fn connect_http(
     };
     match tokio::time::timeout(timeout, rmcp::serve_client(Handler, transport)).await {
         Ok(Ok(service)) => Ok(McpConnection::new(
-            Kind::Http,
+            Kind::Http { token },
             service,
             None,
             tools_changed,
             StderrTail::new(),
             timeout,
         )),
-        Ok(Err(err)) => Err(init_error(&err)),
+        Ok(Err(err)) => Err(init_error(&err, token)),
         Err(_) => Err(McpError::Timeout),
     }
 }
@@ -575,12 +585,13 @@ fn header_map(
     Ok(map)
 }
 
-/// A transport failure as one line without the URL (reqwest puts it in its messages).
-fn describe(err: &(dyn std::error::Error + Send + Sync + 'static)) -> String {
+/// A transport failure as one line without the URL (reqwest puts it in its messages). `token`
+/// as in [`http_error_message`].
+fn describe(err: &(dyn std::error::Error + Send + Sync + 'static), token: bool) -> String {
     let mut current: Option<&(dyn std::error::Error + 'static)> = Some(err);
     while let Some(e) = current {
         if let Some(e) = e.downcast_ref::<StreamableHttpError<reqwest::Error>>() {
-            return http_error_message(e);
+            return http_error_message(e, token);
         }
         if let Some(e) = e.downcast_ref::<reqwest::Error>() {
             return network_message(e);
@@ -597,9 +608,18 @@ fn network_message(err: &reqwest::Error) -> String {
     }
 }
 
-fn http_error_message(err: &StreamableHttpError<reqwest::Error>) -> String {
+/// `token`: the configuration sends an `Authorization` header, so a 401, with a challenge or
+/// without one, means the server refused that token. Only the header's name is looked at.
+fn http_error_message(err: &StreamableHttpError<reqwest::Error>, token: bool) -> String {
+    const TOKEN_REFUSED: &str = "the token is invalid or has expired (HTTP 401)";
     match err {
         StreamableHttpError::Client(e) => network_message(e),
+        StreamableHttpError::AuthRequired(_) if token => TOKEN_REFUSED.into(),
+        StreamableHttpError::UnexpectedServerResponse(message)
+            if token && message.starts_with("HTTP 401") =>
+        {
+            TOKEN_REFUSED.into()
+        }
         StreamableHttpError::AuthRequired(_) => "the server requires authorization (HTTP 401): \
              give it the credentials it expects as a request header; Hatoba does not sign in \
              to MCP servers with OAuth"

@@ -94,6 +94,8 @@ export interface SecretRow {
   key: string;
   saved: boolean;
   draft: KeyDraft;
+  /** From a template (AI-44): what the value looks like, shown while its field is empty. */
+  placeholder?: string;
 }
 
 let nextUid = 1;
@@ -114,6 +116,14 @@ export interface SecretRowProblem {
 /** A row the user added and left empty: it is dropped when saving. */
 export const isBlankRow = (row: SecretRow): boolean => !row.saved && row.key.trim() === "" && row.draft.value.trim() === "";
 
+/**
+ * Header inputs with `Bearer ` put in front of an `Authorization` value without a space, so the user pastes only the
+ * token (AI-29). A value with its own scheme, and a saved value that is kept, stay as they are.
+ */
+export function withBearer(inputs: readonly McpSecretInput[]): McpSecretInput[] {
+  return inputs.map((i) => (i.key.toLowerCase() === "authorization" && i.value && !/\s/.test(i.value) ? { ...i, value: `Bearer ${i.value}` } : i));
+}
+
 // A name has no `=`, no whitespace, and no control character; a header name is an HTTP token (RFC 9110).
 const ENV_NAME = /^[^=\s\u0000-\u001f\u007f]+$/;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
@@ -132,6 +142,15 @@ export function validateSecretRows(rows: readonly SecretRow[], kind: SecretKind)
     if (!row.saved && row.draft.value.trim() === "") problem.value = "missing";
     return Object.keys(problem).length ? problem : null;
   });
+}
+
+/**
+ * The row problems to show. Like the dialog's other fields, an empty name or value is a problem only once the user
+ * tried to save, so a template's empty token is not an error before it is typed.
+ */
+export function shownRowProblems(problems: readonly (SecretRowProblem | null)[], submitted: boolean): (SecretRowProblem | null)[] {
+  if (submitted) return [...problems];
+  return problems.map((p) => (p?.key && p.key !== "empty" ? { key: p.key } : null));
 }
 
 /**
@@ -204,6 +223,14 @@ export function validateMcpForm(form: McpForm, otherNames: readonly string[] = [
   };
 }
 
+/** `name`, or the first of `name-2`, `name-3`… that no other server has, compared as `validateMcpForm` does. */
+export function freeServerName(name: string, otherNames: readonly string[]): string {
+  const taken = new Set(otherNames.map((n) => n.trim().toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${name}-${n}`;
+  return candidate;
+}
+
 export function hasMcpProblems(p: McpFormProblems): boolean {
   return !!p.name || !!p.command || !!p.url || p.secrets.some(Boolean);
 }
@@ -216,7 +243,7 @@ export function mcpFormToInput(id: string | null, form: McpForm): McpServerInput
     transport:
       form.kind === "stdio"
         ? { kind: "stdio", command: form.command.trim(), args: form.args.map((a) => a.value).filter((v) => v !== ""), env: secretInputs(form.env) }
-        : { kind: "http", url: form.url.trim(), headers: secretInputs(form.headers) },
+        : { kind: "http", url: form.url.trim(), headers: withBearer(secretInputs(form.headers)) },
     always_ask: form.alwaysAsk,
   };
 }
