@@ -10,12 +10,14 @@ interface Box {
 
 /**
  * Converts the position of a native file drop to CSS pixels. Tauri types it as a `PhysicalPosition`,
- * but wry fills it in per platform: real physical pixels on Windows, and the view's own coordinates
- * in points on macOS (wry `wkwebview/drag_drop.rs`), which are CSS pixels already. Dividing the
- * macOS value by the Retina scale would put every drop at half the coordinates.
+ * but wry fills it in per platform: real physical pixels on Windows (`webview2/drag_drop.rs`), and
+ * the view's own coordinates — CSS pixels already — on macOS (`wkwebview/drag_drop.rs`) and Linux,
+ * where GTK's `drag-drop` signal reports logical pixels (`webkitgtk/drag_drop.rs`, passed through
+ * unscaled by tauri-runtime-wry). Dividing those by the display scale would shrink every drop's
+ * coordinates (a 200%-scaled Linux desktop halves them).
  */
 export function dropPointToCss(pos: { x: number; y: number }, platform: Platform, devicePixelRatio: number) {
-  const scale = platform === "macos" ? 1 : devicePixelRatio || 1;
+  const scale = platform === "windows" ? devicePixelRatio || 1 : 1;
   return { x: pos.x / scale, y: pos.y / scale };
 }
 
