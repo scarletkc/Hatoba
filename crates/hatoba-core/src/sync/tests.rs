@@ -622,13 +622,13 @@ async fn join_errors_leave_the_local_vault_alone() {
     assert!(matches!(err, Error::RemoteNotInitialized));
 
     enable(&a).await;
-    // The credential store fails: nothing local has changed yet.
+    // The caller's operation ended while signing in (a lock, say): nothing local changes.
     let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| {
-        Err(Error::Format("credential store".into()))
+        Err(Error::Cancelled)
     })
     .await
     .unwrap_err();
-    assert!(matches!(err, Error::Format(_)));
+    assert!(matches!(err, Error::Cancelled));
     assert_eq!(c.v().sync_config().unwrap(), None);
     assert_eq!(
         c.pending(),

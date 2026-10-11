@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
@@ -44,36 +44,46 @@ export function D1Step({
       ? { message: errorMessage(t, error), offline: true }
       : { message: t("sync.token.err"), offline: false };
 
-  // Only the latest pick's answer counts: whether the database holds a vault decides the flow.
-  const picked = useRef("");
+  // Only the latest request's answer counts, for the credentials in the fields: whether the
+  // database holds a vault decides the flow. A new request, an edit and leaving the step all end
+  // the one in flight; the wizard keeps `form`, so a late answer would land in the next visit.
+  const epoch = useRef(0);
+  useEffect(() => {
+    const current = epoch;
+    return () => {
+      current.current++;
+    };
+  }, []);
+
   const pickDatabase = async (databaseId: string) => {
-    picked.current = databaseId;
+    const n = ++epoch.current;
     update({ databaseId, initialized: false, checking: true });
     try {
       const result = await api.sync_test(config(databaseId));
-      if (picked.current === databaseId) update({ initialized: result.ok && result.initialized, checking: false });
+      if (n === epoch.current) update({ initialized: result.ok && result.initialized, checking: false });
     } catch {
-      if (picked.current === databaseId) update({ checking: false });
+      if (n === epoch.current) update({ checking: false });
     }
   };
 
   const runVerify = async () => {
     if (!canVerify) return;
-    picked.current = "";
+    const n = ++epoch.current;
     update({ verify: { status: "testing" }, databaseId: "", databases: [], initialized: false });
     try {
       const result = await api.sync_test(config(""));
+      if (n !== epoch.current) return;
       if (!result.ok) return update({ verify: { status: "failed", ...failure(result.error) } });
       const databases = result.databases ?? [];
       update({ verify: { status: "ok", result }, databases });
       if (databases.length === 1) void pickDatabase(databases[0].id);
     } catch (e) {
-      update({ verify: { status: "failed", ...failure(toAppError(e)) } });
+      if (n === epoch.current) update({ verify: { status: "failed", ...failure(toAppError(e)) } });
     }
   };
 
   const reset = (patch: Partial<D1Form>) => {
-    picked.current = "";
+    epoch.current++;
     update({ ...EMPTY_D1, accountId: form.accountId, apiToken: form.apiToken, ...patch });
   };
 

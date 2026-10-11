@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
@@ -43,7 +43,15 @@ export function WorkerStep({
   const canContinue = !!ok && (initialized || form.token.trim().length > 0);
 
   // Only the answer for the URL in the field counts: whether it holds a vault decides the flow.
+  // Editing the URL, a new test and leaving the step all end the one in flight; the wizard keeps
+  // `form`, so a late answer would otherwise land in the next visit.
   const request = useRef(0);
+  useEffect(() => {
+    const current = request;
+    return () => {
+      current.current++;
+    };
+  }, []);
   const runTest = async () => {
     if (!canTest) return;
     const n = ++request.current;

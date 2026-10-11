@@ -182,6 +182,9 @@ pub async fn sync_join(
     config: SyncConfigInput,
     password: String,
 ) -> AppResult<()> {
+    // A lock or a disconnect while this waits for the server ends it: nothing is saved and the
+    // vault stays as it was (§6.3), even if it was unlocked again meanwhile.
+    let generation = state.sync.generation();
     let (cfg, backend) = backend_from_input(&config)?;
     let secrets = state.secrets.as_ref();
     let joined = flows::join_remote_vault(
@@ -191,6 +194,9 @@ pub async fn sync_join(
         device_info(),
         &cfg,
         |session| {
+            if state.sync.generation() != generation {
+                return Err(hatoba_core::Error::Cancelled);
+            }
             save_session(secrets, session)?;
             match &config {
                 SyncConfigInput::D1 { api_token, .. } => {

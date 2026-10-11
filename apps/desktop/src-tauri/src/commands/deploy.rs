@@ -293,6 +293,8 @@ pub async fn deploy_join(
     target: DeployTarget,
     password: String,
 ) -> AppResult<()> {
+    // As in `sync_join`: a lock or a disconnect while this waits ends it.
+    let generation = state.sync.generation();
     let target = self::target(target);
     let url = {
         let deployment = state.deploy.get(&handle)?;
@@ -314,7 +316,12 @@ pub async fn deploy_join(
         &password,
         device_info(),
         &config,
-        |session| save_session(secrets, session),
+        |session| {
+            if state.sync.generation() != generation {
+                return Err(hatoba_core::Error::Cancelled);
+            }
+            save_session(secrets, session)
+        },
     )
     .await?;
     state.deploy.end(&handle);

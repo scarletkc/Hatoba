@@ -270,9 +270,11 @@ pub struct Joined {
 /// password becomes the remote's and `config` is recorded. The vault must be unlocked.
 ///
 /// `keep_credentials` stores the session (and whatever else the backend needs, such as a D1 API
-/// token) after sign-in and before anything local changes, so an error there leaves the vault as
-/// it was. Nothing is pushed here: the caller then runs an ordinary sync round, which pulls the
-/// remote's items and uploads the local ones. An interrupted round resumes like any other.
+/// token) after sign-in, under the vault lock and only while the vault is still unlocked, right
+/// before anything local changes. An error there, such as [`Error::Cancelled`] when the caller's
+/// operation ended while signing in (a lock, say), leaves the vault as it was. Nothing is pushed
+/// here: the caller then runs an ordinary sync round, which pulls the remote's items and uploads
+/// the local ones. An interrupted round resumes like any other.
 ///
 /// # Errors
 /// [`Error::Locked`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
@@ -296,8 +298,11 @@ pub async fn join_remote_vault(
         return Err(Error::RemoteNotInitialized);
     }
     let auth = authenticate(backend, password, &device_id, &device).await?;
-    keep_credentials(&auth.session)?;
     let rekeyed = with_vault(vault, |v| {
+        if !v.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        keep_credentials(&auth.session)?;
         v.join_remote_vault(&auth.meta, auth.vault_key, config)
     })?;
     Ok(Joined {
