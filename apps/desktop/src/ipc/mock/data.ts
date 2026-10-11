@@ -320,6 +320,7 @@ export function syncStatus(): SyncStatus {
     message: null,
     counts: { hosts: HOSTS.length, keys: KEYS.length, groups: GROUPS.length },
     worker_update: null,
+    too_large: [],
   };
 }
 

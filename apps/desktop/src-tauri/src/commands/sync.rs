@@ -304,7 +304,7 @@ pub async fn sync_revoke_device(
     Ok(())
 }
 
-fn item_type(item: Option<&Item>) -> ItemType {
+pub(crate) fn item_type(item: Option<&Item>) -> ItemType {
     match item {
         Some(Item::Host(_)) | None => ItemType::Host,
         Some(Item::Group(_)) => ItemType::Group,

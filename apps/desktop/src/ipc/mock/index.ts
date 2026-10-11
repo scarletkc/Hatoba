@@ -43,7 +43,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
 /**
  * In-browser stand-in for the Rust backend so the UI can be developed and reviewed with the
  * design's sample data (`pnpm dev`). URL parameters select demo states:
- *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth
+ *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth | too_large
  *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
@@ -123,6 +123,17 @@ export function createMockApi(): HatobaApi {
     if (syncDemo === "offline") return { ...s, state: "offline", pending: 3 };
     if (syncDemo === "auth") return { ...s, state: "auth_failed" };
     if (syncDemo === "conflict") return { ...s, conflicts: D.CONFLICTS.length };
+    if (syncDemo === "too_large") {
+      const host = D.HOSTS[0];
+      return {
+        ...s,
+        pending: 2,
+        too_large: [
+          { item_id: host.id, item_type: "host", item_name: host.name },
+          { item_id: "settings", item_type: "settings", item_name: "settings" },
+        ],
+      };
+    }
     if (workerDemo === "available") return { ...s, worker_update: { kind: "available", version: "0.1.0", bundled: BUNDLED_WORKER } };
     if (workerDemo === "required" || workerDemo === "custom")
       return {
@@ -183,7 +194,7 @@ export function createMockApi(): HatobaApi {
     if (sync.kind === "none") return;
     if (sync.state === "paused") return setSync({ pending: sync.pending + 1 });
     setSync({ state: "syncing", pending: sync.pending + 1 });
-    setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now() }), 900);
+    setTimeout(() => setSync({ state: "idle", pending: 0, last_synced_at: Date.now(), too_large: [] }), 900);
   }
 
   /** The Worker answers with the bundled version: the notice goes, and a paused sync pushes what waited. */

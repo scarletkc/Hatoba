@@ -73,6 +73,9 @@ pub struct SyncReport {
     pub skipped: u32,
     /// Local changes the server rejected for this round (for example `too_large`).
     pub failed: u32,
+    /// The ids among `failed` that the server rejected as `too_large`: items larger than sync
+    /// accepts (§6.2). They stay pending, and every round sends them again.
+    pub too_large: Vec<String>,
     /// Items still waiting to be pushed after the round.
     pub pending_after: u64,
 }
@@ -188,6 +191,7 @@ pub async fn sync_round(
         pushed = report.pushed,
         conflicts = report.conflicts_resolved,
         skipped = report.skipped,
+        failed = report.failed,
         pending = report.pending_after,
         "sync round finished"
     );
@@ -519,6 +523,7 @@ fn apply_push_results(
     let by_id: HashMap<&str, &ItemRow> = pushed.iter().map(|r| (r.id.as_str(), r)).collect();
     let mut pushed_ok = 0u32;
     let mut failed = 0u32;
+    let mut too_large = Vec::new();
     let mut given_up = Vec::new();
 
     let batch = ctx.store.transaction(|tx| {
@@ -555,6 +560,9 @@ fn apply_push_results(
                 }
                 PushResult::Error { id, error } => {
                     tracing::warn!(item_id = %id, error = %error, "server rejected a change");
+                    if error == "too_large" {
+                        too_large.push(id.clone());
+                    }
                     failed += 1;
                     given_up.push(id.clone());
                 }
@@ -564,6 +572,7 @@ fn apply_push_results(
     })?;
     report.pushed += pushed_ok;
     report.failed += failed;
+    report.too_large.extend(too_large);
     finish_batch(ctx, batch, report)?;
     Ok(given_up)
 }
