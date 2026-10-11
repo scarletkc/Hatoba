@@ -656,12 +656,12 @@ A failure after `/v1/setup` succeeded, including a lost response, leaves the rem
 
 1. In the sync wizard, step 2 finds that the Worker or D1 database already holds a vault (`/v1/health` reports `initialized`, or §6.7 step 2 plans `has_vault`). It offers to join that vault instead of setting it up, and needs no setup token.
 2. The master password step asks for the cloud vault's master password and says that this device's data is merged into the cloud vault, that the device then unlocks with that password, and that the cloud vault's recovery code replaces this device's. Its submit button is the explicit confirmation.
-3. With the local vault unlocked, the client signs in as in Flow B step 2, under this device's id, and unwraps the cloud vault_key.
+3. With the local vault unlocked, the client signs in as in Flow B step 2, under this device's id, and unwraps the cloud vault_key. It stores the session (and, in D1 mode, the API token) before anything local changes, so a credential store that fails leaves the local vault as it was.
 4. In one local transaction:
    - **Same vault** (the cloud vault_key opens the local vault check, for example on a device that synced before and was disconnected): every item is marked dirty with revision 0, so the next round reconciles each one per §6.4. Identical items converge without a conflict entry.
    - **Another vault**: every live item is decrypted with the local vault_key and re-encrypted with the cloud vault_key under the same id, revision 0 and dirty, so it is pushed as a new item. The local settings item, tombstones, and items that cannot be decrypted are dropped, and the cloud's settings arrive with the pull. The conflict log is cleared. Device-local data sealed with the vault_key (the recent quick-connect targets and the AI file snapshots) is sealed again with the cloud vault_key.
    - Either way the local meta takes the cloud's salt, KDF parameters, `protected_vault_key`, and `recovery_vault_key`, so the master password and recovery code become the cloud's. `recovery_auth_sealed` is deleted, the sync configuration is recorded, and `sync_cursor` is reset.
-5. The client stores the session and runs an ordinary round, which pulls the cloud's items and pushes the local ones. An interrupted round resumes like any other. When the vault_key changed, biometric unlock, which wraps the old key, is turned off.
+5. The client runs an ordinary round, which pulls the cloud's items and pushes the local ones. An interrupted round resumes like any other. When the vault_key changed, biometric unlock, which wraps the old key, is turned off.
 
 **Worker deployment**: the steps are in [Deploy the sync Worker](../workers/sync/README.md), and the in-app sync wizard links to it. One-click deployment inside the app through the Cloudflare API (§6.7) and a Deploy to Cloudflare button are both P1.
 
@@ -743,7 +743,7 @@ Step 2 decides what to do with resources that already have the chosen names, bef
 |---|---|
 | Not found | Create it |
 | A Hatoba Worker whose database holds no vault | Deploy over it and use the database bound as `DB`, whatever its name. This is what an earlier attempt leaves when it stops before `/v1/setup` |
-| A Hatoba Worker whose database holds a vault | Deploy nothing. The wizard offers **Connect**, which joins that vault through its workers.dev URL (Flow C, §6.6), or a different Worker name. Without a workers.dev subdomain there is no URL to join, so **Connect** is off and the wizard points to connecting the Worker by its URL |
+| A Hatoba Worker whose database holds a vault | Deploy nothing. The wizard offers **Connect**, which joins that vault through its workers.dev URL (Flow C, §6.6), or a different Worker name. Without a workers.dev subdomain there is no URL to join, so **Connect** is off and the wizard points to connecting the Worker by its URL. The sync settings record no deployment for a joined Worker, because the app did not deploy it, so an update treats it as deployed by hand |
 | Any other Worker | Stop and ask for a different Worker name. The app never overwrites a Worker it does not recognize |
 
 When the database bound to a Hatoba Worker no longer exists, the Worker gets a database through the table below, as a new Worker does.

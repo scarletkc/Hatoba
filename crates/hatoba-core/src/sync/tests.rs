@@ -427,9 +427,11 @@ fn own_vault_device(server: &Arc<FakeServer>, clock: &Arc<ManualClock>) -> Dev {
 
 /// Flow C followed by the first sync round, as the app runs them.
 async fn join(dev: &Dev) -> Joined {
-    let joined = join_remote_vault(&dev.vault, &dev.backend, PW, dev.info(), &config())
-        .await
-        .unwrap();
+    let joined = join_remote_vault(&dev.vault, &dev.backend, PW, dev.info(), &config(), |_| {
+        Ok(())
+    })
+    .await
+    .unwrap();
     dev.sync().await;
     joined
 }
@@ -555,20 +557,36 @@ async fn join_errors_leave_the_local_vault_alone() {
     let c = own_vault_device(&server, &clock);
     c.put(host("local-host"));
 
-    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config())
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
         .await
         .unwrap_err();
     assert!(matches!(err, Error::RemoteNotInitialized));
 
     enable(&a).await;
-    let err = join_remote_vault(&c.vault, &c.backend, LOCAL_PW, c.info(), &config())
-        .await
-        .unwrap_err();
+    // The credential store fails: nothing local has changed yet.
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| {
+        Err(Error::Format("credential store".into()))
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(err, Error::Format(_)));
+    assert_eq!(c.v().sync_config().unwrap(), None);
+    assert_eq!(
+        c.pending(),
+        2,
+        "settings + local host, still under the local key"
+    );
+
+    let err = join_remote_vault(&c.vault, &c.backend, LOCAL_PW, c.info(), &config(), |_| {
+        Ok(())
+    })
+    .await
+    .unwrap_err();
     assert!(matches!(err, Error::WrongPassword));
     assert_eq!(c.v().sync_config().unwrap(), None);
 
     c.v().lock();
-    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config())
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Locked));

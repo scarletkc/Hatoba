@@ -269,19 +269,21 @@ pub struct Joined {
 /// item, and any other vault receives every local item as a new one. Either way the local master
 /// password becomes the remote's and `config` is recorded. The vault must be unlocked.
 ///
-/// Nothing is pushed here: the caller stores the returned session and then runs an ordinary
-/// sync round, which pulls the remote's items and uploads the local ones. An interrupted round
-/// resumes like any other.
+/// `keep_credentials` stores the session (and whatever else the backend needs, such as a D1 API
+/// token) after sign-in and before anything local changes, so an error there leaves the vault as
+/// it was. Nothing is pushed here: the caller then runs an ordinary sync round, which pulls the
+/// remote's items and uploads the local ones. An interrupted round resumes like any other.
 ///
 /// # Errors
 /// [`Error::Locked`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
-/// [`Error::WeakKdfParams`], transport errors.
+/// [`Error::WeakKdfParams`], transport errors, and whatever `keep_credentials` returns.
 pub async fn join_remote_vault(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
     password: &str,
     device: DeviceInfo,
     config: &SyncConfig,
+    keep_credentials: impl FnOnce(&Session) -> Result<()> + Send,
 ) -> Result<Joined> {
     let device_id = with_vault(vault, |v| {
         if v.is_unlocked() {
@@ -294,6 +296,7 @@ pub async fn join_remote_vault(
         return Err(Error::RemoteNotInitialized);
     }
     let auth = authenticate(backend, password, &device_id, &device).await?;
+    keep_credentials(&auth.session)?;
     let rekeyed = with_vault(vault, |v| {
         v.join_remote_vault(&auth.meta, auth.vault_key, config)
     })?;

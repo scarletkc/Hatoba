@@ -280,6 +280,9 @@ pub async fn deploy_setup(
 
 /// The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
 /// against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+///
+/// The sync settings record no deployment: the app did not deploy this Worker, so an update
+/// treats it like one deployed by hand (a Git integration may redeploy it).
 #[tauri::command]
 #[specta::specta]
 pub async fn deploy_join(
@@ -301,14 +304,18 @@ pub async fn deploy_join(
     let backend = WorkerBackend::new(&url)?;
     let config = SyncConfig::Worker {
         url: backend.base_url().to_owned(),
-        deployment: Some(WorkerDeployment {
-            account_id: target.account_id,
-            worker_name: target.worker_name,
-        }),
+        deployment: None,
     };
-    let joined =
-        flows::join_remote_vault(&state.vault, &backend, &password, device_info(), &config).await?;
-    save_session(state.secrets.as_ref(), &joined.session)?;
+    let secrets = state.secrets.as_ref();
+    let joined = flows::join_remote_vault(
+        &state.vault,
+        &backend,
+        &password,
+        device_info(),
+        &config,
+        |session| save_session(secrets, session),
+    )
+    .await?;
     state.deploy.end(&handle);
     crate::commands::sync::joined_remote(&app, &state, Arc::new(backend), joined.rekeyed).await;
     Ok(())

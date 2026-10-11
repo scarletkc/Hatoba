@@ -181,15 +181,24 @@ pub async fn sync_join(
     password: String,
 ) -> AppResult<()> {
     let (cfg, backend) = backend_from_input(&config)?;
+    let secrets = state.secrets.as_ref();
     let joined = flows::join_remote_vault(
         &state.vault,
         backend.as_ref(),
         &password,
         device_info(),
         &cfg,
+        |session| {
+            save_session(secrets, session)?;
+            match &config {
+                SyncConfigInput::D1 { api_token, .. } => {
+                    secrets.set(secret_keys::D1_API_TOKEN, api_token.trim())
+                }
+                SyncConfigInput::Worker { .. } => Ok(()),
+            }
+        },
     )
     .await?;
-    persist(&state, &cfg, &config, &joined.session)?;
     joined_remote(&app, &state, backend, joined.rekeyed).await;
     Ok(())
 }

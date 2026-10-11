@@ -204,6 +204,9 @@ export const commands = {
 	/**
 	 *  The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
 	 *  against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+	 * 
+	 *  The sync settings record no deployment: the app did not deploy this Worker, so an update
+	 *  treats it like one deployed by hand (a Git integration may redeploy it).
 	 */
 	deployJoin: (handle: string, target: DeployTarget, password: string) => __TAURI_INVOKE<null>("deploy_join", { handle, target, password }),
 	/**
