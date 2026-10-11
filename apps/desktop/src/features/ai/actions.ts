@@ -568,7 +568,10 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const id = slot.conversationId;
   if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting || reverting(slotId)) return false;
   const later = laterMessages(slot.entries, entryId);
-  const { revert } = editedFiles(slot.entries, slot.fileChanges, entryId);
+  // Read again: the refresh after the turn's last write may not have arrived yet.
+  const fileChanges = await api.ai_file_changes(id).catch(() => slot.fileChanges);
+  if (getSlot(slotId).conversationId === id) patchSlot(slotId, { fileChanges });
+  const { revert } = editedFiles(slot.entries, fileChanges, entryId);
   if (revert.length > 0) {
     // The list is the confirmation, also for a file a call created: each revert asks nothing more.
     const send = await askEditedFiles(later, revert, (change) => revertChange(slotId, id, change));
@@ -781,10 +784,10 @@ export async function reloadSlot(slotId: string) {
   }
 }
 
-/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, or compacting. */
+/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, compacting, or reverting a file change (AI-41). */
 function slotBusy(slotId: string): boolean {
   const s = getSlot(slotId);
-  return !!s.turn || s.remoteRunning || s.compacting || runners.has(slotId);
+  return !!s.turn || s.remoteRunning || s.compacting || s.reverting || runners.has(slotId);
 }
 
 /**
