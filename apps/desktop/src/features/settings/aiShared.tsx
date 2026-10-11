@@ -43,6 +43,7 @@ export function SavedKeyField({
   keepLabel,
   clearedLabel,
   ariaLabel,
+  autoFocus,
 }: {
   id?: string;
   hasSaved: boolean;
@@ -59,6 +60,7 @@ export function SavedKeyField({
   clearedLabel?: string;
   /** Names the field when no label points at it. */
   ariaLabel?: string;
+  autoFocus?: boolean;
 }) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +109,7 @@ export function SavedKeyField({
         ref={inputRef}
         secret
         autoComplete="new-password"
+        autoFocus={autoFocus}
         value={draft.value}
         invalid={invalid}
         aria-label={ariaLabel}
