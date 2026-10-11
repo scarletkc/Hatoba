@@ -13,6 +13,8 @@ export type McpTemplateId = "github" | "linear" | "context7" | "cloudflare";
 export interface McpTemplateHeader {
   key: string;
   placeholder?: string;
+  /** Left empty, the header is not sent. */
+  optional?: boolean;
 }
 
 export interface McpTemplate {
@@ -51,13 +53,14 @@ export const MCP_TEMPLATES: readonly McpTemplate[] = [
     tokenUrl: "https://linear.app/settings/account/security",
   },
   {
-    // upstash/context7: an API key in `Authorization: Bearer`.
+    // upstash/context7: an API key in `Authorization: Bearer`. Without one the server still answers, at a lower rate
+    // limit.
     id: "context7",
     label: "Context7",
     icon: "book-open-text",
     name: "context7",
     url: "https://mcp.context7.com/mcp",
-    headers: [{ key: "Authorization" }],
+    headers: [{ key: "Authorization", placeholder: "ctx7sk-…", optional: true }],
     tokenUrl: "https://context7.com/dashboard",
   },
   {
@@ -83,6 +86,6 @@ export function templateMcpForm(template: McpTemplate, otherNames: readonly stri
     name: freeServerName(template.name, otherNames),
     kind: "http",
     url: template.url,
-    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, placeholder: h.placeholder })),
+    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, placeholder: h.placeholder, optional: h.optional })),
   };
 }

@@ -70,12 +70,21 @@ describe("templateMcpForm", () => {
     expect(new Set(uids).size).toBe(uids.length);
   });
 
-  it("asks for every template's token before saving, Context7's too", () => {
+  it("asks for the token before saving, except Context7's", () => {
     for (const x of MCP_TEMPLATES) {
       const f = templateMcpForm(x, []);
-      expect(validateMcpForm(f).secrets, x.id).toEqual([{ value: "missing" }]);
+      expect(validateMcpForm(f).secrets, x.id).toEqual([x.id === "context7" ? null : { value: "missing" }]);
       expect(hasMcpProblems(validateMcpForm(typed(f, "Authorization", "token_x"))), x.id).toBe(false);
     }
+  });
+
+  it("leaves Context7's key out while it stays empty", () => {
+    const f = templateMcpForm(template("context7"), []);
+    expect(f.headers).toMatchObject([{ key: "Authorization", placeholder: "ctx7sk-…", optional: true }]);
+    expect(mcpFormToInput(null, f).transport).toEqual({ kind: "http", url: "https://mcp.context7.com/mcp", headers: [] });
+    expect(mcpFormToInput(null, typed(f, "Authorization", "ctx7sk-x")).transport).toMatchObject({
+      headers: [{ key: "Authorization", value: "Bearer ctx7sk-x" }],
+    });
   });
 
   it("saves through the ordinary input, with nothing that names the template", () => {

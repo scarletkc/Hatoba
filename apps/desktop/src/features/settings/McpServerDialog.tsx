@@ -392,6 +392,7 @@ function SecretRows({
           <div className={s.secretTable}>
             {rows.map((row, i) => {
               const problem = problems[i];
+              const example = row.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder");
               return (
                 <div className={s.secret} key={row.uid}>
                   <div className={s.secretRow}>
@@ -408,7 +409,7 @@ function SecretRows({
                         value={row.key}
                         invalid={!!problem?.key}
                         placeholder={t(kind === "env" ? "aiSettings.mcp.f.envKey" : "aiSettings.mcp.f.headerKey")}
-                        onChange={(e) => patchRow(row.uid, { key: e.target.value })}
+                        onChange={(e) => patchRow(row.uid, { key: e.target.value, optional: false })}
                       />
                     )}
                     <SavedKeyField
@@ -419,7 +420,7 @@ function SecretRows({
                       invalid={!!problem?.value}
                       autoFocus={valueFocusUid === row.uid}
                       ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                      placeholder={row.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
+                      placeholder={row.optional ? t("aiSettings.mcp.f.optionalPlaceholder", { example }) : example}
                       newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
                       keepLabel={t("aiSettings.mcp.f.valueKeep")}
                       onChange={(draft) => patchRow(row.uid, { draft })}
