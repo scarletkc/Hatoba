@@ -470,6 +470,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   // conversation has no id yet, so a second message would start another one, and a message waiting for its
   // compaction (AI-22) would be stopped, and its pending entry dropped here.
   if (!typed || slot.turn?.phase === "starting") return false;
+  if (reverting(slotId)) return false;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -528,7 +529,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
 export async function retryTurn(slotId: string) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!id || slot.turn) return;
+  if (!id || slot.turn || reverting(slotId)) return;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -565,7 +566,7 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const text = raw.trim();
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting) return false;
+  if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting || reverting(slotId)) return false;
   const later = laterMessages(slot.entries, entryId);
   const { revert } = editedFiles(slot.entries, slot.fileChanges, entryId);
   if (revert.length > 0) {
@@ -667,6 +668,7 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
     if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
   }
   options.onStart?.();
+  patchSlot(slotId, { reverting: true });
   try {
     const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), !!options.restore);
     if (outcome.status === "reverted") {
@@ -679,7 +681,16 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
   } catch (e) {
     toast(aiErrorMessage(e), "error");
     return null;
+  } finally {
+    patchSlot(slotId, { reverting: false });
   }
+}
+
+/** AI-41: a revert of the slot's conversation runs, so nothing is sent until it ends (Rust refuses it too). */
+function reverting(slotId: string): boolean {
+  if (!getSlot(slotId).reverting) return false;
+  toast(t("ai.revert.wait"), "error");
+  return true;
 }
 
 /** The session a revert runs on: the slot's tab, when it is connected. */

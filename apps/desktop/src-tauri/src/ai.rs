@@ -27,7 +27,7 @@
 //! SEC-04: logs carry conversation ids, statuses and error kinds, never messages, tool inputs or
 //! results, provider messages or keys.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -181,6 +181,10 @@ struct Inner {
     /// What the diff of a revert showed the file holding, by conversation, response and call:
     /// Restore anyway writes only over that (AI-41).
     restore_bases: Mutex<HashMap<(String, String, String), files::Found>>,
+    /// The conversations whose file change a revert is putting back (AI-41). No turn starts in
+    /// them meanwhile, so the model never acts while the file changes under it, and the next
+    /// message notes the revert.
+    reverts: Mutex<HashSet<String>>,
     /// What the model has seen of each file, by conversation (AI-38…40).
     seen: files::Seen,
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
@@ -808,6 +812,7 @@ impl AiManager {
         let (id, compact, notes, moved_to) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
+                self.not_reverting(&id)?;
                 let before = conversation.clone();
                 // Checked before the stop, so a refused edit leaves the turn running.
                 let edit = match replace {
@@ -961,6 +966,7 @@ impl AiManager {
         let registered = (|| {
             let mut v = unlocked(vault)?;
             let mut conversation = find_conversation(&v, &conversation_id)?;
+            self.not_reverting(&conversation_id)?;
             let cancelled = self.stop_locked(&mut v, &conversation_id);
             stored = !cancelled.is_empty();
             let entries = Entries::load(&v, &conversation_id)?;
@@ -1204,7 +1210,7 @@ impl AiManager {
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiEntryView> {
-        let (job, op, place, _writing) = {
+        let (job, op, place, _writing, keeps) = {
             let v = unlocked(vault)?;
             let conversation = find_conversation(&v, conversation_id)?;
             let entries = Entries::load(&v, conversation_id)?;
@@ -1222,6 +1228,10 @@ impl AiManager {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
             let mut place = files::Place::default();
+            // AI-41: snapshots are kept by call id, so a call whose id another call of its
+            // response shares (stored by an older build) keeps none: neither block could tell
+            // whose change it holds.
+            let keeps = !shares_id(&entries, tool_call_id);
             // Counted under the guard a lock takes first, so the lock sees every write.
             let writing = session_id
                 .filter(|_| matches!(job, Job::File(FileJob::Edit(_) | FileJob::Write(_), _)))
@@ -1231,7 +1241,7 @@ impl AiManager {
                     .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
                 place = file_place(&conversation, &entries);
             }
-            (job, op, place, writing)
+            (job, op, place, writing, keeps)
         };
         let shown = Mutex::default();
         let keep = KeepSnapshot {
@@ -1248,7 +1258,7 @@ impl AiManager {
             conversation_id,
             place: &place,
             shown: &shown,
-            keep: Some(&keep),
+            keep: keeps.then_some(&keep as &dyn files::Keep),
         };
         let (status, content) = job
             .run(
@@ -1392,7 +1402,7 @@ impl AiManager {
             key.response_id.to_owned(),
             key.tool_call_id.to_owned(),
         );
-        let (change, later_writes, op, _writing) = {
+        let (change, later_writes, op, _running) = {
             let v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
             if self.busy(conversation_id) {
@@ -1427,7 +1437,14 @@ impl AiManager {
             let later = later_writes(&v, &key, &change.meta);
             // Counted under the guard a lock takes first, so the lock sees the write.
             let writing = session_id.map(|id| self.0.writes.begin(id));
-            (change, later, self.start_op(conversation_id), writing)
+            // Under the guard a turn takes to start too: none starts until the revert ends.
+            let reverting = Reverting::new(&self.0, conversation_id);
+            (
+                change,
+                later,
+                self.start_op(conversation_id),
+                (writing, reverting),
+            )
         };
         let shown = if restore {
             guard(&self.0.restore_bases).get(&base_key).copied()
@@ -1465,6 +1482,18 @@ impl AiManager {
             _ => {}
         }
         Ok(outcome)
+    }
+
+    /// Refuses to start a turn while a revert of the conversation runs (AI-41).
+    fn not_reverting(&self, conversation_id: &str) -> AppResult<()> {
+        if guard(&self.0.reverts).contains(conversation_id) {
+            return Err(AppError::invalid(
+                "conversation_id",
+                "A file change of this conversation is being reverted; send the message once \
+                 the revert has ended.",
+            ));
+        }
+        Ok(())
     }
 
     /// A turn, a tool, a preview, a compaction or a revert of the conversation runs.
@@ -3283,6 +3312,35 @@ fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
             })
         })
         .collect()
+}
+
+/// A revert of a conversation's file change runs (AI-41) until this drops.
+struct Reverting<'a>(&'a Inner, String);
+
+impl<'a> Reverting<'a> {
+    fn new(inner: &'a Inner, conversation_id: &str) -> Self {
+        guard(&inner.reverts).insert(conversation_id.to_owned());
+        Self(inner, conversation_id.to_owned())
+    }
+}
+
+impl Drop for Reverting<'_> {
+    fn drop(&mut self) {
+        guard(&self.0.reverts).remove(&self.1);
+    }
+}
+
+/// Another call of the newest response has the id of the call `tool_call_id` too.
+fn shares_id(entries: &Entries, tool_call_id: &str) -> bool {
+    entries
+        .list
+        .iter()
+        .rev()
+        .find_map(|e| match &e.body {
+            EntryBody::Assistant(a) => Some(a),
+            _ => None,
+        })
+        .is_some_and(|a| a.tool_calls.iter().filter(|c| c.id == tool_call_id).count() > 1)
 }
 
 /// Whether a call of the conversation after the one of `key` wrote the same file, and its change

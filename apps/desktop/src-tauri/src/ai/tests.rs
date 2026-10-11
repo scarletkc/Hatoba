@@ -4918,3 +4918,68 @@ async fn writes_keep_their_snapshot_before_they_begin() {
         }
     );
 }
+
+/// AI-41: no message is sent and no request retried while a revert of the conversation runs, so
+/// the model never acts while the file changes under it, and the next message notes the revert.
+/// A call whose id another call of its response shares keeps no snapshot.
+#[tokio::test]
+async fn no_turn_starts_while_a_revert_runs() {
+    let f = Fixture::new(vec![answer("Hello."), answer("Again.")]).await;
+    let (started, sink) = f.send(None, "hi").await;
+    let conv = started.conversation.id;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let reverting = super::Reverting::new(&f.manager.0, &conv);
+    let refused = f
+        .manager
+        .send(
+            &f.vault,
+            f.env(),
+            AiSendInput {
+                conversation_id: Some(conv.clone()),
+                text: "next".into(),
+                context: f.context(),
+            },
+            Arc::new(Sink::default()),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(refused.code, ErrorCode::InvalidInput);
+    assert!(
+        refused.detail.contains("being reverted"),
+        "{}",
+        refused.detail
+    );
+    assert_eq!(
+        f.retry(&conv, f.context()).err().unwrap().code,
+        ErrorCode::InvalidInput
+    );
+    // Nothing was stored meanwhile.
+    assert_eq!(f.detail(&conv).entries.len(), 2);
+    drop(reverting);
+    let (_, sink) = f.send(Some(&conv), "next").await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+
+    let entries = |calls: &[&str]| super::Entries {
+        ids: vec!["e1".into()],
+        list: vec![AiEntry::assistant(
+            1,
+            AssistantEntry {
+                tool_calls: calls
+                    .iter()
+                    .map(|id| ToolCall {
+                        id: (*id).into(),
+                        name: "write_file".into(),
+                        arguments: "{}".into(),
+                    })
+                    .collect(),
+                finish: Finish::ToolCalls,
+                ..AssistantEntry::default()
+            },
+        )],
+    };
+    assert!(super::shares_id(&entries(&["dup", "dup", "c3"]), "dup"));
+    assert!(!super::shares_id(&entries(&["dup", "dup", "c3"]), "c3"));
+}

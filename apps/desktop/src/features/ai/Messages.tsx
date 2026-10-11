@@ -140,7 +140,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
   const running = !!turn || slot.remoteRunning;
   // AI-41: a revert waits until the conversation is idle, so the next message tells the model before it acts again.
-  const busy = running || slot.compacting || slot.loading;
+  const busy = running || slot.compacting || slot.loading || slot.reverting;
 
   return (
     <div

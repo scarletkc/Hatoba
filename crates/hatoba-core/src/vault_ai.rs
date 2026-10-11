@@ -612,7 +612,7 @@ fn split_entry<'a>(conversation_id: &str, entry_id: &str, json: &'a str) -> Resu
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::sync::Arc;
 
     use serde_json::json;
@@ -624,7 +624,8 @@ mod tests {
 
     const PW: &str = "ai-vault-test-password";
 
-    fn vault() -> (Vault, Arc<ManualClock>) {
+    /// An unlocked vault on a manual clock, for the tests of the AI items and file snapshots.
+    pub(crate) fn vault() -> (Vault, Arc<ManualClock>) {
         let clock = Arc::new(ManualClock::new(1_700_000_000_000));
         let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
         vault

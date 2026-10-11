@@ -300,20 +300,11 @@ impl Vault {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
-    use crate::crypto::KdfParams;
     use crate::model::AiConversation;
-    use crate::vault::ManualClock;
 
     fn vault() -> Vault {
-        let clock = Arc::new(ManualClock::new(1_700_000_000_000));
-        let mut vault = Vault::open_in_memory().unwrap().with_clock(clock);
-        vault
-            .create_with_params("snapshot-test-password", KdfParams::for_tests())
-            .unwrap();
-        vault
+        crate::vault_ai::tests::vault().0
     }
 
     fn conversation(vault: &mut Vault) -> String {

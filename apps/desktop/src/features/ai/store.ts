@@ -19,6 +19,8 @@ export interface Slot {
   entries: AiEntryView[];
   /** AI-41: the changes of its file tool calls that this device can revert, or has reverted. */
   fileChanges: AiFileChange[];
+  /** AI-41: a revert of one of them runs; no message is sent meanwhile. */
+  reverting: boolean;
   loading: boolean;
   loadFailed: boolean;
   compacting: boolean;
@@ -111,6 +113,7 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", ex
     conversation: null,
     entries: [],
     fileChanges: [],
+    reverting: false,
     loading: false,
     loadFailed: false,
     compacting: false,
