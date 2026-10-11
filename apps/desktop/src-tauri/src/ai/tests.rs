@@ -1748,10 +1748,7 @@ async fn file_tools_need_a_live_session() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert!(
-        system.contains("rather than with cat, sed or heredocs"),
-        "{system}"
-    );
+    assert!(system.contains("not with cat, sed or heredocs"), "{system}");
 
     let preview = |call: &'static str| {
         f.manager
@@ -2073,7 +2070,7 @@ async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
     assert!(system.contains("No terminal is attached"), "{system}");
     assert!(system.contains("- nginx: Debug nginx"), "{system}");
     assert!(system.contains("- hatoba: "), "{system}");
-    assert!(!system.contains("run_command runs"), "{system}");
+    assert!(!system.contains("run_command"), "{system}");
 
     // They run without a session.
     let c1 = f.run(&conv, "c1", None, None).await.unwrap();
