@@ -1587,6 +1587,11 @@ export type SyncStatus = {
 	 *  `None` when there is nothing to show, including a dismissed "update available".
 	 */
 	worker_update: WorkerUpdate | null,
+	/**
+	 *  The items the last sync round could not upload because they are larger than sync accepts
+	 *  (§6.2). Empty while locked and until a round of this connection has finished.
+	 */
+	too_large: TooLargeItem[],
 };
 
 export type SyncTestResult = {
@@ -1627,6 +1632,16 @@ export type TestResult = {
 };
 
 export type ThemeChoice = "system" | "light" | "dark";
+
+/**
+ *  An item larger than sync accepts. It stays pending, and every round tries it again until it is
+ *  shortened or deleted.
+ */
+export type TooLargeItem = {
+	item_id: string,
+	item_type: ItemType,
+	item_name: string,
+};
 
 export type TransferDirection = "upload" | "download";
 

@@ -1,7 +1,10 @@
 //! `fetch_url` (AI-15).
 //!
 //! GET only, `http`/`https` only, no cookies, no credentials, at most 5 redirects followed by
-//! hand, through the system proxy when one is set. Every hop is checked: an IP-literal host and
+//! hand, through the system proxy when one is set. Redirects are followed only on the host the
+//! call named: a redirect to another host ends the fetch with that URL, so a fetch of it goes
+//! through approval like any other (AI-19), and an allowed domain cannot pass the call on to one
+//! that is not. Every hop is checked: an IP-literal host and
 //! `localhost` directly, and a host name the client resolves itself through a resolver that
 //! refuses names resolving to any non-public address. The connection uses exactly the addresses
 //! the resolver checked, so DNS rebinding between the check and the connection is not possible.
@@ -51,6 +54,10 @@ const REDIRECT_BLOCKED: &str = "the URL redirected to an address on a loopback, 
 pub struct FetchResult {
     /// The final URL, after redirects.
     pub url: String,
+    /// Where `url` redirected to, on another host, which is not followed. The result then has no
+    /// content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect: Option<String>,
     /// The media type, e.g. `text/html` (without parameters).
     pub content_type: String,
     /// Character offset of `content`.
@@ -77,6 +84,14 @@ pub async fn fetch_url(
 /// range, a line on how to read on when more remains, then the content.
 #[must_use]
 pub fn format_fetch_result(r: &FetchResult) -> String {
+    if let Some(to) = &r.redirect {
+        return format!(
+            "URL: {} | Redirects to another host: {to}\n\
+             fetch_url follows redirects only on the host it was given. To read the page, call \
+             fetch_url with that URL.\n",
+            r.url
+        );
+    }
     let end = r.offset + r.content.chars().count() as u64;
     let mut out = format!(
         "URL: {} | Content type: {} | Characters {}-{} of {}{}\n",
@@ -123,6 +138,14 @@ pub(crate) enum Proxy {
     /// Through the proxy at this URL.
     #[cfg(test)]
     At(String),
+}
+
+/// How a fetch ended.
+enum Hop {
+    /// The page.
+    Page(Fetched),
+    /// `at` redirected to `to`, on another host.
+    Elsewhere { at: Url, to: Url },
 }
 
 /// What one successful hop returned.
@@ -217,10 +240,19 @@ impl Fetcher {
         let url = parse_url(url)?;
         let targets = Arc::new(Mutex::new(HashSet::new()));
         let client = self.client(&targets)?;
-        let fetched =
-            tokio::time::timeout(self.timeout, self.follow(&client, &targets, url, cancel))
-                .await
-                .map_err(|_| AiError::Network("fetching the page timed out".into()))??;
+        let hop = tokio::time::timeout(self.timeout, self.follow(&client, &targets, url, cancel))
+            .await
+            .map_err(|_| AiError::Network("fetching the page timed out".into()))??;
+        let fetched = match hop {
+            Hop::Page(fetched) => fetched,
+            Hop::Elsewhere { at, to } => {
+                return Ok(FetchResult {
+                    url: at.to_string(),
+                    redirect: Some(to.to_string()),
+                    ..FetchResult::default()
+                });
+            }
+        };
         let is_html = matches!(
             fetched.media_type.as_str(),
             "text/html" | "application/xhtml+xml"
@@ -250,7 +282,8 @@ impl Fetcher {
         targets: &Mutex<HashSet<String>>,
         mut url: Url,
         cancel: &CancellationToken,
-    ) -> Result<Fetched, AiError> {
+    ) -> Result<Hop, AiError> {
+        let host = url.host().map(|h| h.to_owned());
         let mut redirects = 0;
         loop {
             let redirected = redirects > 0;
@@ -288,7 +321,13 @@ impl Fetcher {
                 let next = url
                     .join(location)
                     .map_err(|_| AiError::InvalidUrl("the redirect target is not a URL".into()))?;
-                url = parse_url(next.as_str())?;
+                let next = parse_url(next.as_str())?;
+                if next.host().map(|h| h.to_owned()) != host {
+                    // Refused addresses still fail here, without a request.
+                    self.check_host(&next, true)?;
+                    return Ok(Hop::Elsewhere { at: url, to: next });
+                }
+                url = next;
                 redirects += 1;
                 continue;
             }
@@ -319,13 +358,13 @@ impl Fetcher {
                 )));
             }
             let (body, truncated) = net::read_capped(response, self.max_bytes, cancel).await?;
-            return Ok(Fetched {
+            return Ok(Hop::Page(Fetched {
                 url,
                 media_type,
                 charset,
                 body,
                 truncated,
-            });
+            }));
         }
     }
 }
@@ -509,6 +548,7 @@ fn page(
         .map_or(rest.len(), |(i, _)| i);
     FetchResult {
         url,
+        redirect: None,
         content_type,
         offset: start as u64,
         total_length: total as u64,

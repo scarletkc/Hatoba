@@ -54,6 +54,23 @@ The sidebar's sync button and the Cloud Sync page show one of these. Changes mad
 - "Incorrect master password." during setup or restore: enter the master password of the vault that was uploaded, not a new one. If it changed on another device, use the new one.
 - For a Worker URL, use the full address including `https://`. A quick check is opening `<Worker URL>/v1/health` in a browser: it should return JSON with `"service": "hatoba-sync"`, a `version`, and `initialized`.
 
+## An item too large to sync
+
+Sync has a size limit per item. With sync off, a host can be saved larger than that (long notes, AI notes and many environment variables), and so can the settings (long custom instructions). Once sync is on, such an item does not upload: it stays on this device and in the pending count, every round tries it again, and everything else syncs as usual. The status page shows a notice for each one:
+
+- A host: "Host “name” is too large to sync. Shorten its notes, AI notes, or environment variables.", with **Edit Host**. Shorten them and **Save**; the next round uploads it.
+- The settings: the message below, with **Open Settings → AI**, where **Custom Instructions** is.
+
+While sync is on, saving refuses such a host or instructions up front.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Your settings are too large to sync. Shorten your custom instructions. | 设置的数据太大，无法同步。请缩短自定义指令。 | 設定のデータが大きすぎて同期できません。カスタム指示を短くしてください。 |
+| This host is too large to sync. Shorten its notes or environment variables. | 这台主机的数据太大，无法同步。请缩短备注或环境变量。 | このホストはデータが大きすぎて同期できません。メモや環境変数を短くしてください。 |
+| Edit Host | 编辑主机 | ホストを編集 |
+| Open Settings → AI | 打开设置 → AI | 設定 → AI を開く |
+| Custom Instructions | 自定义指令 | カスタム指示 |
+
 ## Cloudflare and deployment errors
 
 These come from **Deploy a Worker from Hatoba** and from direct D1 mode.

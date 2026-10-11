@@ -1203,6 +1203,50 @@ async fn server_without_a_row_for_a_known_item_is_recovered_with_base_revision_z
 }
 
 #[tokio::test]
+async fn an_item_too_large_to_sync_is_reported_every_round_until_it_shrinks() {
+    let (server, clock, a, _b) = two_devices().await;
+    // Saved while sync was off: its envelope is over the server's 64 KiB.
+    let big = a.put(Item::Host(Host {
+        name: "big".into(),
+        address: "big.example.org".into(),
+        note: "x".repeat(64 * 1024),
+        ..Host::default()
+    }));
+    let small = a.put(host("small"));
+
+    // It is never sent: a few such items would pass the Worker's request body limit and fail
+    // the whole push.
+    let sent = server.pushed_change_count();
+    let report = a.sync().await;
+    assert_eq!(report.too_large, vec![big.clone()]);
+    assert_eq!(
+        (report.pushed, report.failed, report.pending_after),
+        (1, 1, 1)
+    );
+    assert_eq!(server.pushed_change_count() - sent, 1);
+    assert!(server.item(&big).is_none());
+    assert!(server.item(&small).is_some());
+
+    // Still pending, it is reported again on the next round.
+    let report = a.sync().await;
+    assert_eq!(report.too_large, vec![big.clone()]);
+    assert_eq!(report.pending_after, 1);
+
+    clock.advance(1000);
+    a.edit(&big, |item| match item {
+        Item::Host(h) => h.note = "shortened".into(),
+        other => panic!("not a host: {}", other.kind_str()),
+    });
+    let report = a.sync().await;
+    assert!(report.too_large.is_empty());
+    assert_eq!(
+        (report.pushed, report.failed, report.pending_after),
+        (1, 0, 0)
+    );
+    assert!(server.item(&big).is_some());
+}
+
+#[tokio::test]
 async fn locked_vault_cannot_sync_and_unauthorized_is_reported() {
     let (server, _clock, a, _b) = two_devices().await;
     a.v().lock();
