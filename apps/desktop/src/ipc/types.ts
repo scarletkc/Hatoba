@@ -493,7 +493,7 @@ export interface SyncStatus {
   counts: { hosts: number; keys: number; groups: number } | null;
   /** Worker mode: how the Worker's `/v1/health` compares with this app (§6.7, Upgrades). `null` when there is nothing to show. */
   worker_update: WorkerUpdate | null;
-  /** Items the last sync round couldn't upload because the server refused them as too large (§6.2). They stay pending. */
+  /** Items the last sync round couldn't upload because they are larger than sync accepts (§6.2). They stay pending. */
   too_large: TooLargeItem[];
 }
 

@@ -1214,16 +1214,20 @@ async fn an_item_too_large_to_sync_is_reported_every_round_until_it_shrinks() {
     }));
     let small = a.put(host("small"));
 
+    // It is never sent: a few such items would pass the Worker's request body limit and fail
+    // the whole push.
+    let sent = server.pushed_change_count();
     let report = a.sync().await;
     assert_eq!(report.too_large, vec![big.clone()]);
     assert_eq!(
         (report.pushed, report.failed, report.pending_after),
         (1, 1, 1)
     );
+    assert_eq!(server.pushed_change_count() - sent, 1);
     assert!(server.item(&big).is_none());
     assert!(server.item(&small).is_some());
 
-    // Still pending, it goes out and is rejected again on the next round.
+    // Still pending, it is reported again on the next round.
     let report = a.sync().await;
     assert_eq!(report.too_large, vec![big.clone()]);
     assert_eq!(report.pending_after, 1);

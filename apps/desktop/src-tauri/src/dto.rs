@@ -477,13 +477,13 @@ pub struct SyncStatus {
     /// Worker mode: how the Worker's `/v1/health` compares with this build (§6.7, Upgrades).
     /// `None` when there is nothing to show, including a dismissed "update available".
     pub worker_update: Option<WorkerUpdate>,
-    /// The items the last sync round could not upload because the server refused them as too
-    /// large (§6.2). Empty while locked and until a round of this connection has finished.
+    /// The items the last sync round could not upload because they are larger than sync accepts
+    /// (§6.2). Empty while locked and until a round of this connection has finished.
     pub too_large: Vec<TooLargeItem>,
 }
 
-/// An item the sync server refused as larger than it accepts. It stays pending, and every round
-/// sends it again until it is shortened or deleted.
+/// An item larger than sync accepts. It stays pending, and every round tries it again until it is
+/// shortened or deleted.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct TooLargeItem {
     pub item_id: String,

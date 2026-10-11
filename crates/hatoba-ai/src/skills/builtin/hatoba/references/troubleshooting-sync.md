@@ -56,7 +56,7 @@ The sidebar's sync button and the Cloud Sync page show one of these. Changes mad
 
 ## An item too large to sync
 
-Sync has a size limit per item. With sync off, a host can be saved larger than that (long notes, AI notes and many environment variables), and so can the settings (long custom instructions). Once sync is on, the server refuses such an item: it stays on this device and in the pending count, every round tries it again, and everything else syncs as usual. The status page shows a notice for each one:
+Sync has a size limit per item. With sync off, a host can be saved larger than that (long notes, AI notes and many environment variables), and so can the settings (long custom instructions). Once sync is on, such an item does not upload: it stays on this device and in the pending count, every round tries it again, and everything else syncs as usual. The status page shows a notice for each one:
 
 - A host: "Host “name” is too large to sync. Shorten its notes, AI notes, or environment variables.", with **Edit Host**. Shorten them and **Save**; the next round uploads it.
 - The settings: the message below, with **Open Settings → AI**, where **Custom Instructions** is.

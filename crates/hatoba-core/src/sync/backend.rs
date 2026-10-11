@@ -14,6 +14,9 @@ use crate::error::Result;
 
 /// Maximum number of changes the Worker accepts in one push.
 pub const MAX_CHANGES_PER_PUSH: usize = 100;
+/// The longest envelope the Worker and D1 accept, in bytes (§6.2). A full push of envelopes this
+/// long stays within the Worker's 8 MiB request body.
+pub const MAX_ENVELOPE_BYTES: usize = 64 * 1024;
 
 /// Answer of `GET /v1/health`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

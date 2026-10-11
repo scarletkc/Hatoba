@@ -1588,8 +1588,8 @@ export type SyncStatus = {
 	 */
 	worker_update: WorkerUpdate | null,
 	/**
-	 *  The items the last sync round could not upload because the server refused them as too
-	 *  large (§6.2). Empty while locked and until a round of this connection has finished.
+	 *  The items the last sync round could not upload because they are larger than sync accepts
+	 *  (§6.2). Empty while locked and until a round of this connection has finished.
 	 */
 	too_large: TooLargeItem[],
 };
@@ -1634,8 +1634,8 @@ export type TestResult = {
 export type ThemeChoice = "system" | "light" | "dark";
 
 /**
- *  An item the sync server refused as larger than it accepts. It stays pending, and every round
- *  sends it again until it is shortened or deleted.
+ *  An item larger than sync accepts. It stays pending, and every round tries it again until it is
+ *  shortened or deleted.
  */
 export type TooLargeItem = {
 	item_id: string,

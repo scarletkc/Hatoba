@@ -58,7 +58,7 @@ struct Inner {
     pending_trigger: Option<Trigger>,
     /// Worker mode: the last `/v1/health` reading since the backend was set.
     worker: Option<WorkerCheck>,
-    /// The ids the last finished round of this connection pushed and the server refused as too
+    /// The ids the last finished round of this connection could not upload because they are too
     /// large (`SyncReport::too_large`).
     too_large: Vec<String>,
 }

@@ -5,6 +5,7 @@
 //!           · local row clean  → overwrite with the remote row
 //!           · local row dirty  → resolve (sync::conflict), log, maybe keep a conflict copy
 //!         push every dirty row in chunks of ≤ 100
+//!           · too large → not sent; counted as the server's `too_large`
 //!           · ok        → record revision; clear dirty only if the row was not edited meanwhile
 //!           · conflict  → resolve; if the local version still wins, retry once on top of the
 //!                         server revision
@@ -31,7 +32,9 @@ use serde::Serialize;
 use crate::error::{Error, Result};
 use crate::model::{Item, new_id};
 use crate::store::{ItemRow, NewConflict, StoreOps, StoreTx, meta};
-use crate::sync::backend::{Change, MAX_CHANGES_PER_PUSH, PushResult, RemoteItem, SyncBackend};
+use crate::sync::backend::{
+    Change, MAX_CHANGES_PER_PUSH, MAX_ENVELOPE_BYTES, PushResult, RemoteItem, SyncBackend,
+};
 use crate::sync::conflict::{DEFAULT_CONFLICT_SUFFIX, Decision, Side, conflict_copy, decide};
 use crate::sync::{CancelToken, SharedVault, lock_vault};
 use crate::vault::{SyncCtx, Vault, decode_envelope, seal_item};
@@ -73,8 +76,8 @@ pub struct SyncReport {
     pub skipped: u32,
     /// Local changes the server rejected for this round (for example `too_large`).
     pub failed: u32,
-    /// The ids among `failed` that the server rejected as `too_large`: items larger than sync
-    /// accepts (§6.2). They stay pending, and every round sends them again.
+    /// The ids among `failed` that are larger than sync accepts (§6.2), held back unsent or
+    /// refused by the server as `too_large`. They stay pending, and every round tries them again.
     pub too_large: Vec<String>,
     /// Items still waiting to be pushed after the round.
     pub pending_after: u64,
@@ -473,6 +476,15 @@ fn to_change(row: &ItemRow) -> Change {
     }
 }
 
+/// Whether the row's envelope is longer than the server accepts (§6.2).
+fn too_large_to_send(row: &ItemRow) -> bool {
+    !row.deleted
+        && row
+            .envelope
+            .as_ref()
+            .is_some_and(|e| e.len() > MAX_ENVELOPE_BYTES)
+}
+
 async fn push_all(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -497,9 +509,21 @@ async fn push_all(
             for row in chunk {
                 *attempts.entry(row.id.clone()).or_default() += 1;
             }
-            let results = cancel
-                .guard(backend.push(chunk.iter().map(to_change).collect()))
-                .await?;
+            // The server would refuse these, and a few of them in one request pass the Worker's
+            // body limit, which fails the whole chunk.
+            let (oversized, sendable): (Vec<&ItemRow>, Vec<&ItemRow>) =
+                chunk.iter().partition(|row| too_large_to_send(row));
+            let mut results: Vec<PushResult> = oversized
+                .iter()
+                .map(|row| PushResult::Error {
+                    id: row.id.clone(),
+                    error: "too_large".into(),
+                })
+                .collect();
+            if !sendable.is_empty() {
+                let changes = sendable.into_iter().map(to_change).collect();
+                results.extend(cancel.guard(backend.push(changes)).await?);
+            }
             let given_up = with_vault(vault, cancel, |v| {
                 let mut ctx = v.sync_ctx()?;
                 apply_push_results(&mut ctx, chunk, &results, options, report)

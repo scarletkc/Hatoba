@@ -197,7 +197,7 @@ function WorkerUpdateNotice({ update, onUpdate }: { update: WorkerUpdate; onUpda
   );
 }
 
-/** §6.3: the server refused an item as too large, so it stays pending; names it and what to shorten. */
+/** §6.3: an item too large to sync stays pending; names it and what to shorten. */
 function TooLargeNotice({ item }: { item: TooLargeItem }) {
   const t = useT();
   const navigate = useApp((st) => st.navigate);
