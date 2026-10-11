@@ -248,7 +248,8 @@ impl SshdServer {
         let password_user = ensure_password_user().then_some((TEST_USER, TEST_PASSWORD));
         let config_path = dir.path().join("sshd_config");
         // `free_port` releases the port before sshd binds it, so a parallel test can take it in
-        // between. sshd then exits with "Cannot bind any address" and another port is tried.
+        // between. sshd then exits with "Cannot bind any address" or "Address already in use",
+        // and another port is tried.
         let mut attempt = 0;
         let (child, port) = loop {
             attempt += 1;
@@ -288,7 +289,10 @@ impl SshdServer {
                 .expect("failed to spawn sshd");
             match wait_for_listen(&mut child, dir.path()) {
                 Ok(()) => break (child, port),
-                Err((_, log)) if attempt < 5 && log.contains("Cannot bind any address") => {}
+                Err((_, log))
+                    if attempt < 5
+                        && (log.contains("Cannot bind any address")
+                            || log.contains("Address already in use")) => {}
                 Err((status, log)) => panic!("sshd exited early ({status}): {log}"),
             }
         };
