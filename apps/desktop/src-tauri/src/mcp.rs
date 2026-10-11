@@ -366,6 +366,7 @@ impl Offer {
             .iter()
             .map(|t| ListedTool {
                 name: &t.name,
+                server_id: &t.server_id,
                 server: &t.server_name,
                 tool: &t.tool,
             })
