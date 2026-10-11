@@ -49,13 +49,12 @@ export function needsSession(kind: ToolKind): boolean {
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `web_search` and `read_skill` run without asking and
- * everything else waits for the user, `read_file` included (it can send `~/.ssh` or `.env` to the
- * provider); bypass runs everything. Unknown tools never run, so never ask.
+ * §13.5: in manual approval mode `read_terminal`, `read_file`, `web_search` and `read_skill` run without
+ * asking and everything else waits for the user; bypass runs everything. Unknown tools never run, so never ask.
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
-  return kind === "run_command" || kind === "send_input" || isFileTool(kind) || kind === "fetch_url" || kind === "mcp";
+  return kind === "run_command" || kind === "send_input" || kind === "edit_file" || kind === "write_file" || kind === "fetch_url" || kind === "mcp";
 }
 
 /** What decides whether a call waits for the user. */

@@ -205,7 +205,6 @@ export default defineMessages({
     "ai.call.cancelled": "已取消",
     "ai.call.running": "运行中",
     "ai.call.approval": "等待批准",
-    "ai.call.paused": "已暂停",
     "ai.call.queued": "排队中",
     "ai.call.notRun": "未运行",
 
@@ -226,9 +225,6 @@ export default defineMessages({
     "ai.approval.lines": "{n} 行",
     "ai.approval.escaped": "不可见的字符已显示为转义",
     "ai.approval.invalidJson": "参数必须是 JSON 对象。",
-    "ai.approval.path": "路径",
-    "ai.approval.fromLine": "从第 {n} 行开始",
-    "ai.approval.maxLines": "最多 {n} 行",
     "ai.approval.newFile": "新文件",
     "ai.approval.replaceAll": "替换所有匹配",
     "ai.approval.crlf": "保留 CRLF 换行",
@@ -258,7 +254,6 @@ export default defineMessages({
     "ai.key.right": "→",
 
     // tool call limit (AI-18)
-    "ai.limit.body": "助手已连续调用 {n} 次工具，现已暂停。要让它继续吗？",
 
     // turn states
     "ai.status.waiting": "等待模型响应…",
@@ -311,7 +306,6 @@ export default defineMessages({
     "ai.edit.send": "重新发送",
     "ai.edit.confirmTitle": "编辑并重新发送这条消息？",
     "ai.edit.confirmBody": "这条消息之后的 {n} 条消息会在所有同步的设备上删除，无法恢复。",
-    "ai.edit.confirm": "删除并重新发送",
     "ai.editFiles.body": "这些消息里的调用修改了下面的文件：",
     "ai.editFiles.list": "被删除的消息修改过的文件",
     "ai.editFiles.changes": "{n} 处修改",
@@ -564,7 +558,6 @@ export default defineMessages({
     "ai.call.cancelled": "Cancelled",
     "ai.call.running": "Running",
     "ai.call.approval": "Needs approval",
-    "ai.call.paused": "Paused",
     "ai.call.queued": "Queued",
     "ai.call.notRun": "Not run",
 
@@ -584,9 +577,6 @@ export default defineMessages({
     "ai.approval.lines": "{n} lines",
     "ai.approval.escaped": "Hidden characters shown as escapes",
     "ai.approval.invalidJson": "The arguments must be a JSON object.",
-    "ai.approval.path": "Path",
-    "ai.approval.fromLine": "From line {n}",
-    "ai.approval.maxLines": "At most {n} lines",
     "ai.approval.newFile": "New file",
     "ai.approval.replaceAll": "Replaces every match",
     "ai.approval.crlf": "Keeps CRLF line breaks",
@@ -615,8 +605,6 @@ export default defineMessages({
     "ai.key.left": "←",
     "ai.key.right": "→",
 
-    "ai.limit.body": "The assistant paused after {n} tool calls. Let it continue?",
-    "ai.limit.body_one": "The assistant paused after 1 tool call. Let it continue?",
 
     "ai.status.waiting": "Waiting for the model…",
     "ai.status.working": "Working…",
@@ -665,7 +653,6 @@ export default defineMessages({
     "ai.edit.confirmTitle": "Edit and resend this message?",
     "ai.edit.confirmBody": "The {n} messages after it are deleted on every synced device and can’t be recovered.",
     "ai.edit.confirmBody_one": "The message after it is deleted on every synced device and can’t be recovered.",
-    "ai.edit.confirm": "Delete and Resend",
     "ai.editFiles.body": "Calls in those messages changed these files:",
     "ai.editFiles.body_one": "Calls in those messages changed this file:",
     "ai.editFiles.list": "Files the deleted messages changed",
@@ -915,7 +902,6 @@ export default defineMessages({
     "ai.call.cancelled": "キャンセル",
     "ai.call.running": "実行中",
     "ai.call.approval": "承認待ち",
-    "ai.call.paused": "一時停止",
     "ai.call.queued": "待機中",
     "ai.call.notRun": "未実行",
 
@@ -935,9 +921,6 @@ export default defineMessages({
     "ai.approval.lines": "{n} 行",
     "ai.approval.escaped": "見えない文字をエスケープで表示",
     "ai.approval.invalidJson": "引数は JSON オブジェクトにしてください。",
-    "ai.approval.path": "パス",
-    "ai.approval.fromLine": "{n} 行目から",
-    "ai.approval.maxLines": "最大 {n} 行",
     "ai.approval.newFile": "新規ファイル",
     "ai.approval.replaceAll": "一致をすべて置換",
     "ai.approval.crlf": "CRLF の改行を保持",
@@ -966,7 +949,6 @@ export default defineMessages({
     "ai.key.left": "←",
     "ai.key.right": "→",
 
-    "ai.limit.body": "ツールを {n} 回呼び出したため、アシスタントは一時停止しました。続けますか？",
 
     "ai.status.waiting": "モデルの応答を待っています…",
     "ai.status.working": "処理しています…",
@@ -1014,7 +996,6 @@ export default defineMessages({
     "ai.edit.send": "再送信",
     "ai.edit.confirmTitle": "このメッセージを編集して再送信しますか？",
     "ai.edit.confirmBody": "このメッセージより後の {n} 件のメッセージは、同期しているすべてのデバイスから削除され、元に戻せません。",
-    "ai.edit.confirm": "削除して再送信",
     "ai.editFiles.body": "これらのメッセージの呼び出しが次のファイルを変更しました：",
     "ai.editFiles.list": "削除されるメッセージが変更したファイル",
     "ai.editFiles.changes": "{n} 件の変更",

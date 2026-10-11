@@ -829,8 +829,6 @@ pub struct LocalPrefs {
     pub ai_permission_mode: AiPermissionMode,
     /// AI-16: the user confirmed the first switch to bypass on this device.
     pub ai_bypass_confirmed: bool,
-    /// AI-18: a turn pauses after this many tool calls.
-    pub ai_tool_call_limit: u32,
     /// The AI panel is open (§9).
     pub ai_panel_open: bool,
     /// The AI panel's width in CSS pixels.
@@ -849,7 +847,6 @@ impl Default for LocalPrefs {
             auto_update_check: false,
             ai_permission_mode: AiPermissionMode::Manual,
             ai_bypass_confirmed: false,
-            ai_tool_call_limit: 25,
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
@@ -1982,22 +1979,23 @@ mod tests {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
         assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
-        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (25, 380));
+        assert_eq!(prefs.ai_panel_width, 380);
 
+        // The tool call limit an older version stored is ignored.
         let prefs = LocalPrefs::from_stored(
             r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
                 "ai_panel_open":true,"ai_panel_width":520}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
         assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
-        assert_eq!((prefs.ai_tool_call_limit, prefs.ai_panel_width), (40, 520));
+        assert_eq!(prefs.ai_panel_width, 520);
 
         // A mode a newer build added, or a broken value, is read as the default.
         let prefs = LocalPrefs::from_stored(
-            r#"{"ai_permission_mode":"auto","ai_tool_call_limit":-1,"host_probe":false}"#,
+            r#"{"ai_permission_mode":"auto","ai_panel_width":-1,"host_probe":false}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
-        assert_eq!(prefs.ai_tool_call_limit, 25);
+        assert_eq!(prefs.ai_panel_width, 380);
         assert!(!prefs.host_probe);
     }
 }

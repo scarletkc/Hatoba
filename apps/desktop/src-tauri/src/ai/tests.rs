@@ -1,6 +1,6 @@
 //! Turn tests (spec §12, AI bullet): the turn engine against a mock Chat Completions provider,
 //! without Tauri. Approval, edit, rejection, stop, lock and the cancelled results of calls left
-//! without one, and side questions (AI-42); the tool call limit is the frontend's (AI-18).
+//! without one, and side questions (AI-42).
 
 use std::collections::VecDeque;
 use std::future::Future;

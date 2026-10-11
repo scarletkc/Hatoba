@@ -701,8 +701,6 @@ export interface LocalPrefs {
   ai_permission_mode: AiPermissionMode;
   /** AI-16: the user confirmed the first switch to bypass on this device. */
   ai_bypass_confirmed: boolean;
-  /** AI-18: a turn pauses after this many tool calls (25 by default). */
-  ai_tool_call_limit: number;
   /** The AI panel is open (§9). */
   ai_panel_open: boolean;
   /** The AI panel's width in CSS pixels. */

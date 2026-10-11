@@ -165,7 +165,6 @@ function withContext(s: Slot, view: AiConversationView): AiConversationView {
 type Decision =
   | { kind: "run"; edited: string | null; allow?: "conversation" | "always"; refusal?: string }
   | { kind: "reject"; reason: string }
-  | { kind: "continue" }
   | { kind: "stop" };
 
 /** AI-19: later calls of the tool in this conversation run without asking until the app quits. `grant` is its `grantKey`. */
@@ -184,8 +183,8 @@ const runners = new Map<string, TurnRunner>();
 
 /**
  * Drives one turn (§13.1) for the slot it belongs to: applies the streamed events, then handles the
- * tool calls of each response one at a time, in order, applying the permission mode (§13.5) and the
- * tool call limit (AI-18). `read_terminal` and `send_input` run here; other tools run in Rust.
+ * tool calls of each response one at a time, in order, applying the permission mode (§13.5).
+ * `read_terminal` and `send_input` run here; other tools run in Rust.
  */
 class TurnRunner {
   /** The slot the turn's events and state go to; moves with the conversation (Connect to host, AI-09). */
@@ -313,10 +312,6 @@ class TurnRunner {
     return new Promise((resolve) => (this.waiter = resolve));
   }
 
-  private countCall() {
-    patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, toolCount: s.turn.toolCount + 1 } } : {}));
-  }
-
   private addEntry(entry: AiEntryView) {
     if (!this.disposed) applyEvent(this.slotId, { kind: "entry", entry });
   }
@@ -338,14 +333,6 @@ class TurnRunner {
   }
 
   private async handleCall(convId: string, call: AiToolCall) {
-    // AI-18: pause after the limit until the user chooses Continue.
-    const limit = Math.max(1, useApp.getState().prefs.ai_tool_call_limit || 25);
-    if ((getSlot(this.slotId).turn?.toolCount ?? 0) >= limit) {
-      const d = await this.wait(call.id, "limit");
-      if (d.kind !== "continue" || !this.acting) return;
-      patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, toolCount: 0 } } : {}));
-    }
-
     const kind = toolKind(call.name);
     // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
     if (needsSession(kind) && !this.target()) return this.answer(convId, call.id, NO_TAB);
@@ -363,11 +350,10 @@ class TurnRunner {
     let edited: string | null = null;
     if (mustAsk({ kind, mode: getSlot(this.slotId).mode, allowedHere, mcp })) {
       const d = await this.wait(call.id, "approval", mcp);
-      if (!this.acting || d.kind === "stop" || d.kind === "continue") return;
+      if (!this.acting || d.kind === "stop") return;
       if (d.kind === "reject") {
         this.setCall({ id: call.id, state: "running" });
         await this.report(convId, call.id, { status: "rejected", content: d.reason, edited_arguments: null });
-        this.countCall();
         return;
       }
       edited = d.edited;
@@ -378,21 +364,18 @@ class TurnRunner {
         if (!this.acting) return;
         this.setCall({ id: call.id, state: "running" });
         await this.report(convId, call.id, { status: "error", content: d.refusal, edited_arguments: edited });
-        this.countCall();
         return;
       }
     }
     if (!this.acting) return;
     this.setCall({ id: call.id, state: "running" });
     await this.execute(convId, call, kind, edited);
-    this.countCall();
   }
 
   /** Answers a call with an error result, without asking or running it. */
   private async answer(convId: string, callId: string, content: string) {
     this.setCall({ id: callId, state: "running" });
     await this.report(convId, callId, { status: "error", content, edited_arguments: null });
-    this.countCall();
   }
 
   /** AI-31 Always allow on the card: stored on this device, then the call runs. */
@@ -701,8 +684,8 @@ function settleFailedStart(convId: string, patch: Partial<Slot> = {}): string | 
 
 /**
  * AI-26: replaces an earlier message of the user with `raw`, deletes every entry after it, and starts
- * a turn. Asks first when entries follow it, and offers to revert the file changes of the calls it
- * deletes that this device keeps (AI-41). Not while a turn runs.
+ * a turn. First offers to revert the file changes of the calls it deletes that this device keeps
+ * (AI-41). Not while a turn runs.
  */
 export async function editAndResend(slotId: string, entryId: string, raw: string): Promise<boolean> {
   const text = raw.trim();
@@ -737,14 +720,6 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
       diff: (change) => fileChangeDiff(slotId, change).catch(() => null),
     });
     if (!send) return false;
-  } else if (later > 0) {
-    const ok = await confirm({
-      title: t("ai.edit.confirmTitle"),
-      body: t("ai.edit.confirmBody", { n: later }),
-      confirmLabel: t("ai.edit.confirm"),
-      danger: true,
-    });
-    if (!ok) return false;
   }
   const now = getSlot(slotId);
   if (now.conversationId !== id || now.turn || now.remoteRunning || now.compacting) return false;
@@ -911,7 +886,7 @@ async function revertChange(slotId: string, convId: string, change: AiFileChange
   }
 }
 
-/** The user's answer to an approval card (AI-17) or the tool call limit (AI-18). */
+/** The user's answer to an approval card (AI-17). */
 export function decideCall(slotId: string, decision: Decision) {
   runners.get(slotId)?.decide(decision);
 }

@@ -81,14 +81,13 @@ describe("tool kinds", () => {
 describe("permission modes (§13.5)", () => {
   it("asks in manual mode for everything but reading and searching", () => {
     expect(needsApproval("read_terminal", "manual")).toBe(false);
+    expect(needsApproval("read_file", "manual")).toBe(false);
     expect(needsApproval("web_search", "manual")).toBe(false);
     expect(needsApproval("read_skill", "manual")).toBe(false);
     expect(needsApproval("run_command", "manual")).toBe(true);
     expect(needsApproval("send_input", "manual")).toBe(true);
     expect(needsApproval("fetch_url", "manual")).toBe(true);
     expect(needsApproval("mcp", "manual")).toBe(true);
-    // read_file asks too: it can send ~/.ssh or .env to the provider.
-    expect(needsApproval("read_file", "manual")).toBe(true);
     expect(needsApproval("edit_file", "manual")).toBe(true);
     expect(needsApproval("write_file", "manual")).toBe(true);
   });

@@ -158,7 +158,6 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
  *   error      the first request fails with HTTP 529 and the provider's message; Retry succeeds
  *   refused    every response is declined by the model
  *   length     every response is cut off at the output limit
- *   limit      the model keeps calling read_terminal, so the turn pauses at the tool call limit
  *   autocompact every turn of a conversation that has an answer compacts it first (AI-22)
  *   effortfail every request that carries a thinking level is refused for it and goes again
  *              without it, so the panel says the level was not used (AI-05)
@@ -444,15 +443,6 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         : "This host runs several services; here is each one with its configuration, log location and the usual ways to debug it. ";
       return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
     }
-    if (flags.has("limit") && terminal && callsSoFar < 40) {
-      return {
-        reasoning: zh ? "再看一次屏幕，确认部署进度。" : "Check the screen again to follow the deploy.",
-        text: callsSoFar === 0 ? (zh ? "我会持续观察屏幕上的部署进度。" : "I’ll keep watching the deploy on the screen.") : "",
-        calls: Array.from({ length: 5 }, () => call("read_terminal", { lines: 20 })),
-        finish: "tool_calls",
-      };
-    }
-
     if (flags.has("showcase") && terminal) return showcase(since.filter((e) => e.role === "assistant").length);
 
     if (results.length === 0 && callsSoFar === 0) {

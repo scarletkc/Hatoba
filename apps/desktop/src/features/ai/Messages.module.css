@@ -281,10 +281,6 @@
   min-width: 0;
 }
 
-.toolAttention {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 55%, transparent);
-}
-
 .toolHeadRow {
   display: flex;
   align-items: center;
@@ -677,20 +673,6 @@
 
 .rejectRow .input {
   font-family: var(--font-sans);
-}
-
-/* The tool call limit (AI-18) */
-.cardFoot {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 10px 10px;
-}
-
-.cardText {
-  font-size: var(--text-sm);
-  color: var(--fg2);
-  line-height: 1.5;
 }
 
 /* AI-42: a side question and its answer, set apart from the conversation: nothing stores them. */

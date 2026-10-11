@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Icon, IconButton, Segmented, Spinner, TextField, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, Segmented, Spinner, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
@@ -9,12 +9,9 @@ import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { isImeEvent } from "@/lib/ime";
 import {
-  TOOL_LIMIT_DEFAULT,
   modelChoices,
   parseBaseUrl,
-  parseToolLimit,
   resolveSettings,
   sameRef,
   sameSettings,
@@ -42,8 +39,7 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), custom instructions (AI-36), and the permission mode and tool call limit of this
- * device (AI-16, AI-18).
+ * web search (AI-14), custom instructions (AI-36), and the permission mode of this device (AI-16).
  */
 export function AiPane() {
   const t = useT();
@@ -380,20 +376,10 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   );
 }
 
-/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the tool call limit (AI-18). */
+/** Settings that stay on this device and are not synced: the permission mode (AI-16). */
 function DeviceSection() {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
-  const limit = prefs.ai_tool_call_limit ?? TOOL_LIMIT_DEFAULT;
-  const [limitText, setLimitText] = useState(String(limit));
-  useEffect(() => setLimitText(String(limit)), [limit]);
-
-  const commitLimit = () => {
-    const n = parseToolLimit(limitText);
-    if (n === null) return setLimitText(String(limit));
-    setLimitText(String(n));
-    if (n !== limit) setPrefs({ ai_tool_call_limit: n });
-  };
 
   const chooseMode = async (mode: AiPermissionMode) => {
     if (mode === prefs.ai_permission_mode) return;
@@ -425,21 +411,7 @@ function DeviceSection() {
             onChange={(mode) => void chooseMode(mode)}
           />
         </SettingRow>
-        <SettingRow label={t("aiSettings.limit")} hint={t("aiSettings.limit.hint")} top>
-          <div className={s.limitField}>
-            <TextField
-              mono
-              inputMode="numeric"
-              aria-label={t("aiSettings.limit")}
-              value={limitText}
-              onChange={(e) => setLimitText(e.target.value)}
-              onBlur={commitLimit}
-              onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && commitLimit()}
-            />
-          </div>
-        </SettingRow>
       </Group>
-      <div className={s.sectionHint}>{t("aiSettings.device.hint")}</div>
     </section>
   );
 }

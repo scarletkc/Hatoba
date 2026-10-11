@@ -156,15 +156,13 @@ MCP (Model Context Protocol) servers add tools to the assistant. Hatoba uses too
 
 ## This Device
 
-These two settings stay on this device and are not synced.
+These settings stay on this device and are not synced.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Default Permission Mode | 默认权限模式 | 既定の権限モード |
 | Manual approval | 手动批准 | 手動承認 |
 | Bypass | 绕过批准 | 承認をバイパス |
-| Tool Call Limit | 工具调用上限 | ツール呼び出しの上限 |
 | Turn On Bypass | 开启绕过模式 | バイパスをオンにする |
 
 - **Default Permission Mode**: **Manual approval** (default) or **Bypass**. New conversations start in it. Choosing Bypass the first time asks for confirmation.
-- **Tool Call Limit**: a turn pauses after this many tool calls and goes on only when you press Continue. From 1 to 200, default 25.

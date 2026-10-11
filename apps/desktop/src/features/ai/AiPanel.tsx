@@ -383,7 +383,7 @@ export function AiPanelButton({ className, activeClassName, dotClassName }: { cl
   const t = useT();
   const open = useApp((st) => st.prefs.ai_panel_open);
   const platform = useApp((st) => st.info.platform);
-  const waiting = useAi((st) => Object.values(st.slots).some((x) => x.turn?.call?.state === "approval" || x.turn?.call?.state === "limit"));
+  const waiting = useAi((st) => Object.values(st.slots).some((x) => x.turn?.call?.state === "approval"));
   const label = `${t(open ? "ai.hide" : "ai.show")} (${shortcutLabel(platform, "Ctrl+Shift+A", "⌘⇧A")})`;
   return (
     <button type="button" className={cx(className, open && activeClassName)} title={label} aria-label={label} aria-pressed={open} onClick={() => toggleAiPanel()}>

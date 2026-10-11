@@ -24,13 +24,12 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 
 ## Edit and Resend
 
-**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**, or the question in `references/ai-file-changes.md` when those messages changed files). A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with. To keep the messages after it, fork from the message instead.
+**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, without asking, unless those messages changed files: then the question in `references/ai-file-changes.md` comes first. A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with. To keep the messages after it, fork from the message instead.
 
 | en | zh-CN | ja |
 |---|---|---|
 | Edit and Resend | 编辑并重新发送 | 編集して再送信 |
 | Resend | 重新发送 | 再送信 |
-| Delete and Resend | 删除并重新发送 | 削除して再送信 |
 
 ## Fork a conversation
 

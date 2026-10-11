@@ -346,19 +346,6 @@ export function searchProviderFor(
   return ofKind.find((p) => p.id === chosenId) ?? [...ofKind].sort((a, b) => b.updated_at - a.updated_at)[0] ?? null;
 }
 
-// ───────────────────────── Device settings (AI-16, AI-18) ─────────────────────────
-
-export const TOOL_LIMIT_MIN = 1;
-export const TOOL_LIMIT_MAX = 200;
-export const TOOL_LIMIT_DEFAULT = 25;
-
-/** A tool call limit as typed, kept inside the allowed range; null when it is not a number. */
-export function parseToolLimit(text: string): number | null {
-  const value = text.trim();
-  if (!/^\d{1,9}$/.test(value)) return null;
-  return Math.min(TOOL_LIMIT_MAX, Math.max(TOOL_LIMIT_MIN, Number(value)));
-}
-
 // ───────────────────────── Test results (AI-04) ─────────────────────────
 
 /** The failure kind to explain; a failed result without one counts as `other`. */

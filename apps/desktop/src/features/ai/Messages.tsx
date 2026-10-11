@@ -1,5 +1,4 @@
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
@@ -18,7 +17,6 @@ import {
   retryTurn,
   revertFileChange,
   stopSideQuestion,
-  stopTurn,
   tooMuchMessage,
   type Decision,
 } from "./actions";
@@ -645,8 +643,6 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
       );
     case "approval":
       return <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.approval")}</span>;
-    case "limit":
-      return <span className={cx(s.chip, s.chipWarn)}>{t("ai.call.paused")}</span>;
     case "queued":
     case "streaming":
       return <span className={s.chip}>{t("ai.call.queued")}</span>;
@@ -718,7 +714,7 @@ function ToolBlock({
   if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} />;
 
   return (
-    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={reveal}>
+    <div className={cx(s.tool, flash && s.flash)} data-reveal={reveal}>
       <div className={s.toolHeadRow}>
         <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
@@ -773,7 +769,6 @@ function ToolBlock({
           )}
         </div>
       )}
-      {view.kind === "limit" && <LimitCard slotId={slotId} />}
     </div>
   );
 }
@@ -890,25 +885,6 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
   );
 }
 
-/** AI-18: the turn paused at the tool call limit. */
-function LimitCard({ slotId }: { slotId: string }) {
-  const t = useT();
-  const limit = useApp((st) => st.prefs.ai_tool_call_limit);
-  return (
-    <div className={s.cardFoot}>
-      <span className={s.cardText}>{t("ai.limit.body", { n: limit })}</span>
-      <div className={s.actions}>
-        <Button size="sm" onClick={() => void stopTurn(slotId)}>
-          {t("ai.stop")}
-        </Button>
-        <Button size="sm" variant="primary" icon="play" onClick={() => decideCall(slotId, { kind: "continue" })}>
-          {t("btn.continue")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /** The fields the Edit form shows: the main input of each tool, or the JSON for others. */
 interface Draft {
   main: string;
@@ -926,8 +902,6 @@ function draftFrom(kind: ToolKind, args: Record<string, unknown>, json: string):
       return { main: str(args.text), timeout: "", key: (SEND_KEYS as readonly string[]).includes(str(args.key)) ? (str(args.key) as SendKey) : "", wait: str(args.wait_seconds) };
     case "fetch_url":
       return { main: str(args.url), timeout: "", key: "", wait: "" };
-    case "read_file":
-      return { main: str(args.path), timeout: "", key: "", wait: "" };
     // AI-39, AI-40: Edit changes the text the call writes; the diff follows.
     case "edit_file":
       return { main: str(args.new_string), timeout: "", key: "", wait: "" };
@@ -949,9 +923,6 @@ function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { js
       return { json: JSON.stringify(without({ ...base, text: d.main, key: d.key || undefined, wait_seconds: num(d.wait) })) };
     case "fetch_url":
       return { json: JSON.stringify({ ...base, url: d.main.trim() }) };
-    case "read_file":
-      // A path can start or end with spaces: it goes as typed.
-      return { json: JSON.stringify({ ...base, path: d.main }) };
     case "edit_file":
       return { json: JSON.stringify({ ...base, new_string: d.main }) };
     case "write_file":
@@ -1122,11 +1093,11 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
             }
           }}
         >
-          {kind === "fetch_url" || kind === "read_file" ? (
+          {kind === "fetch_url" ? (
             <input
               className={s.input}
               value={draft.main}
-              aria-label={kind === "read_file" ? t("ai.approval.path") : t("ai.approval.url")}
+              aria-label={t("ai.approval.url")}
               spellCheck={false}
               onChange={(e) => setDraft({ ...draft, main: e.target.value })}
               autoFocus
@@ -1207,18 +1178,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {args.offset !== undefined && <div className={s.meta}>{t("ai.approval.offset", { n: str(args.offset) })}</div>}
             </>
           )}
-          {kind === "read_file" && (
-            <>
-              <ShownInput text={str(args.path)} command />
-              <div className={s.meta}>
-                {[t("ai.approval.fromLine", { n: str(args.offset) || 1 }), args.limit !== undefined && args.limit !== null ? t("ai.approval.maxLines", { n: str(args.limit) }) : ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-            </>
-          )}
           {fileChange && <FileChange state={file} replaceAll={args.replace_all === true} />}
-          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && kind !== "read_file" && !fileChange && (
+          {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && !fileChange && (
             <>
               {mcp && <div className={s.label}>{t("ai.approval.arguments")}</div>}
               <ShownInput text={prettyArgs(call.arguments) || "{}"} />
