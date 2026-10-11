@@ -574,7 +574,10 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const { revert } = editedFiles(slot.entries, fileChanges, entryId);
   if (revert.length > 0) {
     // The list is the confirmation, also for a file a call created: each revert asks nothing more.
-    const send = await askEditedFiles(later, revert, (change) => revertChange(slotId, id, change));
+    // Each revert waits for an idle conversation, as on the block: a turn may have started meanwhile.
+    const send = await askEditedFiles(later, revert, (change) =>
+      slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
+    );
     if (!send) return false;
   } else if (later > 0) {
     const ok = await confirm({

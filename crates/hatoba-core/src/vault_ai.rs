@@ -423,8 +423,11 @@ impl Vault {
             return Err(Error::ItemNotFound(conversation_id.to_owned()));
         }
         self.tombstone(&ids)?;
-        // The device-local snapshots of its file changes (AI-41).
-        self.store.delete_snapshots(conversation_id, None)?;
+        // The device-local snapshots of its file changes (AI-41). The deletion is committed by
+        // now, so a failure here is logged; the sweep after unlock deletes them later.
+        if let Err(e) = self.store.delete_snapshots(conversation_id, None) {
+            tracing::warn!("could not delete the conversation's file snapshots: {e}");
+        }
         Ok(())
     }
 
@@ -464,9 +467,10 @@ impl Vault {
             return Err(Error::ItemNotFound(entry_id.to_owned()));
         }
         self.tombstone(&ids)?;
-        // The snapshots of the calls the deleted responses made (AI-41).
-        self.store
-            .delete_snapshots(conversation_id, Some(entry_id))?;
+        // The snapshots of the calls the deleted responses made (AI-41), as for a conversation.
+        if let Err(e) = self.store.delete_snapshots(conversation_id, Some(entry_id)) {
+            tracing::warn!("could not delete the deleted entries' file snapshots: {e}");
+        }
         Ok(entries.len())
     }
 

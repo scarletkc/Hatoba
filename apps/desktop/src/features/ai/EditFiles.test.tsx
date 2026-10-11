@@ -95,6 +95,20 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     }
   });
 
+  it("lists a revert that threw as failed instead of hanging", async () => {
+    render();
+    let answer: Promise<boolean> | undefined;
+    act(() => {
+      answer = askEditedFiles(2, changes, async () => {
+        throw new Error("the vault is locked");
+      });
+    });
+    await click("Revert and Send");
+    expect(document.body.textContent).toContain("Revert failed.");
+    await click("Cancel");
+    await expect(answer).resolves.toBe(false);
+  });
+
   it("keeps the files as they are, or cancels, without reverting", async () => {
     render();
     let reverts = 0;

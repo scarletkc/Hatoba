@@ -69,7 +69,12 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
       if (useAsk.getState().ask !== ask) return; // the lock closed the dialog
       const key = keyOf(change);
       setResults((r) => ({ ...r, [key]: { state: "reverting" } }));
-      const outcome = await ask.revert(change);
+      let outcome: AiFileRevert;
+      try {
+        outcome = await ask.revert(change);
+      } catch (e) {
+        outcome = { status: "failed", reason: "failed", detail: e instanceof Error ? e.message : String(e) };
+      }
       let result: Result;
       if (outcome.status === "reverted") result = { state: "reverted" };
       else if (outcome.status === "changed") result = { state: "failed", reason: t(outcome.current === null ? "ai.editFiles.gone" : "ai.editFiles.changed") };
