@@ -278,6 +278,42 @@ pub async fn deploy_setup(
     Ok(())
 }
 
+/// The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
+/// against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+#[tauri::command]
+#[specta::specta]
+pub async fn deploy_join(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    handle: String,
+    target: DeployTarget,
+    password: String,
+) -> AppResult<()> {
+    let target = self::target(target);
+    let url = {
+        let deployment = state.deploy.get(&handle)?;
+        let deployment = deployment.lock().await;
+        deployment
+            .vault_worker_url(&target)
+            .await
+            .map_err(deploy_error)?
+    };
+    let backend = WorkerBackend::new(&url)?;
+    let config = SyncConfig::Worker {
+        url: backend.base_url().to_owned(),
+        deployment: Some(WorkerDeployment {
+            account_id: target.account_id,
+            worker_name: target.worker_name,
+        }),
+    };
+    let joined =
+        flows::join_remote_vault(&state.vault, &backend, &password, device_info(), &config).await?;
+    save_session(state.secrets.as_ref(), &joined.session)?;
+    state.deploy.end(&handle);
+    crate::commands::sync::joined_remote(&app, &state, Arc::new(backend), joined.rekeyed).await;
+    Ok(())
+}
+
 /// `https://{name}.{subdomain}.workers.dev` → `name`.
 fn workers_dev_name(url: &str) -> Option<String> {
     let url = reqwest::Url::parse(url).ok()?;

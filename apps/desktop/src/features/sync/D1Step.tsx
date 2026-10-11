@@ -23,7 +23,7 @@ export function D1Step({
   form: D1Form;
   update: (patch: Partial<D1Form>) => void;
   onBack: () => void;
-  onNext: (config: SyncConfigInput) => void;
+  onNext: (config: SyncConfigInput, join: boolean) => void;
 }) {
   const t = useT();
   const accountId = useId();
@@ -31,7 +31,7 @@ export function D1Step({
   const { verify } = form;
   const verified = verify.status === "ok";
   const canVerify = form.accountId.trim() && form.apiToken.trim() && verify.status !== "testing";
-  const canContinue = verified && !!form.databaseId && !form.initialized && !form.checking;
+  const canContinue = verified && !!form.databaseId && !form.checking;
   const config = (databaseId: string): SyncConfigInput => ({
     kind: "d1",
     account_id: form.accountId.trim(),
@@ -83,7 +83,7 @@ export function D1Step({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId))}>
+          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId), form.initialized)}>
             {t("btn.continue")}
           </Button>
         </>
@@ -143,8 +143,7 @@ export function D1Step({
 
         <Field
           label={t("sync.database")}
-          error={form.initialized ? t("err.remote_initialized") : undefined}
-          hint={verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
+          hint={form.initialized ? t("sync.d1.hasVault") : verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
         >
           <PopupSelect
             ariaLabel={t("sync.database")}

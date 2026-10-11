@@ -170,6 +170,47 @@ pub async fn sync_configure(
     Ok(())
 }
 
+/// Flow C (§6.6): connect this device's vault to a remote that already holds a vault, then run
+/// the first round, which pulls the remote's items and uploads this device's.
+#[tauri::command]
+#[specta::specta]
+pub async fn sync_join(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    config: SyncConfigInput,
+    password: String,
+) -> AppResult<()> {
+    let (cfg, backend) = backend_from_input(&config)?;
+    let joined = flows::join_remote_vault(
+        &state.vault,
+        backend.as_ref(),
+        &password,
+        device_info(),
+        &cfg,
+    )
+    .await?;
+    persist(&state, &cfg, &config, &joined.session)?;
+    joined_remote(&app, &state, backend, joined.rekeyed).await;
+    Ok(())
+}
+
+/// After flow C: drops the biometric unlock that wraps the old vault key, installs the backend
+/// and runs the first round. A failed round shows in the sync status and is retried like any
+/// other, so the join itself has succeeded.
+pub(crate) async fn joined_remote(
+    app: &AppHandle,
+    state: &AppState,
+    backend: Arc<dyn SyncBackend>,
+    rekeyed: bool,
+) {
+    if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
+        tracing::warn!("could not remove the biometric unlock: {}", e.detail);
+    }
+    state.sync.set_backend(Some(backend));
+    sync::emit_status(app);
+    let _ = sync::run_round(app).await;
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn sync_now(app: AppHandle) -> AppResult<()> {

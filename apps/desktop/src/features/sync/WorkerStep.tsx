@@ -20,7 +20,7 @@ const WRANGLER_STEPS = [
   "npx wrangler deploy",
 ];
 
-/** Step 2a: deploy the Worker, then test URL + Setup Token. */
+/** Step 2a: deploy the Worker, then test URL + Setup Token. A Worker that already holds a vault needs no token: this device joins it. */
 export function WorkerStep({
   form,
   update,
@@ -30,7 +30,7 @@ export function WorkerStep({
   form: WorkerForm;
   update: (patch: Partial<WorkerForm>) => void;
   onBack: () => void;
-  onNext: (config: SyncConfigInput) => void;
+  onNext: (config: SyncConfigInput, join: boolean) => void;
 }) {
   const t = useT();
   const urlId = useId();
@@ -40,7 +40,7 @@ export function WorkerStep({
   const ok = test.status === "ok" ? test.result : null;
   const initialized = !!ok?.initialized;
   const canTest = form.url.trim().length > 0 && test.status !== "testing";
-  const canContinue = !!ok && !initialized && form.token.trim().length > 0;
+  const canContinue = !!ok && (initialized || form.token.trim().length > 0);
 
   const runTest = async () => {
     if (!canTest) return;
@@ -60,8 +60,7 @@ export function WorkerStep({
 
   const status = (() => {
     if (test.status === "ok") {
-      if (initialized) return { color: "var(--orange)", text: t("err.remote_initialized") };
-      const parts = [t("sync.test.connected")];
+      const parts = [t(initialized ? "sync.test.hasVault" : "sync.test.connected")];
       if (test.result.version) parts.push(t("sync.test.version", { version: test.result.version }));
       if (test.result.latency_ms !== null) parts.push(`${test.result.latency_ms} ms`);
       return { color: "var(--green)", text: parts.join(" · ") };
@@ -76,7 +75,7 @@ export function WorkerStep({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => ok && onNext({ kind: "worker", url: normalizeWorkerUrl(form.url), setup_token: form.token.trim() })}>
+          <Button variant="primary" disabled={!canContinue} onClick={() => ok && onNext({ kind: "worker", url: normalizeWorkerUrl(form.url), setup_token: initialized ? null : form.token.trim() }, initialized)}>
             {t("btn.continue")}
           </Button>
         </>
@@ -131,7 +130,7 @@ export function WorkerStep({
             placeholder={t("sync.workerUrl.placeholder")}
             inputMode="url"
             invalid={test.status === "failed"}
-            trailing={ok && !initialized ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
+            trailing={ok ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
             onChange={(e) => update({ url: e.target.value, test: { status: "idle" } })}
             onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runTest()}
           />

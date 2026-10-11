@@ -71,7 +71,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/terminal.md` | The terminal tab: status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
-| `references/sync.md` | Cloud Sync: what syncs, the setup wizard, the status page, devices, conflicts, restoring on a new device, disconnecting |
+| `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
 | `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, the MCP tools menu |
 | `references/ai-history.md` | AI conversation history: search, open, rename, pin, export and delete, Edit and Resend, and forking a conversation into a new one |

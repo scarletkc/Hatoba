@@ -149,6 +149,11 @@ export const commands = {
 	syncTest: (config: SyncConfigInput) => __TAURI_INVOKE<SyncTestResult>("sync_test", { config }),
 	/**  Flow A (§6.6): initialise the remote with this vault, sign in and push everything. */
 	syncConfigure: (config: SyncConfigInput, password: string) => __TAURI_INVOKE<null>("sync_configure", { config, password }),
+	/**
+	 *  Flow C (§6.6): connect this device's vault to a remote that already holds a vault, then run
+	 *  the first round, which pulls the remote's items and uploads this device's.
+	 */
+	syncJoin: (config: SyncConfigInput, password: string) => __TAURI_INVOKE<null>("sync_join", { config, password }),
 	syncNow: () => __TAURI_INVOKE<null>("sync_now"),
 	/**  Re-authenticate after "认证失效" (session expired or revoked). */
 	syncLogin: (password: string) => __TAURI_INVOKE<null>("sync_login", { password }),
@@ -196,6 +201,11 @@ export const commands = {
 	 *  the deployment.
 	 */
 	deploySetup: (handle: string, password: string) => __TAURI_INVOKE<null>("deploy_setup", { handle, password }),
+	/**
+	 *  The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
+	 *  against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+	 */
+	deployJoin: (handle: string, target: DeployTarget, password: string) => __TAURI_INVOKE<null>("deploy_join", { handle, target, password }),
 	/**
 	 *  What "Update Worker" starts from (DEPLOY-08): the account ID and Worker name recorded when the
 	 *  app deployed the Worker, or else the name in its workers.dev URL.
