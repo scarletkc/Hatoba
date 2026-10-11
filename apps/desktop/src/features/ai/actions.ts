@@ -423,8 +423,9 @@ class TurnRunner {
       const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
       const result = await api.ai_tool_run(convId, call.id, sessionId, edited);
       this.addEntry(result);
-      // AI-41: a write keeps a snapshot, which the call's block can now revert.
-      if ((kind === "edit_file" || kind === "write_file") && result.role === "tool" && result.status === "ok") void refreshFileChanges(this.slotId, convId);
+      // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
+      // partway; and the size limit may have dropped an older one.
+      if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(this.slotId, convId);
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -646,27 +647,33 @@ export async function refreshFileChanges(slotId: string, convId: string) {
 
 /**
  * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. A file the
- * call created is deleted, so the user confirms first; `onStart` runs once the revert is under way. Null when
- * nothing was asked of Rust or it refused; otherwise what the revert did, for the call's block to show.
+ * call created is deleted, so the user confirms first. With `restore` (Restore anyway), it writes over what the
+ * diff of the last revert showed, which the user confirms too. `onStart` runs once the revert is under way.
+ * Null when nothing was asked of Rust or it refused; otherwise what the revert did, for the call's block to show.
  */
-export async function revertFileChange(slotId: string, change: AiFileChange, onStart?: () => void): Promise<AiFileRevert | null> {
+export async function revertFileChange(slotId: string, change: AiFileChange, options: { restore?: boolean; onStart?: () => void } = {}): Promise<AiFileRevert | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId || slotBusy(slotId)) return null;
-  if (change.created) {
-    const ok = await confirm({
-      title: t("ai.revert.deleteTitle", { path: change.path }),
-      body: t("ai.revert.deleteBody"),
-      confirmLabel: t("ai.revert.delete"),
-      danger: true,
-    });
+  const path = change.path;
+  const ask = options.restore
+    ? change.created
+      ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
+      : { title: t("ai.revert.restoreTitle", { path }), body: t("ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }
+    : change.created
+      ? { title: t("ai.revert.deleteTitle", { path }), body: t("ai.revert.deleteBody"), confirmLabel: t("ai.revert.delete") }
+      : null;
+  if (ask) {
+    const ok = await confirm({ ...ask, danger: true });
     if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
   }
-  onStart?.();
+  options.onStart?.();
   try {
-    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId));
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), !!options.restore);
     if (outcome.status === "reverted") {
       markReverted(slotId, convId, change);
-      toast(t("ai.revert.done", { path: change.path }), "success");
+      // Nothing to write: a revert whose result was lost did it already, or the write never changed the file.
+      const done = outcome.wrote ? "ai.revert.done" : change.created ? "ai.revert.alreadyGone" : "ai.revert.already";
+      toast(t(done, { path }), "success");
     }
     return outcome;
   } catch (e) {
@@ -683,13 +690,13 @@ function revertSession(slotId: string): string | null {
 
 function markReverted(slotId: string, convId: string, change: AiFileChange) {
   const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
-  patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, reverted: true } : c)) } : {}));
+  patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, state: "reverted" as const } : c)) } : {}));
 }
 
 /** AI-26, AI-41: reverts a change an edit is about to delete the call of; an error is a failure the edit's dialog lists. */
 async function revertChange(slotId: string, convId: string, change: AiFileChange): Promise<AiFileRevert> {
   try {
-    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId));
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), false);
     if (outcome.status === "reverted") markReverted(slotId, convId, change);
     return outcome;
   } catch (e) {

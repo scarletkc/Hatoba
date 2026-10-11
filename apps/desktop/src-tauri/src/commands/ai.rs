@@ -10,12 +10,12 @@ use hatoba_ai::AiError;
 use hatoba_ai::models::{TestFailure, TestOutcome};
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
-use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
     AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS,
     SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
+use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -822,7 +822,8 @@ pub async fn ai_file_changes(
 }
 
 /// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
-/// `session_id`. A file the call created is deleted, so the panel asks first.
+/// `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
+/// anyway, over what the diff of the last revert showed, which the panel also asks about first.
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_file_revert(
@@ -832,16 +833,20 @@ pub async fn ai_file_revert(
     response_id: String,
     tool_call_id: String,
     session_id: Option<String>,
+    restore: bool,
 ) -> AppResult<AiFileRevert> {
     state
         .ai
         .file_revert(
             &state.vault,
             &AppEnv(app),
-            &conversation_id,
-            &response_id,
-            &tool_call_id,
+            SnapshotKey {
+                conversation_id: &conversation_id,
+                response_id: &response_id,
+                tool_call_id: &tool_call_id,
+            },
             session_id.as_deref(),
+            restore,
         )
         .await
 }

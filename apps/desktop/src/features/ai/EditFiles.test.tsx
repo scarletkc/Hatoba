@@ -31,7 +31,7 @@ const change = (callId: string, path: string, created = false): AiFileChange => 
   server: "root@10.0.0.5:22",
   path,
   created,
-  reverted: false,
+  state: "written",
 });
 const changes = [change("c1", "/etc/nginx/nginx.conf"), change("c2", "/etc/nginx/conf.d/api.conf", true)];
 
@@ -43,7 +43,7 @@ const click = async (label: string) => {
 describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () => {
   it("lists the files newest call first with their server, and has no default action", () => {
     render();
-    act(() => void askEditedFiles(2, changes, async () => ({ status: "reverted" })));
+    act(() => void askEditedFiles(2, changes, async () => ({ status: "reverted", wrote: true })));
     const items = [...document.body.querySelectorAll("li")].map((li) => li.textContent);
     expect(items[0]).toContain("/etc/nginx/conf.d/api.conf");
     expect(items[0]).toContain("root@10.0.0.5:22");
@@ -60,7 +60,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     act(() => {
       answer = askEditedFiles(2, changes, async (c) => {
         order.push(c.tool_call_id);
-        return { status: "reverted" };
+        return { status: "reverted", wrote: true };
       });
     });
     await click("Revert and Send");
@@ -77,7 +77,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
       render();
       const outcomes: Record<string, AiFileRevert> = {
         c2: { status: "failed", reason: "other_server", detail: "admin@10.0.0.9:22" },
-        c1: { status: "changed", path: "/etc/nginx/nginx.conf", written: "a\n", current: "b\n" },
+        c1: { status: "changed", path: "/etc/nginx/nginx.conf", current: "b\n", before: "a\n", later: false },
       };
       let answer: Promise<boolean> | undefined;
       act(() => {
@@ -86,7 +86,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
       await click("Revert and Send");
       const text = document.body.textContent ?? "";
       expect(text).toContain("Connect it to admin@10.0.0.9:22");
-      expect(text).toContain("The file changed after the call wrote it.");
+      expect(text).toContain("The file no longer holds what the call wrote.");
       expect(button("Keep Files and Send")).toBeUndefined();
       await click(choice);
       await expect(answer).resolves.toBe(sent);
@@ -102,13 +102,13 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     act(() => {
       answer = askEditedFiles(2, changes, async () => {
         reverts++;
-        return { status: "reverted" };
+        return { status: "reverted", wrote: true };
       });
     });
     await click("Keep Files and Send");
     await expect(answer).resolves.toBe(true);
     act(() => {
-      answer = askEditedFiles(2, changes, async () => ({ status: "reverted" }));
+      answer = askEditedFiles(2, changes, async () => ({ status: "reverted", wrote: true }));
     });
     await click("Cancel");
     await expect(answer).resolves.toBe(false);
@@ -119,7 +119,7 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     render();
     let answer: Promise<boolean> | undefined;
     act(() => {
-      answer = askEditedFiles(2, changes, async () => ({ status: "reverted" }));
+      answer = askEditedFiles(2, changes, async () => ({ status: "reverted", wrote: true }));
     });
     act(() => setOverlaysLocked(true));
     await expect(answer).resolves.toBe(false);

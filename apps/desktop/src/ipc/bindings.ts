@@ -259,9 +259,10 @@ export const commands = {
 	aiFileChanges: (conversationId: string) => __TAURI_INVOKE<AiFileChange[]>("ai_file_changes", { conversationId }),
 	/**
 	 *  Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
-	 *  `session_id`. A file the call created is deleted, so the panel asks first.
+	 *  `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
+	 *  anyway, over what the diff of the last revert showed, which the panel also asks about first.
 	 */
-	aiFileRevert: (conversationId: string, responseId: string, toolCallId: string, sessionId: string | null) => __TAURI_INVOKE<AiFileRevert>("ai_file_revert", { conversationId, responseId, toolCallId, sessionId }),
+	aiFileRevert: (conversationId: string, responseId: string, toolCallId: string, sessionId: string | null, restore: boolean) => __TAURI_INVOKE<AiFileRevert>("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -400,9 +401,25 @@ export type AiFileChange = {
 	path: string,
 	/**  The call created the file, so a revert deletes it. */
 	created: boolean,
-	/**  The change was reverted. */
-	reverted: boolean,
+	state: AiFileChangeState,
 };
+
+/**  Where a file tool call's change stands on this device (AI-41). */
+export type AiFileChangeState = 
+/**  The call wrote the file. */
+"written" | 
+/**
+ *  The write failed after it may have begun, or its end was never recorded: the file may be
+ *  cut short. It can be reverted like a written one.
+ */
+"unfinished" | 
+/**  The user reverted the change. */
+"reverted" | 
+/**
+ *  The 32 MB limit dropped what the file held before, so the change can no longer be
+ *  reverted.
+ */
+"dropped";
 
 /**
  *  The change an `edit_file` or `write_file` call would make, for its approval card (AI-39,
@@ -426,17 +443,30 @@ export type AiFilePreview = {
 
 /**  The outcome of a revert (AI-41). */
 export type AiFileRevert = 
-/**  The file holds what it held before the call again, or is deleted. */
-{ status: "reverted" } | 
 /**
- *  The file no longer holds what the call wrote, so nothing was written. The texts show CRLF
- *  line breaks as `\n`.
+ *  The file holds what it held before the call again, or no longer exists when the call
+ *  created it. `wrote`: the revert wrote or deleted it; otherwise it was so already, as after
+ *  a revert whose result was lost.
+ */
+{ status: "reverted"; wrote: boolean } | 
+/**
+ *  The file holds neither what the call wrote nor what it held before, so nothing was
+ *  written: the diff from `current` to `before` is what Restore anyway would do. The texts
+ *  show CRLF line breaks as `\n`.
  */
 { status: "changed"; path: string; 
-/**  What the call wrote. */
-written: string; 
-/**  What the file holds now; `None` when it no longer exists. */
-current: string | null } | { status: "failed"; reason: AiRevertFailure; detail: string | null };
+/**  What the file holds now; `None` when it does not exist. */
+current: string | null; 
+/**
+ *  What it held before the call; `None` when the call created it, so Restore anyway
+ *  deletes it.
+ */
+before: string | null; 
+/**
+ *  A later call of this conversation wrote the file too, so reverting the later changes
+ *  first, newest first, may bring it back to what this call wrote.
+ */
+later: boolean } | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
 

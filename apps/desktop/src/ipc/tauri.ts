@@ -174,8 +174,8 @@ export function createTauriApi(): HatobaApi {
     ai_file_preview: (conversationId, toolCallId, sessionId, editedArguments) =>
       call("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
     ai_file_changes: (conversationId) => call("ai_file_changes", { conversationId }),
-    ai_file_revert: (conversationId, responseId, toolCallId, sessionId) =>
-      call("ai_file_revert", { conversationId, responseId, toolCallId, sessionId }),
+    ai_file_revert: (conversationId, responseId, toolCallId, sessionId, restore) =>
+      call("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
     ai_stop: (conversationId) => call("ai_stop", { conversationId }),
     ai_compact: (conversationId, context) => call("ai_compact", { conversationId, context }),
 

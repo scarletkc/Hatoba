@@ -10,19 +10,23 @@ Servers rarely keep a history of their configuration files, so Hatoba keeps one 
 | Revert and Send | 撤销并发送 | 元に戻して送信 |
 | Keep Files and Send | 保留文件并发送 | ファイルはそのままで送信 |
 | Send Anyway | 仍然发送 | このまま送信 |
+| Restore Anyway | 仍然恢复 | このまま復元 |
+| Delete Anyway | 仍然删除 | このまま削除 |
 
 ## Where the earlier content is kept
 
-- Before writing, the call keeps what the file held (or that it did not exist) together with what it wrote. This copy stays on this device, encrypted in the vault's local database. Nothing is written on the server, so no backup file can be picked up by a wildcard include such as nginx's `include sites-enabled/*`.
+- Before writing, the call keeps what the file held (or that it did not exist) together with what it writes. This copy stays on this device, encrypted in the vault's local database. Nothing is written on the server, so no backup file can be picked up by a wildcard include such as nginx's `include sites-enabled/*`.
+- So a write that failed partway (a timeout, a dropped connection) can be reverted too: its block says the file may be cut short.
 - It is not synced and never sent to the model, so only the device that ran the call can revert it.
-- The copies hold at most 32 MB of file text in all; the oldest are dropped first. Deleting the conversation deletes them, and so does **Edit and Resend** of a message before the call (below).
+- The copies hold at most 32 MB of file text in all; the oldest are dropped first, and their blocks then say the change can no longer be reverted. Deleting the conversation deletes them, and so does **Edit and Resend** of a message before the call (below).
 
 ## Reverting
 
 Expand the call's block and choose **Revert**. It is offered once the assistant has finished (no turn running, no approval waiting, no compaction), and needs the conversation's tab connected to the same server.
 
-- Revert reads the file first. It writes the earlier content back only while the file still holds exactly what the call wrote. Otherwise it leaves the file as it is and shows the changes made since the call: by you, by another program, or by a later call of the assistant. Reverting the later calls first, newest first, brings the file back to where this one can be reverted.
-- A file the call created is deleted, after a confirmation (**Delete**).
+- Revert reads the file first. It writes the earlier content back only while the file still holds exactly what the call wrote. A file that already holds its earlier content (a revert that went through but whose result was lost) is only marked reverted.
+- Otherwise it leaves the file as it is and shows the diff from what the file holds now back to what it held before. The file changed since (by you, another program, or a later call of the assistant), or a write stopped partway. When a later call wrote the file too, the block says so: reverting the later calls first, newest first, may bring the file back to where this one can be reverted. **Restore Anyway** under the diff, after a confirmation, writes the earlier content back over exactly what the diff shows, and refuses if the file changed again.
+- A file the call created is deleted, after a confirmation (**Delete**, or **Delete Anyway** when it changed since).
 - Like the file tools, Revert never uses sudo. When the user the tab is logged in as cannot write the file, it says so; restore it in the terminal with sudo instead.
 - The block then shows **Reverted**, and your next message tells the assistant, with a divider "Reverted the change to <path>". The assistant has to read the file again before it changes it.
 

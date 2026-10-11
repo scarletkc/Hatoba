@@ -6,6 +6,9 @@
 //! strings to this module, each sealed under the vault key with an AAD that names the row and the
 //! column. Snapshots stay on this device: they are not items, so they never sync, and they are
 //! not part of the conversation's entries, so they never reach the model.
+//!
+//! A snapshot is stored before its write begins, as [`SnapshotState::Unfinished`], so a write
+//! that fails midway, or that the app never sees end, can still be reverted.
 
 use std::collections::HashSet;
 
@@ -14,11 +17,11 @@ use zeroize::Zeroizing;
 use crate::crypto::{self, AAD_AI_FILE_SNAPSHOT_PREFIX, seal};
 use crate::error::{Error, Result};
 use crate::model::Item;
-use crate::store::{SnapshotRow, StoreOps};
+use crate::store::{SnapshotRow, SnapshotState, StoreOps};
 use crate::vault::Vault;
 
-/// The most bytes of content the snapshots hold together; storing one deletes the oldest until
-/// they fit.
+/// The most bytes of content the snapshots hold together; storing one drops the content of the
+/// oldest until they fit.
 pub const AI_SNAPSHOTS_MAX_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Which call a snapshot belongs to.
@@ -41,8 +44,8 @@ pub struct FileSnapshot {
     pub tool_call_id: String,
     /// The description the caller stored, opened.
     pub meta: Zeroizing<String>,
-    /// When the change was reverted, Unix ms.
-    pub reverted_at: Option<i64>,
+    /// Where the change stands.
+    pub state: SnapshotState,
 }
 
 impl std::fmt::Debug for FileSnapshot {
@@ -50,7 +53,25 @@ impl std::fmt::Debug for FileSnapshot {
         f.debug_struct("FileSnapshot")
             .field("response_id", &self.response_id)
             .field("tool_call_id", &self.tool_call_id)
-            .field("reverted_at", &self.reverted_at)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
+    }
+}
+
+/// One snapshot, opened: its description, and its content while the change can be reverted.
+pub struct StoredSnapshot {
+    /// The description the caller stored.
+    pub meta: Zeroizing<String>,
+    /// The file's content the caller stored; `None` once reverted or dropped.
+    pub content: Option<Zeroizing<String>>,
+    /// Where the change stands.
+    pub state: SnapshotState,
+}
+
+impl std::fmt::Debug for StoredSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredSnapshot")
+            .field("state", &self.state)
             .finish_non_exhaustive()
     }
 }
@@ -80,8 +101,9 @@ fn open(
 }
 
 impl Vault {
-    /// Stores the snapshot of a call's change, replacing one the call has already, then deletes
-    /// the oldest snapshots that still hold content until all of them hold at most
+    /// Stores the snapshot of a call's change before its write begins, as
+    /// [`SnapshotState::Unfinished`], replacing one the call has already, then drops the content
+    /// of the oldest snapshots that still hold some until all of them hold at most
     /// [`AI_SNAPSHOTS_MAX_BYTES`].
     ///
     /// # Errors
@@ -116,8 +138,8 @@ impl Vault {
                 .to_json(),
             ),
             size: content.len() as u64,
+            state: SnapshotState::Unfinished,
             created_at: self.clock.now_ms(),
-            reverted_at: None,
         };
         self.store.transaction(|tx| {
             tx.put_snapshot(&row)?;
@@ -143,25 +165,17 @@ impl Vault {
                     response_id: row.response_id,
                     tool_call_id: row.tool_call_id,
                     meta,
-                    reverted_at: row.reverted_at,
+                    state: row.state,
                 })
             })
             .collect())
     }
 
-    /// A call's snapshot: its description, and its content until the change was reverted.
-    /// `None` when there is none, or this vault key cannot open it.
+    /// A call's snapshot, opened. `None` when there is none, or this vault key cannot open it.
     ///
     /// # Errors
     /// [`Error::Locked`]; storage errors.
-    #[expect(
-        clippy::type_complexity,
-        reason = "the two opened parts of one row, the second absent once reverted"
-    )]
-    pub fn ai_file_snapshot(
-        &self,
-        key: &SnapshotKey<'_>,
-    ) -> Result<Option<(Zeroizing<String>, Option<Zeroizing<String>>)>> {
+    pub fn ai_file_snapshot(&self, key: &SnapshotKey<'_>) -> Result<Option<StoredSnapshot>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
         let Some(row) =
             self.store
@@ -179,11 +193,58 @@ impl Vault {
             },
             None => None,
         };
-        Ok(Some((meta, content)))
+        Ok(Some(StoredSnapshot {
+            meta,
+            content,
+            state: row.state,
+        }))
+    }
+
+    /// Records that the write of a call's change ended and wrote the file, with the description
+    /// `meta` when it changed (the write resolved the path, say). Returns whether the snapshot
+    /// was there and unfinished.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_mark_file_written(
+        &mut self,
+        key: &SnapshotKey<'_>,
+        meta: Option<&str>,
+    ) -> Result<bool> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let meta = match meta {
+            Some(meta) => Some(
+                seal(
+                    &unlocked.vault_key,
+                    aad("meta", key).as_bytes(),
+                    meta.as_bytes(),
+                )?
+                .to_json(),
+            ),
+            None => None,
+        };
+        self.store.set_snapshot_written(
+            key.conversation_id,
+            key.response_id,
+            key.tool_call_id,
+            meta.as_deref(),
+        )
+    }
+
+    /// Deletes a call's snapshot: its write never began.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_delete_file_snapshot(&mut self, key: &SnapshotKey<'_>) -> Result<()> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        self.store
+            .delete_snapshot(key.conversation_id, key.response_id, key.tool_call_id)
     }
 
     /// Records that a call's change was reverted: the snapshot keeps its description and drops
-    /// the content. Returns whether it was there and not reverted yet.
+    /// the content. Returns whether it was there and could be reverted.
     ///
     /// # Errors
     /// [`Error::Locked`]; storage errors.
@@ -191,13 +252,8 @@ impl Vault {
         if !self.is_unlocked() {
             return Err(Error::Locked);
         }
-        let now = self.clock.now_ms();
-        self.store.set_snapshot_reverted(
-            key.conversation_id,
-            key.response_id,
-            key.tool_call_id,
-            now,
-        )
+        self.store
+            .set_snapshot_reverted(key.conversation_id, key.response_id, key.tool_call_id)
     }
 
     /// Deletes the snapshots whose conversation or response is gone, as when another device
@@ -307,16 +363,40 @@ mod tests {
         assert_eq!(row.size, 7);
         assert_eq!(vault.pending_count(), pending);
 
+        // Stored before the write begins, so unfinished until the write ends.
         let listed = vault.ai_file_snapshots(&c).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(
-            (listed[0].tool_call_id.as_str(), listed[0].meta.as_str()),
-            ("call_1", "META")
+            (
+                listed[0].tool_call_id.as_str(),
+                listed[0].meta.as_str(),
+                listed[0].state
+            ),
+            ("call_1", "META", SnapshotState::Unfinished)
         );
-        let (meta, content) = vault.ai_file_snapshot(&k).unwrap().unwrap();
+        let stored = vault.ai_file_snapshot(&k).unwrap().unwrap();
         assert_eq!(
-            (meta.as_str(), content.as_deref().map(String::as_str)),
-            ("META", Some("CONTENT"))
+            (
+                stored.meta.as_str(),
+                stored.content.as_deref().map(String::as_str),
+                stored.state
+            ),
+            ("META", Some("CONTENT"), SnapshotState::Unfinished)
+        );
+
+        // Written, with the path as the write resolved it: the new description is sealed too.
+        assert!(vault.ai_mark_file_written(&k, Some("RESOLVED")).unwrap());
+        assert!(!vault.ai_mark_file_written(&k, None).unwrap());
+        let row = vault
+            .store
+            .snapshot(&c, &response, "call_1")
+            .unwrap()
+            .unwrap();
+        assert!(!row.meta.contains("RESOLVED"));
+        let stored = vault.ai_file_snapshot(&k).unwrap().unwrap();
+        assert_eq!(
+            (stored.meta.as_str(), stored.state),
+            ("RESOLVED", SnapshotState::Written)
         );
 
         // An envelope opens only in its own row.
@@ -337,13 +417,23 @@ mod tests {
         // Reverted: the description stays, the content goes.
         assert!(vault.ai_mark_file_reverted(&k).unwrap());
         assert!(!vault.ai_mark_file_reverted(&k).unwrap());
-        let (_, content) = vault.ai_file_snapshot(&k).unwrap().unwrap();
-        assert!(content.is_none());
-        assert!(
-            vault.ai_file_snapshots(&c).unwrap()[0]
-                .reverted_at
-                .is_some()
+        let stored = vault.ai_file_snapshot(&k).unwrap().unwrap();
+        assert_eq!(
+            (stored.content.is_none(), stored.state),
+            (true, SnapshotState::Reverted)
         );
+        assert_eq!(
+            vault.ai_file_snapshots(&c).unwrap()[0].state,
+            SnapshotState::Reverted
+        );
+
+        // An unfinished write can be reverted too; one that never began goes.
+        let other = key(&c, &response, "call_3");
+        vault.ai_put_file_snapshot(&other, "m", "c").unwrap();
+        assert!(vault.ai_mark_file_reverted(&other).unwrap());
+        vault.ai_put_file_snapshot(&other, "m", "c").unwrap();
+        vault.ai_delete_file_snapshot(&other).unwrap();
+        assert!(vault.ai_file_snapshot(&other).unwrap().is_none());
 
         vault.lock();
         assert!(matches!(vault.ai_file_snapshots(&c), Err(Error::Locked)));
@@ -351,6 +441,54 @@ mod tests {
             vault.ai_put_file_snapshot(&k, "m", "c"),
             Err(Error::Locked)
         ));
+        assert!(matches!(
+            vault.ai_mark_file_written(&k, None),
+            Err(Error::Locked)
+        ));
+        assert!(matches!(
+            vault.ai_delete_file_snapshot(&k),
+            Err(Error::Locked)
+        ));
+    }
+
+    #[test]
+    fn the_cap_drops_the_oldest_content_and_keeps_the_rows() {
+        let mut vault = vault();
+        let c = conversation(&mut vault);
+        let response = vault
+            .ai_append_entry(&c, r#"{"role":"assistant"}"#)
+            .unwrap();
+        let half = "x".repeat(usize::try_from(AI_SNAPSHOTS_MAX_BYTES / 2).unwrap());
+        for call in ["a", "b", "c"] {
+            vault
+                .ai_put_file_snapshot(&key(&c, &response, call), call, &half)
+                .unwrap();
+        }
+        let states: Vec<(String, SnapshotState)> = vault
+            .ai_file_snapshots(&c)
+            .unwrap()
+            .into_iter()
+            .map(|s| (s.meta.to_string(), s.state))
+            .collect();
+        assert_eq!(
+            states,
+            [
+                ("a".into(), SnapshotState::Dropped),
+                ("b".into(), SnapshotState::Unfinished),
+                ("c".into(), SnapshotState::Unfinished)
+            ]
+        );
+        let dropped = key(&c, &response, "a");
+        assert!(
+            vault
+                .ai_file_snapshot(&dropped)
+                .unwrap()
+                .unwrap()
+                .content
+                .is_none()
+        );
+        assert!(!vault.ai_mark_file_reverted(&dropped).unwrap());
+        assert!(!vault.ai_mark_file_written(&dropped, None).unwrap());
     }
 
     #[test]

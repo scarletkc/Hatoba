@@ -417,6 +417,21 @@
   line-height: 1.45;
 }
 
+.revertWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.revertWarn > i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--orange);
+}
+
 .revertDetail {
   margin-top: 2px;
   font-family: var(--font-mono);

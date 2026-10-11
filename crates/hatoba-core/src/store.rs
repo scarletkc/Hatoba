@@ -182,8 +182,8 @@ const LOCAL_COLUMNS: &[(&str, &str, &str)] = &[
 ///
 /// `ai_file_snapshots` keeps what each `edit_file` or `write_file` call changed, so the user can
 /// revert it (spec AI-41): `meta` and `content` are envelopes sealed under the vault key, and
-/// `content` is NULL once the change was reverted. `size` is the bytes `content` holds in
-/// plaintext, which the snapshots' total is capped by.
+/// `content` is NULL once the change was reverted or dropped ([`SnapshotState`]). `size` is the
+/// bytes `content` holds in plaintext, which the snapshots' total is capped by.
 const LOCAL_TABLES: &[&str] = &["CREATE TABLE IF NOT EXISTS ai_file_snapshots (
         conversation_id TEXT NOT NULL,
         response_id     TEXT NOT NULL,
@@ -191,10 +191,53 @@ const LOCAL_TABLES: &[&str] = &["CREATE TABLE IF NOT EXISTS ai_file_snapshots (
         meta            TEXT NOT NULL,
         content         TEXT,
         size            INTEGER NOT NULL,
+        state           TEXT NOT NULL,
         created_at      INTEGER NOT NULL,
-        reverted_at     INTEGER,
         PRIMARY KEY (conversation_id, response_id, tool_call_id)
      )"];
+
+/// Where the change of a file snapshot stands (spec AI-41).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapshotState {
+    /// Stored before the write began: the write runs, or it failed after it may have begun, or
+    /// its end was never recorded.
+    Unfinished,
+    /// The call wrote the file.
+    Written,
+    /// The user reverted the change; the content is gone.
+    Reverted,
+    /// The size cap dropped the content, so the change can no longer be reverted.
+    Dropped,
+}
+
+impl SnapshotState {
+    /// The state as the table stores it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unfinished => "unfinished",
+            Self::Written => "written",
+            Self::Reverted => "reverted",
+            Self::Dropped => "dropped",
+        }
+    }
+
+    /// The content is kept, so the change can be reverted.
+    #[must_use]
+    pub fn revertible(self) -> bool {
+        matches!(self, Self::Unfinished | Self::Written)
+    }
+
+    fn parse(text: &str) -> Self {
+        match text {
+            "unfinished" => Self::Unfinished,
+            "written" => Self::Written,
+            "reverted" => Self::Reverted,
+            // A state a newer build wrote: nothing this one can revert.
+            _ => Self::Dropped,
+        }
+    }
+}
 
 /// A row of the device-local `ai_file_snapshots` table (see [`LOCAL_TABLES`]).
 #[derive(Clone, PartialEq, Eq)]
@@ -211,10 +254,10 @@ pub struct SnapshotRow {
     pub content: Option<String>,
     /// Plaintext bytes of `content`.
     pub size: u64,
+    /// Where the change stands.
+    pub state: SnapshotState,
     /// When the snapshot was stored, Unix ms.
     pub created_at: i64,
-    /// When the change was reverted, Unix ms.
-    pub reverted_at: Option<i64>,
 }
 
 impl std::fmt::Debug for SnapshotRow {
@@ -224,14 +267,14 @@ impl std::fmt::Debug for SnapshotRow {
             .field("response_id", &self.response_id)
             .field("tool_call_id", &self.tool_call_id)
             .field("size", &self.size)
+            .field("state", &self.state)
             .field("created_at", &self.created_at)
-            .field("reverted_at", &self.reverted_at)
             .finish_non_exhaustive()
     }
 }
 
 const SNAPSHOT_COLUMNS: &str = "conversation_id, response_id, tool_call_id, meta, content, size, \
-     created_at, reverted_at";
+     state, created_at";
 
 fn row_to_snapshot(row: &rusqlite::Row<'_>) -> rusqlite::Result<SnapshotRow> {
     Ok(SnapshotRow {
@@ -241,8 +284,8 @@ fn row_to_snapshot(row: &rusqlite::Row<'_>) -> rusqlite::Result<SnapshotRow> {
         meta: row.get(3)?,
         content: row.get(4)?,
         size: from_i64(row.get(5)?),
-        created_at: row.get(6)?,
-        reverted_at: row.get(7)?,
+        state: SnapshotState::parse(&row.get::<_, String>(6)?),
+        created_at: row.get(7)?,
     })
 }
 
@@ -562,8 +605,8 @@ pub trait StoreOps {
                 row.meta,
                 row.content,
                 to_i64(row.size),
-                row.created_at,
-                row.reverted_at
+                row.state.as_str(),
+                row.created_at
             ],
         )?;
         Ok(())
@@ -593,8 +636,8 @@ pub trait StoreOps {
     /// is left out (`None`), so a list never reads the files.
     fn snapshot_list(&self, conversation_id: Option<&str>) -> Result<Vec<SnapshotRow>> {
         let mut stmt = self.conn().prepare(
-            "SELECT conversation_id, response_id, tool_call_id, meta, NULL, size, created_at, \
-             reverted_at FROM ai_file_snapshots WHERE ?1 IS NULL OR conversation_id = ?1 \
+            "SELECT conversation_id, response_id, tool_call_id, meta, NULL, size, state, \
+             created_at FROM ai_file_snapshots WHERE ?1 IS NULL OR conversation_id = ?1 \
              ORDER BY rowid",
         )?;
         let rows = stmt
@@ -603,20 +646,36 @@ pub trait StoreOps {
         Ok(rows)
     }
 
+    /// Marks the write of an unfinished snapshot done, replacing its `meta` when one is given.
+    /// Returns whether the snapshot existed and was unfinished.
+    fn set_snapshot_written(
+        &self,
+        conversation_id: &str,
+        response_id: &str,
+        tool_call_id: &str,
+        meta: Option<&str>,
+    ) -> Result<bool> {
+        Ok(self.conn().execute(
+            "UPDATE ai_file_snapshots SET state = 'written', meta = COALESCE(?4, meta) \
+             WHERE conversation_id = ?1 AND response_id = ?2 AND tool_call_id = ?3 \
+             AND state = 'unfinished'",
+            params![conversation_id, response_id, tool_call_id, meta],
+        )? > 0)
+    }
+
     /// Marks a snapshot's change reverted: its content goes and its size becomes 0. Returns
-    /// whether the snapshot existed and had not been reverted.
+    /// whether the snapshot existed and could be reverted.
     fn set_snapshot_reverted(
         &self,
         conversation_id: &str,
         response_id: &str,
         tool_call_id: &str,
-        at_ms: i64,
     ) -> Result<bool> {
         Ok(self.conn().execute(
-            "UPDATE ai_file_snapshots SET content = NULL, size = 0, reverted_at = ?4 \
+            "UPDATE ai_file_snapshots SET content = NULL, size = 0, state = 'reverted' \
              WHERE conversation_id = ?1 AND response_id = ?2 AND tool_call_id = ?3 \
-             AND reverted_at IS NULL",
-            params![conversation_id, response_id, tool_call_id, at_ms],
+             AND state IN ('unfinished', 'written')",
+            params![conversation_id, response_id, tool_call_id],
         )? > 0)
     }
 
@@ -646,10 +705,11 @@ pub trait StoreOps {
         Ok(n as u64)
     }
 
-    /// Deletes the oldest file snapshots that still hold content until their sizes add up to at
-    /// most `max` bytes. Returns how many it deleted.
+    /// Drops the content of the oldest file snapshots that still hold some until their sizes add
+    /// up to at most `max` bytes; their rows stay, as [`SnapshotState::Dropped`]. Returns how many
+    /// it dropped.
     fn trim_snapshots(&self, max: u64) -> Result<u64> {
-        let mut deleted = 0;
+        let mut dropped = 0;
         loop {
             let total: i64 = self.conn().query_row(
                 "SELECT COALESCE(SUM(size), 0) FROM ai_file_snapshots",
@@ -657,17 +717,18 @@ pub trait StoreOps {
                 |r| r.get(0),
             )?;
             if from_i64(total) <= max {
-                return Ok(deleted);
+                return Ok(dropped);
             }
             let n = self.conn().execute(
-                "DELETE FROM ai_file_snapshots WHERE rowid = (SELECT rowid FROM \
-                 ai_file_snapshots WHERE content IS NOT NULL ORDER BY rowid LIMIT 1)",
+                "UPDATE ai_file_snapshots SET content = NULL, size = 0, state = 'dropped' \
+                 WHERE rowid = (SELECT rowid FROM ai_file_snapshots \
+                 WHERE content IS NOT NULL ORDER BY rowid LIMIT 1)",
                 [],
             )?;
             if n == 0 {
-                return Ok(deleted);
+                return Ok(dropped);
             }
-            deleted += 1;
+            dropped += 1;
         }
     }
 }
@@ -1102,8 +1163,8 @@ mod tests {
             meta: "m".into(),
             content: Some("c".into()),
             size,
+            state: SnapshotState::Written,
             created_at: 1,
-            reverted_at: None,
         }
     }
 
@@ -1139,18 +1200,69 @@ mod tests {
         );
 
         // A reverted change keeps its row without content, and is reverted once.
-        assert!(store.set_snapshot_reverted("c1", "r1", "a", 9).unwrap());
-        assert!(!store.set_snapshot_reverted("c1", "r1", "a", 10).unwrap());
+        assert!(store.set_snapshot_reverted("c1", "r1", "a").unwrap());
+        assert!(!store.set_snapshot_reverted("c1", "r1", "a").unwrap());
         let reverted = store.snapshot("c1", "r1", "a").unwrap().unwrap();
         assert_eq!(
-            (reverted.content, reverted.size, reverted.reverted_at),
-            (None, 0, Some(9))
+            (reverted.content, reverted.size, reverted.state),
+            (None, 0, SnapshotState::Reverted)
+        );
+        // Only an unfinished write is marked written, with its new description.
+        assert!(
+            !store
+                .set_snapshot_written("c1", "r2", "b", Some("n"))
+                .unwrap()
+        );
+        store
+            .put_snapshot(&SnapshotRow {
+                state: SnapshotState::Unfinished,
+                ..snapshot("c1", "r2", "b", 20)
+            })
+            .unwrap();
+        assert!(
+            store
+                .set_snapshot_written("c1", "r2", "b", Some("n"))
+                .unwrap()
+        );
+        let written = store.snapshot("c1", "r2", "b").unwrap().unwrap();
+        assert_eq!(
+            (written.state, written.meta.as_str()),
+            (SnapshotState::Written, "n")
         );
 
-        // Over the cap, the oldest with content go first; reverted ones stay.
+        // Over the cap, the oldest with content are dropped first, keeping their rows; reverted
+        // ones are left alone.
+        let states = |store: &Store| {
+            store
+                .snapshot_list(None)
+                .unwrap()
+                .into_iter()
+                .map(|r| (r.state, r.size))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(store.trim_snapshots(25).unwrap(), 1);
-        assert_eq!(keys(&store), ["c1/r1/a", "c1/r2/b"]);
+        assert_eq!(keys(&store), ["c1/r1/a", "c2/r1/a", "c1/r2/b"]);
+        assert_eq!(
+            states(&store),
+            [
+                (SnapshotState::Reverted, 0),
+                (SnapshotState::Dropped, 0),
+                (SnapshotState::Written, 20)
+            ]
+        );
+        assert!(
+            store
+                .snapshot("c2", "r1", "a")
+                .unwrap()
+                .unwrap()
+                .content
+                .is_none()
+        );
+        assert!(!store.set_snapshot_reverted("c2", "r1", "a").unwrap());
         assert_eq!(store.trim_snapshots(0).unwrap(), 1);
+        assert_eq!(store.trim_snapshots(0).unwrap(), 0);
+        store.delete_snapshot("c2", "r1", "a").unwrap();
+        store.delete_snapshot("c1", "r2", "b").unwrap();
         assert_eq!(keys(&store), ["c1/r1/a"]);
 
         // Deleting a conversation's, or those from a response on.

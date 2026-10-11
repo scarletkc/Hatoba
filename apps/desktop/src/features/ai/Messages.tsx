@@ -646,7 +646,7 @@ function ToolBlock({
         <span className={s.toolName}>{toolLabel(t, call.name)}</span>
         <span className={s.toolSummary}>{summary}</span>
         <StatusChip view={view} name={call.name} />
-        {change?.reverted && (
+        {change?.state === "reverted" && (
           <span className={s.chip}>
             <Icon name="arrow-counter-clockwise" size={11} />
             {t("ai.revert.reverted")}
@@ -664,7 +664,12 @@ function ToolBlock({
               <pre className={cx(s.pre, s.output, "selectable")}>{view.entry.content || t("ai.call.noOutput")}</pre>
             </>
           )}
-          {change && !change.reverted && <RevertChange slotId={slotId} change={change} busy={busy} />}
+          {(change?.state === "written" || change?.state === "unfinished") && <RevertChange slotId={slotId} change={change} busy={busy} />}
+          {change?.state === "dropped" && (
+            <div className={s.revert}>
+              <span className={s.meta}>{t("ai.revert.dropped")}</span>
+            </div>
+          )}
         </div>
       )}
       {view.kind === "limit" && <LimitCard slotId={slotId} />}
@@ -673,49 +678,63 @@ function ToolBlock({
 }
 
 /**
- * AI-41: Revert on the block of a file tool call that wrote, with what it restores and what it does not, and
- * why a revert left the file as it is: the diff from what the call wrote to the file now, or the failure.
+ * AI-41: Revert on the block of a file tool call that wrote, or whose write failed after it may have begun, with
+ * what it restores and what it does not. When the file holds neither what the call wrote nor what it held
+ * before, the block shows the diff from what it holds now back to that, and offers Restore anyway over exactly
+ * what the diff shows; or the failure.
  */
 function RevertChange({ slotId, change, busy }: { slotId: string; change: AiFileChange; busy: boolean }) {
   const t = useT();
-  const [reverting, setReverting] = useState(false);
-  const [outcome, setOutcome] = useState<AiFileRevert | null>(null);
-  const revert = async () => {
+  const [running, setRunning] = useState<"revert" | "restore" | null>(null);
+  const [outcome, setOutcome] = useState<{ result: AiFileRevert; restore: boolean } | null>(null);
+  const run = async (restore: boolean) => {
     try {
-      const next = await revertFileChange(slotId, change, () => {
-        setReverting(true);
-        setOutcome(null);
+      const next = await revertFileChange(slotId, change, {
+        restore,
+        onStart: () => {
+          setRunning(restore ? "restore" : "revert");
+          if (!restore) setOutcome(null);
+        },
       });
-      if (next) setOutcome(next);
+      if (next) setOutcome({ result: next, restore });
     } finally {
-      setReverting(false);
+      setRunning(null);
     }
   };
+  const result = outcome?.result;
   return (
     <div className={s.revert}>
       <div className={s.revertRow}>
-        <Button size="sm" icon="arrow-counter-clockwise" busy={reverting} disabled={busy} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void revert()}>
-          {t(reverting ? "ai.revert.reverting" : "ai.revert.action")}
+        <Button size="sm" icon="arrow-counter-clockwise" busy={running === "revert"} disabled={busy || !!running} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void run(false)}>
+          {t(running === "revert" ? "ai.revert.reverting" : "ai.revert.action")}
         </Button>
         <span className={s.meta}>{t("ai.revert.hint")}</span>
       </div>
-      {outcome?.status === "changed" &&
-        (outcome.current === null ? (
+      {change.state === "unfinished" && (
+        <div className={s.revertWarn}>
+          <Icon name="warning" size={13} />
+          <span>{t("ai.revert.unfinished")}</span>
+        </div>
+      )}
+      {result?.status === "changed" && (
+        <>
           <div className={s.fieldError} role="alert">
-            {t("ai.revert.gone")}
+            {outcome?.restore && `${t("ai.revert.changedAgain")} `}
+            {t(result.before === null ? "ai.revert.changedCreated" : result.current === null ? "ai.revert.gone" : "ai.revert.changed")}
           </div>
-        ) : (
-          <>
-            <div className={s.fieldError} role="alert">
-              {t("ai.revert.changed")}
-            </div>
-            <FileChange state={{ preview: { path: outcome.path, before: outcome.written, after: outcome.current, error: null, crlf: false }, loading: false, failure: null }} />
-          </>
-        ))}
-      {outcome?.status === "failed" && (
+          {result.later && <div className={s.meta}>{t("ai.revert.later")}</div>}
+          <FileChange state={{ preview: { path: result.path, before: result.current, after: result.before ?? "", error: null, crlf: false }, loading: false, failure: null }} />
+          <div className={s.revertRow}>
+            <Button size="sm" variant="danger" icon={result.before === null ? "trash" : "arrow-counter-clockwise"} busy={running === "restore"} disabled={busy || !!running} onClick={() => void run(true)}>
+              {t(result.before === null ? "ai.revert.deleteAnyway" : "ai.revert.restore")}
+            </Button>
+          </div>
+        </>
+      )}
+      {result?.status === "failed" && (
         <div className={s.fieldError} role="alert">
-          {revertFailure(t, outcome.reason, outcome.detail)}
-          {outcome.detail && outcome.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{outcome.detail}</div>}
+          {revertFailure(t, result.reason, result.detail)}
+          {result.detail && result.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{result.detail}</div>}
         </div>
       )}
     </div>

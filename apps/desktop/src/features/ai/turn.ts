@@ -168,9 +168,12 @@ export function laterMessages(entries: AiEntryView[], entryId: string): number {
 
 /** What an edit of the user's message would do to files the assistant changed (AI-26, AI-41). */
 export interface EditedFiles {
-  /** The changes of the calls the edit deletes that this device keeps and has not reverted, oldest call first. */
+  /** The changes of the calls the edit deletes that this device can still revert, oldest call first. */
   revert: AiFileChange[];
-  /** The `edit_file` and `write_file` calls the edit deletes that wrote, by their result, and whose change this device does not keep. */
+  /**
+   * The `edit_file` and `write_file` calls the edit deletes that wrote, by their result, and whose change this
+   * device does not keep: another device ran them, or the size limit dropped it.
+   */
   untracked: number;
 }
 
@@ -181,7 +184,7 @@ export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], ent
   const deleted = entries.slice(i + 1);
   const responses = new Set(deleted.flatMap((e) => (e.role === "assistant" ? [e.entry_id] : [])));
   const kept = changes.filter((c) => responses.has(c.response_id));
-  const known = new Set(kept.map((c) => `${c.response_id}:${c.tool_call_id}`));
+  const known = new Set(kept.filter((c) => c.state !== "dropped").map((c) => `${c.response_id}:${c.tool_call_id}`));
   let untracked = 0;
   let response: (AiEntryView & { role: "assistant" }) | null = null;
   for (const e of deleted) {
@@ -190,7 +193,7 @@ export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], ent
     const call = response.tool_calls.find((c) => c.id === e.tool_call_id);
     if ((call?.name === "edit_file" || call?.name === "write_file") && !known.has(`${response.entry_id}:${call.id}`)) untracked++;
   }
-  return { revert: kept.filter((c) => !c.reverted), untracked };
+  return { revert: kept.filter((c) => c.state === "written" || c.state === "unfinished"), untracked };
 }
 
 /**

@@ -1298,8 +1298,23 @@ pub struct AiFileChange {
     pub path: String,
     /// The call created the file, so a revert deletes it.
     pub created: bool,
-    /// The change was reverted.
-    pub reverted: bool,
+    pub state: AiFileChangeState,
+}
+
+/// Where a file tool call's change stands on this device (AI-41).
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiFileChangeState {
+    /// The call wrote the file.
+    Written,
+    /// The write failed after it may have begun, or its end was never recorded: the file may be
+    /// cut short. It can be reverted like a written one.
+    Unfinished,
+    /// The user reverted the change.
+    Reverted,
+    /// The 32 MB limit dropped what the file held before, so the change can no longer be
+    /// reverted.
+    Dropped,
 }
 
 impl fmt::Debug for AiFileChange {
@@ -1308,7 +1323,7 @@ impl fmt::Debug for AiFileChange {
             .field("response_id", &self.response_id)
             .field("tool_call_id", &self.tool_call_id)
             .field("created", &self.created)
-            .field("reverted", &self.reverted)
+            .field("state", &self.state)
             .finish_non_exhaustive()
     }
 }
@@ -1338,16 +1353,23 @@ pub enum AiRevertFailure {
 #[derive(Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum AiFileRevert {
-    /// The file holds what it held before the call again, or is deleted.
-    Reverted,
-    /// The file no longer holds what the call wrote, so nothing was written. The texts show CRLF
-    /// line breaks as `\n`.
+    /// The file holds what it held before the call again, or no longer exists when the call
+    /// created it. `wrote`: the revert wrote or deleted it; otherwise it was so already, as after
+    /// a revert whose result was lost.
+    Reverted { wrote: bool },
+    /// The file holds neither what the call wrote nor what it held before, so nothing was
+    /// written: the diff from `current` to `before` is what Restore anyway would do. The texts
+    /// show CRLF line breaks as `\n`.
     Changed {
         path: String,
-        /// What the call wrote.
-        written: String,
-        /// What the file holds now; `None` when it no longer exists.
+        /// What the file holds now; `None` when it does not exist.
         current: Option<String>,
+        /// What it held before the call; `None` when the call created it, so Restore anyway
+        /// deletes it.
+        before: Option<String>,
+        /// A later call of this conversation wrote the file too, so reverting the later changes
+        /// first, newest first, may bring it back to what this call wrote.
+        later: bool,
     },
     Failed {
         reason: AiRevertFailure,
@@ -1358,10 +1380,11 @@ pub enum AiFileRevert {
 impl fmt::Debug for AiFileRevert {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Reverted => f.write_str("Reverted"),
-            Self::Changed { current, .. } => f
+            Self::Reverted { wrote } => f.debug_struct("Reverted").field("wrote", wrote).finish(),
+            Self::Changed { current, later, .. } => f
                 .debug_struct("Changed")
                 .field("exists", &current.is_some())
+                .field("later", later)
                 .finish_non_exhaustive(),
             Self::Failed { reason, .. } => f
                 .debug_struct("Failed")

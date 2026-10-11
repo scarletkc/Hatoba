@@ -56,6 +56,7 @@ pub use error::{Error, Result};
 pub use model::{Item, new_id};
 pub use platform::{DeviceInfo, SecretStore};
 pub use recovery::RecoveryCode;
+pub use store::SnapshotState;
 pub use vault::{PasswordChange, RecoveryChange, Vault, VaultStatusInfo};
 pub use vault_ai::{AI_PART_MAX_BYTES, StoredEntry};
-pub use vault_snapshots::{AI_SNAPSHOTS_MAX_BYTES, FileSnapshot, SnapshotKey};
+pub use vault_snapshots::{AI_SNAPSHOTS_MAX_BYTES, FileSnapshot, SnapshotKey, StoredSnapshot};

@@ -285,10 +285,10 @@ export interface HatobaApi {
   ai_file_changes(conversation_id: string): Promise<AiFileChange[]>;
   /**
    * AI-41: reverts the change of the call `tool_call_id` of the response `response_id` on the conversation's
-   * tab `session_id`, only while the file holds what the call wrote. A file the call created is deleted, so
-   * the panel asks first.
+   * tab `session_id`, only while the file holds what the call wrote, or with `restore` (Restore anyway), what
+   * the diff of the last revert showed. A file the call created is deleted, so the panel asks first.
    */
-  ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null): Promise<AiFileRevert>;
+  ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null, restore: boolean): Promise<AiFileRevert>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */

@@ -31,9 +31,9 @@ use super::{
 };
 use super::{Halt, Streamed, Turn, append, lock, title_of, wait_for_results};
 use crate::dto::{
-    AiConversationDetail, AiEffort, AiEntryView, AiFileRevert, AiFinish, AiRevertFailure,
-    AiSendInput, AiSendStarted, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
-    AiTurnEvent, QuickTarget,
+    AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
+    AiRevertFailure, AiSendInput, AiSendStarted, AiToolResultInput, AiToolStatus, AiTurnContext,
+    AiTurnEndReason, AiTurnEvent, QuickTarget,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -4440,11 +4440,10 @@ async fn waiting_for_results_stops_and_fails_as_before() {
     ));
 }
 
-/// A change `call` of the response `response_id` made, kept as its snapshot (AI-41): the file tools
-/// store one when they write, which needs a live SSH session.
-fn keep_a_change(f: &Fixture, conv: &str, response_id: &str, call: &str, path: &str, tool: &str) {
+/// The change `call` of the response `response_id` makes, as the file tools build it.
+fn a_change(path: &str, tool: &str) -> super::files::Change {
     let created = tool == "write_file";
-    let change = super::files::Change {
+    super::files::Change {
         meta: super::files::ChangeMeta {
             server: "ops@db:22".into(),
             path: path.into(),
@@ -4455,8 +4454,29 @@ fn keep_a_change(f: &Fixture, conv: &str, response_id: &str, call: &str, path: &
             before: (!created).then(|| "old\n".to_owned()),
             after: "new\n".into(),
         },
-    };
-    super::store_snapshot(&mut lock(&f.vault), conv, response_id, call, &change);
+    }
+}
+
+fn keeper<'a>(
+    f: &'a Fixture,
+    conv: &'a str,
+    response_id: &'a str,
+    call: &'a str,
+) -> super::KeepSnapshot<'a> {
+    super::KeepSnapshot {
+        vault: &f.vault,
+        key: revert_key(conv, response_id, call),
+        meta: Mutex::default(),
+    }
+}
+
+/// A change `call` of the response `response_id` made, kept as its snapshot (AI-41): the file tools
+/// keep one before they write, which needs a live SSH session, and mark it written after.
+fn keep_a_change(f: &Fixture, conv: &str, response_id: &str, call: &str, path: &str, tool: &str) {
+    use super::files::Keep as _;
+    let keep = keeper(f, conv, response_id, call);
+    keep.keep(&a_change(path, tool)).unwrap();
+    keep.ended(Some(path));
 }
 
 fn revert_key<'a>(
@@ -4534,10 +4554,9 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
                 .file_revert(
                     &f.vault,
                     f.env.as_ref(),
-                    &conv,
-                    &response,
-                    call,
+                    revert_key(&conv, &response, call),
                     Some("tab-1"),
+                    false,
                 )
                 .await
         }
@@ -4559,14 +4578,24 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         f.detail(&conv)
             .file_changes
             .into_iter()
-            .map(|c| (c.tool_call_id, c.path, c.created, c.reverted))
+            .map(|c| (c.tool_call_id, c.path, c.created, c.state))
             .collect::<Vec<_>>()
     };
     assert_eq!(
         listed(&f),
         [
-            ("w1".into(), "/srv/new.conf".into(), true, false),
-            ("e1".into(), "/home/ops/app.conf".into(), false, false),
+            (
+                "w1".into(),
+                "/srv/new.conf".into(),
+                true,
+                AiFileChangeState::Written
+            ),
+            (
+                "e1".into(),
+                "/home/ops/app.conf".into(),
+                false,
+                AiFileChangeState::Written
+            ),
         ]
     );
     assert_eq!(f.manager.file_changes(&f.vault, &conv).unwrap().len(), 2);
@@ -4579,7 +4608,7 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         }
     );
     assert_eq!(revert("nope").await.unwrap_err().code, ErrorCode::NotFound);
-    assert!(!listed(&f)[1].3);
+    assert_eq!(listed(&f)[1].3, AiFileChangeState::Written);
 
     // Reverted on the host (the scripts' part needs SSH): recorded, and not offered again.
     for call in ["e1", "w1"] {
@@ -4589,7 +4618,11 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
                 .unwrap()
         );
     }
-    assert!(listed(&f).iter().all(|c| c.3));
+    assert!(
+        listed(&f)
+            .iter()
+            .all(|c| c.3 == AiFileChangeState::Reverted)
+    );
     assert_eq!(
         revert("e1").await.unwrap_err().code,
         ErrorCode::InvalidInput
@@ -4696,4 +4729,192 @@ async fn an_edit_before_a_call_deletes_its_snapshot() {
     assert!(f.detail(&conv).file_changes.is_empty());
     let requests = f.requests().await;
     assert_eq!(last_user_message(requests.last().unwrap()), "never mind");
+}
+
+/// AI-41: a write keeps its snapshot before it begins. It is written once the write ends (with the
+/// path as the write resolved it), deleted when the write never began, and stays unfinished when
+/// the write failed after it may have begun, or the lock came first: those can be reverted too.
+/// A snapshot the size limit dropped says so, and cannot be reverted.
+#[tokio::test]
+async fn writes_keep_their_snapshot_before_they_begin() {
+    use super::files::Keep as _;
+    let f = Fixture::new(vec![
+        calls(&[
+            (
+                "w1",
+                "write_file",
+                json!({"path": "new.conf", "content": "x"}),
+            ),
+            (
+                "w2",
+                "write_file",
+                json!({"path": "/srv/a", "content": "x"}),
+            ),
+            (
+                "w3",
+                "write_file",
+                json!({"path": "/srv/b", "content": "x"}),
+            ),
+            ("e1", "edit_file", json!({"path": "/srv/b"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "write them").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let response = f
+        .detail(&conv)
+        .entries
+        .iter()
+        .find(|e| matches!(e, AiEntryView::Assistant { .. }))
+        .map(|e| entry_id(e).to_owned())
+        .unwrap();
+    let states = |f: &Fixture| {
+        f.detail(&conv)
+            .file_changes
+            .into_iter()
+            .map(|c| (c.tool_call_id, c.path, c.state))
+            .collect::<Vec<_>>()
+    };
+
+    // Kept before the write: unfinished until it ends, then written at the resolved path.
+    let w1 = keeper(&f, &conv, &response, "w1");
+    w1.keep(&a_change("new.conf", "write_file")).unwrap();
+    assert_eq!(
+        states(&f),
+        [(
+            "w1".into(),
+            "new.conf".into(),
+            AiFileChangeState::Unfinished
+        )]
+    );
+    w1.ended(Some("/home/ops/new.conf"));
+    // A write that never began (refused, or the file changed before it) deletes it again; one that
+    // failed after it may have begun leaves it unfinished.
+    let w2 = keeper(&f, &conv, &response, "w2");
+    w2.keep(&a_change("/srv/a", "write_file")).unwrap();
+    w2.ended(None);
+    keeper(&f, &conv, &response, "w3")
+        .keep(&a_change("/srv/b", "write_file"))
+        .unwrap();
+    assert_eq!(
+        states(&f),
+        [
+            (
+                "w1".into(),
+                "/home/ops/new.conf".into(),
+                AiFileChangeState::Written
+            ),
+            ("w3".into(), "/srv/b".into(), AiFileChangeState::Unfinished),
+        ]
+    );
+
+    // A later call wrote the same file: a revert of the earlier one says so.
+    keep_a_change(&f, &conv, &response, "e1", "/srv/b", "edit_file");
+    let meta = |path: &str| super::files::ChangeMeta {
+        server: "ops@db:22".into(),
+        path: path.into(),
+        tool: "write_file".into(),
+        created: true,
+    };
+    {
+        let v = lock(&f.vault);
+        assert!(super::later_writes(
+            &v,
+            &revert_key(&conv, &response, "w3"),
+            &meta("/srv/b")
+        ));
+        assert!(!super::later_writes(
+            &v,
+            &revert_key(&conv, &response, "e1"),
+            &meta("/srv/b")
+        ));
+        assert!(!super::later_writes(
+            &v,
+            &revert_key(&conv, &response, "w1"),
+            &meta("/home/ops/new.conf")
+        ));
+    }
+    // Reverted, the later change no longer stands in the way.
+    assert!(
+        lock(&f.vault)
+            .ai_mark_file_reverted(&revert_key(&conv, &response, "e1"))
+            .unwrap()
+    );
+    assert!(!super::later_writes(
+        &lock(&f.vault),
+        &revert_key(&conv, &response, "w3"),
+        &meta("/srv/b")
+    ));
+
+    // The lock before the write begins stops the call; nothing is kept.
+    lock(&f.vault).lock();
+    assert!(matches!(
+        keeper(&f, &conv, &response, "w2").keep(&a_change("/srv/a", "write_file")),
+        Err(super::files::Stop::Cancelled)
+    ));
+    lock(&f.vault).unlock(PW).unwrap();
+    assert_eq!(states(&f).len(), 3);
+
+    // The size limit dropped the oldest: listed as such, and not revertible. (Each change above
+    // holds about 30 bytes.)
+    let big = "x".repeat(usize::try_from(hatoba_core::AI_SNAPSHOTS_MAX_BYTES - 40).unwrap());
+    lock(&f.vault)
+        .ai_put_file_snapshot(&revert_key(&conv, &response, "big"), "{}", &big)
+        .unwrap();
+    let now: Vec<_> = states(&f)
+        .into_iter()
+        .map(|(call, _, state)| (call, state))
+        .collect();
+    assert_eq!(
+        now[..3],
+        [
+            ("w1".to_owned(), AiFileChangeState::Dropped),
+            ("w3".to_owned(), AiFileChangeState::Unfinished),
+            ("e1".to_owned(), AiFileChangeState::Reverted),
+        ]
+    );
+    f.result(&conv, "w1", AiToolStatus::Ok, "Created", None)
+        .unwrap();
+    for call in ["w2", "w3", "e1"] {
+        f.result(&conv, call, AiToolStatus::Error, "Failed", None)
+            .unwrap();
+    }
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    let error = f
+        .manager
+        .file_revert(
+            &f.vault,
+            f.env.as_ref(),
+            revert_key(&conv, &response, "w1"),
+            Some("tab-1"),
+            false,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidInput);
+    assert!(
+        error.detail.contains("no longer be reverted"),
+        "{}",
+        error.detail
+    );
+    // An unfinished one can be: here it gets as far as the missing session.
+    assert_eq!(
+        f.manager
+            .file_revert(
+                &f.vault,
+                f.env.as_ref(),
+                revert_key(&conv, &response, "w3"),
+                None,
+                true,
+            )
+            .await
+            .unwrap(),
+        AiFileRevert::Failed {
+            reason: AiRevertFailure::Disconnected,
+            detail: None
+        }
+    );
 }

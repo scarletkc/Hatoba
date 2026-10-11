@@ -995,16 +995,29 @@ export interface AiFileChange {
   path: string;
   /** The call created the file, so a revert deletes it. */
   created: boolean;
-  reverted: boolean;
+  state: AiFileChangeState;
 }
+
+/**
+ * Where a call's change stands on this device (AI-41). `unfinished`: the write failed after it may have begun,
+ * or its end was never recorded, so the file may be cut short; it can be reverted like a written one. `dropped`:
+ * the 32 MB limit dropped what the file held before, so it can no longer be reverted.
+ */
+export type AiFileChangeState = "written" | "unfinished" | "reverted" | "dropped";
 
 /** Why a revert did not happen (AI-41). `detail` names the server for `other_server`, and what failed for `unfinished` and `failed`. */
 export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "timed_out" | "unfinished" | "failed";
 
-/** The outcome of a revert (AI-41). `changed`: the file no longer holds what the call wrote, so nothing was written; `current` is null when it no longer exists. */
+/**
+ * The outcome of a revert (AI-41). `reverted`: the file holds what it held before the call again, or no longer
+ * exists when the call created it; `wrote` is false when it was so already. `changed`: it holds neither what the
+ * call wrote nor what it held before, so nothing was written; the diff from `current` (null: it does not exist)
+ * to `before` (null: the call created it, so Restore anyway deletes it) is what Restore anyway does. `later`: a
+ * later call of the conversation wrote the file too.
+ */
 export type AiFileRevert =
-  | { status: "reverted" }
-  | { status: "changed"; path: string; written: string; current: string | null }
+  | { status: "reverted"; wrote: boolean }
+  | { status: "changed"; path: string; current: string | null; before: string | null; later: boolean }
   | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────

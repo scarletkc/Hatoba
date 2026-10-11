@@ -51,7 +51,7 @@ use hatoba_core::model::{
     SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
-use hatoba_core::{SnapshotKey, Vault};
+use hatoba_core::{SnapshotKey, SnapshotState, Vault};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use tokio::sync::Notify;
@@ -59,9 +59,10 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange, AiFilePreview,
-    AiFileRevert, AiFinish, AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput,
-    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
+    AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiSearchHit, AiSendInput,
+    AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
+    AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -177,6 +178,9 @@ struct Inner {
     /// the call waits: until it has a result, or its conversation stops, sends its next request,
     /// compacts or is deleted, or the vault locks.
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
+    /// What the diff of a revert showed the file holding, by conversation, response and call:
+    /// Restore anyway writes only over that (AI-41).
+    restore_bases: Mutex<HashMap<(String, String, String), files::Found>>,
     /// What the model has seen of each file, by conversation (AI-38…40).
     seen: files::Seen,
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
@@ -575,6 +579,7 @@ impl AiManager {
         }
         // File content stays in memory only while the vault is unlocked.
         guard(&self.0.file_bases).clear();
+        guard(&self.0.restore_bases).clear();
     }
 
     // ---- conversations ----
@@ -1229,11 +1234,21 @@ impl AiManager {
             (job, op, place, writing)
         };
         let shown = Mutex::default();
+        let keep = KeepSnapshot {
+            vault,
+            key: SnapshotKey {
+                conversation_id,
+                response_id: &place.response,
+                tool_call_id,
+            },
+            meta: Mutex::default(),
+        };
         let seen = files::SeenBy {
             seen: &self.0.seen,
             conversation_id,
             place: &place,
             shown: &shown,
+            keep: Some(&keep),
         };
         let (status, content) = job
             .run(
@@ -1251,17 +1266,6 @@ impl AiManager {
         let view = {
             let mut v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
-            // The file was written even when a stop stored a cancelled result meanwhile, so the
-            // change can be reverted either way (AI-41).
-            if let Some(change) = shown.as_ref().and_then(|s| s.change.as_ref()) {
-                store_snapshot(
-                    &mut v,
-                    conversation_id,
-                    &place.response,
-                    tool_call_id,
-                    change,
-                );
-            }
             if let Err(e) = open_call(&Entries::load(&v, conversation_id)?, tool_call_id) {
                 // A stop stored a cancelled result while the tool ran.
                 return Err(if op.cancel.is_cancelled() {
@@ -1354,8 +1358,9 @@ impl AiManager {
             seen: &self.0.seen,
             conversation_id,
             place: &place,
-            // A preview shows the model nothing.
+            // A preview shows the model nothing, and writes nothing.
             shown: &Mutex::default(),
+            keep: None,
         };
         Ok(files::preview_of(&job, &base, seen))
     }
@@ -1367,26 +1372,27 @@ impl AiManager {
         self.0.writes.ended(session_id).await;
     }
 
-    /// `ai_file_revert` (AI-41): reverts the change the call `tool_call_id` of the response
-    /// `response_id` made, on the conversation's tab `session_id`, while the conversation is idle.
-    /// The read is an op of the conversation, which the lock ends; a write that has begun runs to
-    /// its end, and a lock that disconnects SSH sessions waits for it. A revert ends the model's
-    /// record of the file, and the next message notes it.
+    /// `ai_file_revert` (AI-41): reverts the change the call of `key` made, on the conversation's
+    /// tab `session_id`, while the conversation is idle. With `restore` (Restore anyway), it
+    /// writes over what the diff of the last revert showed. The read is an op of the
+    /// conversation, which the lock ends; a write that has begun runs to its end, and a lock that
+    /// disconnects SSH sessions waits for it. A revert ends the model's record of the file, and
+    /// the next message notes it.
     pub async fn file_revert(
         &self,
         vault: &SharedVault,
         env: &dyn AiEnv,
-        conversation_id: &str,
-        response_id: &str,
-        tool_call_id: &str,
+        key: SnapshotKey<'_>,
         session_id: Option<&str>,
+        restore: bool,
     ) -> AppResult<AiFileRevert> {
-        let key = SnapshotKey {
-            conversation_id,
-            response_id,
-            tool_call_id,
-        };
-        let (change, op, _writing) = {
+        let conversation_id = key.conversation_id;
+        let base_key = (
+            conversation_id.to_owned(),
+            key.response_id.to_owned(),
+            key.tool_call_id.to_owned(),
+        );
+        let (change, later_writes, op, _writing) = {
             let v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
             if self.busy(conversation_id) {
@@ -1395,44 +1401,68 @@ impl AiManager {
                     "The conversation is busy; revert the change once it is idle.",
                 ));
             }
-            let Some((meta, content)) = v.ai_file_snapshot(&key)? else {
+            let Some(stored) = v.ai_file_snapshot(&key)? else {
                 return Err(AppError::not_found("file change"));
             };
-            let Some(content) = content else {
-                return Err(AppError::invalid(
-                    "tool_call_id",
-                    "the change was reverted already",
-                ));
+            let content = match (stored.state, stored.content) {
+                (SnapshotState::Reverted, _) => {
+                    return Err(AppError::invalid(
+                        "tool_call_id",
+                        "the change was reverted already",
+                    ));
+                }
+                (state, Some(content)) if state.revertible() => content,
+                _ => {
+                    return Err(AppError::invalid(
+                        "tool_call_id",
+                        "the change can no longer be reverted: the snapshot limit dropped it",
+                    ));
+                }
             };
             let unreadable = |_| AppError::internal("unreadable file snapshot");
             let change = files::Change {
-                meta: serde_json::from_str(&meta).map_err(unreadable)?,
+                meta: serde_json::from_str(&stored.meta).map_err(unreadable)?,
                 content: serde_json::from_str(&content).map_err(unreadable)?,
             };
+            let later = later_writes(&v, &key, &change.meta);
             // Counted under the guard a lock takes first, so the lock sees the write.
             let writing = session_id.map(|id| self.0.writes.begin(id));
-            (change, self.start_op(conversation_id), writing)
+            (change, later, self.start_op(conversation_id), writing)
         };
-        let Some(outcome) = files::revert(live_session(env, session_id), &change, op.token()).await
+        let shown = if restore {
+            guard(&self.0.restore_bases).get(&base_key).copied()
+        } else {
+            None
+        };
+        let Some(files::Revert { mut outcome, found }) =
+            files::revert(live_session(env, session_id), &change, shown, op.token()).await
         else {
             return Err(AppError::new(
                 ErrorCode::Cancelled,
                 "the revert was stopped",
             ));
         };
-        if outcome == AiFileRevert::Reverted {
-            match unlocked(vault).and_then(|mut v| Ok(v.ai_mark_file_reverted(&key)?)) {
-                Ok(_) => {}
-                Err(e) => tracing::warn!(
-                    conversation_id,
-                    code = ?e.code,
-                    "could not record a reverted file change"
-                ),
+        match (&mut outcome, found) {
+            (AiFileRevert::Reverted { wrote }, _) => {
+                guard(&self.0.restore_bases).remove(&base_key);
+                match unlocked(vault).and_then(|mut v| Ok(v.ai_mark_file_reverted(&key)?)) {
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(
+                        conversation_id,
+                        code = ?e.code,
+                        "could not record a reverted file change"
+                    ),
+                }
+                self.0
+                    .seen
+                    .forget_file(conversation_id, &change.meta.server, &change.meta.path);
+                tracing::info!(conversation_id, wrote = *wrote, "AI file change reverted");
             }
-            self.0
-                .seen
-                .forget_file(conversation_id, &change.meta.server, &change.meta.path);
-            tracing::info!(conversation_id, "AI file change reverted");
+            (AiFileRevert::Changed { later, .. }, Some(found)) => {
+                *later = later_writes;
+                guard(&self.0.restore_bases).insert(base_key, found);
+            }
+            _ => {}
         }
         Ok(outcome)
     }
@@ -3192,7 +3222,10 @@ fn pending_reverts(
         }
     };
     let mut reverts = Vec::new();
-    for snapshot in snapshots.iter().filter(|s| s.reverted_at.is_some()) {
+    for snapshot in snapshots
+        .iter()
+        .filter(|s| s.state == SnapshotState::Reverted)
+    {
         let Some(at) = ids.iter().position(|id| *id == snapshot.response_id) else {
             continue;
         };
@@ -3241,31 +3274,83 @@ fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
                 server: meta.server,
                 path: meta.path,
                 created: meta.created,
-                reverted: s.reverted_at.is_some(),
+                state: match s.state {
+                    SnapshotState::Unfinished => AiFileChangeState::Unfinished,
+                    SnapshotState::Written => AiFileChangeState::Written,
+                    SnapshotState::Reverted => AiFileChangeState::Reverted,
+                    SnapshotState::Dropped => AiFileChangeState::Dropped,
+                },
             })
         })
         .collect()
 }
 
-/// Stores the snapshot of a change a file tool call made (AI-41). A failure is logged: the call
-/// itself succeeded.
-fn store_snapshot(
-    v: &mut Vault,
-    conversation_id: &str,
-    response_id: &str,
-    tool_call_id: &str,
-    change: &files::Change,
-) {
-    let Some((meta, content)) = change.encode() else {
-        return;
+/// Whether a call of the conversation after the one of `key` wrote the same file, and its change
+/// can still be reverted (AI-41): reverting it first, newest first, may bring the file back to
+/// what this call wrote.
+fn later_writes(v: &Vault, key: &SnapshotKey<'_>, meta: &files::ChangeMeta) -> bool {
+    let Ok(snapshots) = v.ai_file_snapshots(key.conversation_id) else {
+        return false;
     };
-    let key = SnapshotKey {
-        conversation_id,
-        response_id,
-        tool_call_id,
-    };
-    if let Err(e) = v.ai_put_file_snapshot(&key, &meta, &content) {
-        tracing::warn!(conversation_id, "could not store a file snapshot: {e}");
+    snapshots
+        .iter()
+        .skip_while(|s| s.response_id != key.response_id || s.tool_call_id != key.tool_call_id)
+        .skip(1)
+        .filter(|s| s.state.revertible())
+        .filter_map(|s| serde_json::from_str::<files::ChangeMeta>(&s.meta).ok())
+        .any(|later| later.server == meta.server && later.path == meta.path)
+}
+
+/// Keeps the snapshot of the change an `edit_file` or `write_file` call makes, in the vault,
+/// before its write begins (AI-41).
+struct KeepSnapshot<'a> {
+    vault: &'a SharedVault,
+    key: SnapshotKey<'a>,
+    /// What the kept snapshot says, until the write resolved the path.
+    meta: Mutex<Option<files::ChangeMeta>>,
+}
+
+impl files::Keep for KeepSnapshot<'_> {
+    fn keep(&self, change: &files::Change) -> Result<(), files::Stop> {
+        let mut v = unlocked(self.vault).map_err(|_| files::Stop::Cancelled)?;
+        let Some((meta, content)) = change.encode() else {
+            return Ok(());
+        };
+        // Any other failure is logged, and the call writes without a snapshot.
+        match v.ai_put_file_snapshot(&self.key, &meta, &content) {
+            Ok(()) => *guard(&self.meta) = Some(change.meta.clone()),
+            Err(hatoba_core::Error::Locked) => return Err(files::Stop::Cancelled),
+            Err(e) => tracing::warn!(
+                conversation_id = self.key.conversation_id,
+                "could not store a file snapshot: {e}"
+            ),
+        }
+        Ok(())
+    }
+
+    fn ended(&self, resolved: Option<&str>) {
+        let Some(mut meta) = guard(&self.meta).take() else {
+            return;
+        };
+        // Locked meanwhile: the snapshot stays unfinished, and can be reverted as such.
+        let Ok(mut v) = unlocked(self.vault) else {
+            return;
+        };
+        let result = match resolved {
+            Some(path) if path != meta.path => {
+                meta.path = path.to_owned();
+                let meta = serde_json::to_string(&meta).ok();
+                v.ai_mark_file_written(&self.key, meta.as_deref()).map(drop)
+            }
+            Some(_) => v.ai_mark_file_written(&self.key, None).map(drop),
+            None => v.ai_delete_file_snapshot(&self.key),
+        };
+        if let Err(e) = result {
+            tracing::warn!(
+                conversation_id = self.key.conversation_id,
+                "could not record the end of a file write: {e}"
+            );
+        }
     }
 }
 

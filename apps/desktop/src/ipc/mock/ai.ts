@@ -95,6 +95,8 @@ interface Turn {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
+/** The file the "cutshort" write leaves cut short (AI-41). */
+const CUT_SHORT = "/srv/app/conf.d/cache.conf";
 
 /**
  * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
@@ -116,9 +118,11 @@ const DAY = 24 * HOUR;
  *   "unread"          edit_file of a file the conversation has not read, which is refused
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
- * An edit or write that ran can be reverted from its block while the conversation is idle (AI-41), and
- * the next message notes it. "listen" then "edit" changes one file twice: reverting the first then shows
- * the diff of the second, which is in the way.
+ *   "cutshort"        write_file whose write fails halfway, leaving the file cut short
+ * An edit or write that ran, or failed after it may have begun, can be reverted from its block while the
+ * conversation is idle (AI-41), and the next message notes it. "listen" then "edit" changes one file twice:
+ * reverting the first then shows the diff, says the later call is in the way, and offers Restore Anyway.
+ * The mock keeps few snapshots, so "bigfile" after another change drops the older one.
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
  * Keywords come from the typed text. A message without one gets an answer about what it carries:
  * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
@@ -437,6 +441,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("bigfile"))
           calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
         if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
+        if (want("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
@@ -844,8 +849,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     tool: string;
     before: string | null;
     after: string;
+    /** What the diff of the last revert showed the file holding: Restore anyway writes only over that. */
+    shown?: string | null;
   }
   const snapshots = new Map<string, Snapshot[]>();
+  /** Rust keeps 32 MB; the mock keeps just over what "bigfile" writes, so it drops the changes before it. */
+  const SNAPSHOT_CAP = 15_800;
+  /** Like Rust's trim: drops what the oldest changes held until the kept ones fit. */
+  function trimSnapshots() {
+    const kept = [...snapshots.values()].flat().filter((s) => s.change.state === "written" || s.change.state === "unfinished");
+    let total = kept.reduce((n, s) => n + (s.before?.length ?? 0) + s.after.length, 0);
+    for (const s of kept) {
+      if (total <= SNAPSHOT_CAP) break;
+      total -= (s.before?.length ?? 0) + s.after.length;
+      s.change = { ...s.change, state: "dropped" };
+    }
+  }
   const fileChangesOf = (convId: string) => (snapshots.get(convId) ?? []).map((s) => ({ ...s.change }));
   /** Like Rust's `pending_reverts`: reverted calls in `earlier` that no user entry after the call notes yet, oldest call first. */
   function pendingReverts(convId: string, earlier: AiEntryView[]): Note[] {
@@ -855,7 +874,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return e?.role === "assistant" ? e.tool_calls.findIndex((x) => x.id === s.change.tool_call_id) : -1;
     };
     return (snapshots.get(convId) ?? [])
-      .filter((s) => s.change.reverted && at(s) >= 0 && order(s) >= 0)
+      .filter((s) => s.change.state === "reverted" && at(s) >= 0 && order(s) >= 0)
       .filter((s) => !earlier.slice(at(s) + 1).some((e) => e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === s.change.tool_call_id)))
       .sort((a, b) => at(a) - at(b) || order(a) - order(b))
       .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created));
@@ -983,16 +1002,25 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (refused) return { status: "error", content: refused };
         const after = fileAfter(x.name, args, current);
         if ("error" in after) return { status: "error", content: after.error };
-        remoteFiles.set(key, after.text);
-        seenFiles.set(seenKey(c.view.id, path), after.text);
+        // Like Rust: the snapshot is kept before the write begins, unfinished until it ends.
         const response = c.entries.find((e) => e.role === "assistant" && e.tool_calls.some((t) => t.id === x.id));
+        let snapshot: Snapshot | null = null;
         if (response) {
           const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
           const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
           const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : "root@localhost:22";
-          const change = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, reverted: false };
-          snapshots.set(c.view.id, [...kept, { change, tool: x.name, before: current, after: after.text }]);
+          const change: AiFileChange = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, state: "unfinished" };
+          snapshot = { change, tool: x.name, before: current, after: after.text };
+          snapshots.set(c.view.id, [...kept, snapshot]);
+          trimSnapshots();
         }
+        if (key === CUT_SHORT) {
+          remoteFiles.set(key, after.text.slice(0, Math.ceil(after.text.length / 2)));
+          return { status: "error", content: `Writing ${path} failed: the connection closed. The file may be unchanged, cut short or empty, so read it with read_file before you change it.` };
+        }
+        remoteFiles.set(key, after.text);
+        seenFiles.set(seenKey(c.view.id, path), after.text);
+        if (snapshot?.change.state === "unfinished") snapshot.change = { ...snapshot.change, state: "written" };
         const count = fileLines(after.text).length;
         if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
         return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
@@ -1302,25 +1330,39 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       need(id);
       return fileChangesOf(id);
     },
-    ai_file_revert: async (id, responseId, callId, sessionId) => {
+    ai_file_revert: async (id, responseId, callId, sessionId, restore) => {
       const c = need(id);
       if (turns.has(id) || c.runningUntil > Date.now()) fail("invalid_input", "The conversation is busy; revert the change once it is idle.", { field: "conversation_id" });
-      const snapshot = (snapshots.get(id) ?? []).find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      const list = snapshots.get(id) ?? [];
+      const snapshot = list.find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
       if (!snapshot) return fail("not_found", "file change not found");
-      if (snapshot.change.reverted) fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
+      if (snapshot.change.state === "reverted") fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
+      if (snapshot.change.state === "dropped") fail("invalid_input", "the change can no longer be reverted: the snapshot limit dropped it", { field: "tool_call_id" });
       if (!sessionId) return { status: "failed", reason: "disconnected", detail: null } satisfies AiFileRevert;
       await delay(500);
       const path = snapshot.change.path;
       const current = remoteFiles.get(path) ?? null;
       const shown = (text: string) => text.replace(/\r\n/g, "\n");
-      // Like Rust: only while the file holds exactly what the call wrote.
-      if (current !== snapshot.after) return { status: "changed", path, written: shown(snapshot.after), current: current === null ? null : shown(current) } satisfies AiFileRevert;
-      if (snapshot.before === null) remoteFiles.delete(path);
-      else remoteFiles.set(path, snapshot.before);
-      snapshot.change = { ...snapshot.change, reverted: true };
-      // The model reads the file again before it changes it.
-      seenFiles.delete(`${id}:${path}`);
-      return { status: "reverted" } satisfies AiFileRevert;
+      const reverted = (wrote: boolean) => {
+        snapshot.change = { ...snapshot.change, state: "reverted" };
+        delete snapshot.shown;
+        // The model reads the file again before it changes it.
+        seenFiles.delete(`${id}:${path}`);
+        return { status: "reverted", wrote } satisfies AiFileRevert;
+      };
+      // Like Rust: (b) the file holds what it held before, or the file the call created is gone.
+      if (current === snapshot.before) return reverted(false);
+      // (a) It holds what the call wrote; or with Restore anyway, what the diff showed.
+      if (current === snapshot.after || (restore && snapshot.shown !== undefined && current === snapshot.shown)) {
+        if (snapshot.before === null) remoteFiles.delete(path);
+        else remoteFiles.set(path, snapshot.before);
+        return reverted(true);
+      }
+      // (c) Anything else: the diff to what it held before.
+      snapshot.shown = current;
+      const at = list.indexOf(snapshot);
+      const later = list.slice(at + 1).some((s) => s.change.path === path && (s.change.state === "written" || s.change.state === "unfinished"));
+      return { status: "changed", path, current: current === null ? null : shown(current), before: snapshot.before === null ? null : shown(snapshot.before), later } satisfies AiFileRevert;
     },
     ai_stop: async (id) => {
       const c = convs.get(id);

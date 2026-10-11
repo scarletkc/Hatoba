@@ -162,13 +162,13 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     tool_calls: calls.map(([callId, name]) => ({ id: callId, name, arguments: "{}" })),
   });
   const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: callId, status, content: "" });
-  const change = (responseId: string, callId: string, reverted = false): AiFileChange => ({
+  const change = (responseId: string, callId: string, state: AiFileChange["state"] = "written"): AiFileChange => ({
     response_id: responseId,
     tool_call_id: callId,
     server: "root@10.0.0.5:22",
     path: "/etc/app.conf",
     created: false,
-    reverted,
+    state,
   });
   const entries: AiEntryView[] = [
     { role: "user", entry_id: "u1", created_at: 0, text: "first" },
@@ -189,15 +189,16 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     result("t6", "c6"),
   ];
 
-  it("offers to revert the kept changes of the deleted calls, oldest first, and not the reverted ones", () => {
-    const changes = [change("a1", "c1"), change("a2", "c2"), change("a2", "c3", true)];
-    expect(editedFiles(entries, changes, "u2").revert).toEqual([change("a2", "c2")]);
-    expect(editedFiles(entries, changes, "u1").revert).toEqual([change("a1", "c1"), change("a2", "c2")]);
+  it("offers to revert the kept changes of the deleted calls, oldest first, unfinished ones too", () => {
+    const changes = [change("a1", "c1"), change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "unfinished"), change("a2", "c6", "dropped")];
+    expect(editedFiles(entries, changes, "u2").revert).toEqual([change("a2", "c2"), change("a2", "c5", "unfinished")]);
+    expect(editedFiles(entries, changes, "u1").revert).toEqual([change("a1", "c1"), change("a2", "c2"), change("a2", "c5", "unfinished")]);
   });
 
-  it("counts the calls that wrote and whose change this device does not keep", () => {
+  it("counts the calls that wrote and whose change this device does not keep, or dropped", () => {
     // c6 wrote and has no change here; c5 failed, c4 is no file tool, and c2 and c3 are kept.
-    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", true)], "u2").untracked).toBe(1);
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted")], "u2").untracked).toBe(1);
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c6", "dropped")], "u2").untracked).toBe(1);
     expect(editedFiles(entries, [], "u2").untracked).toBe(3);
     expect(editedFiles(entries, [], "u1").untracked).toBe(4);
   });
