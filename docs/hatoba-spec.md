@@ -924,7 +924,7 @@ The design defines the visuals. This section only specifies the behavior and sta
 - Shortcuts: see WIN-04 in §9.1, and MAC-03 in §9.2 for macOS.
 - Input methods: the Enter that commits an input method candidate never submits, saves, or sends.
 - The theme follows the system by default, and both the light and dark tokens come from the design.
-- Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Japanese, and English translations are P1, and the default follows the system language.
+- Internationalization: **all copy is externalized from day one, with no hard-coded strings** (P0). Simplified Chinese, Japanese, and English translations are P1, and the default follows the system language. MCP server errors (AI-29) are the exception: their messages stay in English under a translated label.
 - §9.1 covers the Windows replacements for the design's macOS elements (traffic-light buttons, SF fonts, translucent sidebar), and §9.2 what the macOS version adapts.
 
 ### 9.1 Windows adaptation
