@@ -778,11 +778,13 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
 
   // AI-39, AI-40: an edit or write runs only once the card has shown its diff, which Rust then writes
   // over. When the card showed why the call cannot apply, Run answers the model with that instead, so a
-  // file that comes back meanwhile is not written without a diff; without any answer, it waits.
+  // file that comes back meanwhile is not written without a diff; without any answer, it waits. Such a
+  // card allows nothing ahead: the user saw no change of the tool's.
   const holdRun = fileChange && (file.loading || !file.preview);
   const refusal = fileChange ? (file.preview?.error ?? undefined) : undefined;
-  const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
+  const run = (wanted?: Extract<Decision, { kind: "run" }>["allow"]) => {
     if (holdRun) return;
+    const allow = refusal === undefined ? wanted : undefined;
     if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow, refusal });
     const next = argsFrom(kind, args, draft);
     if ("error" in next) return setInvalid(true);
@@ -985,8 +987,9 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           </Button>
         </div>
       )}
-      {/* An MCP call whose tool is unknown cannot be allowed ahead: nothing names what it would reach. */}
-      {mode !== "reject" && (kind !== "mcp" || mcp) && (
+      {/* An MCP call whose tool is unknown cannot be allowed ahead: nothing names what it would reach. Nor can
+          an edit or write whose card shows why it cannot apply. */}
+      {mode !== "reject" && (kind !== "mcp" || mcp) && refusal === undefined && (
         <div className={s.allowRow}>
           <LinkButton
             tone="muted"
