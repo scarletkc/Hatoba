@@ -12,7 +12,6 @@ import { isImeEvent } from "@/lib/ime";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
-  bearerMissing,
   commandPreview,
   hasMcpProblems,
   initialMcpForm,
@@ -20,10 +19,14 @@ import {
   mcpFormToInput,
   newSecretRow,
   newUid,
+  rowHint,
+  rowTemplate,
+  schemeMissing,
   shownRowProblems,
   splitCommandLine,
   validateMcpForm,
   type McpForm,
+  type RowHint,
   type SecretKind,
   type SecretRow,
   type SecretRowProblem,
@@ -41,6 +44,17 @@ const TEMPLATE_TEXT: Record<McpTemplateId, { note: MessageKey; token: MessageKey
   context7: { note: "aiSettings.mcp.tpl.context7.note", token: "aiSettings.mcp.tpl.context7.token" },
   cloudflare: { note: "aiSettings.mcp.tpl.cloudflare.note", token: "aiSettings.mcp.tpl.cloudflare.token" },
 };
+
+/** The line under a header row (`rowHint`). */
+const ROW_HINT_TEXT: Record<RowHint, MessageKey> = {
+  bearer: "aiSettings.mcp.tpl.bearerHint",
+  bearerOptional: "aiSettings.mcp.tpl.bearerOptionalHint",
+  optional: "aiSettings.mcp.tpl.optionalHint",
+  authScheme: "aiSettings.mcp.f.authSchemeHint",
+};
+
+/** The id of a row's name or value field, which a save with a problem in that row focuses. */
+const rowFieldId = (prefix: string, uid: number, part: "key" | "value"): string => `${prefix}-${part}-${uid}`;
 
 /**
  * Add or edit one MCP server (AI-29). Saved straight to the backend. Before a `stdio` server is saved, a confirmation
@@ -64,11 +78,15 @@ export function McpServerDialog({
   onSaved: (saved: McpServerView) => void;
 }) {
   const t = useT();
-  const ids = { form: useId(), name: useId(), command: useId(), url: useId() };
+  const ids = { form: useId(), name: useId(), command: useId(), url: useId(), rows: useId() };
   const fromTemplate = server ? null : template;
   const [form, setForm] = useState<McpForm>(() => (fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server)));
-  // A template fills in the name, so the first value to type takes the focus.
-  const [valueFocusUid] = useState(() => (fromTemplate ? (form.headers.find((r) => !r.plain)?.uid ?? null) : null));
+  // A template fills in the name, so the first value to type takes the focus, only as the dialog opens: switching the
+  // type remounts the rows, which must not take it again.
+  const [valueFocusUid, setValueFocusUid] = useState(() =>
+    fromTemplate ? (form.headers.find((r) => rowTemplate(r)?.value === undefined)?.uid ?? null) : null,
+  );
+  useEffect(() => setValueFocusUid(null), []);
   const [submitted, setSubmitted] = useState(false);
   const [rejected, setRejected] = useState<Rejected>({});
   const [splitFailed, setSplitFailed] = useState(false);
@@ -118,6 +136,11 @@ export function McpServerDialog({
       if (problems.name) document.getElementById(ids.name)?.focus();
       else if (problems.command) document.getElementById(ids.command)?.focus();
       else if (problems.url) document.getElementById(ids.url)?.focus();
+      else {
+        const i = problems.secrets.findIndex(Boolean);
+        const rows = form.kind === "stdio" ? form.env : form.headers;
+        if (i >= 0) document.getElementById(rowFieldId(ids.rows, rows[i].uid, problems.secrets[i]?.key ? "key" : "value"))?.focus();
+      }
       return;
     }
     if (form.kind === "stdio") {
@@ -206,7 +229,7 @@ export function McpServerDialog({
           <FormRow label={t("aiSettings.mcp.f.name")} htmlFor={ids.name} error={nameError}>
             <TextField
               id={ids.name}
-              autoFocus={valueFocusUid === null}
+              autoFocus={!fromTemplate}
               value={form.name}
               invalid={!!nameError}
               placeholder={t("aiSettings.mcp.f.namePlaceholder")}
@@ -311,6 +334,7 @@ export function McpServerDialog({
             kind={form.kind === "stdio" ? "env" : "header"}
             rows={secrets}
             problems={secretProblems}
+            idPrefix={ids.rows}
             valueFocusUid={valueFocusUid}
             onChange={setSecrets}
           />
@@ -340,12 +364,15 @@ function SecretRows({
   kind,
   rows,
   problems,
+  idPrefix,
   valueFocusUid,
   onChange,
 }: {
   kind: SecretKind;
   rows: SecretRow[];
   problems: (SecretRowProblem | null)[];
+  /** Makes the ids of the fields (`rowFieldId`). */
+  idPrefix: string;
   /** The row whose value field takes the focus when the dialog opens. */
   valueFocusUid: number | null;
   onChange: (rows: SecretRow[]) => void;
@@ -372,6 +399,8 @@ function SecretRows({
           <div className={s.secretTable}>
             {rows.map((row, i) => {
               const problem = problems[i];
+              const template = rowTemplate(row);
+              const hint = kind === "header" ? rowHint(row) : null;
               return (
                 <div className={s.secret} key={row.uid}>
                   <div className={s.secretRow}>
@@ -381,6 +410,7 @@ function SecretRows({
                       </div>
                     ) : (
                       <TextField
+                        id={rowFieldId(idPrefix, row.uid, "key")}
                         mono
                         autoFocus={focusUid === row.uid}
                         aria-label={t(kind === "env" ? "aiSettings.mcp.f.envKey" : "aiSettings.mcp.f.headerKey")}
@@ -390,8 +420,9 @@ function SecretRows({
                         onChange={(e) => patchRow(row.uid, { key: e.target.value })}
                       />
                     )}
-                    {row.plain && !row.saved ? (
+                    {template?.value !== undefined ? (
                       <TextField
+                        id={rowFieldId(idPrefix, row.uid, "value")}
                         mono
                         value={row.draft.value}
                         invalid={!!problem?.value}
@@ -401,13 +432,14 @@ function SecretRows({
                       />
                     ) : (
                       <SavedKeyField
+                        id={rowFieldId(idPrefix, row.uid, "value")}
                         hasSaved={row.saved}
                         draft={row.draft}
                         allowClear={false}
                         invalid={!!problem?.value}
                         autoFocus={valueFocusUid === row.uid}
                         ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                        placeholder={row.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
+                        placeholder={template?.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
                         newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
                         keepLabel={t("aiSettings.mcp.f.valueKeep")}
                         onChange={(draft) => patchRow(row.uid, { draft })}
@@ -425,13 +457,7 @@ function SecretRows({
                       {problemText(problem)}
                     </div>
                   ) : (
-                    (row.bearer || row.optional) && (
-                      <div className={cx(s.hint, bearerMissing(row) && s.hintWarn)}>
-                        {[row.bearer && t("aiSettings.mcp.tpl.bearerHint"), row.optional && t("aiSettings.mcp.tpl.optionalHint")]
-                          .filter(Boolean)
-                          .join(" ")}
-                      </div>
-                    )
+                    hint && <div className={cx(s.hint, schemeMissing(row) && s.hintWarn)}>{t(ROW_HINT_TEXT[hint])}</div>
                   )}
                 </div>
               );

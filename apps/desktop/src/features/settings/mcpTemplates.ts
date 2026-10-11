@@ -1,4 +1,5 @@
-import { freeServerName, initialMcpForm, newSecretRow, type McpForm, type SecretRow } from "./mcpLogic";
+import { API_TOKENS_URL } from "@/features/sync/external";
+import { freeServerName, initialMcpForm, newSecretRow, type McpForm, type McpTemplateHeader, type SecretRow } from "./mcpLogic";
 
 /*
  * Templates for Settings → AI → MCP servers (spec §13.9, AI-44): no React, no i18n. They ship with the app and only
@@ -7,18 +8,6 @@ import { freeServerName, initialMcpForm, newSecretRow, type McpForm, type Secret
  */
 
 export type McpTemplateId = "github" | "linear" | "context7" | "cloudflare";
-
-export interface McpTemplateHeader {
-  key: string;
-  /** A value that is not a secret, filled in for the user to change, such as GitHub's toolsets. */
-  value?: string;
-  /** What the value looks like, shown while its field is empty. */
-  placeholder?: string;
-  /** The value is `Bearer `, then the token. */
-  bearer?: boolean;
-  /** Left out of the server when no value is typed. */
-  optional?: boolean;
-}
 
 export interface McpTemplate {
   id: McpTemplateId;
@@ -83,13 +72,13 @@ export const MCP_TEMPLATES: readonly McpTemplate[] = [
     url: "https://mcp.cloudflare.com/mcp",
     headers: [{ key: "Authorization", placeholder: "Bearer …", bearer: true }],
     alwaysAsk: true,
-    tokenUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    tokenUrl: API_TOKENS_URL,
   },
 ];
 
 /**
  * The add form filled from a template: an HTTP server with the template's URL and header names, their values empty
- * except the ones that are not secrets, and a name no other server uses.
+ * except the ones that are not secrets, and a name no other server uses. Each row keeps its template header.
  */
 export function templateMcpForm(template: McpTemplate, otherNames: readonly string[]): McpForm {
   return {
@@ -97,17 +86,7 @@ export function templateMcpForm(template: McpTemplate, otherNames: readonly stri
     name: freeServerName(template.name, otherNames),
     kind: "http",
     url: template.url,
-    headers: template.headers.map(
-      (h): SecretRow => ({
-        ...newSecretRow(),
-        key: h.key,
-        draft: { mode: "replace", value: h.value ?? "" },
-        plain: h.value !== undefined,
-        placeholder: h.placeholder,
-        bearer: h.bearer ?? false,
-        optional: h.optional ?? false,
-      }),
-    ),
+    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, draft: { mode: "replace", value: h.value ?? "" }, template: h })),
     alwaysAsk: template.alwaysAsk,
   };
 }

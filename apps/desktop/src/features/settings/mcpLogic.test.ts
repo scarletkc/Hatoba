@@ -3,7 +3,6 @@ import type { McpServerView, McpToolAnnotations, McpToolView } from "@/ipc/types
 import {
   annotationKeys,
   argRows,
-  bearerMissing,
   commandPreview,
   formatCommandLine,
   freeServerName,
@@ -14,7 +13,10 @@ import {
   mcpFormToInput,
   newSecretRow,
   quoteArg,
+  rowHint,
+  rowTemplate,
   savedSecretRows,
+  schemeMissing,
   secretInputs,
   serverState,
   shownRowProblems,
@@ -172,25 +174,58 @@ describe("environment and header rows", () => {
     expect(secretInputs([row(" TOKEN ", " abc ")])).toEqual([{ key: "TOKEN", value: "abc" }]);
   });
 
-  it("drops an optional row without a value, and checks it once one is typed", () => {
-    const optional = row("Authorization", " ", { optional: true });
+  it("keeps a row's template only while the row keeps the template's name", () => {
+    const template = { key: "Authorization", bearer: true };
+    expect(rowTemplate(row(" authorization ", "", { template }))).toBe(template);
+    expect(rowTemplate(row("X-Api-Key", "", { template }))).toBeNull();
+    expect(rowTemplate(row("Authorization", ""))).toBeNull();
+  });
+
+  it("drops an optional template row without a value, and checks it once one is typed", () => {
+    const optional = row("Authorization", " ", { template: { key: "Authorization", optional: true } });
     expect(isBlankRow(optional)).toBe(true);
     expect(validateSecretRows([optional], "header")).toEqual([null]);
     expect(secretInputs([optional])).toEqual([]);
-    const filled = { ...optional, key: "Bad Name", draft: { mode: "replace" as const, value: "x" } };
+    const filled = { ...optional, draft: { mode: "replace" as const, value: "x" } };
     expect(isBlankRow(filled)).toBe(false);
-    expect(validateSecretRows([filled], "header")).toEqual([{ key: "invalid" }]);
+    expect(secretInputs([filled])).toEqual([{ key: "Authorization", value: "x" }]);
     expect(isBlankRow(row("Authorization", ""))).toBe(false);
   });
 
-  it("spots a bearer value typed without Bearer", () => {
-    const bearer = (value: string) => row("Authorization", value, { bearer: true });
-    expect(bearerMissing(bearer(""))).toBe(false);
-    expect(bearerMissing(bearer("github_pat_x"))).toBe(true);
-    expect(bearerMissing(bearer("Bearer"))).toBe(true);
-    expect(bearerMissing(bearer(" Bearer github_pat_x"))).toBe(false);
-    expect(bearerMissing(bearer("bearer x"))).toBe(false);
-    expect(bearerMissing(row("Authorization", "token"))).toBe(false);
+  it("stops treating a renamed template row as optional", () => {
+    const renamed = row("X-Api-Key", "", { template: { key: "Authorization", optional: true } });
+    expect(isBlankRow(renamed)).toBe(false);
+    expect(validateSecretRows([renamed], "header")).toEqual([{ value: "missing" }]);
+  });
+
+  it("spots a template's Bearer value typed without Bearer", () => {
+    const bearer = (value: string) => row("Authorization", value, { template: { key: "Authorization", bearer: true } });
+    expect(schemeMissing(bearer(""))).toBe(false);
+    expect(schemeMissing(bearer("github_pat_x"))).toBe(true);
+    expect(schemeMissing(bearer("Bearer"))).toBe(true);
+    expect(schemeMissing(bearer("Basic abc"))).toBe(true);
+    expect(schemeMissing(bearer(" Bearer github_pat_x"))).toBe(false);
+    expect(schemeMissing(bearer("bearer x"))).toBe(false);
+  });
+
+  it("spots any typed Authorization value without a scheme", () => {
+    expect(schemeMissing(row("Authorization", "lin_api_x"))).toBe(true);
+    expect(schemeMissing(row("authorization", "lin_api_x"))).toBe(true);
+    expect(schemeMissing(row("Authorization", "Basic abc"))).toBe(false);
+    expect(schemeMissing(row("Authorization", "token abc"))).toBe(false);
+    expect(schemeMissing(row("X-Api-Key", "abc"))).toBe(false);
+    expect(schemeMissing(savedSecretRows(["Authorization"])[0])).toBe(false);
+  });
+
+  it("picks the line under a header row", () => {
+    const tpl = (extra: object) => ({ template: { key: "Authorization", ...extra } });
+    expect(rowHint(row("Authorization", "", tpl({ bearer: true })))).toBe("bearer");
+    expect(rowHint(row("Authorization", "", tpl({ bearer: true, optional: true })))).toBe("bearerOptional");
+    expect(rowHint(row("Authorization", "", tpl({ optional: true })))).toBe("optional");
+    expect(rowHint(row("X-Api-Key", "abc", tpl({ bearer: true })))).toBeNull();
+    expect(rowHint(row("Authorization", "abc"))).toBe("authScheme");
+    expect(rowHint(row("Authorization", "Bearer abc"))).toBeNull();
+    expect(rowHint(row("TOKEN", "abc"))).toBeNull();
   });
 });
 

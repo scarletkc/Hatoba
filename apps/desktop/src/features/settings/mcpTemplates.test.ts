@@ -52,9 +52,10 @@ describe("templateMcpForm", () => {
     const f = templateMcpForm(template("github"), []);
     expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/readonly", command: "", args: [], env: [] });
     expect(f.headers).toMatchObject([
-      { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, plain: false, bearer: true, placeholder: "Bearer github_pat_…" },
-      { key: "X-MCP-Toolsets", saved: false, draft: { mode: "replace", value: "repos,issues,pull_requests" }, plain: true, bearer: false },
+      { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, template: { placeholder: "Bearer github_pat_…", bearer: true } },
+      { key: "X-MCP-Toolsets", saved: false, draft: { mode: "replace", value: "repos,issues,pull_requests" }, template: { value: "repos,issues,pull_requests" } },
     ]);
+    expect(f.headers[0].template?.value).toBeUndefined();
   });
 
   it("starts with Always ask as the template sets it", () => {
