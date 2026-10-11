@@ -265,11 +265,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     tools.push(tool(
         FETCH_URL,
         "Fetch an http or https URL with GET, without cookies or credentials, following at \
-         most 5 redirects, and return up to 30,000 characters of its content starting at \
-         `offset` (default 0), with the total length; HTML is converted to Markdown. To read \
-         on, call it again with the offset the result names. Only text, HTML, JSON and XML are \
-         returned, and addresses on loopback, private or link-local networks are refused. Keep \
-         passwords, keys and tokens out of the URL."
+         most 5 redirects on the same host (a redirect to another host is returned instead: \
+         fetch that URL with a new call), and return up to 30,000 characters of its content \
+         starting at `offset` (default 0), with the total length; HTML is converted to \
+         Markdown. To read on, call it again with the offset the result names. Only text, \
+         HTML, JSON and XML are returned, and addresses on loopback, private or link-local \
+         networks are refused. Keep passwords, keys and tokens out of the URL."
             .to_owned(),
         json!({
             "type": "object",
