@@ -1734,7 +1734,7 @@ async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
     assert!(system.contains("No terminal is attached"), "{system}");
     assert!(system.contains("- nginx: Debug nginx"), "{system}");
     assert!(system.contains("- hatoba: "), "{system}");
-    assert!(!system.contains("run_command runs"), "{system}");
+    assert!(!system.contains("run_command"), "{system}");
 
     // They run without a session.
     let c1 = f.run(&conv, "c1", None, None).await.unwrap();
