@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { McpToolInfo } from "@/ipc/types";
 import {
+  allowanceOf,
   callSummary,
   exitStatusOf,
   grantKey,
@@ -10,6 +11,7 @@ import {
   mustAsk,
   needsApproval,
   needsSession,
+  offersAllowHere,
   parseArgs,
   parseReadTerminal,
   parseSendInput,
@@ -219,6 +221,21 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     // AI-19 per tool: allowing edit_file leaves write_file asking.
     expect(grantKey("edit_file", "edit_file", null)).toBe("edit_file");
     expect(grantKey("write_file", "write_file", null)).not.toBe(grantKey("edit_file", "edit_file", null));
+  });
+
+  it("allows nothing ahead from a file change's card that shows why it cannot apply (AI-39, AI-40)", () => {
+    const refusal = "/etc/motd has not been read in this conversation, so edit_file did not change it.";
+    // The card: Run and Reject stay, Allow for this conversation goes.
+    expect(offersAllowHere("edit_file", null, undefined)).toBe(true);
+    expect(offersAllowHere("edit_file", null, refusal)).toBe(false);
+    expect(offersAllowHere("write_file", null, refusal)).toBe(false);
+    expect(offersAllowHere("mcp", info(false, false), undefined)).toBe(true);
+    expect(offersAllowHere("mcp", null, undefined)).toBe(false);
+    // The runner: a decision with a refusal stores no allowance, whatever it asked for.
+    expect(allowanceOf({ allow: "conversation" })).toBe("conversation");
+    expect(allowanceOf({ allow: "conversation", refusal })).toBeUndefined();
+    expect(allowanceOf({ allow: "always", refusal })).toBeUndefined();
+    expect(allowanceOf({ refusal })).toBeUndefined();
   });
 
   it("labels built-in, MCP and unknown tools", () => {

@@ -64,7 +64,7 @@ import {
   type TabSelection,
 } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
-import { grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
+import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
   entriesBefore,
   laterContextStart,
@@ -364,8 +364,9 @@ class TurnRunner {
         return;
       }
       edited = d.edited;
-      if (d.allow === "conversation" && grant) allowInConversation(convId, grant);
-      else if (d.allow === "always" && mcp) await this.alwaysAllow(mcp);
+      const allow = allowanceOf(d);
+      if (allow === "conversation" && grant) allowInConversation(convId, grant);
+      else if (allow === "always" && mcp) await this.alwaysAllow(mcp);
       if (d.refusal !== undefined) {
         if (!this.acting) return;
         this.setCall({ id: call.id, state: "running" });

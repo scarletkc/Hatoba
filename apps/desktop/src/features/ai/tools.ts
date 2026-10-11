@@ -92,6 +92,23 @@ export function grantKey(kind: ToolKind, name: string, mcp: McpToolInfo | null |
   return mcp ? `mcp:${mcp.server_id}:${mcp.tool.tool}` : null;
 }
 
+/**
+ * Whether an approval card offers Allow for this conversation (AI-19). Not for an MCP call whose tool is
+ * unknown, which cannot be allowed ahead, nor for an edit or write whose card shows `refusal`, why it
+ * cannot apply (AI-39, AI-40): the user saw no change of the tool's.
+ */
+export function offersAllowHere(kind: ToolKind, mcp: McpToolInfo | null | undefined, refusal: string | undefined): boolean {
+  return (kind !== "mcp" || !!mcp) && refusal === undefined;
+}
+
+/**
+ * The allowance a Run decision stores (AI-19, AI-31): none when it carries a refusal, so no path grants a
+ * tool from a card that showed no change.
+ */
+export function allowanceOf(decision: { allow?: "conversation" | "always"; refusal?: string }): "conversation" | "always" | undefined {
+  return decision.refusal === undefined ? decision.allow : undefined;
+}
+
 /** The result of a call whose server was switched off in the tools menu during the turn (AI-30); the model reads it. */
 export function mcpOffResult(serverName: string): string {
   return `The MCP server "${serverName}" was switched off for this conversation, so the tool did not run.`;
