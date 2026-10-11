@@ -126,7 +126,7 @@ export interface HatobaApi {
   host_set_favorite(id: string, favorite: boolean): Promise<void>;
   /** TERM-12: show the server's resource usage in this host's terminals (device-local). */
   host_set_show_stats(id: string, on: boolean): Promise<void>;
-  /** SEC-08: Rust copies the saved password to the clipboard and clears it after 30 s. */
+  /** SEC-08: Rust copies the saved password to the clipboard and clears it after this device's delay. */
   host_copy_password(id: string): Promise<void>;
   groups_list(): Promise<GroupView[]>;
   group_save(input: GroupInput): Promise<GroupView>;

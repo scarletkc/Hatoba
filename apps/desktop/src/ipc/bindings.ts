@@ -21,8 +21,8 @@ export const commands = {
 	/**  Feeds the idle auto-lock timer (SEC-02). */
 	activityPing: () => __TAURI_INVOKE<void>("activity_ping"),
 	/**
-	 *  Asks GitHub whether a newer version exists (Settings → About). Runs only when the user
-	 *  checks, or after unlock when they turned on the automatic check.
+	 *  Asks GitHub whether a newer version exists (Settings → About). Runs when the user checks,
+	 *  and once after unlock while the automatic check is on.
 	 */
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**
@@ -65,7 +65,8 @@ export const commands = {
 	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
 	/**
 	 *  SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
-	 *  and clears it after 30 s if the clipboard still holds it.
+	 *  and clears it after the device's delay (90 s by default; 0 never clears it) if the clipboard
+	 *  still holds it.
 	 */
 	hostCopyPassword: (id: string) => __TAURI_INVOKE<null>("host_copy_password", { id }),
 	groupsList: () => __TAURI_INVOKE<GroupView[]>("groups_list"),
@@ -1156,10 +1157,12 @@ export type LocalPrefs = {
 	density: Density,
 	host_probe: boolean,
 	/**
-	 *  Check GitHub for a newer release once after unlock. Off by default: no request leaves
-	 *  the device unless the user asks for it (spec §11, no telemetry).
+	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
+	 *  On by default. It replaces `auto_update_check`, which was off by default and which the
+	 *  app stored with every other pref, so a stored `false` cannot tell a user who turned it
+	 *  off from one who never changed it; that key is ignored.
 	 */
-	auto_update_check: boolean,
+	check_for_updates: boolean,
 	/**  AI-16: the permission mode new conversations start in on this device. */
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
@@ -1172,6 +1175,20 @@ export type LocalPrefs = {
 	ai_panel_width: number,
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
+	/**
+	 *  SEC-02: minutes without input before the vault locks; 0 never locks. Earlier builds
+	 *  synced it as `Settings::auto_lock_minutes` (`settings::adopt_synced_lock_prefs`).
+	 */
+	auto_lock_minutes: number,
+	/**  SEC-02: lock the vault when the computer sleeps. */
+	lock_on_sleep: boolean,
+	/**
+	 *  SEC-03: disconnect the SSH sessions when the vault locks. Earlier builds synced it as
+	 *  `Settings::lock_disconnects_sessions`.
+	 */
+	lock_disconnects_sessions: boolean,
+	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
+	clipboard_clear_secs: number,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -1390,8 +1407,6 @@ export type SessionStateEvent = {
 
 export type SettingsView = {
 	terminal: TerminalSettings,
-	auto_lock_minutes: number,
-	lock_disconnects_sessions: boolean,
 };
 
 export type SkillDetail = {

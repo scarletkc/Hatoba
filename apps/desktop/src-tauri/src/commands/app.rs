@@ -19,8 +19,8 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
     }
 }
 
-/// Asks GitHub whether a newer version exists (Settings → About). Runs only when the user
-/// checks, or after unlock when they turned on the automatic check.
+/// Asks GitHub whether a newer version exists (Settings → About). Runs when the user checks,
+/// and once after unlock while the automatic check is on.
 #[tauri::command]
 #[specta::specta]
 pub async fn update_check(app: AppHandle, state: State<'_, AppState>) -> AppResult<UpdateCheck> {

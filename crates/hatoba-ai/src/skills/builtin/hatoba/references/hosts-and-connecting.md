@@ -31,7 +31,7 @@ The home tab shows the host list for the sidebar item that is selected: **All Ho
 | Copy Password | 复制密码 | パスワードをコピー |
 | Delete… | 删除… | 削除… |
 
-- **Copy Password** appears only for hosts with a saved password. It copies the password and clears the clipboard after 30 seconds.
+- **Copy Password** (hosts with a saved password) copies it and clears the clipboard after the delay set in Settings → Security.
 - **Delete…** asks for confirmation. With Cloud Sync on, the host is removed on the other devices too.
 - A group's right-click menu in the sidebar has **Rename Group** and **Delete Group**. Deleting a group moves its hosts to All Hosts; it does not delete them.
 - The reachability dots can be turned off in Settings → General (**Show host reachability**). When on, Hatoba tries a TCP connection to the listed hosts every 60 seconds, with no login attempt.

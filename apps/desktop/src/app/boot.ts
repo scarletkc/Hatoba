@@ -30,6 +30,13 @@ export async function boot() {
 export async function enterUnlocked() {
   await useVaultData.getState().reload();
   try {
+    // The first unlock after an upgrade copies the lock settings that older versions synced (SEC-02/03).
+    const { auto_lock_minutes, lock_disconnects_sessions } = await api.prefs_get();
+    useApp.setState((st) => ({ prefs: { ...st.prefs, auto_lock_minutes, lock_disconnects_sessions } }));
+  } catch {
+    /* the prefs loaded at boot stay */
+  }
+  try {
     useApp.getState().setSync(await api.sync_status());
   } catch {
     /* sync status is optional */

@@ -94,18 +94,20 @@ export function AboutPane() {
     // One line per count, so that each picks its own plural form.
     const sessions = useTabs.getState().tabs.filter((tab) => tab.status === "connected").length;
     const transfers = useTransfers.getState().items.filter((item) => item.state === "running").length;
-    const ok = await confirm({
-      title: t("settings.about.install.title", { version: target.version }),
-      body: (
-        <>
-          {t("settings.about.install.body")}
-          {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
-          {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
-        </>
-      ),
-      confirmLabel: t("settings.about.install.confirm"),
-      icon: "arrow-circle-up",
-    });
+    // With nothing to interrupt, it installs without asking.
+    const ok =
+      (sessions === 0 && transfers === 0) ||
+      (await confirm({
+        title: t("settings.about.install.title", { version: target.version }),
+        body: (
+          <>
+            {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
+            {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
+          </>
+        ),
+        confirmLabel: t("settings.about.install.confirm"),
+        icon: "arrow-circle-up",
+      }));
     if (ok) await installUpdate();
   };
 
@@ -127,7 +129,7 @@ export function AboutPane() {
         <SettingRow
           label={t("settings.about.update")}
           hint={
-            status ? (
+            status && (
               <span className={s.progress}>
                 <span className={s.status} role="status">
                   <Icon name={status.icon} color={status.color} className={spinning ? controlStyles.spinner : undefined} />
@@ -139,8 +141,6 @@ export function AboutPane() {
                   </span>
                 )}
               </span>
-            ) : (
-              t("settings.about.update.hint")
             )
           }
         >
@@ -156,8 +156,8 @@ export function AboutPane() {
         <SettingRow label={t("settings.about.auto")} hint={t("settings.about.auto.hint")}>
           <Switch
             label={t("settings.about.auto")}
-            checked={prefs.auto_update_check}
-            onChange={(auto_update_check) => setPrefs({ auto_update_check })}
+            checked={prefs.check_for_updates}
+            onChange={(check_for_updates) => setPrefs({ check_for_updates })}
           />
         </SettingRow>
       </Group>

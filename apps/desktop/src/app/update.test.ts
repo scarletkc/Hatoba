@@ -24,7 +24,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
 }));
 
 vi.mock("./store", () => ({
-  useApp: { getState: () => ({ prefs: { auto_update_check: backend.autoCheck } }) },
+  useApp: { getState: () => ({ prefs: { check_for_updates: backend.autoCheck } }) },
 }));
 
 const found = (version: string | null): UpdateCheck => ({

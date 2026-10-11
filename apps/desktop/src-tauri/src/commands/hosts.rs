@@ -16,8 +16,8 @@ use zeroize::Zeroizing;
 
 use crate::convert::{group_view, host_view};
 use crate::dto::{
-    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, ProbeResult, ProxyMode,
-    SshConfigCandidate, TagCount,
+    AuthKind, GroupInput, GroupView, HostInput, HostView, ImportResult, LocalPrefs, ProbeResult,
+    ProxyMode, SshConfigCandidate, TagCount,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, now_ms};
@@ -741,23 +741,31 @@ fn store_identity(
 }
 
 /// SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
-/// and clears it after 30 s if the clipboard still holds it.
+/// and clears it after the device's delay (90 s by default; 0 never clears it) if the clipboard
+/// still holds it.
 #[tauri::command]
 #[specta::specta]
 pub fn host_copy_password(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
-    let password = state.with_unlocked(|v| match find_host(v, &id)?.auth {
-        HostAuth::Password { password } if !password.is_empty() => Ok(password),
+    let (password, prefs) = state.with_unlocked(|v| match find_host(v, &id)?.auth {
+        HostAuth::Password { password } if !password.is_empty() => Ok((password, v.local_prefs()?)),
         _ => Err(AppError::invalid(
             "password",
             "this host has no saved password",
         )),
     })?;
+    let clear_secs = prefs
+        .map(|json| LocalPrefs::from_stored(&json))
+        .unwrap_or_default()
+        .clipboard_clear_secs;
     app.clipboard()
         .write_text(password.as_str())
         .map_err(|e| AppError::internal(e.to_string()))?;
+    if clear_secs == 0 {
+        return Ok(());
+    }
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::time::sleep(Duration::from_secs(clear_secs.into())).await;
         let clipboard = app.clipboard();
         if clipboard
             .read_text()

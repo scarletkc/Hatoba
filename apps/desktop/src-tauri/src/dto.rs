@@ -784,8 +784,6 @@ pub struct TerminalSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct SettingsView {
     pub terminal: TerminalSettings,
-    pub auto_lock_minutes: u32,
-    pub lock_disconnects_sessions: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -822,9 +820,11 @@ pub struct LocalPrefs {
     pub appearance: Appearance,
     pub density: Density,
     pub host_probe: bool,
-    /// Check GitHub for a newer release once after unlock. Off by default: no request leaves
-    /// the device unless the user asks for it (spec §11, no telemetry).
-    pub auto_update_check: bool,
+    /// Check GitHub for a newer release once after the first unlock of each launch (spec §11).
+    /// On by default. It replaces `auto_update_check`, which was off by default and which the
+    /// app stored with every other pref, so a stored `false` cannot tell a user who turned it
+    /// off from one who never changed it; that key is ignored.
+    pub check_for_updates: bool,
     /// AI-16: the permission mode new conversations start in on this device.
     pub ai_permission_mode: AiPermissionMode,
     /// AI-16: the user confirmed the first switch to bypass on this device.
@@ -837,6 +837,16 @@ pub struct LocalPrefs {
     pub ai_panel_width: u32,
     /// SSH-13: the proxy that hosts set to the device default connect through, on this device.
     pub default_proxy_id: Option<String>,
+    /// SEC-02: minutes without input before the vault locks; 0 never locks. Earlier builds
+    /// synced it as `Settings::auto_lock_minutes` (`settings::adopt_synced_lock_prefs`).
+    pub auto_lock_minutes: u32,
+    /// SEC-02: lock the vault when the computer sleeps.
+    pub lock_on_sleep: bool,
+    /// SEC-03: disconnect the SSH sessions when the vault locks. Earlier builds synced it as
+    /// `Settings::lock_disconnects_sessions`.
+    pub lock_disconnects_sessions: bool,
+    /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
+    pub clipboard_clear_secs: u32,
 }
 
 impl Default for LocalPrefs {
@@ -846,13 +856,17 @@ impl Default for LocalPrefs {
             appearance: Appearance::System,
             density: Density::Regular,
             host_probe: true,
-            auto_update_check: false,
+            check_for_updates: true,
             ai_permission_mode: AiPermissionMode::Manual,
             ai_bypass_confirmed: false,
             ai_tool_call_limit: 25,
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
+            auto_lock_minutes: 15,
+            lock_on_sleep: true,
+            lock_disconnects_sessions: false,
+            clipboard_clear_secs: 90,
         }
     }
 }
@@ -1969,12 +1983,31 @@ mod tests {
     use super::{AiPermissionMode, LocalPrefs};
 
     #[test]
-    fn prefs_from_an_older_version_leave_the_update_check_off() {
+    fn the_update_check_is_on_unless_turned_off_since_it_became_the_default() {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja","host_probe":false}"#);
-        assert!(!prefs.auto_update_check);
+        assert!(prefs.check_for_updates);
         assert!(!prefs.host_probe);
-        let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":true}"#);
-        assert!(prefs.auto_update_check);
+        // Earlier builds stored their default with every other pref.
+        let prefs = LocalPrefs::from_stored(r#"{"auto_update_check":false}"#);
+        assert!(prefs.check_for_updates);
+        let prefs = LocalPrefs::from_stored(r#"{"check_for_updates":false}"#);
+        assert!(!prefs.check_for_updates);
+    }
+
+    #[test]
+    fn device_security_prefs_have_defaults() {
+        let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
+        assert_eq!(prefs.auto_lock_minutes, 15);
+        assert!(prefs.lock_on_sleep && !prefs.lock_disconnects_sessions);
+        assert_eq!(prefs.clipboard_clear_secs, 90);
+        let prefs = LocalPrefs::from_stored(
+            r#"{"auto_lock_minutes":0,"lock_on_sleep":false,"clipboard_clear_secs":0}"#,
+        );
+        assert_eq!(
+            (prefs.auto_lock_minutes, prefs.clipboard_clear_secs),
+            (0, 0)
+        );
+        assert!(!prefs.lock_on_sleep);
     }
 
     #[test]
