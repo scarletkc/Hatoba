@@ -160,7 +160,6 @@ export function AiPane() {
             <ProviderRow key={p.id} provider={p} onEdit={() => setDialog({ provider: p })} onDelete={() => void removeProvider(p)} />
           ))}
         </div>
-        <div className={s.sectionHint}>{t("aiSettings.providers.hint")}</div>
       </section>
 
       {data && (
@@ -170,7 +169,7 @@ export function AiPane() {
             <Group>
               <SettingRow
                 label={t("aiSettings.default.row")}
-                hint={modelChoices(providers).length === 0 ? t("aiSettings.default.empty") : t("aiSettings.default.hint")}
+                hint={modelChoices(providers).length === 0 ? t("aiSettings.default.empty") : undefined}
               >
                 <ModelSelect
                   providers={providers}
@@ -375,7 +374,6 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
         }}
         onBlur={commit}
       />
-      <div className={s.sectionHint}>{t("aiSettings.instructions.privacy")}</div>
     </section>
   );
 }

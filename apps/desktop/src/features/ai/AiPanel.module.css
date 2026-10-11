@@ -216,14 +216,6 @@
   text-wrap: pretty;
 }
 
-.emptyNote {
-  max-width: 300px;
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--fg3);
-  text-wrap: pretty;
-}
-
 .empty :global(button) {
   margin-top: 6px;
 }

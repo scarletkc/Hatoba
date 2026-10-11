@@ -46,6 +46,6 @@ A fork copies a conversation up to a point into a new, separate conversation, wh
 | en | zh-CN | ja |
 |---|---|---|
 | Fork from Here | 从这里创建分支 | ここから分岐 |
-| Forked. The original conversation stays in History. | 已创建分支，原对话仍在历史对话中。 | 分岐しました。元の会話は履歴に残っています。 |
+| Forked | 已创建分支 | 分岐しました |
 | Forked. The new conversation is in History. | 已创建分支，新对话在历史对话中。 | 分岐しました。新しい会話は履歴にあります。 |
 | Allow for This Conversation | 在此对话中允许 | この会話では許可 |

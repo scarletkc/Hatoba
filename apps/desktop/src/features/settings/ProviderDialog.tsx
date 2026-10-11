@@ -253,7 +253,7 @@ export function ProviderDialog({
         </>
       }
     >
-      <SheetHeader title={provider ? t("aiSettings.dlg.editTitle") : t("aiSettings.dlg.addTitle")} subtitle={t("aiSettings.dlg.subtitle")} />
+      <SheetHeader title={provider ? t("aiSettings.dlg.editTitle") : t("aiSettings.dlg.addTitle")} />
       <form
         id={ids.form}
         className={s.form}

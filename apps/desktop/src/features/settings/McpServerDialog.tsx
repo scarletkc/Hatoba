@@ -172,7 +172,7 @@ export function McpServerDialog({
         </>
       }
     >
-      <SheetHeader title={server ? t("aiSettings.mcp.dlg.editTitle") : t("aiSettings.mcp.dlg.addTitle")} subtitle={t("aiSettings.mcp.dlg.subtitle")} />
+      <SheetHeader title={server ? t("aiSettings.mcp.dlg.editTitle") : t("aiSettings.mcp.dlg.addTitle")} />
       <form
         id={ids.form}
         className={s.form}
@@ -283,7 +283,7 @@ export function McpServerDialog({
         </Group>
 
         <Section title={form.kind === "stdio" ? t("aiSettings.mcp.f.env") : t("aiSettings.mcp.f.headers")}>
-          <div className={s.hint}>{form.kind === "stdio" ? t("aiSettings.mcp.f.envHint") : t("aiSettings.mcp.f.headersHint")}</div>
+          {form.kind === "http" && <div className={s.hint}>{t("aiSettings.mcp.f.headersHint")}</div>}
           <SecretRows
             // The two transports keep their own rows; switching must not carry one's focus or values into the other.
             key={form.kind}

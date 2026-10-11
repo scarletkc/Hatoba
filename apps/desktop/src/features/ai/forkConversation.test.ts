@@ -65,7 +65,7 @@ describe("forkConversation (AI-43)", () => {
     await forkConversation(HOME_SLOT, original.id, entry.entry_id);
     expect(fork).toHaveBeenCalledWith(original.id, entry.entry_id, "Disk usage (fork)");
     expect(getSlot(HOME_SLOT).conversationId).toBe(copy.id);
-    expect(toast).toHaveBeenCalledWith("Forked. The original conversation stays in History.", "success");
+    expect(toast).toHaveBeenCalledWith("Forked", "success");
   });
 
   it("opens the fork in a tab that never showed a conversation", async () => {
@@ -73,7 +73,7 @@ describe("forkConversation (AI-43)", () => {
     fork.mockResolvedValue(copy);
     await forkConversation(HOME_SLOT, original.id, null);
     expect(getSlot(HOME_SLOT).conversationId).toBe(copy.id);
-    expect(toast).toHaveBeenCalledWith("Forked. The original conversation stays in History.", "success");
+    expect(toast).toHaveBeenCalledWith("Forked", "success");
   });
 
   it("numbers the title past those History has", async () => {

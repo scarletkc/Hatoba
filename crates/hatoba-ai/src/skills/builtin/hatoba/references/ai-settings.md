@@ -16,7 +16,7 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 
 ## Providers
 
-The assistant calls the providers added here directly from the device, with the user's own API keys. Hatoba runs no AI service, and nothing is sent until a provider is added and a message is sent. The provider must support tool calls. Local servers such as Ollama and LM Studio work.
+The assistant calls the providers added here directly from the device, with the user's own API keys. Nothing is sent until a provider is added and a message is sent. The provider must support tool calls. Local servers such as Ollama and LM Studio work.
 
 | en | zh-CN | ja |
 |---|---|---|
