@@ -5,13 +5,27 @@ import type { AiPermissionMode, McpToolInfo } from "@/ipc/types";
 export const READ_TERMINAL = "read_terminal";
 export const RUN_COMMAND = "run_command";
 export const SEND_INPUT = "send_input";
+export const READ_FILE = "read_file";
+export const EDIT_FILE = "edit_file";
+export const WRITE_FILE = "write_file";
 export const WEB_SEARCH = "web_search";
 export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
 
-export type ToolKind = "read_terminal" | "run_command" | "send_input" | "web_search" | "fetch_url" | "read_skill" | "mcp" | "unknown";
+export type ToolKind =
+  | "read_terminal"
+  | "run_command"
+  | "send_input"
+  | "read_file"
+  | "edit_file"
+  | "write_file"
+  | "web_search"
+  | "fetch_url"
+  | "read_skill"
+  | "mcp"
+  | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, WEB_SEARCH, FETCH_URL, READ_SKILL];
+const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, WEB_SEARCH, FETCH_URL, READ_SKILL];
 
 export function toolKind(name: string): ToolKind {
   if (BUILTIN.includes(name)) return name as ToolKind;
@@ -24,18 +38,24 @@ export function runsInFrontend(kind: ToolKind): boolean {
   return kind === "read_terminal" || kind === "send_input";
 }
 
+/** The file tools (AI-38…40), which run in Rust over an exec channel of the tab's connection. */
+export function isFileTool(kind: ToolKind): kind is "read_file" | "edit_file" | "write_file" {
+  return kind === "read_file" || kind === "edit_file" || kind === "write_file";
+}
+
 /** Tools that act on the tab's SSH session and return an error while it is disconnected (AI-08). */
 export function needsSession(kind: ToolKind): boolean {
-  return kind === "read_terminal" || kind === "send_input" || kind === "run_command";
+  return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind);
 }
 
 /**
  * §13.5: in manual approval mode `read_terminal`, `web_search` and `read_skill` run without asking and
- * everything else waits for the user; bypass runs everything. Unknown tools never run, so never ask.
+ * everything else waits for the user, `read_file` included (it can send `~/.ssh` or `.env` to the
+ * provider); bypass runs everything. Unknown tools never run, so never ask.
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
-  return kind === "run_command" || kind === "send_input" || kind === "fetch_url" || kind === "mcp";
+  return kind === "run_command" || kind === "send_input" || isFileTool(kind) || kind === "fetch_url" || kind === "mcp";
 }
 
 /** What decides whether a call waits for the user. */
@@ -87,6 +107,9 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   read_terminal: "ai.tool.read_terminal",
   run_command: "ai.tool.run_command",
   send_input: "ai.tool.send_input",
+  read_file: "ai.tool.read_file",
+  edit_file: "ai.tool.edit_file",
+  write_file: "ai.tool.write_file",
   web_search: "ai.tool.web_search",
   fetch_url: "ai.tool.fetch_url",
   read_skill: "ai.tool.read_skill",
@@ -215,6 +238,11 @@ export function callSummary(name: string, json: string): string {
       return str(args.url);
     case "read_skill":
       return [str(args.name), str(args.path)].filter(Boolean).join(" / ");
+    case "read_file":
+      return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
+    case "edit_file":
+    case "write_file":
+      return firstLine(str(args.path));
     case "read_terminal":
       return args.lines !== undefined ? str(args.lines) : "";
     default: {

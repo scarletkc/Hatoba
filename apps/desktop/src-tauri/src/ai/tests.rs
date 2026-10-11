@@ -573,6 +573,9 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill"
         ]
@@ -1085,12 +1088,17 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     let conv = started.conversation.id;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
+    // What the model saw of files (AI-38…40) is in the entries the summary replaces, and no
+    // approval card waits on a read once the context is summarized.
+    remember_a_file(&f, &conv, "call_x");
 
     let summary = f
         .manager
         .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
         .await
         .unwrap();
+    assert!(!f.manager.0.seen.knows(&conv));
+    assert!(!holds_a_file_base(&f, &conv));
     let AiEntryView::Summary { entry_id, text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
@@ -1377,6 +1385,75 @@ async fn compaction_is_refused_while_a_turn_runs() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 }
 
+/// AI-38…40 without a live session: the calls and the approval card's preview say why, and a
+/// preview is only for an open edit or write.
+#[tokio::test]
+async fn file_tools_need_a_live_session() {
+    let f = Fixture::new(vec![
+        calls(&[
+            (
+                "f1",
+                "edit_file",
+                json!({"path": "/etc/hosts", "old_string": "a", "new_string": "b"}),
+            ),
+            ("f2", "read_file", json!({"path": "/etc/hosts"})),
+            ("f3", "write_file", json!({"path": "/tmp/x"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "fix the hosts file").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let system = messages(&f.requests().await[0])[0]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        system.contains("rather than with cat, sed or heredocs"),
+        "{system}"
+    );
+
+    let preview = |call: &'static str| {
+        f.manager
+            .file_preview(&f.vault, f.env.as_ref(), &conv, call, Some("tab-1"), None)
+    };
+    let card = preview("f1").await.unwrap();
+    assert_eq!(card.path, "/etc/hosts");
+    assert!(card.error.unwrap().contains("disconnected"));
+    assert!(
+        preview("f2")
+            .await
+            .unwrap()
+            .error
+            .unwrap()
+            .contains("shows no diff")
+    );
+    assert_eq!(preview("nope").await.unwrap_err().code, ErrorCode::NotFound);
+
+    for call in ["f1", "f2"] {
+        let result = f.run(&conv, call, Some("tab-1"), None).await.unwrap();
+        assert_eq!(view_content(&result).1, AiToolStatus::Error);
+        assert!(
+            view_content(&result)
+                .2
+                .contains("disconnected, so the tool did not run")
+        );
+    }
+    let f3 = f.run(&conv, "f3", Some("tab-1"), None).await.unwrap();
+    assert!(
+        view_content(&f3)
+            .2
+            .starts_with("The arguments are not valid")
+    );
+    // The call has its result, so its card is gone.
+    assert_eq!(
+        preview("f1").await.unwrap_err().code,
+        ErrorCode::InvalidInput
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+}
+
 #[tokio::test]
 async fn tools_that_run_in_rust_report_failures_as_error_results() {
     let f = Fixture::new(vec![
@@ -1415,6 +1492,9 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill"
         ]
@@ -1476,16 +1556,43 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
     assert_eq!(f.requests().await.len(), 2);
 }
 
+/// An approval card of `call` read a file, and the model has seen it (AI-38…40).
+fn remember_a_file(f: &Fixture, conv: &str, call: &str) {
+    f.manager
+        .0
+        .seen
+        .record(conv, "ops@db:22", "/etc/hosts", b"x");
+    super::guard(&f.manager.0.file_bases).insert(
+        (conv.to_owned(), call.to_owned()),
+        super::files::Base {
+            path: "/etc/hosts".into(),
+            server: "ops@db:22".into(),
+            file: None,
+        },
+    );
+}
+
+/// The manager still holds file content an approval card of the conversation read.
+fn holds_a_file_base(f: &Fixture, conv: &str) -> bool {
+    super::guard(&f.manager.0.file_bases)
+        .keys()
+        .any(|(id, _)| id == conv)
+}
+
 #[tokio::test]
 async fn deleting_a_conversation_stops_its_turn() {
     let f = Fixture::new(vec![calls(&[("call_1", "read_terminal", json!({}))])]).await;
     let (started, sink) = f.send(None, "look").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
+    remember_a_file(&f, &conv, "call_1");
     f.manager
         .delete_conversation(&f.vault, f.env.as_ref(), &conv)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    // What the conversation read of files (AI-38…40) goes with it.
+    assert!(!holds_a_file_base(&f, &conv));
+    assert!(!f.manager.0.seen.knows(&conv));
     assert!(!f.manager.is_running(&conv));
     assert_eq!(
         f.manager
@@ -1709,6 +1816,9 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
             "read_terminal",
             "run_command",
             "send_input",
+            "read_file",
+            "edit_file",
+            "write_file",
             "fetch_url",
             "read_skill",
             "mcp__files__echo",
@@ -1855,11 +1965,16 @@ async fn a_full_context_between_tool_calls_is_compacted_once() {
     let (started, sink) = f.send(None, "look at the screen").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
+    remember_a_file(&f, &conv, "c1");
     // The screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
+    // AI-22 forgets what the model saw of files, as Compact does (AI-38…40), and the next request
+    // drops what approval cards read, since no call waits for one.
+    assert!(!f.manager.0.seen.knows(&conv));
+    assert!(!holds_a_file_base(&f, &conv));
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 3);
@@ -1952,8 +2067,14 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
     assert_eq!(err.field.as_deref(), Some("text"));
     assert_eq!(f.entries(&conv).len(), 8);
 
-    // gamma comes after the context start (summary 2): the start stays.
+    // gamma comes after the context start (summary 2): the start stays. What the model saw of
+    // files (AI-38…40) may be in the deleted entries, so it is forgotten.
+    f.manager
+        .0
+        .seen
+        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
     let (started, sink) = f.edit(&conv, &ids[6], "gamma-edited").await.unwrap();
+    assert!(!f.manager.0.seen.knows(&conv));
     assert_eq!(
         started.conversation.context_start.as_deref(),
         Some(ids[5].as_str())

@@ -9,6 +9,7 @@
 //! - [`chat`]: the two protocol adapters (Chat Completions and Anthropic Messages).
 //! - [`models`]: model listing (AI-03) and Test Connection (AI-04).
 //! - [`tools`]: built-in tool definitions, the system prompt and tool result helpers (§13.4).
+//! - [`files`]: the text side of `read_file`, `edit_file` and `write_file` (AI-38…40).
 //! - [`web`]: `web_search` (AI-14) and `fetch_url` (AI-15).
 //! - [`skills`]: `SKILL.md`, folder and `.zip` import, `.zip` export (§13.8).
 //! - [`mcp`]: the MCP client for stdio and Streamable HTTP servers, tool names and schemas, and
@@ -22,6 +23,7 @@
 pub mod chat;
 pub mod entry;
 pub mod error;
+pub mod files;
 pub mod mcp;
 pub mod models;
 mod net;

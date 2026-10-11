@@ -57,6 +57,9 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Read terminal | 读取终端 | ターミナルを読み取る |
 | Run command | 运行命令 | コマンドを実行 |
 | Type in terminal | 向终端输入 | ターミナルに入力 |
+| Read file | 读取文件 | ファイルを読む |
+| Edit file | 编辑文件 | ファイルを編集 |
+| Write file | 写入文件 | ファイルに書き込む |
 | Web search | 搜索网页 | Web 検索 |
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
@@ -66,6 +69,9 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | **Read terminal** (`read_terminal`) | Returns the visible screen plus up to 100 lines of scrollback (at most 1,000) as text, and whether a full-screen program (vim, htop) is active | Runs without asking |
 | **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 30 s by default, at most 600 s | Asks |
 | **Type in terminal** (`send_input`) | Types text into the shell as the keyboard would, optionally followed by Enter, Tab, Esc, Ctrl+C, Ctrl+D or an arrow key, then waits for output (10 s by default, at most 120 s). A command started this way keeps running if the turn is stopped | Asks |
+| **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, up to 16,000 characters at a time, paging on from a line. Files over 1 MB, binary files and anything but regular files are refused. Like the other file tools it never uses sudo | Asks |
+| **Edit file** (`edit_file`) | Replaces an exact piece of text in a file on the host and writes the file back in place, keeping its owner, mode and line breaks. Refused, in every mode, unless the assistant read the file in this conversation and it has not changed since. The approval card shows the change as a diff, and **Edit** changes the new text | Asks |
+| **Write file** (`write_file`) | Creates a file on the host or replaces its content; replacing a file needs the same read as Edit file. The approval card shows the content, or a diff for an existing file | Asks |
 | **Web search** (`web_search`) | Searches with the search provider chosen in Settings → AI. Not offered when none is chosen | Runs without asking |
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 16,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |

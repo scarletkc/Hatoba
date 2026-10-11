@@ -965,6 +965,23 @@ export interface AiToolResultInput {
   edited_arguments: string | null;
 }
 
+/**
+ * The change an `edit_file` or `write_file` call would make, for its approval card (AI-39, AI-40). The
+ * texts show CRLF line breaks as `\n`; `crlf` says the write keeps them as CRLF.
+ */
+export interface AiFilePreview {
+  /** The path the call names. */
+  path: string;
+  /** The file as Hatoba read it; null when it does not exist (the call creates it) or `error` is set. */
+  before: string | null;
+  /** The file after the call; null when `error` is set. */
+  after: string | null;
+  /** Why the call cannot apply: the error result running it would give the model. */
+  error: string | null;
+  /** Most of the file's line breaks are CRLF, and the write keeps them. */
+  crlf: boolean;
+}
+
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
 
 export interface SkillFileView {

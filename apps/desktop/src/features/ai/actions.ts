@@ -11,6 +11,7 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFilePreview,
   AiModelRef,
   AiPermissionMode,
   AiToolCall,
@@ -148,9 +149,14 @@ function withContext(s: Slot, view: AiConversationView): AiConversationView {
 
 // ───────────────────────── the turn runner ─────────────────────────
 
-/** `allow`: AI-19 Allow for this conversation, or AI-31 Always allow (MCP tools, on this device). */
+/**
+ * `allow`: AI-19 Allow for this conversation, or AI-31 Always allow (MCP tools, on this device).
+ * `refusal`: the error the approval card of an `edit_file` or `write_file` call showed in place of a diff
+ * (AI-39, AI-40); the call answers with it instead of running, so nothing is written that the user did
+ * not see as a diff.
+ */
 type Decision =
-  | { kind: "run"; edited: string | null; allow?: "conversation" | "always" }
+  | { kind: "run"; edited: string | null; allow?: "conversation" | "always"; refusal?: string }
   | { kind: "reject"; reason: string }
   | { kind: "continue" }
   | { kind: "stop" };
@@ -360,6 +366,13 @@ class TurnRunner {
       edited = d.edited;
       if (d.allow === "conversation" && grant) allowInConversation(convId, grant);
       else if (d.allow === "always" && mcp) await this.alwaysAllow(mcp);
+      if (d.refusal !== undefined) {
+        if (!this.acting) return;
+        this.setCall({ id: call.id, state: "running" });
+        await this.report(convId, call.id, { status: "error", content: d.refusal, edited_arguments: edited });
+        this.countCall();
+        return;
+      }
     }
     if (!this.acting) return;
     this.setCall({ id: call.id, state: "running" });
@@ -610,6 +623,18 @@ export async function stopTurn(slotId: string) {
 /** The user's answer to an approval card (AI-17) or the tool call limit (AI-18). */
 export function decideCall(slotId: string, decision: Decision) {
   runners.get(slotId)?.decide(decision);
+}
+
+/**
+ * AI-39, AI-40: the change an `edit_file` or `write_file` call waiting on the slot's approval card would
+ * make, read from the host of the slot's tab, with the arguments as the user edited them on the card.
+ */
+export function previewFileCall(slotId: string, callId: string, edited: string | null): Promise<AiFilePreview> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId) return Promise.reject(new Error("the conversation is not stored yet"));
+  const target = attachedTab(slotId);
+  const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
+  return api.ai_file_preview(convId, callId, sessionId, edited);
 }
 
 export type { Decision };

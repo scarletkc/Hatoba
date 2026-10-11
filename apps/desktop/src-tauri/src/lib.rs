@@ -150,6 +150,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_retry,
             ai_cmd::ai_tool_result,
             ai_cmd::ai_tool_run,
+            ai_cmd::ai_file_preview,
             ai_cmd::ai_stop,
             ai_cmd::ai_compact,
             ai_cmd::ai_search,

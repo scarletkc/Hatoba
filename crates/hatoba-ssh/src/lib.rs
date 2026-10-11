@@ -23,6 +23,7 @@ mod net;
 mod ppk;
 pub mod probe;
 pub mod proxy;
+pub mod remote_file;
 mod server_os;
 pub mod session;
 pub mod sftp;

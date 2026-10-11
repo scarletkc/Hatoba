@@ -59,13 +59,14 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFinish, AiSearchHit,
-    AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext,
-    AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFilePreview, AiFinish,
+    AiSearchHit, AiSendInput, AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus,
+    AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
 use crate::state::now_ms;
+use files::FileJob;
 
 /// The line a result starts with when the user edited the call before it ran (AI-17).
 const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it ran with";
@@ -171,6 +172,13 @@ struct Inner {
     /// Running tools, compactions and provider requests, so that stop and lock reach them.
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
+    /// What the approval card of an `edit_file` or `write_file` call read, by conversation and
+    /// call id: the call writes only over that content (AI-39). File content, so kept only while
+    /// the call waits: until it has a result, or its conversation stops, sends its next request,
+    /// compacts or is deleted, or the vault locks.
+    file_bases: Mutex<HashMap<(String, String), files::Base>>,
+    /// What the model has seen of each file, by conversation (AI-38…40).
+    seen: files::Seen,
 }
 
 struct Op {
@@ -432,6 +440,7 @@ impl AiManager {
     /// `turn_ended { stopped }` on the turn's channel. Returns the cancelled results it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
         let turn = self.cancel(conversation_id);
+        self.forget_file_bases(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
             let cancelled = Entries::load(v, conversation_id)
@@ -476,6 +485,8 @@ impl AiManager {
         for op in guard(&self.0.ops).values() {
             op.cancel.cancel();
         }
+        // File content stays in memory only while the vault is unlocked.
+        guard(&self.0.file_bases).clear();
     }
 
     // ---- conversations ----
@@ -510,6 +521,8 @@ impl AiManager {
                 turn.end(AiTurnEndReason::Stopped);
             }
             v.ai_delete_conversation(conversation_id)?;
+            self.0.seen.forget(conversation_id);
+            self.forget_file_bases(conversation_id);
         }
         tracing::info!(conversation_id, "AI conversation deleted");
         env.changed();
@@ -713,6 +726,8 @@ impl AiManager {
                         earlier.truncate(at);
                     }
                     v.ai_delete_entries_from(&id, &entry_id)?;
+                    // The deleted entries held what the model read of files (AI-38…40).
+                    self.0.seen.forget(&id);
                     *stored = true;
                     // The cancelled results came after the edited message: deleted too.
                     cancelled.clear();
@@ -931,6 +946,8 @@ impl AiManager {
                 Ok(request) => request,
                 Err(halt) => return halted(turn, conversation_id, halt),
             };
+            // Every call so far has a result now, so no approval card waits on a read.
+            self.forget_file_bases(conversation_id);
             if compaction_due(&request) {
                 let compact = {
                     let v = lock(vault);
@@ -1064,7 +1081,7 @@ impl AiManager {
             let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
             let op = self.start_call(conversation_id, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
-            let job = if call.name.starts_with(MCP_PREFIX) {
+            let mut job = if call.name.starts_with(MCP_PREFIX) {
                 Job::mcp(
                     &v,
                     self.0.mcp.offered(conversation_id, &call.name),
@@ -1074,7 +1091,15 @@ impl AiManager {
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
+            if let Job::File(_, base) = &mut job {
+                *base = guard(&self.0.file_bases)
+                    .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
+            }
             (job, op)
+        };
+        let seen = files::SeenBy {
+            seen: &self.0.seen,
+            conversation_id,
         };
         let (status, content) = job
             .run(
@@ -1083,6 +1108,7 @@ impl AiManager {
                 vault,
                 env,
                 session_id,
+                seen,
                 &op.cancel,
             )
             .await;
@@ -1105,6 +1131,84 @@ impl AiManager {
         Ok(view)
     }
 
+    /// `ai_file_preview` (AI-39, AI-40): the change an open `edit_file` or `write_file` call
+    /// would make, for its approval card, with `edited_arguments` when the user edits the call on
+    /// the card. The file is read once per call; what was read is kept for the run, which writes
+    /// only over that content. The read is an op of the conversation, so a stop or the lock ends
+    /// it.
+    pub async fn file_preview(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        tool_call_id: &str,
+        session_id: Option<&str>,
+        edited_arguments: Option<&str>,
+    ) -> AppResult<AiFilePreview> {
+        let (call, op) = {
+            let v = unlocked(vault)?;
+            find_conversation(&v, conversation_id)?;
+            let call = open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
+            (call, self.start_op(conversation_id))
+        };
+        let (job, path) =
+            match files::preview_job(&call.name, edited_arguments.unwrap_or(&call.arguments)) {
+                Ok(job) => job,
+                Err(preview) => return Ok(preview),
+            };
+        let key = (conversation_id.to_owned(), tool_call_id.to_owned());
+        let cached = guard(&self.0.file_bases)
+            .get(&key)
+            .filter(|b| b.path == path)
+            .cloned();
+        let base = match cached {
+            Some(base) => base,
+            None => {
+                let read = match files::read_base(live_session(env, session_id), &path, op.token())
+                    .await
+                {
+                    Ok(base) => base,
+                    Err(files::Stop::Failed(message)) => {
+                        return Ok(files::failed_preview(&path, message));
+                    }
+                    Err(files::Stop::Cancelled) => {
+                        return Err(AppError::new(
+                            ErrorCode::Cancelled,
+                            "the preview was stopped",
+                        ));
+                    }
+                };
+                let v = unlocked(vault)?;
+                let waiting = open_call(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok()
+                    && !self.call_running(conversation_id, tool_call_id);
+                let mut bases = guard(&self.0.file_bases);
+                match bases.get(&key) {
+                    // Previews can overlap (Edit while the first read runs): the read kept first
+                    // stays, so every diff the card shows is against the content the run checks.
+                    Some(kept) if kept.path == path => kept.clone(),
+                    // Kept only while the call waits: not after its result, a stop or the lock.
+                    _ if waiting => {
+                        bases.insert(key, read.clone());
+                        read
+                    }
+                    _ => read,
+                }
+            }
+        };
+        drop(op);
+        let seen = files::SeenBy {
+            seen: &self.0.seen,
+            conversation_id,
+        };
+        Ok(files::preview_of(&job, &base, seen))
+    }
+
+    /// Drops what the approval cards of the conversation read (AI-39): none of its calls waits for
+    /// one any more.
+    fn forget_file_bases(&self, conversation_id: &str) {
+        guard(&self.0.file_bases).retain(|(id, _), _| id != conversation_id);
+    }
+
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn.
     fn store_result(
         &self,
@@ -1116,6 +1220,7 @@ impl AiManager {
     ) -> AppResult<AiEntryView> {
         let entry = AiEntry::tool(now_ms(), tool_call_id, status, content);
         let entry_id = append(v, conversation_id, &entry)?;
+        guard(&self.0.file_bases).remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
         let view = entry_view(&entry_id, &entry);
         if let Some(turn) = self.running(conversation_id) {
             turn.emit(AiTurnEvent::Entry {
@@ -1191,7 +1296,10 @@ impl AiManager {
                     "compaction was stopped",
                 ));
             }
-            store_summary(&mut v, conversation_id, &summary)?
+            let view = store_summary(&mut v, conversation_id, &summary)?;
+            // The summary no longer holds the files the model read (AI-38…40).
+            self.0.seen.forget(conversation_id);
+            view
         };
         drop(op);
         tracing::info!(conversation_id, "AI conversation compacted");
@@ -1218,6 +1326,7 @@ impl AiManager {
         if !cancel_open_calls(&mut v, conversation_id, &entries)?.is_empty() {
             *stored = true;
         }
+        self.forget_file_bases(conversation_id);
         if !compactable(&context_entries(&v, conversation_id)?) {
             return Err(AppError::invalid("conversation_id", "nothing to compact"));
         }
@@ -1342,7 +1451,10 @@ impl AiManager {
                 return Err(CompactFailure::Stopped);
             }
             match store_summary(&mut v, conversation_id, &summary) {
-                Ok(view) => turn.emit(AiTurnEvent::Entry { entry: view }),
+                Ok(view) => {
+                    self.0.seen.forget(conversation_id);
+                    turn.emit(AiTurnEvent::Entry { entry: view });
+                }
                 Err(e) if e.code == ErrorCode::Locked => return Err(CompactFailure::Stopped),
                 Err(e) => {
                     return Err(CompactFailure::Failed {
@@ -2062,6 +2174,8 @@ enum Job {
     /// The result is known without running anything: a vault read, or a call that cannot run.
     Ready(ToolStatus, String),
     RunCommand(RunCommandArgs),
+    /// `read_file`, `edit_file` or `write_file`, with what the approval card read for it.
+    File(FileJob, Option<files::Base>),
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30).
@@ -2093,6 +2207,12 @@ impl Job {
 
     /// `version`: the app's, for the built-in skill (AI-34).
     fn new(v: &Vault, name: &str, arguments: &str, version: &str) -> Self {
+        if let Some(parsed) = FileJob::parse(name, arguments) {
+            return match parsed {
+                Ok(job) => Self::File(job, None),
+                Err(message) => Self::error(message),
+            };
+        }
         match name {
             tools::RUN_COMMAND => match parse::<RunCommandArgs>(arguments) {
                 Ok(args) if args.command.trim().is_empty() => Self::error("The command is empty."),
@@ -2123,6 +2243,10 @@ impl Job {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "what the tools that run in Rust need, each from its own place"
+    )]
     async fn run(
         self,
         http: &reqwest::Client,
@@ -2130,12 +2254,16 @@ impl Job {
         vault: &SharedVault,
         env: &dyn AiEnv,
         session_id: Option<&str>,
+        seen: files::SeenBy<'_>,
         cancel: &CancellationToken,
     ) -> (ToolStatus, String) {
         match self {
             Self::Ready(status, content) => (status, content),
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
+            Self::File(job, base) => {
+                files::run(live_session(env, session_id), job, base, seen, cancel).await
+            }
             Self::WebSearch(config, query) => {
                 match web::web_search(http, &config, &query, cancel).await {
                     Ok(results) => (
@@ -2168,6 +2296,13 @@ fn parse<T: DeserializeOwned>(arguments: &str) -> Result<T, String> {
     serde_json::from_str(arguments).map_err(|e| format!("The arguments are not valid: {e}."))
 }
 
+/// The tab's SSH connection while it is open (AI-08).
+fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<hatoba_ssh::SshSession> {
+    session_id
+        .and_then(|id| env.session(id))
+        .filter(|s| !s.is_closed())
+}
+
 /// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout.
 async fn run_command(
     env: &dyn AiEnv,
@@ -2175,10 +2310,7 @@ async fn run_command(
     args: &RunCommandArgs,
     cancel: &CancellationToken,
 ) -> (ToolStatus, String) {
-    let Some(session) = session_id
-        .and_then(|id| env.session(id))
-        .filter(|s| !s.is_closed())
-    else {
+    let Some(session) = live_session(env, session_id) else {
         return (ToolStatus::Error, DISCONNECTED.to_owned());
     };
     let limit = args.timeout();
@@ -2975,5 +3107,6 @@ pub fn error_kind(e: &AiError) -> &'static str {
     }
 }
 
+mod files;
 #[cfg(test)]
 mod tests;
