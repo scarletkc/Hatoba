@@ -124,11 +124,9 @@ pub fn ai_allowance_remove(
 
 #[cfg(test)]
 mod tests {
-    use hatoba_core::{KdfParams, Vault};
+    use hatoba_core::{KdfParams, Vault, crypto};
 
     use super::*;
-
-    const PW: &str = "correct horse battery staple";
 
     fn allowance(
         kind: AiAllowanceKind,
@@ -181,9 +179,10 @@ mod tests {
     #[test]
     fn approvals_are_kept_once_and_survive_a_relock() {
         use AiAllowanceKind::{Command, Domain, Tool};
+        let pw = crypto::hex_encode(&crypto::random_bytes::<16>().unwrap());
         let mut vault = Vault::open_in_memory().unwrap();
         vault
-            .create_with_params(PW, KdfParams::for_tests())
+            .create_with_params(&pw, KdfParams::for_tests())
             .unwrap();
         let git = allowance(Command, None, Some("root@db:22"), "git pull");
         let edit = allowance(Tool, Some("h1"), None, "edit_file");
@@ -199,7 +198,7 @@ mod tests {
 
         vault.lock();
         assert!(load(&vault).is_err());
-        vault.unlock(PW).unwrap();
+        vault.unlock(&pw).unwrap();
         assert_eq!(load(&vault).unwrap(), vec![git.clone(), edit.clone()]);
 
         assert_eq!(remove(&mut vault, &git).unwrap(), vec![edit.clone()]);

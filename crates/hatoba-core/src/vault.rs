@@ -2026,7 +2026,7 @@ mod tests {
             .store
             .set_meta(
                 meta::AI_ALLOWANCES,
-                &seal(&[7u8; 32], AAD_AI_ALLOWANCES.as_bytes(), b"[]")
+                &seal(&random_key().unwrap(), AAD_AI_ALLOWANCES.as_bytes(), b"[]")
                     .unwrap()
                     .to_json(),
             )
