@@ -1,6 +1,7 @@
-//! Platform integration: window chrome, power events, OS credential store, biometrics.
+//! Platform integration: window chrome, power events, idle time, OS credential store, biometrics.
 
 pub mod biometric;
+pub mod idle;
 #[cfg(target_os = "linux")]
 pub mod linux_chrome;
 pub mod power;

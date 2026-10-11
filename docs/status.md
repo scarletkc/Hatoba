@@ -9,7 +9,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | ID | Name | Status | Notes |
 |---|---|---|---|
 | SEC-01 | Secrets only in Rust memory | ✅ | |
-| SEC-02 | Auto-lock | ✅ | |
+| SEC-02 | Auto-lock | 🟡 | The system-wide idle time on Windows (`GetLastInputInfo`) and macOS (`CGEventSourceSecondsSinceLastEventType`) needs verification on real machines; on Linux only input in Hatoba's window counts |
 | SEC-03 | Keep sessions while locked | ✅ | |
 | SEC-04 | No secrets in logs | ✅ | Confirmed by scanning the logs after the end-to-end test |
 | SEC-05 | Tauri hardening | ✅ | |

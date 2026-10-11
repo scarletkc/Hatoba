@@ -1202,9 +1202,10 @@ impl Default for AiSettings {
 pub struct Settings {
     /// Terminal appearance.
     pub terminal: TerminalSettings,
-    /// Idle minutes before auto-lock (0 disables).
+    /// Idle minutes before auto-lock (0 disables). Builds that keep the lock settings per device
+    /// copy it once and then leave it as stored, for the older builds that still read it.
     pub auto_lock_minutes: u32,
-    /// Disconnect SSH sessions when the vault locks.
+    /// Disconnect SSH sessions when the vault locks. Kept like `auto_lock_minutes`.
     pub lock_disconnects_sessions: bool,
     /// AI assistant settings.
     pub ai: AiSettings,

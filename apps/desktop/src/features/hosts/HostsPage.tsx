@@ -17,6 +17,7 @@ import { useTabs, type TabStatus } from "@/app/tabs";
 import { Button, Icon, LinkButton } from "@/components/controls";
 import { EmptyState, PageHeader, SearchField, Tag, layoutStyles } from "@/components/layout";
 import { Menu, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { durationLabel } from "@/features/settings/durations";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { formatRelative, useT, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -356,11 +357,12 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     }
   };
 
-  // SEC-08: the backend copies the saved password and clears the clipboard after 30 s.
+  // SEC-08: the backend copies the saved password and clears the clipboard after this device's delay.
   const copyPassword = async (host: HostView) => {
     try {
       await api.host_copy_password(host.id);
-      toast(t("hosts.passwordCopied"), "success");
+      const secs = useApp.getState().prefs.clipboard_clear_secs;
+      toast(secs ? t("hosts.passwordCopied", { time: durationLabel(t, secs) }) : t("hosts.passwordCopiedKept"), "success");
     } catch (e) {
       fail(e);
     }

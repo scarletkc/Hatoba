@@ -12,7 +12,7 @@ export default defineMessages({
     "vault.field.matches": "两次输入一致",
     "vault.err.mismatch": "两次输入的主密码不一致。",
     "vault.err.tooShort": "主密码至少需要 8 个字符。",
-    "vault.err.tooWeak": "这个主密码太容易被猜到，请换一个更长或更不常见的。",
+    "vault.err.tooWeak": "这个主密码容易被猜到，更长或更不常见的密码会更安全。",
 
     "vault.unlock.title": "Hatoba 已锁定",
     "vault.unlock.subtitle": "输入主密码以解锁保险库",
@@ -89,7 +89,7 @@ export default defineMessages({
     "vault.field.matches": "Passwords match",
     "vault.err.mismatch": "The two passwords don’t match.",
     "vault.err.tooShort": "The master password needs at least 8 characters.",
-    "vault.err.tooWeak": "That password is too easy to guess. Choose a longer or less common one.",
+    "vault.err.tooWeak": "This password is easy to guess. A longer or less common one is safer.",
 
     "vault.unlock.title": "Hatoba is locked",
     "vault.unlock.subtitle": "Enter your master password to unlock the vault",
@@ -166,7 +166,7 @@ export default defineMessages({
     "vault.field.matches": "パスワードが一致しています",
     "vault.err.mismatch": "2 つのパスワードが一致しません。",
     "vault.err.tooShort": "マスターパスワードは 8 文字以上にしてください。",
-    "vault.err.tooWeak": "このパスワードは推測されやすすぎます。より長いもの、または一般的でないものにしてください。",
+    "vault.err.tooWeak": "このパスワードは推測されやすいです。より長いもの、または一般的でないもののほうが安全です。",
 
     "vault.unlock.title": "Hatoba はロックされています",
     "vault.unlock.subtitle": "マスターパスワードを入力して保管庫のロックを解除",

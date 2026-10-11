@@ -18,6 +18,10 @@ use crate::{lock, sync};
 /// Keys that builds before the terminal behaviour was synced kept in `local_prefs`.
 const LEGACY_RIGHT_CLICK: &str = "right_click";
 const LEGACY_CONFIRM_PASTE: &str = "confirm_multiline_paste";
+/// Set in `local_prefs` once the lock settings were taken from the synced settings.
+const LOCK_PREFS_ADOPTED: &str = "lock_prefs_adopted";
+
+const MAX_AUTO_LOCK_MINUTES: u32 = 24 * 60;
 
 pub fn settings_view(s: &Settings) -> SettingsView {
     SettingsView {
@@ -41,8 +45,6 @@ pub fn settings_view(s: &Settings) -> SettingsView {
             },
             confirm_multiline_paste: s.terminal.confirm_multiline_paste(),
         },
-        auto_lock_minutes: s.auto_lock_minutes,
-        lock_disconnects_sessions: s.lock_disconnects_sessions,
     }
 }
 
@@ -99,17 +101,16 @@ pub fn settings_save(
             RightClick::CopyPaste => CoreRightClick::CopyPaste,
         });
         terminal.set_confirm_multiline_paste(t.confirm_multiline_paste);
+        // The lock settings stay as stored, for older builds on other devices; this one keeps
+        // its own in the device prefs (SEC-02/03).
         let model = Settings {
             terminal,
-            auto_lock_minutes: settings.auto_lock_minutes.min(24 * 60),
-            lock_disconnects_sessions: settings.lock_disconnects_sessions,
-            ai: v.settings().ai,
             updated_at: 0,
+            ..v.settings()
         };
         v.put(Some(SETTINGS_ID), Item::Settings(model))?;
         Ok(())
     })?;
-    lock::refresh_policy(&state);
     sync::local_change(&app);
     Ok(())
 }
@@ -126,10 +127,14 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn prefs_save(state: State<'_, AppState>, prefs: LocalPrefs) -> AppResult<()> {
-    let mut vault = state.vault();
-    let json = merge_prefs(vault.local_prefs()?.as_deref(), &prefs)?;
-    vault.set_local_prefs(&json)?;
+pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResult<()> {
+    prefs.auto_lock_minutes = prefs.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
+    {
+        let mut vault = state.vault();
+        let json = merge_prefs(vault.local_prefs()?.as_deref(), &prefs)?;
+        vault.set_local_prefs(&json)?;
+    }
+    lock::refresh_policy(&state);
     Ok(())
 }
 
@@ -186,6 +191,28 @@ pub fn adopt_legacy_prefs_after_unlock(vault: &mut Vault) -> AppResult<bool> {
     adopt_legacy_prefs(vault)
 }
 
+/// Copies the auto-lock timeout and "lock disconnects sessions", which earlier builds kept in the
+/// synced settings, into the device prefs, once (SEC-02/03). The WebView saves every pref at
+/// once, also while locked, so a stored value does not show whether the copy happened; a marker
+/// key, which [`merge_prefs`] keeps, does. Returns whether it copied.
+pub fn adopt_synced_lock_prefs(vault: &mut Vault) -> AppResult<bool> {
+    let mut stored = stored_prefs(vault.local_prefs()?.as_deref());
+    if stored.get(LOCK_PREFS_ADOPTED).and_then(Value::as_bool) == Some(true) {
+        return Ok(false);
+    }
+    let settings = vault.settings();
+    let minutes = settings.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
+    stored.insert("auto_lock_minutes".into(), minutes.into());
+    stored.insert(
+        "lock_disconnects_sessions".into(),
+        settings.lock_disconnects_sessions.into(),
+    );
+    stored.insert(LOCK_PREFS_ADOPTED.into(), true.into());
+    let json = serde_json::to_string(&stored).map_err(|e| AppError::internal(e.to_string()))?;
+    vault.set_local_prefs(&json)?;
+    Ok(true)
+}
+
 /// The sidebar's star prompt (spec §9). The first read records when this device started waiting.
 #[tauri::command]
 #[specta::specta]
@@ -232,7 +259,9 @@ mod tests {
     use hatoba_core::{KdfParams, Vault};
     use serde_json::{Value, json};
 
-    use super::{adopt_legacy_prefs, adopt_legacy_prefs_after_unlock, merge_prefs};
+    use super::{
+        adopt_legacy_prefs, adopt_legacy_prefs_after_unlock, adopt_synced_lock_prefs, merge_prefs,
+    };
     use crate::dto::{Language, LocalPrefs};
 
     const PW: &str = "correct horse battery staple";
@@ -300,7 +329,7 @@ mod tests {
         assert!(prefs.get("confirm_multiline_paste").is_none());
         let kept = LocalPrefs::from_stored(&prefs.to_string());
         assert_eq!(kept.language, Language::Ja);
-        assert!(!kept.host_probe && kept.auto_update_check);
+        assert!(!kept.host_probe);
     }
 
     #[test]
@@ -432,5 +461,43 @@ mod tests {
         let fresh: Value =
             serde_json::from_str(&merge_prefs(None, &LocalPrefs::default()).unwrap()).unwrap();
         assert_eq!(fresh, serde_json::to_value(LocalPrefs::default()).unwrap());
+    }
+
+    #[test]
+    fn lock_settings_move_into_the_prefs_once() {
+        let mut vault = vault();
+        let mut settings = vault.settings();
+        settings.auto_lock_minutes = 0;
+        settings.lock_disconnects_sessions = true;
+        vault
+            .put(Some(SETTINGS_ID), Item::Settings(settings))
+            .unwrap();
+        // The lock screen saved the prefs, with the defaults, before the first unlock.
+        let json = merge_prefs(None, &LocalPrefs::default()).unwrap();
+        vault.set_local_prefs(&json).unwrap();
+
+        assert!(adopt_synced_lock_prefs(&mut vault).unwrap());
+        let prefs = LocalPrefs::from_stored(&vault.local_prefs().unwrap().unwrap());
+        assert_eq!(prefs.auto_lock_minutes, 0);
+        assert!(prefs.lock_disconnects_sessions);
+
+        // The user picks 5 minutes here, and an older build on another device changes the
+        // synced value.
+        let mine = LocalPrefs {
+            auto_lock_minutes: 5,
+            ..prefs
+        };
+        let json = merge_prefs(vault.local_prefs().unwrap().as_deref(), &mine).unwrap();
+        vault.set_local_prefs(&json).unwrap();
+        let mut settings = vault.settings();
+        settings.auto_lock_minutes = 30;
+        vault
+            .put(Some(SETTINGS_ID), Item::Settings(settings))
+            .unwrap();
+
+        assert!(!adopt_synced_lock_prefs(&mut vault).unwrap());
+        let prefs = LocalPrefs::from_stored(&vault.local_prefs().unwrap().unwrap());
+        assert_eq!(prefs.auto_lock_minutes, 5);
+        assert!(prefs.lock_disconnects_sessions);
     }
 }

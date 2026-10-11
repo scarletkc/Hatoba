@@ -682,8 +682,6 @@ export interface TerminalSettings {
 /** Synced settings item (spec §5.1 `Settings`). */
 export interface SettingsView {
   terminal: TerminalSettings;
-  auto_lock_minutes: number;
-  lock_disconnects_sessions: boolean;
 }
 
 export type Language = "system" | "zh-CN" | "en" | "ja";
@@ -695,8 +693,8 @@ export interface LocalPrefs {
   density: "regular" | "compact";
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
-  /** Check GitHub Releases once after unlock. Off by default (no telemetry, spec §11). */
-  auto_update_check: boolean;
+  /** Check GitHub Releases once after the first unlock of each launch. On by default (spec §11). */
+  check_for_updates: boolean;
   /** AI-16: the permission mode new conversations start in on this device. */
   ai_permission_mode: AiPermissionMode;
   /** AI-16: the user confirmed the first switch to bypass on this device. */
@@ -709,6 +707,14 @@ export interface LocalPrefs {
   ai_panel_width: number;
   /** SSH-13: the proxy that hosts set to the device default connect through, on this device. */
   default_proxy_id: string | null;
+  /** SEC-02: minutes without input before the vault locks; 0 never locks. */
+  auto_lock_minutes: number;
+  /** SEC-02: lock the vault when the computer sleeps. */
+  lock_on_sleep: boolean;
+  /** SEC-03: disconnect the SSH sessions when the vault locks. */
+  lock_disconnects_sessions: boolean;
+  /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
+  clipboard_clear_secs: number;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -724,6 +730,8 @@ export interface AppInfo {
   platform: "windows" | "macos" | "linux" | "web";
   /** Windows 11 Mica is active (WIN-07). */
   mica: boolean;
+  /** The local user name, which quick connect uses when the target names no user (HOST-12); empty when unknown. */
+  local_user: string;
 }
 
 /** What the update check found (spec §11). */
