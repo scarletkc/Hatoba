@@ -74,6 +74,17 @@ export interface MenuAnchor {
   trigger?: HTMLElement;
 }
 
+/**
+ * The part of the viewport that menus and popovers stay inside. While Linux paints its own window
+ * chrome (`:root[data-floating]`), the viewport also covers the transparent margin around the window
+ * surface (`--win-pad`), where clicks pass through to the desktop or start a resize.
+ */
+export function windowSurface(): { left: number; top: number; right: number; bottom: number } {
+  const root = document.documentElement;
+  const pad = root.hasAttribute("data-floating") ? parseFloat(getComputedStyle(root).getPropertyValue("--win-pad")) || 0 : 0;
+  return { left: pad, top: pad, right: window.innerWidth - pad, bottom: window.innerHeight - pad };
+}
+
 /** Floating menu (the design's language picker look). Closes on outside click / Escape. */
 export function Menu({
   anchor,
@@ -106,8 +117,9 @@ export function Menu({
     const r = el.getBoundingClientRect();
     let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
     let top = anchor.y;
-    left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, (anchor.above ?? anchor.y - 8) - r.height);
+    const b = windowSurface();
+    left = Math.max(b.left + 8, Math.min(left, b.right - r.width - 8));
+    if (top + r.height > b.bottom - 8) top = Math.max(b.top + 8, (anchor.above ?? anchor.y - 8) - r.height);
     setPos({ left, top });
   }, [anchor.x, anchor.y, anchor.alignRight, anchor.above]);
 

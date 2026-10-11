@@ -1223,6 +1223,11 @@ export interface VaultLockedEvent {
   reason: "manual" | "idle" | "sleep";
 }
 
+/** Whether the Linux main window shows its painted chrome (off maximized, fullscreen, tiled, or without a compositor). */
+export interface WindowChromeEvent {
+  floating: boolean;
+}
+
 export interface EventMap {
   "vault://locked": VaultLockedEvent;
   "sync://status": SyncStatus;
@@ -1233,4 +1238,5 @@ export interface EventMap {
   "ssh://forward": ForwardStatusEvent;
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
+  "window://chrome": WindowChromeEvent;
 }

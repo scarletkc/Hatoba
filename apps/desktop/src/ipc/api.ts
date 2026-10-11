@@ -362,6 +362,11 @@ export interface HatobaApi {
 
   // window (Windows custom title bar, WIN-01)
   window_snap_overlay(): Promise<void>;
+  /**
+   * Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
+   * or tiled, without a compositor, and on other platforms.
+   */
+  window_floating(): Promise<boolean>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 

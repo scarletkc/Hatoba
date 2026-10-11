@@ -157,6 +157,12 @@
   animation: fade 0.12s ease-out;
 }
 
+/* Linux window chrome: the scrim follows the window's rounded outline, not its corners. */
+:root[data-floating] .backdrop {
+  inset: var(--win-pad);
+  border-radius: var(--radius-window);
+}
+
 .backdropCenter {
   align-items: center;
   padding-top: 24px;
@@ -278,6 +284,11 @@
   align-items: center;
   gap: 8px;
   pointer-events: none;
+}
+
+/* Linux window chrome: keep toasts inside the window surface, not the transparent margin. */
+:root[data-floating] .toasts {
+  bottom: calc(20px + var(--win-pad));
 }
 
 .toast {

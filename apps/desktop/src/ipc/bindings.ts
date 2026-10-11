@@ -11,6 +11,11 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
+	/**
+	 *  Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
+	 *  or tiled, false without a compositor, and false on other platforms.
+	 */
+	windowFloating: () => __TAURI_INVOKE<boolean>("window_floating"),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -369,6 +374,7 @@ export const events = {
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
+	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 };
 
 /* Types */
@@ -1609,6 +1615,15 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+};
+
+/**
+ *  Whether the Linux main window shows its painted chrome right now: off while maximized,
+ *  fullscreen or tiled, and off without a compositor. The WebView mirrors it to
+ *  `:root[data-floating]`; `window_floating` reports the same value.
+ */
+export type WindowChromeEvent = {
+	floating: boolean,
 };
 
 export type WorkerUpdate = {

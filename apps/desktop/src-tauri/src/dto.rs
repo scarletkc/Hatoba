@@ -905,6 +905,15 @@ pub struct AppInfo {
     pub mica: bool,
 }
 
+/// Whether the Linux main window shows its painted chrome right now: off while maximized,
+/// fullscreen or tiled, and off without a compositor. The WebView mirrors it to
+/// `:root[data-floating]`; `window_floating` reports the same value.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://chrome")]
+pub struct WindowChromeEvent {
+    pub floating: bool,
+}
+
 /// What the update check found (spec §11).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct UpdateCheck {

@@ -15,12 +15,32 @@ const TRAFFIC_LIGHT_X: f64 = 18.0;
 #[cfg(target_os = "macos")]
 const TRAFFIC_LIGHT_Y: f64 = 20.0;
 
+/// The initial and minimum size of the visible window surface.
+const INITIAL_SIZE: (f64, f64) = (1200.0, 760.0);
+const MIN_SIZE: (f64, f64) = (860.0, 540.0);
+
+/// What the window adds around the visible surface on each axis: Linux's transparent margin, so
+/// the surface the CSS insets by `WIN_PAD` keeps the sizes above.
+#[cfg(target_os = "linux")]
+const MARGIN: f64 = 2.0 * super::linux_chrome::WIN_PAD as f64;
+#[cfg(not(target_os = "linux"))]
+const MARGIN: f64 = 0.0;
+
+#[cfg(target_os = "linux")]
+pub use super::linux_chrome::floating;
+
+/// Whether the main window shows the painted Linux chrome; other platforms have none.
+#[cfg(not(target_os = "linux"))]
+pub fn floating() -> bool {
+    false
+}
+
 /// Creates the main window. Returns whether Windows 11 Mica was applied.
 pub fn create_main_window(app: &AppHandle) -> tauri::Result<(WebviewWindow, bool)> {
     let builder = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::default())
         .title("Hatoba")
-        .inner_size(1200.0, 760.0)
-        .min_inner_size(860.0, 540.0)
+        .inner_size(INITIAL_SIZE.0 + MARGIN, INITIAL_SIZE.1 + MARGIN)
+        .min_inner_size(MIN_SIZE.0 + MARGIN, MIN_SIZE.1 + MARGIN)
         .center()
         .visible(false);
 
@@ -42,7 +62,15 @@ pub fn create_main_window(app: &AppHandle) -> tauri::Result<(WebviewWindow, bool
     #[cfg(target_os = "windows")]
     let builder = builder.transparent(true).shadow(true);
 
+    // Linux draws no chrome around an undecorated window, so the app paints its own (rounded
+    // corners, shadow, hairline ring) on a surface inset by WIN_PAD inside a transparent
+    // window. linux_chrome::attach manages that margin and decides when the chrome is on.
+    #[cfg(target_os = "linux")]
+    let builder = builder.transparent(true);
+
     let window = builder.build()?;
+    #[cfg(target_os = "linux")]
+    super::linux_chrome::attach(&window)?;
     let mica = apply_material(&window);
     Ok((window, mica))
 }

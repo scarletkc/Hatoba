@@ -940,6 +940,7 @@ export function createMockApi(): HatobaApi {
     },
 
     window_snap_overlay: async () => {},
+    window_floating: async () => false,
     save_text_file: async (path, contents) => {
       // Browser fallback: download the text instead of writing to `path`.
       const a = document.createElement("a");

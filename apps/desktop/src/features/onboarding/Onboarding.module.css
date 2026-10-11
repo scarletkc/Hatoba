@@ -9,6 +9,14 @@
   overflow-y: auto;
 }
 
+/* The Linux window chrome, same as .main in App.module.css; vertical scrolling stays. */
+:root[data-floating] .root {
+  inset: var(--win-pad);
+  border-radius: var(--radius-window);
+  overflow: hidden auto;
+  box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
+}
+
 /* A fixed top offset keeps the logo in place while the card changes height between steps. */
 .center {
   margin: 0 auto;

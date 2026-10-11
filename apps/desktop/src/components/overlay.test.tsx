@@ -144,6 +144,31 @@ describe("Menu", () => {
     }
   });
 
+  it("stays inside the painted window surface, not its transparent margin, while floating", () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 200, height: 120 } as DOMRect);
+    const root = document.documentElement;
+    const anchor = { x: window.innerWidth - 10, y: window.innerHeight - 140 };
+    const pos = () => {
+      const { left, top } = (document.querySelector("[role=menu]") as HTMLElement).style;
+      return { left, top };
+    };
+    try {
+      render(<Menu anchor={anchor} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
+      expect(pos()).toEqual({ left: `${window.innerWidth - 208}px`, top: `${window.innerHeight - 140}px` });
+      act(() => unmount?.());
+
+      root.dataset.floating = "";
+      root.style.setProperty("--win-pad", "22px");
+      render(<Menu anchor={anchor} onClose={() => {}} entries={[{ label: "Item", onSelect: () => {} }]} />);
+      // 8px inside the surface's right edge, and flipped up since the bottom would land in the margin.
+      expect(pos()).toEqual({ left: `${window.innerWidth - 230}px`, top: `${window.innerHeight - 268}px` });
+    } finally {
+      rect.mockRestore();
+      delete root.dataset.floating;
+      root.style.removeProperty("--win-pad");
+    }
+  });
+
   it("closes when its button is pressed again", () => {
     function Trigger() {
       const menu = useMenu();

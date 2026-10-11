@@ -33,6 +33,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(collect_commands![
             app::app_info,
             app::window_snap_overlay,
+            app::window_floating,
             app::save_text_file,
             app::activity_ping,
             app::update_check,
@@ -191,6 +192,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::TransferProgressEvent,
             dto::ForwardStatusEvent,
             dto::McpServerStatus,
+            dto::WindowChromeEvent,
         ])
 }
 

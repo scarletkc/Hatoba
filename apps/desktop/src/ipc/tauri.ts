@@ -213,6 +213,7 @@ export function createTauriApi(): HatobaApi {
     mcp_export: () => call("mcp_export"),
 
     window_snap_overlay: () => call("window_snap_overlay"),
+    window_floating: () => call("window_floating"),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),

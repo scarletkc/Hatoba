@@ -688,7 +688,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let notes = ctx
         .host_name
         .filter(|name| !name.trim().is_empty())
-        .and_then(|name| section_body(ctx.host_notes, "host_notes").map(|body| (name, body)));
+        .zip(section_body(ctx.host_notes, "host_notes"));
 
     out.push_str(&format!(
         "\n<rules>\n\
