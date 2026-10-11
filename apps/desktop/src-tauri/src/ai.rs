@@ -3111,15 +3111,22 @@ fn prompt(
         tools: offered,
     });
     let defs = if fallback.is_none() {
-        tools::builtin_tools(&ToolSet {
-            terminal: context.tab,
-            web_search: chosen_search(v).is_some(),
-            read_skill: !skills.is_empty(),
-        })
+        builtin_tools(v, context)
     } else {
         Vec::new()
     };
     (system, defs)
+}
+
+/// The built-in tools of a request (§13.4): the terminal tools only with a connected tab (AI-09),
+/// `web_search` when a search provider is chosen, `fetch_url` always, and `read_skill` when an
+/// enabled skill exists, the built-in one included (AI-34).
+fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
+    tools::builtin_tools(&ToolSet {
+        terminal: context.tab,
+        web_search: chosen_search(v).is_some(),
+        read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
+    })
 }
 
 /// The first `max` characters of `s`. Saving refuses longer text; one synced from elsewhere is cut.
@@ -3890,7 +3897,8 @@ fn mcp_deferred(entries: &[AiEntry]) -> bool {
 
 /// AI-45: the `mcp_tools` note the conversation's next message starts with, when its requests
 /// offer the MCP tools of `offer`: none while its MCP tools are offered directly, which they stay
-/// until their definitions come to a tenth of the model's context window; then the list of those
+/// until their definitions come to a tenth of the model's context window or the requests would
+/// offer more than 128 tools, built-in ones included; then the list of those
 /// tools, unless the newest note in the context (`entries` from `from` on) lists them already. No
 /// note in the context counts as an empty list, so an empty list after a compaction is not noted.
 fn mcp_note(
@@ -3909,6 +3917,7 @@ fn mcp_note(
             && deferred::defer_due(
                 estimate_tokens(&serde_json::to_string(&defs).unwrap_or_default()),
                 model.context_window,
+                builtin_tools(v, context).len() + defs.len(),
             )
     };
     if !is_deferred {

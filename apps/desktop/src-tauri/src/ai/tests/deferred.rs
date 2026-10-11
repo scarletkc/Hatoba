@@ -20,11 +20,12 @@ fn mcp_reply(id: &Value, result: Value) -> ResponseTemplate {
         .set_body_json(json!({"jsonrpc": "2.0", "id": id, "result": result}))
 }
 
-/// A Streamable HTTP MCP server with [`BIG_TOOLS`] tools, `tool_00` and on.
-async fn big_mock() -> MockServer {
+/// A Streamable HTTP MCP server named `name` that lists `tools` and answers a call of the tool
+/// `t` with the text `"{reply} t"`.
+async fn http_mcp(name: &'static str, tools: Vec<Value>, reply: &'static str) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(path("/mcp"))
-        .respond_with(|request: &Request| {
+        .respond_with(move |request: &Request| {
             match request.method.as_str() {
                 "GET" => return ResponseTemplate::new(405),
                 "DELETE" => return ResponseTemplate::new(200),
@@ -40,32 +41,15 @@ async fn big_mock() -> MockServer {
                     json!({
                         "protocolVersion": "2025-03-26",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "big", "version": "1.0.0"}
+                        "serverInfo": {"name": name, "version": "1.0.0"}
                     }),
                 )
-                .insert_header("mcp-session-id", "big-1"),
-                "tools/list" => {
-                    let tools: Vec<Value> = (0..BIG_TOOLS)
-                        .map(|n| {
-                            json!({
-                                "name": format!("tool_{n:02}"),
-                                "description": format!(
-                                    "Padding tool {n:02}. {}",
-                                    "It stands for one of the many tools a large server lists. "
-                                        .repeat(5)
-                                ),
-                                "inputSchema": {"type": "object",
-                                                "properties": {"value": {"type": "string"}},
-                                                "required": ["value"]}
-                            })
-                        })
-                        .collect();
-                    mcp_reply(&id, json!({"tools": tools}))
-                }
+                .insert_header("mcp-session-id", format!("{name}-1").as_str()),
+                "tools/list" => mcp_reply(&id, json!({ "tools": tools.clone() })),
                 "tools/call" => mcp_reply(
                     &id,
                     json!({"content": [{"type": "text", "text": format!(
-                        "big {}", body["params"]["name"].as_str().unwrap_or("?"))}]}),
+                        "{reply} {}", body["params"]["name"].as_str().unwrap_or("?"))}]}),
                 ),
                 _ => mcp_reply(&id, json!({})),
             }
@@ -73,6 +57,25 @@ async fn big_mock() -> MockServer {
         .mount(&server)
         .await;
     server
+}
+
+/// A Streamable HTTP MCP server with [`BIG_TOOLS`] tools, `tool_00` and on.
+async fn big_mock() -> MockServer {
+    let tools: Vec<Value> = (0..BIG_TOOLS)
+        .map(|n| {
+            json!({
+                "name": format!("tool_{n:02}"),
+                "description": format!(
+                    "Padding tool {n:02}. {}",
+                    "It stands for one of the many tools a large server lists. ".repeat(5)
+                ),
+                "inputSchema": {"type": "object",
+                                "properties": {"value": {"type": "string"}},
+                                "required": ["value"]}
+            })
+        })
+        .collect();
+    http_mcp("big", tools, "big").await
 }
 
 fn big_server(mock: &MockServer) -> McpServer {
@@ -458,43 +461,11 @@ async fn a_deferred_conversation_keeps_its_tools_when_servers_go() {
     f.mcp.shutdown().await;
 }
 
-/// A Streamable HTTP MCP server named `twin` with one tool, `act`, whose result names `label`.
+/// A Streamable HTTP MCP server named `twin` with one tool, `act`, whose result is `"{label} act"`.
 async fn twin(f: &Fixture, label: &'static str) -> (String, MockServer) {
-    let server = MockServer::start().await;
-    Mock::given(path("/mcp"))
-        .respond_with(move |request: &Request| {
-            match request.method.as_str() {
-                "GET" => return ResponseTemplate::new(405),
-                "DELETE" => return ResponseTemplate::new(200),
-                _ => {}
-            }
-            let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
-            let Some(id) = body.get("id").cloned() else {
-                return ResponseTemplate::new(202);
-            };
-            match body["method"].as_str().unwrap_or_default() {
-                "initialize" => mcp_reply(
-                    &id,
-                    json!({
-                        "protocolVersion": "2025-03-26",
-                        "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "twin", "version": "1.0.0"}
-                    }),
-                ),
-                "tools/list" => mcp_reply(
-                    &id,
-                    json!({"tools": [{"name": "act", "description": "Acts.",
-                                      "inputSchema": {"type": "object"}}]}),
-                ),
-                "tools/call" => mcp_reply(
-                    &id,
-                    json!({"content": [{"type": "text", "text": format!("twin {label}")}]}),
-                ),
-                _ => mcp_reply(&id, json!({})),
-            }
-        })
-        .mount(&server)
-        .await;
+    let tools =
+        vec![json!({"name": "act", "description": "Acts.", "inputSchema": {"type": "object"}})];
+    let server = http_mcp("twin", tools, label).await;
     let id = put_server(
         &f.vault,
         McpServer {
@@ -552,9 +523,54 @@ async fn a_name_keeps_its_tool_when_a_server_goes_mid_turn() {
             "The MCP server \"twin\" was deleted, so the tool did not run."
         )
     );
-    assert!(!view_content(&c2).2.contains(&format!("twin {stays}")));
+    assert!(!view_content(&c2).2.contains(&format!("{stays} act")));
     sink.ended().await;
     f.idle(&conv).await;
+    f.mcp.shutdown().await;
+}
+
+/// More than 128 tools in a request, built-in ones included, defer the MCP tools however little of
+/// a large window their definitions take, since OpenAI's Chat Completions API refuses more; 128
+/// do not. Once deferred, they stay deferred with 128 again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn more_than_128_tools_defer_them_in_a_large_window() {
+    let f = Fixture::new(vec![answer("One."), answer("Two."), answer("Three.")]).await;
+    f.set_context_window(1_000_000);
+    let mcp_tools = 128 - BUILTIN.len();
+    let tiny: Vec<Value> = (0..mcp_tools)
+        .map(|n| json!({"name": format!("t{n:03}"), "description": "", "inputSchema": {"type": "object"}}))
+        .collect();
+    let many = http_mcp("many", tiny, "many").await;
+    put_server(
+        &f.vault,
+        McpServer {
+            name: "many".into(),
+            ..big_server(&many)
+        },
+    );
+    let (conv, _) = f.exchange(None, "hello", f.context()).await;
+    let requests = f.requests().await;
+    assert_eq!(tool_names(&requests[0]).len(), 128);
+    assert_eq!(user_texts(&f, &conv), ["hello"]);
+
+    let (one_more, _twin) = twin(&f, "a").await;
+    f.exchange(Some(&conv), "one more", f.context()).await;
+    lock(&f.vault).delete(&one_more).unwrap();
+    f.exchange(Some(&conv), "one fewer", f.context()).await;
+
+    let texts = user_texts(&f, &conv);
+    let listed = |servers: usize, tools: usize| {
+        format!("<mcp_tools servers=\"{servers}\" tools=\"{tools}\">")
+    };
+    assert!(
+        texts[1].starts_with(&listed(2, mcp_tools + 1)),
+        "{}",
+        texts[1]
+    );
+    assert!(texts[2].starts_with(&listed(1, mcp_tools)), "{}", texts[2]);
+    let requests = f.requests().await;
+    assert_eq!(tool_names(&requests[1]), deferred_tools());
+    assert_eq!(prefix(&requests[2]), prefix(&requests[1]));
     f.mcp.shutdown().await;
 }
 

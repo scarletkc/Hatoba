@@ -143,7 +143,7 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 The plug button in the input area (**MCP tools**) lists the MCP servers that are on for this device, with their state, and a switch for each. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
 
-When a conversation's MCP tool definitions would take a tenth of the model's context window or more (3,200 tokens when it is not set), they no longer go with each request, so the provider's prompt cache keeps working: a message lists the tools by name (a divider "Listed N MCP tools"), and the assistant looks a tool up with **Search MCP tools** before it calls it. The conversation stays that way. While servers start, the panel says "Starting MCP servers…".
+When a conversation's MCP tool definitions would take a tenth of the model's context window or more (3,200 tokens when it is not set), or a request would carry more than 128 tools in all, they no longer go with each request, so the provider's prompt cache keeps working: a message lists the tools by name (a divider "Listed N MCP tools"), and the assistant looks a tool up with **Search MCP tools** before it calls it. The conversation stays that way. While servers start, the panel says "Starting MCP servers…".
 
 | en | zh-CN | ja |
 |---|---|---|

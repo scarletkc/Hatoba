@@ -1,9 +1,9 @@
 //! Deferred MCP tools (AI-45): once a conversation's MCP tool definitions come to a tenth of the
-//! model's context window, its requests offer [`SEARCH_TOOLS`](crate::tools::SEARCH_TOOLS) and
+//! model's context window, or its requests would offer more than 128 tools, its requests offer [`SEARCH_TOOLS`](crate::tools::SEARCH_TOOLS) and
 //! [`CALL_MCP_TOOL`](crate::tools::CALL_MCP_TOOL) in their place, so the tool definitions and the
 //! system prompt never change with the servers and the provider's prompt cache keeps serving them.
 //!
-//! - [`defer_due`]: whether a message's MCP tool definitions defer them.
+//! - [`defer_due`]: whether a message's MCP tools are deferred.
 //! - [`list_block`]: the `mcp_tools` note that lists the deferred tools (spec §13.3).
 //! - [`search`] and [`search_result`]: `search_tools`, BM25 over names, server names,
 //!   descriptions and parameter names, with every tool the query names first.
@@ -26,6 +26,9 @@ pub const DEFER_PERCENT: u64 = 10;
 /// The `mcp_tools` note names every tool while it stays within this share of the context window,
 /// in percent.
 pub const LIST_PERCENT: u64 = 2;
+/// The most tools a request offers, built-in ones included, before its MCP tools are deferred:
+/// OpenAI's Chat Completions API takes at most 128 tools a request and refuses more with a 400.
+pub const MAX_TOOLS: usize = 128;
 /// The context window a model is taken to have when it is not known. Smaller than most, since
 /// deferring too early only costs a search.
 pub const UNKNOWN_WINDOW: u64 = 32_000;
@@ -57,10 +60,14 @@ pub fn window(context_window: Option<u64>) -> u64 {
     context_window.filter(|w| *w > 0).unwrap_or(UNKNOWN_WINDOW)
 }
 
-/// Whether MCP tool definitions of `tokens` defer a conversation's MCP tools (AI-45).
+/// Whether a message defers a conversation's MCP tools (AI-45): when their definitions come to
+/// `tokens`, at least [`DEFER_PERCENT`] of the context window, or when its requests would offer
+/// `tools` tools in all, built-in ones included, more than [`MAX_TOOLS`]. The count does not read
+/// the window.
 #[must_use]
-pub fn defer_due(tokens: u64, context_window: Option<u64>) -> bool {
-    tokens.saturating_mul(100) >= window(context_window).saturating_mul(DEFER_PERCENT)
+pub fn defer_due(tokens: u64, context_window: Option<u64>, tools: usize) -> bool {
+    tools > MAX_TOOLS
+        || tokens.saturating_mul(100) >= window(context_window).saturating_mul(DEFER_PERCENT)
 }
 
 /// The most tokens the `mcp_tools` note takes before servers are listed by count alone.
@@ -882,11 +889,15 @@ mod tests {
 
     #[test]
     fn thresholds_read_the_window_or_32k() {
-        assert!(!defer_due(19_999, Some(200_000)));
-        assert!(defer_due(20_000, Some(200_000)));
-        assert!(defer_due(3_200, None));
-        assert!(!defer_due(3_199, None));
-        assert!(defer_due(3_200, Some(0)));
+        assert!(!defer_due(19_999, Some(200_000), 30));
+        assert!(defer_due(20_000, Some(200_000), 30));
+        assert!(defer_due(3_200, None, 30));
+        assert!(!defer_due(3_199, None, 30));
+        assert!(defer_due(3_200, Some(0), 30));
+        // More than 128 tools, whatever the window.
+        assert!(!defer_due(1_000, Some(400_000), 128));
+        assert!(defer_due(1_000, Some(400_000), 129));
+        assert!(defer_due(1_000, None, 129));
         assert_eq!(list_budget(Some(200_000)), 4_000);
         assert_eq!(list_budget(None), 640);
     }
