@@ -1199,11 +1199,9 @@ export type LocalPrefs = {
 	host_probe: boolean,
 	/**
 	 *  Check GitHub for a newer release once after the first unlock of each launch (spec §11).
-	 *  On by default. It replaces `auto_update_check`, which was off by default and which the
-	 *  app stored with every other pref, so a stored `false` cannot tell a user who turned it
-	 *  off from one who never changed it; that key is ignored.
+	 *  On by default; the request carries no identifier.
 	 */
-	check_for_updates: boolean,
+	auto_update_check: boolean,
 	/**  AI-16: the permission mode new conversations start in on this device. */
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
@@ -1214,17 +1212,11 @@ export type LocalPrefs = {
 	ai_panel_width: number,
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
-	/**
-	 *  SEC-02: minutes without input before the vault locks; 0 never locks. Earlier builds
-	 *  synced it as `Settings::auto_lock_minutes` (`settings::adopt_synced_lock_prefs`).
-	 */
+	/**  SEC-02: minutes without input before the vault locks; 0 never locks. */
 	auto_lock_minutes: number,
 	/**  SEC-02: lock the vault when the computer sleeps. */
 	lock_on_sleep: boolean,
-	/**
-	 *  SEC-03: disconnect the SSH sessions when the vault locks. Earlier builds synced it as
-	 *  `Settings::lock_disconnects_sessions`.
-	 */
+	/**  SEC-03: disconnect the SSH sessions when the vault locks. */
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,

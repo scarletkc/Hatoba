@@ -63,7 +63,7 @@ let startupChecked = false;
 export function checkOnFirstUnlock() {
   if (startupChecked) return;
   startupChecked = true;
-  if (useApp.getState().prefs.check_for_updates) void useUpdate.getState().check();
+  if (useApp.getState().prefs.auto_update_check) void useUpdate.getState().check();
 }
 
 export function useStartupUpdateCheck(unlocked: boolean) {

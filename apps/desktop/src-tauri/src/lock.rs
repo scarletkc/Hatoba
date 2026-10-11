@@ -134,7 +134,6 @@ pub fn spawn_watchers(app: AppHandle) {
 mod tests {
     use std::time::Duration;
 
-    use hatoba_core::model::{Item, SETTINGS_ID};
     use hatoba_core::{KdfParams, Vault};
     use serde_json::json;
 
@@ -178,24 +177,5 @@ mod tests {
             .unwrap();
         refresh_policy(&state);
         assert!(!idle_lock_due(&state, Duration::from_secs(24 * 60 * 60)));
-    }
-
-    #[test]
-    fn synced_settings_leave_the_policy_alone() {
-        let state = unlocked();
-        refresh_policy(&state);
-        {
-            // What older builds on other devices still write, and sync brings in.
-            let mut vault = state.vault();
-            let mut settings = vault.settings();
-            settings.auto_lock_minutes = 1;
-            settings.lock_disconnects_sessions = true;
-            vault
-                .put(Some(SETTINGS_ID), Item::Settings(settings))
-                .unwrap();
-        }
-        refresh_policy(&state);
-        assert!(!idle_lock_due(&state, IDLE));
-        assert!(!disconnects_on_lock(&state));
     }
 }

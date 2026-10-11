@@ -1744,9 +1744,9 @@ mod tests {
             Err(Error::InvalidItem(_))
         ));
         let mut s = vault.settings();
-        s.auto_lock_minutes = 5;
+        s.terminal.scrollback = 5_000;
         assert_eq!(vault.put(None, Item::Settings(s)).unwrap(), SETTINGS_ID);
-        assert_eq!(vault.settings().auto_lock_minutes, 5);
+        assert_eq!(vault.settings().terminal.scrollback, 5_000);
     }
 
     #[test]

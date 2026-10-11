@@ -694,7 +694,7 @@ export interface LocalPrefs {
   /** HOST-10 TCP reachability dots. */
   host_probe: boolean;
   /** Check GitHub Releases once after the first unlock of each launch. On by default (spec §11). */
-  check_for_updates: boolean;
+  auto_update_check: boolean;
   /** AI-16: the permission mode new conversations start in on this device. */
   ai_permission_mode: AiPermissionMode;
   /** AI-16: the user confirmed the first switch to bypass on this device. */

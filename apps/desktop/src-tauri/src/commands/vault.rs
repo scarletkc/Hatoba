@@ -6,7 +6,7 @@ use hatoba_core::sync::{SyncConfig, flows, save_session};
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
-use crate::commands::settings::{adopt_legacy_prefs_after_unlock, adopt_synced_lock_prefs};
+use crate::commands::settings::adopt_legacy_prefs_after_unlock;
 use crate::commands::sync::{backend_from_input, persist};
 use crate::dto::{LockReason, SyncConfigInput, SyncKind, VaultState, VaultStatus};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -29,12 +29,6 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
         Ok(0) => {}
         Ok(parts) => tracing::info!(parts, "deleted message parts of deleted conversations"),
         Err(e) => tracing::warn!("could not delete orphaned message parts: {}", e.detail),
-    }
-    if let Err(e) = state.with_unlocked(adopt_synced_lock_prefs) {
-        tracing::warn!(
-            "could not copy the lock settings into the device prefs: {}",
-            e.detail
-        );
     }
     lock::refresh_policy(state);
     state.touch_activity();

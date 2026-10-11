@@ -33,7 +33,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   appearance: "system",
   density: "regular",
   host_probe: true,
-  check_for_updates: true,
+  auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
   ai_panel_open: false,

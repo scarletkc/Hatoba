@@ -1224,10 +1224,10 @@ async fn settings_item_syncs_like_any_other() {
     let (_server, clock, a, b) = two_devices().await;
     clock.advance(1000);
     let mut s = a.v().settings();
-    s.auto_lock_minutes = 42;
+    s.terminal.scrollback = 42_000;
     a.v().put(None, Item::Settings(s)).unwrap();
     converge(&a, &b).await;
-    assert_eq!(b.v().settings().auto_lock_minutes, 42);
+    assert_eq!(b.v().settings().terminal.scrollback, 42_000);
 }
 
 #[tokio::test]
@@ -1237,7 +1237,6 @@ async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_ed
     clock.advance(1000);
     let mut s = a.v().settings();
     s.terminal.font_size = 16;
-    s.auto_lock_minutes = 42;
     s.terminal.right_click = Some(RightClick::CopyPaste);
     a.v().put(None, Item::Settings(s)).unwrap();
     a.sync().await;
@@ -1257,7 +1256,6 @@ async fn device_terminal_prefs_move_in_after_the_pull_without_outdating_newer_ed
     assert_eq!(s.terminal.right_click, Some(RightClick::CopyPaste));
     assert_eq!(s.terminal.confirm_multiline_paste, Some(false));
     assert_eq!(s.terminal.font_size, 16);
-    assert_eq!(s.auto_lock_minutes, 42);
     // B wrote on top of A's version, so nothing had to be resolved.
     assert!(b.v().conflicts(false).unwrap().is_empty());
 }

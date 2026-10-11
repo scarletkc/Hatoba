@@ -1201,32 +1201,15 @@ impl Default for AiSettings {
 }
 
 /// The user's synced settings. There is exactly one, with the fixed id [`SETTINGS_ID`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct Settings {
     /// Terminal appearance.
     pub terminal: TerminalSettings,
-    /// Idle minutes before auto-lock (0 disables). Builds that keep the lock settings per device
-    /// copy it once and then leave it as stored, for the older builds that still read it.
-    pub auto_lock_minutes: u32,
-    /// Disconnect SSH sessions when the vault locks. Kept like `auto_lock_minutes`.
-    pub lock_disconnects_sessions: bool,
     /// AI assistant settings.
     pub ai: AiSettings,
     /// Last modification, Unix ms.
     pub updated_at: i64,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            terminal: TerminalSettings::default(),
-            auto_lock_minutes: 15,
-            lock_disconnects_sessions: false,
-            ai: AiSettings::default(),
-            updated_at: 0,
-        }
-    }
 }
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
@@ -2354,8 +2337,6 @@ mod tests {
         assert_eq!(s.terminal.scrollback, 10_000);
         assert_eq!(s.terminal.right_click(), RightClick::platform_default());
         assert!(s.terminal.confirm_multiline_paste());
-        assert_eq!(s.auto_lock_minutes, 15);
-        assert!(!s.lock_disconnects_sessions);
         let value = serde_json::to_value(Item::Settings(s)).unwrap();
         assert_eq!(value["terminal"]["theme"], "dark");
         assert_eq!(value["terminal"]["cursor_style"], "block");
@@ -2442,7 +2423,6 @@ mod tests {
         let s = item.as_settings().unwrap();
         assert_eq!(s.terminal.theme, ThemeMode::System);
         assert_eq!(s.terminal.cursor_style, CursorStyle::Block);
-        assert_eq!(s.auto_lock_minutes, 15);
     }
 
     #[test]

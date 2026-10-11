@@ -156,8 +156,8 @@ export function AboutPane() {
         <SettingRow label={t("settings.about.auto")} hint={t("settings.about.auto.hint")}>
           <Switch
             label={t("settings.about.auto")}
-            checked={prefs.check_for_updates}
-            onChange={(check_for_updates) => setPrefs({ check_for_updates })}
+            checked={prefs.auto_update_check}
+            onChange={(auto_update_check) => setPrefs({ auto_update_check })}
           />
         </SettingRow>
       </Group>
