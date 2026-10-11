@@ -722,6 +722,29 @@ async fn inspect_never_plans_over_a_foreign_worker_or_a_vault() {
 }
 
 #[tokio::test]
+async fn finds_the_url_of_a_worker_that_holds_a_vault() {
+    let h = Harness::new().await;
+    assert!(matches!(
+        h.deployment().vault_worker_url(&target()).await,
+        Err(Error::WorkerNotFound)
+    ));
+    let db = h.add_database("synced", &with_vault());
+    h.add_hatoba_worker("hatoba-sync", &db);
+    assert_eq!(
+        h.deployment().vault_worker_url(&target()).await.unwrap(),
+        format!(
+            "https://hatoba-sync.{}.workers.dev",
+            h.state().subdomain.clone().unwrap()
+        )
+    );
+    assert!(
+        h.log()
+            .iter()
+            .all(|l| l.starts_with("GET ") || l.ends_with("/query"))
+    );
+}
+
+#[tokio::test]
 async fn inspect_reuses_a_hatoba_worker_without_a_vault_and_its_database() {
     let h = Harness::new().await;
     let db = h.add_database("from-wrangler", &migrated());

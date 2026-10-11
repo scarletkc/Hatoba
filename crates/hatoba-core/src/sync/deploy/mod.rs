@@ -215,7 +215,7 @@ pub enum WorkerPlan {
     Create,
     /// A Hatoba Worker whose database holds no vault: deploy over it.
     Update,
-    /// A Hatoba Worker whose database holds a vault: stop (Flow C).
+    /// A Hatoba Worker whose database holds a vault: deploy nothing; a device joins it (flow C).
     HasVault,
     /// A Worker the app does not recognize: stop and ask for another name.
     Foreign,
@@ -528,6 +528,27 @@ impl Deployment {
             worker: plan,
             database: Some(database),
         })
+    }
+
+    /// The workers.dev URL of the Worker named by `target` when it already holds a vault
+    /// ([`WorkerPlan::HasVault`]), which a device joins instead of deploying (flow C). Writes
+    /// nothing.
+    ///
+    /// # Errors
+    /// [`Error::WorkerNotFound`] when step 2 finds anything else under the name, or the account
+    /// has no workers.dev subdomain to reach it on; API errors as for [`inspect`](Self::inspect).
+    pub async fn vault_worker_url(&self, target: &Target) -> Result<String> {
+        match self.inspect(target).await? {
+            Inspection {
+                worker: WorkerPlan::HasVault,
+                subdomain: Some(subdomain),
+                ..
+            } => Ok(format!(
+                "https://{}.{subdomain}.workers.dev",
+                target.worker_name
+            )),
+            _ => Err(Error::WorkerNotFound),
+        }
     }
 
     /// The ID of the database bound as `DB`, when the bindings are a Hatoba Worker's: a `d1`

@@ -49,8 +49,8 @@ pub use conflict::{ConflictEntry, Resolution};
 pub use d1::D1Backend;
 pub use engine::{SyncEngine, SyncOptions, SyncReport};
 pub use flows::{
-    DeviceEntry, change_password_remote, devices, enable_sync, recover_remote, restore_from_cloud,
-    revoke_device, rotate_recovery_remote, sign_in,
+    DeviceEntry, Joined, change_password_remote, devices, enable_sync, join_remote_vault,
+    recover_remote, restore_from_cloud, revoke_device, rotate_recovery_remote, sign_in,
 };
 pub use worker::WorkerBackend;
 

@@ -1258,6 +1258,89 @@ impl Vault {
         })
     }
 
+    /// Flow C: makes this unlocked vault part of an initialised remote vault, whose metadata and
+    /// unwrapped key the caller authenticated for. The local master password becomes the
+    /// remote's, `config` is recorded, and the pull starts over, all in one transaction.
+    ///
+    /// When the remote is this same vault (a device that synced before), every item is queued
+    /// again so the next round reconciles both sides. Otherwise each live item is sealed under
+    /// the remote vault key and queued as new, and the remote's settings replace the local ones.
+    /// Tombstones, items that cannot be decrypted, and the conflict log are dropped, and the
+    /// device-local data sealed under the vault key is sealed again. Returns whether the vault key
+    /// changed, so the caller can drop what still holds the old one (biometric unlock).
+    pub(crate) fn join_remote_vault(
+        &mut self,
+        remote: &VaultMeta,
+        vault_key: Key32,
+        config: &SyncConfig,
+    ) -> Result<bool> {
+        let old = self.vault_key_copy()?;
+        let rekey = !self.verify_vault_key(&vault_key)?;
+        let config = serde_json::to_string(config)?;
+        let recent = match self.store.get_meta(meta::RECENT_TARGETS)? {
+            Some(sealed) if rekey => {
+                crypto::open_json(&old, AAD_RECENT_TARGETS.as_bytes(), &sealed)
+                    .ok()
+                    .map(|plain| seal(&vault_key, AAD_RECENT_TARGETS.as_bytes(), &plain))
+                    .transpose()?
+                    .map(|env| env.to_json())
+            }
+            _ => None,
+        };
+        let check = seal_vault_check(&vault_key)?;
+        self.store.transaction(|tx| {
+            if rekey {
+                for row in tx.item_rows()? {
+                    let plain = match row.envelope.as_deref().filter(|_| !row.deleted) {
+                        Some(env) if row.id != SETTINGS_ID => {
+                            crypto::open_json(&old, item_aad(&row.id).as_bytes(), env).ok()
+                        }
+                        _ => None,
+                    };
+                    let Some(plain) = plain else {
+                        tx.delete_item_row(&row.id)?;
+                        continue;
+                    };
+                    let envelope = seal(&vault_key, item_aad(&row.id).as_bytes(), &plain)?;
+                    tx.upsert_item_row(&ItemRow {
+                        envelope: Some(envelope.to_json()),
+                        revision: 0,
+                        dirty: true,
+                        ..row
+                    })?;
+                }
+                tx.clear_conflicts()?;
+                crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
+                match &recent {
+                    Some(sealed) => tx.set_meta(meta::RECENT_TARGETS, sealed)?,
+                    None => tx.delete_meta(meta::RECENT_TARGETS)?,
+                }
+            } else {
+                tx.mark_all_dirty_for_upload()?;
+            }
+            tx.set_meta(
+                meta::SCHEMA_VERSION,
+                &crate::store::SCHEMA_VERSION
+                    .max(remote.schema_version)
+                    .to_string(),
+            )?;
+            tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
+            tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
+            tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
+            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
+            tx.set_meta(meta::VAULT_CHECK, &check)?;
+            // The remote's recovery code is not this device's to know.
+            tx.delete_meta(meta::RECOVERY_AUTH_SEALED)?;
+            tx.delete_meta(meta::UNLOCK_FAILURES)?;
+            tx.delete_meta(meta::UNLOCK_LAST_FAILURE_AT)?;
+            tx.set_meta(meta::SYNC_BACKEND, &config)?;
+            tx.delete_meta(meta::SYNC_CURSOR)?;
+            tx.delete_meta(meta::SYNC_LAST_AT)
+        })?;
+        self.finish_unlock(vault_key)?;
+        Ok(rekey)
+    }
+
     // ---- conflict log ----
 
     /// Conflicts resolved automatically, newest first, with both versions decrypted (P1 UI).

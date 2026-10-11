@@ -73,7 +73,7 @@ fn device_login(key: &[u8; 32], device_id: &str, info: &DeviceInfo) -> Result<De
 ///    `setup` runs with this vault's metadata, `auth_key` and sealed-then-unsealed
 ///    `recovery_auth`. A remote that already holds *this* vault (an earlier attempt set it up,
 ///    then failed or lost the response) is adopted instead, and any other vault yields
-///    [`Error::RemoteInitialized`] (the MVP answer to flow C: restore on a new device).
+///    [`Error::RemoteInitialized`] (flow C, [`join_remote_vault`], joins one).
 /// 2. `login`, a check that the remote's wrapped vault keys are this vault's, then a full round.
 ///
 /// A call that fails at any point after `setup` can therefore be retried with the same arguments.
@@ -250,6 +250,57 @@ pub async fn restore_from_cloud(
         v.install_remote_vault(&auth.meta, auth.vault_key, &device_id, Some(config))
     })?;
     Ok(auth.session)
+}
+
+/// The result of [`join_remote_vault`].
+#[derive(Debug)]
+pub struct Joined {
+    /// The session to store in the OS credential store.
+    pub session: Session,
+    /// The remote was another vault, so the local data now uses its vault key. Whatever still
+    /// holds the old key (biometric unlock) no longer works.
+    pub rekeyed: bool,
+}
+
+/// Flow C: connects this device's vault to a remote that already holds a vault.
+///
+/// Signs in with the remote's master password under this device's id, then merges locally
+/// (see `Vault::join_remote_vault`): a remote that holds this same vault is reconciled item by
+/// item, and any other vault receives every local item as a new one. Either way the local master
+/// password becomes the remote's and `config` is recorded. The vault must be unlocked.
+///
+/// Nothing is pushed here: the caller stores the returned session and then runs an ordinary
+/// sync round, which pulls the remote's items and uploads the local ones. An interrupted round
+/// resumes like any other.
+///
+/// # Errors
+/// [`Error::Locked`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
+/// [`Error::WeakKdfParams`], transport errors.
+pub async fn join_remote_vault(
+    vault: &SharedVault,
+    backend: &dyn SyncBackend,
+    password: &str,
+    device: DeviceInfo,
+    config: &SyncConfig,
+) -> Result<Joined> {
+    let device_id = with_vault(vault, |v| {
+        if v.is_unlocked() {
+            Ok(v.device_id())
+        } else {
+            Err(Error::Locked)
+        }
+    })?;
+    if !backend.health().await?.initialized {
+        return Err(Error::RemoteNotInitialized);
+    }
+    let auth = authenticate(backend, password, &device_id, &device).await?;
+    let rekeyed = with_vault(vault, |v| {
+        v.join_remote_vault(&auth.meta, auth.vault_key, config)
+    })?;
+    Ok(Joined {
+        session: auth.session,
+        rekeyed,
+    })
 }
 
 /// Signs in again after the session expired or was revoked ("authentication expired").

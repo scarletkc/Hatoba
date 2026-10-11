@@ -96,8 +96,8 @@ pub enum Error {
     /// The remote has no vault yet (`/v1/prelogin` answered 404).
     #[error("the remote has not been initialised")]
     RemoteNotInitialized,
-    /// The remote already holds a vault (health says so, or setup answered 409). MVP flow C:
-    /// the user should use "restore from cloud" on a new device instead.
+    /// The remote already holds a vault (health says so, or setup answered 409). Joining it is
+    /// flow C (`sync::join_remote_vault`).
     #[error("the remote already holds a vault")]
     RemoteInitialized,
     /// 429 from the Worker.
