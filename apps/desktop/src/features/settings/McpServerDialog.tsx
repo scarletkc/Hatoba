@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { Button, IconButton, LinkButton, Segmented, Switch, TextField } from "@/components/controls";
-import { FormRow, Group, Section } from "@/components/layout";
+import { Callout, FormRow, Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, confirm } from "@/components/overlay";
-import { useT } from "@/i18n";
+import { openExternal } from "@/features/sync/external";
+import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { McpServerView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -11,6 +12,7 @@ import { isImeEvent } from "@/lib/ime";
 import { SavedKeyField } from "./aiShared";
 import {
   argRows,
+  bearerMissing,
   commandPreview,
   hasMcpProblems,
   initialMcpForm,
@@ -26,22 +28,35 @@ import {
   type SecretRowProblem,
   type TransportKind,
 } from "./mcpLogic";
+import { templateMcpForm, type McpTemplate, type McpTemplateId } from "./mcpTemplates";
 import s from "./McpSection.module.css";
 
 type Rejected = Partial<Record<"name" | "command" | "url" | "general", string>>;
 
+/** What the dialog says about each template (AI-44): its note and its token link. */
+const TEMPLATE_TEXT: Record<McpTemplateId, { note: MessageKey; token: MessageKey }> = {
+  github: { note: "aiSettings.mcp.tpl.github.note", token: "aiSettings.mcp.tpl.github.token" },
+  linear: { note: "aiSettings.mcp.tpl.linear.note", token: "aiSettings.mcp.tpl.linear.token" },
+  context7: { note: "aiSettings.mcp.tpl.context7.note", token: "aiSettings.mcp.tpl.context7.token" },
+  cloudflare: { note: "aiSettings.mcp.tpl.cloudflare.note", token: "aiSettings.mcp.tpl.cloudflare.token" },
+};
+
 /**
  * Add or edit one MCP server (AI-29). Saved straight to the backend. Before a `stdio` server is saved, a confirmation
  * shows the full command line, because the server is a program that runs on this device with the user's privileges.
+ * A template (AI-44) only fills in the form of a new server and adds its note; saving is the same.
  */
 export function McpServerDialog({
   server,
+  template = null,
   otherNames,
   onClose,
   onSaved,
 }: {
   /** null adds a server. */
   server: McpServerView | null;
+  /** Fills in the form of a new server. */
+  template?: McpTemplate | null;
   /** The names of the other saved servers. */
   otherNames: string[];
   onClose: () => void;
@@ -49,7 +64,10 @@ export function McpServerDialog({
 }) {
   const t = useT();
   const ids = { form: useId(), name: useId(), command: useId(), url: useId() };
-  const [form, setForm] = useState<McpForm>(() => initialMcpForm(server));
+  const fromTemplate = server ? null : template;
+  const [form, setForm] = useState<McpForm>(() => (fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server)));
+  // A template fills in the name, so the first value to type takes the focus.
+  const [valueFocusUid] = useState(() => (fromTemplate ? (form.headers.find((r) => !r.plain)?.uid ?? null) : null));
   const [submitted, setSubmitted] = useState(false);
   const [rejected, setRejected] = useState<Rejected>({});
   const [splitFailed, setSplitFailed] = useState(false);
@@ -174,11 +192,19 @@ export function McpServerDialog({
           void save();
         }}
       >
+        {fromTemplate && (
+          <Callout icon={fromTemplate.icon} title={t("aiSettings.mcp.tpl.title", { name: fromTemplate.label })}>
+            {t(TEMPLATE_TEXT[fromTemplate.id].note)}{" "}
+            <LinkButton icon="arrow-up-right" onClick={() => void openExternal(fromTemplate.tokenUrl)}>
+              {t(TEMPLATE_TEXT[fromTemplate.id].token)}
+            </LinkButton>
+          </Callout>
+        )}
         <Group>
           <FormRow label={t("aiSettings.mcp.f.name")} htmlFor={ids.name} error={nameError}>
             <TextField
               id={ids.name}
-              autoFocus
+              autoFocus={valueFocusUid === null}
               value={form.name}
               invalid={!!nameError}
               placeholder={t("aiSettings.mcp.f.namePlaceholder")}
@@ -283,6 +309,7 @@ export function McpServerDialog({
             kind={form.kind === "stdio" ? "env" : "header"}
             rows={secrets}
             problems={problems.secrets}
+            valueFocusUid={valueFocusUid}
             onChange={setSecrets}
           />
         </Section>
@@ -311,11 +338,14 @@ function SecretRows({
   kind,
   rows,
   problems,
+  valueFocusUid,
   onChange,
 }: {
   kind: SecretKind;
   rows: SecretRow[];
   problems: (SecretRowProblem | null)[];
+  /** The row whose value field takes the focus when the dialog opens. */
+  valueFocusUid: number | null;
   onChange: (rows: SecretRow[]) => void;
 }) {
   const t = useT();
@@ -358,17 +388,29 @@ function SecretRows({
                         onChange={(e) => patchRow(row.uid, { key: e.target.value })}
                       />
                     )}
-                    <SavedKeyField
-                      hasSaved={row.saved}
-                      draft={row.draft}
-                      allowClear={false}
-                      invalid={!!problem?.value}
-                      ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                      placeholder={t("aiSettings.mcp.f.valuePlaceholder")}
-                      newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
-                      keepLabel={t("aiSettings.mcp.f.valueKeep")}
-                      onChange={(draft) => patchRow(row.uid, { draft })}
-                    />
+                    {row.plain && !row.saved ? (
+                      <TextField
+                        mono
+                        value={row.draft.value}
+                        invalid={!!problem?.value}
+                        aria-label={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
+                        placeholder={t("aiSettings.mcp.f.valuePlaceholder")}
+                        onChange={(e) => patchRow(row.uid, { draft: { mode: "replace", value: e.target.value } })}
+                      />
+                    ) : (
+                      <SavedKeyField
+                        hasSaved={row.saved}
+                        draft={row.draft}
+                        allowClear={false}
+                        invalid={!!problem?.value}
+                        autoFocus={valueFocusUid === row.uid}
+                        ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
+                        placeholder={row.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
+                        newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
+                        keepLabel={t("aiSettings.mcp.f.valueKeep")}
+                        onChange={(draft) => patchRow(row.uid, { draft })}
+                      />
+                    )}
                     <IconButton
                       icon="x"
                       size={13}
@@ -376,10 +418,18 @@ function SecretRows({
                       onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                     />
                   </div>
-                  {problem && (
+                  {problem ? (
                     <div className={s.problem} role="alert">
                       {problemText(problem)}
                     </div>
+                  ) : (
+                    (row.bearer || row.optional) && (
+                      <div className={cx(s.hint, bearerMissing(row) && s.hintWarn)}>
+                        {[row.bearer && t("aiSettings.mcp.tpl.bearerHint"), row.optional && t("aiSettings.mcp.tpl.optionalHint")]
+                          .filter(Boolean)
+                          .join(" ")}
+                      </div>
+                    )
                   )}
                 </div>
               );

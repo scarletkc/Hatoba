@@ -3,8 +3,10 @@ import type { McpServerView, McpToolAnnotations, McpToolView } from "@/ipc/types
 import {
   annotationKeys,
   argRows,
+  bearerMissing,
   commandPreview,
   formatCommandLine,
+  freeServerName,
   hasMcpProblems,
   initialMcpForm,
   isBlankRow,
@@ -161,6 +163,27 @@ describe("environment and header rows", () => {
   it("sends a new row's value and trims the name", () => {
     expect(secretInputs([row(" TOKEN ", " abc ")])).toEqual([{ key: "TOKEN", value: "abc" }]);
   });
+
+  it("drops an optional row without a value, and checks it once one is typed", () => {
+    const optional = row("Authorization", " ", { optional: true });
+    expect(isBlankRow(optional)).toBe(true);
+    expect(validateSecretRows([optional], "header")).toEqual([null]);
+    expect(secretInputs([optional])).toEqual([]);
+    const filled = { ...optional, key: "Bad Name", draft: { mode: "replace" as const, value: "x" } };
+    expect(isBlankRow(filled)).toBe(false);
+    expect(validateSecretRows([filled], "header")).toEqual([{ key: "invalid" }]);
+    expect(isBlankRow(row("Authorization", ""))).toBe(false);
+  });
+
+  it("spots a bearer value typed without Bearer", () => {
+    const bearer = (value: string) => row("Authorization", value, { bearer: true });
+    expect(bearerMissing(bearer(""))).toBe(false);
+    expect(bearerMissing(bearer("github_pat_x"))).toBe(true);
+    expect(bearerMissing(bearer("Bearer"))).toBe(true);
+    expect(bearerMissing(bearer(" Bearer github_pat_x"))).toBe(false);
+    expect(bearerMissing(bearer("bearer x"))).toBe(false);
+    expect(bearerMissing(row("Authorization", "token"))).toBe(false);
+  });
 });
 
 describe("the form", () => {
@@ -189,6 +212,13 @@ describe("the form", () => {
   it("accepts a complete stdio server and a complete http server", () => {
     expect(hasMcpProblems(validateMcpForm(valid()))).toBe(false);
     expect(hasMcpProblems(validateMcpForm(valid({ kind: "http", url: "https://example.com/mcp" })))).toBe(false);
+  });
+
+  it("finds a free name the way validation compares names", () => {
+    expect(freeServerName("github", [])).toBe("github");
+    expect(freeServerName("github", [" GitHub "])).toBe("github-2");
+    expect(freeServerName("github", ["github", "GITHUB-2", "github-4"])).toBe("github-3");
+    expect(validateMcpForm(valid({ name: freeServerName("github", ["github"]) }), ["github"]).name).toBeNull();
   });
 
   it("flags a missing or taken name, case-insensitively", () => {

@@ -87,13 +87,22 @@ export function looksLikeCommandLine(command: string): boolean {
 
 /**
  * An environment variable or request header while it is being edited. A saved value never reaches the page
- * (`saved`), so the row keeps it or replaces it, like an API key (AI-01).
+ * (`saved`), so the row keeps it or replaces it, like an API key (AI-01). The optional fields come from a template
+ * (AI-44) and last until the dialog closes.
  */
 export interface SecretRow {
   uid: number;
   key: string;
   saved: boolean;
   draft: KeyDraft;
+  /** The value is not a secret, so its field shows it. */
+  plain?: boolean;
+  /** What the value looks like, shown while its field is empty. */
+  placeholder?: string;
+  /** The value is `Bearer `, then the token. */
+  bearer?: boolean;
+  /** Without a value, the row is dropped like a blank one. */
+  optional?: boolean;
 }
 
 let nextUid = 1;
@@ -111,8 +120,15 @@ export interface SecretRowProblem {
   value?: "missing";
 }
 
-/** A row the user added and left empty: it is dropped when saving. */
-export const isBlankRow = (row: SecretRow): boolean => !row.saved && row.key.trim() === "" && row.draft.value.trim() === "";
+/** A row the user added and left empty, or an optional row left without a value: it is dropped when saving. */
+export const isBlankRow = (row: SecretRow): boolean =>
+  !row.saved && row.draft.value.trim() === "" && (row.key.trim() === "" || !!row.optional);
+
+/** Whether a value that should be `Bearer ` and a token was typed without that word, as a pasted bare token is. */
+export const bearerMissing = (row: SecretRow): boolean => {
+  const value = row.draft.value.trim();
+  return !!row.bearer && value !== "" && !/^bearer\s/i.test(value);
+};
 
 // A name has no `=`, no whitespace, and no control character; a header name is an HTTP token (RFC 9110).
 const ENV_NAME = /^[^=\s\u0000-\u001f\u007f]+$/;
@@ -202,6 +218,14 @@ export function validateMcpForm(form: McpForm, otherNames: readonly string[] = [
     url: form.kind === "http" ? (url === "" ? "empty" : parseBaseUrl(url) ? null : "invalid") : null,
     secrets: validateSecretRows(form.kind === "stdio" ? form.env : form.headers, form.kind === "stdio" ? "env" : "header"),
   };
+}
+
+/** `name`, or the first of `name-2`, `name-3`… that no other server has, compared as `validateMcpForm` does. */
+export function freeServerName(name: string, otherNames: readonly string[]): string {
+  const taken = new Set(otherNames.map((n) => n.trim().toLowerCase()));
+  let candidate = name;
+  for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${name}-${n}`;
+  return candidate;
 }
 
 export function hasMcpProblems(p: McpFormProblems): boolean {
