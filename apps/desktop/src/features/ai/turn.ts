@@ -1,4 +1,4 @@
-import type { AiEntryView, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
 
 /** A response while it streams, before Rust stores it as an entry (§13.1 step 2). */
 export interface LiveResponse {
@@ -164,6 +164,33 @@ export function entriesBefore(entries: AiEntryView[], entryId: string): AiEntryV
 export function laterMessages(entries: AiEntryView[], entryId: string): number {
   const i = entries.findIndex((e) => e.entry_id === entryId);
   return i < 0 ? 0 : entries.slice(i + 1).filter((e) => e.role !== "tool").length;
+}
+
+/** What an edit of the user's message would do to files the assistant changed (AI-26, AI-41). */
+export interface EditedFiles {
+  /** The changes of the calls the edit deletes that this device keeps and has not reverted, oldest call first. */
+  revert: AiFileChange[];
+  /** The `edit_file` and `write_file` calls the edit deletes that wrote, by their result, and whose change this device does not keep. */
+  untracked: number;
+}
+
+/** The file changes an edit of `entryId` deletes the calls of: those this device can revert, and how many others stay on the host. */
+export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], entryId: string): EditedFiles {
+  const i = entries.findIndex((e) => e.entry_id === entryId);
+  if (i < 0) return { revert: [], untracked: 0 };
+  const deleted = entries.slice(i + 1);
+  const responses = new Set(deleted.flatMap((e) => (e.role === "assistant" ? [e.entry_id] : [])));
+  const kept = changes.filter((c) => responses.has(c.response_id));
+  const known = new Set(kept.map((c) => `${c.response_id}:${c.tool_call_id}`));
+  let untracked = 0;
+  let response: (AiEntryView & { role: "assistant" }) | null = null;
+  for (const e of deleted) {
+    if (e.role === "assistant") response = e;
+    if (e.role !== "tool" || e.status !== "ok" || !response) continue;
+    const call = response.tool_calls.find((c) => c.id === e.tool_call_id);
+    if ((call?.name === "edit_file" || call?.name === "write_file") && !known.has(`${response.entry_id}:${call.id}`)) untracked++;
+  }
+  return { revert: kept.filter((c) => !c.reverted), untracked };
 }
 
 /**

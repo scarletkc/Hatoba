@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { ConfirmHost, setOverlaysLocked, ToastHost } from "@/components/overlay";
 import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
+import { EditFilesHost } from "@/features/ai/EditFiles";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
@@ -62,6 +63,7 @@ export function App() {
       {locked && <UnlockScreen />}
       {!locked && settingsOpen && <SettingsWindow onClose={() => useApp.getState().openSettings(false)} />}
       {!locked && <SessionDialogs />}
+      <EditFilesHost />
       <ConfirmHost />
       <ToastHost />
       <ContextMenuHost platform={platform} />

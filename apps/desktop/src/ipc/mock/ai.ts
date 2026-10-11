@@ -988,7 +988,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const response = c.entries.find((e) => e.role === "assistant" && e.tool_calls.some((t) => t.id === x.id));
         if (response) {
           const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
-          const change = { response_id: response.entry_id, tool_call_id: x.id, path: key, created: current === null, reverted: false };
+          const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
+          const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : "root@localhost:22";
+          const change = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, reverted: false };
           snapshots.set(c.view.id, [...kept, { change, tool: x.name, before: current, after: after.text }]);
         }
         const count = fileLines(after.text).length;

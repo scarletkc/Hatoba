@@ -168,6 +168,21 @@
 }
 
 /* Two classes: it overrides `.input` and `.textarea` below. */
+.editWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.editWarning > i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--orange);
+}
+
 .editMessage .editInput {
   min-height: 34px;
   font-family: var(--font-sans);

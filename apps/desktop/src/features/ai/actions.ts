@@ -46,6 +46,7 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
+import { askEditedFiles } from "./EditFiles";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
@@ -68,6 +69,7 @@ import {
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
+  editedFiles,
   entriesBefore,
   laterContextStart,
   laterMessages,
@@ -555,7 +557,8 @@ function settleFailedStart(convId: string, patch: Partial<Slot> = {}): string | 
 
 /**
  * AI-26: replaces an earlier message of the user with `raw`, deletes every entry after it, and starts
- * a turn. Asks first when entries follow it. Not while a turn runs.
+ * a turn. Asks first when entries follow it, and offers to revert the file changes of the calls it
+ * deletes that this device keeps (AI-41). Not while a turn runs.
  */
 export async function editAndResend(slotId: string, entryId: string, raw: string): Promise<boolean> {
   const text = raw.trim();
@@ -563,7 +566,12 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const id = slot.conversationId;
   if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting) return false;
   const later = laterMessages(slot.entries, entryId);
-  if (later > 0) {
+  const { revert } = editedFiles(slot.entries, slot.fileChanges, entryId);
+  if (revert.length > 0) {
+    // The list is the confirmation, also for a file a call created: each revert asks nothing more.
+    const send = await askEditedFiles(later, revert, (change) => revertChange(slotId, id, change));
+    if (!send) return false;
+  } else if (later > 0) {
     const ok = await confirm({
       title: t("ai.edit.confirmTitle"),
       body: t("ai.edit.confirmBody", { n: later }),
@@ -653,20 +661,39 @@ export async function revertFileChange(slotId: string, change: AiFileChange, onS
     });
     if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
   }
-  const target = attachedTab(slotId);
-  const sessionId = target?.tab.status === "connected" ? (target.tab.sessionId ?? null) : null;
   onStart?.();
   try {
-    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, sessionId);
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId));
     if (outcome.status === "reverted") {
-      const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
-      patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, reverted: true } : c)) } : {}));
+      markReverted(slotId, convId, change);
       toast(t("ai.revert.done", { path: change.path }), "success");
     }
     return outcome;
   } catch (e) {
     toast(aiErrorMessage(e), "error");
     return null;
+  }
+}
+
+/** The session a revert runs on: the slot's tab, when it is connected. */
+function revertSession(slotId: string): string | null {
+  const target = attachedTab(slotId);
+  return target?.tab.status === "connected" ? (target.tab.sessionId ?? null) : null;
+}
+
+function markReverted(slotId: string, convId: string, change: AiFileChange) {
+  const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
+  patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, reverted: true } : c)) } : {}));
+}
+
+/** AI-26, AI-41: reverts a change an edit is about to delete the call of; an error is a failure the edit's dialog lists. */
+async function revertChange(slotId: string, convId: string, change: AiFileChange): Promise<AiFileRevert> {
+  try {
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId));
+    if (outcome.status === "reverted") markReverted(slotId, convId, change);
+    return outcome;
+  } catch (e) {
+    return { status: "failed", reason: "failed", detail: aiErrorMessage(e) };
   }
 }
 

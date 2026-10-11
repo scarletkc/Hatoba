@@ -4,7 +4,7 @@ import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/cont
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiEntryView, AiFileChange, AiFileRevert, AiRevertFailure, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { decideCall, editAndResend, retryTurn, revertFileChange, stopTurn, tooMuchMessage, type Decision } from "./actions";
@@ -16,9 +16,10 @@ import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
+import { revertFailure } from "./revertText";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
-import type { CallState, LiveResponse } from "./turn";
+import { editedFiles, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -172,6 +173,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 at={entry.created_at}
                 pending={pending}
                 onResend={canEdit && !pending ? (text) => editAndResend(slotId, entry.entry_id, text) : undefined}
+                untracked={() => editedFiles(entries, slot.fileChanges, entry.entry_id).untracked}
               />
             );
             break;
@@ -259,9 +261,22 @@ function CopyButton({ text }: { text: string }) {
  * The user's message. Copy takes what was typed, without the attachments. With `onResend`, Edit
  * replaces it and sends it again (AI-26). The notes Hatoba stored before it (AI-05, AI-09) are
  * dividers above it, not part of the bubble; an edit shows them while it is sent, and Rust works
- * them out again for the new message.
+ * them out again for the new message. `untracked` counts the file changes of the calls an edit
+ * deletes that this device cannot revert (AI-41).
  */
-function UserMessage({ text, at, pending, onResend }: { text: string; at: number; pending: boolean; onResend?: (text: string) => Promise<boolean> }) {
+function UserMessage({
+  text,
+  at,
+  pending,
+  onResend,
+  untracked,
+}: {
+  text: string;
+  at: number;
+  pending: boolean;
+  onResend?: (text: string) => Promise<boolean>;
+  untracked: () => number;
+}) {
   const t = useT();
   const [editing, setEditing] = useState(false);
   // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
@@ -271,7 +286,7 @@ function UserMessage({ text, at, pending, onResend }: { text: string; at: number
     return (
       <>
         {notes}
-        <EditMessage parts={parts} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
+        <EditMessage parts={parts} untracked={untracked() > 0} onCancel={() => setEditing(false)} onSend={onResend} onSent={() => setEditing(false)} />
       </>
     );
   return (
@@ -316,15 +331,18 @@ function NoteDivider({ note }: { note: Note }) {
 
 /**
  * AI-26: edits the typed text; what was attached to it stays unless its chip is removed. A long
- * paste becomes another attachment, as in the input box (AI-35).
+ * paste becomes another attachment, as in the input box (AI-35). With `untracked`, the calls the edit
+ * deletes changed files this device cannot revert (AI-41), and the box says those changes stay.
  */
 function EditMessage({
   parts,
+  untracked,
   onCancel,
   onSend,
   onSent,
 }: {
   parts: MessageParts;
+  untracked: boolean;
   onCancel: () => void;
   onSend: (text: string) => Promise<boolean>;
   onSent: () => void;
@@ -423,6 +441,12 @@ function EditMessage({
           }
         }}
       />
+      {untracked && (
+        <div className={s.editWarning} role="note">
+          <Icon name="warning" size={13} />
+          <span>{t("ai.editFiles.untracked")}</span>
+        </div>
+      )}
       <div className={s.actions}>
         <Button size="sm" onClick={onCancel}>
           {t("btn.cancel")}
@@ -648,16 +672,6 @@ function ToolBlock({
   );
 }
 
-const REVERT_FAILURES: Record<AiRevertFailure, MessageKey> = {
-  disconnected: "ai.revert.failed.disconnected",
-  other_server: "ai.revert.failed.otherServer",
-  permission_denied: "ai.revert.failed.permissionDenied",
-  not_text: "ai.revert.failed.notText",
-  timed_out: "ai.revert.failed.timedOut",
-  unfinished: "ai.revert.failed.unfinished",
-  failed: "ai.revert.failed.failed",
-};
-
 /**
  * AI-41: Revert on the block of a file tool call that wrote, with what it restores and what it does not, and
  * why a revert left the file as it is: the diff from what the call wrote to the file now, or the failure.
@@ -700,7 +714,7 @@ function RevertChange({ slotId, change, busy }: { slotId: string; change: AiFile
         ))}
       {outcome?.status === "failed" && (
         <div className={s.fieldError} role="alert">
-          {t(REVERT_FAILURES[outcome.reason], { server: outcome.detail ?? "" })}
+          {revertFailure(t, outcome.reason, outcome.detail)}
           {outcome.detail && outcome.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{outcome.detail}</div>}
         </div>
       )}

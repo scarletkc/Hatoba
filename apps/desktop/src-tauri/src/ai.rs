@@ -3238,6 +3238,7 @@ fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
             Some(AiFileChange {
                 response_id: s.response_id,
                 tool_call_id: s.tool_call_id,
+                server: meta.server,
                 path: meta.path,
                 created: meta.created,
                 reverted: s.reverted_at.is_some(),

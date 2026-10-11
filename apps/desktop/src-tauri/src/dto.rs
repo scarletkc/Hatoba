@@ -1292,6 +1292,8 @@ pub struct AiFileChange {
     /// The entry id of the response that made the call.
     pub response_id: String,
     pub tool_call_id: String,
+    /// The server the call wrote on, as `user@host:port`.
+    pub server: String,
     /// The file's path as the call resolved it.
     pub path: String,
     /// The call created the file, so a revert deletes it.

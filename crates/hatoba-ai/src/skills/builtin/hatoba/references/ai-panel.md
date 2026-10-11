@@ -26,7 +26,7 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 The panel shows the conversation of the active tab, and switching tabs switches the panel. Every terminal tab has its own conversation, and the home tab (host list, Keys, Cloud Sync) has a chat-only one. A tab shows a small sparkle while its assistant is working and a hand while it waits for your approval.
 
 - Header: the conversation title, the tab's host, the permission mode button, **History**, **New Conversation**, and close.
-- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the paperclip, the context meter, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting, for example during the compaction before it.
+- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the paperclip, the context meter, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting (during its compaction, say).
 - Messages: each of yours shows the time you sent it, and each reply, once it is finished, the time it ended (hover for the full date and time). **Copy** next to one of your messages copies what you typed, without the attachments; **Copy** under a reply copies its Markdown, without the reasoning and tool calls, and a reply that used tools is copied whole, with its text from before and after the calls.
 - A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
 - Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
@@ -90,7 +90,7 @@ Results longer than 16,000 characters keep the first 4,000 and the last 12,000. 
 | Turn On Bypass | 绕过批准 | 承認をバイパス |
 
 - **Manual approval** (the default): tools marked "Asks" wait for you.
-- **Bypass**: every tool runs without asking, except tools of MCP servers set to **Always ask**. It is riskier because text on the screen or in a page can steer the assistant. Switching to Bypass for the first time on a device shows a confirmation ("Let the assistant act without asking?", button **Turn On Bypass**).
+- **Bypass**: every tool runs without asking, except tools of MCP servers set to **Always ask**. It is riskier: text on the screen or in a page can steer the assistant. Switching to Bypass for the first time on a device shows a confirmation ("Let the assistant act without asking?", button **Turn On Bypass**).
 - The switch changes the current conversation on this device until the app quits. The default for new conversations is Settings → AI → **This Device** → **Default Permission Mode** (device-local, not synced).
 
 | en | zh-CN | ja |
@@ -149,7 +149,7 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 - **Delete…** removes the conversation on every synced device for good, after a confirmation.
 - **Export as Markdown…** saves the conversation as a Markdown file, with each divider as a line.
-- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with.
+- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**, or the question in `references/ai-file-changes.md` when those messages changed files). A divider about a move to another host stays; the others are worked out again.
 
 | en | zh-CN | ja |
 |---|---|---|

@@ -4631,15 +4631,24 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
     );
 }
 
-/// AI-41: deleting the response that made a call, by an edit, deletes the call's snapshot.
+/// AI-26, AI-41: deleting the response that made a call, by an edit, deletes the call's snapshot,
+/// and the edited message notes no revert of a call it deleted, as when the user reverted the
+/// change before sending the edit.
 #[tokio::test]
 async fn an_edit_before_a_call_deletes_its_snapshot() {
     let f = Fixture::new(vec![
-        calls(&[(
-            "e1",
-            "edit_file",
-            json!({"path": "app.conf", "old_string": "old", "new_string": "new"}),
-        )]),
+        calls(&[
+            (
+                "e1",
+                "edit_file",
+                json!({"path": "app.conf", "old_string": "old", "new_string": "new"}),
+            ),
+            (
+                "w1",
+                "write_file",
+                json!({"path": "/srv/new.conf", "content": "new\n"}),
+            ),
+        ]),
         answer("Edited."),
         answer("Fresh start."),
     ])
@@ -4662,11 +4671,22 @@ async fn an_edit_before_a_call_deletes_its_snapshot() {
         "/home/ops/app.conf",
         "edit_file",
     );
+    keep_a_change(&f, &conv, &response, "w1", "/srv/new.conf", "write_file");
     f.result(&conv, "e1", AiToolStatus::Ok, "Edited", None)
+        .unwrap();
+    f.result(&conv, "w1", AiToolStatus::Ok, "Created", None)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
-    assert_eq!(f.detail(&conv).file_changes.len(), 1);
+    let listed = f.detail(&conv).file_changes;
+    assert_eq!(listed.len(), 2);
+    assert!(listed.iter().all(|c| c.server == "ops@db:22"));
+    // The panel reverted one before it sent the edit (the scripts' part needs SSH).
+    assert!(
+        lock(&f.vault)
+            .ai_mark_file_reverted(&revert_key(&conv, &response, "w1"))
+            .unwrap()
+    );
 
     let (_, sink) = f
         .edit(&conv, entry_id(&started.user_entry), "never mind")
@@ -4674,4 +4694,6 @@ async fn an_edit_before_a_call_deletes_its_snapshot() {
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     assert!(f.detail(&conv).file_changes.is_empty());
+    let requests = f.requests().await;
+    assert_eq!(last_user_message(requests.last().unwrap()), "never mind");
 }
