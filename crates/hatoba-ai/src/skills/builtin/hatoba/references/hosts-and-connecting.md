@@ -45,11 +45,11 @@ The home tab shows the host list for the sidebar item that is selected: **All Ho
 
 ## Quick connect
 
-Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.113.7` in the search box connects without saving a host. A **Connect** row for that target appears at the top of the list and is selected, so Enter connects it; up and down move on to the matching saved hosts. Plain words only search. If a saved host has the same address, port and user, that host is selected instead, so its key and jump host are used.
+Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.113.7` in the search box connects without saving a host. A **Connect** row for it heads the list and is selected, so Enter connects it; up and down move to the matching saved hosts. Plain words only search. If a saved host has the same address, port and user, that host is selected instead, so its key and jump host are used.
 
-- `-p` and `-l` work, and `-v`, `-C`, `-t`, `-4` and the like are ignored. Other options (`-i`, `-J`, `-L`, `-A` …) and remote commands show a row that says why it cannot connect; save a host for keys, jump hosts or forwards.
+- `-p` and `-l` work; `-v`, `-C`, `-t`, `-4` and the like are ignored, and `-A`, `-X`, `-Y` connect without forwarding. Other options (`-i`, `-J`, `-L` …) and remote commands show a row saying why it cannot connect; save a host for keys, jump hosts or forwards.
 - Without a user name, this computer's user name is used, as with `ssh`.
-- The connection goes through this device's default proxy, if Settings → Proxies has one.
+- It connects through this device's default proxy, if Settings → Proxies has one.
 - Sign-in works like the `ssh` command: the SSH agent first, then the server's own prompts, or a password dialog (also when the server's prompts fail). The password is used once and never saved. Saved keys are not tried. A server that hangs up after rejecting too many agent keys is connected to again without the agent. The host key is checked as for any host (trust it on first use; it syncs).
 - The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
 - Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.

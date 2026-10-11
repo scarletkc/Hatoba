@@ -159,6 +159,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     return rows;
   }, [parsed, exact, unsavedRecents, searchText]);
   const problem = parsed && !parsed.ok ? parsed.problem : null;
+  const notice = parsed?.ok ? parsed.notice : undefined;
 
   const hostName = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
 
@@ -583,6 +584,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           </div>
           <div className={s.rows}>
             {problem && <ProblemRow problem={problem} />}
+            {notice && <NoticeRow />}
             {quickRows.map((r) => (
               <QuickRow
                 key={r.id}
@@ -816,6 +818,17 @@ function ProblemRow({ problem }: { problem: QuickProblem }) {
     <div className={cx(s.row, s.problemRow)} role="option" aria-selected={false} aria-disabled>
       <Icon name="prohibit" className={s.quickIcon} />
       <span className={s.problemText}>{text}</span>
+    </div>
+  );
+}
+
+/** A note above the typed target that it connects without the forwarding it asked for. It is not selectable. */
+function NoticeRow() {
+  const t = useT();
+  return (
+    <div className={cx(s.row, s.problemRow)} role="option" aria-selected={false} aria-disabled>
+      <Icon name="info" className={s.quickIcon} />
+      <span className={s.problemText}>{t("hosts.quick.noForwarding")}</span>
     </div>
   );
 }

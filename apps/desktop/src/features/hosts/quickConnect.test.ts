@@ -59,8 +59,10 @@ describe("parseQuickConnect", () => {
       search: "root@db",
     });
     expect(parseQuickConnect("ssh -J jump root@db")).toMatchObject({ problem: { kind: "option", option: "-J" } });
-    expect(parseQuickConnect("ssh -vA root@db")).toMatchObject({ problem: { kind: "option", option: "-A" } });
-    expect(parseQuickConnect("ssh -X root@db")).toMatchObject({ problem: { kind: "option", option: "-X" } });
+    expect(parseQuickConnect("ssh -R 9000:localhost:9000 root@db")).toMatchObject({ problem: { kind: "option", option: "-R" } });
+    expect(parseQuickConnect("ssh -D 1080 root@db")).toMatchObject({ problem: { kind: "option", option: "-D" } });
+    // Forwarding that is ignored does not hide another option's problem.
+    expect(parseQuickConnect("ssh -A -L 8080:localhost:80 root@db")).toMatchObject({ ok: false, problem: { kind: "option", option: "-L" } });
     // The value of an option in a group is not mistaken for the destination.
     expect(parseQuickConnect("ssh -vi key root@db")).toMatchObject({ problem: { kind: "option", option: "-i" }, search: "root@db" });
     expect(parseQuickConnect("root@db -L 8080:localhost:80")).toMatchObject({ problem: { kind: "option", option: "-L" } });
@@ -74,6 +76,20 @@ describe("parseQuickConnect", () => {
     expect(parseQuickConnect("ssh -tt root@db -q")).toMatchObject({ ok: true, target: target("db", 22, "root") });
     expect(parseQuickConnect("ssh -6vp2222 root@db")).toMatchObject({ ok: true, target: target("db", 2222, "root") });
     expect(parseQuickConnect("ssh -Cl deploy db")).toMatchObject({ ok: true, target: target("db", 22, "deploy") });
+  });
+
+  it("connects without the agent or X11 forwarding it asks for, and says so", () => {
+    expect(parseQuickConnect("ssh -A user@host")).toEqual({
+      ok: true,
+      target: target("host", 22, "user"),
+      search: "user@host",
+      notice: "forwarding",
+    });
+    expect(parseQuickConnect("ssh -X user@host")).toMatchObject({ ok: true, target: target("host", 22, "user"), notice: "forwarding" });
+    expect(parseQuickConnect("ssh -AY -p 2222 host")).toMatchObject({ ok: true, target: target("host", 2222, null), notice: "forwarding" });
+    expect(parseQuickConnect("ssh -4Av root@db")).toMatchObject({ ok: true, target: target("db", 22, "root"), notice: "forwarding" });
+    // Turning forwarding off needs no note.
+    expect(parseQuickConnect("ssh -ax root@db")).not.toHaveProperty("notice");
   });
 
   it("waits for an ssh command to be complete", () => {

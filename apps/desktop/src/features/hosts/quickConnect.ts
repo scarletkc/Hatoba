@@ -12,20 +12,23 @@ export type QuickProblem = { kind: "option"; option: string } | { kind: "command
 
 /**
  * What the hosts search field makes of its input (HOST-12). `search` is the text the saved hosts are
- * filtered with: the destination without the ssh syntax around it.
+ * filtered with: the destination without the ssh syntax around it. `notice` says that the target
+ * connects, but without the agent or X11 forwarding it asked for.
  */
 export type QuickParse =
-  | { ok: true; target: TypedTarget; search: string }
+  | { ok: true; target: TypedTarget; search: string; notice?: "forwarding" }
   | { ok: false; problem: QuickProblem; search: string };
 
 /** OpenSSH options that take an argument, so their value is not mistaken for the destination. */
 const WITH_ARGUMENT = new Set("bceilmopBDEFIJLOPQRSwW".split(""));
 /**
- * OpenSSH options that change nothing Hatoba does, so they are ignored: the address family, compression,
- * quiet and verbose output, terminal allocation (a tab always has one), and turning off agent or X11
- * forwarding and GSSAPI delegation, which Hatoba never does.
+ * OpenSSH options that are ignored: the address family, compression, quiet and verbose output, terminal
+ * allocation (a tab always has one), turning off agent or X11 forwarding and GSSAPI delegation, which
+ * Hatoba never does, and asking for agent or X11 forwarding (`FORWARDING`). Hatoba has neither, so it
+ * connects without forwarding, as ssh does when forwarding is not possible.
  */
-const IGNORED = new Set("46aCkqtTvx".split(""));
+const IGNORED = new Set("46aACkqtTvxXY".split(""));
+const FORWARDING = new Set("AXY".split(""));
 const HOSTNAME = /^[\p{L}\p{N}_](?:[\p{L}\p{N}._-]*)$/u;
 const IPV6 = /^[0-9a-f]*:[0-9a-f:.]*(?:%[\w.-]+)?$/i;
 
@@ -87,6 +90,7 @@ export function parseQuickConnect(input: string): QuickParse | null {
   let portOption: number | null = null;
   let userOption: string | null = null;
   let problem: QuickProblem | null = null;
+  let forwarding = false;
   const positionals: string[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
@@ -97,6 +101,7 @@ export function parseQuickConnect(input: string): QuickParse | null {
         const flag = token[j];
         if (!WITH_ARGUMENT.has(flag)) {
           if (!IGNORED.has(flag)) problem ??= { kind: "option", option: `-${flag}` };
+          else if (FORWARDING.has(flag)) forwarding = true;
           continue;
         }
         const value = token.slice(j + 1) || tokens[++i];
@@ -123,7 +128,8 @@ export function parseQuickConnect(input: string): QuickParse | null {
   const search = `${username ? `${username}@` : ""}${dest.address}`;
   if (!problem && Number.isNaN(port)) problem = { kind: "port" };
   if (problem) return { ok: false, problem, search };
-  return { ok: true, target: { address: dest.address, port, username: username || null }, search };
+  const target = { address: dest.address, port, username: username || null };
+  return forwarding ? { ok: true, target, search, notice: "forwarding" } : { ok: true, target, search };
 }
 
 /** The address as it goes before `:port`: an IPv6 address in brackets. */

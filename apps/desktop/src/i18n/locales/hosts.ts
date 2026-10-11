@@ -60,6 +60,7 @@ export default defineMessages({
     "hosts.quick.forget": "从记录中移除",
     "hosts.quick.option": "快速连接不支持 {option}。要使用密钥、跳板机等设置，请新建主机。",
     "hosts.quick.command": "快速连接不能直接运行远程命令。请先连接，再在终端里运行。",
+    "hosts.quick.noForwarding": "不支持 agent 转发和 X11 转发，连接时不会转发。",
 
     "hosts.import.title": "从 SSH 配置导入",
     "hosts.import.subtitle": "选择要从 {path} 导入的主机。",
@@ -239,6 +240,7 @@ export default defineMessages({
     "hosts.quick.forget": "Remove from Recent",
     "hosts.quick.option": "Quick connect doesn’t support {option}. To use keys, jump hosts or other options, add a host.",
     "hosts.quick.command": "Quick connect can’t run a remote command. Connect first, then run it in the terminal.",
+    "hosts.quick.noForwarding": "Agent and X11 forwarding aren’t supported; the connection won’t forward them.",
 
     "hosts.import.title": "Import SSH Config",
     "hosts.import.subtitle": "Choose the hosts to import from {path}.",
@@ -421,6 +423,7 @@ export default defineMessages({
     "hosts.quick.forget": "履歴から削除",
     "hosts.quick.option": "クイック接続は {option} に対応していません。鍵や踏み台などを使うには、ホストを追加してください。",
     "hosts.quick.command": "クイック接続ではリモートコマンドを実行できません。接続してからターミナルで実行してください。",
+    "hosts.quick.noForwarding": "エージェント転送と X11 転送には対応していないため、転送せずに接続します。",
 
     "hosts.import.title": "SSH 設定からインポート",
     "hosts.import.subtitle": "{path} からインポートするホストを選択してください。",
