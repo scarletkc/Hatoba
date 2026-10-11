@@ -664,7 +664,8 @@ pub trait StoreOps {
     }
 
     /// Marks a snapshot's change reverted: its content goes and its size becomes 0. Returns
-    /// whether the snapshot existed and could be reverted.
+    /// whether the snapshot existed and was not reverted yet. A dropped one is marked too: a
+    /// revert that began before the size limit dropped it still put the file back.
     fn set_snapshot_reverted(
         &self,
         conversation_id: &str,
@@ -674,7 +675,7 @@ pub trait StoreOps {
         Ok(self.conn().execute(
             "UPDATE ai_file_snapshots SET content = NULL, size = 0, state = 'reverted' \
              WHERE conversation_id = ?1 AND response_id = ?2 AND tool_call_id = ?3 \
-             AND state IN ('unfinished', 'written')",
+             AND state <> 'reverted'",
             params![conversation_id, response_id, tool_call_id],
         )? > 0)
     }
@@ -1258,6 +1259,8 @@ mod tests {
                 .content
                 .is_none()
         );
+        // A revert that began before the limit dropped it still put the file back.
+        assert!(store.set_snapshot_reverted("c2", "r1", "a").unwrap());
         assert!(!store.set_snapshot_reverted("c2", "r1", "a").unwrap());
         assert_eq!(store.trim_snapshots(0).unwrap(), 1);
         assert_eq!(store.trim_snapshots(0).unwrap(), 0);

@@ -244,7 +244,8 @@ impl Vault {
     }
 
     /// Records that a call's change was reverted: the snapshot keeps its description and drops
-    /// the content. Returns whether it was there and could be reverted.
+    /// the content. Returns whether it was there and not reverted yet; one the size limit dropped
+    /// while its revert ran is marked too.
     ///
     /// # Errors
     /// [`Error::Locked`]; storage errors.
@@ -478,8 +479,13 @@ mod tests {
                 .content
                 .is_none()
         );
-        assert!(!vault.ai_mark_file_reverted(&dropped).unwrap());
         assert!(!vault.ai_mark_file_written(&dropped, None).unwrap());
+        // A revert that began before the limit dropped it still put the file back.
+        assert!(vault.ai_mark_file_reverted(&dropped).unwrap());
+        assert_eq!(
+            vault.ai_file_snapshot(&dropped).unwrap().unwrap().state,
+            SnapshotState::Reverted
+        );
     }
 
     #[test]

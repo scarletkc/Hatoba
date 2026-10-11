@@ -670,6 +670,11 @@ async fn write_bytes(
     }
     if let Some((keep, change)) = keep {
         keep.keep(change)?;
+        // A stop or the lock may have come while the snapshot was stored: the write never begins.
+        if cancel.is_cancelled() {
+            keep.ended(None);
+            return Err(Stop::Cancelled);
+        }
     }
     let result =
         match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await
@@ -934,6 +939,10 @@ async fn restore(session: &SshSession, change: &Change, current: Option<&[u8]>) 
             }
             Ok(Err(RemoteFileError::IsDirectory | RemoteFileError::NotRegular)) => {
                 revert_failed(AiRevertFailure::NotText, None)
+            }
+            // The command may have deleted the file when it failed or the connection went.
+            Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+                revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
             }
             Ok(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
         };

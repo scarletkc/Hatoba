@@ -1343,7 +1343,8 @@ pub enum AiRevertFailure {
     NotText,
     /// Reading the file did not finish within 30 seconds; nothing was written.
     TimedOut,
-    /// Writing failed after it may have begun: the file may be cut short. `detail` says why.
+    /// Writing or deleting failed after it may have begun: the file may be cut short, or
+    /// deleted. `detail` says why.
     Unfinished,
     /// Anything else; `detail` says what.
     Failed,

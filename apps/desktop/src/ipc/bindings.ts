@@ -534,7 +534,10 @@ export type AiRevertFailure =
 "not_text" | 
 /**  Reading the file did not finish within 30 seconds; nothing was written. */
 "timed_out" | 
-/**  Writing failed after it may have begun: the file may be cut short. `detail` says why. */
+/**
+ *  Writing or deleting failed after it may have begun: the file may be cut short, or
+ *  deleted. `detail` says why.
+ */
 "unfinished" | 
 /**  Anything else; `detail` says what. */
 "failed";

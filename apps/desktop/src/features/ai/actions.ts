@@ -424,8 +424,8 @@ class TurnRunner {
       const result = await api.ai_tool_run(convId, call.id, sessionId, edited);
       this.addEntry(result);
       // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
-      // partway; and the size limit may have dropped an older one.
-      if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(this.slotId, convId);
+      // partway; and the size limit may have dropped an older one, of any conversation.
+      if (kind === "edit_file" || kind === "write_file") refreshAllFileChanges();
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -636,6 +636,11 @@ export async function stopTurn(slotId: string) {
   }
 }
 
+/** AI-41: reads again the file changes of every open conversation, as the size limit spans them all. */
+function refreshAllFileChanges() {
+  for (const [id, s] of Object.entries(useAi.getState().slots)) if (s.conversationId) void refreshFileChanges(id, s.conversationId);
+}
+
 /** AI-41: reads again which changes of the conversation's file tool calls this device keeps. */
 export async function refreshFileChanges(slotId: string, convId: string) {
   try {
@@ -680,6 +685,8 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
     return outcome;
   } catch (e) {
     toast(aiErrorMessage(e), "error");
+    // The size limit may have dropped the change meanwhile, or another device's edit deleted its call.
+    void refreshFileChanges(slotId, convId);
     return null;
   } finally {
     patchSlot(slotId, { reverting: false });
@@ -711,6 +718,7 @@ async function revertChange(slotId: string, convId: string, change: AiFileChange
     if (outcome.status === "reverted") markReverted(slotId, convId, change);
     return outcome;
   } catch (e) {
+    void refreshFileChanges(slotId, convId);
     return { status: "failed", reason: "failed", detail: aiErrorMessage(e) };
   }
 }
@@ -880,7 +888,8 @@ export function resetForLock() {
     slots: Object.fromEntries(
       Object.entries(st.slots).map(([id, s]) => [
         id,
-        { ...s, conversation: null, entries: [], turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, loading: !!s.conversationId },
+        // File changes name servers and paths: conversation plaintext too.
+        { ...s, conversation: null, entries: [], fileChanges: [], reverting: false, turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, loading: !!s.conversationId },
       ]),
     ),
   }));
