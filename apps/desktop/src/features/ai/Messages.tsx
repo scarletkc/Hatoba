@@ -614,7 +614,8 @@ function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { js
     case "fetch_url":
       return { json: JSON.stringify({ ...base, url: d.main.trim() }) };
     case "read_file":
-      return { json: JSON.stringify({ ...base, path: d.main.trim() }) };
+      // A path can start or end with spaces: it goes as typed.
+      return { json: JSON.stringify({ ...base, path: d.main }) };
     case "edit_file":
       return { json: JSON.stringify({ ...base, new_string: d.main }) };
     case "write_file":

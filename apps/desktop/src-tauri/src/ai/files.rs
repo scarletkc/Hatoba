@@ -95,9 +95,29 @@ pub(super) struct Place {
     pub context: Vec<String>,
 }
 
+/// What a call's result shows the model of a file. `tool_run` records it once it has stored the
+/// result, so a call that a stop or the lock ends records nothing.
+#[derive(Debug)]
+pub(super) struct Shown {
+    server: String,
+    path: String,
+    sum: (u32, u64),
+}
+
+impl Shown {
+    fn new(server: &str, path: &str, bytes: &[u8]) -> Self {
+        Self {
+            server: server.to_owned(),
+            path: path.to_owned(),
+            sum: remote_file::cksum(bytes),
+        }
+    }
+}
+
 impl Seen {
     /// The model has seen `bytes` as the file at `path` on `server`, in a result of a call that
     /// `response` made.
+    #[cfg(test)]
     pub(super) fn record(
         &self,
         conversation_id: &str,
@@ -106,13 +126,18 @@ impl Seen {
         path: &str,
         bytes: &[u8],
     ) {
+        self.insert(conversation_id, response, Shown::new(server, path, bytes));
+    }
+
+    /// The model has seen the file as `shown`, in a stored result of a call that `response` made.
+    pub(super) fn insert(&self, conversation_id: &str, response: &str, shown: Shown) {
         guard(&self.0)
             .entry(conversation_id.to_owned())
             .or_default()
             .insert(
-                (server.to_owned(), path.to_owned()),
+                (shown.server, shown.path),
                 Sight {
-                    sum: remote_file::cksum(bytes),
+                    sum: shown.sum,
                     response: response.to_owned(),
                 },
             );
@@ -131,25 +156,21 @@ impl Seen {
     }
 }
 
-/// Where a file tool records and checks what the model has seen: the conversation's record, and
-/// where the call is in the conversation.
+/// Where a file tool checks what the model has seen, and notes what its result shows: the
+/// conversation's record, where the call is in the conversation, and the note.
 #[derive(Clone, Copy)]
 pub(super) struct SeenBy<'a> {
     pub seen: &'a Seen,
     pub conversation_id: &'a str,
     pub place: &'a Place,
+    /// What the call's result shows of a file, for `tool_run` to record once it stores it.
+    pub shown: &'a Mutex<Option<Shown>>,
 }
 
 impl SeenBy<'_> {
     /// The call's result shows the model `bytes` as the file at `path` on `server`.
-    fn record(&self, server: &str, path: &str, bytes: &[u8]) {
-        self.seen.record(
-            self.conversation_id,
-            &self.place.response,
-            server,
-            path,
-            bytes,
-        );
+    fn shows(&self, server: &str, path: &str, bytes: &[u8]) {
+        *guard(self.shown) = Some(Shown::new(server, path, bytes));
     }
 
     /// AI-39, AI-40: `tool` may change `file` on `server` only when the model saw it as it is, in
@@ -204,6 +225,9 @@ pub(super) enum Stop {
     Cancelled,
     /// The message for the model, or for the approval card.
     Failed(String),
+    /// A write failed after it may have begun: the message says the file may be cut short, and
+    /// stands when the connection is gone too.
+    Unfinished(String),
 }
 
 impl From<String> for Stop {
@@ -245,7 +269,7 @@ pub(super) async fn run(
         Ok(text) => (ToolStatus::Ok, text),
         Err(Stop::Cancelled) => (ToolStatus::Cancelled, String::new()),
         Err(Stop::Failed(_)) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
-        Err(Stop::Failed(message)) => (ToolStatus::Error, message),
+        Err(Stop::Failed(message) | Stop::Unfinished(message)) => (ToolStatus::Error, message),
     }
 }
 
@@ -349,7 +373,7 @@ async fn read(
         args.offset,
         args.limit,
     )?;
-    seen.record(&server(session), &file.path, &file.bytes);
+    seen.shows(&server(session), &file.path, &file.bytes);
     Ok(page)
 }
 
@@ -372,7 +396,7 @@ async fn edit(
     let new = edit.file.encode();
     let expect = Expect::Content(&file.bytes);
     let path = write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
-    wrote(seen, cancel, &server, &path, &new);
+    seen.shows(&server, &path, &new);
     Ok(files::edit_result(&args.path, &edit))
 }
 
@@ -403,17 +427,8 @@ async fn write(
         .as_ref()
         .map_or(Expect::Missing, |f| Expect::Content(&f.bytes));
     let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel).await?;
-    wrote(seen, cancel, &server, &path, &bytes);
+    seen.shows(&server, &path, &bytes);
     Ok(files::write_result(&args.path, &new, file.is_none()))
-}
-
-/// Records what a call wrote. A stop that came during the write gave the call a cancelled result
-/// instead, which does not show the file, so the record stays as it was and the next change needs
-/// a read.
-fn wrote(seen: SeenBy<'_>, cancel: &CancellationToken, server: &str, path: &str, bytes: &[u8]) {
-    if !cancel.is_cancelled() {
-        seen.record(server, path, bytes);
-    }
 }
 
 /// The file `write_file` writes: `content` in the style of the file it replaces.
@@ -493,9 +508,27 @@ async fn write_bytes(
         return Err(Stop::Cancelled);
     }
     match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await {
-        Err(_) => Err(Stop::Failed(timed_out(path, Op::Write))),
-        Ok(result) => result.map_err(|e| Stop::Failed(describe(path, Op::Write, e, from_card))),
+        Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
+        Ok(Ok(resolved)) => Ok(resolved),
+        // The command may have begun writing when it failed or the connection went.
+        Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            Err(Stop::Unfinished(unfinished(path, &e, session.is_closed())))
+        }
+        Ok(Err(e)) => Err(Stop::Failed(describe(path, Op::Write, e, from_card))),
     }
+}
+
+/// The message for a write that failed after it may have begun.
+fn unfinished(path: &str, error: &RemoteFileError, closed: bool) -> String {
+    let reconnect = if closed {
+        " once the user has reconnected the tab"
+    } else {
+        ""
+    };
+    format!(
+        "Writing {path} failed: {error}. The file may be unchanged, cut short or empty, so read \
+         it with read_file{reconnect} before you change it."
+    )
 }
 
 fn decode(path: &str, bytes: &[u8]) -> Result<TextFile, String> {
@@ -605,19 +638,21 @@ mod tests {
             )
             .contains("5000000 bytes")
         );
+        let full = RemoteFileError::Failed {
+            status: Some(1),
+            stderr: "cat: write error: No space left on device".into(),
+        };
         assert_eq!(
-            describe(
-                "x",
-                Op::Write,
-                RemoteFileError::Failed {
-                    status: Some(1),
-                    stderr: "cat: write error: No space left on device".into()
-                },
-                false
-            ),
-            "Could not write x: the command exited with status 1 (cat: write error: No space \
-             left on device)."
+            unfinished("x", &full, false),
+            "Writing x failed: the command exited with status 1: cat: write error: No space left \
+             on device. The file may be unchanged, cut short or empty, so read it with read_file \
+             before you change it."
         );
+        let gone = RemoteFileError::Ssh(hatoba_ssh::SshError::new(
+            hatoba_ssh::SshErrorKind::Disconnected,
+            "the connection closed",
+        ));
+        assert!(unfinished("x", &gone, true).contains("once the user has reconnected the tab"));
     }
 
     #[test]
@@ -682,6 +717,7 @@ mod tests {
             seen: &seen,
             conversation_id: "c1",
             place: &place,
+            shown: &Mutex::default(),
         };
         let hosts = base("~/hosts", Some(b"127.0.0.1 a\r\n::1 a\r\n"));
         seen.record(
@@ -739,6 +775,7 @@ mod tests {
             seen: &seen,
             conversation_id: "c1",
             place: &place,
+            shown: &Mutex::default(),
         };
         let conf = base("~/app.conf", Some(b"port = 80\n"));
         let edit = job(
@@ -792,12 +829,20 @@ mod tests {
         assert!(preview_of(&overwrite, &changed, by).error.is_some());
 
         // Its own write is what it saw last, so it can edit again; the old content no longer passes.
-        seen.record("c1", "e3", SERVER, "/home/ops/app.conf", b"port = 8080\n");
+        // A call only notes what its result shows: it counts once `tool_run` stores the result.
+        let shown = Mutex::default();
+        let wrote = SeenBy {
+            shown: &shown,
+            ..by
+        };
+        wrote.shows(SERVER, "/home/ops/app.conf", b"port = 8080\n");
         let after_edit = base("~/app.conf", Some(b"port = 8080\n"));
         let again = job(
             tools::EDIT_FILE,
             r#"{"path":"~/app.conf","old_string":"8080","new_string":"8081"}"#,
         );
+        assert!(preview_of(&again, &after_edit, by).error.is_some());
+        seen.insert("c1", "e3", guard(&shown).take().unwrap());
         assert_eq!(preview_of(&again, &after_edit, by).error, None);
         assert!(preview_of(&edit, &conf, by).error.is_some());
 
@@ -813,6 +858,7 @@ mod tests {
             seen: &seen,
             conversation_id: "c2",
             place: &place,
+            shown: &Mutex::default(),
         };
         assert_eq!(preview_of(&edit, &conf, other).error, None);
     }

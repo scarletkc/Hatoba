@@ -1119,10 +1119,12 @@ impl AiManager {
             }
             (job, op, place)
         };
+        let shown = Mutex::default();
         let seen = files::SeenBy {
             seen: &self.0.seen,
             conversation_id,
             place: &place,
+            shown: &shown,
         };
         let (status, content) = job
             .run(
@@ -1147,7 +1149,13 @@ impl AiManager {
                     e
                 });
             }
-            self.store_result(&mut v, conversation_id, tool_call_id, status, content)?
+            let view = self.store_result(&mut v, conversation_id, tool_call_id, status, content)?;
+            // The model sees the file now that the result is stored (AI-38…40), under the guard
+            // that a stop or the lock would have taken first.
+            if let Some(shown) = guard(&shown).take() {
+                self.0.seen.insert(conversation_id, &place.response, shown);
+            }
+            view
         };
         drop(op);
         env.changed();
@@ -1193,7 +1201,7 @@ impl AiManager {
                     .await
                 {
                     Ok(base) => base,
-                    Err(files::Stop::Failed(message)) => {
+                    Err(files::Stop::Failed(message) | files::Stop::Unfinished(message)) => {
                         return Ok(files::failed_preview(&path, message));
                     }
                     Err(files::Stop::Cancelled) => {
@@ -1225,6 +1233,8 @@ impl AiManager {
             seen: &self.0.seen,
             conversation_id,
             place: &place,
+            // A preview shows the model nothing.
+            shown: &Mutex::default(),
         };
         Ok(files::preview_of(&job, &base, seen))
     }

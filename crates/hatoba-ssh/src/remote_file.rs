@@ -160,7 +160,7 @@ pub async fn write(
         .exec_output(&command, Some(stdin))
         .await
         .map_err(RemoteFileError::Ssh)?;
-    parse_write(&out, path)
+    parse_write(&out)
 }
 
 /// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
@@ -269,10 +269,13 @@ fn parse_read(out: &ExecOutput, max: u64) -> Result<RemoteFile, RemoteFileError>
     }
 }
 
-/// The resolved path of a write that succeeded; `given` when its stdout lost the path.
-fn parse_write(out: &ExecOutput, given: &str) -> Result<String, RemoteFileError> {
+/// The resolved path of a write that succeeded. Status 0 without the marker is a failure: a login
+/// shell whose startup files exit with 0 never ran the script.
+fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
     match out.exit_status {
-        Some(0) => Ok(after_marker(&out.stdout).map_or_else(|| given.to_owned(), |(path, _)| path)),
+        Some(0) => after_marker(&out.stdout)
+            .map(|(path, _)| path)
+            .ok_or_else(|| failed(out)),
         Some(2) => Err(RemoteFileError::NoDirectory),
         Some(3) => Err(RemoteFileError::IsDirectory),
         Some(4) => Err(RemoteFileError::PermissionDenied),
@@ -369,10 +372,13 @@ mod tests {
             Err(RemoteFileError::TooLarge(11))
         ));
         assert_eq!(
-            parse_write(&out(b"motd\nhatoba-file\n/srv/a\n", 0), "a").unwrap(),
+            parse_write(&out(b"motd\nhatoba-file\n/srv/a\n", 0)).unwrap(),
             "/srv/a"
         );
-        assert_eq!(parse_write(&out(b"", 0), "a").unwrap(), "a");
+        assert!(matches!(
+            parse_write(&out(b"", 0)),
+            Err(RemoteFileError::Failed { .. })
+        ));
         let mut big = out(b"", 5);
         big.stderr = b"1048577\n".to_vec();
         assert!(matches!(
@@ -435,7 +441,7 @@ mod tests {
             expect: Expect<'_>,
         ) -> Result<String, RemoteFileError> {
             let (command, stdin) = write_request(path, content, expect)?;
-            parse_write(&run(home, &command, &stdin), path)
+            parse_write(&run(home, &command, &stdin))
         }
 
         fn write(
