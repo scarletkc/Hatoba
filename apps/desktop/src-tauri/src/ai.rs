@@ -173,8 +173,9 @@ struct Inner {
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
     /// What the approval card of an `edit_file` or `write_file` call read, by conversation and
-    /// call id: the call writes only over that content (AI-39). Kept until the call has a
-    /// result, its conversation stops, or the vault locks.
+    /// call id: the call writes only over that content (AI-39). File content, so kept only while
+    /// the call waits: until it has a result, or its conversation stops, sends its next request,
+    /// compacts or is deleted, or the vault locks.
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
     /// What the model has seen of each file, by conversation (AI-38…40).
     seen: files::Seen,
@@ -439,7 +440,7 @@ impl AiManager {
     /// `turn_ended { stopped }` on the turn's channel. Returns the cancelled results it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
         let turn = self.cancel(conversation_id);
-        guard(&self.0.file_bases).retain(|(id, _), _| id != conversation_id);
+        self.forget_file_bases(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
             let cancelled = Entries::load(v, conversation_id)
@@ -521,6 +522,7 @@ impl AiManager {
             }
             v.ai_delete_conversation(conversation_id)?;
             self.0.seen.forget(conversation_id);
+            self.forget_file_bases(conversation_id);
         }
         tracing::info!(conversation_id, "AI conversation deleted");
         env.changed();
@@ -944,6 +946,8 @@ impl AiManager {
                 Ok(request) => request,
                 Err(halt) => return halted(turn, conversation_id, halt),
             };
+            // Every call so far has a result now, so no approval card waits on a read.
+            self.forget_file_bases(conversation_id);
             if compaction_due(&request) {
                 let compact = {
                     let v = lock(vault);
@@ -1199,6 +1203,12 @@ impl AiManager {
         Ok(files::preview_of(&job, &base, seen))
     }
 
+    /// Drops what the approval cards of the conversation read (AI-39): none of its calls waits for
+    /// one any more.
+    fn forget_file_bases(&self, conversation_id: &str) {
+        guard(&self.0.file_bases).retain(|(id, _), _| id != conversation_id);
+    }
+
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn.
     fn store_result(
         &self,
@@ -1316,6 +1326,7 @@ impl AiManager {
         if !cancel_open_calls(&mut v, conversation_id, &entries)?.is_empty() {
             *stored = true;
         }
+        self.forget_file_bases(conversation_id);
         if !compactable(&context_entries(&v, conversation_id)?) {
             return Err(AppError::invalid("conversation_id", "nothing to compact"));
         }

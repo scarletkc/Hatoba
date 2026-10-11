@@ -1088,11 +1088,9 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     let conv = started.conversation.id;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
-    // What the model saw of files (AI-38…40) is in the entries the summary replaces.
-    f.manager
-        .0
-        .seen
-        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
+    // What the model saw of files (AI-38…40) is in the entries the summary replaces, and no
+    // approval card waits on a read once the context is summarized.
+    remember_a_file(&f, &conv, "call_x");
 
     let summary = f
         .manager
@@ -1100,6 +1098,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
         .await
         .unwrap();
     assert!(!f.manager.0.seen.knows(&conv));
+    assert!(!holds_a_file_base(&f, &conv));
     let AiEntryView::Summary { entry_id, text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
@@ -1557,16 +1556,43 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
     assert_eq!(f.requests().await.len(), 2);
 }
 
+/// An approval card of `call` read a file, and the model has seen it (AI-38…40).
+fn remember_a_file(f: &Fixture, conv: &str, call: &str) {
+    f.manager
+        .0
+        .seen
+        .record(conv, "ops@db:22", "/etc/hosts", b"x");
+    super::guard(&f.manager.0.file_bases).insert(
+        (conv.to_owned(), call.to_owned()),
+        super::files::Base {
+            path: "/etc/hosts".into(),
+            server: "ops@db:22".into(),
+            file: None,
+        },
+    );
+}
+
+/// The manager still holds file content an approval card of the conversation read.
+fn holds_a_file_base(f: &Fixture, conv: &str) -> bool {
+    super::guard(&f.manager.0.file_bases)
+        .keys()
+        .any(|(id, _)| id == conv)
+}
+
 #[tokio::test]
 async fn deleting_a_conversation_stops_its_turn() {
     let f = Fixture::new(vec![calls(&[("call_1", "read_terminal", json!({}))])]).await;
     let (started, sink) = f.send(None, "look").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
+    remember_a_file(&f, &conv, "call_1");
     f.manager
         .delete_conversation(&f.vault, f.env.as_ref(), &conv)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    // What the conversation read of files (AI-38…40) goes with it.
+    assert!(!holds_a_file_base(&f, &conv));
+    assert!(!f.manager.0.seen.knows(&conv));
     assert!(!f.manager.is_running(&conv));
     assert_eq!(
         f.manager
@@ -1939,17 +1965,16 @@ async fn a_full_context_between_tool_calls_is_compacted_once() {
     let (started, sink) = f.send(None, "look at the screen").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
-    f.manager
-        .0
-        .seen
-        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
+    remember_a_file(&f, &conv, "c1");
     // The screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
-    // AI-22 forgets what the model saw of files, as Compact does (AI-38…40).
+    // AI-22 forgets what the model saw of files, as Compact does (AI-38…40), and the next request
+    // drops what approval cards read, since no call waits for one.
     assert!(!f.manager.0.seen.knows(&conv));
+    assert!(!holds_a_file_base(&f, &conv));
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 3);
