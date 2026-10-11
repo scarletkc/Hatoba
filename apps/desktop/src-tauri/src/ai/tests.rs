@@ -1664,15 +1664,15 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
     assert_eq!(text, "SUMMARY from the request without tools.");
     let requests = f.requests().await;
     assert_eq!(requests.len(), 5);
-    for (fork, plain) in [(&requests[1], &requests[2]), (&requests[3], &requests[4])] {
-        assert!(!tool_names(fork).is_empty());
+    for (with_tools, plain) in [(&requests[1], &requests[2]), (&requests[3], &requests[4])] {
+        assert!(!tool_names(with_tools).is_empty());
         assert!(plain.get("tools").is_none());
         assert!(
             system_of(plain).contains("only asks for a summary of the conversation"),
             "{}",
             system_of(plain)
         );
-        assert_eq!(messages(plain)[1..], messages(fork)[1..]);
+        assert_eq!(messages(plain)[1..], messages(with_tools)[1..]);
         assert_eq!(
             messages(plain).last().unwrap()["content"],
             COMPACT_INSTRUCTION
@@ -4649,8 +4649,8 @@ async fn a_side_answer_that_calls_tools_is_asked_again_without_tools() {
     assert_eq!(streamed_text(&events[restarted..]), "Plain answer.");
 
     let requests = f.requests().await;
-    let (fork, plain) = (&requests[1], &requests[2]);
-    assert!(!tool_names(fork).is_empty());
+    let (with_tools, plain) = (&requests[1], &requests[2]);
+    assert!(!tool_names(with_tools).is_empty());
     assert!(plain.get("tools").is_none());
     assert!(
         system_of(plain)
@@ -4658,7 +4658,7 @@ async fn a_side_answer_that_calls_tools_is_asked_again_without_tools() {
         "{}",
         system_of(plain)
     );
-    assert_eq!(messages(plain)[1..], messages(fork)[1..]);
+    assert_eq!(messages(plain)[1..], messages(with_tools)[1..]);
     assert_eq!(
         messages(plain).last().unwrap()["content"],
         side_message("and the load?")

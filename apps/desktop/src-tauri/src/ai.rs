@@ -11,7 +11,7 @@
 //! which starts the servers that need it, and compacts the context first when the request would
 //! pass 90% of the model's context window (AI-22). A Compact request (AI-21) is the request a
 //! turn would send next with the instruction after it, built by the same function, so it reuses
-//! the prefix the provider cached. A side question (AI-42) forks the same request with the
+//! the prefix the provider cached. A side question (AI-42) sends the same request with the
 //! question after it, and stores nothing. History search (AI-24) and edit and resend (AI-26) are
 //! here too.
 //!
@@ -1145,7 +1145,7 @@ impl AiManager {
                         return AiTurnEndReason::Stopped;
                     }
                     // The request the turn was about to send, asking where the task stands.
-                    Fork::new(
+                    SideRequest::new(
                         &v,
                         &turn.context,
                         request,
@@ -1589,17 +1589,17 @@ impl AiManager {
     async fn summarize(
         &self,
         conversation_id: &str,
-        compact: Fork,
+        compact: SideRequest,
         cancel: &CancellationToken,
     ) -> Result<Option<String>, AiError> {
         let _compacting = self.start_compacting(conversation_id);
-        let Fork {
+        let SideRequest {
             mut request,
             plain_system,
         } = compact;
         let http = self.http();
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
-        log_fork_usage(conversation_id, COMPACT, false, response.usage);
+        log_side_request_usage(conversation_id, COMPACT, false, response.usage);
         if let Some(summary) = summary_of(&response) {
             return Ok(Some(summary));
         }
@@ -1611,7 +1611,7 @@ impl AiManager {
         request.tools = Vec::new();
         request.system = plain_system;
         let response = complete(&http, &request.provider, &request.chat(), cancel).await?;
-        log_fork_usage(conversation_id, COMPACT, true, response.usage);
+        log_side_request_usage(conversation_id, COMPACT, true, response.usage);
         if !response.tool_calls.is_empty() {
             tracing::info!(
                 conversation_id,
@@ -1663,7 +1663,7 @@ impl AiManager {
         env: &dyn AiEnv,
         conversation_id: &str,
         turn: &Turn,
-        compact: Fork,
+        compact: SideRequest,
     ) -> Result<(), CompactFailure> {
         tracing::info!(conversation_id, "AI context nearly full; compacting");
         let summary = match self.summarize(conversation_id, compact, &turn.cancel).await {
@@ -1760,7 +1760,7 @@ impl AiManager {
         let cancel = side.op.token().clone();
         // AI-30: the MCP tools the next request offers, so this request offers them too.
         let offer = self.0.mcp.offer(vault, &context, &cancel).await;
-        let fork = {
+        let request = {
             let v = unlocked(vault)?;
             if cancel.is_cancelled() {
                 return Err(stopped());
@@ -1783,7 +1783,7 @@ impl AiManager {
             )?
         };
         let response = match self
-            .side_answer(&conversation_id, fork, &cancel, on_event)
+            .side_answer(&conversation_id, request, &cancel, on_event)
             .await
         {
             Ok(response) => response,
@@ -1827,14 +1827,14 @@ impl AiManager {
     async fn side_answer(
         &self,
         conversation_id: &str,
-        fork: Fork,
+        request: SideRequest,
         cancel: &CancellationToken,
         on_event: &(dyn Fn(AiSideEvent) + Send + Sync),
     ) -> Result<AssistantEntry, AiError> {
-        let Fork {
+        let SideRequest {
             mut request,
             plain_system,
-        } = fork;
+        } = request;
         let http = self.http();
         // Nothing reaches the panel once the side question is stopped.
         let send = |event: AiSideEvent| {
@@ -1855,7 +1855,7 @@ impl AiManager {
             &mut forward,
         )
         .await?;
-        log_fork_usage(conversation_id, SIDE_QUESTION, false, response.usage);
+        log_side_request_usage(conversation_id, SIDE_QUESTION, false, response.usage);
         if response.tool_calls.is_empty() {
             return Ok(response);
         }
@@ -1875,7 +1875,7 @@ impl AiManager {
             &mut forward,
         )
         .await?;
-        log_fork_usage(conversation_id, SIDE_QUESTION, true, response.usage);
+        log_side_request_usage(conversation_id, SIDE_QUESTION, true, response.usage);
         Ok(response)
     }
 }
@@ -1891,19 +1891,20 @@ enum CompactFailure {
     },
 }
 
-/// A Compact request (AI-21) or a side question's (AI-42): the conversation's next request, as
+/// A request beside the conversation's turns, whose answer is no reply of the conversation: a
+/// Compact request (AI-21) or a side question's (AI-42). It is the conversation's next request, as
 /// [`next_request`] builds it for a turn, with a last user message after it. It offers the same
 /// tools with the same system prompt and replays the same entries, so the provider reads its
 /// prefix from the cache the conversation's requests wrote. Only its output limit differs
 /// ([`compact_output_tokens`]), which is not part of that prefix. `plain_system` is the system
 /// prompt of the fallback without tools ([`AiManager::summarize`], [`AiManager::side_answer`]).
-struct Fork {
+struct SideRequest {
     request: Request,
     plain_system: String,
 }
 
-impl Fork {
-    /// Forks `next`, the request a turn with `context` sends next, by appending `message`.
+impl SideRequest {
+    /// `next`, the request a turn with `context` sends next, with `message` appended to it.
     /// `plain` says what the fallback without tools asks for.
     fn new(
         v: &Vault,
@@ -1928,7 +1929,7 @@ fn summary_of(response: &AssistantEntry) -> Option<String> {
     (response.tool_calls.is_empty() && !text.is_empty()).then(|| text.to_owned())
 }
 
-/// The Compact request (AI-21) for the conversation's context, forked from the next request of a
+/// The Compact request (AI-21) for the conversation's context, built from the next request of a
 /// turn with `context` and `server_id` whose MCP tools are `offer`.
 fn compact_request(
     v: &Vault,
@@ -1937,14 +1938,20 @@ fn compact_request(
     server_id: Option<&str>,
     offer: &Offer,
     instruction: &str,
-) -> AppResult<Fork> {
+) -> AppResult<SideRequest> {
     let list = context_entries(v, conversation_id)?;
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));
     }
     let next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
-    Ok(Fork::new(v, context, next, instruction, PromptTools::None))
+    Ok(SideRequest::new(
+        v,
+        context,
+        next,
+        instruction,
+        PromptTools::None,
+    ))
 }
 
 /// What a side question's request says of the calls without a result (AI-42).
@@ -1957,7 +1964,7 @@ enum OpenCalls<'a> {
     Pending { approval: Option<&'a str> },
 }
 
-/// A side question's request (AI-42), forked from the next request of a turn with `context` and
+/// A side question's request (AI-42), built from the next request of a turn with `context` and
 /// `server_id` whose MCP tools are `offer`, like a Compact request: the calls without a result,
 /// answered as `open` says for this request only, then the question after its instruction.
 fn side_request(
@@ -1968,7 +1975,7 @@ fn side_request(
     offer: &Offer,
     open: OpenCalls<'_>,
     question: &str,
-) -> AppResult<Fork> {
+) -> AppResult<SideRequest> {
     let mut list = context_entries(v, conversation_id)?;
     if let OpenCalls::Pending { approval } = open {
         let now = now_ms();
@@ -1987,7 +1994,7 @@ fn side_request(
         "{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
         escape_closing_tag(question.trim(), "side_question")
     );
-    Ok(Fork::new(
+    Ok(SideRequest::new(
         v,
         context,
         next,
@@ -2026,13 +2033,19 @@ fn compact_output_tokens(model: &ModelSpec) -> u64 {
     tokens.max(1)
 }
 
-/// What [`log_fork_usage`] logs a forked request as: Compact (AI-21) or a side question (AI-42).
+/// What [`log_side_request_usage`] logs a [`SideRequest`] as: Compact (AI-21) or a side question
+/// (AI-42).
 const COMPACT: &str = "compact";
 const SIDE_QUESTION: &str = "side_question";
 
-/// Logs the token counts of a response to a [`Fork`], never its text (SEC-04), so the share the
-/// prompt cache served can be measured.
-fn log_fork_usage(conversation_id: &str, request: &str, fallback: bool, usage: Option<Usage>) {
+/// Logs the token counts of a response to a [`SideRequest`], never its text (SEC-04), so the share
+/// the prompt cache served can be measured.
+fn log_side_request_usage(
+    conversation_id: &str,
+    request: &str,
+    fallback: bool,
+    usage: Option<Usage>,
+) {
     let usage = usage.unwrap_or_default();
     tracing::info!(
         conversation_id,
@@ -2043,7 +2056,7 @@ fn log_fork_usage(conversation_id: &str, request: &str, fallback: bool, usage: O
         cache_write_tokens = usage.cache_write_tokens,
         output_tokens = usage.output_tokens,
         estimated = usage.estimated,
-        "AI forked request response"
+        "AI side request response"
     );
 }
 
