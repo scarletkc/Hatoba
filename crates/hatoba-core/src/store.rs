@@ -61,7 +61,8 @@ pub mod meta {
     pub const RECENT_TARGETS: &str = "recent_targets";
     /// Set when this device joined another vault (flow C) and cleared once a pull has installed
     /// the remote's settings item, which wins over any local edit made meanwhile. A disconnect
-    /// keeps it, so reconnecting before that pull still lets the remote's settings win.
+    /// keeps it, so reconnecting before that pull still lets the remote's settings win; setting
+    /// up a new remote with this vault (flow A) clears it.
     pub const ADOPT_REMOTE_SETTINGS: &str = "adopt_remote_settings";
     /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
     /// vault key because they name hosts. Device-local, never synced.

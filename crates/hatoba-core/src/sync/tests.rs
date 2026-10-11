@@ -597,6 +597,43 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
 }
 
 #[tokio::test]
+async fn setting_up_a_new_remote_ends_a_pending_settings_adoption() {
+    let (server, clock, a, _b) = world();
+    enable(&a).await;
+    let c = own_vault_device(&server, &clock);
+    join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    // The first pull never happens, and this vault moves to a new, empty remote.
+    c.v().set_sync_config(None).unwrap();
+    c.v().rotate_recovery(PW).unwrap();
+    let other = FakeServer::new();
+    let backend = FakeBackend::new(&other);
+    enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
+        .await
+        .unwrap();
+    assert!(
+        c.v()
+            .store
+            .get_meta(crate::store::meta::ADOPT_REMOTE_SETTINGS)
+            .unwrap()
+            .is_none()
+    );
+
+    // A settings edit before the next round is kept, not replaced by the uploaded copy.
+    c.clock.advance(60_000);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.font_size = 21;
+        }
+    });
+    sync_round(&c.vault, &backend, &SyncOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(c.v().settings().terminal.font_size, 21);
+}
+
+#[tokio::test]
 async fn join_reconnects_a_device_that_synced_before() {
     let (_server, _clock, a, b) = two_devices().await;
     b.v().set_sync_config(None).unwrap();

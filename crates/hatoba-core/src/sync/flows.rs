@@ -109,11 +109,13 @@ pub async fn enable_sync(
         ensure_own_kdf(backend, &material.meta).await?;
     } else {
         // The remote is brand new: everything local is "never synced". Queue it before `setup`
-        // so that an attempt interrupted after `setup` leaves the vault ready to upload.
+        // so that an attempt interrupted after `setup` leaves the vault ready to upload. Its
+        // settings come from this vault, so an earlier join's pending adoption no longer applies.
         with_vault(vault, |v| {
             v.store.transaction(|tx| {
                 tx.mark_all_dirty_for_upload()?;
-                tx.delete_meta(meta::SYNC_CURSOR)
+                tx.delete_meta(meta::SYNC_CURSOR)?;
+                tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)
             })
         })?;
         let setup = backend
