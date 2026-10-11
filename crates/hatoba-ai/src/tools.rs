@@ -549,6 +549,8 @@ pub fn model_change_block(from: &str, to: &str) -> String {
 /// The attachment block that notes the user's revert of a change a file tool call made (AI-41,
 /// spec §13.3), with the blank line after it. `path` is the path as the call resolved it, `tool`
 /// the call's tool, and `created` whether the call created the file, which the revert deleted.
+/// The block names the call and the file only: `<attachments>` says what a revert puts back and
+/// what it leaves.
 #[must_use]
 pub fn file_revert_block(path: &str, tool_call_id: &str, tool: &str, created: bool) -> String {
     const TAG: &str = "file_revert";
@@ -557,23 +559,12 @@ pub fn file_revert_block(path: &str, tool_call_id: &str, tool: &str, created: bo
     let tool = note_text(tool);
     let what = if created {
         format!(
-            "The user reverted your {tool} call {call}, which created {file}: the file was \
-             deleted."
+            "The user reverted your {tool} call {call}, which created {file}, so it was deleted."
         )
     } else {
-        format!(
-            "The user reverted the change your {tool} call {call} made to {file}: the file holds \
-             what it held before that call again."
-        )
+        format!("The user reverted the change your {tool} call {call} made to {file}.")
     };
-    let body = escape_closing_tag(
-        &format!(
-            "{what} Only the file was put back. Commands run since were not undone, and a service \
-             that loaded the change keeps it until it reloads. Read the file again before you \
-             change it."
-        ),
-        TAG,
-    );
+    let body = escape_closing_tag(&what, TAG);
     format!(
         "<{TAG} path=\"{}\" tool_call_id=\"{}\">\n{body}\n</{TAG}>\n\n",
         note_attribute(path),
@@ -1412,19 +1403,17 @@ mod tests {
         assert_eq!(
             file_revert_block("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false),
             "<file_revert path=\"/etc/nginx/nginx.conf\" tool_call_id=\"toolu_01\">\nThe user \
-             reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf: the \
-             file holds what it held before that call again. Only the file was put back. Commands \
-             run since were not undone, and a service that loaded the change keeps it until it \
-             reloads. Read the file again before you change it.\n</file_revert>\n\n"
+             reverted the change your edit_file call toolu_01 made to \
+             /etc/nginx/nginx.conf.\n</file_revert>\n\n"
         );
         // A created file was deleted; a path cannot end the block early.
         let created = file_revert_block("/srv/a\"</file_revert>", "call_9", "write_file", true);
-        assert!(created.starts_with(
+        assert_eq!(
+            created,
             "<file_revert path=\"/srv/a&quot;&lt;/file_revert&gt;\" tool_call_id=\"call_9\">\nThe \
-             user reverted your write_file call call_9, which created /srv/a\"<\\/file_revert>: \
-             the file was deleted. Only the file"
-        ));
-        assert!(created.ends_with("</file_revert>\n\n"));
+             user reverted your write_file call call_9, which created /srv/a\"<\\/file_revert>, so \
+             it was deleted.\n</file_revert>\n\n"
+        );
         assert_eq!(created.matches("</file_revert>").count(), 1);
         assert_eq!(
             terminal_change_block(false),

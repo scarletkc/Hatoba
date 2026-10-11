@@ -15,6 +15,12 @@ interface Ask {
   later: number;
   /** Oldest call first. */
   changes: AiFileChange[];
+  /**
+   * The server the slot's tab is connected to, as changes name theirs; null while it is not connected. Only
+   * changes on it can be reverted from the tab.
+   */
+  server: string | null;
+  /** Reverts one change. */
   revert: (change: AiFileChange) => Promise<AiFileRevert>;
   /** What a change did, for the lines a revert adds and removes; null when it cannot be read. */
   diff?: (change: AiFileChange) => Promise<AiFilePreview | null>;
@@ -25,12 +31,12 @@ const useAsk = create<{ ask: Ask | null }>(() => ({ ask: null }));
 
 /**
  * Asks before an edit deletes the calls that made `changes`: revert them and send, keep the files as they
- * are and send, or cancel. Resolves true when the edit goes ahead. `revert` reverts one change.
+ * are and send, or cancel. Resolves true when the edit goes ahead.
  */
-export function askEditedFiles(later: number, changes: AiFileChange[], revert: Ask["revert"], diff?: Ask["diff"]): Promise<boolean> {
+export function askEditedFiles(ask: Omit<Ask, "resolve">): Promise<boolean> {
   return new Promise((resolve) => {
     useAsk.getState().ask?.resolve(false);
-    useAsk.setState({ ask: { later, changes, revert, diff, resolve } });
+    useAsk.setState({ ask: { ...ask, resolve } });
   });
 }
 
@@ -76,9 +82,11 @@ export function groupChanges(newestFirst: AiFileChange[]): FileGroup[] {
 
 /**
  * Lists each file once, by its path and server, with how many of the deleted calls changed it, the lines a
- * revert adds and removes, and whether reverting deletes it. Reverts go newest call first. Neither way of
- * sending is the default. Changes that could not be reverted keep their reason, and the user sends anyway or
- * cancels; the reverts done stay done either way.
+ * revert adds and removes, and whether reverting deletes it. Reverts go newest call first, of the files on the
+ * server the tab is connected to: without one, Revert and Send is off, so Cancel keeps every change revertible
+ * once the tab is connected. Neither way of sending is the default. Changes that were not reverted keep their
+ * reason, and the user sends anyway, which deletes their copies, or cancels; the reverts done stay done either
+ * way.
  */
 function EditFilesDialog({ ask }: { ask: Ask }) {
   const t = useT();
@@ -87,6 +95,10 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
   const [stats, setStats] = useState<Record<string, { added: number; removed: number }>>({});
   const newestFirst = useMemo(() => [...ask.changes].reverse(), [ask.changes]);
   const groups = useMemo(() => groupChanges(newestFirst), [newestFirst]);
+  const here = (c: { server: string }) => c.server === ask.server;
+  const anyHere = newestFirst.some(here);
+  // Why a file on another server is not reverted from this tab.
+  const elsewhere = ask.server === null ? t("ai.revert.failed.disconnected") : t("ai.editFiles.otherServer", { server: ask.server });
 
   // What reverting each change writes back: from what the call wrote to what the file held before.
   useEffect(() => {
@@ -112,6 +124,11 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
     for (const change of newestFirst) {
       if (useAsk.getState().ask !== ask) return; // the lock closed the dialog
       const key = keyOf(change);
+      if (!here(change)) {
+        failed = true;
+        setResults((r) => ({ ...r, [key]: { state: "failed", reason: elsewhere } }));
+        continue;
+      }
       setResults((r) => ({ ...r, [key]: { state: "reverting" } }));
       let outcome: AiFileRevert;
       try {
@@ -157,7 +174,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
               <Button disabled={reverting} onClick={() => close(ask, true)}>
                 {t("ai.editFiles.keep")}
               </Button>
-              <Button icon="arrow-counter-clockwise" busy={reverting} onClick={() => void revertAll()}>
+              <Button icon="arrow-counter-clockwise" busy={reverting} disabled={!anyHere} onClick={() => void revertAll()}>
                 {t("ai.editFiles.revert")}
               </Button>
             </>
@@ -196,6 +213,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
                     </span>
                   )}
                 </div>
+                {phase === "choose" && ask.server !== null && !here(group) && <div className={s.elsewhere}>{elsewhere}</div>}
                 {reasons.map((reason) => (
                   <div key={reason} className={s.reason} role="alert">
                     {reason}
@@ -222,7 +240,13 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
         })}
       </ul>
       <div className={cx(s.note, phase === "failed" && s.noteFailed)} role={phase === "failed" ? "alert" : undefined}>
-        {t(phase === "failed" ? "ai.editFiles.failed" : "ai.editFiles.hint")}
+        {phase === "failed"
+          ? t("ai.editFiles.failed")
+          : anyHere
+            ? t("ai.editFiles.hint")
+            : ask.server === null
+              ? t("ai.editFiles.disconnected")
+              : t("ai.editFiles.noneHere", { server: ask.server })}
       </div>
     </Dialog>
   );

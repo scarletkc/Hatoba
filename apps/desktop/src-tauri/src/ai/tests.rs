@@ -464,6 +464,7 @@ impl Fixture {
                 edited_arguments,
             )
             .await
+            .map(|run| run.entry)
     }
 
     fn entries(&self, conversation_id: &str) -> Vec<AiEntry> {
@@ -4449,6 +4450,7 @@ fn a_change(path: &str, tool: &str) -> super::files::Change {
             path: path.into(),
             tool: tool.into(),
             created,
+            mode: None,
         },
         content: super::files::ChangeContent {
             before: (!created).then(|| "old\n".to_owned()),
@@ -4463,11 +4465,7 @@ fn keeper<'a>(
     response_id: &'a str,
     call: &'a str,
 ) -> super::KeepSnapshot<'a> {
-    super::KeepSnapshot {
-        vault: &f.vault,
-        key: revert_key(conv, response_id, call),
-        meta: Mutex::default(),
-    }
+    super::KeepSnapshot::new(&f.vault, revert_key(conv, response_id, call))
 }
 
 /// A change `call` of the response `response_id` made, kept as its snapshot (AI-41): the file tools
@@ -4817,6 +4815,7 @@ async fn writes_keep_their_snapshot_before_they_begin() {
         path: path.into(),
         tool: "write_file".into(),
         created: true,
+        mode: None,
     };
     {
         let v = lock(&f.vault);
@@ -4856,6 +4855,11 @@ async fn writes_keep_their_snapshot_before_they_begin() {
     ));
     lock(&f.vault).unlock(PW).unwrap();
     assert_eq!(states(&f).len(), 3);
+    // Within the limit, nothing is dropped, so the panel reads no other conversation again.
+    let small = keeper(&f, &conv, &response, "w5");
+    small.keep(&a_change("/srv/d", "write_file")).unwrap();
+    assert!(!small.dropped());
+    small.ended(None);
 
     // The size limit dropped the oldest: listed as such, and not revertible. (Each change above
     // holds about 30 bytes.)
@@ -4936,6 +4940,12 @@ async fn writes_keep_their_snapshot_before_they_begin() {
             detail: None
         }
     );
+    // Keeping a change that goes over the limit drops the oldest kept, and says so.
+    let mut large = a_change("/srv/c", "write_file");
+    large.content.after = "y".repeat(100);
+    let keep = keeper(&f, &conv, &response, "w4");
+    keep.keep(&large).unwrap();
+    assert!(keep.dropped());
 }
 
 /// AI-41: no message is sent and no request retried while a revert of the conversation runs, so

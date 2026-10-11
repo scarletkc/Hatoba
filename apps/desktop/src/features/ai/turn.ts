@@ -199,6 +199,22 @@ export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], ent
   return { revert: kept.filter((c) => c.state === "written" || c.state === "unfinished"), untracked: staying.size };
 }
 
+/** The `data-reveal` key of a call's block: by its response too, since responses may reuse call ids. */
+export function callRevealKey(responseId: string, callId: string): string {
+  return `call:${responseId}:${callId}`;
+}
+
+/**
+ * What a reveal of `entry` scrolls to and highlights (AI-24, AI-41): the entry, or for a tool result the block of
+ * its call, in the newest response before it with that call id. Null for a result without one.
+ */
+export function revealKey(entries: AiEntryView[], entry: AiEntryView): string | null {
+  if (entry.role !== "tool") return `entry:${entry.entry_id}`;
+  const at = entries.indexOf(entry);
+  const response = entries.slice(0, at < 0 ? entries.length : at).findLast((e) => e.role === "assistant" && e.tool_calls.some((c) => c.id === entry.tool_call_id));
+  return response ? callRevealKey(response.entry_id, entry.tool_call_id) : null;
+}
+
 /**
  * The tool calls of the newest assistant entry that have no result yet, in order. Results answer the
  * calls with their id in order, as Rust pairs them, so of calls that share an id the first ones are

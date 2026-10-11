@@ -154,6 +154,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_file_changes,
             ai_cmd::ai_file_change_diff,
             ai_cmd::ai_file_revert,
+            ai_cmd::ai_session_server,
             ai_cmd::ai_stop,
             ai_cmd::ai_compact,
             ai_cmd::ai_search,

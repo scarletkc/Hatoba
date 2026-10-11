@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AiEntryView, AiFileChange, AiTurnEvent } from "@/ipc/types";
 import {
+  callRevealKey,
   editedFiles,
   entriesBefore,
   laterContextStart,
@@ -9,6 +10,7 @@ import {
   newTurn,
   placeUserEntry,
   reduceTurnEvent,
+  revealKey,
   unansweredCalls,
   upsertEntry,
   type TurnSnapshot,
@@ -209,6 +211,16 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     expect(editedFiles(entries, [change("a2", "c2")], "missing")).toEqual({ revert: [], untracked: 0 });
     const last: AiEntryView[] = [...entries, { role: "user", entry_id: "u3", created_at: 0, text: "third" }];
     expect(editedFiles(last, [change("a2", "c2")], "u3")).toEqual({ revert: [], untracked: 0 });
+  });
+
+  it("reveals a result in the block of its own response's call when responses reuse call ids", () => {
+    const reused: AiEntryView[] = [...entries, { role: "user", entry_id: "u3", created_at: 0, text: "third" }, response("a3", [["c1", "edit_file"]]), result("t7", "c1")];
+    const at = (id: string) => reused.find((e) => e.entry_id === id)!;
+    expect(revealKey(reused, at("t1"))).toBe(callRevealKey("a1", "c1"));
+    expect(revealKey(reused, at("t7"))).toBe(callRevealKey("a3", "c1"));
+    expect(revealKey(reused, at("u2"))).toBe("entry:u2");
+    expect(revealKey(reused, at("a2"))).toBe("entry:a2");
+    expect(revealKey([result("t9", "c9")], result("t9", "c9"))).toBeNull();
   });
 });
 

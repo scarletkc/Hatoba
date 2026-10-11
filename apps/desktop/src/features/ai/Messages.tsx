@@ -19,7 +19,7 @@ import { replies as findReplies, type ReplyEnd } from "./replies";
 import { revertFailure } from "./revertText";
 import { patchSlot, useAi, type Slot } from "./store";
 import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
-import { editedFiles, type CallState, type LiveResponse } from "./turn";
+import { callRevealKey, editedFiles, revealKey, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -112,10 +112,10 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
       if (!slot.loading && entries.length > 0) patchSlot(slotId, { reveal: null }); // not in this conversation (any more)
       return;
     }
-    const key = entry.role === "tool" ? `call:${entry.tool_call_id}` : `entry:${entry.entry_id}`;
-    const el = list.querySelector(`[data-reveal="${CSS.escape(key)}"]`);
+    const key = revealKey(entries, entry);
+    const el = key && list.querySelector(`[data-reveal="${CSS.escape(key)}"]`);
     patchSlot(slotId, { reveal: null });
-    if (!el) return;
+    if (!key || !el) return;
     stick.current = false;
     el.scrollIntoView({ block: "center" });
     setFlash(key);
@@ -183,6 +183,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             body = (
               <AssistantMessage
                 slotId={slotId}
+                entryId={entry.entry_id}
                 text={entry.text}
                 reasoning={entry.reasoning}
                 calls={entry.tool_calls}
@@ -477,6 +478,7 @@ function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveRespons
 
 function AssistantMessage({
   slotId,
+  entryId,
   text,
   reasoning,
   calls,
@@ -490,6 +492,8 @@ function AssistantMessage({
   reply,
 }: {
   slotId: string;
+  /** The stored entry; a reply still streaming has none. */
+  entryId?: string;
   text: string;
   reasoning: string | null;
   calls: AiToolCall[];
@@ -512,9 +516,10 @@ function AssistantMessage({
       {reasoning && <Reasoning text={reasoning} active={thinking} />}
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {!text && !reasoning && calls.length === 0 && !streaming && finish !== "tool_calls" && <EmptyReply />}
-      {calls.map((call) => (
-        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} flash={flash === `call:${call.id}`} />
-      ))}
+      {calls.map((call) => {
+        const reveal = entryId ? callRevealKey(entryId, call.id) : undefined;
+        return <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} reveal={reveal} flash={!!reveal && flash === reveal} />;
+      })}
       {reply && (
         <div className={s.replyFoot}>
           {reply.text && <CopyButton text={reply.text} />}
@@ -617,6 +622,7 @@ function useRevert(slotId: string, change: AiFileChange | undefined) {
     try {
       const next = await revertFileChange(slotId, change, {
         restore,
+        recreate: outcome?.result.status === "changed" && outcome.result.current === null,
         onStart: () => {
           setRunning(restore ? "restore" : "revert");
           if (!restore) setOutcome(null);
@@ -644,6 +650,7 @@ function ToolBlock({
   change,
   busy,
   host,
+  reveal,
   flash,
 }: {
   slotId: string;
@@ -652,6 +659,8 @@ function ToolBlock({
   change?: AiFileChange;
   busy: boolean;
   host: HostInfo | null;
+  /** The key a search hit or a link reveals the block by (AI-24). */
+  reveal?: string;
   flash?: boolean;
 }) {
   const t = useT();
@@ -667,7 +676,7 @@ function ToolBlock({
   if (view.kind === "approval") return <ApprovalCard slotId={slotId} call={call} host={host} mcp={view.mcp ?? null} />;
 
   return (
-    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={`call:${call.id}`}>
+    <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={reveal}>
       <div className={s.toolHeadRow}>
         <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
@@ -737,17 +746,19 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
   const keeps = change?.state === "written" || change?.state === "unfinished";
   // undefined while it loads; "failed" when the snapshot could not be read, so nothing stands in for it.
   const [kept, setKept] = useState<AiFilePreview | null | undefined | "failed">(undefined);
+  // Read once per change and state: a refresh of the slot's file changes gives the same change a new object.
+  const [responseId, callId, state] = [change?.response_id, change?.tool_call_id, change?.state];
   useEffect(() => {
-    if (!keeps || !change) return;
+    if (!responseId || !callId || (state !== "written" && state !== "unfinished")) return;
     let live = true;
-    fileChangeDiff(slotId, change).then(
+    fileChangeDiff(slotId, { response_id: responseId, tool_call_id: callId }).then(
       (preview) => live && setKept(preview),
       () => live && setKept("failed"),
     );
     return () => {
       live = false;
     };
-  }, [slotId, keeps, change]);
+  }, [slotId, responseId, callId, state]);
   const failed = keeps && kept === "failed";
   const preview = failed ? null : ((keeps && kept !== "failed" ? kept : null) ?? callFileChange(call.name, call.arguments));
   return (

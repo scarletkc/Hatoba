@@ -129,6 +129,10 @@ pub(super) struct ChangeMeta {
     pub tool: String,
     /// The call created the file.
     pub created: bool,
+    /// The file's permission bits before the call, which Restore anyway gives it when it creates
+    /// the file again; `None` when the call created it or they could not be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<u32>,
 }
 
 /// The file's content around a change: stored sealed as the snapshot's `content`. Both are UTF-8,
@@ -184,6 +188,7 @@ impl Change {
                 path: path.to_owned(),
                 tool: tool.to_owned(),
                 created: before.is_none(),
+                mode: None,
             },
             content: ChangeContent {
                 before: match before {
@@ -193,6 +198,12 @@ impl Change {
                 after: text(after)?,
             },
         })
+    }
+
+    /// The change, with the permission bits the file had before it.
+    pub(super) fn with_mode(mut self, mode: Option<u32>) -> Self {
+        self.meta.mode = mode;
+        self
     }
 
     /// The snapshot's `meta` and `content` as stored, sealed by the vault.
@@ -543,7 +554,8 @@ async fn edit(
         tools::EDIT_FILE,
         Some(&file.bytes),
         &new,
-    );
+    )
+    .map(|c| c.with_mode(file.mode));
     let keep = seen.keep.zip(change.as_ref());
     let path = write_bytes(session, &args.path, &new, expect, from_card, cancel, keep).await?;
     seen.shows(&server, &path, &new);
@@ -584,7 +596,8 @@ async fn write(
         tools::WRITE_FILE,
         file.as_ref().map(|f| f.bytes.as_slice()),
         &bytes,
-    );
+    )
+    .map(|c| c.with_mode(file.as_ref().and_then(|f| f.mode)));
     let keep = seen.keep.zip(change.as_ref());
     let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel, keep).await?;
     seen.shows(&server, &path, &bytes);
@@ -676,17 +689,20 @@ async fn write_bytes(
             return Err(Stop::Cancelled);
         }
     }
-    let result =
-        match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await
-        {
-            Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
-            Ok(Ok(resolved)) => Ok(resolved),
-            // The command may have begun writing when it failed or the connection went.
-            Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
-                Err(Stop::Unfinished(unfinished(path, &e, session.is_closed())))
-            }
-            Ok(Err(e)) => Err(Stop::Failed(describe(path, Op::Write, e, from_card))),
-        };
+    let result = match tokio::time::timeout(
+        TIMEOUT,
+        remote_file::write(session, path, bytes, expect, None),
+    )
+    .await
+    {
+        Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
+        Ok(Ok(resolved)) => Ok(resolved),
+        // The command may have begun writing when it failed or the connection went.
+        Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            Err(Stop::Unfinished(unfinished(path, &e, session.is_closed())))
+        }
+        Ok(Err(e)) => Err(Stop::Failed(describe(path, Op::Write, e, from_card))),
+    };
     if let Some((keep, _)) = keep {
         match &result {
             Ok(resolved) => keep.ended(Some(resolved)),
@@ -758,6 +774,8 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
              {verb} it: writing would create the link's target, which may be anywhere. Use the \
              path the link should point to, or ask the user."
         ),
+        // Only a deletion (AI-41's revert) refuses a link.
+        RemoteFileError::SymbolicLink => format!("{path} is a symbolic link."),
         RemoteFileError::PermissionDenied => format!(
             "Permission denied: the user this tab is logged in as cannot {verb} {path}. The file \
              tools never use sudo. To go on, use send_input to run a command with sudo in the \
@@ -938,56 +956,86 @@ async fn found_again(session: &SshSession, change: &Change) -> Revert {
     }
 }
 
+/// The permission bits a file Restore anyway creates again gets when its snapshot has none (it
+/// was taken before snapshots kept them, or `ls` showed none): readable by its owner only.
+const RECREATED_MODE: u32 = 0o600;
+
 /// Writes back what the file held before the call, or deletes the file the call created, only
-/// while it holds exactly `current`, by `cksum` checksum and size.
+/// while it holds exactly `current`, by `cksum` checksum and size. A file deleted since is created
+/// again with the permission bits it had, owned by the user the tab is logged in as.
 async fn restore(session: &SshSession, change: &Change, current: Option<&[u8]>) -> Revert {
     let path = &change.meta.path;
-    let reverted: Revert = AiFileRevert::Reverted { wrote: true }.into();
-    let Some(before) = &change.content.before else {
-        let Some(current) = current else {
-            return AiFileRevert::Reverted { wrote: false }.into();
-        };
-        return match tokio::time::timeout(TIMEOUT, remote_file::delete(session, path, current))
-            .await
-        {
-            Err(_) => revert_failed(AiRevertFailure::TimedOut, None),
-            Ok(Ok(_)) => reverted,
-            Ok(Err(RemoteFileError::Changed | RemoteFileError::NotFound)) => {
-                found_again(session, change).await
-            }
-            Ok(Err(RemoteFileError::PermissionDenied)) => {
-                revert_failed(AiRevertFailure::PermissionDenied, None)
-            }
-            Ok(Err(RemoteFileError::IsDirectory | RemoteFileError::NotRegular)) => {
-                revert_failed(AiRevertFailure::NotText, None)
-            }
-            // The command may have deleted the file when it failed or the connection went.
-            Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
-                revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
-            }
-            Ok(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
-        };
+    let ended = match &change.content.before {
+        None => {
+            let Some(current) = current else {
+                return AiFileRevert::Reverted { wrote: false }.into();
+            };
+            let delete = remote_file::delete(session, path, current);
+            deleted(tokio::time::timeout(TIMEOUT, delete).await.ok())
+        }
+        Some(before) => {
+            let expect = current.map_or(Expect::Missing, Expect::Content);
+            let mode = current
+                .is_none()
+                .then(|| change.meta.mode.unwrap_or(RECREATED_MODE));
+            let write = remote_file::write(session, path, before.as_bytes(), expect, mode);
+            written(tokio::time::timeout(TIMEOUT, write).await.ok())
+        }
     };
-    let expect = current.map_or(Expect::Missing, Expect::Content);
-    let write = remote_file::write(session, path, before.as_bytes(), expect);
-    match tokio::time::timeout(TIMEOUT, write).await {
-        Err(_) => revert_failed(AiRevertFailure::Unfinished, None),
-        Ok(Ok(_)) => reverted,
-        Ok(Err(RemoteFileError::Changed)) => found_again(session, change).await,
-        Ok(Err(RemoteFileError::PermissionDenied)) => {
+    match ended {
+        Some(revert) => revert,
+        None => found_again(session, change).await,
+    }
+}
+
+/// What the end of a revert's deletion means (`None`: it timed out), or `None` when the file
+/// changed since it was read, so it is read again.
+fn deleted(result: Option<Result<String, RemoteFileError>>) -> Option<Revert> {
+    Some(match result {
+        Some(Ok(_)) => AiFileRevert::Reverted { wrote: true }.into(),
+        Some(Err(RemoteFileError::Changed | RemoteFileError::NotFound)) => return None,
+        // Neither the link nor its target is deleted. Reading through the link again would show
+        // its target, which may hold what the call wrote, so there is nothing to show.
+        Some(Err(RemoteFileError::SymbolicLink)) => {
+            revert_failed(AiRevertFailure::SymbolicLink, None)
+        }
+        Some(Err(RemoteFileError::PermissionDenied)) => {
             revert_failed(AiRevertFailure::PermissionDenied, None)
         }
-        Ok(Err(
+        Some(Err(RemoteFileError::IsDirectory | RemoteFileError::NotRegular)) => {
+            revert_failed(AiRevertFailure::NotText, None)
+        }
+        // `rm` may have run before the time ran out, the command failed or the connection went.
+        None => revert_failed(AiRevertFailure::Unfinished, None),
+        Some(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
+        }
+        Some(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+    })
+}
+
+/// What the end of a revert's write means (`None`: it timed out), or `None` when the file changed
+/// since it was read, so it is read again.
+fn written(result: Option<Result<String, RemoteFileError>>) -> Option<Revert> {
+    Some(match result {
+        Some(Ok(_)) => AiFileRevert::Reverted { wrote: true }.into(),
+        Some(Err(RemoteFileError::Changed)) => return None,
+        Some(Err(RemoteFileError::PermissionDenied)) => {
+            revert_failed(AiRevertFailure::PermissionDenied, None)
+        }
+        Some(Err(
             RemoteFileError::IsDirectory
             | RemoteFileError::NotRegular
             | RemoteFileError::DanglingLink,
         )) => revert_failed(AiRevertFailure::NotText, None),
-        // The command may have begun writing when it failed or the connection went.
-        Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+        // The write may have begun before the time ran out, the command failed or the connection
+        // went.
+        None => revert_failed(AiRevertFailure::Unfinished, None),
+        Some(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
             revert_failed(AiRevertFailure::Unfinished, Some(e.to_string()))
         }
-        Ok(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
-    }
+        Some(Err(e)) => revert_failed(AiRevertFailure::Failed, Some(e.to_string())),
+    })
 }
 
 /// AI-41: puts back what the file held before `change`, or deletes the file the change created.
@@ -1100,6 +1148,7 @@ mod tests {
             file: bytes.map(|b| RemoteFile {
                 path: resolved,
                 bytes: b.to_vec(),
+                mode: Some(0o644),
             }),
         }
     }
@@ -1299,11 +1348,24 @@ mod tests {
                 path: "/etc/app.conf".into(),
                 tool: tools::EDIT_FILE.into(),
                 created: false,
+                mode: None,
             }
         );
         assert_eq!(change.content.before.as_deref(), Some("a\r\n"));
         let (meta, content) = change.encode().unwrap();
         assert!(meta.contains("\"created\":false"), "{meta}");
+        assert!(!meta.contains("mode"), "{meta}");
+        // The permission bits the file had go with it, for Restore anyway to create it again.
+        let (with_mode, _) = change.clone().with_mode(Some(0o640)).encode().unwrap();
+        assert!(with_mode.contains("\"mode\":416"), "{with_mode}");
+        assert_eq!(
+            serde_json::from_str::<ChangeMeta>(&with_mode).unwrap().mode,
+            Some(0o640)
+        );
+        assert_eq!(
+            serde_json::from_str::<ChangeMeta>(&meta).unwrap().mode,
+            None
+        );
         assert!(
             content.contains("\"after\":\"b\\r\\n\""),
             "{}",
@@ -1320,6 +1382,54 @@ mod tests {
                 reason: AiRevertFailure::Disconnected,
                 detail: None
             }))
+        );
+    }
+
+    /// AI-41: how the end of a revert's write or deletion reads. One that may have begun is
+    /// unfinished, a timeout included; a symbolic link in a created file's place stops the revert
+    /// rather than showing its target again.
+    #[test]
+    fn reverts_tell_what_their_write_or_deletion_did() {
+        let failed = |reason| {
+            Some(Revert::from(AiFileRevert::Failed {
+                reason,
+                detail: None,
+            }))
+        };
+        let done = Some(Revert::from(AiFileRevert::Reverted { wrote: true }));
+        assert_eq!(deleted(Some(Ok("/srv/new".into()))), done);
+        assert_eq!(written(Some(Ok("/etc/app.conf".into()))), done);
+        assert_eq!(deleted(None), failed(AiRevertFailure::Unfinished));
+        assert_eq!(written(None), failed(AiRevertFailure::Unfinished));
+        let gone = || {
+            RemoteFileError::Ssh(hatoba_ssh::SshError::new(
+                hatoba_ssh::SshErrorKind::Disconnected,
+                "the connection closed",
+            ))
+        };
+        for result in [deleted(Some(Err(gone()))), written(Some(Err(gone())))] {
+            assert!(matches!(
+                result,
+                Some(Revert {
+                    outcome: AiFileRevert::Failed {
+                        reason: AiRevertFailure::Unfinished,
+                        detail: Some(_),
+                    },
+                    found: None,
+                })
+            ));
+        }
+        // Changed since the read: read again.
+        assert_eq!(deleted(Some(Err(RemoteFileError::Changed))), None);
+        assert_eq!(deleted(Some(Err(RemoteFileError::NotFound))), None);
+        assert_eq!(written(Some(Err(RemoteFileError::Changed))), None);
+        assert_eq!(
+            deleted(Some(Err(RemoteFileError::SymbolicLink))),
+            failed(AiRevertFailure::SymbolicLink)
+        );
+        assert_eq!(
+            deleted(Some(Err(RemoteFileError::PermissionDenied))),
+            failed(AiRevertFailure::PermissionDenied)
         );
     }
 

@@ -289,14 +289,13 @@ export function noteBlock(n: Note): string {
 /** The note of a revert (AI-41) as Rust's `file_revert_block` words it; `created`: the call created the file, which the revert deleted. */
 export function fileRevertNote(path: string, toolCallId: string, tool: string, created: boolean): Note {
   const [file, call] = [noteText(path), noteText(toolCallId)];
-  const what = created
-    ? `The user reverted your ${tool} call ${call}, which created ${file}: the file was deleted.`
-    : `The user reverted the change your ${tool} call ${call} made to ${file}: the file holds what it held before that call again.`;
   return {
     kind: "file_revert",
     path,
     toolCallId,
-    body: `${what} Only the file was put back. Commands run since were not undone, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.`,
+    body: created
+      ? `The user reverted your ${tool} call ${call}, which created ${file}, so it was deleted.`
+      : `The user reverted the change your ${tool} call ${call} made to ${file}.`,
   };
 }
 

@@ -1005,8 +1005,12 @@ export interface AiFileChange {
  */
 export type AiFileChangeState = "written" | "unfinished" | "reverted" | "dropped";
 
-/** Why a revert did not happen (AI-41). `detail` names the server for `other_server`, and what failed for `unfinished` and `failed`. */
-export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "timed_out" | "unfinished" | "failed";
+/**
+ * Why a revert did not happen (AI-41). `detail` names the server for `other_server`, and what failed for
+ * `unfinished` (when an error ended it rather than the time) and `failed`. `symbolic_link`: a link is in the place
+ * of the file the call created, and neither it nor its target is deleted.
+ */
+export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "symbolic_link" | "timed_out" | "unfinished" | "failed";
 
 /**
  * The outcome of a revert (AI-41). `reverted`: the file holds what it held before the call again, or no longer
@@ -1019,6 +1023,15 @@ export type AiFileRevert =
   | { status: "reverted"; wrote: boolean }
   | { status: "changed"; path: string; current: string | null; before: string | null; later: boolean }
   | { status: "failed"; reason: AiRevertFailure; detail: string | null };
+
+/**
+ * What `ai_tool_run` stored: the call's result. `dropped_file_changes` (AI-41): keeping the snapshot of this call's
+ * change dropped older ones over the size limit, of this or another conversation.
+ */
+export interface AiToolRun {
+  entry: AiEntryView;
+  dropped_file_changes: boolean;
+}
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
 

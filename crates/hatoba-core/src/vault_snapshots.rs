@@ -104,7 +104,7 @@ impl Vault {
     /// Stores the snapshot of a call's change before its write begins, as
     /// [`SnapshotState::Unfinished`], replacing one the call has already, then drops the content
     /// of the oldest snapshots that still hold some until all of them hold at most
-    /// [`AI_SNAPSHOTS_MAX_BYTES`].
+    /// [`AI_SNAPSHOTS_MAX_BYTES`]. Returns how many it dropped, of any conversation.
     ///
     /// # Errors
     /// [`Error::Locked`]; [`Error::ItemNotFound`] if the conversation does not exist; storage
@@ -114,7 +114,7 @@ impl Vault {
         key: &SnapshotKey<'_>,
         meta: &str,
         content: &str,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
         if !matches!(self.get(key.conversation_id), Some(Item::AiConversation(_))) {
             return Err(Error::ItemNotFound(key.conversation_id.to_owned()));
@@ -143,8 +143,7 @@ impl Vault {
         };
         self.store.transaction(|tx| {
             tx.put_snapshot(&row)?;
-            tx.trim_snapshots(AI_SNAPSHOTS_MAX_BYTES)?;
-            Ok(())
+            tx.trim_snapshots(AI_SNAPSHOTS_MAX_BYTES)
         })
     }
 
@@ -451,11 +450,17 @@ mod tests {
             .ai_append_entry(&c, r#"{"role":"assistant"}"#)
             .unwrap();
         let half = "x".repeat(usize::try_from(AI_SNAPSHOTS_MAX_BYTES / 2).unwrap());
-        for call in ["a", "b", "c"] {
-            vault
-                .ai_put_file_snapshot(&key(&c, &response, call), call, &half)
-                .unwrap();
-        }
+        // Each put says how many it dropped, so the panel reads other conversations' changes
+        // again only then.
+        let drops: Vec<u64> = ["a", "b", "c"]
+            .into_iter()
+            .map(|call| {
+                vault
+                    .ai_put_file_snapshot(&key(&c, &response, call), call, &half)
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(drops, [0, 0, 1]);
         let states: Vec<(String, SnapshotState)> = vault
             .ai_file_snapshots(&c)
             .unwrap()

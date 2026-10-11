@@ -13,6 +13,7 @@ import type {
   AiSettingsView,
   AiTestResult,
   AiToolResultInput,
+  AiToolRun,
   AiTurnContext,
   AiTurnEvent,
   AiSearchHit,
@@ -273,8 +274,11 @@ export interface HatobaApi {
   ai_retry(conversation_id: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<void>;
   /** Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
   ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
-  /** Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...) and stores its result. */
-  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiEntryView>;
+  /**
+   * Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...)
+   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41).
+   */
+  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiToolRun>;
   /**
    * AI-39, AI-40: the change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
    * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file
@@ -294,6 +298,8 @@ export interface HatobaApi {
    * the diff of the last revert showed. A file the call created is deleted, so the panel asks first.
    */
   ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null, restore: boolean): Promise<AiFileRevert>;
+  /** AI-41: the server a revert on the tab `session_id` runs on, as `AiFileChange.server` names it; null while the tab is not connected. */
+  ai_session_server(session_id: string | null): Promise<string | null>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */

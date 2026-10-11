@@ -146,7 +146,6 @@ export function toolLabel(t: (key: MessageKey, params?: Params) => string, name:
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
-/** The call's arguments as an object. An empty string counts as `{}` (some providers send it for no arguments). */
 /**
  * AI-41: what an `edit_file` or `write_file` call changes, from its arguments alone, for its block when this
  * device keeps no snapshot of it: the replaced text and its replacement, or the content written. Null for other
@@ -163,6 +162,7 @@ export function callFileChange(name: string, json: string): AiFilePreview | null
   return { path: text(args.path), before, after, error: null, crlf: false };
 }
 
+/** The call's arguments as an object. An empty string counts as `{}` (some providers send it for no arguments). */
 export function parseArgs(json: string): Record<string, unknown> | null {
   if (!json.trim()) return {};
   try {

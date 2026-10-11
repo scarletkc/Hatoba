@@ -243,9 +243,10 @@ export const commands = {
 	aiToolResult: (conversationId: string, toolCallId: string, result: AiToolResultInput) => __TAURI_INVOKE<AiEntryView>("ai_tool_result", { conversationId, toolCallId, result }),
 	/**
 	 *  Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
-	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
+	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
+	 *  keeping the snapshot of a file change dropped older ones (AI-41).
 	 */
-	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiEntryView>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiToolRun>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
 	/**
 	 *  The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
 	 *  host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
@@ -283,6 +284,11 @@ export const commands = {
 	 *  anyway, over what the diff of the last revert showed, which the panel also asks about first.
 	 */
 	aiFileRevert: (conversationId: string, responseId: string, toolCallId: string, sessionId: string | null, restore: boolean) => __TAURI_INVOKE<AiFileRevert>("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
+	/**
+	 *  The server a revert (AI-41) on the tab `session_id` runs on, as `AiFileChange.server` names it;
+	 *  null while the tab is not connected. Edit and resend asks before it offers to revert changes.
+	 */
+	aiSessionServer: (sessionId: string | null) => __TAURI_INVOKE<string | null>("ai_session_server", { sessionId }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -552,11 +558,16 @@ export type AiRevertFailure =
  *  can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
  */
 "not_text" | 
+/**
+ *  A symbolic link is in the place of the file the call created, so neither the link nor its
+ *  target was deleted.
+ */
+"symbolic_link" | 
 /**  Reading the file did not finish within 30 seconds; nothing was written. */
 "timed_out" | 
 /**
- *  Writing or deleting failed after it may have begun: the file may be cut short, or
- *  deleted. `detail` says why.
+ *  Writing or deleting failed after it may have begun, a timeout included: the file may be
+ *  cut short, or deleted. `detail` says why, when there was an error.
  */
 "unfinished" | 
 /**  Anything else; `detail` says what. */
@@ -618,6 +629,17 @@ export type AiToolResultInput = {
 	content: string,
 	/**  AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
 	edited_arguments: string | null,
+};
+
+/**  What `ai_tool_run` stored: the call's result entry. */
+export type AiToolRun = {
+	entry: AiEntryView,
+	/**
+	 *  AI-41: keeping the snapshot of this call's change dropped older ones over the size limit,
+	 *  of this or another conversation, so the panel reads the file changes of its other
+	 *  conversations again.
+	 */
+	dropped_file_changes: boolean,
 };
 
 export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";

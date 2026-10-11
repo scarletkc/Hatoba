@@ -28,8 +28,8 @@ use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
     AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView,
     AiSearchHit, AiSendInput, AiSendStarted, AiSettingsView, AiTestFailure, AiTestResult,
-    AiToolResultInput, AiTurnContext, AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput,
-    SearchProviderView,
+    AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, DroppedFile, SearchKind,
+    SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -842,6 +842,14 @@ pub async fn ai_file_change_diff(
     )
 }
 
+/// The server a revert (AI-41) on the tab `session_id` runs on, as `AiFileChange.server` names it;
+/// null while the tab is not connected. Edit and resend asks before it offers to revert changes.
+#[tauri::command]
+#[specta::specta]
+pub fn ai_session_server(app: AppHandle, session_id: Option<String>) -> Option<String> {
+    crate::ai::session_server(&AppEnv(app), session_id.as_deref())
+}
+
 /// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
 /// `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
 /// anyway, over what the diff of the last revert showed, which the panel also asks about first.
@@ -873,7 +881,8 @@ pub async fn ai_file_revert(
 }
 
 /// Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
-/// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
+/// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
+/// keeping the snapshot of a file change dropped older ones (AI-41).
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_tool_run(
@@ -883,7 +892,7 @@ pub async fn ai_tool_run(
     tool_call_id: String,
     session_id: Option<String>,
     edited_arguments: Option<String>,
-) -> AppResult<AiEntryView> {
+) -> AppResult<AiToolRun> {
     state
         .ai
         .tool_run(

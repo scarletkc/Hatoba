@@ -61,8 +61,8 @@ use zeroize::Zeroizing;
 use crate::dto::{
     AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
     AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiSearchHit, AiSendInput,
-    AiSendStarted, AiToolCall, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
-    AiTurnEvent, AiUsage, QuickTarget,
+    AiSendStarted, AiToolCall, AiToolResultInput, AiToolRun, AiToolStatus, AiTurnContext,
+    AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -1237,7 +1237,7 @@ impl AiManager {
         tool_call_id: &str,
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
-    ) -> AppResult<AiEntryView> {
+    ) -> AppResult<AiToolRun> {
         let (job, op, place, _writing, keeps) = {
             let v = unlocked(vault)?;
             let conversation = find_conversation(&v, conversation_id)?;
@@ -1272,15 +1272,14 @@ impl AiManager {
             (job, op, place, writing, keeps)
         };
         let shown = Mutex::default();
-        let keep = KeepSnapshot {
+        let keep = KeepSnapshot::new(
             vault,
-            key: SnapshotKey {
+            SnapshotKey {
                 conversation_id,
                 response_id: &place.response,
                 tool_call_id,
             },
-            meta: Mutex::default(),
-        };
+        );
         let seen = files::SeenBy {
             seen: &self.0.seen,
             conversation_id,
@@ -1322,7 +1321,10 @@ impl AiManager {
         };
         drop(op);
         env.changed();
-        Ok(view)
+        Ok(AiToolRun {
+            entry: view,
+            dropped_file_changes: keep.dropped(),
+        })
     }
 
     /// `ai_file_preview` (AI-39, AI-40): the change an open `edit_file` or `write_file` call
@@ -2654,6 +2656,12 @@ fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<hatoba_ssh:
         .filter(|s| !s.is_closed())
 }
 
+/// The server a revert (AI-41) on the tab `session_id` runs on, as file changes name it; `None`
+/// while the tab is not connected.
+pub fn session_server(env: &dyn AiEnv, session_id: Option<&str>) -> Option<String> {
+    live_session(env, session_id).map(|s| files::server(&s))
+}
+
 /// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout.
 async fn run_command(
     env: &dyn AiEnv,
@@ -3409,6 +3417,23 @@ struct KeepSnapshot<'a> {
     key: SnapshotKey<'a>,
     /// What the kept snapshot says, until the write resolved the path.
     meta: Mutex<Option<files::ChangeMeta>>,
+    /// Keeping it dropped older snapshots over the size limit, of any conversation.
+    dropped: AtomicBool,
+}
+
+impl<'a> KeepSnapshot<'a> {
+    fn new(vault: &'a SharedVault, key: SnapshotKey<'a>) -> Self {
+        Self {
+            vault,
+            key,
+            meta: Mutex::default(),
+            dropped: AtomicBool::new(false),
+        }
+    }
+
+    fn dropped(&self) -> bool {
+        self.dropped.load(Ordering::Relaxed)
+    }
 }
 
 impl files::Keep for KeepSnapshot<'_> {
@@ -3419,7 +3444,10 @@ impl files::Keep for KeepSnapshot<'_> {
         };
         // Any other failure is logged, and the call writes without a snapshot.
         match v.ai_put_file_snapshot(&self.key, &meta, &content) {
-            Ok(()) => *guard(&self.meta) = Some(change.meta.clone()),
+            Ok(dropped) => {
+                *guard(&self.meta) = Some(change.meta.clone());
+                self.dropped.store(dropped > 0, Ordering::Relaxed);
+            }
             Err(hatoba_core::Error::Locked) => return Err(files::Stop::Cancelled),
             Err(e) => tracing::warn!(
                 conversation_id = self.key.conversation_id,

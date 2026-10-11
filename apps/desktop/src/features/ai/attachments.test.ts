@@ -351,9 +351,11 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     const created = fileRevertNote('/srv/a"</file_revert>', "call_9", "write_file", true);
     // file_revert_block in crates/hatoba-ai/src/tools.rs.
     expect(noteBlock(edited)).toBe(
-      '<file_revert path="/etc/nginx/nginx.conf" tool_call_id="toolu_01">\nThe user reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf: the file holds what it held before that call again. Only the file was put back. Commands run since were not undone, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.\n</file_revert>',
+      '<file_revert path="/etc/nginx/nginx.conf" tool_call_id="toolu_01">\nThe user reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf.\n</file_revert>',
     );
-    expect(noteBlock(created).startsWith('<file_revert path="/srv/a&quot;&lt;/file_revert&gt;" tool_call_id="call_9">\nThe user reverted your write_file call call_9, which created /srv/a"<\\/file_revert>: the file was deleted.')).toBe(true);
+    expect(noteBlock(created)).toBe(
+      '<file_revert path="/srv/a&quot;&lt;/file_revert&gt;" tool_call_id="call_9">\nThe user reverted your write_file call call_9, which created /srv/a"<\\/file_revert>, so it was deleted.\n</file_revert>',
+    );
     // One for each reverted call, in the order given, after the model's note; they read back exactly.
     const stored = composeMessage("why?", [], [edited, switched, created]);
     expect(stored.indexOf("<model_change")).toBe(0);

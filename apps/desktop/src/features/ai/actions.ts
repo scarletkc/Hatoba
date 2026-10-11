@@ -422,11 +422,12 @@ class TurnRunner {
       }
       // AI-08: tools use the tab's current session, so they follow a reconnect.
       const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
-      const result = await api.ai_tool_run(convId, call.id, sessionId, edited);
-      this.addEntry(result);
+      const { entry, dropped_file_changes } = await api.ai_tool_run(convId, call.id, sessionId, edited);
+      this.addEntry(entry);
       // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
-      // partway; and the size limit may have dropped an older one, of any conversation.
-      if (kind === "edit_file" || kind === "write_file") refreshAllFileChanges();
+      // partway. Keeping it may have dropped older ones over the size limit, of any conversation.
+      if (dropped_file_changes) refreshAllFileChanges();
+      else if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(this.slotId, convId);
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -582,15 +583,19 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   patchSlot(slotId, { fileChanges });
   const { revert } = editedFiles(slot.entries, fileChanges, entryId);
   if (revert.length > 0) {
+    // Only the changes on the server the tab is connected to can be reverted from it; the dialog says so of the
+    // others, which Cancel keeps revertible.
+    const server = await api.ai_session_server(revertSession(slotId)).catch(() => null);
     // The list is the confirmation, also for a file a call created: each revert asks nothing more.
     // Each revert waits for an idle conversation, as on the block: a turn may have started meanwhile.
-    const send = await askEditedFiles(
+    const send = await askEditedFiles({
       later,
-      revert,
-      (change) =>
+      changes: revert,
+      server,
+      revert: (change) =>
         slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
-      (change) => fileChangeDiff(slotId, change).catch(() => null),
-    );
+      diff: (change) => fileChangeDiff(slotId, change).catch(() => null),
+    });
     if (!send) return false;
   } else if (later > 0) {
     const ok = await confirm({
@@ -672,7 +677,7 @@ export async function refreshFileChanges(slotId: string, convId: string) {
 }
 
 /** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped. Rejects when it cannot be read. */
-export async function fileChangeDiff(slotId: string, change: AiFileChange): Promise<AiFilePreview | null> {
+export async function fileChangeDiff(slotId: string, change: Pick<AiFileChange, "response_id" | "tool_call_id">): Promise<AiFilePreview | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId) return null;
   return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id);
@@ -681,11 +686,15 @@ export async function fileChangeDiff(slotId: string, change: AiFileChange): Prom
 /**
  * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. The user
  * confirms first, with the diff the revert writes back; a file the call created is deleted. With `restore`
- * (Restore anyway), it writes over what the diff of the last revert showed, which the user confirms too.
- * `onStart` runs once the revert is under way. Null when nothing was asked of Rust or it refused; otherwise
+ * (Restore anyway), it writes over what the diff of the last revert showed, which the user confirms too;
+ * `recreate`: that diff showed the file missing, so it is created again. `onStart` runs once the revert is under way. Null when nothing was asked of Rust or it refused; otherwise
  * what the revert did, for the call's block to show.
  */
-export async function revertFileChange(slotId: string, change: AiFileChange, options: { restore?: boolean; onStart?: () => void } = {}): Promise<AiFileRevert | null> {
+export async function revertFileChange(
+  slotId: string,
+  change: AiFileChange,
+  options: { restore?: boolean; recreate?: boolean; onStart?: () => void } = {},
+): Promise<AiFileRevert | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId || slotBusy(slotId)) return null;
   const path = change.path;
@@ -693,7 +702,7 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
     ? await confirm({
         ...(change.created
           ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
-          : { title: t("ai.revert.restoreTitle", { path }), body: t("ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
+          : { title: t("ai.revert.restoreTitle", { path }), body: t(options.recreate ? "ai.revert.recreateBody" : "ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
         danger: true,
       })
     : await fileChangeDiff(slotId, change).then(

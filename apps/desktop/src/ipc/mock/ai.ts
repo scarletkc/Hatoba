@@ -40,6 +40,7 @@ type AiApi = Pick<
   | "ai_file_changes"
   | "ai_file_change_diff"
   | "ai_file_revert"
+  | "ai_session_server"
   | "ai_stop"
   | "ai_compact"
   | "ai_search"
@@ -53,6 +54,8 @@ export interface AiMockDeps {
   settings: HatobaApi["ai_settings_get"];
   /** The hosts mock's list, whose names the notes of a move to another host carry (AI-09). */
   hosts?: () => Promise<HostView[]>;
+  /** The server a live session of the shell mock is connected to, as file changes name it (AI-41). */
+  sessionServer?: (sessionId: string) => string | null;
   /** The MCP servers of the extensions mock, whose tools the fake model calls. */
   mcp?: {
     servers: HatobaApi["mcp_servers_list"];
@@ -98,6 +101,8 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 /** The file the "cutshort" write leaves cut short (AI-41). */
 const CUT_SHORT = "/srv/app/conf.d/cache.conf";
+/** The file "write" creates, which "symlink" puts a link in the place of (AI-41). */
+const MAINTENANCE = "/srv/app/public/maintenance.html";
 
 /**
  * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
@@ -120,6 +125,9 @@ const CUT_SHORT = "/srv/app/conf.d/cache.conf";
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
  *   "cutshort"        write_file whose write fails halfway, leaving the file cut short
+ *   "rmfile"          run_command `rm /etc/motd`     "symlink"  run_command that puts a link in the place
+ *                     of the file "write" creates, so reverting "motd" offers to create the file again and
+ *                     reverting "write" stops at the link (AI-41)
  * An edit or write that ran, or failed after it may have begun, can be reverted from its block while the
  * conversation is idle (AI-41), and the next message notes it. "listen" then "edit" changes one file twice:
  * reverting the first then shows the diff, says the later call is in the way, and offers Restore Anyway.
@@ -438,11 +446,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
         if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
         if (want("write", "写入", "書き込"))
-          calls.push(call("write_file", { path: "/srv/app/public/maintenance.html", content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
+          calls.push(call("write_file", { path: MAINTENANCE, content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
         if (want("bigfile"))
           calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
         if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
         if (want("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
+        if (want("rmfile")) calls.push(call("run_command", { command: "rm /etc/motd" }));
+        if (want("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
@@ -856,16 +866,23 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const snapshots = new Map<string, Snapshot[]>();
   /** Rust keeps 32 MB; the mock keeps just over what "bigfile" writes, so it drops the changes before it. */
   const SNAPSHOT_CAP = 15_800;
-  /** Like Rust's trim: drops what the oldest changes held until the kept ones fit. */
-  function trimSnapshots() {
+  /** Like Rust's trim: drops what the oldest changes held until the kept ones fit; true when it dropped any. */
+  function trimSnapshots(): boolean {
     const kept = [...snapshots.values()].flat().filter((s) => s.change.state === "written" || s.change.state === "unfinished");
     let total = kept.reduce((n, s) => n + (s.before?.length ?? 0) + s.after.length, 0);
+    let dropped = false;
     for (const s of kept) {
       if (total <= SNAPSHOT_CAP) break;
       total -= (s.before?.length ?? 0) + s.after.length;
       s.change = { ...s.change, state: "dropped" };
+      dropped = true;
     }
+    return dropped;
   }
+  /** Files a link was put in the place of ("symlink"), which reads go through and a revert's deletion refuses. */
+  const remoteLinks = new Set<string>();
+  /** Calls whose snapshot dropped older ones, as `ai_tool_run` reports it. */
+  const droppedBy = new Set<string>();
   const fileChangesOf = (convId: string) => (snapshots.get(convId) ?? []).map((s) => ({ ...s.change }));
   /** Like Rust's `pending_reverts`: reverted calls in `earlier` that no user entry after the call notes yet, oldest call first. */
   function pendingReverts(convId: string, earlier: AiEntryView[]): Note[] {
@@ -973,6 +990,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       case "run_command": {
         if (!sessionId) return { status: "error", content: "The terminal tab is not connected." };
         const command = String(args.command ?? "");
+        // AI-41: files changed behind a call's back, for its revert to find.
+        if (command === "rm /etc/motd") remoteFiles.delete("/etc/motd");
+        if (command.startsWith("ln -sfn ") && remoteFiles.has(MAINTENANCE)) remoteLinks.add(MAINTENANCE);
         const secs = Number(/sleep\s+(\d+)/.exec(command)?.[1] ?? 0);
         await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
         const r = exec(command);
@@ -1020,7 +1040,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           const change: AiFileChange = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, state: "unfinished" };
           snapshot = { change, tool: x.name, before: current, after: after.text };
           snapshots.set(c.view.id, [...kept, snapshot]);
-          trimSnapshots();
+          if (trimSnapshots()) droppedBy.add(x.id);
         }
         if (key === CUT_SHORT) {
           remoteFiles.set(key, after.text.slice(0, Math.ceil(after.text.length / 2)));
@@ -1304,8 +1324,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const x = openCall(c, callId);
       const r = await runTool(c, x, sessionId, edited);
       // A stop stored a cancelled result while the tool ran.
+      const dropped = droppedBy.delete(callId);
       if (answered(c).has(callId)) fail("cancelled", "the tool call was stopped");
-      return storeResult(c, callId, r.status, r.content, edited);
+      return { entry: storeResult(c, callId, r.status, r.content, edited), dropped_file_changes: dropped };
     },
     ai_file_preview: async (id, callId, sessionId, edited) => {
       const c = need(id);
@@ -1371,6 +1392,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (current === snapshot.before) return reverted(false);
       // (a) It holds what the call wrote; or with Restore anyway, what the diff showed.
       if (current === snapshot.after || (restore && snapshot.shown !== undefined && current === snapshot.shown)) {
+        // Like Rust's delete script: a link in the place of the file the call created is not deleted.
+        if (snapshot.before === null && remoteLinks.has(path)) return { status: "failed", reason: "symbolic_link", detail: null } satisfies AiFileRevert;
         if (snapshot.before === null) remoteFiles.delete(path);
         else remoteFiles.set(path, snapshot.before);
         return reverted(true);
@@ -1381,6 +1404,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const later = list.slice(at + 1).some((s) => s.change.path === path && (s.change.state === "written" || s.change.state === "unfinished"));
       return { status: "changed", path, current: current === null ? null : shown(current), before: snapshot.before === null ? null : shown(snapshot.before), later } satisfies AiFileRevert;
     },
+    ai_session_server: async (sessionId) => (sessionId ? (deps.sessionServer?.(sessionId) ?? null) : null),
     ai_stop: async (id) => {
       const c = convs.get(id);
       if (c?.runningUntil) c.runningUntil = 0;

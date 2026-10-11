@@ -16,7 +16,7 @@ import type {
   VaultStatus,
 } from "../types";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
-import { sameTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
@@ -206,6 +206,10 @@ export function createMockApi(): HatobaApi {
       providers: aiSettings.ai_providers_list,
       settings: aiSettings.ai_settings_get,
       hosts: async () => hosts,
+      sessionServer: (sid) => {
+        const shell = shells.get(sid);
+        return shell ? formatTarget(shell.host) : null;
+      },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
     app_info: async () => ({ version, platform, mica: false }),

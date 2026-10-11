@@ -8,6 +8,7 @@ const FAILURES: Record<AiRevertFailure, MessageKey> = {
   other_server: "ai.revert.failed.otherServer",
   permission_denied: "ai.revert.failed.permissionDenied",
   not_text: "ai.revert.failed.notText",
+  symbolic_link: "ai.revert.failed.symbolicLink",
   timed_out: "ai.revert.failed.timedOut",
   unfinished: "ai.revert.failed.unfinished",
   failed: "ai.revert.failed.failed",

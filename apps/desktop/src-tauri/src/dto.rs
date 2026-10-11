@@ -1240,6 +1240,16 @@ pub struct AiUsage {
     pub estimated: bool,
 }
 
+/// What `ai_tool_run` stored: the call's result entry.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiToolRun {
+    pub entry: AiEntryView,
+    /// AI-41: keeping the snapshot of this call's change dropped older ones over the size limit,
+    /// of this or another conversation, so the panel reads the file changes of its other
+    /// conversations again.
+    pub dropped_file_changes: bool,
+}
+
 /// A stored conversation entry (§13.7), without the provider's raw message.
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "role", rename_all = "snake_case")]
@@ -1341,10 +1351,13 @@ pub enum AiRevertFailure {
     /// The file changed since the call wrote it into something that is not a text file Hatoba
     /// can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
     NotText,
+    /// A symbolic link is in the place of the file the call created, so neither the link nor its
+    /// target was deleted.
+    SymbolicLink,
     /// Reading the file did not finish within 30 seconds; nothing was written.
     TimedOut,
-    /// Writing or deleting failed after it may have begun: the file may be cut short, or
-    /// deleted. `detail` says why.
+    /// Writing or deleting failed after it may have begun, a timeout included: the file may be
+    /// cut short, or deleted. `detail` says why, when there was an error.
     Unfinished,
     /// Anything else; `detail` says what.
     Failed,

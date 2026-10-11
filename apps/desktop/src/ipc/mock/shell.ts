@@ -16,7 +16,8 @@ export class FakeShell {
   private enc = new TextEncoder();
 
   constructor(
-    private host: HostView,
+    /** The host the session is connected to. */
+    readonly host: HostView,
     private out: (bytes: Uint8Array) => void,
   ) {}
 
