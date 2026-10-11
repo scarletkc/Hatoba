@@ -3069,29 +3069,24 @@ fn names_server(v: &Vault, from: &str, here: &AiQuickTarget) -> bool {
         })
 }
 
-/// AI-41: the place a `host_change` note's `from` names: the quick-connect target it writes as
-/// `user@host:port`, or else the only saved host with that display name. Neither when it names
-/// none, as for a host that no longer exists, whose name the note leaves empty.
+/// AI-41: the place a `host_change` note's `from` names: the only saved host with that display
+/// name, or else the quick-connect target it writes as `user@host:port`. A display name may look
+/// like a target, so the saved host comes first. Neither when it names none, as for a host that no
+/// longer exists, whose name the note leaves empty.
 fn place_named(v: &Vault, from: &str) -> Place {
-    if let Some(target) = parse_target(from) {
-        return Place {
-            host_id: None,
-            quick_target: Some(target),
-        };
-    }
     let mut named = v
         .hosts()
         .into_iter()
         .filter(|(_, h)| !from.is_empty() && h.name == from);
-    match (named.next(), named.next()) {
-        (Some((host_id, _)), None) => Place {
+    if let (Some((host_id, _)), None) = (named.next(), named.next()) {
+        return Place {
             host_id: Some(host_id),
             quick_target: None,
-        },
-        _ => Place {
-            host_id: None,
-            quick_target: None,
-        },
+        };
+    }
+    Place {
+        host_id: None,
+        quick_target: parse_target(from),
     }
 }
 

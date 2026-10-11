@@ -4766,6 +4766,8 @@ fn a_note_names_a_target_or_a_single_host() {
     let web = f.add_host("web", "");
     f.add_host("twin", "");
     f.add_host("twin", "");
+    // A display name that looks like a target names the saved host.
+    let lookalike = f.add_host("root@prod:22", "");
     let v = lock(&f.vault);
     let place = |from: &str| {
         let Place {
@@ -4776,6 +4778,7 @@ fn a_note_names_a_target_or_a_single_host() {
     };
     assert_eq!(place("web"), (Some(web), None));
     assert_eq!(place("twin"), (None, None));
+    assert_eq!(place("root@prod:22"), (Some(lookalike), None));
     assert_eq!(place(""), (None, None));
     assert_eq!(
         place("root@10.0.0.9:22"),

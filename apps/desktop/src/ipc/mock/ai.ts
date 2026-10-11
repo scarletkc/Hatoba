@@ -1211,8 +1211,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (moved?.kind === "host_change") {
         const target = /\s/.test(moved.from) ? null : parseQuickConnect(moved.from);
         const named = ((await deps.hosts?.()) ?? []).filter((h) => moved.from && h.name === moved.from);
-        quick_target = target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
-        host_id = !quick_target && named.length === 1 ? named[0].id : null;
+        host_id = named.length === 1 ? named[0].id : null;
+        quick_target = !host_id && target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
       }
       const now = Date.now();
       const fork: Conv = {

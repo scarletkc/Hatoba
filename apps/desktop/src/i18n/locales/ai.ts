@@ -259,6 +259,7 @@ export default defineMessages({
     "ai.fork": "从这里创建分支",
     "ai.fork.title": "{title}（分支）",
     "ai.fork.done": "已创建分支，原对话仍在历史对话中。",
+    "ai.fork.inHistory": "已创建分支，新对话在历史对话中。",
 
     // tools menu (AI-30, AI-32)
     "ai.tools": "MCP 工具",
@@ -538,6 +539,7 @@ export default defineMessages({
     "ai.fork": "Fork from Here",
     "ai.fork.title": "{title} (fork)",
     "ai.fork.done": "Forked. The original conversation stays in History.",
+    "ai.fork.inHistory": "Forked. The new conversation is in History.",
 
     "ai.tools": "MCP tools",
     "ai.tools.summary": "This conversation uses {on} of {total} MCP servers",
@@ -810,6 +812,7 @@ export default defineMessages({
     "ai.fork": "ここから分岐",
     "ai.fork.title": "{title}（分岐）",
     "ai.fork.done": "分岐しました。元の会話は履歴に残っています。",
+    "ai.fork.inHistory": "分岐しました。新しい会話は履歴にあります。",
 
     "ai.tools": "MCP ツール",
     "ai.tools.summary": "この会話は {total} 個中 {on} 個の MCP サーバーを使います",
