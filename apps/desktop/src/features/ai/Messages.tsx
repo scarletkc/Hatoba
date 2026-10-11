@@ -720,12 +720,18 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
   }, [fileChange, mode, kind, args, draft]);
   const file = useFilePreview(slotId, call.id, editedFile, fileChange);
 
+  // AI-39, AI-40: an edit or write runs only once the card has shown its diff, which Rust then writes
+  // over. When the card showed why the call cannot apply, Run answers the model with that instead, so a
+  // file that comes back meanwhile is not written without a diff; without any answer, it waits.
+  const holdRun = fileChange && (file.loading || !file.preview);
+  const refusal = fileChange ? (file.preview?.error ?? undefined) : undefined;
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
-    if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow });
+    if (holdRun) return;
+    if (mode !== "edit") return decideCall(slotId, { kind: "run", edited: null, allow, refusal });
     const next = argsFrom(kind, args, draft);
     if ("error" in next) return setInvalid(true);
     const same = next.json === JSON.stringify(args);
-    decideCall(slotId, { kind: "run", edited: same ? null : next.json, allow });
+    decideCall(slotId, { kind: "run", edited: same ? null : next.json, allow, refusal });
   };
   const reject = () => decideCall(slotId, { kind: "reject", reason: reason.trim() });
   const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
@@ -917,8 +923,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {t("btn.edit")}
             </Button>
           )}
-          {/* An edit or write runs once its diff has been read, so the user approves what they saw; so does Allow below. */}
-          <Button size="sm" variant="primary" icon="play" disabled={fileChange && file.loading} onClick={() => run()}>
+          {/* An edit or write runs once its card has an answer (a diff or why it cannot apply); so does Allow below. */}
+          <Button size="sm" variant="primary" icon="play" disabled={holdRun} onClick={() => run()}>
             {t("ai.approval.run")}
           </Button>
         </div>
@@ -930,7 +936,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
             tone="muted"
             icon="chat-circle-dots"
             title={t("ai.approval.allowHereHint", { tool: label })}
-            disabled={fileChange && file.loading}
+            disabled={holdRun}
             onClick={() => run("conversation")}
           >
             {t("ai.approval.allowHere")}
