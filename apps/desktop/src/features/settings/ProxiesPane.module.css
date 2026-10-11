@@ -7,14 +7,6 @@
   min-height: 24px;
 }
 
-.sectionHint {
-  padding: 0 4px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--fg2);
-  text-wrap: pretty;
-}
-
 /* Lets the hover of the first and last row follow the group's rounded corners. */
 .clip {
   overflow: hidden;

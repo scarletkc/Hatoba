@@ -5,7 +5,7 @@ import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { Language, LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { Pane, PaneHint, SettingRow, usePrefs, type PaneProps } from "./shared";
+import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
@@ -79,7 +79,6 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
           </button>
         </SettingRow>
       </Group>
-      <PaneHint>{t("settings.language.hint")}</PaneHint>
 
       {langMenu.anchor && <Menu anchor={langMenu.anchor} onClose={langMenu.close} minWidth={200} entries={langEntries} />}
     </Pane>

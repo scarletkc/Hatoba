@@ -68,12 +68,12 @@ export function SecurityPane({ settings, update }: PaneProps) {
       )}
 
       <Group>
-        <SettingRow label={t("settings.sec.password")} hint={t("settings.sec.password.hint")}>
+        <SettingRow label={t("settings.sec.password")}>
           <Button icon="lock-key" onClick={() => setDialog("password")}>
             {t("settings.sec.password.button")}
           </Button>
         </SettingRow>
-        <SettingRow label={t("settings.sec.recovery")} hint={t("settings.sec.recovery.hint")}>
+        <SettingRow label={t("settings.sec.recovery")}>
           <Button icon="shield-check" onClick={() => setDialog("recovery")}>
             {t("settings.sec.recovery.button")}
           </Button>
