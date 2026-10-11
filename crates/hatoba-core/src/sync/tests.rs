@@ -560,6 +560,38 @@ async fn join_merges_another_vault_into_the_cloud() {
 }
 
 #[tokio::test]
+async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
+    let (server, clock, a, _b) = world();
+    a.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.auto_lock_minutes = 42;
+        }
+    });
+    enable(&a).await;
+    let c = own_vault_device(&server, &clock);
+    join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    // The first pull never happens; settings change, and sync is disconnected.
+    server.set_offline(true);
+    assert!(matches!(c.try_sync().await, Err(Error::Offline)));
+    server.set_offline(false);
+    c.clock.advance(60_000);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.auto_lock_minutes = 9;
+        }
+    });
+    c.v().set_sync_config(None).unwrap();
+
+    let joined = join(&c).await;
+    assert!(!joined.rekeyed);
+    assert_eq!(c.v().settings().auto_lock_minutes, 42);
+    a.sync().await;
+    assert_eq!(a.v().settings().auto_lock_minutes, 42);
+}
+
+#[tokio::test]
 async fn join_reconnects_a_device_that_synced_before() {
     let (_server, _clock, a, b) = two_devices().await;
     b.v().set_sync_config(None).unwrap();

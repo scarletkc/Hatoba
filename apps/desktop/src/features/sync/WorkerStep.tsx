@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
@@ -42,19 +42,23 @@ export function WorkerStep({
   const canTest = form.url.trim().length > 0 && test.status !== "testing";
   const canContinue = !!ok && (initialized || form.token.trim().length > 0);
 
+  // Only the answer for the URL in the field counts: whether it holds a vault decides the flow.
+  const request = useRef(0);
   const runTest = async () => {
     if (!canTest) return;
+    const n = ++request.current;
     const url = normalizeWorkerUrl(form.url);
     update({ url, test: { status: "testing" } });
     try {
       const result = await api.sync_test({ kind: "worker", url, setup_token: form.token.trim() || null });
+      if (n !== request.current) return;
       update({
         test: result.ok
           ? { status: "ok", result }
           : { status: "failed", message: result.error ? errorMessage(t, result.error) : t("sync.test.failed") },
       });
     } catch (e) {
-      update({ test: { status: "failed", message: errorMessage(t, e) } });
+      if (n === request.current) update({ test: { status: "failed", message: errorMessage(t, e) } });
     }
   };
 
@@ -131,7 +135,10 @@ export function WorkerStep({
             inputMode="url"
             invalid={test.status === "failed"}
             trailing={ok ? <Icon name="check-circle" fill size={15} color="var(--green)" /> : undefined}
-            onChange={(e) => update({ url: e.target.value, test: { status: "idle" } })}
+            onChange={(e) => {
+              request.current++;
+              update({ url: e.target.value, test: { status: "idle" } });
+            }}
             onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && void runTest()}
           />
         </Field>

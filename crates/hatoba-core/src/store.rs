@@ -59,8 +59,9 @@ pub mod meta {
     /// Envelope JSON: the shell's list of recent quick-connect targets (HOST-12), sealed under
     /// the vault key because it names hosts. Device-local, never synced.
     pub const RECENT_TARGETS: &str = "recent_targets";
-    /// Set when this device joined another vault (flow C) and cleared once the first pull has
-    /// installed the remote's settings item, which wins over any local edit made meanwhile.
+    /// Set when this device joined another vault (flow C) and cleared once a pull has installed
+    /// the remote's settings item, which wins over any local edit made meanwhile. A disconnect
+    /// keeps it, so reconnecting before that pull still lets the remote's settings win.
     pub const ADOPT_REMOTE_SETTINGS: &str = "adopt_remote_settings";
 }
 

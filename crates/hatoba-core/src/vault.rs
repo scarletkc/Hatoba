@@ -1094,8 +1094,7 @@ impl Vault {
             None => self.store.transaction(|tx| {
                 tx.delete_meta(meta::SYNC_BACKEND)?;
                 tx.delete_meta(meta::SYNC_CURSOR)?;
-                tx.delete_meta(meta::SYNC_LAST_AT)?;
-                tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)
+                tx.delete_meta(meta::SYNC_LAST_AT)
             }),
         }
     }
