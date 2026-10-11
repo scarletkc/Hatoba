@@ -44,13 +44,16 @@ export function WorkerStep({
 
   // Only the answer for the URL in the field counts: whether it holds a vault decides the flow.
   // Editing the URL, a new test and leaving the step all end the one in flight; the wizard keeps
-  // `form`, so a late answer would otherwise land in the next visit.
+  // `form`, so a late answer would otherwise land in the next visit. A test still shown as running
+  // when the step comes back is one of those, so it can be run again.
   const request = useRef(0);
   useEffect(() => {
+    if (test.status === "testing") update({ test: { status: "idle" } });
     const current = request;
     return () => {
       current.current++;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const runTest = async () => {
     if (!canTest) return;

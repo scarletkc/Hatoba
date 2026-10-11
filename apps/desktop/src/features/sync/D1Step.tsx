@@ -47,6 +47,8 @@ export function D1Step({
   // Only the latest request's answer counts, for the credentials in the fields: whether the
   // database holds a vault decides the flow. A new request, an edit and leaving the step all end
   // the one in flight; the wizard keeps `form`, so a late answer would land in the next visit.
+  // What was still running when the step comes back is one of those: a token check can be run
+  // again, and the chosen database is checked again.
   const epoch = useRef(0);
   useEffect(() => {
     const current = epoch;
@@ -65,6 +67,12 @@ export function D1Step({
       if (n === epoch.current) update({ checking: false });
     }
   };
+
+  useEffect(() => {
+    if (verify.status === "testing") update({ verify: { status: "idle" } });
+    if (form.checking) void pickDatabase(form.databaseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const runVerify = async () => {
     if (!canVerify) return;
