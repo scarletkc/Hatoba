@@ -342,7 +342,7 @@ impl Cleaner<'_> {
 }
 
 /// The target of a local `$ref` (`#` plus a JSON pointer, percent-encoded as URI fragments are).
-fn local_target<'v>(root: &'v Value, reference: &str) -> Option<&'v Value> {
+pub(crate) fn local_target<'v>(root: &'v Value, reference: &str) -> Option<&'v Value> {
     let fragment = reference.strip_prefix('#')?;
     root.pointer(&decode_pointer(fragment))
 }

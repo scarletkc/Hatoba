@@ -87,6 +87,8 @@ export function placeUserEntry(entries: AiEntryView[], entry: AiEntryView): AiEn
 export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot {
   const turn = s.turn;
   switch (ev.kind) {
+    case "opened":
+      return s;
     case "request_started":
       return { ...s, outcome: null, turn: { ...(turn ?? newTurn()), phase: "waiting", live: emptyLive(), error: null } };
     case "text":

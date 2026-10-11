@@ -158,7 +158,7 @@ pub(crate) fn stdio_server(name: &str) -> McpServer {
 }
 
 /// A stdio server item whose start never ends ([`hang`]).
-fn hanging_server(name: &str) -> McpServer {
+pub(crate) fn hanging_server(name: &str) -> McpServer {
     mock_server(name, "hang")
 }
 

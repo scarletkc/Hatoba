@@ -70,7 +70,7 @@ import {
   type TabSelection,
 } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
-import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
+import { allowanceOf, CALL_MCP_TOOL, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
   editedFiles,
   entriesBefore,
@@ -232,6 +232,16 @@ class TurnRunner {
     return this.disposed;
   }
 
+  /**
+   * Rust registered a new conversation's turn under `convId` before storing its message (AI-45). A stop
+   * names it from now on, so it works while the MCP servers start; one asked for before is sent now.
+   */
+  private opened(convId: string) {
+    if (this.convId) return;
+    this.convId = convId;
+    if (this.stopping) void this.requestStop(convId);
+  }
+
   /** `ai_send` stored the conversation. A stop asked for before that is sent now. */
   started(convId: string) {
     this.convId = convId;
@@ -241,6 +251,10 @@ class TurnRunner {
 
   onEvent = (ev: AiTurnEvent) => {
     if (this.disposed) return;
+    if (ev.kind === "opened") {
+      this.opened(ev.conversation_id);
+      return;
+    }
     // After the end (e.g. the fallback below), only stored entries still matter.
     if (this.ended) {
       if (ev.kind === "entry") this.addEntry(ev.entry);
@@ -350,10 +364,24 @@ class TurnRunner {
     // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
     if (needsSession(kind) && !this.target()) return this.answer(convId, call.id, NO_TAB);
     // AI-31: an MCP call's tool, resolved the way Rust runs the call; its Always allow and its server's
-    // Always ask decide whether it asks.
+    // Always ask decide whether it asks. A `call_mcp_tool` call (AI-45) counts as the tool it names.
     let mcp: McpToolInfo | null = null;
     if (kind === "mcp") {
-      mcp = await api.mcp_tool_info(convId, call.name).catch(() => null);
+      if (call.name === CALL_MCP_TOOL) {
+        const proxy = await api.mcp_proxy_info(convId, call.arguments).catch(() => null);
+        if (!this.acting) return;
+        // Nothing would run (arguments that do not match the tool's schema, a tool the conversation does
+        // not have, a deleted server): Rust answers it with that error, without asking.
+        if (proxy && !proxy.runs) {
+          this.setCall({ id: call.id, state: "running" });
+          await this.execute(convId, call, kind, null);
+          this.countCall();
+          return;
+        }
+        mcp = proxy?.tool ?? null;
+      } else {
+        mcp = await api.mcp_tool_info(convId, call.name).catch(() => null);
+      }
       if (!this.acting) return;
       // AI-30: a server switched off in the tools menu runs nothing more, in this turn too.
       if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
@@ -538,7 +566,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       extras: [...extras, ...s.extras],
     }));
     restore();
-    // Stopped before it was stored (during its compaction, AI-22): the message is back in the input.
+    // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
+    // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
     return false;
   }
@@ -772,8 +801,9 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
     runner.dispose();
     const target = settleFailedStart(id, { entries: now.entries });
     if (target) {
-      // Stopped before it was stored (during its compaction, AI-22): the message and what followed it
-      // are deleted already, so the edited text goes back into the input instead of being lost.
+      // Stopped before it was stored: while the MCP servers started (AI-45), which leaves the message
+      // and what followed it, or during its compaction (AI-22), which has deleted them. Either way the
+      // edited text goes back into the input instead of being lost.
       if (toAppError(e).code === "cancelled") restoreDraft(target, text);
       void reloadSlot(target);
     }

@@ -63,6 +63,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Web search | 搜索网页 | Web 検索 |
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
+| Search MCP tools | 搜索 MCP 工具 | MCP ツールを検索 |
 
 | Tool | What it does | Manual approval mode |
 |---|---|---|
@@ -76,6 +77,8 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 16,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
 | MCP tools (`mcp__<server>__<tool>`) | Tools from the MCP servers the user added (shown as server · tool) | Ask, unless set to Always allow |
+| **Search MCP tools** (`search_tools`) | With many MCP tools (see MCP tools menu), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
+| `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
 Results longer than 16,000 characters keep the first 4,000 and the last 12,000. Every call and result is a collapsible block in the conversation, in both modes. Screen text, command output and web pages are data: the assistant is told never to follow instructions found in them.
 
@@ -140,6 +143,8 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 The plug button in the input area (**MCP tools**) lists the MCP servers that are on for this device, with their state, and a switch for each. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
 
+Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
+
 | en | zh-CN | ja |
 |---|---|---|
 | MCP servers for this conversation | 此对话使用的 MCP 服务器 | この会話で使う MCP サーバー |
@@ -148,5 +153,6 @@ The plug button in the input area (**MCP tools**) lists the MCP servers that are
 | Starts when needed | 需要时启动 | 必要なときに起動 |
 | Starting… | 正在启动… | 起動しています… |
 | Failed | 出错 | エラー |
+| Starting MCP servers… | 正在启动 MCP 服务器… | MCP サーバーを起動しています… |
 
 Provider and tool errors in the panel are explained in `references/troubleshooting-ai.md`.
