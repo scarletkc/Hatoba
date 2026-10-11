@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { charCount, HOST_NOTES_MAX_CHARS, INSTRUCTIONS_MAX_CHARS, textSize } from "./instructions";
+import { byteCount, charCount, HOST_NOTES_MAX_BYTES, INSTRUCTIONS_MAX_BYTES, textSize } from "./instructions";
 
 describe("custom instructions and host notes (AI-36, AI-37)", () => {
   it("counts characters the way Rust does", () => {
@@ -10,11 +10,17 @@ describe("custom instructions and host notes (AI-36, AI-37)", () => {
     expect(charCount("😀")).toBe(1);
   });
 
+  it("measures the limit in bytes of UTF-8, as Rust does", () => {
+    expect(byteCount("abc")).toBe(3);
+    expect(byteCount("日本語")).toBe(9);
+    expect(byteCount("😀")).toBe(4);
+  });
+
   it("estimates tokens like the context meter and flags text over the limit", () => {
-    expect(textSize("Answer in English.", INSTRUCTIONS_MAX_CHARS)).toEqual({ chars: 18, tokens: 5, over: false });
-    expect(textSize("x".repeat(INSTRUCTIONS_MAX_CHARS), INSTRUCTIONS_MAX_CHARS).over).toBe(false);
-    expect(textSize("x".repeat(INSTRUCTIONS_MAX_CHARS + 1), INSTRUCTIONS_MAX_CHARS).over).toBe(true);
-    // At the limit in characters, though longer in UTF-16 units.
-    expect(textSize("😀".repeat(HOST_NOTES_MAX_CHARS), HOST_NOTES_MAX_CHARS)).toEqual({ chars: HOST_NOTES_MAX_CHARS, tokens: 1_000, over: false });
+    expect(textSize("Answer in English.", INSTRUCTIONS_MAX_BYTES)).toEqual({ bytes: 18, tokens: 5, over: false });
+    expect(textSize("x".repeat(INSTRUCTIONS_MAX_BYTES), INSTRUCTIONS_MAX_BYTES).over).toBe(false);
+    expect(textSize("x".repeat(INSTRUCTIONS_MAX_BYTES + 1), INSTRUCTIONS_MAX_BYTES).over).toBe(true);
+    // Within the limit in characters, but over it in bytes.
+    expect(textSize("日".repeat(HOST_NOTES_MAX_BYTES / 2), HOST_NOTES_MAX_BYTES).over).toBe(true);
   });
 });

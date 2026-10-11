@@ -15,6 +15,7 @@ import type {
   SyncStatus,
   VaultStatus,
 } from "../types";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { ENV_MAX_VARS, envRows, envTooLarge, validateEnvRows } from "@/features/hosts/envVars";
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
 import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
@@ -321,7 +322,7 @@ export function createMockApi(): HatobaApi {
       needUnlocked();
       if (!input.name.trim()) fail("invalid_input", "name is required", { field: "name" });
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if ([...input.ai_notes].length > 2_000) fail("invalid_input", "AI notes are limited to 2,000 characters", { field: "ai_notes" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 32 KB", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));

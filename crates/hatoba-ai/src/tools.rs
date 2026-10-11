@@ -32,11 +32,10 @@ pub const FETCH_URL: &str = "fetch_url";
 pub const READ_SKILL: &str = "read_skill";
 
 /// Results longer than this many characters are shortened (§13.4).
-pub const MAX_RESULT_CHARS: usize = 16_000;
-/// Characters kept from the start of a shortened result.
-const HEAD_CHARS: usize = 4_000;
-/// Characters kept from the end of a shortened result.
-const TAIL_CHARS: usize = 12_000;
+pub const MAX_RESULT_CHARS: usize = 30_000;
+/// MCP tool results longer than this many characters are shortened (§13.9): servers such as
+/// documentation or database tools return long results by design.
+pub const MAX_MCP_RESULT_CHARS: usize = 100_000;
 
 /// Which built-in tools a request offers. `fetch_url` is always offered; the others depend on
 /// the conversation (AI-09).
@@ -95,8 +94,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
              `cd dir && command`. Its output does not appear in the terminal. Use send_input \
              instead when the command must run in the user's shell or needs interaction, and \
              read_file, edit_file and write_file to read and change files. The command is \
-             stopped after timeout_seconds (default 30, at most 600). Output longer than 16,000 \
-             characters keeps its first 4,000 and last 12,000 characters."
+             stopped after timeout_seconds (default 120, at most 600). Output longer than 30,000 \
+             characters keeps its first 7,500 and last 22,500 characters."
                 .to_owned(),
             json!({
                 "type": "object",
@@ -107,7 +106,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     },
                     "timeout_seconds": {
                         "type": "integer",
-                        "description": "Seconds before the command is stopped (default 30, at most 600)."
+                        "description": "Seconds before the command is stopped (default 120, at most 600)."
                     }
                 },
                 "required": ["command"]
@@ -147,13 +146,14 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         tools.push(tool(
             READ_FILE,
             "Read a text file on the tab's host. Returns its lines numbered like `cat -n`, from \
-             line `offset` (default 1), at most `limit` lines and 16,000 characters, with the \
+             line `offset` (default 1), at most `limit` lines and 30,000 characters, with the \
              file's line count and the offset to read on from; lines longer than 2,000 \
              characters are cut. It runs on a separate exec channel, so a relative path or `~/` \
-             starts at the user's home directory, not at the shell's working directory. Files \
-             over 1 MB, binary files and anything but regular files are refused: use run_command \
-             with grep, head or tail for those. It runs without asking, and without sudo; when \
-             permission is denied, use send_input with sudo in the terminal instead."
+             starts at the user's home directory, not at the shell's working directory. Binary \
+             files and anything but regular files are refused. A file over 1 MB is read a page \
+             at a time like any other, but edit_file and write_file do not change it. It runs \
+             without asking, and without sudo; when permission is denied, use send_input with \
+             sudo in the terminal instead."
                 .to_owned(),
             json!({
                 "type": "object",
@@ -170,7 +170,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     "limit": {
                         "type": "integer",
                         "description": "The most lines to return (default: as many as fit in \
-                                        16,000 characters)."
+                                        30,000 characters)."
                     }
                 },
                 "required": ["path"]
@@ -261,7 +261,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     tools.push(tool(
         FETCH_URL,
         "Fetch an http or https URL with GET, without cookies or credentials, following at \
-         most 5 redirects, and return up to 16,000 characters of its content starting at \
+         most 5 redirects, and return up to 30,000 characters of its content starting at \
          `offset` (default 0), with the total length; HTML is converted to Markdown. To read \
          on, call it again with the offset the result names. Only text, HTML, JSON and XML are \
          returned, and addresses on loopback, private or link-local networks are refused."
@@ -767,20 +767,29 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     out
 }
 
-/// Shortens a tool result longer than 16,000 characters to its first 4,000 and last 12,000
-/// characters, with a line between them saying how many were left out (§13.4). Counts
-/// characters, never splitting one.
+/// Shortens a tool result longer than [`MAX_RESULT_CHARS`] (30,000) characters to its first
+/// 7,500 and last 22,500 characters, with a line between them saying how many were left out
+/// (§13.4). Counts characters, never splitting one.
 #[must_use]
 pub fn truncate_result(s: &str) -> String {
+    truncate_result_to(s, MAX_RESULT_CHARS)
+}
+
+/// [`truncate_result`] for a result of at most `max` characters: a quarter of them from its start
+/// and the rest from its end.
+#[must_use]
+pub fn truncate_result_to(s: &str, max: usize) -> String {
     let total = s.chars().count();
-    if total <= MAX_RESULT_CHARS {
+    if total <= max {
         return s.to_owned();
     }
-    let left_out = total - HEAD_CHARS - TAIL_CHARS;
-    let head_end = s.char_indices().nth(HEAD_CHARS).map_or(s.len(), |(i, _)| i);
+    let head = max / 4;
+    let tail = max - head;
+    let left_out = total - head - tail;
+    let head_end = s.char_indices().nth(head).map_or(s.len(), |(i, _)| i);
     let tail_start = s
         .char_indices()
-        .nth(total - TAIL_CHARS)
+        .nth(total - tail)
         .map_or(s.len(), |(i, _)| i);
     format!(
         "{}\n\n[… {left_out} characters left out …]\n\n{}",
@@ -800,10 +809,10 @@ pub struct RunCommandArgs {
 }
 
 impl RunCommandArgs {
-    /// The timeout: 30 s by default, clamped to 1..=600 s (AI-12).
+    /// The timeout: 120 s by default, clamped to 1..=600 s (AI-12).
     #[must_use]
     pub fn timeout(&self) -> Duration {
-        Duration::from_secs(self.timeout_seconds.unwrap_or(30).clamp(1, 600))
+        Duration::from_secs(self.timeout_seconds.unwrap_or(120).clamp(1, 600))
     }
 }
 
@@ -994,7 +1003,7 @@ mod tests {
             "without sudo",
             "send_input with sudo",
             "1 MB",
-            "16,000",
+            "30,000",
             "offset",
         ] {
             assert!(read.description.contains(phrase), "{phrase}");
@@ -1488,13 +1497,13 @@ Skills are instructions for particular tasks. When a request matches a skill's d
 
         let long = format!(
             "{}{}{}",
-            "h".repeat(4_000),
+            "h".repeat(7_500),
             "m".repeat(5_000),
-            "t".repeat(12_000)
+            "t".repeat(22_500)
         );
         let out = truncate_result(&long);
-        assert!(out.starts_with(&"h".repeat(4_000)));
-        assert!(out.ends_with(&"t".repeat(12_000)));
+        assert!(out.starts_with(&"h".repeat(7_500)));
+        assert!(out.ends_with(&"t".repeat(22_500)));
         assert!(out.contains("[… 5000 characters left out …]"));
         assert!(!out.contains('m'));
 
@@ -1502,13 +1511,20 @@ Skills are instructions for particular tasks. When a request matches a skill's d
         let wide = "日".repeat(MAX_RESULT_CHARS + 1);
         let out = truncate_result(&wide);
         assert!(out.contains("[… 1 characters left out …]"));
-        assert_eq!(out.chars().filter(|&c| c == '日').count(), 16_000);
+        assert_eq!(out.chars().filter(|&c| c == '日').count(), MAX_RESULT_CHARS);
+
+        // MCP results keep more, in the same proportions.
+        let mcp = "x".repeat(MAX_MCP_RESULT_CHARS);
+        assert_eq!(truncate_result_to(&mcp, MAX_MCP_RESULT_CHARS), mcp);
+        let out = truncate_result_to(&format!("{mcp}yz"), MAX_MCP_RESULT_CHARS);
+        assert!(out.starts_with(&"x".repeat(25_000)) && out.ends_with("xyz"));
+        assert!(out.contains("[… 2 characters left out …]"));
     }
 
     #[test]
     fn run_command_timeout_defaults_and_clamps() {
         let args: RunCommandArgs = serde_json::from_str(r#"{"command":"ls"}"#).unwrap();
-        assert_eq!(args.timeout(), Duration::from_secs(30));
+        assert_eq!(args.timeout(), Duration::from_secs(120));
         for (given, expected) in [(0, 1), (1, 1), (45, 45), (600, 600), (9999, 600)] {
             let args = RunCommandArgs {
                 command: "x".into(),

@@ -106,7 +106,7 @@ pub struct HostInput {
     /// Required when `proxy_mode` is `proxy`, ignored otherwise.
     pub proxy_id: Option<String>,
     pub note: String,
-    /// At most 2,000 characters (AI-37).
+    /// At most 32 KB of UTF-8 (AI-37).
     pub ai_notes: String,
     /// Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14).
     pub env: Vec<HostEnvVar>,
@@ -1182,7 +1182,7 @@ pub struct AiSettingsView {
     pub search_provider_id: Option<String>,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
-    /// Sent with every request, at most 4,000 characters (AI-36).
+    /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
     pub custom_instructions: String,
 }
 

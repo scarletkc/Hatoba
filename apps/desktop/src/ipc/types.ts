@@ -171,7 +171,7 @@ export interface HostInput {
   /** Required when `proxy_mode` is `proxy`, ignored otherwise. */
   proxy_id: string | null;
   note: string;
-  /** At most 2,000 characters (AI-37). */
+  /** At most 32 KB of UTF-8 (AI-37). */
   ai_notes: string;
   /** Checked as in `features/hosts/envVars.ts` (SSH-14). */
   env: HostEnvVar[];
@@ -838,7 +838,7 @@ export interface AiSettingsView {
   search_provider_id: string | null;
   /** The built-in `hatoba` skill is offered (AI-34). */
   builtin_skill_enabled: boolean;
-  /** Sent with every request, at most 4,000 characters (AI-36). */
+  /** Sent with every request, at most 32 KB of UTF-8 (AI-36). */
   custom_instructions: string;
 }
 

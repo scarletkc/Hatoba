@@ -110,7 +110,7 @@ pub struct Host {
     /// Free-form note.
     pub note: String,
     /// What the AI assistant is told about this host in its system prompt (AI-37), at most
-    /// [`MAX_HOST_AI_NOTES_CHARS`] characters. Absent while empty.
+    /// [`MAX_HOST_AI_NOTES_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub ai_notes: String,
     /// Last modification, Unix ms. Drives last-writer-wins conflict resolution.
@@ -121,8 +121,10 @@ pub struct Host {
     pub env: Vec<EnvVar>,
 }
 
-/// The longest [`Host::ai_notes`], in characters (AI-37).
-pub const MAX_HOST_AI_NOTES_CHARS: usize = 2_000;
+/// The longest [`Host::ai_notes`], in bytes of UTF-8 (AI-37). Notes this long fit an item with
+/// room to spare, but not with the most environment variables a host can have: saving a host
+/// that does not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
+pub const MAX_HOST_AI_NOTES_BYTES: usize = 32 * 1024;
 
 /// One of a host's environment variables (SSH-14).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
@@ -1176,13 +1178,15 @@ pub struct AiSettings {
     /// before it existed.
     pub builtin_skill_enabled: bool,
     /// The user's instructions, sent with every request (AI-36), at most
-    /// [`MAX_CUSTOM_INSTRUCTIONS_CHARS`] characters. Absent while empty.
+    /// [`MAX_CUSTOM_INSTRUCTIONS_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub custom_instructions: String,
 }
 
-/// The longest [`AiSettings::custom_instructions`], in characters (AI-36).
-pub const MAX_CUSTOM_INSTRUCTIONS_CHARS: usize = 4_000;
+/// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
+/// fits the settings item; text whose JSON is much longer (many quotes or backslashes) may not,
+/// and saving settings that do not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
+pub const MAX_CUSTOM_INSTRUCTIONS_BYTES: usize = 32 * 1024;
 
 impl Default for AiSettings {
     fn default() -> Self {
@@ -1801,7 +1805,9 @@ mod tests {
     #[test]
     fn the_largest_host_env_fits_an_item() {
         // SSH-14: a host whose variables use the whole budget, with the escaping that costs most
-        // (every value byte a quote), still fits the plaintext a synced item may have.
+        // (every value byte a quote), still fits the plaintext a synced item may have, with 6,000
+        // bytes of AI notes beside them. Longer notes and such variables together may not fit,
+        // and saving the host then says so.
         let quotes = "\"".repeat(MAX_ENV_VALUE_CHARS);
         let mut env: Vec<EnvVar> = (0..4)
             .map(|i| EnvVar::new(format!("N{i}"), quotes.clone()))
@@ -1812,13 +1818,27 @@ mod tests {
         }
         assert_eq!(check_host_env(&env), Ok(()));
         let item = Item::Host(Host {
-            ai_notes: "日".repeat(MAX_HOST_AI_NOTES_CHARS),
+            ai_notes: "日".repeat(2_000),
             env,
             ..sample_host()
         });
         let len = item.plaintext_len().unwrap();
         assert_eq!(len, item.to_plaintext().unwrap().len());
         assert!(len <= MAX_ITEM_PLAINTEXT_BYTES, "{len}");
+    }
+
+    #[test]
+    fn the_longest_notes_and_instructions_fit_an_item() {
+        // AI-36, AI-37: as plain text, whose JSON is as long as the text.
+        let host = Item::Host(Host {
+            ai_notes: "日".repeat(MAX_HOST_AI_NOTES_BYTES / 3),
+            ..sample_host()
+        });
+        assert!(host.plaintext_len().unwrap() <= MAX_ITEM_PLAINTEXT_BYTES);
+        let mut settings = Settings::default();
+        settings.ai.custom_instructions = "x".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES);
+        let settings = Item::Settings(settings);
+        assert!(settings.plaintext_len().unwrap() <= MAX_ITEM_PLAINTEXT_BYTES);
     }
 
     #[test]

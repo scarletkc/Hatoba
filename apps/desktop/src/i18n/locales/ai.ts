@@ -175,8 +175,8 @@ export default defineMessages({
     "ai.revert.failed.timedOut": "主机 30 秒内没有响应。请先在终端里检查这个文件再重试。",
     "ai.revert.failed.unfinished": "撤销开始后出错，文件可能不完整，或者已经被删除。再撤销一次可以查看它现在的内容。",
     "ai.revert.failed.failed": "撤销失败。",
-    "ai.instructions.size": "{n} / {max} 个字符 · 约 {tokens} 个 token",
-    "ai.instructions.tooLong": "最多 {max} 个字符，缩短后才能保存。",
+    "ai.instructions.size": "{n} / {max} 字节 · 约 {tokens} 个 token",
+    "ai.instructions.tooLong": "最多 {max} 字节，缩短后才能保存。",
     "ai.emptyReply": "模型没有给出回答。",
 
     // tool calls
@@ -538,8 +538,8 @@ export default defineMessages({
     "ai.revert.failed.timedOut": "The host did not answer within 30 seconds. Check the file in the terminal before you try again.",
     "ai.revert.failed.unfinished": "The revert failed after it may have begun, so the file may be cut short or already deleted. Revert again to see what it holds now.",
     "ai.revert.failed.failed": "Revert failed.",
-    "ai.instructions.size": "{n} / {max} characters · about {tokens} tokens",
-    "ai.instructions.tooLong": "At most {max} characters. Shorten the text to save it.",
+    "ai.instructions.size": "{n} / {max} bytes · about {tokens} tokens",
+    "ai.instructions.tooLong": "At most {max} bytes. Shorten the text to save it.",
     "ai.emptyReply": "The model gave no answer.",
 
     "ai.tool.read_terminal": "Read terminal",
@@ -891,8 +891,8 @@ export default defineMessages({
     "ai.revert.failed.timedOut": "ホストが 30 秒以内に応答しませんでした。もう一度試す前に、ターミナルでファイルを確認してください。",
     "ai.revert.failed.unfinished": "元に戻す処理が始まった後に失敗したため、ファイルが途中で切れているか、すでに削除されているかもしれません。もう一度元に戻すと、今の内容を確認できます。",
     "ai.revert.failed.failed": "元に戻せませんでした。",
-    "ai.instructions.size": "{n} / {max} 文字 · 約 {tokens} トークン",
-    "ai.instructions.tooLong": "最大 {max} 文字です。短くすると保存できます。",
+    "ai.instructions.size": "{n} / {max} バイト · 約 {tokens} トークン",
+    "ai.instructions.tooLong": "最大 {max} バイトです。短くすると保存できます。",
     "ai.emptyReply": "モデルから回答がありませんでした。",
 
     "ai.tool.read_terminal": "ターミナルを読み取る",

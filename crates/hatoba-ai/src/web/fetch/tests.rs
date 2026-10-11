@@ -191,12 +191,9 @@ async fn long_content_pages_by_characters() {
     assert_eq!(first.total_length, 40_000);
     assert_eq!(first.content.chars().count(), MAX_FETCH_CHARS);
     assert!(text.starts_with(&first.content));
-    let second = fetch(16_000).await;
-    assert_eq!(second.offset, 16_000);
-    assert_eq!(
-        format!("{}{}", first.content, second.content),
-        text.chars().take(32_000).collect::<String>()
-    );
+    let second = fetch(30_000).await;
+    assert_eq!(second.offset, 30_000);
+    assert_eq!(format!("{}{}", first.content, second.content), text);
     let tail = fetch(39_990).await;
     assert_eq!(tail.content, "日本語ab日本語ab");
     let past = fetch(50_000).await;
@@ -204,8 +201,8 @@ async fn long_content_pages_by_characters() {
 
     let header = format_fetch_result(&first);
     assert!(header.starts_with(&format!(
-        "URL: {url} | Content type: text/plain | Characters 0-16000 of 40000\n\
-         More content follows: call fetch_url again with offset 16000 to read on.\n\n"
+        "URL: {url} | Content type: text/plain | Characters 0-30000 of 40000\n\
+         More content follows: call fetch_url again with offset 30000 to read on.\n\n"
     )));
     assert!(format_fetch_result(&tail).contains("Characters 39990-40000 of 40000\n\n"));
     assert!(format_fetch_result(&past).contains("No content at this offset."));

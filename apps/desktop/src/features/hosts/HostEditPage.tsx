@@ -6,7 +6,7 @@ import { Button, Icon, IconButton, LinkButton, Segmented, StatusDot, TextArea, T
 import { EmptyState, FormRow, Group, Section, TagInput } from "@/components/layout";
 import { PopupSelect, confirm, toast, type SelectOption } from "@/components/overlay";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { charCount, HOST_NOTES_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type { AuthKind, HostInput, HostView, KeyView, ProxyMode, QuickTarget } from "@/ipc/types";
@@ -152,7 +152,7 @@ export function HostEditPage({
     // Ignored behind a jump host, so it only matters without one.
     if (!form.jumpHostId && form.proxyMode === "proxy" && !proxies.some((p) => p.id === form.proxyId)) e.proxy = t("hosts.err.proxyDeleted");
     // The field says so itself; this only keeps the form from saving.
-    if (charCount(form.aiNotes) > HOST_NOTES_MAX_CHARS) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_CHARS.toLocaleString(t.locale) });
+    if (byteCount(form.aiNotes) > HOST_NOTES_MAX_BYTES) e.aiNotes = t("ai.instructions.tooLong", { max: HOST_NOTES_MAX_BYTES.toLocaleString(t.locale) });
     return e;
   };
 
@@ -582,7 +582,7 @@ export function HostEditPage({
                 id="host-aiNotes"
                 label={t("hosts.f.aiNotes")}
                 value={form.aiNotes}
-                max={HOST_NOTES_MAX_CHARS}
+                max={HOST_NOTES_MAX_BYTES}
                 rows={4}
                 placeholder={t("hosts.f.aiNotesPlaceholder")}
                 error={errors.aiNotes}

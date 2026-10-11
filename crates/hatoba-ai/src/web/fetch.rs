@@ -10,7 +10,7 @@
 //! which may well be local, and resolve unchecked.
 //!
 //! Text, HTML, JSON and XML are accepted; HTML becomes Markdown. The download is capped at 5 MB
-//! and the whole fetch at 30 s. The result is up to 16,000 characters from `offset`.
+//! and the whole fetch at 90 s. The result is up to 30,000 characters from `offset`.
 
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
@@ -30,11 +30,11 @@ use crate::net::{
 };
 
 /// Characters returned per call.
-pub const MAX_FETCH_CHARS: usize = 16_000;
+pub const MAX_FETCH_CHARS: usize = 30_000;
 /// Bytes downloaded at most; the rest of a longer body is left out.
 const MAX_DOWNLOAD_BYTES: usize = 5 * 1024 * 1024;
 /// Overall limit of one fetch, redirects included.
-const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
+const FETCH_TIMEOUT: Duration = Duration::from_secs(90);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_REDIRECTS: usize = 5;
 /// DOM depth above which HTML is reduced to text instead of Markdown.
@@ -57,13 +57,13 @@ pub struct FetchResult {
     pub offset: u64,
     /// Characters in the whole converted content.
     pub total_length: u64,
-    /// Up to 16,000 characters from `offset`.
+    /// Up to 30,000 characters from `offset`.
     pub content: String,
     /// The body was longer than the 5 MB download limit and was cut.
     pub truncated: bool,
 }
 
-/// Fetches `url` and returns up to 16,000 characters from `offset` (characters, not bytes) of
+/// Fetches `url` and returns up to 30,000 characters from `offset` (characters, not bytes) of
 /// its content, HTML converted to Markdown (AI-15). Refuses non-public addresses at every hop.
 pub async fn fetch_url(
     url: &str,
@@ -488,7 +488,7 @@ fn dom_depth(root: &std::rc::Rc<htmd::Node>) -> usize {
     deepest
 }
 
-/// Up to 16,000 characters of `content` from `offset`.
+/// Up to 30,000 characters of `content` from `offset`.
 fn page(
     url: String,
     content_type: String,

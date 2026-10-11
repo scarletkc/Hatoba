@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use hatoba_core::model::{
-    EnvVar, EnvVarError, Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_CHARS,
+    EnvVar, EnvVarError, Group, Host, HostAuth, HostProxy, Item, MAX_HOST_AI_NOTES_BYTES,
     MAX_HOST_ENV_BYTES, MAX_HOST_ENV_VARS, MAX_ITEM_PLAINTEXT_BYTES, SshKey, check_env_var,
     check_host_env,
 };
@@ -60,10 +60,10 @@ pub fn host_from_input(
             "port must be between 1 and 65535",
         ));
     }
-    if input.ai_notes.chars().count() > MAX_HOST_AI_NOTES_CHARS {
+    if input.ai_notes.len() > MAX_HOST_AI_NOTES_BYTES {
         return Err(AppError::invalid(
             "ai_notes",
-            "AI notes are limited to 2,000 characters",
+            "AI notes are limited to 32 KB",
         ));
     }
     let env: Vec<EnvVar> = input
@@ -1186,9 +1186,9 @@ mod tests {
             notes
         );
 
-        assert!(host_from_input(&input("日".repeat(MAX_HOST_AI_NOTES_CHARS)), None, &v).is_ok());
-        let err = host_from_input(&input("日".repeat(MAX_HOST_AI_NOTES_CHARS + 1)), None, &v)
-            .unwrap_err();
+        assert!(host_from_input(&input("x".repeat(MAX_HOST_AI_NOTES_BYTES)), None, &v).is_ok());
+        let err =
+            host_from_input(&input("x".repeat(MAX_HOST_AI_NOTES_BYTES + 1)), None, &v).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("ai_notes"));
     }
 }

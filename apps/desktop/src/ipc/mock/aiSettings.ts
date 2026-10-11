@@ -1,4 +1,4 @@
-import { INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import type { HatobaApi } from "../api";
 import type {
   AiAllowance,
@@ -263,8 +263,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_settings_get: async () => structuredClone(settings),
     ai_settings_save: async (next) => {
       // Like Rust (AI-36).
-      if ([...next.custom_instructions].length > INSTRUCTIONS_MAX_CHARS)
-        throw { code: "invalid_input", detail: "custom instructions are limited to 4,000 characters", field: "custom_instructions" } satisfies AppError;
+      if (byteCount(next.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
+        throw { code: "invalid_input", detail: "custom instructions are limited to 32 KB", field: "custom_instructions" } satisfies AppError;
       settings = structuredClone(next);
     },
     // AI-19: the approvals saved on this device, kept until the page reloads.

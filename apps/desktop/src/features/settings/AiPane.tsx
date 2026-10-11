@@ -6,7 +6,7 @@ import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/co
 import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { InstructionsField } from "@/features/ai/InstructionsField";
-import { charCount, INSTRUCTIONS_MAX_CHARS } from "@/features/ai/instructions";
+import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -341,7 +341,7 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
   const commit = useCallback(() => {
     const { draft, value, onSave } = latest.current;
     editing.current = false;
-    if (draft !== value && charCount(draft) <= INSTRUCTIONS_MAX_CHARS) onSave(draft);
+    if (draft !== value && byteCount(draft) <= INSTRUCTIONS_MAX_BYTES) onSave(draft);
   }, []);
 
   useEffect(() => {
@@ -359,7 +359,7 @@ function InstructionsSection({ value, onSave }: { value: string; onSave: (text: 
         id="ai-custom-instructions"
         label={t("aiSettings.instructions")}
         value={draft}
-        max={INSTRUCTIONS_MAX_CHARS}
+        max={INSTRUCTIONS_MAX_BYTES}
         rows={6}
         placeholder={t("aiSettings.instructions.placeholder")}
         onChange={(text) => {

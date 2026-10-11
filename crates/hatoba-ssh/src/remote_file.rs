@@ -30,6 +30,17 @@ const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
      [ \"$n\" -le \"$1\" ] || { echo \"$n\" >&2; exit 5; }; m=$(ls -ldnL -- \"$f\" 2>/dev/null); \
      echo hatoba-file; printf %s \"$f\"; echo; printf %.10s \"$m\"; echo; exec cat -- \"$f\"";
 
+/// Reads part of the file named on stdin, resolved as the read script resolves it: from line `$1`
+/// on, `$2` bytes at most. Prints the marker, the path as resolved, the file's line count (a last
+/// line without a line break counted too) and the bytes. Exit statuses as for the read script.
+const LINES_SCRIPT: &str = "IFS= read -r f || exit 9; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
+     [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
+     [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
+     [ -r \"$f\" ] || exit 4; n=$(wc -l < \"$f\") || exit 4; t=$(tail -c 1 -- \"$f\"); \
+     [ -n \"$t\" ] && n=$((n + 1)); echo hatoba-file; printf %s \"$f\"; echo; echo $n; \
+     tail -n +$1 -- \"$f\" | head -c $2";
+
 /// Writes the rest of stdin to the file named on its first line, resolved as the read script
 /// resolves it, after checking the state on its second line: `any`, `missing`, or the file's
 /// `cksum` output (`crc size`). Its third line is the mode, in octal, of a file the write
@@ -160,6 +171,35 @@ pub struct RemoteFile {
     pub mode: Option<u32>,
 }
 
+/// Part of a file read from the host: its bytes from the start of one line on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteLines {
+    /// The path as the script resolved it, as for [`RemoteFile::path`].
+    pub path: String,
+    /// The file's line count; a last line without a line break counts too.
+    pub lines: u64,
+    /// The bytes from the start of the line read from, at most the number asked for.
+    pub bytes: Vec<u8>,
+    /// More of the file followed: `bytes` stopped at the number asked for.
+    pub cut: bool,
+}
+
+/// Reads at most `max` bytes of the file at `path`, from the start of line `from` (1-based) on,
+/// whatever the file's size: for a page of a file too large to read whole.
+pub async fn read_lines(
+    session: &SshSession,
+    path: &str,
+    from: u64,
+    max: u64,
+) -> Result<RemoteLines, RemoteFileError> {
+    let (command, stdin) = lines_request(path, from, max)?;
+    let out = session
+        .exec_output(&command, Some(stdin))
+        .await
+        .map_err(RemoteFileError::Ssh)?;
+    parse_lines(&out, max)
+}
+
 /// Reads the file at `path`, refusing one larger than `max` bytes.
 pub async fn read(
     session: &SshSession,
@@ -231,6 +271,19 @@ fn read_request(path: &str, max: u64) -> Result<(String, Vec<u8>), RemoteFileErr
     check_path(path)?;
     Ok((
         command(READ_SCRIPT, Some(&max.to_string())),
+        format!("{path}\n").into_bytes(),
+    ))
+}
+
+/// The command and stdin of a partial read. One byte more than `max` is asked for, which tells
+/// whether more followed.
+fn lines_request(path: &str, from: u64, max: u64) -> Result<(String, Vec<u8>), RemoteFileError> {
+    check_path(path)?;
+    Ok((
+        command(
+            LINES_SCRIPT,
+            Some(&format!("{} {}", from.max(1), max.saturating_add(1))),
+        ),
         format!("{path}\n").into_bytes(),
     ))
 }
@@ -352,6 +405,37 @@ fn parse_read(out: &ExecOutput, max: u64) -> Result<RemoteFile, RemoteFileError>
     }
 }
 
+fn parse_lines(out: &ExecOutput, max: u64) -> Result<RemoteLines, RemoteFileError> {
+    match out.exit_status {
+        Some(0) => {
+            let (path, rest) = after_marker(&out.stdout).ok_or_else(|| failed(out))?;
+            let end = rest
+                .iter()
+                .position(|&b| b == b'\n')
+                .ok_or_else(|| failed(out))?;
+            let lines = std::str::from_utf8(&rest[..end])
+                .ok()
+                .and_then(|n| n.trim().parse().ok())
+                .ok_or_else(|| failed(out))?;
+            let mut bytes = rest[end + 1..].to_vec();
+            let cut = bytes.len() as u64 > max;
+            bytes.truncate(usize::try_from(max).unwrap_or(usize::MAX));
+            Ok(RemoteLines {
+                path,
+                lines,
+                bytes,
+                cut,
+            })
+        }
+        Some(2) => Err(RemoteFileError::NotFound),
+        Some(3) => Err(RemoteFileError::IsDirectory),
+        Some(4) => Err(RemoteFileError::PermissionDenied),
+        Some(6) => Err(RemoteFileError::NotRegular),
+        Some(8) => Err(RemoteFileError::DanglingLink),
+        _ => Err(failed(out)),
+    }
+}
+
 /// The resolved path of a write that succeeded. Status 0 without the marker is a failure: a login
 /// shell whose startup files exit with 0 never ran the script.
 fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
@@ -425,7 +509,7 @@ mod tests {
 
     #[test]
     fn scripts_survive_any_login_shell() {
-        for script in [READ_SCRIPT, WRITE_SCRIPT, DELETE_SCRIPT] {
+        for script in [READ_SCRIPT, LINES_SCRIPT, WRITE_SCRIPT, DELETE_SCRIPT] {
             // `!` too: csh expands it even inside single quotes when its history is on.
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
@@ -594,6 +678,16 @@ mod tests {
             read_file(home, path, max).map(|f| f.bytes)
         }
 
+        fn read_lines(
+            home: &Path,
+            path: &str,
+            from: u64,
+            max: u64,
+        ) -> Result<RemoteLines, RemoteFileError> {
+            let (command, stdin) = lines_request(path, from, max)?;
+            parse_lines(&run(home, &command, &stdin), max)
+        }
+
         fn write_file(
             home: &Path,
             path: &str,
@@ -696,6 +790,46 @@ mod tests {
                     Err(RemoteFileError::PermissionDenied)
                 ));
             }
+        }
+
+        #[test]
+        fn reads_part_of_a_file_from_a_line() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            std::fs::write(home.join("log"), b"one\ntwo\nthree\nfour\n").unwrap();
+            let part = read_lines(home, "log", 2, 100).unwrap();
+            assert_eq!(part.path, home.join("log").to_str().unwrap());
+            assert_eq!(
+                (part.lines, &part.bytes[..], part.cut),
+                (4, &b"two\nthree\nfour\n"[..], false)
+            );
+            // At most `max` bytes, and whether more followed.
+            let part = read_lines(home, "~/log", 2, 6).unwrap();
+            assert_eq!((&part.bytes[..], part.cut), (&b"two\nth"[..], true));
+            let part = read_lines(home, "log", 2, 15).unwrap();
+            assert_eq!(
+                (&part.bytes[..], part.cut),
+                (&b"two\nthree\nfour\n"[..], false)
+            );
+            // A last line without a line break counts; past the end there is nothing.
+            std::fs::write(home.join("open"), b"a\nb").unwrap();
+            let part = read_lines(home, "open", 9, 10).unwrap();
+            assert_eq!((part.lines, part.bytes.len()), (2, 0));
+            std::fs::write(home.join("empty"), b"").unwrap();
+            assert_eq!(read_lines(home, "empty", 1, 10).unwrap().lines, 0);
+
+            assert!(matches!(
+                read_lines(home, "missing", 1, 10),
+                Err(RemoteFileError::NotFound)
+            ));
+            assert!(matches!(
+                read_lines(home, "~", 1, 10),
+                Err(RemoteFileError::IsDirectory)
+            ));
+            assert!(matches!(
+                read_lines(home, "/dev/null", 1, 10),
+                Err(RemoteFileError::NotRegular)
+            ));
         }
 
         #[test]

@@ -1070,7 +1070,10 @@ impl McpManager {
                 } else {
                     ToolStatus::Ok
                 };
-                (status, tools::truncate_result(&result.content))
+                (
+                    status,
+                    tools::truncate_result_to(&result.content, tools::MAX_MCP_RESULT_CHARS),
+                )
             }
             Err(McpError::Cancelled) => (ToolStatus::Cancelled, String::new()),
             Err(McpError::Closed) => {

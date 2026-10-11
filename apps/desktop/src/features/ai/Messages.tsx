@@ -1201,7 +1201,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           {kind === "run_command" && (
             <label className={s.inline}>
               {t("ai.approval.timeout")}
-              <input className={cx(s.input, s.number)} type="number" min={1} max={600} placeholder="30" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
+              <input className={cx(s.input, s.number)} type="number" min={1} max={600} placeholder="120" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
               {t("ai.approval.seconds")}
             </label>
           )}
@@ -1227,7 +1227,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           {kind === "run_command" && (
             <>
               <ShownInput text={str(args.command)} command />
-              <div className={s.meta}>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 30 })}</div>
+              <div className={s.meta}>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 120 })}</div>
             </>
           )}
           {kind === "send_input" && (

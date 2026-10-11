@@ -12,8 +12,8 @@ use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
-    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS,
-    SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
+    AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    MAX_ITEM_PLAINTEXT_BYTES, SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
@@ -588,10 +588,10 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         }
         other => other.clone(),
     };
-    if input.custom_instructions.chars().count() > MAX_CUSTOM_INSTRUCTIONS_CHARS {
+    if input.custom_instructions.len() > MAX_CUSTOM_INSTRUCTIONS_BYTES {
         return Err(AppError::invalid(
             "custom_instructions",
-            "custom instructions are limited to 4,000 characters",
+            "custom instructions are limited to 32 KB",
         ));
     }
     let ai = AiSettings {
@@ -605,7 +605,16 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         return Ok(());
     }
     settings.ai = ai;
-    v.put(Some(SETTINGS_ID), Item::Settings(settings))?;
+    let item = Item::Settings(settings);
+    // The Worker and D1 would refuse a larger settings item on every sync (§6.2); only
+    // instructions whose JSON is far longer than their text (many quotes) get there.
+    if item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
+        return Err(AppError::invalid(
+            "custom_instructions",
+            "the custom instructions are too large to sync",
+        ));
+    }
+    v.put(Some(SETTINGS_ID), item)?;
     Ok(())
 }
 
@@ -1253,7 +1262,7 @@ mod tests {
         save_ai_settings(&mut v, &default).unwrap();
         assert_eq!(v.settings().ai.default_effort, None);
 
-        // AI-36: custom instructions are stored with them, up to 4,000 characters.
+        // AI-36: custom instructions are stored with them.
         let instructions = AiSettingsView {
             custom_instructions: "Answer in English.\n<host> means the tab's host.".into(),
             ..ai_settings_view(&v.settings().ai)
@@ -1264,18 +1273,27 @@ mod tests {
             "Answer in English.\n<host> means the tab's host."
         );
         assert_eq!(ai_settings_view(&v.settings().ai), instructions);
+        // Up to 32 KB of UTF-8.
+        let text = format!("{}xy", "日".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES / 3));
+        assert_eq!(text.len(), MAX_CUSTOM_INSTRUCTIONS_BYTES);
         let longest = AiSettingsView {
-            custom_instructions: "日".repeat(4_000),
+            custom_instructions: text.clone(),
             ..ai_settings_view(&v.settings().ai)
         };
         save_ai_settings(&mut v, &longest).unwrap();
-        let too_long = AiSettingsView {
-            custom_instructions: "日".repeat(4_001),
-            ..ai_settings_view(&v.settings().ai)
-        };
-        let err = save_ai_settings(&mut v, &too_long).unwrap_err();
-        assert_eq!(err.field.as_deref(), Some("custom_instructions"));
-        assert_eq!(v.settings().ai.custom_instructions, "日".repeat(4_000));
+        for refused in [
+            format!("{text}z"),
+            // Within the limit, but its JSON does not fit a synced item.
+            "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES),
+        ] {
+            let too_long = AiSettingsView {
+                custom_instructions: refused,
+                ..ai_settings_view(&v.settings().ai)
+            };
+            let err = save_ai_settings(&mut v, &too_long).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("custom_instructions"));
+            assert_eq!(v.settings().ai.custom_instructions, text);
+        }
 
         delete_search_provider(&mut v, &search.id).unwrap();
         assert_eq!(v.settings().ai.search_provider_id, None);
