@@ -26,17 +26,14 @@ export interface McpTemplate {
 
 export const MCP_TEMPLATES: readonly McpTemplate[] = [
   {
-    // github/github-mcp-server, docs/remote-server.md: `/readonly` keeps to read tools, and X-MCP-Toolsets picks the
-    // toolsets. The token link fills in a fine-grained token with read access to what those toolsets reach.
+    // github/github-mcp-server, docs/remote-server.md: `/readonly` keeps the default toolsets to their read tools. The
+    // token link fills in a fine-grained token with read access to what those toolsets reach.
     id: "github",
     label: "GitHub",
     icon: "github-logo",
     name: "github",
     url: "https://api.githubcopilot.com/mcp/readonly",
-    headers: [
-      { key: "Authorization", placeholder: "Bearer github_pat_…", bearer: true },
-      { key: "X-MCP-Toolsets", value: "repos,issues,pull_requests" },
-    ],
+    headers: [{ key: "Authorization", placeholder: "Bearer github_pat_…", bearer: true }],
     alwaysAsk: false,
     tokenUrl: "https://github.com/settings/personal-access-tokens/new?name=Hatoba+MCP&contents=read&issues=read&pull_requests=read",
   },
@@ -77,8 +74,8 @@ export const MCP_TEMPLATES: readonly McpTemplate[] = [
 ];
 
 /**
- * The add form filled from a template: an HTTP server with the template's URL and header names, their values empty
- * except the ones that are not secrets, and a name no other server uses. Each row keeps its template header.
+ * The add form filled from a template: an HTTP server with the template's URL, its header names with empty values, and
+ * a name no other server uses. Each row keeps its template header.
  */
 export function templateMcpForm(template: McpTemplate, otherNames: readonly string[]): McpForm {
   return {
@@ -86,7 +83,7 @@ export function templateMcpForm(template: McpTemplate, otherNames: readonly stri
     name: freeServerName(template.name, otherNames),
     kind: "http",
     url: template.url,
-    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, draft: { mode: "replace", value: h.value ?? "" }, template: h })),
+    headers: template.headers.map((h): SecretRow => ({ ...newSecretRow(), key: h.key, template: h })),
     alwaysAsk: template.alwaysAsk,
   };
 }

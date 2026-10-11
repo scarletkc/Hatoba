@@ -32,11 +32,11 @@ describe("MCP templates", () => {
     }
   });
 
-  it("keep GitHub read-only and to a few toolsets", () => {
+  it("keep GitHub read-only, with its default toolsets", () => {
     const github = template("github");
     expect(github.url).toBe("https://api.githubcopilot.com/mcp/readonly");
     expect(github.alwaysAsk).toBe(false);
-    expect(github.headers.find((h) => h.key === "X-MCP-Toolsets")?.value).toBe("repos,issues,pull_requests");
+    expect(github.headers.map((h) => h.key)).toEqual(["Authorization"]);
     const token = new URL(github.tokenUrl);
     expect(token.pathname).toBe("/settings/personal-access-tokens/new");
     expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual(["read", "read", "read"]);
@@ -48,14 +48,12 @@ describe("MCP templates", () => {
 });
 
 describe("templateMcpForm", () => {
-  it("fills in an HTTP server with the header names and empty secret values", () => {
+  it("fills in an HTTP server with the header names and empty values", () => {
     const f = templateMcpForm(template("github"), []);
     expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/readonly", command: "", args: [], env: [] });
     expect(f.headers).toMatchObject([
       { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, template: { placeholder: "Bearer github_pat_…", bearer: true } },
-      { key: "X-MCP-Toolsets", saved: false, draft: { mode: "replace", value: "repos,issues,pull_requests" }, template: { value: "repos,issues,pull_requests" } },
     ]);
-    expect(f.headers[0].template?.value).toBeUndefined();
   });
 
   it("starts with Always ask as the template sets it", () => {
@@ -88,10 +86,7 @@ describe("templateMcpForm", () => {
       transport: {
         kind: "http",
         url: "https://api.githubcopilot.com/mcp/readonly",
-        headers: [
-          { key: "Authorization", value: "Bearer github_pat_x" },
-          { key: "X-MCP-Toolsets", value: "repos,issues,pull_requests" },
-        ],
+        headers: [{ key: "Authorization", value: "Bearer github_pat_x" }],
       },
       always_ask: false,
     });

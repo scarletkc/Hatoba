@@ -88,8 +88,6 @@ export function looksLikeCommandLine(command: string): boolean {
 /** A header that a template (AI-44) fills in. */
 export interface McpTemplateHeader {
   key: string;
-  /** A value that is not a secret, filled in for the user to change, such as GitHub's toolsets. Its field shows it. */
-  value?: string;
   /** What the value looks like, shown while its field is empty. */
   placeholder?: string;
   /** The value is `Bearer `, then the token. */
@@ -113,7 +111,7 @@ export interface SecretRow {
 
 /**
  * The template header of a row while the row keeps its name, compared as header names are (case-insensitively). A
- * row the user renamed is an ordinary row: a value typed under another name may be a secret, and need not be optional.
+ * row the user renamed is an ordinary row: a value under another name need not be optional, nor start with `Bearer `.
  */
 export const rowTemplate = (row: SecretRow): McpTemplateHeader | null =>
   row.template && row.key.trim().toLowerCase() === row.template.key.toLowerCase() ? row.template : null;

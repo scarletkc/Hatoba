@@ -83,9 +83,7 @@ export function McpServerDialog({
   const [form, setForm] = useState<McpForm>(() => (fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server)));
   // A template fills in the name, so the first value to type takes the focus, only as the dialog opens: switching the
   // type remounts the rows, which must not take it again.
-  const [valueFocusUid, setValueFocusUid] = useState(() =>
-    fromTemplate ? (form.headers.find((r) => rowTemplate(r)?.value === undefined)?.uid ?? null) : null,
-  );
+  const [valueFocusUid, setValueFocusUid] = useState(() => (fromTemplate ? (form.headers[0]?.uid ?? null) : null));
   useEffect(() => setValueFocusUid(null), []);
   const [submitted, setSubmitted] = useState(false);
   const [rejected, setRejected] = useState<Rejected>({});
@@ -399,7 +397,6 @@ function SecretRows({
           <div className={s.secretTable}>
             {rows.map((row, i) => {
               const problem = problems[i];
-              const template = rowTemplate(row);
               const hint = kind === "header" ? rowHint(row) : null;
               return (
                 <div className={s.secret} key={row.uid}>
@@ -420,31 +417,19 @@ function SecretRows({
                         onChange={(e) => patchRow(row.uid, { key: e.target.value })}
                       />
                     )}
-                    {template?.value !== undefined ? (
-                      <TextField
-                        id={rowFieldId(idPrefix, row.uid, "value")}
-                        mono
-                        value={row.draft.value}
-                        invalid={!!problem?.value}
-                        aria-label={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                        placeholder={t("aiSettings.mcp.f.valuePlaceholder")}
-                        onChange={(e) => patchRow(row.uid, { draft: { mode: "replace", value: e.target.value } })}
-                      />
-                    ) : (
-                      <SavedKeyField
-                        id={rowFieldId(idPrefix, row.uid, "value")}
-                        hasSaved={row.saved}
-                        draft={row.draft}
-                        allowClear={false}
-                        invalid={!!problem?.value}
-                        autoFocus={valueFocusUid === row.uid}
-                        ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                        placeholder={template?.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
-                        newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
-                        keepLabel={t("aiSettings.mcp.f.valueKeep")}
-                        onChange={(draft) => patchRow(row.uid, { draft })}
-                      />
-                    )}
+                    <SavedKeyField
+                      id={rowFieldId(idPrefix, row.uid, "value")}
+                      hasSaved={row.saved}
+                      draft={row.draft}
+                      allowClear={false}
+                      invalid={!!problem?.value}
+                      autoFocus={valueFocusUid === row.uid}
+                      ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
+                      placeholder={rowTemplate(row)?.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
+                      newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
+                      keepLabel={t("aiSettings.mcp.f.valueKeep")}
+                      onChange={(draft) => patchRow(row.uid, { draft })}
+                    />
                     <IconButton
                       icon="x"
                       size={13}
