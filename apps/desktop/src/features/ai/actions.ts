@@ -1076,7 +1076,8 @@ export async function pinConversation(id: string, pinned: boolean) {
 /**
  * AI-41: copies a conversation up to the entry `entryId` (all of it with null) into a new conversation, and
  * opens that in the slot as History's Open does (AI-09). Not while the conversation is busy. When the slot
- * moved on while Rust copied (another conversation, a new turn or a compaction), the fork stays in History.
+ * moved on while Rust copied (another conversation, a message, a turn or a compaction, even one that has ended
+ * since), the fork stays in History.
  */
 export async function forkConversation(slotId: string, id: string, entryId: string | null) {
   if (conversationBusy(id)) return;
@@ -1090,8 +1091,10 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
   try {
     const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? ""));
     updateConversation(fork);
+    // Every message, stored entry and reload gives the slot a new entries array, so the same array means
+    // nothing happened in it meanwhile, however it ended.
     const now = getSlot(slotId);
-    if (now.conversationId !== before.conversationId || runners.get(slotId) !== runner || now.compacting !== before.compacting) {
+    if (now.conversationId !== before.conversationId || now.entries !== before.entries || runners.get(slotId) !== runner || now.compacting !== before.compacting) {
       toast(t("ai.fork.inHistory"), "success");
       return;
     }

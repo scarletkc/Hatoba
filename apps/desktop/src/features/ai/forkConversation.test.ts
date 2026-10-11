@@ -61,6 +61,19 @@ describe("forkConversation (AI-41)", () => {
     expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
   });
 
+  it("leaves a slot where a turn started and ended while Rust copied", async () => {
+    let finish!: (view: AiConversationView) => void;
+    fork.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const pending = forkConversation(HOME_SLOT, original.id, null);
+    const reply: AiEntryView = { ...entry, entry_id: "e2", text: "And now?" };
+    patchSlot(HOME_SLOT, (s) => ({ entries: [...s.entries, reply], turn: newTurn() }));
+    patchSlot(HOME_SLOT, { turn: null });
+    finish(copy);
+    await pending;
+    expect(getSlot(HOME_SLOT).conversationId).toBe(original.id);
+    expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
+  });
+
   it("does nothing while the conversation is busy", async () => {
     patchSlot(HOME_SLOT, { turn: newTurn() });
     await forkConversation(HOME_SLOT, original.id, null);
