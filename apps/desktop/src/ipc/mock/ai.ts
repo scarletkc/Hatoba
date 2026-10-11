@@ -503,7 +503,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
-      if (want("mcp")) calls.push(await mcpCall(turn, words));
+      if (want("mcp")) {
+        const mcp = await mcpCall(turn, words);
+        // AI-45: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
+        if (want("deferred")) {
+          calls.push(call("search_tools", { query: "issues" }));
+          calls.push(call("call_mcp_tool", { tool: mcp.name, arguments: JSON.parse(mcp.arguments) as unknown }));
+        } else calls.push(mcp);
+      }
       if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
       // Connection diagnostics: read the built-in skill's troubleshooting reference first.
       if (diagnostics && calls.length === 0) calls.push(call("read_skill", { name: "hatoba", path: "references/troubleshooting-connections.md" }));
@@ -812,6 +819,27 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     }
     notes.push(...pendingReverts(c.view.id, earlier));
     return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
+  }
+
+  /**
+   * AI-45, for the demo: a message with "deferred" in it lists the tools of the running MCP servers in an
+   * `mcp_tools` note, as Rust does once a conversation's MCP tools take a tenth of the context window.
+   */
+  async function deferredList(context: AiTurnContext, text: string): Promise<string> {
+    if (!text.toLowerCase().includes("deferred") || !deps.mcp) return "";
+    const lines: string[] = [];
+    let tools = 0;
+    for (const s of (await deps.mcp.servers()).filter((x) => x.enabled && !context.disabled_mcp_servers.includes(x.id))) {
+      const status = await deps.mcp.status(s.id);
+      if (status.state !== "running" || status.tools.length === 0) continue;
+      tools += status.tools.length;
+      lines.push(`- ${s.name} (${status.tools.length === 1 ? "1 tool" : `${status.tools.length} tools`}): ${status.tools.map((x) => x.name).join(", ")}`);
+    }
+    const body =
+      tools === 0
+        ? "No MCP tools are available from this message on."
+        : `The MCP tools you can call with call_mcp_tool from this message on, by server. This list replaces any earlier one. search_tools returns a tool's description and input schema, and finds the tools of a server that is listed by count only.\n${lines.join("\n")}`;
+    return `${noteBlock({ kind: "mcp_tools", servers: lines.length, tools, body })}\n\n`;
   }
 
   /**
@@ -1128,9 +1156,43 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             content: "# Troubleshooting connections (demo excerpt)\n\n## ETIMEDOUT (timeout)\n\nThe host did not answer within 15 seconds: it is off, a firewall drops the packets, or the address or port is wrong.\n\n## ECONNREFUSED (refused)\n\nThe host answered but nothing listens on the port: the SSH server is stopped or listens elsewhere.",
           };
         return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
+      case "search_tools": {
+        // AI-45: the running servers' tools whose names or descriptions have a word of the query.
+        await wait(300);
+        const words = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+        const found: string[] = [];
+        const servers = (await deps.mcp?.servers().catch(() => [])) ?? [];
+        for (const sv of servers.filter((x) => x.enabled && !turn?.context.disabled_mcp_servers.includes(x.id))) {
+          const status = await deps.mcp!.status(sv.id).catch(() => null);
+          for (const tool of status?.state === "running" ? status.tools : []) {
+            const text = `${tool.name} ${tool.description}`.toLowerCase();
+            if (words.some((w) => text.includes(w.replace(/s$/, ""))))
+              found.push(`## ${tool.name}\nServer: ${sv.name}\nDescription: ${tool.description || "(none)"}\nInput schema: {"type":"object","properties":{"repo":{"type":"string"}}}`);
+          }
+        }
+        return {
+          status: "ok",
+          content: found.length === 0 ? `No MCP tool matches "${String(args.query ?? "")}".` : `${found.length} matches (demo).\n\n${found.slice(0, 5).join("\n\n")}`,
+        };
+      }
       default: {
         // An MCP tool (AI-30): the server's text content, or an error result when no running server offers it.
         await wait(700);
+        // AI-45: `call_mcp_tool` runs the tool it names with that tool's arguments.
+        if (x.name === "call_mcp_tool") {
+          const named = typeof args.tool === "string" ? args.tool : "";
+          // Like Rust: an object, or a string that holds one.
+          let inner: unknown = args.arguments;
+          if (typeof inner === "string") {
+            try {
+              inner = JSON.parse(inner);
+            } catch {
+              inner = null;
+            }
+          }
+          args = (inner && typeof inner === "object" && !Array.isArray(inner) ? inner : {}) as Record<string, unknown>;
+          x = { ...x, name: named };
+        }
         const info = (await deps.mcp?.toolInfo(c.view.id, x.name).catch(() => null)) ?? null;
         if (!info || turn?.context.disabled_mcp_servers.includes(info.server_id)) return { status: "error", content: `No running MCP server offers the tool ${x.name}.` };
         return {
@@ -1386,6 +1448,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         c = need(input.conversation_id);
       } else {
         const id = newId();
+        // Like Rust: the new conversation's id goes out before the message waits for the MCP servers (AI-45).
+        onEvent({ kind: "opened", conversation_id: id });
         c = {
           view: {
             id,
@@ -1407,7 +1471,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
-      const notes = input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "";
+      const notes = (input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "") + (await deferredList(input.context, input.text));
       const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null };
       const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move, recorded);
       return { conversation: view(c), user_entry };
@@ -1632,7 +1696,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: the kept move is dropped when its note names the server the message goes from under another name.
       if (noted !== null && (await namesServer(c, move, noted))) noted = null;
       else if (noted === null) noted = move?.from ?? null;
-      const notes = await notesBefore(c, [...c.entries], move, noted, context);
+      const notes = (await notesBefore(c, [...c.entries], move, noted, context)) + (await deferredList(context, text));
       const user_entry = await storeMessage(c, turn, notes + text, context, move, recorded);
       return { conversation: view(c), user_entry };
     },

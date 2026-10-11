@@ -1,6 +1,7 @@
 //! MCP server commands (spec §13.9): the servers of Settings → AI (AI-29), their state on this
 //! device (enabled, Always allow, AI-31), their live status (AI-32), the tool behind a name the
-//! model called, and import and export in the `mcpServers` format (AI-33). The connections run in
+//! model called, directly or through `call_mcp_tool` (AI-45), and import and export in the
+//! `mcpServers` format (AI-33). The connections run in
 //! [`crate::mcp::McpManager`].
 //!
 //! Environment and header values go one way, WebView → Rust, like API keys: views carry only
@@ -21,8 +22,8 @@ use tauri_specta::Event;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    McpImportPreview, McpImportServer, McpImportSkipped, McpSecretInput, McpServerInput,
-    McpServerStatus, McpServerView, McpToolInfo, McpTransportInput,
+    McpImportPreview, McpImportServer, McpImportSkipped, McpProxyInfo, McpSecretInput,
+    McpServerInput, McpServerStatus, McpServerView, McpToolInfo, McpTransportInput,
 };
 use crate::error::{AppError, AppResult};
 use crate::mcp::{
@@ -583,6 +584,42 @@ pub async fn mcp_tool_info(
     name: String,
 ) -> AppResult<Option<McpToolInfo>> {
     state.with_unlocked(|v| Ok(tool_info(v, &state.mcp, &conversation_id, &name)))
+}
+
+/// AI-45: what the approval card of a `call_mcp_tool` call needs, as `ai_tool_run` resolves the
+/// call: the tool it names, and whether it runs. A call that does not run (arguments that do not
+/// match the tool's input schema, a tool the conversation does not have, a deleted server) gets
+/// its error result without asking.
+pub(crate) fn proxy_info(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    arguments: &str,
+) -> McpProxyInfo {
+    match crate::ai::proxy_call(v, mcp, conversation_id, arguments) {
+        Ok((tool, _)) => McpProxyInfo {
+            tool: tool_info(v, mcp, conversation_id, &tool.name),
+            runs: true,
+        },
+        Err(_) => McpProxyInfo {
+            tool: hatoba_ai::mcp::deferred::parse_call(arguments)
+                .ok()
+                .and_then(|call| tool_info(v, mcp, conversation_id, &call.tool)),
+            runs: false,
+        },
+    }
+}
+
+/// The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card.
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_proxy_info(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    // Not `arguments`, which the generated TypeScript binding could not name a parameter.
+    call_arguments: String,
+) -> AppResult<McpProxyInfo> {
+    state.with_unlocked(|v| Ok(proxy_info(v, &state.mcp, &conversation_id, &call_arguments)))
 }
 
 /// AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add.

@@ -1,7 +1,10 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
 
-/** Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9). */
+/**
+ * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
+ * once a conversation's MCP tools are deferred, through `call_mcp_tool` (AI-45).
+ */
 export const READ_TERMINAL = "read_terminal";
 export const RUN_COMMAND = "run_command";
 export const SEND_INPUT = "send_input";
@@ -11,6 +14,8 @@ export const WRITE_FILE = "write_file";
 export const WEB_SEARCH = "web_search";
 export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
+export const SEARCH_TOOLS = "search_tools";
+export const CALL_MCP_TOOL = "call_mcp_tool";
 
 export type ToolKind =
   | "read_terminal"
@@ -22,15 +27,49 @@ export type ToolKind =
   | "web_search"
   | "fetch_url"
   | "read_skill"
+  | "search_tools"
   | "mcp"
   | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, WEB_SEARCH, FETCH_URL, READ_SKILL];
+const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
 
+/** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
   if (BUILTIN.includes(name)) return name as ToolKind;
-  if (/^mcp__.+__.+/.test(name)) return "mcp";
+  if (name === CALL_MCP_TOOL || /^mcp__.+__.+/.test(name)) return "mcp";
   return "unknown";
+}
+
+/**
+ * AI-45: the MCP tool a `call_mcp_tool` call names, and that tool's arguments as JSON: an object, or a
+ * string that holds one, `{}` when left out, as Rust reads them. Null for any other call, or one whose
+ * arguments name no MCP tool: Rust runs no other tool through it (a call that names `run_command`
+ * returns an error), so such a call is shown as it is.
+ */
+export function proxyCall(name: string, json: string): { tool: string; arguments: string } | null {
+  if (name !== CALL_MCP_TOOL) return null;
+  const args = parseArgs(json);
+  const tool = typeof args?.tool === "string" ? args.tool.trim() : "";
+  if (!args || !splitMcpName(tool)) return null;
+  const inner = args.arguments;
+  if (inner === undefined || inner === null || (typeof inner === "string" && !inner.trim())) return { tool, arguments: "{}" };
+  if (typeof inner === "string") {
+    const parsed = parseArgs(inner);
+    return { tool, arguments: parsed ? JSON.stringify(parsed) : inner };
+  }
+  return { tool, arguments: JSON.stringify(inner) };
+}
+
+/** A call as the panel and the export show it: a `call_mcp_tool` call as the MCP tool it names, with that tool's arguments (AI-45). */
+export function shownCall<T extends { name: string; arguments: string }>(call: T): T {
+  const proxy = proxyCall(call.name, call.arguments);
+  return proxy ? { ...call, name: proxy.tool, arguments: proxy.arguments } : call;
+}
+
+/** The arguments a `call_mcp_tool` call runs with after the user edited the tool's own on its card (AI-17, AI-45). */
+export function proxyArguments(json: string, edited: string): string {
+  const args = parseArgs(json) ?? {};
+  return JSON.stringify({ ...args, arguments: JSON.parse(edited) as unknown });
 }
 
 /** `read_terminal` and `send_input` need the tab's xterm instance, so the frontend runs them (§13.1). */
@@ -49,7 +88,7 @@ export function needsSession(kind: ToolKind): boolean {
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `web_search` and `read_skill` run without asking and
+ * §13.5: in manual approval mode `read_terminal`, `web_search`, `read_skill` and `search_tools` (AI-45) run without asking and
  * everything else waits for the user, `read_file` included (it can send `~/.ssh` or `.env` to the
  * provider); bypass runs everything. Unknown tools never run, so never ask.
  */
@@ -130,11 +169,16 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   web_search: "ai.tool.web_search",
   fetch_url: "ai.tool.fetch_url",
   read_skill: "ai.tool.read_skill",
+  search_tools: "ai.tool.search_tools",
 };
 
-/** The name a call shows with: the built-in tool's label, `server · tool` for MCP, or the raw name. */
+/**
+ * The name a call shows with: the built-in tool's label, `server · tool` for MCP, or the raw name. A
+ * `call_mcp_tool` call shows as the tool it names: pass it through `shownCall` first.
+ */
 export function toolLabel(t: (key: MessageKey, params?: Params) => string, name: string): string {
   const kind = toolKind(name);
+  if (name === CALL_MCP_TOOL) return name;
   if (kind === "mcp") {
     const [server, tool] = splitMcpName(name) ?? ["", name];
     return t("ai.tool.mcp", { server, tool });
@@ -271,6 +315,8 @@ export function callSummary(name: string, json: string): string {
       return str(args.url);
     case "read_skill":
       return [str(args.name), str(args.path)].filter(Boolean).join(" / ");
+    case "search_tools":
+      return str(args.query);
     case "read_file":
       return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
     case "edit_file":

@@ -1,4 +1,4 @@
-# Troubleshooting: keys, vault, files and other messages
+# Troubleshooting: keys, vault, files, updates and other messages
 
 The messages are shown exactly as the app prints them in each language, so a message the user pastes can be matched to a row. Failed SSH connections, jump hosts, host key prompts and dropped connections are in `references/troubleshooting-connections.md`. Sync and Cloudflare errors are in `references/troubleshooting-sync.md`, AI errors in `references/troubleshooting-ai.md`.
 
@@ -66,6 +66,25 @@ When importing a key, or connecting with one:
 | en | zh-CN | ja |
 |---|---|---|
 | Port Forwarding | 端口转发 | ポートフォワーディング |
+
+## Updates
+
+These show in Settings → About, in the update row, after **Check for Updates** or **Download and Install**:
+
+| en | zh-CN | ja |
+|---|---|---|
+| Can’t reach GitHub. Check your network and try again. | 无法连接到 GitHub，请检查网络后重试。 | GitHub に接続できません。ネットワークを確認して、もう一度お試しください。 |
+| Couldn’t check for updates. Try again later. | 检查更新失败，请稍后再试。 | アップデートを確認できませんでした。しばらくしてからもう一度お試しください。 |
+| Couldn’t install the update. Try again later. | 无法安装更新，请稍后再试。 | アップデートをインストールできませんでした。しばらくしてからもう一度お試しください。 |
+| The downloaded update isn’t signed by Hatoba, so it wasn’t installed. | 下载的更新没有 Hatoba 的有效签名，已拒绝安装。 | ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。 |
+| Check for Updates | 检查更新 | アップデートを確認 |
+| Download and Install | 下载并安装 | ダウンロードしてインストール |
+| View on GitHub | 在 GitHub 上查看 | GitHub で見る |
+
+- "Can’t reach GitHub." means GitHub did not answer at all: no network, a DNS or firewall problem, or a download that received nothing for 30 seconds. Check the connection and press the button again; a download starts over.
+- "Couldn’t check for updates." means GitHub answered with an error. Try again later.
+- "Couldn’t install the update." means the download or the installer failed for another reason, and the current version keeps running. Press **Download and Install** again. If it keeps failing, open the release page with **View on GitHub** under the release notes, download the installer for the platform and run it, and report the problem with the logs.
+- The signature message means the downloaded file did not match the signature of Hatoba's release key, so nothing was installed. Do not install that version by hand from its release page, which may hold the same rejected file. Report it with **Report a Problem**, keep the current version, and wait for a correctly signed update.
 
 ## Still not solved
 

@@ -132,6 +132,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-27, 28, 34 | Skills: management, import and export, `read_skill`, the built-in `hatoba` skill | ✅ | A test checks every label the built-in skill quotes against the i18n tables |
 | AI-29…33 | MCP servers: `stdio` and `http`, tools, approvals, lifecycle, `mcpServers` import and export | 🟡 | Tests run mock `stdio` and Streamable HTTP servers. Not yet tried with real servers on Windows, such as ones started with `npx` |
 | AI-44 | MCP server templates: GitHub, Linear, Context7, Cloudflare | 🟡 | Unit tests cover the filled-in form and what it saves, and the dialog was tried with the mock backend. None of the four templates has been tried against its service with a real token yet |
+| AI-45 | Deferred MCP tools: `search_tools`, `call_mcp_tool`, and the `mcp_tools` note | 🟡 | Turn tests run against mock Chat Completions and Anthropic Messages servers with mock `stdio` and Streamable HTTP MCP servers, and the panel was tried with the mock backend. Not yet tried against real providers and servers |
 | AI-36, 37 | Custom instructions, AI notes of a host | ✅ | |
 
 ## MVP scope
