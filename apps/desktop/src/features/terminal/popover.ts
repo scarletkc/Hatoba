@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
-import { useOverlaysLocked, type MenuAnchor } from "@/components/overlay";
+import { useOverlaysLocked, windowSurface, type MenuAnchor } from "@/components/overlay";
 
 /**
  * Placement and dismissal of a status bar popover: below its button and kept inside the window
@@ -28,8 +28,9 @@ export function useStatusPopover(
     const r = el.getBoundingClientRect();
     let left = anchor.alignRight ? anchor.x - r.width : anchor.x;
     let top = anchor.y;
-    left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, anchor.y - r.height - 8);
+    const b = windowSurface();
+    left = Math.max(b.left + 8, Math.min(left, b.right - r.width - 8));
+    if (top + r.height > b.bottom - 8) top = Math.max(b.top + 8, anchor.y - r.height - 8);
     setPos({ left, top });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `measure` is the caller's list of size inputs
   }, [ref, anchor.x, anchor.y, anchor.alignRight, ...measure]);

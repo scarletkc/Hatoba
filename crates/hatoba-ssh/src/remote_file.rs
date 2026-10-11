@@ -1,11 +1,12 @@
-//! Reading and writing a file on the host over an exec channel (spec §13.4, "File tools"; the
-//! SFTP panel's editor, SFTP-05, is meant to use it too).
+//! Reading, writing and deleting a file on the host over an exec channel (spec §13.4, "File
+//! tools", and AI-41's revert; the SFTP panel's editor, SFTP-05, is meant to use it too).
 //!
 //! Each operation runs a fixed `sh -c` script. The path, and for a write the expected state and
 //! the content, travel on stdin, so nothing the caller passes goes through the quoting of the
 //! user's login shell, which may be bash, zsh, fish or csh. The scripts are one line without
 //! single quotes or backslashes for the same reason. A write pipes into the file
-//! (`cat > path`), so an existing file keeps its inode, owner, mode and the links to it.
+//! (`cat > path`), so an existing file keeps its inode, owner, mode and the links to it; a file
+//! it creates gets the login's umask, or the mode the caller names.
 
 use std::fmt;
 
@@ -16,39 +17,59 @@ use crate::session::{ExecOutput, SshSession};
 /// so that anything the login shell's startup files print to stdout is told apart from them.
 const MARKER: &[u8] = b"hatoba-file\n";
 
-/// Reads the file named on stdin, `$1` bytes at most, and prints the marker, the path as resolved
-/// and the file. A relative path or one that starts with `~/` is taken from `$HOME`. Exit
-/// statuses: 2 missing, 3 directory, 4 not readable, 5 larger than `$1` (its size on stderr),
-/// 6 not a regular file, 8 a symbolic link to nothing, 9 no path.
+/// Reads the file named on stdin, `$1` bytes at most, and prints the marker, the path as resolved,
+/// the file's mode as the first ten characters of `ls -l` (empty when `ls` fails) and the file. A
+/// relative path or one that starts with `~/` is taken from `$HOME`. Exit statuses: 2 missing,
+/// 3 directory, 4 not readable, 5 larger than `$1` (its size on stderr), 6 not a regular file,
+/// 8 a symbolic link to nothing, 9 no path.
 const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
      [ -r \"$f\" ] || exit 4; n=$(wc -c < \"$f\") || exit 4; n=$(echo $n); \
-     [ \"$n\" -le \"$1\" ] || { echo \"$n\" >&2; exit 5; }; \
-     echo hatoba-file; printf %s \"$f\"; echo; exec cat -- \"$f\"";
+     [ \"$n\" -le \"$1\" ] || { echo \"$n\" >&2; exit 5; }; m=$(ls -ldnL -- \"$f\" 2>/dev/null); \
+     echo hatoba-file; printf %s \"$f\"; echo; printf %.10s \"$m\"; echo; exec cat -- \"$f\"";
 
 /// Writes the rest of stdin to the file named on its first line, resolved as the read script
 /// resolves it, after checking the state on its second line: `any`, `missing`, or the file's
-/// `cksum` output (`crc size`). Prints the marker and the resolved path. Exit statuses:
-/// 2 no such directory, 3 directory, 4 not writable, 6 not a regular file, 7 not in the
-/// expected state, 8 a symbolic link to nothing (writing would create its target, wherever that
-/// is), 9 no path. A file that passed the checks and still cannot be opened or written (a
-/// read-only file system, a full disk) is status 1, with the message on stderr: dash would exit
-/// with 2 for the failed redirection, which reads as a missing directory.
+/// `cksum` output (`crc size`). Its third line is the mode, in octal, of a file the write
+/// creates, or `none` for the umask's: such a file is created readable by its owner only and then
+/// given that mode, so it is never open to others in between. An existing file keeps its mode.
+/// Prints the marker and the resolved path. Exit statuses: 2 no such directory, 3 directory,
+/// 4 not writable, 6 not a regular file, 7 not in the expected state, 8 a symbolic link to
+/// nothing (writing would create its target, wherever that is), 9 no path. A file that passed the
+/// checks and still cannot be opened, written or given its mode (a read-only file system, a full
+/// disk) is status 1, with the message on stderr: dash would exit with 2 for the failed
+/// redirection, which reads as a missing directory.
 ///
 /// The check and the write run in one command, so a change made since the caller read the file
 /// is caught. A write by another process in the moment between the check and `cat` is not: an
 /// in-place rewrite has no lock that every writer honors.
 const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
+     IFS= read -r m || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -f \"$f\" ] || exit 6; [ \"$g\" = missing ] && exit 7; \
      case $g in any) ;; *) c=$(cksum < \"$f\") || exit 4; set -- $c; \
-     [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; \
+     [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; m=none; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
-     [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; fi; \
-     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1";
+     [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; [ \"$m\" = none ] || umask 077; fi; \
+     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1; \
+     [ \"$m\" = none ] || chmod $m \"$f\" || exit 1";
+
+/// Deletes the file named on stdin's first line, resolved as the read script resolves it, if it
+/// is a regular file (not a symbolic link) whose `cksum` output is stdin's second line. Prints
+/// the marker and the resolved path. Exit statuses: 2 missing, 3 directory, 4 not deletable,
+/// 6 not a regular file, 7 not in the expected state, 8 a symbolic link in its place (neither the
+/// link nor its target is deleted), 9 no path; 1 when `rm` fails after the checks, with its
+/// message on stderr. Like a write, a change in the moment between the check and `rm` is not
+/// caught.
+const DELETE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
+     [ -L \"$f\" ] && exit 8; [ -d \"$f\" ] && exit 3; [ -e \"$f\" ] || exit 2; \
+     [ -f \"$f\" ] || exit 6; c=$(cksum < \"$f\") || exit 4; set -- $c; \
+     [ \"$1 $2\" = \"$g\" ] || exit 7; d=$(dirname -- \"$f\"); [ -w \"$d\" ] || exit 4; \
+     echo hatoba-file; printf %s \"$f\"; echo; rm -f -- \"$f\" || exit 1";
 
 /// What a write checks right before it writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +97,8 @@ pub enum RemoteFileError {
     NotRegular,
     /// The path is a symbolic link whose target does not exist.
     DanglingLink,
+    /// Delete: a symbolic link is in the file's place, so neither it nor its target was deleted.
+    SymbolicLink,
     /// The user cannot read (or write) the file, or create it in its directory.
     PermissionDenied,
     /// Read: the file has this many bytes, more than the limit.
@@ -102,6 +125,7 @@ impl fmt::Display for RemoteFileError {
             Self::IsDirectory => f.write_str("is a directory"),
             Self::NotRegular => f.write_str("not a regular file"),
             Self::DanglingLink => f.write_str("a symbolic link to a file that does not exist"),
+            Self::SymbolicLink => f.write_str("a symbolic link is in its place"),
             Self::PermissionDenied => f.write_str("permission denied"),
             Self::TooLarge(size) => write!(f, "the file is too large ({size} bytes)"),
             Self::Changed => f.write_str("the file changed"),
@@ -131,6 +155,9 @@ pub struct RemoteFile {
     pub path: String,
     /// The file's bytes.
     pub bytes: Vec<u8>,
+    /// Its permission bits (`0o777` at most), as `ls` showed them; `None` when it showed none
+    /// that parse.
+    pub mode: Option<u32>,
 }
 
 /// Reads the file at `path`, refusing one larger than `max` bytes.
@@ -148,19 +175,38 @@ pub async fn read(
 }
 
 /// Writes `content` to the file at `path` in place, if the file is in the state `expect` names,
-/// and returns the path as resolved.
+/// and returns the path as resolved. `mode`: the permission bits a file the write creates gets,
+/// readable by its owner only until then; `None` leaves them to the login's umask. An existing
+/// file keeps its own.
 pub async fn write(
     session: &SshSession,
     path: &str,
     content: &[u8],
     expect: Expect<'_>,
+    mode: Option<u32>,
 ) -> Result<String, RemoteFileError> {
-    let (command, stdin) = write_request(path, content, expect)?;
+    let (command, stdin) = write_request(path, content, expect, mode)?;
     let out = session
         .exec_output(&command, Some(stdin))
         .await
         .map_err(RemoteFileError::Ssh)?;
     parse_write(&out)
+}
+
+/// Deletes the file at `path` if it still holds `expect`, compared by POSIX `cksum` checksum and
+/// size, and returns the path as resolved. A symbolic link in the file's place is not deleted
+/// ([`RemoteFileError::SymbolicLink`]): the link is not what was checked.
+pub async fn delete(
+    session: &SshSession,
+    path: &str,
+    expect: &[u8],
+) -> Result<String, RemoteFileError> {
+    let (command, stdin) = delete_request(path, expect)?;
+    let out = session
+        .exec_output(&command, Some(stdin))
+        .await
+        .map_err(RemoteFileError::Ssh)?;
+    parse_delete(&out)
 }
 
 /// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
@@ -194,6 +240,7 @@ fn write_request(
     path: &str,
     content: &[u8],
     expect: Expect<'_>,
+    mode: Option<u32>,
 ) -> Result<(String, Vec<u8>), RemoteFileError> {
     check_path(path)?;
     let state = match expect {
@@ -204,9 +251,20 @@ fn write_request(
             format!("{crc} {size}")
         }
     };
-    let mut stdin = format!("{path}\n{state}\n").into_bytes();
+    let mode = mode.map_or_else(|| "none".to_owned(), |m| format!("{:o}", m & 0o777));
+    let mut stdin = format!("{path}\n{state}\n{mode}\n").into_bytes();
     stdin.extend_from_slice(content);
     Ok((command(WRITE_SCRIPT, None), stdin))
+}
+
+/// The command and stdin of a deletion.
+fn delete_request(path: &str, expect: &[u8]) -> Result<(String, Vec<u8>), RemoteFileError> {
+    check_path(path)?;
+    let (crc, size) = cksum(expect);
+    Ok((
+        command(DELETE_SCRIPT, None),
+        format!("{path}\n{crc} {size}\n").into_bytes(),
+    ))
 }
 
 fn last_line(stderr: &[u8]) -> String {
@@ -244,10 +302,34 @@ fn after_marker(stdout: &[u8]) -> Option<(String, &[u8])> {
     Some((path, &rest[end + 1..]))
 }
 
+/// The permission bits in the first ten characters of `ls -l` for a regular file, such as
+/// `-rw-r-----`: set-id and sticky bits are left out. `None` for anything else.
+fn parse_mode(line: &[u8]) -> Option<u32> {
+    let [b'-', bits @ ..] = line else {
+        return None;
+    };
+    if bits.len() != 9 {
+        return None;
+    }
+    bits.iter().enumerate().try_fold(0, |mode, (i, &c)| {
+        let set = match (i % 3, c) {
+            (_, b'-') | (2, b'S' | b'T') => false,
+            (0, b'r') | (1, b'w') | (2, b'x' | b's' | b't') => true,
+            _ => return None,
+        };
+        Some(if set { mode | (1 << (8 - i)) } else { mode })
+    })
+}
+
 fn parse_read(out: &ExecOutput, max: u64) -> Result<RemoteFile, RemoteFileError> {
     match out.exit_status {
         Some(0) => {
-            let (path, content) = after_marker(&out.stdout).ok_or_else(|| failed(out))?;
+            let (path, rest) = after_marker(&out.stdout).ok_or_else(|| failed(out))?;
+            let end = rest
+                .iter()
+                .position(|&b| b == b'\n')
+                .ok_or_else(|| failed(out))?;
+            let content = &rest[end + 1..];
             // The file grew after the script measured it.
             if content.len() as u64 > max {
                 return Err(RemoteFileError::TooLarge(content.len() as u64));
@@ -255,6 +337,7 @@ fn parse_read(out: &ExecOutput, max: u64) -> Result<RemoteFile, RemoteFileError>
             Ok(RemoteFile {
                 path,
                 bytes: content.to_vec(),
+                mode: parse_mode(&rest[..end]),
             })
         }
         Some(2) => Err(RemoteFileError::NotFound),
@@ -282,6 +365,22 @@ fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
         Some(6) => Err(RemoteFileError::NotRegular),
         Some(7) => Err(RemoteFileError::Changed),
         Some(8) => Err(RemoteFileError::DanglingLink),
+        _ => Err(failed(out)),
+    }
+}
+
+/// The resolved path of a deletion that succeeded, as for [`parse_write`].
+fn parse_delete(out: &ExecOutput) -> Result<String, RemoteFileError> {
+    match out.exit_status {
+        Some(0) => after_marker(&out.stdout)
+            .map(|(path, _)| path)
+            .ok_or_else(|| failed(out)),
+        Some(2) => Err(RemoteFileError::NotFound),
+        Some(3) => Err(RemoteFileError::IsDirectory),
+        Some(4) => Err(RemoteFileError::PermissionDenied),
+        Some(6) => Err(RemoteFileError::NotRegular),
+        Some(7) => Err(RemoteFileError::Changed),
+        Some(8) => Err(RemoteFileError::SymbolicLink),
         _ => Err(failed(out)),
     }
 }
@@ -326,7 +425,7 @@ mod tests {
 
     #[test]
     fn scripts_survive_any_login_shell() {
-        for script in [READ_SCRIPT, WRITE_SCRIPT] {
+        for script in [READ_SCRIPT, WRITE_SCRIPT, DELETE_SCRIPT] {
             // `!` too: csh expands it even inside single quotes when its history is on.
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
@@ -335,11 +434,21 @@ mod tests {
             Err(RemoteFileError::InvalidPath)
         ));
         assert!(matches!(
-            write_request("", b"", Expect::Any),
+            write_request("", b"", Expect::Any, None),
             Err(RemoteFileError::InvalidPath)
         ));
-        let (_, stdin) = write_request("/tmp/x", b"body", Expect::Content(b"123456789")).unwrap();
-        assert_eq!(stdin, b"/tmp/x\n930766865 9\nbody");
+        let (_, stdin) =
+            write_request("/tmp/x", b"body", Expect::Content(b"123456789"), None).unwrap();
+        assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\nbody");
+        // Permission bits only, in octal.
+        let (_, stdin) = write_request("/tmp/x", b"", Expect::Missing, Some(0o4640)).unwrap();
+        assert_eq!(stdin, b"/tmp/x\nmissing\n640\n");
+        assert!(matches!(
+            delete_request("a\rb", b""),
+            Err(RemoteFileError::InvalidPath)
+        ));
+        let (_, stdin) = delete_request("~/new.txt", b"123456789").unwrap();
+        assert_eq!(stdin, b"~/new.txt\n930766865 9\n");
     }
 
     #[test]
@@ -350,25 +459,31 @@ mod tests {
             stderr: b"line 1\nwc: 99\n".to_vec(),
         };
         assert_eq!(
-            parse_read(&out(b"hatoba-file\n/home/a/b c\nbody", 0), 10).unwrap(),
+            parse_read(&out(b"hatoba-file\n/home/a/b c\n-rw-r-----\nbody", 0), 10).unwrap(),
             RemoteFile {
                 path: "/home/a/b c".into(),
-                bytes: b"body".to_vec()
+                bytes: b"body".to_vec(),
+                mode: Some(0o640),
             }
         );
-        let noisy = parse_read(&out(b"motd\nhatoba-file\n/x\nhatoba-file\n", 0), 20).unwrap();
+        // `ls` failed: no mode, the file all the same.
+        let noisy = parse_read(&out(b"motd\nhatoba-file\n/x\n\nhatoba-file\n", 0), 20).unwrap();
         assert_eq!(
-            (noisy.path.as_str(), &noisy.bytes[..]),
-            ("/x", &b"hatoba-file\n"[..])
+            (noisy.path.as_str(), &noisy.bytes[..], noisy.mode),
+            ("/x", &b"hatoba-file\n"[..], None)
         );
-        for broken in [&b"no marker"[..], b"hatoba-file\n/no/line/end"] {
+        for broken in [
+            &b"no marker"[..],
+            b"hatoba-file\n/no/line/end",
+            b"hatoba-file\n/x\n-rw-r--r--",
+        ] {
             assert!(matches!(
                 parse_read(&out(broken, 0), 20),
                 Err(RemoteFileError::Failed { .. })
             ));
         }
         assert!(matches!(
-            parse_read(&out(b"hatoba-file\n/x\n0123456789x", 0), 10),
+            parse_read(&out(b"hatoba-file\n/x\n-rw-------\n0123456789x", 0), 10),
             Err(RemoteFileError::TooLarge(11))
         ));
         assert_eq!(
@@ -378,6 +493,26 @@ mod tests {
         assert!(matches!(
             parse_write(&out(b"", 0)),
             Err(RemoteFileError::Failed { .. })
+        ));
+        assert_eq!(
+            parse_delete(&out(b"motd\nhatoba-file\n/srv/a\n", 0)).unwrap(),
+            "/srv/a"
+        );
+        assert!(matches!(
+            parse_delete(&out(b"", 0)),
+            Err(RemoteFileError::Failed { .. })
+        ));
+        assert!(matches!(
+            parse_delete(&out(b"", 7)),
+            Err(RemoteFileError::Changed)
+        ));
+        assert!(matches!(
+            parse_delete(&out(b"", 2)),
+            Err(RemoteFileError::NotFound)
+        ));
+        assert!(matches!(
+            parse_delete(&out(b"", 8)),
+            Err(RemoteFileError::SymbolicLink)
         ));
         let mut big = out(b"", 5);
         big.stderr = b"1048577\n".to_vec();
@@ -390,6 +525,31 @@ mod tests {
                 assert_eq!((status, stderr.as_str()), (Some(1), "wc: 99"));
             }
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn modes_read_as_ls_shows_them() {
+        assert_eq!(parse_mode(b"-rw-r--r--"), Some(0o644));
+        assert_eq!(parse_mode(b"-rw-------"), Some(0o600));
+        assert_eq!(parse_mode(b"-rwxr-x--x"), Some(0o751));
+        // Set-id and sticky bits are left out; whether the execute bit is set is kept.
+        assert_eq!(parse_mode(b"-rwsr-Sr-t"), Some(0o745));
+        assert_eq!(parse_mode(b"----------"), Some(0));
+        for other in [
+            &b""[..],
+            b"drwxr-xr-x",
+            b"lrwxrwxrwx",
+            b"-rw-r--r",
+            b"-rw-r--r-+",
+            b"-rwxrwxrwz",
+        ] {
+            assert_eq!(
+                parse_mode(other),
+                None,
+                "{}",
+                String::from_utf8_lossy(other)
+            );
         }
     }
 
@@ -439,8 +599,9 @@ mod tests {
             path: &str,
             content: &[u8],
             expect: Expect<'_>,
+            mode: Option<u32>,
         ) -> Result<String, RemoteFileError> {
-            let (command, stdin) = write_request(path, content, expect)?;
+            let (command, stdin) = write_request(path, content, expect, mode)?;
             parse_write(&run(home, &command, &stdin))
         }
 
@@ -450,7 +611,16 @@ mod tests {
             content: &[u8],
             expect: Expect<'_>,
         ) -> Result<(), RemoteFileError> {
-            write_file(home, path, content, expect).map(|_| ())
+            write_file(home, path, content, expect, None).map(|_| ())
+        }
+
+        fn mode_of(path: &Path) -> u32 {
+            std::fs::metadata(path).unwrap().mode() & 0o7777
+        }
+
+        fn delete_file(home: &Path, path: &str, expect: &[u8]) -> Result<String, RemoteFileError> {
+            let (command, stdin) = delete_request(path, expect)?;
+            parse_delete(&run(home, &command, &stdin))
         }
 
         fn is_root() -> bool {
@@ -475,6 +645,17 @@ mod tests {
             );
             std::fs::write(home.join("notes"), b"in home\n").unwrap();
             assert_eq!(read(home, "~/notes", 100).unwrap(), b"in home\n");
+            // Its permission bits, through a link too.
+            std::fs::set_permissions(home.join("notes"), std::fs::Permissions::from_mode(0o640))
+                .unwrap();
+            std::os::unix::fs::symlink(home.join("notes"), home.join("notes.link")).unwrap();
+            for path in ["notes", "notes.link"] {
+                assert_eq!(
+                    read_file(home, path, 100).unwrap().mode,
+                    Some(0o640),
+                    "{path}"
+                );
+            }
             // `~/`, relative and absolute paths resolve to the same path.
             let resolved = home.join("notes").to_str().unwrap().to_owned();
             for path in ["~/notes", "notes", resolved.as_str()] {
@@ -553,6 +734,9 @@ mod tests {
             );
             write(home, "~/app.conf", b"", Expect::Any).unwrap();
             assert_eq!(std::fs::read(&path).unwrap(), b"");
+            // A mode is for a file the write creates: this one keeps its own.
+            write_file(home, "app.conf", b"x", Expect::Any, Some(0o600)).unwrap();
+            assert_eq!(mode_of(&path), 0o640);
 
             // New files: only where the card saw none, and only in a directory that exists.
             assert!(matches!(
@@ -560,13 +744,20 @@ mod tests {
                 Err(RemoteFileError::Changed)
             ));
             assert_eq!(
-                write_file(home, "new.txt", b"first line\n", Expect::Missing).unwrap(),
+                write_file(home, "new.txt", b"first line\n", Expect::Missing, None).unwrap(),
                 home.join("new.txt").to_str().unwrap()
             );
             assert_eq!(
                 std::fs::read(home.join("new.txt")).unwrap(),
                 b"first line\n"
             );
+            // Created with the mode named, whatever the umask: Restore anyway puts back a file
+            // that was deleted with the mode it had.
+            write_file(home, "secret.conf", b"s\n", Expect::Missing, Some(0o600)).unwrap();
+            assert_eq!(mode_of(&home.join("secret.conf")), 0o600);
+            write_file(home, "shared.conf", b"s\n", Expect::Missing, Some(0o664)).unwrap();
+            assert_eq!(mode_of(&home.join("shared.conf")), 0o664);
+            assert_eq!(std::fs::read(home.join("shared.conf")).unwrap(), b"s\n");
             assert!(matches!(
                 write(home, "no/such/dir/x", b"x", Expect::Any),
                 Err(RemoteFileError::NoDirectory)
@@ -601,6 +792,67 @@ mod tests {
                     write(home, "ro", b"y", Expect::Content(b"x")),
                     Err(RemoteFileError::PermissionDenied)
                 ));
+            }
+        }
+
+        #[test]
+        fn deletes_only_the_file_as_expected() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            let path = home.join("new.conf");
+            std::fs::write(&path, b"made\n").unwrap();
+
+            // Changed since: kept.
+            assert!(matches!(
+                delete_file(home, "new.conf", b"other\n"),
+                Err(RemoteFileError::Changed)
+            ));
+            assert!(path.exists());
+            assert_eq!(
+                delete_file(home, "~/new.conf", b"made\n").unwrap(),
+                path.to_str().unwrap()
+            );
+            assert!(!path.exists());
+            assert!(matches!(
+                delete_file(home, "new.conf", b"made\n"),
+                Err(RemoteFileError::NotFound)
+            ));
+            assert!(matches!(
+                delete_file(home, ".", b""),
+                Err(RemoteFileError::IsDirectory)
+            ));
+            assert!(matches!(
+                delete_file(home, "/dev/null", b""),
+                Err(RemoteFileError::NotRegular)
+            ));
+
+            // A link put in the file's place is not the file: neither it nor its target goes,
+            // even when the target holds what was expected.
+            let target = home.join("target");
+            std::fs::write(&target, b"made\n").unwrap();
+            std::os::unix::fs::symlink(&target, &path).unwrap();
+            assert!(matches!(
+                delete_file(home, "new.conf", b"made\n"),
+                Err(RemoteFileError::SymbolicLink)
+            ));
+            assert!(path.exists() && target.exists());
+            std::os::unix::fs::symlink(home.join("gone"), home.join("dangling")).unwrap();
+            assert!(matches!(
+                delete_file(home, "dangling", b""),
+                Err(RemoteFileError::SymbolicLink)
+            ));
+
+            if !is_root() {
+                let locked = home.join("locked");
+                std::fs::create_dir(&locked).unwrap();
+                std::fs::write(locked.join("x"), b"x").unwrap();
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).unwrap();
+                assert!(matches!(
+                    delete_file(home, "locked/x", b"x"),
+                    Err(RemoteFileError::PermissionDenied)
+                ));
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+                assert!(locked.join("x").exists());
             }
         }
     }

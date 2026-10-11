@@ -700,10 +700,12 @@ async fn remote_files_are_read_and_written_in_place() {
     let path = area.join("it's $HOME.conf");
     std::fs::write(&path, b"listen 80;\r\n").unwrap();
     let inode = std::fs::metadata(&path).unwrap().ino();
+    let mode = std::fs::metadata(&path).unwrap().mode() & 0o777;
     let name = path.to_str().unwrap();
 
     let file = remote_file::read(&session, name, 1024).await.unwrap();
     assert_eq!(file.path, name);
+    assert_eq!(file.mode, Some(mode));
     let read = file.bytes;
     assert_eq!(read, b"listen 80;\r\n");
     assert!(matches!(
@@ -711,14 +713,20 @@ async fn remote_files_are_read_and_written_in_place() {
         Err(RemoteFileError::TooLarge(12))
     ));
 
-    remote_file::write(&session, name, b"listen 443;\r\n", Expect::Content(&read))
-        .await
-        .unwrap();
+    remote_file::write(
+        &session,
+        name,
+        b"listen 443;\r\n",
+        Expect::Content(&read),
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(std::fs::read(&path).unwrap(), b"listen 443;\r\n");
     assert_eq!(std::fs::metadata(&path).unwrap().ino(), inode);
     // What the first read saw is gone, so a second write against it is refused.
     assert!(matches!(
-        remote_file::write(&session, name, b"x", Expect::Content(&read)).await,
+        remote_file::write(&session, name, b"x", Expect::Content(&read), None).await,
         Err(RemoteFileError::Changed)
     ));
 
@@ -733,10 +741,24 @@ async fn remote_files_are_read_and_written_in_place() {
         new_name,
         &pseudo_random(256 * 1024, 5),
         Expect::Missing,
+        Some(0o640),
     )
     .await
     .unwrap();
     assert_eq!(std::fs::read(&new).unwrap(), pseudo_random(256 * 1024, 5));
+    assert_eq!(std::fs::metadata(&new).unwrap().mode() & 0o777, 0o640);
+
+    // Revert (AI-41) deletes a file the tools created, only while it holds what they wrote.
+    assert!(matches!(
+        remote_file::delete(&session, new_name, b"other").await,
+        Err(RemoteFileError::Changed)
+    ));
+    assert!(new.exists());
+    let deleted = remote_file::delete(&session, new_name, &pseudo_random(256 * 1024, 5))
+        .await
+        .unwrap();
+    assert_eq!(deleted, new_name);
+    assert!(!new.exists());
 }
 
 // --------------------------------------------------------------------------- probe & errors on a live server

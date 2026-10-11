@@ -1,0 +1,94 @@
+.files {
+  display: flex;
+  flex-direction: column;
+  max-height: 232px;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  list-style: none;
+}
+
+.file {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+}
+
+.file + .file {
+  border-top: 0.5px solid var(--line);
+}
+
+.fileIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--fg2);
+}
+
+.fileText {
+  flex: 1;
+  min-width: 0;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.server {
+  margin-top: 1px;
+  font-size: var(--text-xs);
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--red);
+}
+
+.elsewhere {
+  margin-top: 3px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+}
+
+.note {
+  margin-top: 10px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+.noteFailed {
+  color: var(--red);
+}
+
+.lines {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+}
+
+.added {
+  color: var(--green);
+}
+
+.removed {
+  color: var(--red);
+}

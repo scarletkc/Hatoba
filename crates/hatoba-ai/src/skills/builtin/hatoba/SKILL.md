@@ -75,6 +75,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
 | `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, history, export and edit, the MCP tools menu |
 | `references/ai-models.md` | The model picker, the Thinking Level (Default to Max), the context meter, Compact and automatic compaction, the reasoning display |
+| `references/ai-file-changes.md` | Undoing the assistant's file edits: **Revert** on an Edit file or Write file call, where the earlier content is kept, when Revert refuses, what it does not undo, and what **Edit and Resend** asks about the files the deleted calls changed |
 | `references/ai-attachments.md` | What goes with an AI message: the terminal selection, Ask AI about a failed connection, long pastes, text files, size limits and the context-fit note |
 | `references/ai-side-questions.md` | Asking the assistant something while it works or an approval card waits, without stopping it: **Ask a Side Question**, Alt+Enter, **Ask About This** on an approval card, what is not saved, stopping a side question |
 | `references/ai-instructions.md` | Custom Instructions in Settings → AI and a host's AI Notes: what they are for, limits, saving and sync, how the assistant follows them |

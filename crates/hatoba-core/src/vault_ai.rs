@@ -349,7 +349,8 @@ impl Vault {
     /// Deletes the message parts whose conversation was deleted (its item is a tombstone), as
     /// when another device deleted a conversation while this one added entries offline: the
     /// tombstone arrived first, or the parts were written after it. Returns how many parts it
-    /// deleted, leaving tombstones that sync.
+    /// deleted, leaving tombstones that sync. Then sweeps the file snapshots
+    /// ([`ai_sweep_file_snapshots`](Self::ai_sweep_file_snapshots)).
     ///
     /// Parts of a conversation this device has no row for at all are kept: a sync pull may bring
     /// parts before their conversation (pages come in any order).
@@ -386,10 +387,18 @@ impl Vault {
         if !orphans.is_empty() {
             self.tombstone(&orphans)?;
         }
+        // Device-local, so nothing to sync: the file snapshots of conversations and responses
+        // that are gone (AI-41).
+        match self.ai_sweep_file_snapshots() {
+            Ok(0) => {}
+            Ok(snapshots) => tracing::info!(snapshots, "deleted file snapshots of deleted entries"),
+            Err(e) => tracing::warn!("could not delete orphaned file snapshots: {e}"),
+        }
         Ok(orphans.len())
     }
 
-    /// Deletes a conversation and all of its message parts, leaving tombstones that sync.
+    /// Deletes a conversation and all of its message parts, leaving tombstones that sync, and its
+    /// file snapshots.
     ///
     /// Parts without a conversation item (it was deleted on another device while this one added
     /// entries) are deleted too.
@@ -413,11 +422,18 @@ impl Vault {
         if ids.is_empty() {
             return Err(Error::ItemNotFound(conversation_id.to_owned()));
         }
-        self.tombstone(&ids)
+        self.tombstone(&ids)?;
+        // The device-local snapshots of its file changes (AI-41). The deletion is committed by
+        // now, so a failure here is logged; the sweep after unlock deletes them later.
+        if let Err(e) = self.store.delete_snapshots(conversation_id, None) {
+            tracing::warn!("could not delete the conversation's file snapshots: {e}");
+        }
+        Ok(())
     }
 
     /// Deletes the entry `entry_id` of a conversation and every later entry (AI-26), leaving
-    /// tombstones that sync, in one transaction. Returns how many entries were deleted.
+    /// tombstones that sync, in one transaction, and the file snapshots of the calls those
+    /// entries made. Returns how many entries were deleted.
     ///
     /// Entries are ordered by `entry_id`, so "later" means a greater id, wherever it was written.
     /// The conversation item is not touched; a `context_start` that pointed at a deleted entry is
@@ -451,6 +467,10 @@ impl Vault {
             return Err(Error::ItemNotFound(entry_id.to_owned()));
         }
         self.tombstone(&ids)?;
+        // The snapshots of the calls the deleted responses made (AI-41), as for a conversation.
+        if let Err(e) = self.store.delete_snapshots(conversation_id, Some(entry_id)) {
+            tracing::warn!("could not delete the deleted entries' file snapshots: {e}");
+        }
         Ok(entries.len())
     }
 
@@ -596,7 +616,7 @@ fn split_entry<'a>(conversation_id: &str, entry_id: &str, json: &'a str) -> Resu
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::sync::Arc;
 
     use serde_json::json;
@@ -608,7 +628,8 @@ mod tests {
 
     const PW: &str = "ai-vault-test-password";
 
-    fn vault() -> (Vault, Arc<ManualClock>) {
+    /// An unlocked vault on a manual clock, for the tests of the AI items and file snapshots.
+    pub(crate) fn vault() -> (Vault, Arc<ManualClock>) {
         let clock = Arc::new(ManualClock::new(1_700_000_000_000));
         let mut vault = Vault::open_in_memory().unwrap().with_clock(clock.clone());
         vault

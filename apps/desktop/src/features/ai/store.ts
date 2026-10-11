@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
-import type { AiConversationView, AiEntryView, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
+import type { AiConversationView, AiEntryView, AiFileChange, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
 import type { DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionState } from "./attachments";
 import type { EffortPick } from "./effort";
 import type { SideQuestion } from "./side";
@@ -18,6 +18,10 @@ export interface Slot {
   conversationId: string | null;
   conversation: AiConversationView | null;
   entries: AiEntryView[];
+  /** AI-41: the changes of its file tool calls that this device can revert, or has reverted. */
+  fileChanges: AiFileChange[];
+  /** AI-41: a revert of one of them runs; no message is sent meanwhile. */
+  reverting: boolean;
   loading: boolean;
   loadFailed: boolean;
   compacting: boolean;
@@ -111,6 +115,8 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", ex
     conversationId: null,
     conversation: null,
     entries: [],
+    fileChanges: [],
+    reverting: false,
     loading: false,
     loadFailed: false,
     compacting: false,

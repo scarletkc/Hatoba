@@ -33,6 +33,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .commands(collect_commands![
             app::app_info,
             app::window_snap_overlay,
+            app::window_floating,
             app::save_text_file,
             app::activity_ping,
             app::update_check,
@@ -151,6 +152,10 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_tool_result,
             ai_cmd::ai_tool_run,
             ai_cmd::ai_file_preview,
+            ai_cmd::ai_file_changes,
+            ai_cmd::ai_file_change_diff,
+            ai_cmd::ai_file_revert,
+            ai_cmd::ai_session_server,
             ai_cmd::ai_stop,
             ai_cmd::ai_compact,
             ai_cmd::ai_side_question,
@@ -189,6 +194,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::TransferProgressEvent,
             dto::ForwardStatusEvent,
             dto::McpServerStatus,
+            dto::WindowChromeEvent,
         ])
 }
 

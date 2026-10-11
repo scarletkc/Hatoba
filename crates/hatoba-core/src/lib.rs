@@ -14,6 +14,7 @@
 //! | [`store`] | local SQLite: ciphertext only (spec §5.2) |
 //! | [`vault`] | lock state, password and recovery operations, the decrypted item map |
 //! | `vault_ai` | AI assistant items on [`Vault`]: providers, skills, MCP servers, conversation entries split across `ai_message` items (spec §13.7) |
+//! | `vault_snapshots` | device-local, sealed snapshots of what the AI file tools changed, for Revert (spec AI-41) |
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
 //! | [`backup`] | encrypted backup export / import (VAULT-07) |
 //! | [`platform`] | injected capabilities (`SecretStore`, `DeviceInfo`) |
@@ -47,6 +48,7 @@ pub mod store;
 pub mod sync;
 pub mod vault;
 mod vault_ai;
+mod vault_snapshots;
 pub mod version;
 
 pub use crypto::{Envelope, KdfParams, Key32};
@@ -54,5 +56,7 @@ pub use error::{Error, Result};
 pub use model::{Item, new_id};
 pub use platform::{DeviceInfo, SecretStore};
 pub use recovery::RecoveryCode;
+pub use store::SnapshotState;
 pub use vault::{PasswordChange, RecoveryChange, Vault, VaultStatusInfo};
 pub use vault_ai::{AI_PART_MAX_BYTES, StoredEntry};
+pub use vault_snapshots::{AI_SNAPSHOTS_MAX_BYTES, FileSnapshot, SnapshotKey, StoredSnapshot};

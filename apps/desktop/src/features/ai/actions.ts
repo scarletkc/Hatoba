@@ -11,7 +11,9 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFileChange,
   AiFilePreview,
+  AiFileRevert,
   AiModelRef,
   AiPermissionMode,
   AiToolCall,
@@ -44,6 +46,8 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
+import { askEditedFiles } from "./EditFiles";
+import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
@@ -67,6 +71,7 @@ import {
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
+  editedFiles,
   entriesBefore,
   laterContextStart,
   laterMessages,
@@ -418,7 +423,12 @@ class TurnRunner {
       }
       // AI-08: tools use the tab's current session, so they follow a reconnect.
       const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
-      this.addEntry(await api.ai_tool_run(convId, call.id, sessionId, edited));
+      const { entry, dropped_file_changes } = await api.ai_tool_run(convId, call.id, sessionId, edited);
+      this.addEntry(entry);
+      // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
+      // partway. Keeping it may have dropped older ones over the size limit, of any conversation.
+      if (dropped_file_changes) refreshAllFileChanges();
+      else if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(this.slotId, convId);
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -484,6 +494,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   // conversation has no id yet, so a second message would start another one, and a message waiting for its
   // compaction (AI-22) would be stopped, and its pending entry dropped here.
   if (!typed || slot.turn?.phase === "starting") return false;
+  if (reverting(slotId)) return false;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -657,7 +668,7 @@ function discardSideQuestion(slotId: string) {
 export async function retryTurn(slotId: string) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!id || slot.turn) return;
+  if (!id || slot.turn || reverting(slotId)) return;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
@@ -688,15 +699,43 @@ function settleFailedStart(convId: string, patch: Partial<Slot> = {}): string | 
 
 /**
  * AI-26: replaces an earlier message of the user with `raw`, deletes every entry after it, and starts
- * a turn. Asks first when entries follow it. Not while a turn runs.
+ * a turn. Asks first when entries follow it, and offers to revert the file changes of the calls it
+ * deletes that this device keeps (AI-41). Not while a turn runs.
  */
 export async function editAndResend(slotId: string, entryId: string, raw: string): Promise<boolean> {
   const text = raw.trim();
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting) return false;
+  if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting || reverting(slotId)) return false;
   const later = laterMessages(slot.entries, entryId);
-  if (later > 0) {
+  // Read again: the refresh after the turn's last write may not have arrived yet. Without them the edit
+  // cannot tell which changes it would leave on the host, so it is not sent.
+  let fileChanges: AiFileChange[];
+  try {
+    fileChanges = await api.ai_file_changes(id);
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+    return false;
+  }
+  if (!unlocked() || getSlot(slotId).conversationId !== id) return false;
+  patchSlot(slotId, { fileChanges });
+  const { revert } = editedFiles(slot.entries, fileChanges, entryId);
+  if (revert.length > 0) {
+    // Only the changes on the server the tab is connected to can be reverted from it; the dialog says so of the
+    // others, which Cancel keeps revertible.
+    const server = await api.ai_session_server(revertSession(slotId)).catch(() => null);
+    // The list is the confirmation, also for a file a call created: each revert asks nothing more.
+    // Each revert waits for an idle conversation, as on the block: a turn may have started meanwhile.
+    const send = await askEditedFiles({
+      later,
+      changes: revert,
+      server,
+      revert: (change) =>
+        slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
+      diff: (change) => fileChangeDiff(slotId, change).catch(() => null),
+    });
+    if (!send) return false;
+  } else if (later > 0) {
     const ok = await confirm({
       title: t("ai.edit.confirmTitle"),
       body: t("ai.edit.confirmBody", { n: later }),
@@ -760,6 +799,116 @@ export async function stopTurn(slotId: string) {
   }
 }
 
+/** AI-41: reads again the file changes of every open conversation, as the size limit spans them all. */
+function refreshAllFileChanges() {
+  for (const [id, s] of Object.entries(useAi.getState().slots)) if (s.conversationId) void refreshFileChanges(id, s.conversationId);
+}
+
+/** AI-41: reads again which changes of the conversation's file tool calls this device keeps. */
+export async function refreshFileChanges(slotId: string, convId: string) {
+  try {
+    const fileChanges = await api.ai_file_changes(convId);
+    // The lock cleared them meanwhile: they name servers and paths.
+    if (unlocked() && getSlot(slotId).conversationId === convId) patchSlot(slotId, { fileChanges });
+  } catch {
+    // Locked or deleted meanwhile; the next load reads them again.
+  }
+}
+
+/** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped. Rejects when it cannot be read. */
+export async function fileChangeDiff(slotId: string, change: Pick<AiFileChange, "response_id" | "tool_call_id">): Promise<AiFilePreview | null> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId) return null;
+  return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id);
+}
+
+/**
+ * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. The user
+ * confirms first, with the diff the revert writes back; a file the call created is deleted. With `restore`
+ * (Restore anyway), it writes over what the diff of the last revert showed, which the user confirms too;
+ * `recreate`: that diff showed the file missing, so it is created again. `onStart` runs once the revert is under way. Null when nothing was asked of Rust or it refused; otherwise
+ * what the revert did, for the call's block to show.
+ */
+export async function revertFileChange(
+  slotId: string,
+  change: AiFileChange,
+  options: { restore?: boolean; recreate?: boolean; onStart?: () => void } = {},
+): Promise<AiFileRevert | null> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId || slotBusy(slotId)) return null;
+  const path = change.path;
+  const ok = options.restore
+    ? await confirm({
+        ...(change.created
+          ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
+          : { title: t("ai.revert.restoreTitle", { path }), body: t(options.recreate ? "ai.revert.recreateBody" : "ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
+        danger: true,
+      })
+    : await fileChangeDiff(slotId, change).then(
+        (preview) => confirmRevert(change, preview),
+        // The confirmation promises the diff it writes back: without it, nothing is asked or written.
+        (e: unknown) => {
+          toast(aiErrorMessage(e), "error");
+          return false;
+        },
+      );
+  if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
+  options.onStart?.();
+  patchSlot(slotId, { reverting: true });
+  try {
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), !!options.restore);
+    if (outcome.status === "reverted") {
+      markReverted(slotId, convId, change);
+      // Nothing to write: a revert whose result was lost did it already, or the write never changed the file.
+      const done = outcome.wrote ? "ai.revert.done" : change.created ? "ai.revert.alreadyGone" : "ai.revert.already";
+      toast(t(done, { path }), "success");
+    }
+    return outcome;
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+    // The size limit may have dropped the change meanwhile, or another device's edit deleted its call.
+    void refreshFileChanges(slotId, convId);
+    return null;
+  } finally {
+    patchSlot(slotId, { reverting: false });
+  }
+}
+
+/** The vault is unlocked: what a command returned may go into the store. */
+function unlocked(): boolean {
+  return useApp.getState().phase === "unlocked";
+}
+
+/** AI-41: a revert of the slot's conversation runs, so nothing is sent until it ends (Rust refuses it too). */
+function reverting(slotId: string): boolean {
+  if (!getSlot(slotId).reverting) return false;
+  toast(t("ai.revert.wait"), "error");
+  return true;
+}
+
+/** The session a revert runs on: the slot's tab, when it is connected. */
+function revertSession(slotId: string): string | null {
+  const target = attachedTab(slotId);
+  return target?.tab.status === "connected" ? (target.tab.sessionId ?? null) : null;
+}
+
+function markReverted(slotId: string, convId: string, change: AiFileChange) {
+  const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
+  patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, state: "reverted" as const } : c)) } : {}));
+}
+
+/** AI-26, AI-41: reverts a change an edit is about to delete the call of; an error is a failure the edit's dialog lists. */
+async function revertChange(slotId: string, convId: string, change: AiFileChange): Promise<AiFileRevert> {
+  try {
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, revertSession(slotId), false);
+    if (outcome.status === "reverted") markReverted(slotId, convId, change);
+    return outcome;
+  } catch (e) {
+    void refreshFileChanges(slotId, convId);
+    return { status: "failed", reason: "failed", detail: aiErrorMessage(e) };
+  }
+}
+
 /** The user's answer to an approval card (AI-17) or the tool call limit (AI-18). */
 export function decideCall(slotId: string, decision: Decision) {
   runners.get(slotId)?.decide(decision);
@@ -804,6 +953,7 @@ export async function reloadSlot(slotId: string) {
     patchSlot(slotId, (s) => ({
       conversation: detail.conversation,
       entries: s.turn ? s.entries : detail.entries,
+      fileChanges: detail.file_changes,
       loading: false,
       loadFailed: false,
       remoteRunning: detail.running && !runners.has(slotId),
@@ -818,10 +968,10 @@ export async function reloadSlot(slotId: string) {
   }
 }
 
-/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, or compacting. */
+/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, compacting, or reverting a file change (AI-41). */
 function slotBusy(slotId: string): boolean {
   const s = getSlot(slotId);
-  return !!s.turn || s.remoteRunning || s.compacting || runners.has(slotId);
+  return !!s.turn || s.remoteRunning || s.compacting || s.reverting || runners.has(slotId);
 }
 
 /**
@@ -927,7 +1077,8 @@ export function resetForLock() {
     slots: Object.fromEntries(
       Object.entries(st.slots).map(([id, s]) => [
         id,
-        { ...s, conversation: null, entries: [], turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, side: null, loading: !!s.conversationId },
+        // File changes name servers and paths: conversation plaintext too.
+        { ...s, conversation: null, entries: [], fileChanges: [], reverting: false, turn: null, outcome: null, effortIgnored: false, remoteRunning: false, compacting: false, side: null, loading: !!s.conversationId },
       ]),
     ),
   }));
@@ -1146,7 +1297,7 @@ export function removeDiagnostics(tabId: string) {
 export async function compactConversation(slotId: string) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!id || slot.turn || slot.compacting) return;
+  if (!id || slot.turn || slot.compacting || reverting(slotId)) return;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");

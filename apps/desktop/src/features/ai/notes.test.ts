@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translate, type Locale, type MessageKey, type Params } from "@/i18n";
-import { composeMessage, parseMessage } from "./attachments";
+import { composeMessage, fileRevertNote, parseMessage } from "./attachments";
 import { noteLabel, noteTitle } from "./notes";
 
 const tr = (locale: Locale) => (key: MessageKey, params?: Params) => translate(locale, key, params);
@@ -41,6 +41,14 @@ describe("notes as dividers (AI-05, AI-09)", () => {
     expect(noteLabel(tr("zh-CN"), detached)).toBe("终端不再可用");
     expect(noteLabel(tr("ja"), attached)).toBe("ターミナルを使えるようになりました");
     expect(noteLabel(tr("ja"), detached)).toBe("ターミナルを使えなくなりました");
+  });
+
+  it("name the file whose change the user reverted (AI-41)", () => {
+    const note = fileRevertNote("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false);
+    expect(noteLabel(tr("en"), note)).toBe("Reverted the change to /etc/nginx/nginx.conf");
+    expect(noteLabel(tr("zh-CN"), note)).toBe("已撤销对 /etc/nginx/nginx.conf 的修改");
+    expect(noteLabel(tr("ja"), note)).toBe("/etc/nginx/nginx.conf への変更を元に戻しました");
+    expect(noteTitle(tr("en"), note)).toBe("Reverted the change to /etc/nginx/nginx.conf");
   });
 
   it("come out of a stored message in order, apart from its bubble", () => {

@@ -7,6 +7,7 @@ import {
   clipText,
   composeMessage,
   droppedFile,
+  fileRevertNote,
   FILE_MAX_BYTES,
   fitsMessage,
   isLongPaste,
@@ -343,6 +344,25 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
     ]) {
       expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
     }
+  });
+
+  it("note each reverted file change, as Rust writes them, after the other notes (AI-41)", () => {
+    const edited = fileRevertNote("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false);
+    const created = fileRevertNote('/srv/a"</file_revert>', "call_9", "write_file", true);
+    // file_revert_block in crates/hatoba-ai/src/tools.rs.
+    expect(noteBlock(edited)).toBe(
+      '<file_revert path="/etc/nginx/nginx.conf" tool_call_id="toolu_01">\nThe user reverted the change your edit_file call toolu_01 made to /etc/nginx/nginx.conf.\n</file_revert>',
+    );
+    expect(noteBlock(created)).toBe(
+      '<file_revert path="/srv/a&quot;&lt;/file_revert&gt;" tool_call_id="call_9">\nThe user reverted your write_file call call_9, which created /srv/a"<\\/file_revert>, so it was deleted.\n</file_revert>',
+    );
+    // One for each reverted call, in the order given, after the model's note; they read back exactly.
+    const stored = composeMessage("why?", [], [edited, switched, created]);
+    expect(stored.indexOf("<model_change")).toBe(0);
+    expect(parseMessage(stored)).toEqual({ notes: [switched, edited, created], attachments: [], typed: "why?" });
+    // With other attributes, it is typed text.
+    const odd = '<file_revert tool_call_id="x" path="/a">\nx\n</file_revert>\n\nq';
+    expect(parseMessage(odd)).toEqual({ notes: [], attachments: [], typed: odd });
   });
 
   it("name a model by its display name in the panel", () => {

@@ -1,5 +1,5 @@
 import type { MessageKey, Params } from "@/i18n";
-import type { AiPermissionMode, McpToolInfo } from "@/ipc/types";
+import type { AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
 
 /** Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9). */
 export const READ_TERMINAL = "read_terminal";
@@ -145,6 +145,22 @@ export function toolLabel(t: (key: MessageKey, params?: Params) => string, name:
 // ───────────── arguments ─────────────
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/**
+ * AI-41: what an `edit_file` or `write_file` call changes, from its arguments alone, for its block when this
+ * device keeps no snapshot of it: the replaced text and its replacement, or the content written. Null for other
+ * tools, or arguments that do not parse.
+ */
+export function callFileChange(name: string, json: string): AiFilePreview | null {
+  const kind = toolKind(name);
+  if (kind !== "edit_file" && kind !== "write_file") return null;
+  const args = parseArgs(json);
+  if (!args) return null;
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
+  // Whether write_file created the file is not in its arguments, so the content shows as added, without "new file".
+  const [before, after] = kind === "edit_file" ? [text(args.old_string), text(args.new_string)] : ["", text(args.content)];
+  return { path: text(args.path), before, after, error: null, crlf: false };
+}
 
 /** The call's arguments as an object. An empty string counts as `{}` (some providers send it for no arguments). */
 export function parseArgs(json: string): Record<string, unknown> | null {

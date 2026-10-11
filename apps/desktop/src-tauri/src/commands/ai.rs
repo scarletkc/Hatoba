@@ -10,12 +10,12 @@ use hatoba_ai::AiError;
 use hatoba_ai::models::{TestFailure, TestOutcome};
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
-use hatoba_core::Vault;
 use hatoba_core::model::{
     AiAuthHeader as CoreAuthHeader, AiConversation, AiModel as CoreModel, AiModelRef as CoreRef,
     AiProtocol as CoreProtocol, AiProvider, AiSettings, Item, MAX_CUSTOM_INSTRUCTIONS_CHARS,
     SETTINGS_ID, SearchKind as CoreSearchKind, SearchProvider,
 };
+use hatoba_core::{SnapshotKey, Vault};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -25,11 +25,11 @@ use crate::ai::{
     effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFilePreview, AiModel,
-    AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
-    AiSendStarted, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure,
-    AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent, DroppedFile, SearchKind,
-    SearchProviderInput, SearchProviderView,
+    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
+    AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView,
+    AiSearchHit, AiSendInput, AiSendStarted, AiSettingsView, AiSideAnswer, AiSideEvent,
+    AiSideQuestionInput, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext,
+    AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -810,8 +810,79 @@ pub async fn ai_file_preview(
         .await
 }
 
+/// The changes of the conversation's `edit_file` and `write_file` calls that this device keeps
+/// and can revert, or has reverted (AI-41).
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_changes(
+    state: State<'_, AppState>,
+    conversation_id: String,
+) -> AppResult<Vec<AiFileChange>> {
+    state.ai.file_changes(&state.vault, &conversation_id)
+}
+
+/// What an `edit_file` or `write_file` call changed (AI-41), from its snapshot, for its block and
+/// the revert's confirmation: the file before the call and as the call wrote it. `None` once the
+/// change was reverted or dropped.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_change_diff(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    response_id: String,
+    tool_call_id: String,
+) -> AppResult<Option<AiFilePreview>> {
+    state.ai.file_change_diff(
+        &state.vault,
+        SnapshotKey {
+            conversation_id: &conversation_id,
+            response_id: &response_id,
+            tool_call_id: &tool_call_id,
+        },
+    )
+}
+
+/// The server a revert (AI-41) on the tab `session_id` runs on, as `AiFileChange.server` names it;
+/// null while the tab is not connected. Edit and resend asks before it offers to revert changes.
+#[tauri::command]
+#[specta::specta]
+pub fn ai_session_server(app: AppHandle, session_id: Option<String>) -> Option<String> {
+    crate::ai::session_server(&AppEnv(app), session_id.as_deref())
+}
+
+/// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
+/// `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
+/// anyway, over what the diff of the last revert showed, which the panel also asks about first.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_revert(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: String,
+    response_id: String,
+    tool_call_id: String,
+    session_id: Option<String>,
+    restore: bool,
+) -> AppResult<AiFileRevert> {
+    state
+        .ai
+        .file_revert(
+            &state.vault,
+            &AppEnv(app),
+            SnapshotKey {
+                conversation_id: &conversation_id,
+                response_id: &response_id,
+                tool_call_id: &tool_call_id,
+            },
+            session_id.as_deref(),
+            restore,
+        )
+        .await
+}
+
 /// Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
-/// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
+/// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
+/// keeping the snapshot of a file change dropped older ones (AI-41).
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_tool_run(
@@ -821,7 +892,7 @@ pub async fn ai_tool_run(
     tool_call_id: String,
     session_id: Option<String>,
     edited_arguments: Option<String>,
-) -> AppResult<AiEntryView> {
+) -> AppResult<AiToolRun> {
     state
         .ai
         .tool_run(

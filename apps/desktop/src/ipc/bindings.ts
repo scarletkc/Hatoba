@@ -11,6 +11,11 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	/**  Opens the Windows 11 Snap Layouts flyout (hovering the custom maximize button, WIN-01). */
 	windowSnapOverlay: () => __TAURI_INVOKE<void>("window_snap_overlay"),
+	/**
+	 *  Whether the Linux main window shows its painted chrome: false while maximized, fullscreen
+	 *  or tiled, false without a compositor, and false on other platforms.
+	 */
+	windowFloating: () => __TAURI_INVOKE<boolean>("window_floating"),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -243,15 +248,52 @@ export const commands = {
 	aiToolResult: (conversationId: string, toolCallId: string, result: AiToolResultInput) => __TAURI_INVOKE<AiEntryView>("ai_tool_result", { conversationId, toolCallId, result }),
 	/**
 	 *  Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
-	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
+	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
+	 *  keeping the snapshot of a file change dropped older ones (AI-41).
 	 */
-	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiEntryView>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiToolRun>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
 	/**
 	 *  The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
 	 *  host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
 	 *  card, if they did.
 	 */
 	aiFilePreview: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiFilePreview>("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
+	/**
+	 *  The changes of the conversation's `edit_file` and `write_file` calls that this device keeps
+	 *  and can revert, or has reverted (AI-41).
+	 */
+	aiFileChanges: (conversationId: string) => __TAURI_INVOKE<AiFileChange[]>("ai_file_changes", { conversationId }),
+	/**
+	 *  What an `edit_file` or `write_file` call changed (AI-41), from its snapshot, for its block and
+	 *  the revert's confirmation: the file before the call and as the call wrote it. `None` once the
+	 *  change was reverted or dropped.
+	 */
+	aiFileChangeDiff: (conversationId: string, responseId: string, toolCallId: string) => __TAURI_INVOKE<{
+	/**  The path the call names. */
+	path: string,
+	/**
+	 *  The file as Hatoba read it, or `None` when it does not exist (the call creates it) or
+	 *  `error` is set.
+	 */
+	before: string | null,
+	/**  The file after the call, or `None` when `error` is set. */
+	after: string | null,
+	/**  Why the call cannot apply: the error result running it would give the model. */
+	error: string | null,
+	/**  Most of the file's line breaks are CRLF, and the write keeps them. */
+	crlf: boolean,
+} | null>("ai_file_change_diff", { conversationId, responseId, toolCallId }),
+	/**
+	 *  Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
+	 *  `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
+	 *  anyway, over what the diff of the last revert showed, which the panel also asks about first.
+	 */
+	aiFileRevert: (conversationId: string, responseId: string, toolCallId: string, sessionId: string | null, restore: boolean) => __TAURI_INVOKE<AiFileRevert>("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
+	/**
+	 *  The server a revert (AI-41) on the tab `session_id` runs on, as `AiFileChange.server` names it;
+	 *  null while the tab is not connected. Edit and resend asks before it offers to revert changes.
+	 */
+	aiSessionServer: (sessionId: string | null) => __TAURI_INVOKE<string | null>("ai_session_server", { sessionId }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -342,6 +384,7 @@ export const events = {
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
+	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 };
 
 /* Types */
@@ -352,6 +395,11 @@ export type AiConversationDetail = {
 	entries: AiEntryView[],
 	/**  A turn of this conversation is running (its events go to the channel that started it). */
 	running: boolean,
+	/**
+	 *  The changes of its `edit_file` and `write_file` calls that this device can revert, or
+	 *  has reverted (AI-41).
+	 */
+	file_changes: AiFileChange[],
 };
 
 export type AiConversationView = {
@@ -382,6 +430,40 @@ export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
 
 /**
+ *  A change an `edit_file` or `write_file` call made, kept on this device so the user can revert
+ *  it (AI-41).
+ */
+export type AiFileChange = {
+	/**  The entry id of the response that made the call. */
+	response_id: string,
+	tool_call_id: string,
+	/**  The server the call wrote on, as `user@host:port`. */
+	server: string,
+	/**  The file's path as the call resolved it. */
+	path: string,
+	/**  The call created the file, so a revert deletes it. */
+	created: boolean,
+	state: AiFileChangeState,
+};
+
+/**  Where a file tool call's change stands on this device (AI-41). */
+export type AiFileChangeState = 
+/**  The call wrote the file. */
+"written" | 
+/**
+ *  The write failed after it may have begun, or its end was never recorded: the file may be
+ *  cut short. It can be reverted like a written one.
+ */
+"unfinished" | 
+/**  The user reverted the change. */
+"reverted" | 
+/**
+ *  The 32 MB limit dropped what the file held before, so the change can no longer be
+ *  reverted.
+ */
+"dropped";
+
+/**
  *  The change an `edit_file` or `write_file` call would make, for its approval card (AI-39,
  *  AI-40). The texts show CRLF line breaks as `\n`; `crlf` says the write keeps them as CRLF.
  */
@@ -400,6 +482,33 @@ export type AiFilePreview = {
 	/**  Most of the file's line breaks are CRLF, and the write keeps them. */
 	crlf: boolean,
 };
+
+/**  The outcome of a revert (AI-41). */
+export type AiFileRevert = 
+/**
+ *  The file holds what it held before the call again, or no longer exists when the call
+ *  created it. `wrote`: the revert wrote or deleted it; otherwise it was so already, as after
+ *  a revert whose result was lost.
+ */
+{ status: "reverted"; wrote: boolean } | 
+/**
+ *  The file holds neither what the call wrote nor what it held before, so nothing was
+ *  written: the diff from `current` to `before` is what Restore anyway would do. The texts
+ *  show CRLF line breaks as `\n`.
+ */
+{ status: "changed"; path: string; 
+/**  What the file holds now; `None` when it does not exist. */
+current: string | null; 
+/**
+ *  What it held before the call; `None` when the call created it, so Restore anyway
+ *  deletes it.
+ */
+before: string | null; 
+/**
+ *  A later call of this conversation wrote the file too, so reverting the later changes
+ *  first, newest first, may bring it back to what this call wrote.
+ */
+later: boolean } | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
 
@@ -451,6 +560,34 @@ export type AiProviderView = {
 	models: AiModel[],
 	updated_at: number,
 };
+
+/**  Why a revert did not happen (AI-41), for the panel to say in the user's language. */
+export type AiRevertFailure = 
+/**  The conversation's tab is not connected. */
+"disconnected" | 
+/**  The tab is connected to another server than the one the call wrote on; `detail` names it. */
+"other_server" | 
+/**  The user the tab is logged in as cannot write or delete the file. */
+"permission_denied" | 
+/**
+ *  The file changed since the call wrote it into something that is not a text file Hatoba
+ *  can read (a directory, a binary file, a file over 1 MB): there is no diff to show.
+ */
+"not_text" | 
+/**
+ *  A symbolic link is in the place of the file the call created, so neither the link nor its
+ *  target was deleted.
+ */
+"symbolic_link" | 
+/**  Reading the file did not finish within 30 seconds; nothing was written. */
+"timed_out" | 
+/**
+ *  Writing or deleting failed after it may have begun, a timeout included: the file may be
+ *  cut short, or deleted. `detail` says why, when there was an error.
+ */
+"unfinished" | 
+/**  Anything else; `detail` says what. */
+"failed";
 
 export type AiSearchHit = {
 	conversation_id: string,
@@ -538,6 +675,17 @@ export type AiToolResultInput = {
 	content: string,
 	/**  AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
 	edited_arguments: string | null,
+};
+
+/**  What `ai_tool_run` stored: the call's result entry. */
+export type AiToolRun = {
+	entry: AiEntryView,
+	/**
+	 *  AI-41: keeping the snapshot of this call's change dropped older ones over the size limit,
+	 *  of this or another conversation, so the panel reads the file changes of its other
+	 *  conversations again.
+	 */
+	dropped_file_changes: boolean,
 };
 
 export type AiToolStatus = "ok" | "error" | "rejected" | "cancelled";
@@ -1507,6 +1655,15 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+};
+
+/**
+ *  Whether the Linux main window shows its painted chrome right now: off while maximized,
+ *  fullscreen or tiled, and off without a compositor. The WebView mirrors it to
+ *  `:root[data-floating]`; `window_floating` reports the same value.
+ */
+export type WindowChromeEvent = {
+	floating: boolean,
 };
 
 export type WorkerUpdate = {
