@@ -32,6 +32,9 @@ fn find_host(vault: &Vault, id: &str) -> AppResult<Host> {
         .ok_or_else(|| AppError::not_found("host"))
 }
 
+/// The longest host name, in characters (HOST-01).
+const MAX_NAME_CHARS: usize = 128;
+
 /// Validates the form (spec §9 "field validation errors") and builds the stored model.
 pub fn host_from_input(
     input: &HostInput,
@@ -40,7 +43,7 @@ pub fn host_from_input(
 ) -> AppResult<Host> {
     let name = input.name.trim();
     let address = input.address.trim();
-    if name.chars().count() > 128 {
+    if name.chars().count() > MAX_NAME_CHARS {
         return Err(AppError::invalid("name", "name is too long"));
     }
     if address.is_empty() {
@@ -134,8 +137,13 @@ pub fn host_from_input(
         }
     }
     Ok(Host {
-        // HOST-01: a host without a name is named after its address.
-        name: if name.is_empty() { address } else { name }.to_owned(),
+        // HOST-01: a host without a name is named after its address, cut to the name's limit so
+        // the host saves again as it is.
+        name: if name.is_empty() {
+            address.chars().take(MAX_NAME_CHARS).collect()
+        } else {
+            name.to_owned()
+        },
         address: address.to_owned(),
         port: input.port,
         username: input.username.trim().to_owned(),
@@ -1196,6 +1204,21 @@ mod tests {
         );
         let named = host_from_input(&input(String::new()), None, &v).unwrap();
         assert_eq!(named.name, "prod-db");
+
+        // A long address gives a name within the limit, which the host editor saves again.
+        let long = format!("{}.example.com", "a".repeat(200));
+        let unnamed = HostInput {
+            name: String::new(),
+            address: long.clone(),
+            ..input(String::new())
+        };
+        let host = host_from_input(&unnamed, None, &v).unwrap();
+        assert_eq!(host.name, long[..MAX_NAME_CHARS]);
+        let again = HostInput {
+            name: host.name.clone(),
+            ..unnamed
+        };
+        assert_eq!(host_from_input(&again, None, &v).unwrap().name, host.name);
     }
 
     #[test]

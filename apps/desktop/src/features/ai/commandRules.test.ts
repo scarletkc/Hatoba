@@ -98,6 +98,7 @@ describe("read-only commands (§13.5)", () => {
       "git show HEAD:README.md",
       "git branch -vv",
       "git branch --list 'feature/*'",
+      "git branch -l",
       "git remote -v",
       "git rev-parse HEAD",
       "git ls-files",
@@ -175,6 +176,8 @@ describe("read-only commands (§13.5)", () => {
       "git checkout main",
       "git branch new-branch",
       "git branch -D old",
+      // Git before 2.20 reads -l as --create-reflog, which creates the branch.
+      "git branch -l feature",
       "git tag v1.0",
       "git tag -d v1.0",
       "git remote add origin x",

@@ -412,19 +412,19 @@ fn device_defaults_enable_http_servers_only() {
     // AI-29: a server from another device is enabled iff it uses http.
     assert!(!device.enabled("a", &stdio));
     assert!(device.enabled("a", &http));
-    device.server_mut("a").enabled = Some(true);
-    device.server_mut("b").enabled = Some(false);
+    device.server_mut("a", &stdio).enabled = Some(true);
+    device.server_mut("b", &http).enabled = Some(false);
     assert!(device.enabled("a", &stdio));
     assert!(!device.enabled("b", &http));
 
     // AI-31: per tool, or the whole server.
     assert!(!device.allows("a", "echo"));
     device
-        .server_mut("a")
+        .server_mut("a", &stdio)
         .always_allow_tools
         .push("echo".into());
     assert!(device.allows("a", "echo") && !device.allows("a", "fail"));
-    device.server_mut("b").always_allow = true;
+    device.server_mut("b", &http).always_allow = true;
     assert!(device.allows("b", "anything"));
 
     // Stored and read back; garbage reads as the defaults.
@@ -434,6 +434,49 @@ fn device_defaults_enable_http_servers_only() {
     assert_eq!(DeviceState::load(&v), device);
     v.set_mcp_device_state("not json").unwrap();
     assert_eq!(DeviceState::load(&v), DeviceState::default());
+}
+
+#[test]
+fn a_choice_made_for_http_does_not_hold_once_the_server_uses_stdio() {
+    let vault = vault();
+    let http = McpServer {
+        name: "web".into(),
+        transport: McpTransport::Http {
+            url: "https://mcp.example.com/mcp".into(),
+            headers: Default::default(),
+        },
+        always_ask: false,
+        updated_at: 0,
+    };
+    let id = put_server(&vault, http);
+    set_enabled(&vault, &id, true);
+    crate::commands::mcp::set_always_allow(&mut vault.lock().unwrap(), &id, None, true).unwrap();
+
+    // Another device makes it a stdio server: it arrives off here, as a new stdio server does
+    // (AI-29), and without the Always allow chosen for the http server.
+    let stdio = stdio_server("web");
+    vault
+        .lock()
+        .unwrap()
+        .put(Some(&id), Item::McpServer(stdio.clone()))
+        .unwrap();
+    let device = DeviceState::load(&vault.lock().unwrap());
+    assert!(!device.enabled(&id, &stdio.transport));
+    assert!(!device.allows(&id, "echo"));
+
+    // Turned on here, it stays on when its command line changes elsewhere.
+    set_enabled(&vault, &id, true);
+    let mut changed = stdio_server("web");
+    let McpTransport::Stdio { args, .. } = &mut changed.transport else {
+        unreachable!("a stdio server");
+    };
+    args.push("--verbose".into());
+    vault
+        .lock()
+        .unwrap()
+        .put(Some(&id), Item::McpServer(changed.clone()))
+        .unwrap();
+    assert!(DeviceState::load(&vault.lock().unwrap()).enabled(&id, &changed.transport));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

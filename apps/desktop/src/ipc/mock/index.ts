@@ -330,7 +330,7 @@ export function createMockApi(): HatobaApi {
       const existing = input.id ? hosts.find((h) => h.id === input.id) : undefined;
       const view: HostView = {
         id: existing?.id ?? id("h"),
-        name: input.name.trim() || input.address.trim(),
+        name: input.name.trim() || Array.from(input.address.trim()).slice(0, 128).join(""),
         address: input.address.trim(),
         port: input.port || 22,
         username: input.username.trim(),

@@ -148,9 +148,11 @@ function gitReads(args: string[]): boolean {
   const rest = args.slice(i + 1);
   // Write their output to a file, or run a program the repository's configuration names.
   if (rest.some((a) => refused(a, ["--output", "--ext-diff", "--open-files-in-pager"]))) return false;
-  // `branch` and `tag` only list: with no name given, or with --list.
-  const lists = (longs: string[], shorts: string) =>
-    without(longs, shorts)(rest) && (rest.every((a) => a.startsWith("-")) || rest.includes("-l") || rest.includes("--list"));
+  // `branch` and `tag` only list: with no name given, or with --list. Git before 2.20 reads `branch -l`
+  // as --create-reflog, so with a name only `tag -l` lists.
+  const lists = (longs: string[], shorts: string, shortList: boolean) =>
+    without(longs, shorts)(rest) &&
+    (rest.every((a) => a.startsWith("-")) || rest.includes("--list") || (shortList && rest.includes("-l")));
   switch (sub) {
     case "status":
     case "log":
@@ -167,9 +169,9 @@ function gitReads(args: string[]): boolean {
     case "grep":
       return without([], "O")(rest);
     case "branch":
-      return lists(["--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--create-reflog"], "dDmMcCfut");
+      return lists(["--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description", "--track", "--create-reflog"], "dDmMcCfut", false);
     case "tag":
-      return lists(["--delete", "--annotate", "--sign", "--local-user", "--force", "--message", "--file", "--edit", "--create-reflog"], "dasufmFe");
+      return lists(["--delete", "--annotate", "--sign", "--local-user", "--force", "--message", "--file", "--edit", "--create-reflog"], "dasufmFe", true);
     case "remote":
       return rest.every((a) => a === "-v" || a === "--verbose") || rest[0] === "get-url" || rest[0] === "show";
     case "stash":
