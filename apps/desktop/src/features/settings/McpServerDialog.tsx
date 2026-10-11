@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { Button, IconButton, LinkButton, Segmented, Switch, TextField } from "@/components/controls";
-import { Callout, FormRow, Group, Section } from "@/components/layout";
+import { FormRow, Group, Section } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, confirm } from "@/components/overlay";
 import { openExternal } from "@/features/sync/external";
 import { useT, type MessageKey } from "@/i18n";
@@ -19,14 +19,10 @@ import {
   mcpFormToInput,
   newSecretRow,
   newUid,
-  rowHint,
-  rowTemplate,
-  schemeMissing,
   shownRowProblems,
   splitCommandLine,
   validateMcpForm,
   type McpForm,
-  type RowHint,
   type SecretKind,
   type SecretRow,
   type SecretRowProblem,
@@ -37,21 +33,20 @@ import s from "./McpSection.module.css";
 
 type Rejected = Partial<Record<"name" | "command" | "url" | "general", string>>;
 
-/** What the dialog says about each template (AI-44): its note and its token link. */
-const TEMPLATE_TEXT: Record<McpTemplateId, { note: MessageKey; token: MessageKey }> = {
-  github: { note: "aiSettings.mcp.tpl.github.note", token: "aiSettings.mcp.tpl.github.token" },
-  linear: { note: "aiSettings.mcp.tpl.linear.note", token: "aiSettings.mcp.tpl.linear.token" },
-  context7: { note: "aiSettings.mcp.tpl.context7.note", token: "aiSettings.mcp.tpl.context7.token" },
-  cloudflare: { note: "aiSettings.mcp.tpl.cloudflare.note", token: "aiSettings.mcp.tpl.cloudflare.token" },
+/** The label of each template's token link (AI-44). */
+const TOKEN_LINK: Record<McpTemplateId, MessageKey> = {
+  github: "aiSettings.mcp.tpl.github.token",
+  linear: "aiSettings.mcp.tpl.linear.token",
+  context7: "aiSettings.mcp.tpl.context7.token",
+  cloudflare: "aiSettings.mcp.tpl.cloudflare.token",
 };
 
-/** The line under a header row (`rowHint`). */
-const ROW_HINT_TEXT: Record<RowHint, MessageKey> = {
-  bearer: "aiSettings.mcp.tpl.bearerHint",
-  bearerOptional: "aiSettings.mcp.tpl.bearerOptionalHint",
-  optional: "aiSettings.mcp.tpl.optionalHint",
-  authScheme: "aiSettings.mcp.f.authSchemeHint",
-};
+interface TokenLink {
+  /** The row the link sits under. */
+  uid: number;
+  label: MessageKey;
+  url: string;
+}
 
 /** The id of a row's name or value field, which a save with a problem in that row focuses. */
 const rowFieldId = (prefix: string, uid: number, part: "key" | "value"): string => `${prefix}-${part}-${uid}`;
@@ -59,7 +54,7 @@ const rowFieldId = (prefix: string, uid: number, part: "key" | "value"): string 
 /**
  * Add or edit one MCP server (AI-29). Saved straight to the backend. Before a `stdio` server is saved, a confirmation
  * shows the full command line, because the server is a program that runs on this device with the user's privileges.
- * A template (AI-44) only fills in the form of a new server and adds its note; saving is the same.
+ * A template (AI-44) only fills in the form of a new server and adds its token link; saving is the same.
  */
 export function McpServerDialog({
   server,
@@ -81,9 +76,13 @@ export function McpServerDialog({
   const ids = { form: useId(), name: useId(), command: useId(), url: useId(), rows: useId() };
   const fromTemplate = server ? null : template;
   const [form, setForm] = useState<McpForm>(() => (fromTemplate ? templateMcpForm(fromTemplate, otherNames) : initialMcpForm(server)));
+  const [tokenLink] = useState<TokenLink | null>(() => {
+    const row = fromTemplate && form.headers[0];
+    return row ? { uid: row.uid, label: TOKEN_LINK[fromTemplate.id], url: fromTemplate.tokenUrl } : null;
+  });
   // A template fills in the name, so the first value to type takes the focus, only as the dialog opens: switching the
   // type remounts the rows, which must not take it again.
-  const [valueFocusUid, setValueFocusUid] = useState(() => (fromTemplate ? (form.headers[0]?.uid ?? null) : null));
+  const [valueFocusUid, setValueFocusUid] = useState(tokenLink?.uid ?? null);
   useEffect(() => setValueFocusUid(null), []);
   const [submitted, setSubmitted] = useState(false);
   const [rejected, setRejected] = useState<Rejected>({});
@@ -215,14 +214,6 @@ export function McpServerDialog({
           void save();
         }}
       >
-        {fromTemplate && (
-          <Callout icon={fromTemplate.icon} title={t("aiSettings.mcp.tpl.title", { name: fromTemplate.label })}>
-            {t(TEMPLATE_TEXT[fromTemplate.id].note)}{" "}
-            <LinkButton icon="arrow-up-right" onClick={() => void openExternal(fromTemplate.tokenUrl)}>
-              {t(TEMPLATE_TEXT[fromTemplate.id].token)}
-            </LinkButton>
-          </Callout>
-        )}
         <Group>
           <FormRow label={t("aiSettings.mcp.f.name")} htmlFor={ids.name} error={nameError}>
             <TextField
@@ -334,6 +325,7 @@ export function McpServerDialog({
             problems={secretProblems}
             idPrefix={ids.rows}
             valueFocusUid={valueFocusUid}
+            tokenLink={tokenLink}
             onChange={setSecrets}
           />
         </Section>
@@ -364,6 +356,7 @@ function SecretRows({
   problems,
   idPrefix,
   valueFocusUid,
+  tokenLink,
   onChange,
 }: {
   kind: SecretKind;
@@ -373,6 +366,8 @@ function SecretRows({
   idPrefix: string;
   /** The row whose value field takes the focus when the dialog opens. */
   valueFocusUid: number | null;
+  /** A template's link to where its token is created. */
+  tokenLink: TokenLink | null;
   onChange: (rows: SecretRow[]) => void;
 }) {
   const t = useT();
@@ -397,7 +392,6 @@ function SecretRows({
           <div className={s.secretTable}>
             {rows.map((row, i) => {
               const problem = problems[i];
-              const hint = kind === "header" ? rowHint(row) : null;
               return (
                 <div className={s.secret} key={row.uid}>
                   <div className={s.secretRow}>
@@ -425,7 +419,7 @@ function SecretRows({
                       invalid={!!problem?.value}
                       autoFocus={valueFocusUid === row.uid}
                       ariaLabel={`${row.key} ${t("aiSettings.mcp.f.valuePlaceholder")}`.trim()}
-                      placeholder={rowTemplate(row)?.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
+                      placeholder={row.placeholder ?? t("aiSettings.mcp.f.valuePlaceholder")}
                       newPlaceholder={t("aiSettings.mcp.f.valueNewPlaceholder")}
                       keepLabel={t("aiSettings.mcp.f.valueKeep")}
                       onChange={(draft) => patchRow(row.uid, { draft })}
@@ -437,12 +431,17 @@ function SecretRows({
                       onClick={() => onChange(rows.filter((r) => r.uid !== row.uid))}
                     />
                   </div>
-                  {problem ? (
+                  {problem && (
                     <div className={s.problem} role="alert">
                       {problemText(problem)}
                     </div>
-                  ) : (
-                    hint && <div className={cx(s.hint, schemeMissing(row) && s.hintWarn)}>{t(ROW_HINT_TEXT[hint])}</div>
+                  )}
+                  {tokenLink?.uid === row.uid && (
+                    <div className={s.hint}>
+                      <LinkButton icon="arrow-up-right" onClick={() => void openExternal(tokenLink.url)}>
+                        {t(tokenLink.label)}
+                      </LinkButton>
+                    </div>
                   )}
                 </div>
               );

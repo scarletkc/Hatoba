@@ -13,10 +13,7 @@ import {
   mcpFormToInput,
   newSecretRow,
   quoteArg,
-  rowHint,
-  rowTemplate,
   savedSecretRows,
-  schemeMissing,
   secretInputs,
   serverState,
   shownRowProblems,
@@ -173,60 +170,6 @@ describe("environment and header rows", () => {
   it("sends a new row's value and trims the name", () => {
     expect(secretInputs([row(" TOKEN ", " abc ")])).toEqual([{ key: "TOKEN", value: "abc" }]);
   });
-
-  it("keeps a row's template only while the row keeps the template's name", () => {
-    const template = { key: "Authorization", bearer: true };
-    expect(rowTemplate(row(" authorization ", "", { template }))).toBe(template);
-    expect(rowTemplate(row("X-Api-Key", "", { template }))).toBeNull();
-    expect(rowTemplate(row("Authorization", ""))).toBeNull();
-  });
-
-  it("drops an optional template row without a value, and checks it once one is typed", () => {
-    const optional = row("Authorization", " ", { template: { key: "Authorization", optional: true } });
-    expect(isBlankRow(optional)).toBe(true);
-    expect(validateSecretRows([optional], "header")).toEqual([null]);
-    expect(secretInputs([optional])).toEqual([]);
-    const filled = { ...optional, draft: { mode: "replace" as const, value: "x" } };
-    expect(isBlankRow(filled)).toBe(false);
-    expect(secretInputs([filled])).toEqual([{ key: "Authorization", value: "x" }]);
-    expect(isBlankRow(row("Authorization", ""))).toBe(false);
-  });
-
-  it("stops treating a renamed template row as optional", () => {
-    const renamed = row("X-Api-Key", "", { template: { key: "Authorization", optional: true } });
-    expect(isBlankRow(renamed)).toBe(false);
-    expect(validateSecretRows([renamed], "header")).toEqual([{ value: "missing" }]);
-  });
-
-  it("spots a template's Bearer value typed without Bearer", () => {
-    const bearer = (value: string) => row("Authorization", value, { template: { key: "Authorization", bearer: true } });
-    expect(schemeMissing(bearer(""))).toBe(false);
-    expect(schemeMissing(bearer("github_pat_x"))).toBe(true);
-    expect(schemeMissing(bearer("Bearer"))).toBe(true);
-    expect(schemeMissing(bearer("Basic abc"))).toBe(true);
-    expect(schemeMissing(bearer(" Bearer github_pat_x"))).toBe(false);
-    expect(schemeMissing(bearer("bearer x"))).toBe(false);
-  });
-
-  it("spots any typed Authorization value without a scheme", () => {
-    expect(schemeMissing(row("Authorization", "lin_api_x"))).toBe(true);
-    expect(schemeMissing(row("authorization", "lin_api_x"))).toBe(true);
-    expect(schemeMissing(row("Authorization", "Basic abc"))).toBe(false);
-    expect(schemeMissing(row("Authorization", "token abc"))).toBe(false);
-    expect(schemeMissing(row("X-Api-Key", "abc"))).toBe(false);
-    expect(schemeMissing(savedSecretRows(["Authorization"])[0])).toBe(false);
-  });
-
-  it("picks the line under a header row", () => {
-    const tpl = (extra: object) => ({ template: { key: "Authorization", ...extra } });
-    expect(rowHint(row("Authorization", "", tpl({ bearer: true })))).toBe("bearer");
-    expect(rowHint(row("Authorization", "", tpl({ bearer: true, optional: true })))).toBe("bearerOptional");
-    expect(rowHint(row("Authorization", "", tpl({ optional: true })))).toBe("optional");
-    expect(rowHint(row("X-Api-Key", "abc", tpl({ bearer: true })))).toBeNull();
-    expect(rowHint(row("Authorization", "abc"))).toBe("authScheme");
-    expect(rowHint(row("Authorization", "Bearer abc"))).toBeNull();
-    expect(rowHint(row("TOKEN", "abc"))).toBeNull();
-  });
 });
 
 describe("the form", () => {
@@ -304,6 +247,28 @@ describe("the form", () => {
       transport: { kind: "http", url: "https://api.example.com/mcp", headers: [{ key: "Authorization", value: null }] },
       always_ask: false,
     });
+  });
+
+  const httpInput = (rows: SecretRow[]) => mcpFormToInput(null, valid({ kind: "http", url: "https://x.test/mcp", headers: rows })).transport;
+
+  it("puts Bearer in front of an Authorization value without a space", () => {
+    expect(httpInput([row("Authorization", " github_pat_x ")])).toMatchObject({ headers: [{ key: "Authorization", value: "Bearer github_pat_x" }] });
+    expect(httpInput([row("authorization", "lin_api_x")])).toMatchObject({ headers: [{ key: "authorization", value: "Bearer lin_api_x" }] });
+  });
+
+  it("puts Bearer in front of a token that replaces a saved Authorization value", () => {
+    const f = initialMcpForm(httpServer());
+    const headers = f.headers.map((r) => ({ ...r, draft: { mode: "replace" as const, value: "new_token" } }));
+    expect(mcpFormToInput("m2", { ...f, headers }).transport).toMatchObject({ headers: [{ key: "Authorization", value: "Bearer new_token" }] });
+  });
+
+  it("leaves an Authorization value with a scheme, a kept value, other headers, and variables as they are", () => {
+    expect(httpInput([row("Authorization", "Bearer x")])).toMatchObject({ headers: [{ value: "Bearer x" }] });
+    expect(httpInput([row("Authorization", "Basic abc")])).toMatchObject({ headers: [{ value: "Basic abc" }] });
+    expect(httpInput([row("Authorization", "token abc")])).toMatchObject({ headers: [{ value: "token abc" }] });
+    expect(httpInput(savedSecretRows(["Authorization"]))).toMatchObject({ headers: [{ key: "Authorization", value: null }] });
+    expect(httpInput([row("X-Api-Key", "abc")])).toMatchObject({ headers: [{ key: "X-Api-Key", value: "abc" }] });
+    expect(mcpFormToInput(null, valid({ env: [row("Authorization", "abc")] })).transport).toMatchObject({ env: [{ key: "Authorization", value: "abc" }] });
   });
 
   it("keeps the other transport's rows out of the input", () => {

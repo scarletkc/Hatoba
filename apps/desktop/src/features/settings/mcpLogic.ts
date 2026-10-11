@@ -85,17 +85,6 @@ export function looksLikeCommandLine(command: string): boolean {
 
 // ───────────────────────── Environment and header rows (AI-29) ─────────────────────────
 
-/** A header that a template (AI-44) fills in. */
-export interface McpTemplateHeader {
-  key: string;
-  /** What the value looks like, shown while its field is empty. */
-  placeholder?: string;
-  /** The value is `Bearer `, then the token. */
-  bearer?: boolean;
-  /** Without a value, the row is dropped like a blank one. */
-  optional?: boolean;
-}
-
 /**
  * An environment variable or request header while it is being edited. A saved value never reaches the page
  * (`saved`), so the row keeps it or replaces it, like an API key (AI-01).
@@ -105,16 +94,9 @@ export interface SecretRow {
   key: string;
   saved: boolean;
   draft: KeyDraft;
-  /** The template header that filled the row in, until the dialog closes; see `rowTemplate`. */
-  template?: McpTemplateHeader;
+  /** From a template (AI-44): what the value looks like, shown while its field is empty. */
+  placeholder?: string;
 }
-
-/**
- * The template header of a row while the row keeps its name, compared as header names are (case-insensitively). A
- * row the user renamed is an ordinary row: a value under another name need not be optional, nor start with `Bearer `.
- */
-export const rowTemplate = (row: SecretRow): McpTemplateHeader | null =>
-  row.template && row.key.trim().toLowerCase() === row.template.key.toLowerCase() ? row.template : null;
 
 let nextUid = 1;
 export const newUid = (): number => nextUid++;
@@ -131,30 +113,15 @@ export interface SecretRowProblem {
   value?: "missing";
 }
 
-/** A row the user added and left empty, or an optional template row left without a value: it is dropped when saving. */
-export const isBlankRow = (row: SecretRow): boolean =>
-  !row.saved && row.draft.value.trim() === "" && (row.key.trim() === "" || !!rowTemplate(row)?.optional);
+/** A row the user added and left empty: it is dropped when saving. */
+export const isBlankRow = (row: SecretRow): boolean => !row.saved && row.key.trim() === "" && row.draft.value.trim() === "";
 
 /**
- * Whether a typed `Authorization` value seems to lack its scheme, as a pasted bare token does: a template's Bearer
- * value that does not start with `Bearer `, or any other value without a space. A warning only, since a service may
- * take a bare token.
+ * Header inputs with `Bearer ` put in front of an `Authorization` value without a space, so the user pastes only the
+ * token (AI-29). A value with its own scheme, and a saved value that is kept, stay as they are.
  */
-export function schemeMissing(row: SecretRow): boolean {
-  const value = row.draft.value.trim();
-  if (value === "") return false;
-  if (rowTemplate(row)?.bearer) return !/^bearer\s/i.test(value);
-  return row.key.trim().toLowerCase() === "authorization" && !/\s/.test(value);
-}
-
-export type RowHint = "bearer" | "bearerOptional" | "optional" | "authScheme";
-
-/** The line under a header row: what its template's value looks like, or that its `Authorization` value lacks a scheme. */
-export function rowHint(row: SecretRow): RowHint | null {
-  const template = rowTemplate(row);
-  if (template?.bearer) return template.optional ? "bearerOptional" : "bearer";
-  if (template?.optional) return "optional";
-  return schemeMissing(row) ? "authScheme" : null;
+export function withBearer(inputs: readonly McpSecretInput[]): McpSecretInput[] {
+  return inputs.map((i) => (i.key.toLowerCase() === "authorization" && i.value && !/\s/.test(i.value) ? { ...i, value: `Bearer ${i.value}` } : i));
 }
 
 // A name has no `=`, no whitespace, and no control character; a header name is an HTTP token (RFC 9110).
@@ -276,7 +243,7 @@ export function mcpFormToInput(id: string | null, form: McpForm): McpServerInput
     transport:
       form.kind === "stdio"
         ? { kind: "stdio", command: form.command.trim(), args: form.args.map((a) => a.value).filter((v) => v !== ""), env: secretInputs(form.env) }
-        : { kind: "http", url: form.url.trim(), headers: secretInputs(form.headers) },
+        : { kind: "http", url: form.url.trim(), headers: withBearer(secretInputs(form.headers)) },
     always_ask: form.alwaysAsk,
   };
 }

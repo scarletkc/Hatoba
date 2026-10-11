@@ -35,15 +35,14 @@ describe("MCP templates", () => {
   it("give GitHub its default toolsets and a token that can write", () => {
     const github = template("github");
     expect(github.url).toBe("https://api.githubcopilot.com/mcp/");
-    expect(github.alwaysAsk).toBe(false);
     expect(github.headers.map((h) => h.key)).toEqual(["Authorization"]);
     const token = new URL(github.tokenUrl);
     expect(token.pathname).toBe("/settings/personal-access-tokens/new");
     expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual(["write", "write", "write"]);
   });
 
-  it("turn on Always ask for Linear and Cloudflare", () => {
-    expect(MCP_TEMPLATES.filter((x) => x.alwaysAsk).map((x) => x.id)).toEqual(["linear", "cloudflare"]);
+  it("show the token without Bearer, which saving adds", () => {
+    for (const x of MCP_TEMPLATES) for (const h of x.headers) expect(h.placeholder ?? "", x.id).not.toMatch(/bearer/i);
   });
 });
 
@@ -52,13 +51,12 @@ describe("templateMcpForm", () => {
     const f = templateMcpForm(template("github"), []);
     expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/", command: "", args: [], env: [] });
     expect(f.headers).toMatchObject([
-      { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, template: { placeholder: "Bearer github_pat_…", bearer: true } },
+      { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, placeholder: "github_pat_…" },
     ]);
   });
 
-  it("starts with Always ask as the template sets it", () => {
-    expect(templateMcpForm(template("linear"), []).alwaysAsk).toBe(true);
-    expect(templateMcpForm(template("context7"), []).alwaysAsk).toBe(false);
+  it("starts with Always ask off, like a server added by hand", () => {
+    for (const x of MCP_TEMPLATES) expect(templateMcpForm(x, []).alwaysAsk, x.id).toBe(false);
   });
 
   it("picks a name no other server has", () => {
@@ -72,14 +70,16 @@ describe("templateMcpForm", () => {
     expect(new Set(uids).size).toBe(uids.length);
   });
 
-  it("asks for a required token before saving", () => {
-    const f = templateMcpForm(template("linear"), []);
-    expect(validateMcpForm(f).secrets).toEqual([{ value: "missing" }]);
-    expect(hasMcpProblems(validateMcpForm(typed(f, "Authorization", "Bearer lin_api_x")))).toBe(false);
+  it("asks for every template's token before saving, Context7's too", () => {
+    for (const x of MCP_TEMPLATES) {
+      const f = templateMcpForm(x, []);
+      expect(validateMcpForm(f).secrets, x.id).toEqual([{ value: "missing" }]);
+      expect(hasMcpProblems(validateMcpForm(typed(f, "Authorization", "token_x"))), x.id).toBe(false);
+    }
   });
 
   it("saves through the ordinary input, with nothing that names the template", () => {
-    const f = typed(templateMcpForm(template("github"), []), "Authorization", " Bearer github_pat_x ");
+    const f = typed(templateMcpForm(template("github"), []), "Authorization", " github_pat_x ");
     expect(mcpFormToInput(null, f)).toEqual({
       id: null,
       name: "github",
@@ -89,15 +89,6 @@ describe("templateMcpForm", () => {
         headers: [{ key: "Authorization", value: "Bearer github_pat_x" }],
       },
       always_ask: false,
-    });
-  });
-
-  it("leaves an optional header out when no value is typed", () => {
-    const f = templateMcpForm(template("context7"), []);
-    expect(hasMcpProblems(validateMcpForm(f))).toBe(false);
-    expect(mcpFormToInput(null, f).transport).toEqual({ kind: "http", url: "https://mcp.context7.com/mcp", headers: [] });
-    expect(mcpFormToInput(null, typed(f, "Authorization", "Bearer k")).transport).toMatchObject({
-      headers: [{ key: "Authorization", value: "Bearer k" }],
     });
   });
 });

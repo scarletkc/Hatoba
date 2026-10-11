@@ -174,38 +174,58 @@ async fn http_session_lists_calls_and_closes() {
     );
 }
 
-#[tokio::test]
-async fn http_errors_name_no_secret_or_url() {
-    // 401 with a challenge: Hatoba has no OAuth sign-in.
+/// The message of a 401, with or without a challenge, for a configuration with or without an
+/// `Authorization` header.
+async fn unauthorized(challenge: bool, token: bool) -> String {
     let server = MockServer::start().await;
+    let mut reply = ResponseTemplate::new(401).set_body_string("invalid token");
+    if challenge {
+        reply = reply.insert_header("www-authenticate", "Bearer realm=\"mcp\"");
+    }
     Mock::given(method("POST"))
-        .respond_with(
-            ResponseTemplate::new(401).insert_header("www-authenticate", "Bearer realm=\"mcp\""),
-        )
+        .respond_with(reply)
         .mount(&server)
         .await;
-    let err = McpConnection::connect(&config(&server), &http_client(), CONNECT)
+    let mut cfg = config(&server);
+    if !token {
+        let McpTransportConfig::Http { headers, .. } = &mut cfg else {
+            unreachable!()
+        };
+        headers.retain(|(name, _)| name != "Authorization");
+    }
+    let err = McpConnection::connect(&cfg, &http_client(), CONNECT)
         .await
         .unwrap_err();
-    let McpError::Connect(message) = &err else {
+    let McpError::Connect(message) = err else {
         panic!("{err:?}");
     };
-    assert!(message.contains("authorization"), "{message}");
+    assert!(!message.contains("http-secret"), "{message}");
+    message
+}
 
-    // 401 without one, and with a body.
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .respond_with(ResponseTemplate::new(401).set_body_string("invalid token"))
-        .mount(&server)
-        .await;
-    let err = McpConnection::connect(&config(&server), &http_client(), CONNECT)
-        .await
-        .unwrap_err();
+#[tokio::test]
+async fn http_401_says_the_token_was_refused_when_one_was_sent() {
+    for challenge in [true, false] {
+        assert_eq!(
+            unauthorized(challenge, true).await,
+            "the token is invalid or has expired (HTTP 401)"
+        );
+    }
+    // Without a token, a challenge asks for a sign-in Hatoba does not have.
+    let message = unauthorized(true, false).await;
     assert!(
-        matches!(&err, McpError::Connect(m) if m.contains("401") && !m.contains("http-secret")),
-        "{err:?}"
+        message.contains("requires authorization") && message.contains("OAuth"),
+        "{message}"
     );
+    let message = unauthorized(false, false).await;
+    assert!(
+        message.contains("401") && message.contains("invalid token"),
+        "{message}"
+    );
+}
 
+#[tokio::test]
+async fn http_errors_name_no_secret_or_url() {
     // Nothing listening: the message has neither the URL nor its query.
     let port = {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
