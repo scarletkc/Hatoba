@@ -105,6 +105,23 @@ describe("Markdown export (AI-25)", () => {
     expect(out).toContain("```\n\nAnd now?");
   });
 
+  it("says when a reply has no answer, also after its reasoning", () => {
+    const empty: AiEntryView = {
+      role: "assistant",
+      entry_id: "a9",
+      created_at: 2,
+      provider_id: "p",
+      model_id: "m",
+      text: "",
+      reasoning: "Thinking it over.",
+      tool_calls: [],
+      finish: "stop",
+      usage: null,
+    };
+    const out = conversationMarkdown({ conversation, entries: [empty], host: null }, { t, time });
+    expect(out).toContain("## Assistant · m\n\n> **Reasoning**\n>\n> Thinking it over.\n\n*The model gave no answer.*\n");
+  });
+
   it("names a deleted host and an untitled conversation", () => {
     const out = conversationMarkdown({ conversation: { ...conversation, title: "" }, entries: [], host: null }, { t, time });
     expect(out).toBe("# Untitled conversation\n\n- Host: Deleted host\n- Created: T1000\n");

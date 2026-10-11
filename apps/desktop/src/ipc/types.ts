@@ -942,7 +942,8 @@ export interface AiSendStarted {
   user_entry: AiEntryView;
 }
 
-export type AiTurnEndReason = "completed" | "length" | "refused" | "stopped" | "error";
+/** `empty`: the response had neither text nor tool calls, such as a reply of reasoning only (§13.1). */
+export type AiTurnEndReason = "completed" | "length" | "refused" | "empty" | "stopped" | "error";
 
 /** Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
 export type AiTurnEvent =

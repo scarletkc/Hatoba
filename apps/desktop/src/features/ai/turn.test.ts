@@ -89,6 +89,23 @@ describe("reduceTurnEvent (§13.1)", () => {
     expect(s.outcome).toEqual({ reason: "stopped" });
   });
 
+  it("says when a reply ended without an answer, keeping its reasoning (§13.1)", () => {
+    const user: AiEntryView = { role: "user", entry_id: "e1", created_at: 0, text: "df?" };
+    const empty: AiEntryView = { ...assistant, text: "", reasoning: "Thinking it over.", tool_calls: [], finish: "stop" };
+    const s = run([
+      { kind: "request_started" },
+      { kind: "reasoning", delta: "Thinking it over." },
+      { kind: "entry", entry: empty },
+      { kind: "done", finish: "stop" },
+      { kind: "turn_ended", reason: "empty" },
+    ], { ...start, entries: [user] });
+    expect(s.entries).toEqual([user, empty]);
+    expect(s.turn).toBeNull();
+    expect(s.outcome).toEqual({ reason: "empty" });
+    // Retry starts a new request, which clears it.
+    expect(run([{ kind: "request_started" }], { ...s, turn: newTurn() }).outcome).toBeNull();
+  });
+
   it("clears the last outcome when a new request starts", () => {
     const s = run([{ kind: "request_started" }], { entries: [], turn: newTurn(), outcome: { reason: "refused" }, contextStart: null });
     expect(s.outcome).toBeNull();
