@@ -1357,7 +1357,7 @@ impl Vault {
                     })?;
                 }
                 tx.clear_conflicts()?;
-                tx.set_meta(meta::ADOPT_REMOTE_SETTINGS, "1")?;
+                tx.set_meta(meta::ADOPT_REMOTE_SETTINGS, &config)?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
                 for (key, resealed) in &local {
                     match resealed {

@@ -597,34 +597,34 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
 }
 
 #[tokio::test]
-async fn setting_up_a_new_remote_ends_a_pending_settings_adoption() {
+async fn a_new_remote_syncs_settings_as_usual_after_a_pending_join() {
     let (server, clock, a, _b) = world();
     enable(&a).await;
     let c = own_vault_device(&server, &clock);
     join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
         .await
         .unwrap();
-    // The first pull never happens, and this vault moves to a new, empty remote.
+    // The first pull never happens, and this vault moves to a new, empty remote; the first
+    // setup's response is lost, so the retry resumes on a remote that already holds this vault.
     c.v().set_sync_config(None).unwrap();
     c.v().rotate_recovery(PW).unwrap();
     let other = FakeServer::new();
     let backend = FakeBackend::new(&other);
-    let marker = || {
-        c.v()
-            .store
-            .get_meta(crate::store::meta::ADOPT_REMOTE_SETTINGS)
-            .unwrap()
-    };
-    // A setup that fails leaves the adoption pending, for a reconnect to the joined vault.
-    let err = enable_sync(&c.vault, &backend, PW, Some("wrong-token"), c.info())
-        .await
-        .unwrap_err();
-    assert!(matches!(err, Error::InvalidSetupToken));
-    assert!(marker().is_some());
+    other.fail_next("setup");
+    assert!(
+        enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
+            .await
+            .is_err()
+    );
     enable_sync(&c.vault, &backend, PW, Some(SETUP_TOKEN), c.info())
         .await
         .unwrap();
-    assert!(marker().is_none());
+    c.v()
+        .set_sync_config(Some(&SyncConfig::Worker {
+            url: "https://other.example.workers.dev".into(),
+            deployment: None,
+        }))
+        .unwrap();
 
     // A settings edit before the next round is kept, not replaced by the uploaded copy.
     c.clock.advance(60_000);

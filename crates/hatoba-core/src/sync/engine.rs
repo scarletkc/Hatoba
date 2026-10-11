@@ -320,8 +320,12 @@ fn apply_remote(
     from_push: bool,
     batch: &mut Batch,
 ) -> Result<Disposition> {
-    // The first settings item after joining another vault replaces the local one outright.
-    if remote.id == SETTINGS_ID && tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)?.is_some() {
+    // The first settings item from the backend this device joined another vault on replaces the
+    // local one outright.
+    if remote.id == SETTINGS_ID
+        && let Some(joined) = tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)?
+        && tx.get_meta(meta::SYNC_BACKEND)?.as_deref() == Some(joined.as_str())
+    {
         tx.upsert_item_row(&remote_row(remote))?;
         tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
         batch.touched.push(remote.id.clone());

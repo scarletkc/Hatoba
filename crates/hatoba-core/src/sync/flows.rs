@@ -131,12 +131,7 @@ pub async fn enable_sync(
         match setup {
             // Initialised since `health`: by a retried request of ours, or by someone else.
             Err(Error::RemoteInitialized) => ensure_own_kdf(backend, &material.meta).await?,
-            other => {
-                other?;
-                // The new remote's settings come from this vault, so an earlier join's pending
-                // adoption no longer applies. Until `setup` succeeded, it still might.
-                with_vault(vault, |v| v.store.delete_meta(meta::ADOPT_REMOTE_SETTINGS))?;
-            }
+            other => other?,
         }
     }
 
