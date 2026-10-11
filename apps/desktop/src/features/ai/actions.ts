@@ -47,6 +47,7 @@ import {
   type SelectionAttachment,
 } from "./attachments";
 import { askEditedFiles } from "./EditFiles";
+import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { conversationModel } from "./models";
@@ -575,8 +576,12 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   if (revert.length > 0) {
     // The list is the confirmation, also for a file a call created: each revert asks nothing more.
     // Each revert waits for an idle conversation, as on the block: a turn may have started meanwhile.
-    const send = await askEditedFiles(later, revert, (change) =>
-      slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
+    const send = await askEditedFiles(
+      later,
+      revert,
+      (change) =>
+        slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
+      (change) => fileChangeDiff(slotId, change),
     );
     if (!send) return false;
   } else if (later > 0) {
@@ -657,27 +662,33 @@ export async function refreshFileChanges(slotId: string, convId: string) {
   }
 }
 
+/** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped, or when it cannot be read. */
+export async function fileChangeDiff(slotId: string, change: AiFileChange): Promise<AiFilePreview | null> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId) return null;
+  return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id).catch(() => null);
+}
+
 /**
- * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. A file the
- * call created is deleted, so the user confirms first. With `restore` (Restore anyway), it writes over what the
- * diff of the last revert showed, which the user confirms too. `onStart` runs once the revert is under way.
- * Null when nothing was asked of Rust or it refused; otherwise what the revert did, for the call's block to show.
+ * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. The user
+ * confirms first, with the diff the revert writes back; a file the call created is deleted. With `restore`
+ * (Restore anyway), it writes over what the diff of the last revert showed, which the user confirms too.
+ * `onStart` runs once the revert is under way. Null when nothing was asked of Rust or it refused; otherwise
+ * what the revert did, for the call's block to show.
  */
 export async function revertFileChange(slotId: string, change: AiFileChange, options: { restore?: boolean; onStart?: () => void } = {}): Promise<AiFileRevert | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId || slotBusy(slotId)) return null;
   const path = change.path;
-  const ask = options.restore
-    ? change.created
-      ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
-      : { title: t("ai.revert.restoreTitle", { path }), body: t("ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }
-    : change.created
-      ? { title: t("ai.revert.deleteTitle", { path }), body: t("ai.revert.deleteBody"), confirmLabel: t("ai.revert.delete") }
-      : null;
-  if (ask) {
-    const ok = await confirm({ ...ask, danger: true });
-    if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
-  }
+  const ok = options.restore
+    ? await confirm({
+        ...(change.created
+          ? { title: t("ai.revert.deleteAnywayTitle", { path }), body: t("ai.revert.deleteAnywayBody"), confirmLabel: t("ai.revert.deleteAnyway") }
+          : { title: t("ai.revert.restoreTitle", { path }), body: t("ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
+        danger: true,
+      })
+    : await confirmRevert(change, await fileChangeDiff(slotId, change));
+  if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
   options.onStart?.();
   patchSlot(slotId, { reverting: true });
   try {

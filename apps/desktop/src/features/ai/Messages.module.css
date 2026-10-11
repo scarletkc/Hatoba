@@ -285,6 +285,54 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 55%, transparent);
 }
 
+.toolHeadRow {
+  display: flex;
+  align-items: center;
+  border-radius: 9px;
+  min-width: 0;
+}
+
+.toolHeadRow:hover {
+  background: var(--fill);
+}
+
+.toolHeadRow > .toolHead {
+  flex: 1;
+}
+
+.toolHeadRow > .toolHead:hover {
+  background: transparent;
+}
+
+/* AI-41: Revert in the header, shown while the pointer or focus is on the header. */
+.toolHeadAction {
+  flex: none;
+  margin-right: 5px;
+  opacity: 0;
+}
+
+.toolHeadRow:hover > .toolHeadAction,
+.toolHeadRow:focus-within > .toolHeadAction,
+.toolHeadActionOn {
+  opacity: 1;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.labelLink {
+  font-size: var(--text-xs);
+}
+
+.inlineLink {
+  display: inline;
+  font-size: inherit;
+}
+
 .toolHead {
   display: flex;
   align-items: center;

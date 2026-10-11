@@ -409,6 +409,8 @@ export const FooterSpacer = () => <div className={o.sheetFooterSpacer} />;
 export interface ConfirmOptions {
   title: string;
   body?: ReactNode;
+  /** The dialog's width in pixels, for a body that shows more than text (a diff, say). */
+  width?: number;
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
@@ -425,6 +427,7 @@ export function Dialog({
   actions,
   onClose,
   children,
+  width,
 }: {
   title: string;
   body?: ReactNode;
@@ -433,10 +436,11 @@ export function Dialog({
   actions: ReactNode;
   onClose?: () => void;
   children?: ReactNode;
+  width?: number;
 }) {
   return (
     <Modal onClose={onClose} center>
-      <div role="alertdialog" aria-modal className={o.dialog}>
+      <div role="alertdialog" aria-modal className={o.dialog} style={width ? { width } : undefined}>
         <div className={o.dialogHead}>
           {icon && <Icon name={icon} size={20} color={iconColor ?? "var(--accent)"} />}
           <div className={o.dialogTitle}>{title}</div>
@@ -471,6 +475,7 @@ export function ConfirmHost() {
     <Dialog
       title={pending.title}
       body={pending.body}
+      width={pending.width}
       icon={pending.icon ?? (pending.danger ? "warning-circle" : undefined)}
       iconColor={pending.iconColor ?? (pending.danger ? "var(--red)" : undefined)}
       onClose={() => done(false)}

@@ -883,6 +883,27 @@ fn shown_text(bytes: &[u8]) -> Option<String> {
     TextFile::decode(bytes).ok().map(|f| f.display_text())
 }
 
+/// The change as the panel diffs it, from what the file held before the call (`None`: the call
+/// created it) to what the call wrote.
+pub(super) fn change_preview(change: &Change) -> AiFilePreview {
+    let before = change
+        .content
+        .before
+        .as_deref()
+        .map(|before| TextFile::decode(before.as_bytes()));
+    AiFilePreview {
+        path: change.meta.path.clone(),
+        before: before.as_ref().map(|file| {
+            file.as_ref()
+                .map(TextFile::display_text)
+                .unwrap_or_default()
+        }),
+        after: Some(shown_text(change.content.after.as_bytes()).unwrap_or_default()),
+        error: None,
+        crlf: before.is_some_and(|file| file.is_ok_and(|f| f.crlf)),
+    }
+}
+
 /// The diff from what the file holds now to what it held before the call, which Restore anyway
 /// writes, and what the file held as the diff shows it.
 fn show(change: &Change, current: Option<&[u8]>) -> Revert {

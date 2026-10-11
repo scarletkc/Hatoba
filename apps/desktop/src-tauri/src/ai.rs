@@ -617,6 +617,29 @@ impl AiManager {
         Ok(file_changes(&v, conversation_id))
     }
 
+    /// What the call of `key` changed, from the snapshot this device keeps (AI-41), as the panel
+    /// diffs it. `None` once the change was reverted or dropped.
+    pub fn file_change_diff(
+        &self,
+        vault: &SharedVault,
+        key: SnapshotKey<'_>,
+    ) -> AppResult<Option<AiFilePreview>> {
+        let v = unlocked(vault)?;
+        find_conversation(&v, key.conversation_id)?;
+        let Some(stored) = v.ai_file_snapshot(&key)? else {
+            return Err(AppError::not_found("file change"));
+        };
+        let Some(content) = stored.content else {
+            return Ok(None);
+        };
+        let unreadable = |_| AppError::internal("unreadable file snapshot");
+        let change = files::Change {
+            meta: serde_json::from_str(&stored.meta).map_err(unreadable)?,
+            content: serde_json::from_str(&content).map_err(unreadable)?,
+        };
+        Ok(Some(files::change_preview(&change)))
+    }
+
     /// Deletes a conversation and its entries, stopping its turn first.
     pub fn delete_conversation(
         &self,

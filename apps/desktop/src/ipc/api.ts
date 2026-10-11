@@ -284,6 +284,11 @@ export interface HatobaApi {
   /** AI-41: the changes of the conversation's `edit_file` and `write_file` calls that this device keeps. */
   ai_file_changes(conversation_id: string): Promise<AiFileChange[]>;
   /**
+   * AI-41: what the call `tool_call_id` of the response `response_id` changed, from the snapshot this device
+   * keeps, from the file before the call to what it wrote; null once the change was reverted or dropped.
+   */
+  ai_file_change_diff(conversation_id: string, response_id: string, tool_call_id: string): Promise<AiFilePreview | null>;
+  /**
    * AI-41: reverts the change of the call `tool_call_id` of the response `response_id` on the conversation's
    * tab `session_id`, only while the file holds what the call wrote, or with `restore` (Restore anyway), what
    * the diff of the last revert showed. A file the call created is deleted, so the panel asks first.

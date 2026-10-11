@@ -70,3 +70,18 @@
 .noteFailed {
   color: var(--red);
 }
+
+.lines {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+}
+
+.added {
+  color: var(--green);
+}
+
+.removed {
+  color: var(--red);
+}

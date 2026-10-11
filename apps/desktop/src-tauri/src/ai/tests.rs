@@ -4900,6 +4900,25 @@ async fn writes_keep_their_snapshot_before_they_begin() {
         "{}",
         error.detail
     );
+    // The block and the confirmation show what a kept change did; a dropped one has nothing.
+    let diff = |call: &str| {
+        f.manager
+            .file_change_diff(&f.vault, revert_key(&conv, &response, call))
+            .unwrap()
+    };
+    let w3 = diff("w3").unwrap();
+    assert_eq!(
+        (w3.path.as_str(), w3.before, w3.after.as_deref()),
+        ("/srv/b", None, Some("new\n"))
+    );
+    assert!(diff("w1").is_none());
+    assert_eq!(
+        f.manager
+            .file_change_diff(&f.vault, revert_key(&conv, &response, "nope"))
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
     // An unfinished one can be: here it gets as far as the missing session.
     assert_eq!(
         f.manager

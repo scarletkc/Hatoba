@@ -821,6 +821,27 @@ pub async fn ai_file_changes(
     state.ai.file_changes(&state.vault, &conversation_id)
 }
 
+/// What an `edit_file` or `write_file` call changed (AI-41), from its snapshot, for its block and
+/// the revert's confirmation: the file before the call and as the call wrote it. `None` once the
+/// change was reverted or dropped.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_change_diff(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    response_id: String,
+    tool_call_id: String,
+) -> AppResult<Option<AiFilePreview>> {
+    state.ai.file_change_diff(
+        &state.vault,
+        SnapshotKey {
+            conversation_id: &conversation_id,
+            response_id: &response_id,
+            tool_call_id: &tool_call_id,
+        },
+    )
+}
+
 /// Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
 /// `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
 /// anyway, over what the diff of the last revert showed, which the panel also asks about first.

@@ -4,10 +4,10 @@ import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/cont
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiEntryView, AiFileChange, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiFilePreview, AiFileRevert, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { decideCall, editAndResend, retryTurn, revertFileChange, stopTurn, tooMuchMessage, type Decision } from "./actions";
+import { decideCall, editAndResend, fileChangeDiff, retryTurn, revertFileChange, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
@@ -18,7 +18,7 @@ import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
 import { revertFailure } from "./revertText";
 import { patchSlot, useAi, type Slot } from "./store";
-import { callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
+import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import { editedFiles, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
@@ -608,9 +608,34 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
   }
 }
 
+/** AI-41: the revert of a call's change, which the Revert in the block's header and the one in its body share. */
+function useRevert(slotId: string, change: AiFileChange | undefined) {
+  const [running, setRunning] = useState<"revert" | "restore" | null>(null);
+  const [outcome, setOutcome] = useState<{ result: AiFileRevert; restore: boolean } | null>(null);
+  const run = async (restore: boolean) => {
+    if (!change) return;
+    try {
+      const next = await revertFileChange(slotId, change, {
+        restore,
+        onStart: () => {
+          setRunning(restore ? "restore" : "revert");
+          if (!restore) setOutcome(null);
+        },
+      });
+      if (next) setOutcome({ result: next, restore });
+    } finally {
+      setRunning(null);
+    }
+  };
+  return { running, outcome, run };
+}
+
+type RevertState = ReturnType<typeof useRevert>;
+
 /**
- * Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. A
- * change of a file tool call this device keeps can be reverted from it (AI-41).
+ * Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. An
+ * `edit_file` or `write_file` call shows its change as a diff. A change of a file tool call this device keeps
+ * can be reverted from the block's header, on hover or focus, or from its body (AI-41).
  */
 function ToolBlock({
   slotId,
@@ -633,6 +658,8 @@ function ToolBlock({
   const [open, setOpen] = useState(false);
   const kind = toolKind(call.name);
   const summary = callSummary(call.name, call.arguments);
+  const revertible = change?.state === "written" || change?.state === "unfinished";
+  const revert = useRevert(slotId, change);
   useEffect(() => {
     if (flash) setOpen(true);
   }, [flash]);
@@ -641,30 +668,53 @@ function ToolBlock({
 
   return (
     <div className={cx(s.tool, view.kind === "limit" && s.toolAttention, flash && s.flash)} data-reveal={`call:${call.id}`}>
-      <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
-        <span className={s.toolName}>{toolLabel(t, call.name)}</span>
-        <span className={s.toolSummary}>{summary}</span>
-        <StatusChip view={view} name={call.name} />
-        {change?.state === "reverted" && (
-          <span className={s.chip}>
-            <Icon name="arrow-counter-clockwise" size={11} />
-            {t("ai.revert.reverted")}
-          </span>
+      <div className={s.toolHeadRow}>
+        <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
+          <span className={s.toolName}>{toolLabel(t, call.name)}</span>
+          <span className={s.toolSummary}>{summary}</span>
+          {change?.state === "reverted" ? (
+            <span className={s.chip}>
+              <Icon name="arrow-counter-clockwise" size={11} />
+              {t("ai.revert.reverted")}
+            </span>
+          ) : (
+            <StatusChip view={view} name={call.name} />
+          )}
+          <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
+        </button>
+        {revertible && (
+          <IconButton
+            icon="arrow-counter-clockwise"
+            size={13}
+            label={t("ai.revert.action")}
+            title={busy ? t("ai.revert.busy") : t("ai.revert.action")}
+            className={cx(s.toolHeadAction, revert.running && s.toolHeadActionOn)}
+            disabled={busy || !!revert.running}
+            onClick={() => {
+              setOpen(true);
+              void revert.run(false);
+            }}
+          />
         )}
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
-      </button>
+      </div>
       {open && (
         <div className={s.toolBody}>
-          <div className={s.label}>{t("ai.call.input")}</div>
-          <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+          {kind === "edit_file" || kind === "write_file" ? (
+            <CallChange slotId={slotId} call={call} change={change} />
+          ) : (
+            <>
+              <div className={s.label}>{t("ai.call.input")}</div>
+              <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+            </>
+          )}
           {view.kind === "result" && (
             <>
               <div className={s.label}>{t("ai.call.output")}</div>
               <pre className={cx(s.pre, s.output, "selectable")}>{view.entry.content || t("ai.call.noOutput")}</pre>
             </>
           )}
-          {(change?.state === "written" || change?.state === "unfinished") && <RevertChange slotId={slotId} change={change} busy={busy} />}
+          {revertible && <RevertChange slotId={slotId} change={change} busy={busy} revert={revert} />}
           {change?.state === "dropped" && (
             <div className={s.revert}>
               <span className={s.meta}>{t("ai.revert.dropped")}</span>
@@ -678,37 +728,67 @@ function ToolBlock({
 }
 
 /**
- * AI-41: Revert on the block of a file tool call that wrote, or whose write failed after it may have begun, with
- * what it restores and what it does not. When the file holds neither what the call wrote nor what it held
- * before, the block shows the diff from what it holds now back to that, and offers Restore anyway over exactly
- * what the diff shows; or the failure.
+ * AI-39, AI-40: the change an `edit_file` or `write_file` call made, as a diff: from its snapshot while this
+ * device keeps one (AI-41), otherwise from the call's arguments. The arguments themselves are one click away.
  */
-function RevertChange({ slotId, change, busy }: { slotId: string; change: AiFileChange; busy: boolean }) {
+function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall; change?: AiFileChange }) {
   const t = useT();
-  const [running, setRunning] = useState<"revert" | "restore" | null>(null);
-  const [outcome, setOutcome] = useState<{ result: AiFileRevert; restore: boolean } | null>(null);
-  const run = async (restore: boolean) => {
-    try {
-      const next = await revertFileChange(slotId, change, {
-        restore,
-        onStart: () => {
-          setRunning(restore ? "restore" : "revert");
-          if (!restore) setOutcome(null);
-        },
-      });
-      if (next) setOutcome({ result: next, restore });
-    } finally {
-      setRunning(null);
-    }
-  };
+  const [input, setInput] = useState(false);
+  const keeps = change?.state === "written" || change?.state === "unfinished";
+  const [kept, setKept] = useState<AiFilePreview | null | undefined>(undefined);
+  useEffect(() => {
+    if (!keeps || !change) return;
+    let live = true;
+    void fileChangeDiff(slotId, change).then((preview) => {
+      if (live) setKept(preview);
+    });
+    return () => {
+      live = false;
+    };
+  }, [slotId, keeps, change]);
+  const preview = (keeps ? kept : null) ?? callFileChange(call.name, call.arguments);
+  return (
+    <>
+      <div className={s.labelRow}>
+        <span className={s.label}>{t("ai.call.change")}</span>
+        <LinkButton tone="muted" className={s.labelLink} aria-expanded={input} onClick={() => setInput((v) => !v)}>
+          {t(input ? "ai.call.hideInput" : "ai.call.showInput")}
+        </LinkButton>
+      </div>
+      {preview && <FileChange state={{ preview, loading: keeps && kept === undefined, failure: null }} />}
+      {(input || !preview) && <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>}
+    </>
+  );
+}
+
+/**
+ * AI-41: Revert on the block of a file tool call that wrote, or whose write failed after it may have begun; its
+ * confirmation says what it restores and what it does not. When the file holds neither what the call wrote nor
+ * what it held before, the block shows the diff from what it holds now back to that, links the later call that
+ * wrote it too, and offers Restore anyway over exactly what the diff shows; or the failure.
+ */
+function RevertChange({ slotId, change, busy, revert }: { slotId: string; change: AiFileChange; busy: boolean; revert: RevertState }) {
+  const t = useT();
+  const { running, outcome, run } = revert;
   const result = outcome?.result;
+  // The result of the newest later call that wrote the same file, which the diff can jump to.
+  const laterEntry = useAi((st) => {
+    const slot = st.slots[slotId];
+    if (!slot) return null;
+    const at = slot.fileChanges.findIndex((c) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id);
+    const later = slot.fileChanges
+      .slice(at + 1)
+      .filter((c) => c.server === change.server && c.path === change.path && (c.state === "written" || c.state === "unfinished"))
+      .at(-1);
+    if (!later) return null;
+    return slot.entries.find((e) => e.role === "tool" && e.tool_call_id === later.tool_call_id && e.entry_id > later.response_id)?.entry_id ?? null;
+  });
   return (
     <div className={s.revert}>
       <div className={s.revertRow}>
         <Button size="sm" icon="arrow-counter-clockwise" busy={running === "revert"} disabled={busy || !!running} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void run(false)}>
           {t(running === "revert" ? "ai.revert.reverting" : "ai.revert.action")}
         </Button>
-        <span className={s.meta}>{t("ai.revert.hint")}</span>
       </div>
       {change.state === "unfinished" && (
         <div className={s.revertWarn}>
@@ -722,7 +802,19 @@ function RevertChange({ slotId, change, busy }: { slotId: string; change: AiFile
             {outcome?.restore && `${t("ai.revert.changedAgain")} `}
             {t(result.before === null ? "ai.revert.changedCreated" : result.current === null ? "ai.revert.gone" : "ai.revert.changed")}
           </div>
-          {result.later && <div className={s.meta}>{t("ai.revert.later")}</div>}
+          {result.later && (
+            <div className={s.meta}>
+              {t("ai.revert.later")}
+              {laterEntry && (
+                <>
+                  {" "}
+                  <LinkButton className={s.inlineLink} onClick={() => patchSlot(slotId, { reveal: laterEntry })}>
+                    {t("ai.revert.goLater")}
+                  </LinkButton>
+                </>
+              )}
+            </div>
+          )}
           <FileChange state={{ preview: { path: result.path, before: result.current, after: result.before ?? "", error: null, crlf: false }, loading: false, failure: null }} />
           <div className={s.revertRow}>
             <Button size="sm" variant="danger" icon={result.before === null ? "trash" : "arrow-counter-clockwise"} busy={running === "restore"} disabled={busy || !!running} onClick={() => void run(true)}>

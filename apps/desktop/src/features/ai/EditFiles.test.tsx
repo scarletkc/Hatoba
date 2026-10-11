@@ -95,6 +95,34 @@ describe("the dialog of an edit that deletes file changes (AI-26, AI-41)", () =>
     }
   });
 
+  it("lists each file once, with how many changes it has and the lines a revert adds and removes", async () => {
+    render();
+    const twice = [change("c1", "/etc/nginx/nginx.conf"), change("c2", "/etc/hosts"), change("c3", "/etc/nginx/nginx.conf")];
+    const order: string[] = [];
+    act(() => {
+      void askEditedFiles(
+        2,
+        twice,
+        async (c) => {
+          order.push(c.tool_call_id);
+          return { status: "reverted", wrote: true };
+        },
+        async (c) => ({ path: c.path, before: "a\n", after: c.tool_call_id === "c3" ? "a\nb\nc\n" : "b\n", error: null, crlf: false }),
+      );
+    });
+    await act(async () => {});
+    const items = [...document.body.querySelectorAll("li")].map((li) => li.textContent ?? "");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain("/etc/nginx/nginx.conf");
+    expect(items[0]).toContain("2 changes");
+    // c3 reverts to a: two lines removed; c1 reverts b to a: one added, one removed.
+    expect(items[0]).toContain("+1");
+    expect(items[0]).toContain("−3");
+    expect(items[1]).not.toContain("changes");
+    await click("Revert and Send");
+    expect(order).toEqual(["c3", "c2", "c1"]);
+  });
+
   it("lists a revert that threw as failed instead of hanging", async () => {
     render();
     let answer: Promise<boolean> | undefined;

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { Button, Icon, Spinner } from "@/components/controls";
 import { Dialog, useOverlaysLocked } from "@/components/overlay";
 import { useT } from "@/i18n";
-import type { AiFileChange, AiFileRevert } from "@/ipc/types";
+import type { AiFileChange, AiFilePreview, AiFileRevert } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { diffLines, diffStats } from "./diff";
 import { revertFailure } from "./revertText";
 import s from "./EditFiles.module.css";
 
@@ -15,6 +16,8 @@ interface Ask {
   /** Oldest call first. */
   changes: AiFileChange[];
   revert: (change: AiFileChange) => Promise<AiFileRevert>;
+  /** What a change did, for the lines a revert adds and removes; null when it cannot be read. */
+  diff?: (change: AiFileChange) => Promise<AiFilePreview | null>;
   resolve: (send: boolean) => void;
 }
 
@@ -24,10 +27,10 @@ const useAsk = create<{ ask: Ask | null }>(() => ({ ask: null }));
  * Asks before an edit deletes the calls that made `changes`: revert them and send, keep the files as they
  * are and send, or cancel. Resolves true when the edit goes ahead. `revert` reverts one change.
  */
-export function askEditedFiles(later: number, changes: AiFileChange[], revert: Ask["revert"]): Promise<boolean> {
+export function askEditedFiles(later: number, changes: AiFileChange[], revert: Ask["revert"], diff?: Ask["diff"]): Promise<boolean> {
   return new Promise((resolve) => {
     useAsk.getState().ask?.resolve(false);
-    useAsk.setState({ ask: { later, changes, revert, resolve } });
+    useAsk.setState({ ask: { later, changes, revert, diff, resolve } });
   });
 }
 
@@ -51,16 +54,57 @@ const keyOf = (c: AiFileChange) => `${c.response_id}:${c.tool_call_id}`;
 
 type Result = { state: "reverting" } | { state: "reverted" } | { state: "failed"; reason: string };
 
+/** The changes to one file, newest call first. */
+interface FileGroup {
+  key: string;
+  server: string;
+  path: string;
+  changes: AiFileChange[];
+}
+
+/** The changes grouped by file, the file whose newest change is newest first. */
+export function groupChanges(newestFirst: AiFileChange[]): FileGroup[] {
+  const groups = new Map<string, FileGroup>();
+  for (const c of newestFirst) {
+    const key = `${c.server}\n${c.path}`;
+    const group = groups.get(key) ?? { key, server: c.server, path: c.path, changes: [] };
+    group.changes.push(c);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 /**
- * Lists each change newest call first, the order a revert takes, with its server and whether reverting
- * deletes the file. Neither way of sending is the default. Changes that could not be reverted keep their
- * reason, and the user sends anyway or cancels; the reverts done stay done either way.
+ * Lists each file once, by its path and server, with how many of the deleted calls changed it, the lines a
+ * revert adds and removes, and whether reverting deletes it. Reverts go newest call first. Neither way of
+ * sending is the default. Changes that could not be reverted keep their reason, and the user sends anyway or
+ * cancels; the reverts done stay done either way.
  */
 function EditFilesDialog({ ask }: { ask: Ask }) {
   const t = useT();
   const [phase, setPhase] = useState<"choose" | "reverting" | "failed">("choose");
   const [results, setResults] = useState<Record<string, Result>>({});
-  const newestFirst = [...ask.changes].reverse();
+  const [stats, setStats] = useState<Record<string, { added: number; removed: number }>>({});
+  const newestFirst = useMemo(() => [...ask.changes].reverse(), [ask.changes]);
+  const groups = useMemo(() => groupChanges(newestFirst), [newestFirst]);
+
+  // What reverting each change writes back: from what the call wrote to what the file held before.
+  useEffect(() => {
+    const diff = ask.diff;
+    if (!diff) return;
+    let live = true;
+    void Promise.all(newestFirst.map((c) => diff(c).catch(() => null))).then((previews) => {
+      if (!live) return;
+      const next: Record<string, { added: number; removed: number }> = {};
+      previews.forEach((p, i) => {
+        if (p?.after != null) next[keyOf(newestFirst[i])] = diffStats(diffLines(p.after, p.before ?? ""));
+      });
+      setStats(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [ask, newestFirst]);
 
   const revertAll = async () => {
     setPhase("reverting");
@@ -95,7 +139,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
       iconColor="var(--red)"
       body={
         <>
-          {t("ai.edit.confirmBody", { n: ask.later })} {t("ai.editFiles.body", { n: ask.changes.length })}
+          {t("ai.edit.confirmBody", { n: ask.later })} {t("ai.editFiles.body", { n: groups.length })}
         </>
       }
       onClose={reverting ? undefined : () => close(ask, false)}
@@ -122,34 +166,53 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
       }
     >
       <ul className={s.files} aria-label={t("ai.editFiles.list")}>
-        {newestFirst.map((change) => {
-          const result = results[keyOf(change)];
+        {groups.map((group) => {
+          const states = group.changes.map((c) => results[keyOf(c)]);
+          const reasons = [...new Set(states.flatMap((r) => (r?.state === "failed" ? [r.reason] : [])))];
+          const state = states.some((r) => r?.state === "reverting")
+            ? "reverting"
+            : reasons.length > 0
+              ? "failed"
+              : states.every((r) => r?.state === "reverted")
+                ? "reverted"
+                : null;
+          // Reverting every change of the file deletes it when its oldest call created it.
+          const created = group.changes[group.changes.length - 1].created;
+          const counted = group.changes.map((c) => stats[keyOf(c)]);
+          const lines = counted.every(Boolean) ? counted.reduce((sum, x) => ({ added: sum.added + x!.added, removed: sum.removed + x!.removed }), { added: 0, removed: 0 }) : null;
           return (
-            <li key={keyOf(change)} className={s.file}>
-              <Icon name={change.created ? "file-plus" : "note-pencil"} size={14} className={s.fileIcon} />
+            <li key={group.key} className={s.file}>
+              <Icon name={created ? "file-plus" : "note-pencil"} size={14} className={s.fileIcon} />
               <div className={s.fileText}>
-                <div className={cx(s.path, "selectable")}>{change.path}</div>
+                <div className={cx(s.path, "selectable")}>{group.path}</div>
                 <div className={s.server}>
-                  {change.server}
-                  {change.created && ` · ${t("ai.editFiles.created")}`}
+                  {group.server}
+                  {group.changes.length > 1 && ` · ${t("ai.editFiles.changes", { n: group.changes.length })}`}
+                  {created && ` · ${t("ai.editFiles.created")}`}
+                  {lines && (lines.added > 0 || lines.removed > 0) && (
+                    <span className={s.lines} aria-label={t("ai.approval.diffStats", lines)}>
+                      {lines.added > 0 && <span className={s.added}>+{lines.added}</span>}
+                      {lines.removed > 0 && <span className={s.removed}>−{lines.removed}</span>}
+                    </span>
+                  )}
                 </div>
-                {result?.state === "failed" && (
-                  <div className={s.reason} role="alert">
-                    {result.reason}
+                {reasons.map((reason) => (
+                  <div key={reason} className={s.reason} role="alert">
+                    {reason}
                   </div>
-                )}
+                ))}
               </div>
-              {result?.state === "reverting" && (
+              {state === "reverting" && (
                 <span className={s.status}>
                   <Spinner size={13} />
                 </span>
               )}
-              {result?.state === "reverted" && (
+              {state === "reverted" && (
                 <span className={s.status} role="img" aria-label={t("ai.revert.reverted")}>
                   <Icon name="check-circle" size={15} fill color="var(--green)" />
                 </span>
               )}
-              {result?.state === "failed" && (
+              {state === "failed" && (
                 <span className={s.status}>
                   <Icon name="warning-circle" size={15} fill color="var(--red)" />
                 </span>

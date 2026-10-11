@@ -38,6 +38,7 @@ type AiApi = Pick<
   | "ai_tool_run"
   | "ai_file_preview"
   | "ai_file_changes"
+  | "ai_file_change_diff"
   | "ai_file_revert"
   | "ai_stop"
   | "ai_compact"
@@ -1329,6 +1330,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ai_file_changes: async (id) => {
       need(id);
       return fileChangesOf(id);
+    },
+    ai_file_change_diff: async (id, responseId, callId) => {
+      need(id);
+      const snapshot = (snapshots.get(id) ?? []).find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      if (!snapshot) return fail("not_found", "file change not found");
+      if (snapshot.change.state !== "written" && snapshot.change.state !== "unfinished") return null;
+      const shown = (text: string) => text.replace(/\r\n/g, "\n");
+      const crlf = snapshot.before !== null && crlfOf(snapshot.before);
+      return { path: snapshot.change.path, before: snapshot.before === null ? null : shown(snapshot.before), after: shown(snapshot.after), error: null, crlf };
     },
     ai_file_revert: async (id, responseId, callId, sessionId, restore) => {
       const c = need(id);

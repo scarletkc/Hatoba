@@ -258,6 +258,26 @@ export const commands = {
 	 */
 	aiFileChanges: (conversationId: string) => __TAURI_INVOKE<AiFileChange[]>("ai_file_changes", { conversationId }),
 	/**
+	 *  What an `edit_file` or `write_file` call changed (AI-41), from its snapshot, for its block and
+	 *  the revert's confirmation: the file before the call and as the call wrote it. `None` once the
+	 *  change was reverted or dropped.
+	 */
+	aiFileChangeDiff: (conversationId: string, responseId: string, toolCallId: string) => __TAURI_INVOKE<{
+	/**  The path the call names. */
+	path: string,
+	/**
+	 *  The file as Hatoba read it, or `None` when it does not exist (the call creates it) or
+	 *  `error` is set.
+	 */
+	before: string | null,
+	/**  The file after the call, or `None` when `error` is set. */
+	after: string | null,
+	/**  Why the call cannot apply: the error result running it would give the model. */
+	error: string | null,
+	/**  Most of the file's line breaks are CRLF, and the write keeps them. */
+	crlf: boolean,
+} | null>("ai_file_change_diff", { conversationId, responseId, toolCallId }),
+	/**
 	 *  Reverts the change an `edit_file` or `write_file` call made (AI-41), on the conversation's tab
 	 *  `session_id`. A file the call created is deleted, so the panel asks first. `restore`: Restore
 	 *  anyway, over what the diff of the last revert showed, which the panel also asks about first.
