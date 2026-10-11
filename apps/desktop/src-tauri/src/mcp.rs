@@ -364,6 +364,37 @@ impl Offer {
     }
 }
 
+/// The servers a conversation's requests offer the tools of, read from an unlocked vault.
+struct Wanted {
+    /// `(id, name, config)` of every server enabled on this device and not switched off for the
+    /// conversation, with or without a terminal tab (AI-09), sorted by name, then id.
+    wanted: Vec<(String, String, McpTransportConfig)>,
+    /// Every server's id.
+    live: Vec<String>,
+    /// The servers off on this device.
+    off: Vec<String>,
+}
+
+impl Wanted {
+    fn read(v: &Vault, context: &AiTurnContext) -> Self {
+        let device = DeviceState::load(v);
+        let servers = v.mcp_servers();
+        let live: Vec<String> = servers.iter().map(|(id, _)| id.clone()).collect();
+        let mut wanted: Vec<(String, String, McpTransportConfig)> = Vec::new();
+        let mut off = Vec::new();
+        for (id, s) in servers {
+            if !device.enabled(&id, &s.transport) {
+                off.push(id);
+            } else if !context.disabled_mcp_servers.contains(&id) {
+                let config = transport_config(&s.transport);
+                wanted.push((id, s.name, config));
+            }
+        }
+        wanted.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        Self { wanted, live, off }
+    }
+}
+
 /// The view of an offered tool, with its Always allow on this device.
 pub fn tool_view(device: &DeviceState, tool: &OfferedTool) -> McpToolView {
     let a = &tool.tool.annotations;
@@ -643,26 +674,12 @@ impl McpManager {
         context: &AiTurnContext,
         cancel: &CancellationToken,
     ) -> Offer {
-        let (wanted, live, off) = {
+        let Wanted { wanted, live, off } = {
             let v = guard(vault);
             if !v.is_unlocked() {
                 return Offer::default();
             }
-            let device = DeviceState::load(&v);
-            let servers = v.mcp_servers();
-            let live: Vec<String> = servers.iter().map(|(id, _)| id.clone()).collect();
-            let mut wanted: Vec<(String, String, McpTransportConfig)> = Vec::new();
-            let mut off = Vec::new();
-            for (id, s) in servers {
-                if !device.enabled(&id, &s.transport) {
-                    off.push(id);
-                } else if !context.disabled_mcp_servers.contains(&id) {
-                    let config = transport_config(&s.transport);
-                    wanted.push((id, s.name, config));
-                }
-            }
-            wanted.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-            (wanted, live, off)
+            Wanted::read(&v, context)
         };
         self.prune(vault, &live);
         self.stop_off(vault, &off);
@@ -676,6 +693,31 @@ impl McpManager {
             .into_iter()
             .zip(lists)
             .filter_map(|((id, name, _), tools)| tools.map(|tools| (id, name, tools)))
+            .collect();
+        Offer::new(&servers)
+    }
+
+    /// The MCP tools a side question's request offers (AI-42): those [`Self::offer`] would offer,
+    /// but only of the servers that run now with their configuration. Starts, restarts and
+    /// relists nothing, since no tool runs from a side question; a server that is not running
+    /// was left out of the conversation's latest request too, or stopped since. Reads the vault
+    /// `v` it is called under.
+    pub fn running_offer(&self, v: &Vault, context: &AiTurnContext) -> Offer {
+        if !v.is_unlocked() {
+            return Offer::default();
+        }
+        let servers: Vec<(String, String, Vec<McpTool>)> = Wanted::read(v, context)
+            .wanted
+            .into_iter()
+            .filter_map(|(id, name, config)| {
+                let server = self.existing(&id)?;
+                let s = guard(&server.state);
+                let running = s.phase == McpServerState::Running
+                    && s.config.as_ref() == Some(&config)
+                    && s.conn.as_ref().is_some_and(|conn| !conn.is_closed());
+                let tools = running.then(|| s.tools.clone());
+                tools.map(|tools| (id, name, tools))
+            })
             .collect();
         Offer::new(&servers)
     }

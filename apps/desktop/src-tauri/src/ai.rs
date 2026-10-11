@@ -201,12 +201,6 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
-    /// The side question (AI-42) on its way in each conversation that has one: its op's id and
-    /// token. A newer side question of the conversation cancels it.
-    sides: Mutex<HashMap<String, (u64, CancellationToken)>>,
-    /// How many compactions of each conversation run now (AI-21, AI-22), which refuse a side
-    /// question meanwhile (AI-42).
-    compacting: Mutex<HashMap<String, usize>>,
 }
 
 struct Op {
@@ -214,7 +208,38 @@ struct Op {
     conversation_id: Option<String>,
     /// The tool call an `ai_tool_run` runs, which nothing else runs or answers meanwhile.
     tool_call_id: Option<String>,
+    kind: OpKind,
     cancel: CancellationToken,
+}
+
+/// What an op does, where something else depends on it.
+#[derive(Clone, PartialEq, Eq)]
+enum OpKind {
+    /// A tool, the file read of an approval card, or a provider request outside a conversation.
+    Other,
+    /// A compaction of the op's conversation (AI-21, AI-22), which refuses a side question
+    /// meanwhile (AI-42).
+    Compact,
+    /// A side question (AI-42) about `conversation_id`, by the panel's number for it. Its op
+    /// belongs to no conversation, so a stop of the turn leaves it alone, and the conversation
+    /// does not count as busy while it runs.
+    Side {
+        conversation_id: String,
+        question_id: u32,
+    },
+}
+
+impl Op {
+    /// The number of the side question (AI-42) about the conversation that the op is.
+    fn side_of(&self, conversation_id: &str) -> Option<u32> {
+        match &self.kind {
+            OpKind::Side {
+                conversation_id: of,
+                question_id,
+            } if of == conversation_id => Some(*question_id),
+            _ => None,
+        }
+    }
 }
 
 /// A running tool, compaction or provider request; unregisters itself when dropped.
@@ -234,43 +259,6 @@ impl OpGuard<'_> {
 impl Drop for OpGuard<'_> {
     fn drop(&mut self) {
         guard(&self.inner.ops).remove(&self.id);
-    }
-}
-
-/// A side question on its way (AI-42): an op outside the conversation's turn, so a stop of the
-/// turn does not reach it. Unregisters itself when dropped.
-struct SideGuard<'a> {
-    op: OpGuard<'a>,
-    conversation_id: String,
-}
-
-impl Drop for SideGuard<'_> {
-    fn drop(&mut self) {
-        let mut sides = guard(&self.op.inner.sides);
-        if sides
-            .get(&self.conversation_id)
-            .is_some_and(|(id, _)| *id == self.op.id)
-        {
-            sides.remove(&self.conversation_id);
-        }
-    }
-}
-
-/// A compaction of a conversation while it runs (AI-21, AI-22); unregisters itself when dropped.
-struct CompactingGuard<'a> {
-    inner: &'a Inner,
-    conversation_id: String,
-}
-
-impl Drop for CompactingGuard<'_> {
-    fn drop(&mut self) {
-        let mut compacting = guard(&self.inner.compacting);
-        if let Some(count) = compacting.get_mut(&self.conversation_id) {
-            *count -= 1;
-            if *count == 0 {
-                compacting.remove(&self.conversation_id);
-            }
-        }
     }
 }
 
@@ -483,11 +471,25 @@ impl AiManager {
         turn
     }
 
-    /// Registers a tool or compaction of the conversation. Called under the vault guard that
-    /// checked the call, so a stop either came first (and the check failed) or cancels it.
+    /// Registers a tool of the conversation. Called under the vault guard that checked the call,
+    /// so a stop either came first (and the check failed) or cancels it.
     fn start_op(&self, conversation_id: &str) -> OpGuard<'_> {
         let cancel = self.turn_token(conversation_id);
-        self.register_op(Some(conversation_id), None, cancel)
+        self.register_op(Some(conversation_id), None, OpKind::Other, cancel)
+    }
+
+    /// Registers a compaction of the conversation (AI-21, AI-22), like [`Self::start_op`]. The
+    /// conversation counts as compacting until the guard drops ([`Self::is_compacting`]).
+    fn start_compaction(&self, conversation_id: &str) -> OpGuard<'_> {
+        let cancel = self.turn_token(conversation_id);
+        self.register_op(Some(conversation_id), None, OpKind::Compact, cancel)
+    }
+
+    /// A compaction of the conversation runs, by hand or automatically.
+    fn is_compacting(&self, conversation_id: &str) -> bool {
+        guard(&self.0.ops).values().any(|op| {
+            op.kind == OpKind::Compact && op.conversation_id.as_deref() == Some(conversation_id)
+        })
     }
 
     /// Registers the run of a tool call, like [`Self::start_op`]. Refused while the call runs
@@ -501,7 +503,12 @@ impl AiManager {
             ));
         }
         let cancel = self.turn_token(conversation_id);
-        Ok(self.register_op(Some(conversation_id), Some(tool_call_id), cancel))
+        Ok(self.register_op(
+            Some(conversation_id),
+            Some(tool_call_id),
+            OpKind::Other,
+            cancel,
+        ))
     }
 
     /// An `ai_tool_run` of the call has not finished.
@@ -522,60 +529,71 @@ impl AiManager {
     /// the lock cancels its token (§13.1). Call it under the vault guard that read the provider,
     /// so that a lock either came first or cancels the request.
     pub fn background_op(&self) -> OpGuard<'_> {
-        self.register_op(None, None, CancellationToken::new())
+        self.register_op(None, None, OpKind::Other, CancellationToken::new())
     }
 
-    /// Registers a side question of the conversation (AI-42) and cancels the one before it. Its
-    /// op belongs to no conversation, so a stop of the turn leaves it alone and the lock reaches
-    /// it; [`Self::side_stop`] stops it.
-    fn start_side(&self, conversation_id: &str) -> SideGuard<'_> {
-        let cancel = CancellationToken::new();
-        let op = self.register_op(None, None, cancel.clone());
-        let before = guard(&self.0.sides).insert(conversation_id.to_owned(), (op.id, cancel));
-        if let Some((_, cancel)) = before {
-            cancel.cancel();
+    /// Registers the side question `question_id` of the conversation (AI-42) and stops the one
+    /// on its way before it, at once, so that two side questions never both go on. A stop of the
+    /// turn leaves it alone and the lock reaches it; [`Self::side_stop`] stops it.
+    fn start_side(&self, conversation_id: &str, question_id: u32) -> OpGuard<'_> {
+        let mut ops = guard(&self.0.ops);
+        for op in ops.values() {
+            if op.side_of(conversation_id).is_some() {
+                op.cancel.cancel();
+            }
         }
-        SideGuard {
-            op,
+        let kind = OpKind::Side {
             conversation_id: conversation_id.to_owned(),
+            question_id,
+        };
+        self.insert_op(&mut ops, None, None, kind, CancellationToken::new())
+    }
+
+    /// `ai_side_stop` (AI-42): stops the conversation's side question `question_id`, if it is on
+    /// its way. Its turn goes on, and so does a newer side question that replaced it.
+    pub fn side_stop(&self, conversation_id: &str, question_id: u32) {
+        for op in guard(&self.0.ops).values() {
+            if op.side_of(conversation_id) == Some(question_id) {
+                op.cancel.cancel();
+            }
         }
     }
 
-    /// `ai_side_stop` (AI-42): stops the conversation's side question, if one is on its way. Its
-    /// turn goes on.
-    pub fn side_stop(&self, conversation_id: &str) {
-        if let Some((_, cancel)) = guard(&self.0.sides).remove(conversation_id) {
-            cancel.cancel();
+    /// Stops every side question of the conversation (AI-42).
+    fn stop_sides(&self, conversation_id: &str) {
+        for op in guard(&self.0.ops).values() {
+            if op.side_of(conversation_id).is_some() {
+                op.cancel.cancel();
+            }
         }
-    }
-
-    /// Marks the conversation as compacting until the guard drops (AI-21, AI-22).
-    fn start_compacting(&self, conversation_id: &str) -> CompactingGuard<'_> {
-        *guard(&self.0.compacting)
-            .entry(conversation_id.to_owned())
-            .or_default() += 1;
-        CompactingGuard {
-            inner: &self.0,
-            conversation_id: conversation_id.to_owned(),
-        }
-    }
-
-    fn is_compacting(&self, conversation_id: &str) -> bool {
-        guard(&self.0.compacting).contains_key(conversation_id)
     }
 
     fn register_op(
         &self,
         conversation_id: Option<&str>,
         tool_call_id: Option<&str>,
+        kind: OpKind,
+        cancel: CancellationToken,
+    ) -> OpGuard<'_> {
+        let mut ops = guard(&self.0.ops);
+        self.insert_op(&mut ops, conversation_id, tool_call_id, kind, cancel)
+    }
+
+    fn insert_op(
+        &self,
+        ops: &mut HashMap<u64, Op>,
+        conversation_id: Option<&str>,
+        tool_call_id: Option<&str>,
+        kind: OpKind,
         cancel: CancellationToken,
     ) -> OpGuard<'_> {
         let id = self.0.next_op.fetch_add(1, Ordering::Relaxed);
-        guard(&self.0.ops).insert(
+        ops.insert(
             id,
             Op {
                 conversation_id: conversation_id.map(str::to_owned),
                 tool_call_id: tool_call_id.map(str::to_owned),
+                kind,
                 cancel: cancel.clone(),
             },
         );
@@ -664,8 +682,8 @@ impl AiManager {
     }
 
     /// The vault is about to lock (SEC-02): stops every turn and tool, and every provider request
-    /// outside a turn, side questions (AI-42) included, so the assistant never acts behind the lock screen (§13.1). Called
-    /// with the vault guard, before `Vault::lock`.
+    /// outside a turn, side questions (AI-42) included, so the assistant never acts behind the
+    /// lock screen (§13.1). Called with the vault guard, before `Vault::lock`.
     pub fn stop_all(&self, v: &mut Vault) {
         let running: Vec<String> = guard(&self.0.turns).keys().cloned().collect();
         for conversation_id in &running {
@@ -709,7 +727,7 @@ impl AiManager {
             if let Some(turn) = self.cancel(conversation_id) {
                 turn.end(AiTurnEndReason::Stopped);
             }
-            self.side_stop(conversation_id);
+            self.stop_sides(conversation_id);
             v.ai_delete_conversation(conversation_id)?;
             self.0.seen.forget(conversation_id);
             self.forget_file_bases(conversation_id);
@@ -1483,7 +1501,6 @@ impl AiManager {
         conversation_id: &str,
         context: &AiTurnContext,
     ) -> AppResult<AiEntryView> {
-        let _compacting = self.start_compacting(conversation_id);
         let mut stored = false;
         let prepared = self.prepare_compact(vault, conversation_id, context, &mut stored);
         if stored {
@@ -1572,7 +1589,7 @@ impl AiManager {
         }
         resolve_model(&v, &context.provider_id, &context.model_id)
             .map_err(|message| AppError::invalid("model_id", message))?;
-        Ok(self.start_op(conversation_id))
+        Ok(self.start_compaction(conversation_id))
     }
 
     /// Asks the model for the summary a Compact request wants (AI-21). An answer that calls tools
@@ -1626,7 +1643,7 @@ impl AiManager {
         conversation_id: &str,
         turn: &Turn,
     ) -> Result<(), CompactFailure> {
-        let _compacting = self.start_compacting(conversation_id);
+        let _compaction = self.start_compaction(conversation_id);
         let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
         let compact = {
             let v = lock(vault);
@@ -1661,7 +1678,7 @@ impl AiManager {
         turn: &Turn,
         compact: SideRequest,
     ) -> Result<(), CompactFailure> {
-        let _compacting = self.start_compacting(conversation_id);
+        let _compaction = self.start_compaction(conversation_id);
         tracing::info!(conversation_id, "AI context nearly full; compacting");
         let summary = match self.summarize(conversation_id, compact, &turn.cancel).await {
             Ok(summary) => summary,
@@ -1718,8 +1735,9 @@ impl AiManager {
     /// `ai_side_question` (AI-42): asks the conversation's model `input.text` with the request
     /// the conversation would send next ([`side_request`]), streams the answer to `on_event`, and
     /// returns it. Stores nothing and leaves a running turn as it is: the turn's stop does not
-    /// reach it, while [`Self::side_stop`], a newer side question of the conversation, deleting
-    /// the conversation and the lock do. Refused while the conversation is compacting.
+    /// reach it, while [`Self::side_stop`], a newer side question of the conversation (even one
+    /// that is refused), deleting the conversation and the lock do. Refused while the
+    /// conversation is compacting.
     pub async fn side_question(
         &self,
         vault: &SharedVault,
@@ -1729,17 +1747,19 @@ impl AiManager {
     ) -> AppResult<AiSideAnswer> {
         let AiSideQuestionInput {
             conversation_id,
+            question_id,
             text,
-            context,
+            context: next_context,
             approval_call_id,
         } = input;
-        if text.trim().is_empty() {
-            return Err(AppError::invalid("text", "The question is empty."));
-        }
         let stopped = || AppError::new(ErrorCode::Cancelled, "the side question was stopped");
-        let next_server_id = turn_server_id(env, &context);
-        let side = {
+        let next_server_id = turn_server_id(env, &next_context);
+        // The running turn's next request, whose prefix the provider has cached, or the next
+        // message's when no turn runs, read under one vault guard: a turn starts and gives way to
+        // a new message under it, so its context goes with the entries read here.
+        let (side, request) = {
             let v = unlocked(vault)?;
+            let side = self.start_side(&conversation_id, question_id);
             find_conversation(&v, &conversation_id)?;
             if self.is_compacting(&conversation_id) {
                 return Err(AppError::invalid(
@@ -1747,49 +1767,32 @@ impl AiManager {
                     "the conversation is being compacted",
                 ));
             }
-            self.start_side(&conversation_id)
-        };
-        let cancel = side.op.token().clone();
-        let request = loop {
-            // The running turn's next request, whose prefix the provider has cached, or the next
-            // message's when no turn runs.
             let turn = self.running(&conversation_id);
-            let (context, server_id) = match &turn {
-                Some(turn) => (turn.context.clone(), turn.server_id.clone()),
-                None => (context.clone(), next_server_id.clone()),
+            let (context, server_id, timing) = match &turn {
+                Some(turn) => (
+                    &turn.context,
+                    turn.server_id.as_deref(),
+                    SideTiming::DuringTurn {
+                        approval: approval_call_id.as_deref(),
+                    },
+                ),
+                None => (&next_context, next_server_id.as_deref(), SideTiming::Idle),
             };
-            // AI-30: the MCP tools that request offers, so this one offers them too.
-            let offer = self.0.mcp.offer(vault, &context, &cancel).await;
-            let v = unlocked(vault)?;
-            if cancel.is_cancelled() {
-                return Err(stopped());
-            }
-            // A turn that started, ended or gave way to a new message meanwhile changed the
-            // entries, which must go with its context: start again from the turn there is now.
-            let now = self.running(&conversation_id);
-            let same = match (&turn, &now) {
-                (Some(before), Some(now)) => Arc::ptr_eq(before, now),
-                (before, now) => before.is_none() && now.is_none(),
-            };
-            if !same {
-                continue;
-            }
-            let timing = match turn {
-                Some(_) => SideTiming::DuringTurn {
-                    approval: approval_call_id.as_deref(),
-                },
-                None => SideTiming::Idle,
-            };
-            break side_request(
+            // AI-30: the MCP tools that request offers, of the servers that run now; none starts
+            // for a side question.
+            let offer = self.0.mcp.running_offer(&v, context);
+            let request = side_request(
                 &v,
                 &conversation_id,
-                &context,
-                server_id.as_deref(),
+                context,
+                server_id,
                 &offer,
                 timing,
                 &text,
             )?;
+            (side, request)
         };
+        let cancel = side.token().clone();
         let response = match self
             .side_answer(&conversation_id, request, &cancel, on_event)
             .await
@@ -1903,9 +1906,10 @@ enum CompactFailure {
 /// Compact request (AI-21) or a side question's (AI-42). It is the conversation's next request, as
 /// [`next_request`] builds it for a turn, with a last user message after it. It offers the same
 /// tools with the same system prompt and replays the same entries, so the provider reads its
-/// prefix from the cache the conversation's requests wrote. Only its output limit differs
-/// ([`compact_output_tokens`]), which is not part of that prefix. `plain_system` is the system
-/// prompt of the fallback without tools ([`AiManager::summarize`], [`AiManager::side_answer`]).
+/// prefix from the cache the conversation's requests wrote. A Compact request asks for less
+/// output ([`compact_output_tokens`]), which is not part of that prefix; a side question asks for
+/// as much as the next request. `plain_system` is the system prompt of the fallback without tools
+/// ([`AiManager::summarize`], [`AiManager::side_answer`]).
 struct SideRequest {
     request: Request,
     plain_system: String,
@@ -1922,7 +1926,6 @@ impl SideRequest {
         plain: PromptTools,
     ) -> Self {
         next.entries.push(AiEntry::user(now_ms(), message));
-        next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
         let (plain_system, _) = prompt(v, context, Some(plain), None);
         Self {
             request: next,
@@ -1938,7 +1941,7 @@ fn summary_of(response: &AssistantEntry) -> Option<String> {
 }
 
 /// The Compact request (AI-21) for the conversation's context, built from the next request of a
-/// turn with `context` and `server_id` whose MCP tools are `offer`.
+/// turn with `context` and `server_id` whose MCP tools are `offer`, with less output.
 fn compact_request(
     v: &Vault,
     conversation_id: &str,
@@ -1951,8 +1954,9 @@ fn compact_request(
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));
     }
-    let next = next_request(v, context, server_id, offer, list)
+    let mut next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
+    next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
     Ok(SideRequest::new(
         v,
         context,
@@ -1969,15 +1973,14 @@ enum SideTiming<'a> {
     /// No turn runs: the request is the next message's, so the question starts with the notes
     /// that message would start with (spec §13.3), and calls without a result go as cancelled.
     Idle,
-    /// A turn runs, whose stored messages carry their notes: each of its calls without a result
-    /// gets one, which says that the call waits for the user's approval (the call `approval`,
-    /// whose card waits) or has not finished.
+    /// A turn runs, whose stored messages carry their notes ([`side_results`]).
     DuringTurn { approval: Option<&'a str> },
 }
 
 /// A side question's request (AI-42), built from the next request of a turn with `context` and
-/// `server_id` whose MCP tools are `offer`, like a Compact request: what `timing` adds, then the
-/// question after its instruction. Nothing of it is stored.
+/// `server_id` whose MCP tools are `offer`, like a Compact request. Its last user message is laid
+/// out like a message's: what `timing` adds (the notes), the attachment blocks the input area put
+/// before the question, then the instruction and the typed question. Nothing of it is stored.
 fn side_request(
     v: &Vault,
     conversation_id: &str,
@@ -1987,27 +1990,33 @@ fn side_request(
     timing: SideTiming<'_>,
     question: &str,
 ) -> AppResult<SideRequest> {
-    let mut list = context_entries(v, conversation_id)?;
+    let (attachments, typed) = side_parts(question);
+    let typed = typed.trim();
+    if typed.is_empty() {
+        return Err(AppError::invalid("text", "The question is empty."));
+    }
+    let conversation = find_conversation(v, conversation_id)?;
+    let mut entries = Entries::load(v, conversation_id)?;
+    let from = entries.context_from(conversation.context_start.as_deref());
     let notes = match timing {
-        SideTiming::Idle => next_message_notes(v, conversation_id, context)?,
-        SideTiming::DuringTurn { approval } => {
-            let now = now_ms();
-            for call_id in fix_up_missing_results(&list) {
-                let content = if approval == Some(call_id.as_str()) {
-                    SIDE_AWAITING_APPROVAL
-                } else {
-                    SIDE_PENDING
-                };
-                list.push(AiEntry::tool(now, call_id, ToolStatus::Ok, content));
-            }
-            String::new()
-        }
+        SideTiming::Idle => next_message_notes(v, &conversation, &entries.list, context),
+        SideTiming::DuringTurn { .. } => String::new(),
     };
+    let mut list = entries.list.split_off(from);
+    if let SideTiming::DuringTurn { approval } = timing {
+        side_results(&mut list, approval);
+    }
     let next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
+    let attachments = attachments.trim_end_matches('\n');
+    let attachments = if attachments.is_empty() {
+        String::new()
+    } else {
+        format!("{attachments}\n\n")
+    };
     let message = format!(
-        "{notes}{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
-        escape_closing_tag(question.trim(), "side_question")
+        "{notes}{attachments}{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
+        escape_closing_tag(typed, "side_question")
     );
     Ok(SideRequest::new(
         v,
@@ -2016,6 +2025,45 @@ fn side_request(
         message,
         PromptTools::SideQuestion,
     ))
+}
+
+/// A side question's text (AI-42) split into the attachment blocks the input area put before it
+/// (spec §13.3) and the typed question. Text that starts with a note is all typed, since only
+/// Hatoba writes notes.
+fn side_parts(text: &str) -> (&str, &str) {
+    let (blocks, typed) = leading_blocks(text);
+    if blocks.iter().any(|b| b.kind.note) {
+        return ("", text);
+    }
+    (&text[..text.len() - typed.len()], typed)
+}
+
+/// The results a side question's request (AI-42) gives the calls of the running turn's `context`
+/// that have none, for that request only. Only the calls of the turn's newest response, which the
+/// context ends with but for results, get a result that says the call waits for the user's
+/// approval (the call `approval`, whose card waits) or has not finished. Any other call without a
+/// result (one left by a crash, or merged from another device) goes as cancelled, as in the
+/// turn's own requests.
+fn side_results(context: &mut Vec<AiEntry>, approval: Option<&str>) {
+    let newest = context
+        .iter()
+        .rposition(|e| !matches!(e.body, EntryBody::Tool { .. }))
+        .filter(|&i| matches!(context[i].body, EntryBody::Assistant(_)));
+    let open_now = newest.map_or(0, |i| fix_up_missing_results(&context[i..]).len());
+    let missing = fix_up_missing_results(context);
+    let older = missing.len().saturating_sub(open_now);
+    let now = now_ms();
+    // In conversation order, so each result answers the call it is meant for (`pair_results`).
+    for (n, call_id) in missing.into_iter().enumerate() {
+        let entry = if n < older {
+            AiEntry::cancelled_result(now, call_id)
+        } else if approval == Some(call_id.as_str()) {
+            AiEntry::tool(now, call_id, ToolStatus::Ok, SIDE_AWAITING_APPROVAL)
+        } else {
+            AiEntry::tool(now, call_id, ToolStatus::Ok, SIDE_PENDING)
+        };
+        context.push(entry);
+    }
 }
 
 /// The conversation's context: its entries from `context_start` on (AI-21).
@@ -3341,18 +3389,18 @@ fn moves_to(
 /// The notes the conversation's next message would start with if it went with `context` (spec
 /// §13.3), as [`AiManager::open_turn`] works them out for a message that edits nothing. A side
 /// question of an idle conversation (AI-42) starts with them, unstored, so that its request reads
-/// the earlier entries the way the next message's will.
+/// the earlier entries the way the next message's will. `earlier` is every entry of the
+/// conversation.
 fn next_message_notes(
     v: &Vault,
-    conversation_id: &str,
+    conversation: &AiConversation,
+    earlier: &[AiEntry],
     context: &AiTurnContext,
-) -> AppResult<String> {
-    let conversation = find_conversation(v, conversation_id)?;
-    let earlier = Entries::load(v, conversation_id)?.list;
+) -> String {
     let target = tab_target(context);
     let host_id = context.host_id.as_deref();
-    let (came_from, host_now) = if moves_to(&conversation, host_id, target.as_ref()) {
-        let came_from = moved_from(v, &conversation, host_id, target.as_ref());
+    let (came_from, host_now) = if moves_to(conversation, host_id, target.as_ref()) {
+        let came_from = moved_from(v, conversation, host_id, target.as_ref());
         let host_now = host_id
             .and_then(|id| host_name(v, id))
             .or_else(|| target.as_ref().map(target_name));
@@ -3365,13 +3413,13 @@ fn next_message_notes(
             .or_else(|| conversation.quick_target.as_ref().map(target_name));
         (None, host_now)
     };
-    Ok(notes_before(
+    notes_before(
         v,
-        &earlier,
+        earlier,
         came_from.as_deref(),
         host_now.as_deref(),
         context,
-    ))
+    )
 }
 
 /// How a stored model is named in a `model_change` note: its display name and ID, or the ID

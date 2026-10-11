@@ -180,7 +180,7 @@ export function createTauriApi(): HatobaApi {
       channel.onmessage = onEvent;
       return call("ai_side_question", { input, channel });
     },
-    ai_side_stop: (conversationId) => call("ai_side_stop", { conversationId }),
+    ai_side_stop: (conversationId, questionId) => call("ai_side_stop", { conversationId, questionId }),
 
     ai_search: (query) => call("ai_search", { query }),
     ai_edit_resend: (conversationId, entryId, text, context, onEvent) => {

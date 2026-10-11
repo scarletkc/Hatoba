@@ -882,11 +882,16 @@ pub async fn ai_side_question(
         .await
 }
 
-/// AI-42: stops the conversation's side question, if one is on its way; its turn goes on.
+/// AI-42: stops the conversation's side question `question_id`, if it is on its way; its turn
+/// goes on, and so does a newer side question.
 #[tauri::command]
 #[specta::specta]
-pub async fn ai_side_stop(state: State<'_, AppState>, conversation_id: String) -> AppResult<()> {
-    state.ai.side_stop(&conversation_id);
+pub async fn ai_side_stop(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    question_id: u32,
+) -> AppResult<()> {
+    state.ai.side_stop(&conversation_id, question_id);
     Ok(())
 }
 

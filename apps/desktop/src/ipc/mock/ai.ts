@@ -152,8 +152,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const replyTerminal = new Map<string, boolean>();
   /** Like Rust's `AssistantEntry.interrupted`, which the view does not carry: replies the user stopped (§13.1). */
   const interrupted = new Set<string>();
-  /** AI-42: what stops the side question on its way in each conversation. */
-  const sides = new Map<string, () => void>();
+  /** AI-42: the side question on its way in each conversation, by the panel's number, and what stops it. */
+  const sides = new Map<string, { question: number; stop: () => void }>();
   /** Conversations being compacted (AI-21, AI-22), which refuse a side question. */
   const compacting = new Set<string>();
   let errorShown = false;
@@ -1317,18 +1317,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ai_side_question: async (input, onEvent) => {
       const id = input.conversation_id;
       const c = need(id);
-      if (!input.text.trim()) fail("invalid_input", "The question is empty.", { field: "text" });
-      if (compacting.has(id)) fail("invalid_input", "the conversation is being compacted", { field: "conversation_id" });
-      await checkModel(input.context);
-      // Like Rust: a newer side question of the conversation stops the one before it.
-      sides.get(id)?.();
+      // Like Rust: a newer side question of the conversation stops the one before it, even one that is refused.
+      sides.get(id)?.stop();
       let stopped = false;
       const wakers = new Set<() => void>();
       const stop = () => {
         stopped = true;
         wakers.forEach((wake) => wake());
       };
-      sides.set(id, stop);
+      const mine = { question: input.question_id, stop };
+      sides.set(id, mine);
       const pause = (ms: number) =>
         new Promise<boolean>((resolve) => {
           const wake = () => resolve(false);
@@ -1340,6 +1338,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         });
       const gone = () => fail("cancelled", "the side question was stopped");
       try {
+        if (!parseMessage(input.text).typed.trim()) fail("invalid_input", "The question is empty.", { field: "text" });
+        if (compacting.has(id)) fail("invalid_input", "the conversation is being compacted", { field: "conversation_id" });
+        await checkModel(input.context);
         if (!(await pause(500))) gone();
         for (const piece of chunks(zh ? "先看看对话里已有的内容……" : "Looking at what the conversation shows so far…")) {
           if (!(await pause(20))) gone();
@@ -1352,12 +1353,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         }
         return { text, finish: "stop" };
       } finally {
-        if (sides.get(id) === stop) sides.delete(id);
+        if (sides.get(id) === mine) sides.delete(id);
       }
     },
-    ai_side_stop: async (id) => {
-      sides.get(id)?.();
-      sides.delete(id);
+    ai_side_stop: async (id, question) => {
+      const side = sides.get(id);
+      if (side?.question === question) side.stop();
     },
     ai_search: async (query) => {
       await delay(200);

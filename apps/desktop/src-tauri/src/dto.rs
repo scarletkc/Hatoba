@@ -1386,6 +1386,9 @@ pub enum AiTurnEvent {
 #[derive(Clone, Deserialize, Type)]
 pub struct AiSideQuestionInput {
     pub conversation_id: String,
+    /// The panel's number for the question, which `ai_side_stop` names, so that a stop meant for
+    /// it never stops a newer one.
+    pub question_id: u32,
     /// The question, after the attachment blocks the input area adds (spec §13.3).
     pub text: String,
     /// What the next message would be sent with; a running turn's own context wins.
@@ -1398,6 +1401,7 @@ impl fmt::Debug for AiSideQuestionInput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AiSideQuestionInput")
             .field("conversation_id", &self.conversation_id)
+            .field("question_id", &self.question_id)
             .field(
                 "text",
                 &format_args!("<{} chars>", self.text.chars().count()),

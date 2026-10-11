@@ -292,8 +292,8 @@ export interface HatobaApi {
    * and the lock stop it (`cancelled`).
    */
   ai_side_question(input: AiSideQuestionInput, onEvent: (event: AiSideEvent) => void): Promise<AiSideAnswer>;
-  /** AI-42: stops the conversation's side question, if one is on its way; its turn goes on. */
-  ai_side_stop(conversation_id: string): Promise<void>;
+  /** AI-42: stops the conversation's side question `question_id`, if it is on its way; its turn goes on, and so does a newer side question. */
+  ai_side_stop(conversation_id: string, question_id: number): Promise<void>;
 
   /** AI-24: conversations whose title or message text contains `query` (case-insensitive). */
   ai_search(query: string): Promise<AiSearchHit[]>;

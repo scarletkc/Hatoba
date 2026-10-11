@@ -261,8 +261,11 @@ export const commands = {
 	 *  streams on `channel` and comes back whole; nothing is stored.
 	 */
 	aiSideQuestion: (input: AiSideQuestionInput, channel: Channel<AiSideEvent>) => __TAURI_INVOKE<AiSideAnswer>("ai_side_question", { input, channel }),
-	/**  AI-42: stops the conversation's side question, if one is on its way; its turn goes on. */
-	aiSideStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_side_stop", { conversationId }),
+	/**
+	 *  AI-42: stops the conversation's side question `question_id`, if it is on its way; its turn
+	 *  goes on, and so does a newer side question.
+	 */
+	aiSideStop: (conversationId: string, questionId: number) => __TAURI_INVOKE<null>("ai_side_stop", { conversationId, questionId }),
 	/**  AI-24: conversations whose title or message text contains `query`, ignoring case. */
 	aiSearch: (query: string) => __TAURI_INVOKE<AiSearchHit[]>("ai_search", { query }),
 	/**
@@ -498,6 +501,11 @@ export type AiSideEvent = { kind: "reasoning"; delta: string } | { kind: "text";
 /**  AI-42: a side question about a conversation, asked without stopping its turn. */
 export type AiSideQuestionInput = {
 	conversation_id: string,
+	/**
+	 *  The panel's number for the question, which `ai_side_stop` names, so that a stop meant for
+	 *  it never stops a newer one.
+	 */
+	question_id: number,
 	/**  The question, after the attachment blocks the input area adds (spec §13.3). */
 	text: string,
 	/**  What the next message would be sent with; a running turn's own context wins. */

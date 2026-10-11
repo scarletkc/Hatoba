@@ -1,21 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConversationView, AiEntryView, AiProviderView, AiSideAnswer, AiSideEvent, AiSideQuestionInput } from "@/ipc/types";
+import type { AiConversationView, AiEntryView, AiProviderView, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput } from "@/ipc/types";
 import type { PasteAttachment } from "./attachments";
 import { newTurn } from "./turn";
 
 /** The calls the actions make, answered by each test. */
 const side = vi.hoisted(() => ({
   question: vi.fn<(input: AiSideQuestionInput, onEvent: (event: AiSideEvent) => void) => Promise<AiSideAnswer>>(),
-  stop: vi.fn<(conversationId: string) => Promise<void>>(),
+  stop: vi.fn<(conversationId: string, questionId: number) => Promise<void>>(),
+  send: vi.fn<() => Promise<AiSendStarted>>(),
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
-  api: { ai_side_question: side.question, ai_side_stop: side.stop },
+  api: { ai_side_question: side.question, ai_side_stop: side.stop, ai_send: side.send },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { askSideQuestion, dismissSideQuestion, retrySideQuestion, stopSideQuestion } = await import("./actions");
+const { askAiAboutConnection, askSideQuestion, dismissSideQuestion, noteSelection, retrySideQuestion, sendMessage, stopSideQuestion, tabSelection } = await import("./actions");
 const { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning } = await import("./side");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
 type Slot = import("./store").Slot;
@@ -72,6 +73,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 beforeEach(() => {
   side.question.mockReset();
   side.stop.mockReset().mockResolvedValue(undefined);
+  side.send.mockReset().mockReturnValue(new Promise(() => {}));
   useAi.setState({
     slots: { [HOME_SLOT]: slot() },
     catalog: { providers: [provider], settings: null, loaded: true },
@@ -153,14 +155,16 @@ describe("askSideQuestion (AI-42)", () => {
     expect(side.question).not.toHaveBeenCalled();
   });
 
-  it("stops only the side question, and × discards it", async () => {
+  it("stops only the side question, by its number, and × discards it", async () => {
     const turn = newTurn();
     patchSlot(HOME_SLOT, { turn });
     const p = pending();
     askSideQuestion(HOME_SLOT, "why?");
+    const id = p.input()?.question_id;
+    expect(getSlot(HOME_SLOT).side?.id).toBe(id);
     p.emit({ kind: "text", delta: "Because" });
     stopSideQuestion(HOME_SLOT);
-    expect(side.stop).toHaveBeenCalledWith("c1");
+    expect(side.stop).toHaveBeenCalledWith("c1", id);
     expect(getSlot(HOME_SLOT).side).toMatchObject({ phase: "stopped", answer: "Because" });
     expect(getSlot(HOME_SLOT).turn).toBe(turn);
     // What Rust sends after the stop changes nothing.
@@ -173,16 +177,59 @@ describe("askSideQuestion (AI-42)", () => {
     expect(getSlot(HOME_SLOT).side).toBeNull();
   });
 
-  it("replaces a side question still on its way", async () => {
+  it("replaces a side question still on its way, and keeps the input area as the newer one left it", async () => {
     const first = pending();
     askSideQuestion(HOME_SLOT, "first");
     const second = pending();
     askSideQuestion(HOME_SLOT, "second");
+    expect(second.input()?.question_id).not.toBe(first.input()?.question_id);
     first.emit({ kind: "text", delta: "old" });
     first.fail("cancelled", "the side question was stopped");
     second.emit({ kind: "text", delta: "new" });
     await flush();
     expect(getSlot(HOME_SLOT).side).toMatchObject({ question: "second", phase: "streaming", answer: "new" });
+    expect(getSlot(HOME_SLOT).draft).toBe("");
+  });
+
+  it("gives what it took back to the input area when it is refused, fails or is stopped", async () => {
+    const TAB = "tab-1";
+    const ends: ((p: ReturnType<typeof pending>) => void)[] = [
+      (p) => p.fail("invalid_input", "the conversation is being compacted"),
+      (p) => p.fail("ai", "the provider is overloaded"),
+      () => stopSideQuestion(TAB),
+      () => dismissSideQuestion(TAB),
+    ];
+    for (const end of ends) {
+      useAi.setState({ slots: { [TAB]: slot() }, selections: {}, diagnostics: {} });
+      noteSelection(TAB, "502 Bad Gateway");
+      askAiAboutConnection(TAB, "prod-api", "kind: timeout");
+      patchSlot(TAB, { draft: " why? ", extras: [{ id: "x1", attachment: paste }] });
+      const p = pending();
+      askSideQuestion(TAB, getSlot(TAB).draft);
+      expect(p.input()?.text).toMatch(/^<connection_diagnostics [^]*<terminal_selection [^]*<pasted_text [^]*why\?$/);
+      expect(getSlot(TAB)).toMatchObject({ draft: "", extras: [] });
+      expect(useAi.getState().diagnostics[TAB]).toBeUndefined();
+      expect(tabSelection(TAB).hidden).not.toBeNull();
+      // Added while the answer was on its way.
+      const later = { id: "x2", attachment: paste };
+      patchSlot(TAB, { extras: [later] });
+
+      end(p);
+      await flush();
+      expect(getSlot(TAB)).toMatchObject({ draft: " why? ", extras: [{ id: "x1" }, { id: "x2" }] });
+      expect(useAi.getState().diagnostics[TAB]).toBeTruthy();
+      expect(tabSelection(TAB).hidden).toBeNull();
+    }
+    // Text typed meanwhile stays; the question's attachments still come back.
+    useAi.setState({ slots: { [TAB]: slot() }, selections: {}, diagnostics: {} });
+    patchSlot(TAB, { extras: [{ id: "x1", attachment: paste }] });
+    const p = pending();
+    askSideQuestion(TAB, "why?");
+    patchSlot(TAB, { draft: "next message" });
+    p.fail("ai", "the provider is overloaded");
+    await flush();
+    expect(getSlot(TAB)).toMatchObject({ draft: "next message", extras: [{ id: "x1" }] });
+    expect(getSlot(TAB).side).toMatchObject({ phase: "error" });
   });
 
   it("shows a failure without what streamed of it, and Retry asks the same question again", async () => {
@@ -200,5 +247,30 @@ describe("askSideQuestion (AI-42)", () => {
     retrySideQuestion(HOME_SLOT);
     expect(again.input()?.text).toBe(sent);
     expect(getSlot(HOME_SLOT).side).toMatchObject({ question: "why?", phase: "waiting" });
+  });
+
+  it("goes when a message is sent, stopping first while its answer is on its way", async () => {
+    const p = pending();
+    askSideQuestion(HOME_SLOT, "why?");
+    const id = p.input()?.question_id;
+    void sendMessage(HOME_SLOT, "restart nginx");
+    expect(side.stop).toHaveBeenCalledWith("c1", id);
+    expect(side.send).toHaveBeenCalled();
+    expect(getSlot(HOME_SLOT).side).toBeNull();
+    // The question was asked: its text does not come back into the input area.
+    p.fail("cancelled", "the side question was stopped");
+    await flush();
+    expect(getSlot(HOME_SLOT)).toMatchObject({ draft: "", side: null });
+
+    // A finished one just goes.
+    const done = pending();
+    patchSlot(HOME_SLOT, { turn: null });
+    askSideQuestion(HOME_SLOT, "and now?");
+    done.answer("Fine.");
+    await flush();
+    side.stop.mockClear();
+    void sendMessage(HOME_SLOT, "thanks");
+    expect(side.stop).not.toHaveBeenCalled();
+    expect(getSlot(HOME_SLOT).side).toBeNull();
   });
 });

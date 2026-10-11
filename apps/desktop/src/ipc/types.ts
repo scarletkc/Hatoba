@@ -960,6 +960,8 @@ export type AiTurnEvent =
 /** AI-42: a side question about a conversation, asked without stopping its turn. */
 export interface AiSideQuestionInput {
   conversation_id: string;
+  /** The panel's number for the question, which `ai_side_stop` names, so that a stop meant for it never stops a newer one. */
+  question_id: number;
   /** The question, after the attachment blocks the input area adds (spec §13.3). */
   text: string;
   /** What the next message would be sent with; a running turn's own context wins. */

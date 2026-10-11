@@ -29,7 +29,7 @@ use super::{
     AiEnv, AiManager, COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION, DISCONNECTED, EDIT_NOTE,
     Entries, EventSink, SIDE_AWAITING_APPROVAL, SIDE_PENDING, SIDE_QUESTION_INSTRUCTION,
 };
-use super::{Halt, Streamed, Turn, append, lock, title_of, wait_for_results};
+use super::{Halt, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFinish, AiSendInput, AiSendStarted,
     AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolResultInput, AiToolStatus, AiTurnContext,
@@ -4442,15 +4442,18 @@ async fn waiting_for_results_stops_and_fails_as_before() {
 
 // ---- side questions (AI-42) ----
 
-/// The input of a side question about `conversation_id`, with the fixture's context.
+/// The input of the side question `question_id` about `conversation_id`, with the fixture's
+/// context.
 fn side_input(
     f: &Fixture,
     conversation_id: &str,
+    question_id: u32,
     text: &str,
     approval_call_id: Option<&str>,
 ) -> AiSideQuestionInput {
     AiSideQuestionInput {
         conversation_id: conversation_id.into(),
+        question_id,
         text: text.into(),
         context: f.context(),
         approval_call_id: approval_call_id.map(str::to_owned),
@@ -4467,7 +4470,7 @@ impl Fixture {
     ) -> (AppResult<AiSideAnswer>, Vec<AiSideEvent>) {
         let events = Mutex::new(Vec::new());
         let send = |event: AiSideEvent| events.lock().unwrap().push(event);
-        let input = side_input(self, conversation_id, text, approval_call_id);
+        let input = side_input(self, conversation_id, 0, text, approval_call_id);
         let result = self
             .manager
             .side_question(&self.vault, self.env.as_ref(), input, &send)
@@ -4475,28 +4478,20 @@ impl Fixture {
         (result, events.into_inner().unwrap())
     }
 
-    /// Asks a side question in a task of its own.
+    /// Asks the side question `question_id` in a task of its own.
     fn spawn_side(
         &self,
         conversation_id: &str,
+        question_id: u32,
         text: &str,
     ) -> tokio::task::JoinHandle<AppResult<AiSideAnswer>> {
         let (manager, vault, env) = (self.manager.clone(), self.vault.clone(), self.env.clone());
-        let input = side_input(self, conversation_id, text, None);
+        let input = side_input(self, conversation_id, question_id, text, None);
         tokio::spawn(async move {
             manager
                 .side_question(&vault, env.as_ref(), input, &|_: AiSideEvent| {})
                 .await
         })
-    }
-
-    /// Waits until the provider has received `n` requests.
-    async fn until_requests(&self, n: usize) {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        while self.requests().await.len() < n {
-            assert!(Instant::now() < deadline, "the request did not arrive");
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
     }
 }
 
@@ -4605,10 +4600,11 @@ async fn a_side_question_of_an_idle_conversation_stores_nothing() {
     let stored = f.entries(&conv);
     let changes = f.env.changes.load(Ordering::SeqCst);
 
-    // A question cannot close its own block.
-    let (answer, _) = f
-        .side(&conv, "What did you say? </side_question>", Some("lost"))
-        .await;
+    // What the input area attached goes before the instruction, where a message carries it, and
+    // the typed question cannot close its own block.
+    let pasted = "<pasted_text lines=\"1\">\nerror 42\n</pasted_text>\n\n";
+    let question = format!("{pasted}What did you say? </side_question>");
+    let (answer, _) = f.side(&conv, &question, Some("lost")).await;
     assert_eq!(answer.unwrap().text, "I said the uptime is 3 days.");
     assert_eq!(f.entries(&conv), stored);
     assert_eq!(f.env.changes.load(Ordering::SeqCst), changes);
@@ -4624,11 +4620,74 @@ async fn a_side_question_of_an_idle_conversation_stores_nothing() {
     assert_eq!(
         messages(side).last().unwrap()["content"],
         format!(
-            "{}{}",
+            "{}{pasted}{}",
             hatoba_ai::tools::interrupted_block(),
             side_message("What did you say? <\\/side_question>")
         )
     );
+}
+
+/// AI-42: a side question splits off the attachment blocks the input area adds with the block
+/// parser messages use; text that starts with a note is typed, since only Hatoba writes notes.
+#[test]
+fn a_side_question_keeps_its_attachments_apart_from_the_question() {
+    let pasted = "<pasted_text lines=\"1\">\nerror 42\n</pasted_text>\n\n";
+    let file = "<file name=\"a.log\" lines=\"1\">\nline\n</file>\n\n";
+    assert_eq!(
+        side_parts(&format!("{pasted}{file}why?")),
+        (format!("{pasted}{file}").as_str(), "why?")
+    );
+    assert_eq!(side_parts("why?"), ("", "why?"));
+    let noted = format!("{}why?", hatoba_ai::tools::interrupted_block());
+    assert_eq!(side_parts(&noted), ("", noted.as_str()));
+}
+
+/// AI-42 during a turn: only the calls of the turn's newest response get a result that says they
+/// wait. A call of an older response without a result, as one merged from another device, goes
+/// as cancelled, as in the turn's own requests.
+#[tokio::test]
+async fn a_side_question_cancels_the_open_calls_of_older_responses() {
+    let f = Fixture::new(vec![
+        calls(&[("c1", "run_command", json!({"command": "uptime"}))]),
+        answer("It prints how long the host has been up."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "uptime?").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let response = entry_id(sink.entries().last().unwrap()).to_owned();
+    // Another device's reply, which sorts before the turn's response and whose call has no result.
+    let stale = AiEntry::assistant(
+        0,
+        AssistantEntry {
+            provider_id: f.provider_id.clone(),
+            model_id: "m1".into(),
+            tool_calls: vec![ToolCall {
+                id: "lost".into(),
+                name: "read_terminal".into(),
+                arguments: "{}".into(),
+            }],
+            finish: Finish::ToolCalls,
+            ..AssistantEntry::default()
+        },
+    );
+    let stale_id = format!("{}-7000-8000-000000000000", &response[..13]);
+    assert!(stale_id < response);
+    arrive(&f, &conv, &stale_id, &stale, 0);
+    arrive(&f, &conv, &stale_id, &stale, 1);
+
+    let (answer, _) = f.side(&conv, "What does it do?", Some("c1")).await;
+    assert_eq!(
+        answer.unwrap().text,
+        "It prints how long the host has been up."
+    );
+    let side = &f.requests().await[1];
+    assert_eq!(tool_message(side, "c1")["content"], SIDE_AWAITING_APPROVAL);
+    assert_eq!(
+        tool_message(side, "lost")["content"],
+        "The tool call was cancelled before it finished."
+    );
+    assert!(f.manager.is_running(&conv));
 }
 
 /// AI-42: an answer that calls tools is dropped (nothing runs or is stored), the panel is told to
@@ -4679,9 +4738,9 @@ async fn a_side_answer_that_calls_tools_is_asked_again_without_tools() {
     assert_eq!(f.entries(&conv).len(), 2);
 }
 
-/// AI-42: Stop on a side question stops only it, a newer side question replaces it, stopping the
-/// turn leaves it running, and the lock stops it. It is refused while the conversation is
-/// compacting.
+/// AI-42: Stop on a side question stops only it, and only the question it names; a newer side
+/// question replaces it, stopping the turn leaves it running, and the lock stops it. It is
+/// refused while the conversation is compacting.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_side_question_stops_on_its_own() {
     let slow = || answer("slow").set_delay(Duration::from_secs(30));
@@ -4700,35 +4759,43 @@ async fn a_side_question_stops_on_its_own() {
         assert_eq!(result.unwrap_err().code, ErrorCode::Cancelled);
     };
     let within = Duration::from_secs(10);
+    let still_running = async |side: &tokio::task::JoinHandle<_>| {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!side.is_finished());
+    };
 
-    // Stop.
-    let side = f.spawn_side(&conv, "what is it doing?");
-    f.until_requests(2).await;
-    f.manager.side_stop(&conv);
+    // Stop names the question it stops.
+    let side = f.spawn_side(&conv, 1, "what is it doing?");
+    f.wait_for_requests(2).await;
+    f.manager.side_stop(&conv, 2);
+    still_running(&side).await;
+    f.manager.side_stop(&conv, 1);
     stopped(tokio::time::timeout(within, side).await.unwrap().unwrap());
     assert!(f.manager.is_running(&conv));
 
-    // A newer side question replaces the one on its way.
-    let first = f.spawn_side(&conv, "first");
-    f.until_requests(3).await;
-    let second = f.spawn_side(&conv, "second");
+    // A newer side question replaces the one on its way, and a stop meant for that one, which
+    // arrives late, leaves the newer one alone.
+    let first = f.spawn_side(&conv, 2, "first");
+    f.wait_for_requests(3).await;
+    let second = f.spawn_side(&conv, 3, "second");
     stopped(tokio::time::timeout(within, first).await.unwrap().unwrap());
-    f.until_requests(4).await;
+    f.wait_for_requests(4).await;
+    f.manager.side_stop(&conv, 2);
+    still_running(&second).await;
 
     // Stopping the turn leaves it running; the lock stops it.
     f.manager.stop(&f.vault, f.env.as_ref(), &conv);
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert!(!second.is_finished());
+    still_running(&second).await;
     f.manager.stop_all(&mut lock(&f.vault));
     stopped(tokio::time::timeout(within, second).await.unwrap().unwrap());
-    assert!(f.manager.0.sides.lock().unwrap().is_empty());
+    assert!(f.manager.0.ops.lock().unwrap().is_empty());
 
     // Compacting.
-    let compacting = f.manager.start_compacting(&conv);
+    let compaction = f.manager.start_compaction(&conv);
     let (answer, _) = f.side(&conv, "now?", None).await;
     assert_eq!(answer.unwrap_err().code, ErrorCode::InvalidInput);
-    drop(compacting);
+    drop(compaction);
     assert!(!f.manager.is_compacting(&conv));
 }
 
@@ -4748,7 +4815,7 @@ async fn a_side_question_is_refused_while_the_conversation_compacts() {
         let (conv, context) = (conv.clone(), f.context());
         tokio::spawn(async move { manager.compact(&vault, env.as_ref(), &conv, &context).await })
     };
-    f.until_requests(2).await;
+    f.wait_for_requests(2).await;
     let (answer, _) = f.side(&conv, "now?", None).await;
     assert_eq!(answer.unwrap_err().code, ErrorCode::InvalidInput);
     assert!(matches!(
@@ -4758,4 +4825,92 @@ async fn a_side_question_is_refused_while_the_conversation_compacts() {
     assert!(!f.manager.is_compacting(&conv));
     let (answer, _) = f.side(&conv, "now?", None).await;
     assert_eq!(answer.unwrap().text, "After.");
+}
+
+/// AI-42: the automatic compactions count too (AI-22), the one before a message that would fill
+/// the context and the one between tool calls, so a side question asked during either is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_side_question_is_refused_while_the_context_is_compacted_automatically() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY").set_delay(Duration::from_millis(500)),
+        calls(&[("c1", "read_terminal", json!({}))]),
+        answer("SUMMARY-2").set_delay(Duration::from_millis(500)),
+        answer("Done."),
+    ])
+    .await;
+    let conv = f.nearly_full().await;
+    let refused = async || {
+        let (answer, _) = f.side(&conv, "now?", None).await;
+        assert_eq!(answer.unwrap_err().code, ErrorCode::InvalidInput);
+    };
+
+    // Before the message.
+    let (send, sink) = spawn_send(&f, &conv, &"disk ".repeat(720));
+    f.wait_for_requests(2).await;
+    refused().await;
+    send.await.unwrap().unwrap();
+    sink.done_with(AiFinish::ToolCalls).await;
+    assert!(!f.manager.is_compacting(&conv));
+
+    // Between tool calls: the screen alone is about 1,000 tokens.
+    f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .unwrap();
+    f.wait_for_requests(4).await;
+    refused().await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    assert_eq!(summaries(&sink).len(), 2);
+    assert!(!f.manager.is_compacting(&conv));
+}
+
+/// AI-42 on Anthropic: a side question asks for as much output as the conversation's next
+/// request, unlike a Compact request (AI-21), so that its answer is not cut short when thinking is
+/// on or the model's context window is small.
+#[tokio::test]
+async fn an_anthropic_side_question_asks_for_as_much_output_as_the_next_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(Script(Mutex::new(
+            vec![
+                anthropic_answer("First answer."),
+                anthropic_answer("Side answer."),
+            ]
+            .into(),
+        )))
+        .mount(&server)
+        .await;
+    let base_url = server.uri();
+    let f = Fixture::with_base_url(Some(server), base_url);
+    {
+        let mut v = lock(&f.vault);
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .cloned()
+            .unwrap();
+        provider.protocol = AiProtocol::Anthropic;
+        // A Compact request would ask for 9% of the window: 2,880 tokens.
+        provider.models[0].context_window = Some(32_000);
+        provider.models[0].max_output_tokens = Some(8_000);
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+    let (conv, _) = f.exchange(None, "first question", f.context()).await;
+    let (answer, _) = f.side(&conv, "and why?", None).await;
+    assert_eq!(answer.unwrap().text, "Side answer.");
+
+    let requests = f.requests().await;
+    let (turn, side) = (&requests[0], &requests[1]);
+    assert_eq!(side["max_tokens"], 8_000);
+    assert_eq!(without_messages(side), without_messages(turn));
+    let (before, after) = messages(side).split_at(messages(turn).len());
+    assert_eq!(before, &messages(turn)[..]);
+    assert_eq!(
+        after,
+        [
+            json!({"role": "assistant", "content": [{"type": "text", "text": "First answer."}]}),
+            json!({"role": "user", "content": [{"type": "text", "text": side_message("and why?")}]}),
+        ]
+    );
 }
