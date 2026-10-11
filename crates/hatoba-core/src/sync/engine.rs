@@ -217,7 +217,7 @@ async fn pull_all(
         let next = page.next_since;
         with_vault(vault, cancel, |v| {
             let mut ctx = v.sync_ctx()?;
-            apply_pull_page(&mut ctx, &page.items, next, options, report)
+            apply_pull_page(&mut ctx, &page.items, next, !has_more, options, report)
         })?;
         if !has_more {
             return Ok(());
@@ -242,6 +242,7 @@ fn apply_pull_page(
     ctx: &mut SyncCtx<'_>,
     items: &[RemoteItem],
     next_since: u64,
+    last: bool,
     options: &SyncOptions,
     report: &mut SyncReport,
 ) -> Result<()> {
@@ -266,9 +267,25 @@ fn apply_pull_page(
             .unwrap_or(0);
         let cursor = current.max(next_since).max(batch.max_seq);
         tx.set_meta(meta::SYNC_CURSOR, &cursor.to_string())?;
+        if last && adoption_pending(tx)? {
+            // The whole cloud was pulled without a settings item: it has none, so the settings
+            // kept from before the join go up instead.
+            if let Some(row) = tx.item_row(SETTINGS_ID)?.filter(|row| !row.deleted) {
+                tx.upsert_item_row(&ItemRow { dirty: true, ..row })?;
+            }
+            tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
+        }
         Ok(batch)
     })?;
     finish_batch(ctx, batch, report)
+}
+
+/// Whether this device joined the current backend's vault and has yet to see its settings.
+fn adoption_pending(tx: &StoreTx<'_>) -> Result<bool> {
+    let Some(joined) = tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)? else {
+        return Ok(false);
+    };
+    Ok(tx.get_meta(meta::SYNC_BACKEND)?.as_deref() == Some(joined.as_str()))
 }
 
 /// Refreshes the decrypted cache for everything a committed transaction touched and folds the
@@ -322,10 +339,7 @@ fn apply_remote(
 ) -> Result<Disposition> {
     // The first settings item from the backend this device joined another vault on replaces the
     // local one outright.
-    if remote.id == SETTINGS_ID
-        && let Some(joined) = tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)?
-        && tx.get_meta(meta::SYNC_BACKEND)?.as_deref() == Some(joined.as_str())
-    {
+    if remote.id == SETTINGS_ID && adoption_pending(tx)? {
         tx.upsert_item_row(&remote_row(remote))?;
         tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
         batch.touched.push(remote.id.clone());

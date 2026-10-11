@@ -597,6 +597,34 @@ async fn cloud_settings_still_win_after_reconnecting_before_the_first_pull() {
 }
 
 #[tokio::test]
+async fn join_uploads_the_local_settings_when_the_cloud_has_none() {
+    let (server, clock, a, b) = world();
+    // Flow A set the remote up but never got to upload anything.
+    server.fail_next("login");
+    assert!(
+        enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
+            .await
+            .is_err()
+    );
+    server.set_offline(false);
+    assert_eq!(server.item_count(), 0);
+
+    let c = own_vault_device(&server, &clock);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.font_size = 7;
+        }
+    });
+    let joined = join(&c).await;
+    assert!(joined.rekeyed);
+    assert_eq!(c.pending(), 0);
+    assert!(server.item(SETTINGS_ID).is_some(), "the settings went up");
+
+    restore(&b).await;
+    assert_eq!(b.v().settings().terminal.font_size, 7);
+}
+
+#[tokio::test]
 async fn a_new_remote_syncs_settings_as_usual_after_a_pending_join() {
     let (server, clock, a, _b) = world();
     enable(&a).await;
