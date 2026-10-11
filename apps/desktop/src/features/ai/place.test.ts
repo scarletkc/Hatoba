@@ -39,6 +39,14 @@ describe("movedFrom (AI-09)", () => {
     expect(movedFrom(onHost("h-prod"), hostTab("h-prod"), hosts)).toBeNull();
   });
 
+  it("names the server a fork's copies came from when the fork could not tell which it is (AI-43)", () => {
+    const fork = (origin: string) => ({ ...homeChat, origin });
+    expect(movedFrom(fork("old-name"), hostTab("h-web"), hosts)).toEqual({ from: "old-name", to: "web-1" });
+    expect(movedFrom(fork(""), quickTab("10.0.0.7"), hosts)).toEqual({ from: "", to: "root@10.0.0.7:22" });
+    expect(movedFrom(fork("web-1"), hostTab("h-web-2"), hosts)).toBeNull();
+    expect(movedFrom(homeChat, hostTab("h-web"), hosts)).toBeNull();
+  });
+
   it("names the quick-connect target a conversation moves off (HOST-12)", () => {
     const on7 = onTarget(target("10.0.0.7"));
     expect(movedFrom(on7, hostTab("h-prod"), hosts)).toEqual({ from: "root@10.0.0.7:22", to: "prod-db" });

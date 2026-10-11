@@ -147,6 +147,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_conversation_rename,
             ai_cmd::ai_conversation_pin,
             ai_cmd::ai_conversation_delete,
+            ai_cmd::ai_conversation_fork,
             ai_cmd::ai_send,
             ai_cmd::ai_retry,
             ai_cmd::ai_tool_result,

@@ -315,6 +315,7 @@ mod tests {
                     title: "t".into(),
                     host_id: None,
                     quick_target: None,
+                    origin: None,
                     pinned: false,
                     context_start: None,
                     effort: None,

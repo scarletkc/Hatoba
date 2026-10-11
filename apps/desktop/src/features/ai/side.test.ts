@@ -26,6 +26,7 @@ const view: AiConversationView = {
   title: "nginx 502",
   host_id: null,
   quick_target: null,
+  origin: null,
   pinned: false,
   context_start: null,
   effort: null,

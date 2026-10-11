@@ -238,6 +238,11 @@ export const commands = {
 	aiConversationPin: (id: string, pinned: boolean) => __TAURI_INVOKE<AiConversationView>("ai_conversation_pin", { id, pinned }),
 	aiConversationDelete: (id: string) => __TAURI_INVOKE<null>("ai_conversation_delete", { id }),
 	/**
+	 *  AI-43: copies the conversation up to the entry `entry_id`, or all of it without one, into a
+	 *  new conversation titled `title`, and returns the new conversation.
+	 */
+	aiConversationFork: (id: string, entryId: string | null, title: string) => __TAURI_INVOKE<AiConversationView>("ai_conversation_fork", { id, entryId, title }),
+	/**
 	 *  Stores the user's message and starts a turn; its events stream on `channel` until
 	 *  `turn_ended`.
 	 */
@@ -412,6 +417,11 @@ export type AiConversationView = {
 	 *  as the conversation records it: the address in lowercase and without brackets.
 	 */
 	quick_target: QuickTarget | null,
+	/**
+	 *  AI-43: with neither, the name of the server a fork's copies came from, when the fork could
+	 *  not tell which it is; its next message on a tab of a host or target notes the move from it.
+	 */
+	origin: string | null,
 	pinned: boolean,
 	/**  `entry_id` where the context sent to the model starts (AI-21). */
 	context_start: string | null,

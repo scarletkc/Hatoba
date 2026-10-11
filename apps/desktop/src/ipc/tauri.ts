@@ -158,6 +158,7 @@ export function createTauriApi(): HatobaApi {
     ai_conversation_rename: (id, title) => call("ai_conversation_rename", { id, title }),
     ai_conversation_pin: (id, pinned) => call("ai_conversation_pin", { id, pinned }),
     ai_conversation_delete: (id) => call("ai_conversation_delete", { id }),
+    ai_conversation_fork: (id, entryId, title) => call("ai_conversation_fork", { id, entryId, title }),
     ai_send: (input, onEvent) => {
       const channel = new Channel<AiTurnEvent>();
       channel.onmessage = onEvent;

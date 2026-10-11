@@ -4,7 +4,7 @@ import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, HostView, QuickTarget } from "@/ipc/types";
 
 type Tr = (key: MessageKey, params?: Params) => string;
-type Recorded = Pick<AiConversationView, "host_id" | "quick_target">;
+type Recorded = Pick<AiConversationView, "host_id" | "quick_target"> & Partial<Pick<AiConversationView, "origin">>;
 
 /** Like Rust's `AiQuickTarget::new` (AI-09): a target as a conversation records it, the address in lowercase and without brackets. */
 export function recordedTarget(t: QuickTarget): QuickTarget {
@@ -62,7 +62,8 @@ export function moves(c: Recorded, tab: TabSource): boolean {
 
 /**
  * The `host_change` note the next message in `tab` gets (AI-09), as Rust's `moved_from` and `notes_before`
- * name it: `from`, the conversation's host (empty when it was deleted since) or target, and `to`, the tab's.
+ * name it: `from`, the conversation's host (empty when it was deleted since) or target, or with neither, a fork's
+ * `origin` (AI-43), and `to`, the tab's.
  * Null when Rust writes none: the message does not move the conversation, it was nowhere (a home tab chat), the
  * move is between a target and the saved host with its address, port, and user (as after Save as Host…), the
  * tab's saved host was deleted, or both have one name.
@@ -73,7 +74,8 @@ export function movedFrom(c: Recorded, tab: TabSource, hosts: HostView[]): { fro
   const next = hosts.find((h) => h.id === tab.hostId);
   let from: string | null;
   if (c.host_id) from = tab.target && old && sameTarget(old, tab.target) ? null : (old?.name ?? "");
-  else from = c.quick_target && !(next && sameTarget(next, c.quick_target)) ? formatTarget(c.quick_target) : null;
+  else if (c.quick_target) from = next && sameTarget(next, c.quick_target) ? null : formatTarget(c.quick_target);
+  else from = c.origin ?? null;
   const to = tab.hostId !== null ? next?.name : formatTarget(recordedTarget(tab.target));
   return from !== null && to !== undefined && from !== to ? { from, to } : null;
 }

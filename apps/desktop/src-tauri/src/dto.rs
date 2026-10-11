@@ -1205,6 +1205,9 @@ pub struct AiConversationView {
     /// The quick-connect target (HOST-12) it last worked on while `host_id` is `None` (AI-09),
     /// as the conversation records it: the address in lowercase and without brackets.
     pub quick_target: Option<QuickTarget>,
+    /// AI-43: with neither, the name of the server a fork's copies came from, when the fork could
+    /// not tell which it is; its next message on a tab of a host or target notes the move from it.
+    pub origin: Option<String>,
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
     pub context_start: Option<String>,

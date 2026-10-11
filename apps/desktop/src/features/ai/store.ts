@@ -84,6 +84,8 @@ interface AiState {
   /** The history list, once the panel has asked for it (AI-23). */
   history: AiConversationView[] | null;
   historyFailed: boolean;
+  /** AI-43: the conversations a fork is being made of; the panel offers no other fork of them meanwhile. */
+  forking: string[];
   /** Bumped to move focus to the input box. */
   focusTick: number;
   /** The focus request selects the whole draft, so typing replaces a suggested question. */
@@ -100,6 +102,7 @@ export const useAi = create<AiState>(() => ({
   diagnostics: {},
   history: null,
   historyFailed: false,
+  forking: [],
   focusTick: 0,
   focusSelectAll: false,
 }));

@@ -13,6 +13,7 @@ import {
   dismissSideQuestion,
   editAndResend,
   fileChangeDiff,
+  forkConversation,
   retrySideQuestion,
   retryTurn,
   revertFileChange,
@@ -26,6 +27,7 @@ import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
+import { forkPoints } from "./fork";
 import { Markdown } from "./Markdown";
 import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
@@ -147,8 +149,15 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return newest && turn ? { kind: "queued" } : { kind: "none" };
   };
 
-  // AI-26: the user's stored messages can be edited and sent again while nothing runs.
+  // AI-26: the user's stored messages can be edited and sent again while nothing runs; AI-43: the
+  // conversation can be forked from them and from finished replies then too, unless a file change is being
+  // reverted (AI-41) or a fork of it is being made.
   const canEdit = !!slot.conversationId && !turn && !slot.remoteRunning && !slot.compacting && !slot.loading;
+  const forkable = useMemo(() => forkPoints(entries), [entries]);
+  const conversationId = slot.conversationId;
+  const forking = useAi((st) => !!conversationId && st.forking.includes(conversationId));
+  const fork = (entryId: string) =>
+    canEdit && !slot.reverting && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined;
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
   // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
@@ -187,6 +196,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 at={entry.created_at}
                 pending={pending}
                 onResend={canEdit && !pending ? (text) => editAndResend(slotId, entry.entry_id, text) : undefined}
+                onFork={fork(entry.entry_id)}
                 untracked={() => editedFiles(entries, slot.fileChanges, entry.entry_id).untracked}
               />
             );
@@ -208,6 +218,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 finish={entry.finish}
                 flash={flash}
                 reply={reply}
+                onFork={reply ? fork(entry.entry_id) : undefined}
               />
             );
             break;
@@ -273,24 +284,33 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+/** AI-43: copies the conversation up to this message into a new one, which opens in its place. */
+function ForkButton({ onFork }: { onFork: () => void }) {
+  const t = useT();
+  return <IconButton icon="git-fork" label={t("ai.fork")} size={13} className={s.messageAction} onClick={onFork} />;
+}
+
 /**
  * The user's message. Copy takes what was typed, without the attachments. With `onResend`, Edit
- * replaces it and sends it again (AI-26). The notes Hatoba stored before it (AI-05, AI-09) are
- * dividers above it, not part of the bubble; an edit shows them while it is sent, and Rust works
- * them out again for the new message. `untracked` counts the file changes of the calls an edit
- * deletes that this device cannot revert (AI-41).
+ * replaces it and sends it again (AI-26), and with `onFork`, Fork from Here copies the conversation up
+ * to it into a new one (AI-43). The notes Hatoba stored before it (AI-05, AI-09) are dividers above
+ * it, not part of the bubble; an edit shows them while it is sent, and Rust works them out again for
+ * the new message. `untracked` counts the file changes of the calls an edit deletes that this device
+ * cannot revert (AI-41).
  */
 function UserMessage({
   text,
   at,
   pending,
   onResend,
+  onFork,
   untracked,
 }: {
   text: string;
   at: number;
   pending: boolean;
   onResend?: (text: string) => Promise<boolean>;
+  onFork?: () => void;
   untracked: () => number;
 }) {
   const t = useT();
@@ -312,6 +332,7 @@ function UserMessage({
         <div className={s.userActions}>
           {parts.typed && <CopyButton text={parts.typed} />}
           {onResend && <IconButton icon="pencil-simple" label={t("ai.edit")} size={13} className={s.messageAction} onClick={() => setEditing(true)} />}
+          {onFork && <ForkButton onFork={onFork} />}
         </div>
         <div className={s.userStack}>
           {parts.attachments.map((a, i) => (
@@ -505,6 +526,7 @@ function AssistantMessage({
   finish,
   flash,
   reply,
+  onFork,
 }: {
   slotId: string;
   /** The stored entry; a reply still streaming has none. */
@@ -524,6 +546,8 @@ function AssistantMessage({
   flash?: string | null;
   /** The finished reply this entry ends: its text for Copy, and when it ended. */
   reply?: ReplyEnd;
+  /** AI-43: Fork from Here under the finished reply. */
+  onFork?: () => void;
 }) {
   const thinking = !!streaming && !text && calls.length === 0;
   return (
@@ -538,6 +562,7 @@ function AssistantMessage({
       {reply && (
         <div className={s.replyFoot}>
           {reply.text && <CopyButton text={reply.text} />}
+          {onFork && <ForkButton onFork={onFork} />}
           <MessageTime at={reply.at} />
         </div>
       )}

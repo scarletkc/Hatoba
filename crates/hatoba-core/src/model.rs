@@ -772,6 +772,12 @@ pub struct AiConversation {
     /// get no note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quick_target: Option<AiQuickTarget>,
+    /// AI-43: for a fork that records neither a host nor a target, the name a `host_change` note
+    /// gives the server its copies came from (AI-09), when the copies tell the name but not which
+    /// saved host or target it is (empty for a host that no longer exists). The next message that
+    /// moves the fork starts with a note from it, and the move clears it. `None` (absent) is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     /// Pinned to the top of the history.
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
@@ -1929,6 +1935,7 @@ mod tests {
             title: "Why is nginx down".into(),
             host_id: Some("h1".into()),
             quick_target: None,
+            origin: None,
             pinned: true,
             context_start: Some("e1".into()),
             effort: Some(AiEffort::Xhigh),
@@ -1960,6 +1967,15 @@ mod tests {
             }))
             .unwrap()["quick_target"],
             json!({"username": "root", "address": "fe80::1", "port": 2222})
+        );
+        // A fork whose copies name a server it cannot tell (AI-43).
+        assert_eq!(
+            serde_json::to_value(Item::AiConversation(AiConversation {
+                origin: Some("prod".into()),
+                ..AiConversation::default()
+            }))
+            .unwrap()["origin"],
+            json!("prod")
         );
 
         let message = Item::AiMessage(AiMessage {

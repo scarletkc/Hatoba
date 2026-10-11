@@ -21,8 +21,8 @@ use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
 use crate::ai::{
-    AiEnv, EventSink, auth_header, conversation_view, conversation_view_at, core_effort,
-    effort_view, find_conversation, listed_effort, protocol, search_kind,
+    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, conversation_view, conversation_view_at,
+    core_effort, effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
@@ -651,10 +651,10 @@ pub(crate) fn rename_conversation(
     title: &str,
 ) -> AppResult<AiConversationView> {
     let title = title.trim();
-    if !(1..=200).contains(&title.chars().count()) {
+    if !(1..=MAX_TITLE_CHARS).contains(&title.chars().count()) {
         return Err(AppError::invalid(
             "title",
-            "the title must be 1 to 200 characters",
+            format!("the title must be 1 to {MAX_TITLE_CHARS} characters"),
         ));
     }
     update_conversation(v, id, |c| title.clone_into(&mut c.title))
@@ -720,6 +720,22 @@ pub async fn ai_conversation_delete(
     state
         .ai
         .delete_conversation(&state.vault, &AppEnv(app), &id)
+}
+
+/// AI-43: copies the conversation up to the entry `entry_id`, or all of it without one, into a
+/// new conversation titled `title`, and returns the new conversation.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_conversation_fork(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    entry_id: Option<String>,
+    title: String,
+) -> AppResult<AiConversationView> {
+    let (ai, vault) = (state.ai.clone(), state.vault.clone());
+    blocking(move || ai.fork_conversation(&vault, &AppEnv(app), &id, entry_id.as_deref(), &title))
+        .await
 }
 
 // ───────────────────────── turns (§13.1) ─────────────────────────

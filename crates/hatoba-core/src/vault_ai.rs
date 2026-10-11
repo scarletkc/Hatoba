@@ -13,6 +13,8 @@
 //!   `part_count`, `updated_at`) and not its `data`. [`Vault::ai_entries`] reads a conversation
 //!   back from the local database and decrypts it again; [`Vault::ai_entries_from`] reads only
 //!   its newest entries, picked by their headers.
+//! * A fork (AI-43) is a new conversation created with copies of entries, all in one transaction
+//!   ([`Vault::ai_create_conversation`]).
 //! * Deleting a conversation or a skill tombstones everything that belongs to it (§6.5), and
 //!   editing a message to send it again (AI-26) tombstones that entry and every later one.
 //!   Parts that another device added to a conversation deleted here (or the other way round)
@@ -269,49 +271,82 @@ impl Vault {
             .map(|(_, m)| m.entry_id.as_str())
             .max();
         let entry_id = next_entry_id(now, last)?;
-        let slices = split_entry(conversation_id, &entry_id, json)?;
-        let part_count = u32::try_from(slices.len())
-            .map_err(|_| Error::InvalidItem("the entry is too large".into()))?;
+
+        let Self {
+            store, unlocked, ..
+        } = self;
+        let unlocked = unlocked.as_mut().ok_or(Error::Locked)?;
+        let parts = seal_entry(&unlocked.vault_key, conversation_id, &entry_id, json, now)?;
+        store.transaction(|tx| {
+            for (row, _) in &parts {
+                tx.upsert_item_row(row)?;
+            }
+            Ok(())
+        })?;
+        unlocked
+            .items
+            .extend(parts.into_iter().map(|(row, header)| (row.id, header)));
+        Ok(entry_id)
+    }
+
+    /// Creates a conversation that holds these entries, in this order, and returns its id and the
+    /// entries' ids: a fork (AI-43). The conversation item and every part are stored in one
+    /// transaction, dirty, so a fork is never left half written and syncs whole.
+    ///
+    /// Each entry gets a fresh UUIDv7, each greater than the one before, as
+    /// [`ai_append_entry`](Self::ai_append_entry) would give them one after another. The JSON is
+    /// stored as it is. `context_start` is the index of the entry whose new id becomes the
+    /// conversation's `context_start` (AI-21), which is `None` without one.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_create_conversation(
+        &mut self,
+        mut conversation: AiConversation,
+        entries: &[&str],
+        context_start: Option<usize>,
+    ) -> Result<(String, Vec<String>)> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        let now = self.clock.now_ms();
+        let id = new_id();
 
         let Self {
             store, unlocked, ..
         } = self;
         let unlocked = unlocked.as_mut().ok_or(Error::Locked)?;
         let key = &unlocked.vault_key;
-        let headers = store.transaction(|tx| {
-            let mut headers = Vec::with_capacity(slices.len());
-            for (part, slice) in (0..part_count).zip(&slices) {
-                let id = new_id();
-                let mut item = Item::AiMessage(AiMessage {
-                    conversation_id: conversation_id.to_owned(),
-                    entry_id: entry_id.clone(),
-                    part,
-                    part_count,
-                    data: (*slice).to_owned(),
-                    updated_at: now,
-                });
-                let plain = item.to_plaintext()?;
-                if plain.len() > AI_PART_MAX_BYTES {
-                    return Err(Error::InvalidItem(
-                        "an entry part exceeds the size limit".into(),
-                    ));
-                }
-                let envelope = seal(key, item_aad(&id).as_bytes(), &plain)?;
-                tx.upsert_item_row(&ItemRow {
-                    id: id.clone(),
-                    envelope: Some(envelope.to_json()),
-                    revision: 0,
-                    deleted: false,
-                    dirty: true,
-                    updated_at: now,
-                })?;
-                item.strip_message_data();
-                headers.push((id, item));
+        let mut entry_ids: Vec<String> = Vec::with_capacity(entries.len());
+        let mut parts = Vec::new();
+        for json in entries {
+            let entry_id = next_entry_id(now, entry_ids.last().map(String::as_str))?;
+            parts.extend(seal_entry(key, &id, &entry_id, json, now)?);
+            entry_ids.push(entry_id);
+        }
+        conversation.context_start = context_start.and_then(|i| entry_ids.get(i)).cloned();
+        conversation.updated_at = now;
+        let item = Item::AiConversation(conversation);
+        let envelope = seal(key, item_aad(&id).as_bytes(), &item.to_plaintext()?)?;
+        store.transaction(|tx| {
+            tx.upsert_item_row(&ItemRow {
+                id: id.clone(),
+                envelope: Some(envelope.to_json()),
+                revision: 0,
+                deleted: false,
+                dirty: true,
+                updated_at: now,
+            })?;
+            for (row, _) in &parts {
+                tx.upsert_item_row(row)?;
             }
-            Ok(headers)
+            Ok(())
         })?;
-        unlocked.items.extend(headers);
-        Ok(entry_id)
+        unlocked.items.insert(id.clone(), item);
+        unlocked
+            .items
+            .extend(parts.into_iter().map(|(row, header)| (row.id, header)));
+        Ok((id, entry_ids))
     }
 
     /// When a conversation last saw activity: the latest `updated_at` of the conversation item
@@ -572,6 +607,52 @@ fn successor(prev: Uuid) -> Uuid {
 }
 
 // ---- splitting ----------------------------------------------------------------------------
+
+/// The `ai_message` items of one entry, sealed: each part's row, dirty, and its header without
+/// `data` for the item map.
+fn seal_entry(
+    key: &[u8; 32],
+    conversation_id: &str,
+    entry_id: &str,
+    json: &str,
+    now: i64,
+) -> Result<Vec<(ItemRow, Item)>> {
+    let slices = split_entry(conversation_id, entry_id, json)?;
+    let part_count = u32::try_from(slices.len())
+        .map_err(|_| Error::InvalidItem("the entry is too large".into()))?;
+    let mut parts = Vec::with_capacity(slices.len());
+    for (part, slice) in (0..part_count).zip(&slices) {
+        let id = new_id();
+        let mut item = Item::AiMessage(AiMessage {
+            conversation_id: conversation_id.to_owned(),
+            entry_id: entry_id.to_owned(),
+            part,
+            part_count,
+            data: (*slice).to_owned(),
+            updated_at: now,
+        });
+        let plain = item.to_plaintext()?;
+        if plain.len() > AI_PART_MAX_BYTES {
+            return Err(Error::InvalidItem(
+                "an entry part exceeds the size limit".into(),
+            ));
+        }
+        let envelope = seal(key, item_aad(&id).as_bytes(), &plain)?;
+        item.strip_message_data();
+        parts.push((
+            ItemRow {
+                id,
+                envelope: Some(envelope.to_json()),
+                revision: 0,
+                deleted: false,
+                dirty: true,
+                updated_at: now,
+            },
+            item,
+        ));
+    }
+    Ok(parts)
+}
 
 /// How many bytes `c` takes inside a JSON string as `serde_json` writes it.
 fn escaped_len(c: char) -> usize {
@@ -1161,6 +1242,92 @@ pub(crate) mod tests {
             vault.ai_parts_read() - before,
             cached_messages(&vault).len()
         );
+    }
+
+    #[test]
+    fn a_created_conversation_holds_its_entries_in_order() {
+        let (mut vault, clock) = vault();
+        let original = conversation(&mut vault, "original");
+        vault.ai_append_entry(&original, r#"{"n":0}"#).unwrap();
+        let big = serde_json::to_string(&json!({"text": nasty(60_000)})).unwrap();
+        let jsons = [r#"{"n":1}"#, big.as_str(), r#"{"n":3}"#];
+        let pending = vault.pending_count();
+        clock.advance(5_000);
+        let (id, entry_ids) = vault
+            .ai_create_conversation(
+                AiConversation {
+                    title: "fork".into(),
+                    pinned: true,
+                    context_start: Some("stale".into()),
+                    ..AiConversation::default()
+                },
+                &jsons,
+                Some(1),
+            )
+            .unwrap();
+
+        let item = vault
+            .get(&id)
+            .unwrap()
+            .as_ai_conversation()
+            .unwrap()
+            .clone();
+        assert_eq!((item.title.as_str(), item.pinned), ("fork", true));
+        // `context_start` is the new id of the entry it names.
+        assert_eq!(item.context_start.as_ref(), Some(&entry_ids[1]));
+        assert_eq!(item.updated_at, 1_700_000_005_000);
+        assert_eq!(vault.ai_last_activity(&id), 1_700_000_005_000);
+        // Fresh, increasing UUIDv7s, even within one millisecond, and the JSON as it was.
+        assert_eq!(entry_ids.len(), 3);
+        assert!(entry_ids.windows(2).all(|w| w[0] < w[1]));
+        for entry_id in &entry_ids {
+            assert_eq!(Uuid::parse_str(entry_id).unwrap().get_version_num(), 7);
+        }
+        let stored = vault.ai_entries(&id).unwrap();
+        assert_eq!(
+            stored
+                .iter()
+                .map(|e| e.entry_id.clone())
+                .collect::<Vec<_>>(),
+            entry_ids
+        );
+        assert_eq!(
+            stored.iter().map(|e| e.json.as_str()).collect::<Vec<_>>(),
+            jsons
+        );
+        // The item and every part are new rows, dirty, so they sync; the original is untouched.
+        let parts = cached_messages(&vault)
+            .iter()
+            .filter(|m| m.conversation_id == id)
+            .count();
+        assert!(parts >= 4, "{parts} parts");
+        assert_eq!(
+            vault.pending_count(),
+            pending + 1 + u64::try_from(parts).unwrap()
+        );
+        let row = vault.store.item_row(&id).unwrap().unwrap();
+        assert!(row.dirty && !row.deleted && row.revision == 0);
+        assert_eq!(vault.ai_entries(&original).unwrap().len(), 1);
+
+        // A later entry sorts after the copies; a conversation can start with none.
+        let next = vault.ai_append_entry(&id, "{}").unwrap();
+        assert!(next > entry_ids[2]);
+        let (empty, none) = vault
+            .ai_create_conversation(AiConversation::default(), &[], Some(0))
+            .unwrap();
+        assert!(none.is_empty() && vault.ai_entries(&empty).unwrap().is_empty());
+        let empty = vault.get(&empty).unwrap().as_ai_conversation().unwrap();
+        assert_eq!(empty.context_start, None);
+
+        // Everything reads back after a lock and unlock.
+        vault.lock();
+        assert!(matches!(
+            vault.ai_create_conversation(AiConversation::default(), &jsons, None),
+            Err(Error::Locked)
+        ));
+        vault.unlock(PW).unwrap();
+        assert_eq!(vault.ai_entries(&id).unwrap().len(), 4);
+        assert_eq!(vault.ai_entries(&id).unwrap()[1].json.as_str(), big);
     }
 
     #[test]

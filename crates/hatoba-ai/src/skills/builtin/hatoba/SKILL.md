@@ -73,7 +73,8 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
-| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, history, export and edit, the MCP tools menu |
+| `references/ai-panel.md` | Using the AI assistant: the panel, tools, permission modes, approvals, the MCP tools menu |
+| `references/ai-history.md` | AI conversation history: search, open, rename, pin, export and delete, Edit and Resend, and forking a conversation into a new one |
 | `references/ai-models.md` | The model picker, the Thinking Level (Default to Max), the context meter, Compact and automatic compaction, the reasoning display |
 | `references/ai-file-changes.md` | Undoing the assistant's file edits: **Revert** on an Edit file or Write file call, where the earlier content is kept, when Revert refuses, what it does not undo, and what **Edit and Resend** asks about the files the deleted calls changed |
 | `references/ai-attachments.md` | What goes with an AI message: the terminal selection, Ask AI about a failed connection, long pastes, text files, size limits and the context-fit note |

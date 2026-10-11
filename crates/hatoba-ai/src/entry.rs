@@ -29,6 +29,10 @@ pub enum EntryBody {
         /// The message text.
         #[serde(default)]
         text: String,
+        /// Where the entries before the message came from (AI-09, AI-43). `None` (absent) in
+        /// entries from before it was recorded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        came_from: Option<EntryPlace>,
     },
     /// A model response.
     Assistant(AssistantEntry),
@@ -53,6 +57,37 @@ pub enum EntryBody {
         #[serde(default)]
         text: String,
     },
+}
+
+/// The host or quick-connect target a conversation was on when one of its user messages was
+/// stored, before the move the message made (AI-09): where the screens and command output before
+/// the message came from. Empty for none, as for a home tab chat.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EntryPlace {
+    /// The saved host's item id, which may have been deleted since.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_id: Option<String>,
+    /// The quick-connect target (HOST-12), while `host_id` is `None`, as the conversation item
+    /// records it: the address in lowercase and without brackets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quick_target: Option<EntryTarget>,
+    /// With neither, the name of the server, for a fork that knows only that (AI-43: the
+    /// conversation item's `origin`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// A quick-connect target in an [`EntryPlace`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EntryTarget {
+    /// The user name it connects as.
+    pub username: String,
+    /// DNS name or IP address.
+    pub address: String,
+    /// The SSH port.
+    pub port: u16,
 }
 
 /// A model response as stored (the `assistant` entry).
@@ -165,7 +200,22 @@ impl AiEntry {
     pub fn user(created_at: i64, text: impl Into<String>) -> Self {
         Self {
             created_at,
-            body: EntryBody::User { text: text.into() },
+            body: EntryBody::User {
+                text: text.into(),
+                came_from: None,
+            },
+        }
+    }
+
+    /// A `user` entry that records where the entries before it came from.
+    #[must_use]
+    pub fn user_from(created_at: i64, text: impl Into<String>, came_from: EntryPlace) -> Self {
+        Self {
+            created_at,
+            body: EntryBody::User {
+                text: text.into(),
+                came_from: Some(came_from),
+            },
         }
     }
 
@@ -243,7 +293,8 @@ pub fn fix_up_missing_results(entries: &[AiEntry]) -> Vec<String> {
 /// For each tool call, keyed by `(assistant entry index, call index)`, the index of the `tool`
 /// entry that answers it: the first result with that id stored after the call and not taken by
 /// an earlier call.
-pub(crate) fn pair_results(entries: &[AiEntry]) -> HashMap<(usize, usize), usize> {
+#[must_use]
+pub fn pair_results(entries: &[AiEntry]) -> HashMap<(usize, usize), usize> {
     let mut results: HashMap<&str, VecDeque<usize>> = HashMap::new();
     for (i, entry) in entries.iter().enumerate() {
         if let EntryBody::Tool { tool_call_id, .. } = &entry.body {
@@ -357,6 +408,28 @@ mod tests {
             (
                 AiEntry::user(1, "hello"),
                 json!({"created_at": 1, "role": "user", "text": "hello"}),
+            ),
+            (
+                AiEntry::user_from(
+                    1,
+                    "on",
+                    EntryPlace {
+                        host_id: None,
+                        quick_target: Some(EntryTarget {
+                            username: "root".into(),
+                            address: "fe80::1".into(),
+                            port: 22,
+                        }),
+                        origin: None,
+                    },
+                ),
+                json!({"created_at": 1, "role": "user", "text": "on", "came_from": {
+                    "quick_target": {"username": "root", "address": "fe80::1", "port": 22}
+                }}),
+            ),
+            (
+                AiEntry::user_from(1, "home", EntryPlace::default()),
+                json!({"created_at": 1, "role": "user", "text": "home", "came_from": {}}),
             ),
             (
                 AiEntry::tool(2, "c1", ToolStatus::Rejected, "no"),

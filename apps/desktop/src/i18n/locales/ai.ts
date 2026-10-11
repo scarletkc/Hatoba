@@ -287,6 +287,7 @@ export default defineMessages({
     "ai.history.more": "更多操作",
     "ai.history.renameLabel": "对话标题",
     "ai.history.export": "导出为 Markdown…",
+    "ai.history.fork": "创建分支",
 
     // history search (AI-24)
     "ai.search": "搜索对话",
@@ -325,6 +326,13 @@ export default defineMessages({
     "ai.editFiles.changed": "文件已经不是这次调用写入的内容。",
     "ai.editFiles.gone": "文件已经不存在。",
     "ai.editFiles.untracked": "后面的消息里有调用修改过主机上的文件。这台设备没有保存这些修改，删除消息后它们会留在主机上。",
+
+    // fork (AI-43)
+    "ai.fork": "从这里创建分支",
+    "ai.fork.title": "{title}（分支）",
+    "ai.fork.titleNumbered": "{title}（分支 {n}）",
+    "ai.fork.done": "已创建分支，原对话仍在历史对话中。",
+    "ai.fork.inHistory": "已创建分支，新对话在历史对话中。",
 
     // tools menu (AI-30, AI-32)
     "ai.tools": "MCP 工具",
@@ -634,6 +642,7 @@ export default defineMessages({
     "ai.history.more": "More",
     "ai.history.renameLabel": "Conversation title",
     "ai.history.export": "Export as Markdown…",
+    "ai.history.fork": "Fork",
 
     "ai.search": "Search conversations",
     "ai.search.clear": "Clear Search",
@@ -672,6 +681,13 @@ export default defineMessages({
     "ai.editFiles.changed": "The file no longer holds what the call wrote.",
     "ai.editFiles.gone": "The file no longer exists.",
     "ai.editFiles.untracked": "Calls in the later messages changed files on the host. This device keeps no copy of those changes, so they stay when the messages are deleted.",
+
+    // fork (AI-43)
+    "ai.fork": "Fork from Here",
+    "ai.fork.title": "{title} (fork)",
+    "ai.fork.titleNumbered": "{title} (fork {n})",
+    "ai.fork.done": "Forked. The original conversation stays in History.",
+    "ai.fork.inHistory": "Forked. The new conversation is in History.",
 
     "ai.tools": "MCP tools",
     "ai.tools.summary": "This conversation uses {on} of {total} MCP servers",
@@ -975,6 +991,7 @@ export default defineMessages({
     "ai.history.more": "その他の操作",
     "ai.history.renameLabel": "会話のタイトル",
     "ai.history.export": "Markdown として書き出す…",
+    "ai.history.fork": "分岐",
 
     "ai.search": "会話を検索",
     "ai.search.clear": "検索をクリア",
@@ -1010,6 +1027,13 @@ export default defineMessages({
     "ai.editFiles.changed": "ファイルはもうこの呼び出しが書き込んだ内容ではありません。",
     "ai.editFiles.gone": "ファイルがもう存在しません。",
     "ai.editFiles.untracked": "後のメッセージの呼び出しがホスト上のファイルを変更しました。このデバイスにはその変更の記録がないため、メッセージを削除しても変更はホストに残ります。",
+
+    // fork (AI-43)
+    "ai.fork": "ここから分岐",
+    "ai.fork.title": "{title}（分岐）",
+    "ai.fork.titleNumbered": "{title}（分岐 {n}）",
+    "ai.fork.done": "分岐しました。元の会話は履歴に残っています。",
+    "ai.fork.inHistory": "分岐しました。新しい会話は履歴にあります。",
 
     "ai.tools": "MCP ツール",
     "ai.tools.summary": "この会話は {total} 個中 {on} 個の MCP サーバーを使います",

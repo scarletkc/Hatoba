@@ -853,6 +853,8 @@ export interface AiConversationView {
   host_id: string | null;
   /** The quick-connect target (HOST-12) it last worked on while `host_id` is null (AI-09), the address in lowercase and without brackets. */
   quick_target: QuickTarget | null;
+  /** AI-43: with neither, the name of the server a fork's copies came from, when the fork could not tell which it is; its next message on a tab of a host or target notes the move from it. */
+  origin: string | null;
   pinned: boolean;
   /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
   context_start: string | null;

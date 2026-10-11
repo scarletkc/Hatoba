@@ -7,7 +7,8 @@ import { api } from "@/ipc/api";
 import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { deleteConversation, exportConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
+import { conversationBusy, deleteConversation, exportConversation, forkConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
+import { MAX_TITLE_CHARS } from "./fork";
 import { sortConversations } from "./models";
 import { conversationPlace, placeName } from "./place";
 import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
@@ -74,6 +75,11 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     onClose();
   };
 
+  const fork = (c: AiConversationView) => {
+    void forkConversation(slotId, c.id, null);
+    onClose();
+  };
+
   const remove = async (c: AiConversationView) => {
     const ok = await confirm({
       title: t("ai.history.deleteTitle", { title: c.title || t("ai.untitled") }),
@@ -89,6 +95,8 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     e.stopPropagation();
     setMenuEntries([
       { label: t("ai.history.open"), icon: "chat-circle-dots", onSelect: () => open(c) },
+      // AI-43: a copy of the whole conversation, which opens here; not while it is busy in its tab or a fork of it is being made.
+      { label: t("ai.history.fork"), icon: "git-fork", disabled: conversationBusy(c.id) || useAi.getState().forking.includes(c.id), onSelect: () => fork(c) },
       { label: t("btn.rename"), icon: "pencil-simple", onSelect: () => setRenaming(c.id) },
       { label: t(c.pinned ? "ai.history.unpin" : "ai.history.pin"), icon: c.pinned ? "push-pin-slash" : "push-pin", onSelect: () => void pinConversation(c.id, !c.pinned) },
       { label: t("ai.history.export"), icon: "export", onSelect: () => void exportConversation(c.id) },
@@ -350,7 +358,7 @@ function TitleInput({ initial, onDone }: { initial: string; onDone: (title: stri
       ref={ref}
       className={s.renameInput}
       value={value}
-      maxLength={200}
+      maxLength={MAX_TITLE_CHARS}
       aria-label={t("ai.history.renameLabel")}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
