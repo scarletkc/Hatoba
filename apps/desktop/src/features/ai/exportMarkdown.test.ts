@@ -92,13 +92,14 @@ describe("Markdown export (AI-25)", () => {
 
   it("writes a move to another host or model, or a terminal attached, as a line before the message (AI-05, AI-09)", () => {
     const text = composeMessage("And now?", [makePaste("x")!], [
+      { kind: "interrupted" },
       { kind: "host_change", from: "staging-web", to: "prod-db" },
       { kind: "terminal_change", to: "attached" },
       { kind: "model_change", from: "Claude Sonnet 5.5 (claude-sonnet-5-5)", to: "Claude Opus 5.5 (claude-opus-5-5)" },
     ]);
     const out = conversationMarkdown({ conversation, entries: [{ role: "user", entry_id: "u9", created_at: 1, text }], host: null }, { t, time });
     expect(out).toContain(
-      "*Moved to prod-db (was on staging-web)*\n\n*Terminal now available*\n\n*Switched to Claude Opus 5.5 (claude-opus-5-5) (was Claude Sonnet 5.5 (claude-sonnet-5-5))*\n\n## You\n\n**Pasted text · 1 line**",
+      "*Previous reply stopped*\n\n*Moved to prod-db (was on staging-web)*\n\n*Terminal now available*\n\n*Switched to Claude Opus 5.5 (claude-opus-5-5) (was Claude Sonnet 5.5 (claude-sonnet-5-5))*\n\n## You\n\n**Pasted text · 1 line**",
     );
     expect(out).toContain("```\n\nAnd now?");
   });

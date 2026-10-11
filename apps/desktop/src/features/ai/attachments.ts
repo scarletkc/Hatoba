@@ -12,9 +12,10 @@
  *
  *   the typed text
  *
- * Before them, Rust stores the notes Hatoba writes itself when a message moves the conversation to
- * another host, changes whether a terminal is attached, or goes to another model (`host_change`,
- * `terminal_change`, `model_change`); the panel shows those as dividers. The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3
+ * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
+ * stopped, moves the conversation to another host, changes whether a terminal is attached, or goes to
+ * another model (`interrupted`, `host_change`, `terminal_change`, `model_change`); the panel shows
+ * those as dividers. The block format and its escaping are specified once, in docs/hatoba-spec.md §13.3
  * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
  * conversation.
  */
@@ -199,15 +200,18 @@ export function attachmentTokens(a: Attachment): number {
 // ───────────── the stored blocks ─────────────
 
 /**
- * A note Hatoba writes before a message (AI-05, AI-09), never the user: with this message the
- * conversation moved to another host, a terminal became attached or stopped being attached, or it
- * went to another model. `from` of a host change is empty when the earlier host no longer exists; a
+ * A note Hatoba writes before a message (§13.1, AI-05, AI-09), never the user: the reply before it was
+ * stopped by the user, or with this message the conversation moved to another host, a terminal
+ * became attached or stopped being attached, or it went to another model. `from` of a host change is empty when the earlier host no longer exists; a
  * model is named as `Name (id)`, or by its ID alone.
  */
-export type Note = { kind: "host_change" | "model_change"; from: string; to: string } | { kind: "terminal_change"; to: "attached" | "detached" };
+export type Note =
+  | { kind: "interrupted" }
+  | { kind: "host_change" | "model_change"; from: string; to: string }
+  | { kind: "terminal_change"; to: "attached" | "detached" };
 
 /** The order Hatoba writes its notes in. */
-const NOTE_ORDER = ["host_change", "terminal_change", "model_change"] as const satisfies readonly Note["kind"][];
+const NOTE_ORDER = ["interrupted", "host_change", "terminal_change", "model_change"] as const satisfies readonly Note["kind"][];
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -258,12 +262,16 @@ const TERMINAL_BODY = {
   detached: "No terminal is attached from this message on. Screens and command output before this message came from the terminal that was attached then.",
 } as const;
 
+const INTERRUPTED_BODY =
+  "The user stopped your previous reply before it was finished. It ends where it was cut off; anything you were still writing, tool calls included, was not kept.";
+
 /**
- * A note as Rust writes it (`host_change_block`, `terminal_change_block` and `model_change_block` in
- * crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
- * does the same.
+ * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block` and
+ * `model_change_block` in crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a
+ * message, and the mock does the same.
  */
 export function noteBlock(n: Note): string {
+  if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
   if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   const from = noteText(n.from);
   const body =
@@ -298,7 +306,7 @@ export interface MessageParts {
   typed: string;
 }
 
-const OPEN = /^<(host_change|terminal_change|model_change|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+const OPEN = /^<(interrupted|host_change|terminal_change|model_change|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -309,6 +317,8 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
   const value = (i: number) => attrs[i][1];
   const attachment = (a: Attachment): Block => ({ kind: "attachment", attachment: a });
   switch (tag) {
+    case "interrupted":
+      return names === "" ? { kind: "note", note: { kind: tag } } : null;
     case "host_change":
     case "model_change":
       return names === "from,to" ? { kind: "note", note: { kind: tag, from: value(0), to: value(1) } } : null;

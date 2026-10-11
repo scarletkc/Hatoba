@@ -83,6 +83,8 @@ interface Turn {
   sleepers: Set<() => void>;
   /** AI-22 ran once in this turn. */
   compacted: boolean;
+  /** What the response being streamed has sent so far, which a stop stores (§13.1). */
+  streamed: { provider_id: string; model_id: string; text: string; calls: AiToolCall[] } | null;
 }
 
 const MIN = 60_000;
@@ -135,6 +137,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const turns = new Map<string, Turn>();
   /** By reply entry id: whether its request offered the terminal tools (AI-09). */
   const replyTerminal = new Map<string, boolean>();
+  /** Like Rust's `AssistantEntry.interrupted`, which the view does not carry: replies the user stopped (§13.1). */
+  const interrupted = new Set<string>();
   let errorShown = false;
   let lastMs = 0;
   let seq = 0;
@@ -191,14 +195,39 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (turns.get(turn.convId) === turn) turns.delete(turn.convId);
   }
 
-  /** Like Rust's stop: the cancelled results and `turn_ended { stopped }` go to the running turn's channel. */
+  /**
+   * Like Rust's stop: what a response being streamed has shown is stored as a stopped reply, and it,
+   * the cancelled results and `turn_ended { stopped }` go to the running turn's channel. Returns the
+   * entries it stored.
+   */
   function stopTurn(convId: string): AiEntryView[] {
     const turn = turns.get(convId);
     const c = convs.get(convId);
     if (turn) turn.timers.forEach((t) => clearTimeout(t));
-    const cancelled = c ? cancelOpenCalls(c) : [];
+    const stored: AiEntryView[] = [];
+    const part = turn?.streamed;
+    if (turn) turn.streamed = null;
+    if (c && part && (part.text.trim() || part.calls.length > 0)) {
+      const entry: Assistant = {
+        role: "assistant",
+        entry_id: newId(),
+        created_at: Date.now(),
+        provider_id: part.provider_id,
+        model_id: part.model_id,
+        text: part.text,
+        reasoning: null,
+        tool_calls: part.calls,
+        finish: part.calls.length > 0 ? "tool_calls" : "stop",
+        usage: null,
+      };
+      replyTerminal.set(entry.entry_id, turn.context.tab);
+      interrupted.add(entry.entry_id);
+      store(c, entry);
+      stored.push(entry);
+    }
+    if (c) stored.push(...cancelOpenCalls(c));
     if (turn) endTurn(turn, "stopped");
-    return cancelled;
+    return stored;
   }
 
   /** Resolves false once the turn has ended, also when it ends while sleeping. */
@@ -535,16 +564,19 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     }
     const p = await plan(c, turn);
     if (turn.ended) return;
+    const part = (turn.streamed = { provider_id: turn.context.provider_id, model_id: turn.context.model_id, text: "", calls: [] as AiToolCall[] });
     for (const piece of chunks(p.reasoning)) {
       if (!(await sleep(turn, 22))) return;
       turn.emit({ kind: "reasoning", delta: piece });
     }
     for (const piece of chunks(p.text)) {
       if (!(await sleep(turn, 26))) return;
+      part.text += piece;
       turn.emit({ kind: "text", delta: piece });
     }
     for (const x of p.calls) {
       if (!(await sleep(turn, 120))) return;
+      part.calls.push(x);
       turn.emit({ kind: "tool_call", id: x.id, name: x.name, arguments: x.arguments });
     }
     const usage: AiUsage = { input_tokens: estimate(c) + 2400, output_tokens: Math.ceil((p.text.length + p.reasoning.length) / 4) + 20, estimated: false };
@@ -564,6 +596,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     };
     // Like Rust's `AssistantEntry.terminal` (AI-09), which the view does not carry.
     replyTerminal.set(entry.entry_id, turn.context.tab);
+    turn.streamed = null;
     store(c, entry);
     turn.emit({ kind: "done", finish: p.finish });
     if (p.finish === "tool_calls") return;
@@ -594,7 +627,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function startTurn(c: Conv, context: AiTurnContext, onEvent: (ev: AiTurnEvent) => void, go = true): Turn {
     const cancelled = stopTurn(c.view.id);
     c.runningUntil = 0;
-    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), sleepers: new Set(), compacted: false };
+    const turn: Turn = { convId: c.view.id, emit: onEvent, context, ended: false, timers: new Set(), sleepers: new Set(), compacted: false, streamed: null };
     turns.set(c.view.id, turn);
     for (const entry of cancelled) turn.emit({ kind: "entry", entry });
     if (go) begin(turn);
@@ -627,7 +660,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   }
 
   /**
-   * Like Rust's `notes_before` (AI-05, AI-09): a `host_change` note when the entries before the message
+   * Like Rust's `notes_before` (§13.1, AI-05, AI-09): an `interrupted` note when the newest reply is one
+   * the user stopped, unless a message without a reply noted it already, a `host_change` note when the entries before the message
    * came from another host than the one the conversation is on with it (`move`'s, or its own when `move` is
    * `null`; `cameFrom` names the other, `null` without a move), a
    * `terminal_change` note when the message has the terminal tools and `terminalBefore` says there was
@@ -638,6 +672,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
     if (earlier.length === 0) return "";
+    for (const e of [...earlier].reverse()) {
+      if (e.role === "assistant") {
+        if (interrupted.has(e.entry_id)) notes.push({ kind: "interrupted" });
+        break;
+      }
+      if (e.role === "summary" || (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "interrupted"))) break;
+    }
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? c.view;
     const to = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quick_target ? formatTarget(place.quick_target) : undefined);

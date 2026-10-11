@@ -111,7 +111,7 @@ An approval card appears in the conversation for a call that needs approval. It 
 - **Run** runs the call. **Edit** changes the input first (the model is told what you changed). **Reject** takes an optional reason that goes back to the model.
 - **Allow for This Conversation**: later calls of the same tool in this conversation run without asking until the app quits. For an MCP tool it means that tool of that server. A call whose tool cannot be named (its server was deleted, say) always asks, in both modes, has no such option, and never runs for a deleted server.
 - **Always Allow** (MCP tools only): stored on this device; change it in Settings → AI.
-- After the **Tool Call Limit** (25 by default) a turn pauses with "The assistant paused after N tool calls. Let it continue?" and the buttons **Stop** and **Continue**. **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal.
+- After the **Tool Call Limit** (25 by default) a turn pauses with "The assistant paused after N tool calls. Let it continue?" and the buttons **Stop** and **Continue**. **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A reply stopped while it was being written keeps the text shown so far, and the next message gets a divider above it, "Previous reply stopped", which tells the assistant its reply was cut off.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -142,8 +142,8 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 | More | 更多操作 | その他の操作 |
 
 - **Delete…** removes the conversation on every synced device for good, after a confirmation.
-- **Export as Markdown…** saves the conversation as a Markdown file, with each divider (a move to another host or model, a terminal that became available or went away) as a line.
-- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the terminal and model dividers are worked out again for the tab and model it is resent with.
+- **Export as Markdown…** saves the conversation as a Markdown file, with each divider (a stopped reply, a move to another host or model, a terminal that became available or went away) as a line.
+- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the stop, terminal and model dividers are worked out again for the tab and model it is resent with.
 
 | en | zh-CN | ja |
 |---|---|---|

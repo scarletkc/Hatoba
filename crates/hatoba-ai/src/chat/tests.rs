@@ -1965,7 +1965,10 @@ fn a_stopped_response_is_rebuilt_from_its_text() {
             },
         )
     };
-    let next = AiEntry::user(3, format!("{}never mind", crate::tools::interrupted_block()));
+    let next = AiEntry::user(
+        3,
+        format!("{}never mind", crate::tools::interrupted_block()),
+    );
 
     let chat = ModelSpec::new("gpt-4.1");
     let entries = vec![AiEntry::user(1, "df?"), stopped(&chat.id), next.clone()];

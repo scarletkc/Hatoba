@@ -283,11 +283,11 @@ function UserMessage({ text, at, pending, onResend }: { text: string; at: number
   );
 }
 
-const NOTE_ICONS = { host_change: "arrows-left-right", model_change: "swap" } as const;
+const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap" } as const;
 
 /**
- * A note Hatoba stored before a message: the conversation moved to another host, a terminal became
- * attached or went away, or it went to another model.
+ * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
+ * to another host, a terminal became attached or went away, or it went to another model.
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();

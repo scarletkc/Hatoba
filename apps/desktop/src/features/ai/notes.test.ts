@@ -6,6 +6,14 @@ import { noteLabel, noteTitle } from "./notes";
 const tr = (locale: Locale) => (key: MessageKey, params?: Params) => translate(locale, key, params);
 
 describe("notes as dividers (AI-05, AI-09)", () => {
+  it("say that the user stopped the reply before the message (§13.1)", () => {
+    const note = { kind: "interrupted" } as const;
+    expect(noteLabel(tr("en"), note)).toBe("Previous reply stopped");
+    expect(noteTitle(tr("en"), note)).toBe("Previous reply stopped");
+    expect(noteLabel(tr("zh-CN"), note)).toBe("上一条回复已被停止");
+    expect(noteLabel(tr("ja"), note)).toBe("前の返信は停止されました");
+  });
+
   it("say where the conversation moved and where it was", () => {
     const note = { kind: "host_change", from: "staging-web", to: "prod-db" } as const;
     expect(noteLabel(tr("zh-CN"), note)).toBe("已转到 prod-db（之前在 staging-web）");
@@ -40,9 +48,15 @@ describe("notes as dividers (AI-05, AI-09)", () => {
       { kind: "model_change", from: "A (a)", to: "B (b)" },
       { kind: "terminal_change", to: "attached" },
       { kind: "host_change", from: "one", to: "two" },
+      { kind: "interrupted" },
     ]);
     const parts = parseMessage(stored);
-    expect(parts.notes.map((n) => noteLabel(tr("en"), n))).toEqual(["Moved to two (was on one)", "Terminal now available", "Switched to B (was A)"]);
+    expect(parts.notes.map((n) => noteLabel(tr("en"), n))).toEqual([
+      "Previous reply stopped",
+      "Moved to two (was on one)",
+      "Terminal now available",
+      "Switched to B (was A)",
+    ]);
     expect(parts.typed).toBe("Why?");
     expect(parts.attachments).toHaveLength(1);
   });

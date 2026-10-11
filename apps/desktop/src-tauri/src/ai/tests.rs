@@ -825,7 +825,10 @@ fn a_stop_keeps_the_text_and_the_complete_calls_that_streamed() {
     // A call alone was shown too; its result is the cancelled one the stop stores.
     let entry = streamed("", vec![call]).into_entry(true).unwrap();
     assert!(entry.text.is_empty() && entry.finish == Finish::ToolCalls);
-    assert_eq!(streamed("Hi", vec![]).into_entry(true).unwrap().finish, Finish::Stop);
+    assert_eq!(
+        streamed("Hi", vec![]).into_entry(true).unwrap().finish,
+        Finish::Stop
+    );
     // Nothing but white space: nothing to keep.
     assert_eq!(streamed(" \n", vec![]).into_entry(true), None);
 }
@@ -840,8 +843,7 @@ async fn stopping_before_any_text_stores_nothing() {
     let (started, sink) = f.send(None, "hello").await;
     let conv = started.conversation.id;
     sink.until("reasoning", |e| {
-        e.iter()
-            .any(|e| matches!(e, AiTurnEvent::Reasoning { .. }))
+        e.iter().any(|e| matches!(e, AiTurnEvent::Reasoning { .. }))
     })
     .await;
 
@@ -869,7 +871,9 @@ async fn the_message_after_a_stopped_reply_says_it_was_interrupted() {
 
     let context = f.context();
     assert_eq!(
-        f.exchange(Some(&conv), "never mind", context.clone()).await.1,
+        f.exchange(Some(&conv), "never mind", context.clone())
+            .await
+            .1,
         AiTurnEndReason::Completed
     );
     // Noted once: the reply after it was not stopped.
@@ -909,11 +913,15 @@ async fn sending_while_a_reply_streams_keeps_the_part_that_streamed() {
 
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 4);
-    assert!(matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "Hel" && a.interrupted));
+    assert!(
+        matches!(&entries[1].body, EntryBody::Assistant(a) if a.text == "Hel" && a.interrupted)
+    );
     assert!(
         matches!(&entries[2].body, EntryBody::User { text } if *text == format!("{}two", interrupted_block()))
     );
-    assert!(matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Done." && !a.interrupted));
+    assert!(
+        matches!(&entries[3].body, EntryBody::Assistant(a) if a.text == "Done." && !a.interrupted)
+    );
     // The panel listens to the new turn's channel by then, so the stopped reply goes there too.
     assert!(matches!(
         second.entries().first(),
