@@ -301,7 +301,7 @@ pub async fn join_remote_vault(
     }
     let auth = authenticate(backend, password, &device_id, &device).await?;
     // Settings are one item, so another vault's cannot be merged with this device's: the join
-    // takes them as they stand now, and the commit never leaves this device's in their place.
+    // takes the remote's as they stand now, in the same commit.
     let settings = find_remote_item(backend, SETTINGS_ID).await?;
     let rekeyed = with_vault(vault, |v| {
         if !v.is_unlocked() {

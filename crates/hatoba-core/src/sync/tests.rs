@@ -627,6 +627,58 @@ async fn join_uploads_the_local_settings_when_the_cloud_has_none() {
 }
 
 #[tokio::test]
+async fn the_cloud_vaults_own_settings_win_over_a_joined_device_whenever_they_arrive() {
+    // The first device's upload lands before the joined device's first round, or after it.
+    for arrives_first in [true, false] {
+        let (server, clock, a, _b) = world();
+        a.edit(SETTINGS_ID, |item| {
+            if let Item::Settings(s) = item {
+                s.terminal.font_size = 42;
+            }
+        });
+        // Flow A set the remote up but has not uploaded anything yet.
+        server.fail_next("login");
+        assert!(
+            enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
+                .await
+                .is_err()
+        );
+        let cloud = a.v().settings();
+
+        // The joined device's settings were edited more recently than the first device's.
+        let c = own_vault_device(&server, &clock);
+        clock.advance(60_000);
+        c.edit(SETTINGS_ID, |item| {
+            if let Item::Settings(s) = item {
+                s.terminal.font_size = 7;
+                s.terminal.scrollback = cloud.terminal.scrollback + 1;
+            }
+        });
+        join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+            .await
+            .unwrap();
+        if arrives_first {
+            enable(&a).await;
+            c.sync().await;
+        } else {
+            c.sync().await;
+            enable(&a).await;
+            c.sync().await;
+        }
+        a.sync().await;
+        for dev in [&a, &c] {
+            let settings = dev.v().settings();
+            assert_eq!(
+                settings.terminal.font_size, 42,
+                "{}, {arrives_first}",
+                dev.name
+            );
+            assert_eq!(settings.terminal.scrollback, cloud.terminal.scrollback);
+        }
+    }
+}
+
+#[tokio::test]
 async fn join_reconnects_a_device_that_synced_before() {
     let (_server, _clock, a, b) = two_devices().await;
     b.v().set_sync_config(None).unwrap();

@@ -270,6 +270,22 @@ pub(crate) fn seal_item(key: &[u8; 32], id: &str, item: &Item) -> Result<crypto:
     seal(key, item_aad(id).as_bytes(), &plain)
 }
 
+/// This device's settings for a cloud vault that has none yet (flow C), dated at the epoch:
+/// older than the settings of any of the cloud vault's own devices, which therefore win over them
+/// whenever they arrive (§6.4).
+fn fallback_settings_row(vault_key: &[u8; 32], settings: &Item) -> Result<ItemRow> {
+    let mut item = settings.clone();
+    item.set_updated_at(0);
+    Ok(ItemRow {
+        id: SETTINGS_ID.to_owned(),
+        envelope: Some(seal_item(vault_key, SETTINGS_ID, &item)?.to_json()),
+        revision: 0,
+        deleted: false,
+        dirty: true,
+        updated_at: 0,
+    })
+}
+
 /// Item ids are what the Worker accepts: `[A-Za-z0-9_-]{1,64}`.
 fn valid_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
@@ -1318,8 +1334,10 @@ impl Vault {
     /// When the remote is this same vault (a device that synced before), every item is queued
     /// again so the next round reconciles both sides. Otherwise each live item is sealed under
     /// the remote vault key and queued as new, except the settings: `cloud_settings`, the
-    /// remote's settings item as read just before, replaces the local one, which is queued only
-    /// when the remote has none. Tombstones, items that cannot be decrypted, and the conflict log
+    /// remote's settings item as read just before, replaces the local one. When the remote has
+    /// none, the local one is queued dated at the epoch, older than any settings of the remote's
+    /// own devices, which therefore replace it whenever they arrive (an edit made here after the
+    /// join is dated as usual). Tombstones, items that cannot be decrypted, and the conflict log
     /// are dropped, and every [`LocalSecret`] is sealed again. Returns whether the vault key
     /// changed, so the caller can drop what still holds the old one (biometric unlock).
     ///
@@ -1350,11 +1368,19 @@ impl Vault {
                 local.push((which.meta_key(), resealed));
             }
         }
+        let settings = match cloud_settings {
+            Some(remote) if rekey => Some(remote_row(remote)),
+            None if rekey => self
+                .get(SETTINGS_ID)
+                .map(|item| fallback_settings_row(&vault_key, item))
+                .transpose()?,
+            _ => None,
+        };
         let check = seal_vault_check(&vault_key)?;
         self.store.transaction(|tx| {
             if rekey {
                 for row in tx.item_rows()? {
-                    if row.id == SETTINGS_ID && cloud_settings.is_some() {
+                    if row.id == SETTINGS_ID && settings.is_some() {
                         continue;
                     }
                     let plain = row
@@ -1376,8 +1402,8 @@ impl Vault {
                         ..row
                     })?;
                 }
-                if let Some(remote) = cloud_settings {
-                    tx.upsert_item_row(&remote_row(remote))?;
+                if let Some(row) = &settings {
+                    tx.upsert_item_row(row)?;
                 }
                 tx.clear_conflicts()?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
