@@ -408,7 +408,7 @@ function SecretRows({
                         value={row.key}
                         invalid={!!problem?.key}
                         placeholder={t(kind === "env" ? "aiSettings.mcp.f.envKey" : "aiSettings.mcp.f.headerKey")}
-                        onChange={(e) => patchRow(row.uid, { key: e.target.value })}
+                        onChange={(e) => patchRow(row.uid, { key: e.target.value, optional: false })}
                       />
                     )}
                     <SavedKeyField

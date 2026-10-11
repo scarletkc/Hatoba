@@ -167,6 +167,17 @@ describe("environment and header rows", () => {
     ]);
   });
 
+  it("drops an optional row left without a value, and sends it once one is typed", () => {
+    const optional = row("Authorization", " ", { optional: true });
+    expect(isBlankRow(optional)).toBe(true);
+    expect(validateSecretRows([optional], "header")).toEqual([null]);
+    expect(secretInputs([optional])).toEqual([]);
+    const typed = { ...optional, draft: { mode: "replace" as const, value: "x" } };
+    expect(isBlankRow(typed)).toBe(false);
+    expect(secretInputs([typed])).toEqual([{ key: "Authorization", value: "x" }]);
+    expect(isBlankRow(row("Authorization", ""))).toBe(false);
+  });
+
   it("sends a new row's value and trims the name", () => {
     expect(secretInputs([row(" TOKEN ", " abc ")])).toEqual([{ key: "TOKEN", value: "abc" }]);
   });
