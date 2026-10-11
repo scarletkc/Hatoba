@@ -371,6 +371,8 @@ export const commands = {
 	always_ask: boolean,
 	tool: McpToolView,
 } | null>("mcp_tool_info", { conversationId, name }),
+	/**  The MCP tool a `call_mcp_tool` call names (AI-44), for its approval card. */
+	mcpProxyInfo: (conversationId: string, arguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, arguments }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */
@@ -1190,6 +1192,17 @@ export type McpImportServer = {
 export type McpImportSkipped = {
 	name: string,
 	reason: string,
+};
+
+/**  What the approval card of a `call_mcp_tool` call needs (AI-44). */
+export type McpProxyInfo = {
+	/**
+	 *  The tool the call names, as `mcp_tool_info` gives a direct call's; null when the
+	 *  conversation has no tool of that name or its server was deleted.
+	 */
+	tool: McpToolInfo | null,
+	/**  False when the call cannot run: it then gets its error result without asking. */
+	runs: boolean,
 };
 
 export type McpSecretInput = {

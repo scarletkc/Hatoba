@@ -1930,6 +1930,16 @@ pub struct McpToolInfo {
     pub tool: McpToolView,
 }
 
+/// What the approval card of a `call_mcp_tool` call needs (AI-44).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpProxyInfo {
+    /// The tool the call names, as `mcp_tool_info` gives a direct call's; null when the
+    /// conversation has no tool of that name or its server was deleted.
+    pub tool: Option<McpToolInfo>,
+    /// False when the call cannot run: it then gets its error result without asking.
+    pub runs: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct McpImportServer {
     pub name: String,

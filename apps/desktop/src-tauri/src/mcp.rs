@@ -14,8 +14,8 @@
 //!   and goes to the WebView as `ai://mcp-status` on every change. Locking the vault and quitting
 //!   stop every server; a server whose configuration changed restarts.
 //! - [`Offer`]: the MCP tools one request offered, with the names the model sees (AI-30). A
-//!   conversation keeps the offer of its latest request, so a call maps back to the server and
-//!   tool that request named.
+//!   conversation keeps the offer of its latest request, or of its latest `search_tools` call
+//!   (AI-44), so a call maps back to the server and tool that request or search named.
 //!
 //! Locks: the vault mutex comes before the manager's own locks, never after; the servers map
 //! before a server's state, and one server's state at a time. Status events read the device
@@ -32,6 +32,7 @@ use std::time::Duration;
 use futures::future::join_all;
 use hatoba_ai::chat::ToolDef;
 use hatoba_ai::entry::ToolStatus;
+use hatoba_ai::mcp::deferred::ListedTool;
 use hatoba_ai::mcp::{self, McpConnection, McpError, McpTool, McpTransportConfig, StderrTail};
 use hatoba_ai::provider::Protocol;
 use hatoba_ai::tools;
@@ -355,6 +356,18 @@ impl Offer {
                 name: t.name.clone(),
                 description: t.tool.description.clone(),
                 input_schema: mcp::clean_schema(&t.tool.input_schema, protocol),
+            })
+            .collect()
+    }
+
+    /// The tools as the deferred list and `search_tools` see them (AI-44), in the offer's order.
+    pub fn listed(&self) -> Vec<ListedTool<'_>> {
+        self.tools
+            .iter()
+            .map(|t| ListedTool {
+                name: &t.name,
+                server: &t.server_name,
+                tool: &t.tool,
             })
             .collect()
     }
@@ -1007,11 +1020,14 @@ impl McpManager {
     /// always name the same server: names are per request, since cleaned server names can
     /// collide and the tools menu changes which servers a conversation's requests offer.
     pub fn offered(&self, conversation_id: &str, name: &str) -> Option<OfferedTool> {
+        self.latest(conversation_id).find(name).cloned()
+    }
+
+    /// The tools of the conversation's latest request or `search_tools` call (AI-44), or, when
+    /// this run of the app made neither, of the running servers.
+    pub fn latest(&self, conversation_id: &str) -> Arc<Offer> {
         let offer = guard(&self.0.offers).get(conversation_id).cloned();
-        match offer {
-            Some(offer) => offer.find(name).cloned(),
-            None => self.current_tools().find(name).cloned(),
-        }
+        offer.unwrap_or_else(|| Arc::new(self.current_tools()))
     }
 
     // ---- calls (AI-30, AI-32) ----

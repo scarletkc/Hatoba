@@ -9,7 +9,11 @@
 //!
 //! Before each request the turn asks the [`McpManager`] for the MCP tools to offer (AI-30),
 //! which starts the servers that need it, and compacts the context first when the request would
-//! pass 90% of the model's context window (AI-22). A Compact request (AI-21) is the request a
+//! pass 90% of the model's context window (AI-22). A new message waits for those servers before it
+//! is stored: from the first message whose MCP tool definitions come to a tenth of the window, the
+//! conversation's requests offer `search_tools` and `call_mcp_tool` in their place, and its
+//! messages list the tools in an `mcp_tools` note, so the tool definitions and the system prompt
+//! stay the same whatever the servers do (AI-44). A Compact request (AI-21) is the request a
 //! turn would send next with the instruction after it, built by the same function, so it reuses
 //! the prefix the provider cached. A side question (AI-42) sends the same request with the
 //! question after it, and stores nothing. History search (AI-24), edit and resend (AI-26) and
@@ -40,6 +44,7 @@ use hatoba_ai::entry::{
     AiEntry, AssistantEntry, EntryBody, EntryPlace, EntryTarget, Finish, ToolCall, ToolStatus,
     Usage, fix_up_missing_results, pair_results,
 };
+use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
@@ -959,9 +964,11 @@ impl AiManager {
         .await
     }
 
-    /// Registers the turn, compacts first when the new message needs it (AI-22), stores the
-    /// user's message (in place of `replace` and the entries after it, for an edit) with the
-    /// thinking level (AI-05) and the move its note tells of (AI-09), and returns the turn's task.
+    /// Registers the turn, starts the MCP servers its requests use (AI-44), compacts first when
+    /// the new message needs it (AI-22), stores the user's message (in place of `replace` and the
+    /// entries after it, for an edit) with the thinking level (AI-05), the move its note tells of
+    /// (AI-09) and the list of deferred MCP tools (AI-44), and returns the turn's task. A new
+    /// conversation is created with its message.
     #[expect(
         clippy::too_many_arguments,
         reason = "the two commands that start a turn pass their own pieces"
@@ -993,7 +1000,43 @@ impl AiManager {
         if stored {
             env.changed();
         }
-        let (id, turn, compact, notes, moved_to, came_from) = registered?;
+        let (id, turn, notes, moved_to, came_from, created) = registered?;
+        let stopped = || {
+            AppError::new(
+                ErrorCode::Cancelled,
+                "the message was stopped before it was sent",
+            )
+        };
+
+        // AI-44: the servers the message's requests use start, and list their tools again after
+        // `tools/list_changed`, before the message is stored, which decides whether it defers
+        // them and lists them. A server that fails offers no tools, as for any request.
+        let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
+
+        // AI-22: whether the context needs a compaction before the message, with the notes it
+        // would start with. A new conversation has nothing to compact.
+        let compact = match created {
+            Some(_) => Ok(false),
+            None => (|| {
+                let v = unlocked(vault)?;
+                if turn.cancel.is_cancelled() {
+                    return Err(stopped());
+                }
+                let conversation = find_conversation(&v, &id)?;
+                let entries = Entries::load(&v, &id)?;
+                let from = entries.context_from(conversation.context_start.as_deref());
+                let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
+                compaction_before(&v, &id, &turn.context, &format!("{notes}{listed}{text}"))
+            })(),
+        };
+        let compact = match compact {
+            Ok(compact) => compact,
+            Err(e) => {
+                turn.end(AiTurnEndReason::Stopped);
+                self.forget(&id, &turn);
+                return Err(e);
+            }
+        };
 
         // AI-22: the summary is stored before the message, so the message stays in the context.
         // A failed compaction is logged and the message goes anyway: the request may still fit,
@@ -1007,16 +1050,33 @@ impl AiManager {
 
         let started = (|| {
             let mut v = unlocked(vault)?;
-            // Stopped, or replaced by a newer message, while the context was compacted: the
-            // message is not stored. Checked under the guard a stop takes, like every write.
+            // Stopped, or replaced by a newer message, while the servers started or the context
+            // was compacted: the message is not stored, and a new conversation is not created.
+            // Checked under the guard a stop takes, like every write.
             if turn.cancel.is_cancelled() {
-                return Err(AppError::new(
-                    ErrorCode::Cancelled,
-                    "the message was stopped before it was sent",
-                ));
+                return Err(stopped());
             }
-            // AI-05, AI-09: Hatoba's notes come before what the panel sent (spec §13.3).
-            let text = format!("{notes}{text}");
+            if let Some(conversation) = created {
+                v.put(Some(&id), Item::AiConversation(conversation))?;
+            }
+            // AI-44: the list of deferred MCP tools, when the model has not seen it, read after a
+            // compaction, whose summary leaves it out.
+            let listed = {
+                let conversation = find_conversation(&v, &id)?;
+                let entries = Entries::load(&v, &id)?;
+                let from = entries.context_from(conversation.context_start.as_deref());
+                let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
+                if !listed.is_empty() && !mcp_deferred(&entries.list) {
+                    tracing::info!(
+                        conversation_id = %id,
+                        tools = offer.listed().len(),
+                        "AI conversation's MCP tools deferred"
+                    );
+                }
+                listed
+            };
+            // AI-05, AI-09, AI-44: Hatoba's notes come before what the panel sent (spec §13.3).
+            let text = format!("{notes}{listed}{text}");
             let entry = match came_from {
                 Some(came_from) => AiEntry::user_from(now_ms(), text, came_from),
                 None => AiEntry::user(now_ms(), text),
@@ -1058,13 +1118,14 @@ impl AiManager {
         Ok((started, self.task(vault.clone(), env, id, turn, false)))
     }
 
-    /// The first step of [`Self::start_turn`], under the vault guard: the conversation (created
-    /// when new), the stop of its running turn, an edit's deletion, the move to the tab's host or
-    /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), the
-    /// registered turn, and whether the new message needs a compaction first (AI-22). Returns the
-    /// conversation's id, the turn, that answer, the notes, the move, which is stored with the
-    /// message, like the thinking level: a stop while the context is compacted stores no message,
-    /// and where the entries before the message came from, which the message records (AI-43).
+    /// The first step of [`Self::start_turn`], under the vault guard: the stop of the
+    /// conversation's running turn, an edit's deletion, the move to the tab's host or
+    /// quick-connect target (AI-09), the notes Hatoba puts before the message (AI-05, AI-09), and
+    /// the registered turn. Returns the conversation's id, the turn, the notes, the move, which is
+    /// stored with the message, like the thinking level: a stop while the MCP servers start or the
+    /// context is compacted stores no message, where the entries before the message came from,
+    /// which the message records (AI-43), and a new conversation, which is created with its
+    /// message under the id registered here, so such a stop leaves no empty conversation.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -1081,7 +1142,7 @@ impl AiManager {
     ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
         let mut cancelled = Vec::new();
-        let (id, compact, notes, moved_to, recorded) = match conversation_id {
+        let (id, notes, moved_to, recorded, created) = match conversation_id {
             Some(id) => {
                 let mut conversation = find_conversation(&v, &id)?;
                 self.not_reverting(&id)?;
@@ -1187,27 +1248,28 @@ impl AiManager {
                     &context,
                     &reverts,
                 );
-                let full = format!("{notes}{text}");
-                let compact = compaction_before(&v, &id, &context, &full)?;
-                (id, compact, notes, moved_to, recorded)
+                (id, notes, moved_to, recorded, None)
             }
             None => {
-                let id = v.put(
+                let created = AiConversation {
+                    title: title_of(text),
+                    host_id: context.host_id.clone(),
+                    quick_target: tab_target(&context),
+                    origin: None,
+                    pinned: false,
+                    context_start: None,
+                    effort: context.effort.map(core_effort),
+                    created_at: now_ms(),
+                    updated_at: 0,
+                };
+                let id = hatoba_core::new_id();
+                (
+                    id,
+                    String::new(),
                     None,
-                    Item::AiConversation(AiConversation {
-                        title: title_of(text),
-                        host_id: context.host_id.clone(),
-                        quick_target: tab_target(&context),
-                        origin: None,
-                        pinned: false,
-                        context_start: None,
-                        effort: context.effort.map(core_effort),
-                        created_at: now_ms(),
-                        updated_at: 0,
-                    }),
-                )?;
-                *stored = true;
-                (id, false, String::new(), None, Some(EntryPlace::default()))
+                    Some(EntryPlace::default()),
+                    Some(created),
+                )
             }
         };
         let turn = self.register(&id, context, server_id, sink);
@@ -1216,7 +1278,7 @@ impl AiManager {
         for entry in cancelled {
             turn.emit(AiTurnEvent::Entry { entry });
         }
-        Ok((id, turn, compact, notes, moved_to, recorded))
+        Ok((id, turn, notes, moved_to, recorded, created))
     }
 
     /// `ai_retry`: sends the next request from the stored conversation on a new channel. A
@@ -1500,6 +1562,11 @@ impl AiManager {
                     &call.name,
                     arguments,
                 )
+            } else if call.name == tools::CALL_MCP_TOOL {
+                match proxy_call(&v, &self.0.mcp, conversation_id, arguments) {
+                    Ok((tool, arguments)) => Job::Mcp(Box::new(tool), arguments),
+                    Err(refusal) => Job::error(refusal),
+                }
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
@@ -1535,17 +1602,24 @@ impl AiManager {
             shown: &shown,
             keep: keeps.then_some(&keep as &dyn files::Keep),
         };
-        let (status, content) = job
-            .run(
-                &self.http(),
-                &self.0.mcp,
-                vault,
-                env,
-                session_id,
-                seen,
-                &op.cancel,
-            )
-            .await;
+        let (status, content) = match job {
+            Job::SearchTools(args) => {
+                self.search_tools(vault, conversation_id, &args, &op.cancel)
+                    .await
+            }
+            job => {
+                job.run(
+                    &self.http(),
+                    &self.0.mcp,
+                    vault,
+                    env,
+                    session_id,
+                    seen,
+                    &op.cancel,
+                )
+                .await
+            }
+        };
         let content = result_content(status, content, edited_arguments);
         let shown = guard(&shown).take();
         let view = {
@@ -1573,6 +1647,43 @@ impl AiManager {
             entry: view,
             dropped_file_changes: keep.dropped(),
         })
+    }
+
+    /// `search_tools` (AI-44): searches the MCP tools the running turn's requests use, refreshed
+    /// as for a request first, so a server that sent `tools/list_changed` during the turn is
+    /// relisted before the search, and keeps them as the conversation's latest tools, so a call
+    /// of a tool the search found resolves to it. Without a running turn, which a call of the
+    /// turn's newest response always has, the conversation's latest tools.
+    async fn search_tools(
+        &self,
+        vault: &SharedVault,
+        conversation_id: &str,
+        args: &deferred::SearchArgs,
+        cancel: &CancellationToken,
+    ) -> (ToolStatus, String) {
+        let offer = match self.running(conversation_id) {
+            Some(turn) => {
+                let offer = self.0.mcp.offer(vault, &turn.context, cancel).await;
+                if cancel.is_cancelled() {
+                    return (ToolStatus::Cancelled, String::new());
+                }
+                self.0.mcp.record_offer(conversation_id, offer.clone());
+                Arc::new(offer)
+            }
+            None => self.0.mcp.latest(conversation_id),
+        };
+        let listed = offer.listed();
+        let matches = deferred::search(&listed, &args.query, args.max_results);
+        tracing::info!(
+            conversation_id,
+            tools = listed.len(),
+            matches = matches.len(),
+            "MCP tools searched"
+        );
+        (
+            ToolStatus::Ok,
+            tools::truncate_result(&deferred::search_result(&listed, &matches, &args.query)),
+        )
     }
 
     /// `ai_file_preview` (AI-39, AI-40): the change an open `edit_file` or `write_file` call
@@ -2286,11 +2397,15 @@ fn compact_request(
     offer: &Offer,
     instruction: &str,
 ) -> AppResult<SideRequest> {
-    let list = context_entries(v, conversation_id)?;
+    let conversation = find_conversation(v, conversation_id)?;
+    let mut entries = Entries::load(v, conversation_id)?;
+    let from = entries.context_from(conversation.context_start.as_deref());
+    let deferred = mcp_deferred(&entries.list);
+    let list = entries.list.split_off(from);
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));
     }
-    let next = next_request(v, context, server_id, offer, list)
+    let next = next_request(v, context, server_id, offer, list, deferred)
         .map_err(|message| AppError::invalid("model_id", message))?;
     Ok(SideRequest::compact(v, context, next, instruction))
 }
@@ -2333,11 +2448,12 @@ fn side_request(
         }
         SideTiming::DuringTurn { .. } => String::new(),
     };
+    let deferred = mcp_deferred(&entries.list);
     let mut list = entries.list.split_off(from);
     if let SideTiming::DuringTurn { approval } = timing {
         side_results(&mut list, approval);
     }
-    let next = next_request(v, context, server_id, offer, list)
+    let next = next_request(v, context, server_id, offer, list, deferred)
         .map_err(|message| AppError::invalid("model_id", message))?;
     let attachments = attachments.trim_end_matches('\n');
     let attachments = if attachments.is_empty() {
@@ -2594,15 +2710,25 @@ fn prepare_locked(
         entries = Entries::load(v, conversation_id)?;
     }
     let from = entries.context_from(conversation.context_start.as_deref());
+    let deferred = mcp_deferred(&entries.list);
     let context = entries.list.split_off(from);
     if nothing_to_send(&context) {
         return Err(Halt::Idle);
     }
-    next_request(v, &turn.context, turn.server_id.as_deref(), offer, context).map_err(Halt::Failed)
+    next_request(
+        v,
+        &turn.context,
+        turn.server_id.as_deref(),
+        offer,
+        context,
+        deferred,
+    )
+    .map_err(Halt::Failed)
 }
 
 /// The conversation's next request (§13.1) for its context `entries`: the system prompt that
-/// offers tools, the built-in tools, then the MCP tools of `offer`. Every request of a turn,
+/// offers tools, the built-in tools, then the MCP tools of `offer`, or `search_tools` and
+/// `call_mcp_tool` when the conversation's MCP tools are `deferred` (AI-44). Every request of a turn,
 /// every Compact request (AI-21) and every side question's (AI-42) is built here, so the last two
 /// have their turn's prefix. The error is a sentence for the panel.
 fn next_request(
@@ -2611,11 +2737,18 @@ fn next_request(
     server_id: Option<&str>,
     offer: &Offer,
     entries: Vec<AiEntry>,
+    deferred: bool,
 ) -> Result<Request, String> {
     let (provider, model) = resolve_model(v, &context.provider_id, &context.model_id)?;
     let (system, mut tools) = prompt(v, context, None, server_id);
-    // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09).
-    tools.extend(offer.tool_defs(provider.protocol));
+    // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09),
+    // or, once the conversation's MCP tools are deferred, the two tools that stand for them
+    // whatever servers are on (AI-44).
+    if deferred {
+        tools.extend(tools::deferred_mcp_tools());
+    } else {
+        tools.extend(offer.tool_defs(provider.protocol));
+    }
     Ok(Request {
         provider_id: context.provider_id.clone(),
         provider,
@@ -3097,8 +3230,12 @@ enum Job {
     File(FileJob, Option<files::Base>),
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
-    /// An MCP tool the request offered, with its arguments (AI-30).
+    /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
+    /// `call_mcp_tool` (AI-44).
     Mcp(Box<OfferedTool>, Map<String, Value>),
+    /// `search_tools` (AI-44), which [`AiManager::search_tools`] runs, since it reads the
+    /// conversation's MCP tools.
+    SearchTools(deferred::SearchArgs),
 }
 
 impl Job {
@@ -3155,6 +3292,10 @@ impl Job {
                 Ok(args) => read_skill(v, &args, version),
                 Err(message) => Self::error(message),
             },
+            tools::SEARCH_TOOLS => match deferred::parse_search(arguments) {
+                Ok(args) => Self::SearchTools(args),
+                Err(message) => Self::error(message),
+            },
             tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
                 "{name} runs in the terminal tab and cannot run here."
             )),
@@ -3179,6 +3320,11 @@ impl Job {
         match self {
             Self::Ready(status, content) => (status, content),
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
+            // `tool_run` runs it with the conversation's MCP tools.
+            Self::SearchTools(_) => (
+                ToolStatus::Error,
+                "search_tools cannot run here.".to_owned(),
+            ),
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
             Self::File(job, base) => {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
@@ -3204,6 +3350,41 @@ impl Job {
             },
         }
     }
+}
+
+/// AI-44: the MCP tool a `call_mcp_tool` call with `arguments` calls in the conversation, with the
+/// tool's arguments, resolved as a direct call is (from the conversation's latest request or
+/// search, AI-30). The error is the call's result when it cannot run, so it neither asks nor
+/// runs: arguments that cannot be read, a name the conversation has no tool of, a server that was
+/// deleted, or arguments that do not match the tool's input schema. The approval card
+/// (`mcp_proxy_info`) and the run (`ai_tool_run`) both resolve here.
+pub fn proxy_call(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    arguments: &str,
+) -> Result<(OfferedTool, Map<String, Value>), String> {
+    let call = deferred::parse_call(arguments)?;
+    let Some(tool) = mcp.offered(conversation_id, &call.tool) else {
+        return Err(format!(
+            "The call did not run: this conversation has no MCP tool named \"{}\" now. Call {} to \
+             find the tools you can call.",
+            call.tool,
+            tools::SEARCH_TOOLS
+        ));
+    };
+    if !crate::mcp::server_exists(v, &tool.server_id) {
+        return Err(crate::mcp::server_gone(&tool.server_name));
+    }
+    let problems = deferred::check_arguments(&tool.tool.input_schema, &call.arguments);
+    if !problems.is_empty() {
+        return Err(tools::truncate_result(&deferred::mismatch_result(
+            &tool.name,
+            &problems,
+            &tool.tool.input_schema,
+        )));
+    }
+    Ok((tool, call.arguments))
 }
 
 fn parse<T: DeserializeOwned>(arguments: &str) -> Result<T, String> {
@@ -3481,6 +3662,9 @@ const MODEL_CHANGE: &str = "model_change";
 /// The tag of the note Hatoba puts before the first message after the user reverted a change of
 /// a file tool call (AI-41), one for each call.
 const FILE_REVERT: &str = "file_revert";
+/// The tag of the note Hatoba puts before a message that comes with another list of deferred MCP
+/// tools than the model last saw (AI-44). A conversation with one is deferred.
+const MCP_TOOLS: &str = deferred::LIST_TAG;
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
@@ -3539,6 +3723,15 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("path", _), ("tool_call_id", _)]),
+    },
+    AttachmentKind {
+        tag: MCP_TOOLS,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| {
+            matches!(attrs, [("servers", servers), ("tools", tools)]
+                if is_count(servers) && is_count(tools))
+        },
     },
     AttachmentKind {
         tag: "terminal_selection",
@@ -3619,6 +3812,73 @@ fn has_note(text: &str, tag: &str) -> bool {
         .iter()
         .take_while(|b| b.kind.note)
         .any(|b| b.kind.tag == tag)
+}
+
+/// The whole text of the note `tag` among the notes a user entry starts with, its blank line
+/// included.
+fn note_block<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
+    let (blocks, _) = leading_blocks(text);
+    let mut rest = text;
+    for block in blocks.iter().take_while(|b| b.kind.note) {
+        let (_, after) = leading_block(rest)?;
+        if block.kind.tag == tag {
+            return Some(&rest[..rest.len() - after.len()]);
+        }
+        rest = after;
+    }
+    None
+}
+
+/// AI-44: whether a conversation's MCP tools are deferred, which they are from the first message
+/// that listed them in an `mcp_tools` note. `entries` is every entry of the conversation, so a
+/// compaction leaves the choice as it was.
+fn mcp_deferred(entries: &[AiEntry]) -> bool {
+    entries.iter().any(|e| match &e.body {
+        EntryBody::User { text, .. } => has_note(text, MCP_TOOLS),
+        _ => false,
+    })
+}
+
+/// AI-44: the `mcp_tools` note the conversation's next message starts with, when its requests
+/// offer the MCP tools of `offer`: none while its MCP tools are offered directly, which they stay
+/// until their definitions come to a tenth of the model's context window; then the list of those
+/// tools, unless the newest note in the context (`entries` from `from` on) lists them already. No
+/// note in the context counts as an empty list, so an empty list after a compaction is not noted.
+fn mcp_note(
+    v: &Vault,
+    context: &AiTurnContext,
+    entries: &[AiEntry],
+    from: usize,
+    offer: &Offer,
+) -> String {
+    let Ok((provider, model)) = resolve_model(v, &context.provider_id, &context.model_id) else {
+        return String::new();
+    };
+    let is_deferred = mcp_deferred(entries) || {
+        let defs = offer.tool_defs(provider.protocol);
+        !defs.is_empty()
+            && deferred::defer_due(
+                estimate_tokens(&serde_json::to_string(&defs).unwrap_or_default()),
+                model.context_window,
+            )
+    };
+    if !is_deferred {
+        return String::new();
+    }
+    let note = deferred::list_block(&offer.listed(), deferred::list_budget(model.context_window));
+    let seen = entries[from.min(entries.len())..]
+        .iter()
+        .rev()
+        .find_map(|e| match &e.body {
+            EntryBody::User { text, .. } => note_block(text, MCP_TOOLS),
+            _ => None,
+        })
+        .map_or_else(|| deferred::list_block(&[], u64::MAX), str::to_owned);
+    if note.trim_end() == seen.trim_end() {
+        String::new()
+    } else {
+        note
+    }
 }
 
 /// The block `text` starts with (spec §13.3), and the text after it: the opening tag with its
@@ -3805,16 +4065,16 @@ struct Place {
     quick_target: Option<AiQuickTarget>,
 }
 
-/// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, whether the message
-/// needs a compaction first, the notes, the move, and where the entries before the message came
-/// from (AI-43).
+/// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, the notes, the move,
+/// where the entries before the message came from (AI-43), and a new conversation to create with
+/// the message.
 type Opened = (
     String,
     Arc<Turn>,
-    bool,
     String,
     Option<Place>,
     Option<EntryPlace>,
+    Option<AiConversation>,
 );
 
 /// A host's display name, when the host exists.
