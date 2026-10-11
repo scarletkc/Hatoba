@@ -1409,10 +1409,7 @@ async fn file_tools_need_a_live_session() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert!(
-        system.contains("rather than with cat, sed or heredocs"),
-        "{system}"
-    );
+    assert!(system.contains("not with cat, sed or heredocs"), "{system}");
 
     let preview = |call: &'static str| {
         f.manager
