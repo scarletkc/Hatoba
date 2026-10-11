@@ -37,8 +37,9 @@ use zeroize::Zeroizing;
 use crate::crypto::auth_hash;
 use crate::error::{Error, Result};
 use crate::sync::backend::{
-    Change, DeviceLogin, KdfInfo, PullPage, PushResult, Recovered, RemoteDevice, RemoteItem,
-    ServerInfo, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
+    Change, DeviceLogin, KdfInfo, MAX_ENVELOPE_BYTES, PullPage, PushResult, Recovered,
+    RemoteDevice, RemoteItem, ServerInfo, Session, SyncBackend, VaultInit, VaultMeta,
+    VaultMetaUpdate,
 };
 use crate::sync::http::{
     build_client, error_code, is_loopback_host, map_transport, read_body, retry_after,
@@ -46,8 +47,6 @@ use crate::sync::http::{
 
 /// Production API base.
 pub const CLOUDFLARE_API_BASE: &str = "https://api.cloudflare.com/client/v4";
-/// Largest accepted envelope, as on the Worker.
-const MAX_ENVELOPE_BYTES: usize = 64 * 1024;
 /// Placeholder expiry for the dummy session (year 9999).
 const FAR_FUTURE_MS: i64 = 253_402_300_799_000;
 /// Marker for "the table does not exist yet".

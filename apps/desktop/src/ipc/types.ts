@@ -493,6 +493,14 @@ export interface SyncStatus {
   counts: { hosts: number; keys: number; groups: number } | null;
   /** Worker mode: how the Worker's `/v1/health` compares with this app (§6.7, Upgrades). `null` when there is nothing to show. */
   worker_update: WorkerUpdate | null;
+  /** Items the last sync round couldn't upload because they are larger than sync accepts (§6.2). They stay pending. */
+  too_large: TooLargeItem[];
+}
+
+export interface TooLargeItem {
+  item_id: string;
+  item_type: ItemType;
+  item_name: string;
 }
 
 /** `available`: sync continues and the notice can be dismissed. `required` and `app_required` pause sync. */

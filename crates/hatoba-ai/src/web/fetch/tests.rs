@@ -239,12 +239,25 @@ async fn private_addresses_are_refused_including_after_a_redirect() {
     .await;
     mount(&server, "/page", body("text/plain", "inside")).await;
     let cancel = CancellationToken::new();
-    for at in ["/to-ip", "/to-v6", "/to-name", "/to-mixed", "/to-metadata"] {
+    for at in ["/to-ip", "/to-v6", "/to-metadata"] {
         let err = fetcher()
             .fetch(&public_url(&server, at), 0, &cancel)
             .await
             .unwrap_err();
         assert_eq!(err, AiError::Blocked(REDIRECT_BLOCKED.into()), "{at}");
+    }
+    // A name on another host is not followed, so it is not resolved either: a fetch of it is a
+    // call of its own, refused below.
+    for (at, to) in [("/to-name", "rebind.test"), ("/to-mixed", "mixed.test")] {
+        let result = fetcher()
+            .fetch(&public_url(&server, at), 0, &cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            result.redirect,
+            Some(format!("http://{to}:{port}/page")),
+            "{at}"
+        );
     }
     // Directly, without a redirect.
     for url in [
@@ -317,6 +330,72 @@ async fn behind_a_local_proxy_the_targets_are_still_checked() {
         assert!(matches!(err, AiError::Blocked(_)), "{url}: {err:?}");
     }
     assert_eq!(proxy.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn redirects_to_another_host_are_returned_not_followed() {
+    let server = MockServer::start().await;
+    let other = MockServer::start().await;
+    let port = server.address().port();
+    let other_port = other.address().port();
+    mount(
+        &server,
+        "/away",
+        redirect(302, "https://elsewhere.test/page?q=1"),
+    )
+    .await;
+    // The same host on another port, and in other letter case, is followed.
+    mount(
+        &server,
+        "/port",
+        redirect(301, &format!("http://public.test:{other_port}/page")),
+    )
+    .await;
+    mount(
+        &server,
+        "/case",
+        redirect(302, &format!("http://PUBLIC.test:{port}/page")),
+    )
+    .await;
+    mount(&server, "/page", body("text/plain", "here")).await;
+    mount(&other, "/page", body("text/plain", "other port")).await;
+    let cancel = CancellationToken::new();
+
+    let away = fetcher()
+        .fetch(&public_url(&server, "/away"), 0, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(
+        away,
+        FetchResult {
+            url: public_url(&server, "/away"),
+            redirect: Some("https://elsewhere.test/page?q=1".into()),
+            ..FetchResult::default()
+        }
+    );
+    assert_eq!(
+        format_fetch_result(&away),
+        format!(
+            "URL: {} | Redirects to another host: https://elsewhere.test/page?q=1\n\
+             fetch_url follows redirects only on the host it was given. To read the page, call \
+             fetch_url with that URL.\n",
+            public_url(&server, "/away")
+        )
+    );
+
+    let ported = fetcher()
+        .fetch(&public_url(&server, "/port"), 0, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(
+        (ported.redirect, ported.content.as_str()),
+        (None, "other port")
+    );
+    let cased = fetcher()
+        .fetch(&public_url(&server, "/case"), 0, &cancel)
+        .await
+        .unwrap();
+    assert_eq!((cased.redirect, cased.content.as_str()), (None, "here"));
 }
 
 #[tokio::test]
