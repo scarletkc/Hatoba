@@ -25,8 +25,7 @@ export default defineMessages({
     "ai.mode.bypass": "绕过批准",
     "ai.mode.bypassShort": "绕过",
     "ai.bypass.title": "让助手不经确认就执行操作？",
-    "ai.bypass.body":
-      "绕过批准后，助手会直接在这个标签页的主机上运行命令、读取和修改文件、向终端输入内容、打开网页，不再询问你。屏幕上或网页里的文字可能诱导它做出你不想要的操作。这只影响当前对话，退出应用后恢复默认模式。",
+    "ai.bypass.body": "助手会运行命令、修改文件、向终端输入内容和打开网页，不再询问你。它读到的文字可能会诱导它。",
     "ai.bypass.confirm": "绕过批准",
 
     // empty states
@@ -395,8 +394,7 @@ export default defineMessages({
     "ai.mode.bypass": "Bypass",
     "ai.mode.bypassShort": "Bypass",
     "ai.bypass.title": "Let the assistant act without asking?",
-    "ai.bypass.body":
-      "In Bypass mode, the assistant runs commands on this tab’s host, reads and changes its files, types into the terminal, and opens web pages without asking you. Text on the screen or in a page can steer it into actions you didn’t want. This applies to this conversation until you quit the app.",
+    "ai.bypass.body": "The assistant will run commands, change files, type into the terminal and open pages without asking. Text it reads can steer it.",
     "ai.bypass.confirm": "Turn On Bypass",
 
     "ai.empty.title": "Ask about {host}",
@@ -753,8 +751,7 @@ export default defineMessages({
     "ai.mode.bypass": "承認をバイパス",
     "ai.mode.bypassShort": "バイパス",
     "ai.bypass.title": "確認なしで操作させますか？",
-    "ai.bypass.body":
-      "承認をバイパスすると、アシスタントはこのタブのホストでのコマンド実行、ファイルの読み取りと変更、ターミナルへの入力、Web ページの取得を確認なしで行います。画面やページ内の文字によって、意図しない操作に誘導される可能性があります。この設定は現在の会話にだけ適用され、アプリを終了するまで有効です。",
+    "ai.bypass.body": "アシスタントは確認なしで、コマンドの実行、ファイルの変更、ターミナルへの入力、ページの取得を行います。読み取った文字によって誘導されることがあります。",
     "ai.bypass.confirm": "承認をバイパス",
 
     "ai.empty.title": "{host} について質問する",

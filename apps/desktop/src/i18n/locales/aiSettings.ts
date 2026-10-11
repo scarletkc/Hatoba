@@ -125,7 +125,7 @@ export default defineMessages({
 
     "aiSettings.device": "此设备",
     "aiSettings.mode": "默认权限模式",
-    "aiSettings.mode.hint": "新对话从这个模式开始。手动批准时，助手运行命令、向终端输入或获取网页之前，会先征求你的同意。面板标题栏里的开关可以临时改变当前对话的模式。",
+    "aiSettings.mode.hint": "新对话从这个模式开始。",
     "aiSettings.mode.manual": "手动批准",
     "aiSettings.mode.bypass": "绕过批准",
     "aiSettings.allowances": "已保存的批准",
@@ -133,7 +133,6 @@ export default defineMessages({
     "aiSettings.allowances.command": "以“{prefix}”开头的命令",
     "aiSettings.allowances.domain": "{domain} 上的网页",
     "aiSettings.bypass.title": "开启绕过模式？",
-    "aiSettings.bypass.body": "绕过模式下，助手会在标签页的主机上运行命令、向终端输入内容，并获取网页，而不会先询问你。屏幕上或网页中的文字可能会诱导它做你并不想要的事。你随时可以改回手动批准。",
     "aiSettings.bypass.confirm": "开启绕过模式",
 
     "aiSettings.skills": "技能",
@@ -491,7 +490,7 @@ export default defineMessages({
 
     "aiSettings.device": "This Device",
     "aiSettings.mode": "Default Permission Mode",
-    "aiSettings.mode.hint": "New conversations start in this mode. With manual approval, the assistant asks before it runs a command, types into the terminal, or fetches a web page. The switch in the panel header changes the current conversation for now.",
+    "aiSettings.mode.hint": "New conversations start in this mode.",
     "aiSettings.mode.manual": "Manual approval",
     "aiSettings.mode.bypass": "Bypass",
     "aiSettings.allowances": "Saved Approvals",
@@ -499,7 +498,6 @@ export default defineMessages({
     "aiSettings.allowances.command": "Commands starting with “{prefix}”",
     "aiSettings.allowances.domain": "Pages on {domain}",
     "aiSettings.bypass.title": "Turn On Bypass Mode?",
-    "aiSettings.bypass.body": "In bypass mode the assistant runs commands on the tab’s host, types into its terminal, and fetches web pages without asking you first. Text on the screen or in a web page can steer it into doing things you didn’t intend. You can go back to manual approval at any time.",
     "aiSettings.bypass.confirm": "Turn On Bypass",
 
     "aiSettings.skills": "Skills",
@@ -861,7 +859,7 @@ export default defineMessages({
 
     "aiSettings.device": "このデバイス",
     "aiSettings.mode": "既定の権限モード",
-    "aiSettings.mode.hint": "新しい会話はこのモードで始まります。手動承認では、コマンドの実行、ターミナルへの入力、Web ページの取得の前に、アシスタントが確認します。パネル上部のスイッチでは、現在の会話のモードを一時的に切り替えられます。",
+    "aiSettings.mode.hint": "新しい会話はこのモードで始まります。",
     "aiSettings.mode.manual": "手動承認",
     "aiSettings.mode.bypass": "承認をバイパス",
     "aiSettings.allowances": "保存済みの許可",
@@ -869,7 +867,6 @@ export default defineMessages({
     "aiSettings.allowances.command": "「{prefix}」で始まるコマンド",
     "aiSettings.allowances.domain": "{domain} のページ",
     "aiSettings.bypass.title": "バイパスモードをオンにしますか？",
-    "aiSettings.bypass.body": "バイパスモードでは、アシスタントはタブのホストでのコマンド実行、ターミナルへの入力、Web ページの取得を、確認なしで行います。画面上や Web ページ内のテキストによって、意図しない操作へ誘導されるおそれがあります。手動承認にはいつでも戻せます。",
     "aiSettings.bypass.confirm": "バイパスをオンにする",
 
     "aiSettings.skills": "スキル",

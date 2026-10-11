@@ -416,7 +416,7 @@ function DeviceSection() {
     if (mode === "bypass" && !prefs.ai_bypass_confirmed) {
       const ok = await confirm({
         title: t("aiSettings.bypass.title"),
-        body: t("aiSettings.bypass.body"),
+        body: t("ai.bypass.body"),
         confirmLabel: t("aiSettings.bypass.confirm"),
         danger: true,
       });
