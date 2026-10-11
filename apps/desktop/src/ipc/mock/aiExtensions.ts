@@ -512,8 +512,8 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
         return fail("invalid_input", "the URL is not valid", "url");
       }
     })();
-    const local = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\])/.test(url.hostname);
-    if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) fail("invalid_input", "the URL must use https unless it is a local address", "url");
+    if (url.protocol !== "https:" && url.protocol !== "http:") fail("invalid_input", "the URL must start with https:// or http://", "url");
+    if (url.username || url.password) fail("invalid_input", "the URL must not contain a user name or password", "url");
     const saved = old?.transport.kind === "http" ? old.transport.header_keys : [];
     return { kind: "http", url: input.url, header_keys: secretKeys(input.headers, saved) };
   };

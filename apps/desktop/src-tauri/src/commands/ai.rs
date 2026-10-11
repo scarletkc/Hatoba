@@ -195,14 +195,12 @@ fn api_key(input: Option<&str>, saved: Option<&Zeroizing<String>>) -> Zeroizing<
 }
 
 /// AI-02: checks a base URL and returns it as entered, trimmed.
-async fn checked_base_url(base_url: &str) -> AppResult<String> {
+fn checked_base_url(base_url: &str) -> AppResult<String> {
     let base_url = base_url.trim();
     if base_url.is_empty() {
         return Err(AppError::invalid("base_url", "the base URL is required"));
     }
-    validate_base_url(base_url)
-        .await
-        .map_err(|e| AppError::invalid("base_url", e.to_string()))?;
+    validate_base_url(base_url).map_err(|e| AppError::invalid("base_url", e.to_string()))?;
     Ok(base_url.to_owned())
 }
 
@@ -334,7 +332,7 @@ pub async fn ai_provider_save(
     state: State<'_, AppState>,
     input: AiProviderInput,
 ) -> AppResult<AiProviderView> {
-    let base_url = checked_base_url(&input.base_url).await?;
+    let base_url = checked_base_url(&input.base_url)?;
     let view = state.with_unlocked(|v| save_provider(v, &input, base_url))?;
     sync::local_change(&app);
     Ok(view)
@@ -501,9 +499,9 @@ pub async fn search_provider_save(
     input: SearchProviderInput,
 ) -> AppResult<SearchProviderView> {
     let base_url = match input.kind {
-        SearchKind::Searxng => {
-            Some(checked_base_url(input.base_url.as_deref().unwrap_or_default()).await?)
-        }
+        SearchKind::Searxng => Some(checked_base_url(
+            input.base_url.as_deref().unwrap_or_default(),
+        )?),
         SearchKind::Brave | SearchKind::Tavily => None,
     };
     let view = state.with_unlocked(|v| save_search_provider(v, &input, base_url))?;

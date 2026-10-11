@@ -292,6 +292,37 @@ async fn the_public_fetch_refuses_loopback() {
 }
 
 #[tokio::test]
+async fn behind_a_local_proxy_the_targets_are_still_checked() {
+    // A proxy on loopback, as desktop proxy tools run one: the mock server, which answers the
+    // proxied request itself. Its own address is no target, so the public policy lets it through.
+    let proxy = MockServer::start().await;
+    mount(&proxy, "/page", body("text/plain", "through the proxy")).await;
+    let fetcher = Fetcher {
+        proxy: Proxy::At(format!("http://localhost:{}", proxy.address().port())),
+        ..Fetcher::public()
+    };
+    let cancel = CancellationToken::new();
+    let page = fetcher
+        .fetch("http://docs.example.test/page", 0, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(page.content, "through the proxy");
+    // The proxy resolves the targets' names, so what is refused here is refused by the host as
+    // written: an address, or localhost by its name.
+    for url in [
+        "http://localhost/page",
+        "http://api.LOCALHOST./page",
+        "http://127.0.0.1/page",
+        "http://10.1.2.3/page",
+        "http://[::1]/page",
+    ] {
+        let err = fetcher.fetch(url, 0, &cancel).await.unwrap_err();
+        assert!(matches!(err, AiError::Blocked(_)), "{url}: {err:?}");
+    }
+    assert_eq!(proxy.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn redirects_are_followed_up_to_five() {
     let server = MockServer::start().await;
     mount(&server, "/r1", redirect(301, "/r2")).await;

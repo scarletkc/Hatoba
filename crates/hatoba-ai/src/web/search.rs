@@ -12,7 +12,7 @@ use zeroize::Zeroizing;
 use super::text::plain_text;
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{client_for, validate_base_url};
+use crate::provider::validate_base_url;
 
 /// The search services Hatoba supports.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -174,19 +174,13 @@ async fn search(
                 .as_deref()
                 .filter(|b| !b.trim().is_empty())
                 .ok_or_else(|| AiError::Config("the SearXNG instance URL is missing".into()))?;
-            let base = tokio::select! {
-                biased;
-                () = cancel.cancelled() => return Err(AiError::Cancelled),
-                base = validate_base_url(base) => base?,
-            };
+            let base = validate_base_url(base)?;
             let mut url = net::endpoint(&base, "/search");
             url.query_pairs_mut()
                 .append_pair("q", query)
                 .append_pair("format", "json");
             (
-                client_for(http, &base)
-                    .get(url)
-                    .header(ACCEPT, "application/json"),
+                http.get(url).header(ACCEPT, "application/json"),
                 "/results",
                 "content",
             )
@@ -421,9 +415,9 @@ mod tests {
             .await,
             Err(AiError::Config(_))
         ));
-        let public_http = cfg(SearchKind::Searxng, "", Some("http://8.8.8.8".into()));
+        let not_http = cfg(SearchKind::Searxng, "", Some("ftp://searx.example".into()));
         assert!(matches!(
-            web_search(&http, &public_http, "q", &cancel).await,
+            web_search(&http, &not_http, "q", &cancel).await,
             Err(AiError::InvalidUrl(_))
         ));
     }

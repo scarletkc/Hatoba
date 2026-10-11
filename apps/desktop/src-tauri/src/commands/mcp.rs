@@ -233,8 +233,8 @@ pub(crate) fn transport_from_input(
     }
 }
 
-/// AI-02's rules for an `http` server's URL: `https`, or `http` for a local address.
-async fn checked_url(input: &McpTransportInput) -> AppResult<Option<String>> {
+/// AI-02's rules for an `http` server's URL: `http` or `https`.
+fn checked_url(input: &McpTransportInput) -> AppResult<Option<String>> {
     let McpTransportInput::Http { url, .. } = input else {
         return Ok(None);
     };
@@ -242,11 +242,9 @@ async fn checked_url(input: &McpTransportInput) -> AppResult<Option<String>> {
     if url.is_empty() {
         return Err(AppError::invalid("url", "A URL is required."));
     }
-    validate_base_url(url).await.map_err(|e| {
+    validate_base_url(url).map_err(|e| {
         let message = match &e {
-            AiError::InvalidUrl(m) | AiError::Network(m) => {
-                m.replacen("the base URL", "the URL", 1)
-            }
+            AiError::InvalidUrl(m) => m.replacen("the base URL", "the URL", 1),
             other => other.to_string(),
         };
         AppError::invalid("url", sentence(&message))
@@ -473,7 +471,7 @@ pub async fn mcp_server_save(
     state: State<'_, AppState>,
     input: McpServerInput,
 ) -> AppResult<McpServerView> {
-    let url = checked_url(&input.transport).await?;
+    let url = checked_url(&input.transport)?;
     let saved = state.with_unlocked(|v| save_server(v, &input, url))?;
     let id = saved.view.id.clone();
     tracing::info!(server_id = %id, transport = saved.server.transport.kind_str(), "MCP server saved");

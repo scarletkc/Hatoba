@@ -200,31 +200,29 @@ fn invalid_servers_are_refused_with_short_messages() {
     assert_eq!(v.mcp_servers().len(), 1);
 }
 
-#[tokio::test]
-async fn http_urls_follow_the_provider_rules() {
+#[test]
+fn http_urls_follow_the_provider_rules() {
     let field = |e: AppError| e.field.unwrap_or_default();
     let with_url = |url: &str| McpTransportInput::Http {
         url: url.into(),
         headers: Vec::new(),
     };
-    assert_eq!(field(checked_url(&with_url(" ")).await.unwrap_err()), "url");
-    let err = checked_url(&with_url("ftp://mcp.example.com"))
-        .await
-        .unwrap_err();
+    assert_eq!(field(checked_url(&with_url(" ")).unwrap_err()), "url");
+    let err = checked_url(&with_url("ftp://mcp.example.com")).unwrap_err();
     assert_eq!(field(err.clone()), "url");
     assert!(err.detail.starts_with("The URL"), "{}", err.detail);
-    assert_eq!(
-        checked_url(&with_url(" http://127.0.0.1:3000/mcp "))
-            .await
-            .unwrap(),
-        Some("http://127.0.0.1:3000/mcp".into())
-    );
+    for url in ["http://127.0.0.1:3000/mcp", "http://mcp.example.com/mcp"] {
+        assert_eq!(
+            checked_url(&with_url(&format!(" {url} "))).unwrap(),
+            Some(url.into())
+        );
+    }
     let stdio = McpTransportInput::Stdio {
         command: "x".into(),
         args: Vec::new(),
         env: Vec::new(),
     };
-    assert_eq!(checked_url(&stdio).await.unwrap(), None);
+    assert_eq!(checked_url(&stdio).unwrap(), None);
 }
 
 #[test]

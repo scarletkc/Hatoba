@@ -395,8 +395,8 @@ async fn test_connection_network_and_url_failures() {
     assert_eq!(outcome.failure, Some(TestFailure::Network), "{outcome:?}");
     assert_eq!(outcome.status, None);
 
-    let public_http = provider("http://8.8.8.8/v1".into(), Protocol::ChatCompletions);
-    let outcome = test_connection(&http, &public_http, None, &CancellationToken::new()).await;
+    let not_http = provider("ftp://llm.example.com/v1".into(), Protocol::ChatCompletions);
+    let outcome = test_connection(&http, &not_http, None, &CancellationToken::new()).await;
     assert_eq!(outcome.failure, Some(TestFailure::InvalidUrl));
     let outcome = test_connection(
         &http,

@@ -309,7 +309,6 @@ export function McpServerDialog({
                   placeholder={t("aiSettings.mcp.f.urlPlaceholder")}
                   onChange={(e) => patch({ url: e.target.value })}
                 />
-                <span className={s.hint}>{t("aiSettings.mcp.f.urlHint")}</span>
               </div>
             </FormRow>
           )}

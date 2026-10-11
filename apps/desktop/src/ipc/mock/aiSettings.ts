@@ -49,7 +49,7 @@ type AiSettingsApi = Pick<
  * model selector shows two groups. Inside the editor a few inputs trigger the other states:
  *   a base URL on a `.invalid` host        Test Connection fails with a network error
  *   a first model ID containing `nope`      Test Connection fails with an unknown model (404)
- *   an `http://` URL outside localhost      Test Connection reports an invalid URL, and saving is rejected
+ *   a URL with a user name or password      Test Connection reports an invalid URL, and saving is rejected
  *   a non-local provider with no API key    Test Connection fails with an authentication error
  *   a base URL containing `openrouter`      Fetch Models returns 150 models, to try the picker's filter
  * Fetch Models takes half a second and Test Connection 700 ms, so the busy states can be seen.
@@ -114,7 +114,7 @@ export function createAiSettingsMock(): AiSettingsApi {
       return null;
     }
   };
-  /** Loopback and private network addresses, the only ones that may use plain HTTP (AI-02). */
+  /** Loopback and private network addresses: local model servers, which need no API key. */
   const isLocalHost = (host: string) =>
     host === "localhost" ||
     host === "[::1]" ||
@@ -122,10 +122,12 @@ export function createAiSettingsMock(): AiSettingsApi {
     /^10\./.test(host) ||
     /^192\.168\./.test(host) ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+  /** Like Rust (AI-02): `http` or `https` with a host, and no user name or password. */
   const urlProblem = (url: string): "invalid" | null => {
     const host = hostOf(url);
     if (!host || !/^https?:\/\//i.test(url.trim())) return "invalid";
-    return /^http:/i.test(url.trim()) && !isLocalHost(host) ? "invalid" : null;
+    const parsed = new URL(url.trim());
+    return parsed.username || parsed.password ? "invalid" : null;
   };
 
   const savedKey = (input: { id: string | null; api_key: string | null }, list: { id: string; has_api_key: boolean }[]) =>
@@ -184,7 +186,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_providers_list: async () => providers.map(clone),
     ai_provider_save: async (input) => {
       if (urlProblem(input.base_url)) {
-        const err: AppError = { code: "invalid_input", detail: "the base URL must use https unless it is a local address", field: "base_url" };
+        const err: AppError = { code: "invalid_input", detail: "the base URL must not contain a user name or password", field: "base_url" };
         throw err;
       }
       await wait(150);

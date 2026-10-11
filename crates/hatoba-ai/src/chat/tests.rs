@@ -1067,16 +1067,16 @@ async fn complete_returns_the_entry_and_bad_urls_are_refused() {
     .unwrap();
     assert_eq!(entry.text, "Disk usage is 42%.");
 
-    let public_http = ProviderConfig {
-        base_url: "http://8.8.8.8/v1".into(),
+    let not_http = ProviderConfig {
+        base_url: "ftp://llm.example.com/v1".into(),
         ..p
     };
-    let err = run(&public_http, &request(&model, &entries, &[]))
+    let err = run(&not_http, &request(&model, &entries, &[]))
         .await
         .0
         .unwrap_err();
     assert!(matches!(err, AiError::InvalidUrl(_)));
-    assert!(!format!("{err} {err:?} {public_http:?}").contains(KEY));
+    assert!(!format!("{err} {err:?} {not_http:?}").contains(KEY));
 }
 
 // ---------------------------------------------------------------------------------------------

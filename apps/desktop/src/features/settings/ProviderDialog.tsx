@@ -292,7 +292,6 @@ export function ProviderDialog({
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
               <span className={s.hint}>{t(`aiSettings.f.baseUrl.${form.protocol}` as MessageKey)}</span>
-              <span className={s.hint}>{t("aiSettings.f.baseUrl.https")}</span>
             </div>
           </FormRow>
           <FormRow label={t("aiSettings.f.apiKey")} htmlFor={ids.key}>
