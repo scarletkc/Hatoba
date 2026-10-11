@@ -488,11 +488,6 @@ export function HostEditPage({
                   <span className={s.hint}>{t("hosts.f.askHint")}</span>
                 </FormRow>
               )}
-              {form.authKind === "agent" && (
-                <FormRow label="">
-                  <span className={s.hint}>{t("hosts.f.agentHint")}</span>
-                </FormRow>
-              )}
             </Group>
           </Section>
 
@@ -549,7 +544,7 @@ export function HostEditPage({
                     </div>
                     <LinkButton onClick={() => useApp.getState().openSettings(true, "proxies")}>{t("hosts.f.manageProxies")}</LinkButton>
                   </div>
-                  <span className={s.jumpHint}>{form.jumpHostId ? t("hosts.f.proxyJumpHint") : t("hosts.f.proxyHint")}</span>
+                  {form.jumpHostId && <span className={s.jumpHint}>{t("hosts.f.proxyJumpHint")}</span>}
                 </div>
               </FormRow>
             </Group>
@@ -588,7 +583,6 @@ export function HostEditPage({
                 error={errors.aiNotes}
                 onChange={(aiNotes) => patch({ aiNotes }, "aiNotes")}
               />
-              <span className={s.aiPrivacy}>{t("hosts.f.aiNotesPrivacy")}</span>
             </div>
           </Section>
 

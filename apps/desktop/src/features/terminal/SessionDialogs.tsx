@@ -182,13 +182,11 @@ function SecretDialog({ item }: { item: PromptItem & { kind: "secret" } }) {
               : t("terminal.passphrase.title")}
           </div>
         </div>
-        <div className={s.body}>
-          {isPassword
-            ? r.oneOff
-              ? t("terminal.password.oneOffBody")
-              : t("terminal.password.body", { target: r.target })
-            : t("terminal.passphrase.body", { name: r.hostName })}
-        </div>
+        {!(isPassword && r.oneOff) && (
+          <div className={s.body}>
+            {isPassword ? t("terminal.password.body", { target: r.target }) : t("terminal.passphrase.body", { name: r.hostName })}
+          </div>
+        )}
         {r.wrong && <div className={s.wrong}>{t("terminal.passphrase.wrong")}</div>}
         <div className={s.fields}>
           <TextField
@@ -232,7 +230,6 @@ function UsernameDialog({ item }: { item: PromptItem & { kind: "username" } }) {
             {t("terminal.user.title", { target: item.target })}
           </div>
         </div>
-        <div className={s.body}>{t("terminal.user.body")}</div>
         <div className={s.fields}>
           <TextField
             large

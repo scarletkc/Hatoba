@@ -112,7 +112,6 @@ export function KeyDetail({
             <br />
             {"•".repeat(20)}
           </div>
-          <div className={s.hint}>{t("keys.detail.privateHint")}</div>
         </div>
 
         <div className={s.usedHosts}>

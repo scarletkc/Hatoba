@@ -156,7 +156,6 @@ export function ImportKeyDialog({ onClose, onDone }: { onClose: () => void; onDo
         <Field
           label={t("keys.field.passphraseOpt")}
           htmlFor={passId}
-          hint={t("keys.import.passphraseHint")}
           error={error?.field === "passphrase" ? error.message : undefined}
         >
           <TextField
@@ -228,7 +227,7 @@ export function GenerateKeyDialog({ onClose, onDone }: { onClose: () => void; on
         </>
       }
     >
-      <SheetHeader title={t("keys.generate.title")} subtitle={t("keys.generate.body")} />
+      <SheetHeader title={t("keys.generate.title")} />
       <form
         id={formId}
         className={s.form}
@@ -267,11 +266,7 @@ export function GenerateKeyDialog({ onClose, onDone }: { onClose: () => void; on
         <Field label={t("keys.generate.comment")} htmlFor={commentId}>
           <TextField id={commentId} mono value={comment} disabled={busy} onChange={(e) => setComment(e.target.value)} />
         </Field>
-        <Field
-          label={t("keys.field.passphraseOpt")}
-          htmlFor={passId}
-          hint={t("keys.generate.passphraseHint")}
-        >
+        <Field label={t("keys.field.passphraseOpt")} htmlFor={passId}>
           <TextField id={passId} secret value={passphrase} disabled={busy} onChange={(e) => setPassphrase(e.target.value)} />
         </Field>
         <Field

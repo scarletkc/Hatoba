@@ -178,6 +178,7 @@ export function ForwardDialog({
                   ref={bindPortRef}
                   mono
                   inputMode="numeric"
+                  placeholder={t("hosts.fwd.f.portHint")}
                   value={bindPort}
                   invalid={!!errors.bind_port}
                   onChange={(e) => {
@@ -191,17 +192,12 @@ export function ForwardDialog({
                   {localError}
                 </div>
               ) : (
-                <>
-                  {exposed ? (
-                    <div className={s.warn}>
-                      <Icon name="warning" size={13} />
-                      {t("hosts.fwd.f.exposedWarn")}
-                    </div>
-                  ) : (
-                    <div className={s.hint}>{t("hosts.fwd.f.localHint")}</div>
-                  )}
-                  <div className={s.hint}>{t("hosts.fwd.f.portHint")}</div>
-                </>
+                exposed && (
+                  <div className={s.warn}>
+                    <Icon name="warning" size={13} />
+                    {t("hosts.fwd.f.exposedWarn")}
+                  </div>
+                )
               )}
             </div>
           </FormRow>
