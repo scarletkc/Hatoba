@@ -368,6 +368,18 @@ fn model_sentence(model: &PromptModel<'_>) -> String {
     }
 }
 
+/// The attachment block that notes that the user stopped the reply before the message while it
+/// streamed (spec §13.1, §13.3), with the blank line after it.
+#[must_use]
+pub fn interrupted_block() -> String {
+    const TAG: &str = "interrupted";
+    format!(
+        "<{TAG}>\nThe user stopped your previous reply before it was finished. It ends where it \
+         was cut off; anything you were still writing, tool calls included, was not kept.\n\
+         </{TAG}>\n\n"
+    )
+}
+
 /// The attachment block that notes a move to another host (AI-09, spec §13.3), with the blank
 /// line after it. `from` is empty when the earlier host no longer exists.
 #[must_use]
@@ -450,6 +462,9 @@ fn note_attribute(s: &str) -> String {
 const ATTACHMENTS: &str = "<attachments>\n\
      A user message can start with blocks before the text the user typed. First come notes \
      that Hatoba adds:\n\
+     - <interrupted>: the user stopped the reply before this message while it was being \
+     written, so that reply ends where it was cut off. Answer this message rather than \
+     finishing that reply, unless the user asks you to go on.\n\
      - <host_change from=\"…\" to=\"…\">: with this message the conversation moved to another \
      host. Screens and command output before it came from the host in from.\n\
      - <terminal_change to=\"…\">: with this message a terminal became attached \
@@ -839,6 +854,7 @@ mod tests {
             "The SSH server identifies itself as \"SSH-2.0-OpenSSH_9.6p1\".\n</context>\n",
             "</context>\n\n<rules>\n",
             "</rules>\n\n<attachments>\n",
+            "<interrupted>: ",
             "<host_change from=",
             "<terminal_change to=",
             "<model_change from=",
@@ -1117,6 +1133,12 @@ mod tests {
              model.\n</model_change>\n\n"
         );
         assert_eq!(
+            interrupted_block(),
+            "<interrupted>\nThe user stopped your previous reply before it was finished. It ends \
+             where it was cut off; anything you were still writing, tool calls included, was not \
+             kept.\n</interrupted>\n\n"
+        );
+        assert_eq!(
             terminal_change_block(true),
             "<terminal_change to=\"attached\">\nA terminal is attached from this message on. \
              Before this message none was, so replies that said they could not read a screen or \
@@ -1178,6 +1200,7 @@ PostgreSQL 16 primary. Never restart postgresql during business hours.
 
 <attachments>
 A user message can start with blocks before the text the user typed. First come notes that Hatoba adds:
+- <interrupted>: the user stopped the reply before this message while it was being written, so that reply ends where it was cut off. Answer this message rather than finishing that reply, unless the user asks you to go on.
 - <host_change from="…" to="…">: with this message the conversation moved to another host. Screens and command output before it came from the host in from.
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.

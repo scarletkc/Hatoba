@@ -81,6 +81,11 @@ pub struct AssistantEntry {
     /// needs a `terminal_change` note. `None` in entries from before it was recorded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal: Option<bool>,
+    /// The user stopped the response while it streamed (spec §13.1): `text` and `tool_calls` are
+    /// what had arrived, `raw` is empty, and the next message gets an `interrupted` note. Stored
+    /// only when true.
+    #[serde(skip_serializing_if = "is_false")]
+    pub interrupted: bool,
 }
 
 /// A tool call made by the model.
@@ -133,6 +138,10 @@ pub struct Usage {
 
 fn is_zero(n: &u64) -> bool {
     *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// How a tool call ended.
@@ -293,6 +302,7 @@ mod tests {
                 }),
                 raw: json!({"role": "assistant"}),
                 terminal: Some(true),
+                interrupted: false,
             },
         );
         let value = serde_json::to_value(&entry).unwrap();
@@ -314,6 +324,19 @@ mod tests {
         );
         let back: AiEntry = serde_json::from_value(value).unwrap();
         assert_eq!(back, entry);
+
+        // A stopped response is marked; others leave the field out.
+        let stopped = AiEntry::assistant(
+            8,
+            AssistantEntry {
+                text: "Partly".into(),
+                interrupted: true,
+                ..AssistantEntry::default()
+            },
+        );
+        let value = serde_json::to_value(&stopped).unwrap();
+        assert_eq!(value["interrupted"], json!(true));
+        assert_eq!(serde_json::from_value::<AiEntry>(value).unwrap(), stopped);
 
         // Cache counts are stored only when the provider reported some.
         let cached = Usage {
@@ -360,6 +383,7 @@ mod tests {
         assert_eq!(a.finish, Finish::Stop);
         assert!(a.raw.is_null() && a.usage.is_none() && a.tool_calls.is_empty());
         assert_eq!(a.terminal, None);
+        assert!(!a.interrupted);
 
         let tool: AiEntry =
             serde_json::from_value(json!({"created_at": 1, "role": "tool", "tool_call_id": "x"}))

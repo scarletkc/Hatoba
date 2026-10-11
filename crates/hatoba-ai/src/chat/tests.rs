@@ -215,6 +215,7 @@ async fn chat_completions_streams_text_and_sends_the_expected_request() {
             usage: Some(cached_usage(812, 9, 768, 0)),
             raw: json!({"role": "assistant", "content": "Disk usage is 42%.", "refusal": null}),
             terminal: None,
+            interrupted: false,
         }
     );
 
@@ -600,6 +601,7 @@ fn thinking_entry() -> AssistantEntry {
         usage: a.usage,
         raw: a.raw,
         terminal: None,
+        interrupted: false,
     }
 }
 
@@ -1944,6 +1946,50 @@ fn chat_completions_raw_is_replayed_only_with_object_arguments() {
     assert!(replayed(
         json!({"role": "assistant", "content": "Hi.", "tool_calls": []})
     ));
+}
+
+/// A response the user stopped is stored without `raw` (spec §13.1), so even the model that wrote
+/// it gets the message rebuilt from the text that streamed.
+#[test]
+fn a_stopped_response_is_rebuilt_from_its_text() {
+    let tools = terminal_tools();
+    let stopped = |model: &str| {
+        AiEntry::assistant(
+            2,
+            AssistantEntry {
+                provider_id: PROVIDER_ID.into(),
+                model_id: model.into(),
+                text: "The disk is 4".into(),
+                interrupted: true,
+                ..AssistantEntry::default()
+            },
+        )
+    };
+    let next = AiEntry::user(3, format!("{}never mind", crate::tools::interrupted_block()));
+
+    let chat = ModelSpec::new("gpt-4.1");
+    let entries = vec![AiEntry::user(1, "df?"), stopped(&chat.id), next.clone()];
+    let built = request::chat_completions(&request(&chat, &entries, &tools), true, true);
+    assert!(!built.used_raw);
+    assert_eq!(
+        built.body["messages"][2],
+        json!({"role": "assistant", "content": "The disk is 4"})
+    );
+    assert!(
+        built.body["messages"][3]["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("<interrupted>\n")
+    );
+
+    let anthropic = ModelSpec::new("claude-opus-4-8");
+    let entries = vec![AiEntry::user(1, "df?"), stopped(&anthropic.id), next];
+    let built = request::anthropic(&request(&anthropic, &entries, &tools), true, true);
+    assert!(!built.used_raw);
+    assert_eq!(
+        built.body["messages"][1],
+        json!({"role": "assistant", "content": [{"type": "text", "text": "The disk is 4"}]})
+    );
 }
 
 #[test]
