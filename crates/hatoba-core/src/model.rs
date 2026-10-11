@@ -121,10 +121,10 @@ pub struct Host {
     pub env: Vec<EnvVar>,
 }
 
-/// The longest [`Host::ai_notes`], in bytes of UTF-8 (AI-37). Notes this long fit an item with
-/// room to spare, but not with the most environment variables a host can have: saving a host
-/// that does not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
-pub const MAX_HOST_AI_NOTES_BYTES: usize = 32 * 1024;
+/// The longest [`Host::ai_notes`], in bytes of UTF-8 (AI-37). Notes this long fit an item beside
+/// the most environment variables a host can have, unless much of the text needs escaping in JSON;
+/// while sync is on, saving a host that does not fit [`MAX_ITEM_PLAINTEXT_BYTES`] is refused.
+pub const MAX_HOST_AI_NOTES_BYTES: usize = 16 * 1024;
 
 /// One of a host's environment variables (SSH-14).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
@@ -1791,7 +1791,7 @@ mod tests {
         // SSH-14: a host whose variables use the whole budget, with the escaping that costs most
         // (every value byte a quote), still fits the plaintext a synced item may have, with 6,000
         // bytes of AI notes beside them. Longer notes and such variables together may not fit,
-        // and saving the host then says so.
+        // and saving the host while sync is on then says so.
         let quotes = "\"".repeat(MAX_ENV_VALUE_CHARS);
         let mut env: Vec<EnvVar> = (0..4)
             .map(|i| EnvVar::new(format!("N{i}"), quotes.clone()))
@@ -1813,9 +1813,21 @@ mod tests {
 
     #[test]
     fn the_longest_notes_and_instructions_fit_an_item() {
-        // AI-36, AI-37: as plain text, whose JSON is as long as the text.
+        // AI-36, AI-37: as plain text, whose JSON is as long as the text. The longest notes fit
+        // beside environment variables that use the whole budget (SSH-14).
+        let value = "v".repeat(MAX_ENV_VALUE_CHARS);
+        let mut env: Vec<EnvVar> = (0..4)
+            .map(|i| EnvVar::new(format!("N{i}"), value.clone()))
+            .collect();
+        env.extend((4..MAX_HOST_ENV_VARS).map(|i| EnvVar::new(format!("N{i}"), "")));
+        while env_bytes(&env) > MAX_HOST_ENV_BYTES {
+            env[3].value.pop();
+        }
+        assert_eq!(env_bytes(&env), MAX_HOST_ENV_BYTES);
+        assert_eq!(check_host_env(&env), Ok(()));
         let host = Item::Host(Host {
             ai_notes: "日".repeat(MAX_HOST_AI_NOTES_BYTES / 3),
+            env,
             ..sample_host()
         });
         assert!(host.plaintext_len().unwrap() <= MAX_ITEM_PLAINTEXT_BYTES);

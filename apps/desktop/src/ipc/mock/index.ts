@@ -257,7 +257,7 @@ export function createMockApi(): HatobaApi {
     }),
     vault_create: async (password) => {
       await delay(600);
-      if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
+      if (password.length < 12) fail("invalid_input", "password too short", { field: "password" });
       vaultState = "unlocked";
       hosts = [];
       groups = [];
@@ -332,7 +332,7 @@ export function createMockApi(): HatobaApi {
     host_save: async (input) => {
       needUnlocked();
       if (!input.address.trim()) fail("invalid_input", "address is required", { field: "address" });
-      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 32 KB", { field: "ai_notes" });
+      if (byteCount(input.ai_notes) > HOST_NOTES_MAX_BYTES) fail("invalid_input", "AI notes are limited to 16 KB", { field: "ai_notes" });
       if (input.proxy_mode === "proxy" && !proxies.some((p) => p.id === input.proxy_id))
         fail("invalid_input", "proxy not found", { field: "proxy_id" });
       const env = input.env.map((v) => ({ name: v.name.trim(), value: v.value }));

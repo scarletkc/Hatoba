@@ -171,7 +171,7 @@ export interface HostInput {
   /** Required when `proxy_mode` is `proxy`, ignored otherwise. */
   proxy_id: string | null;
   note: string;
-  /** At most 32 KB of UTF-8 (AI-37). */
+  /** At most 16 KB of UTF-8 (AI-37). */
   ai_notes: string;
   /** Checked as in `features/hosts/envVars.ts` (SSH-14). */
   env: HostEnvVar[];

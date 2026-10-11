@@ -39,7 +39,7 @@ pub const CALL_MCP_TOOL: &str = "call_mcp_tool";
 pub const MAX_RESULT_CHARS: usize = 30_000;
 /// MCP tool results longer than this many characters are shortened (§13.9): servers such as
 /// documentation or database tools return long results by design.
-pub const MAX_MCP_RESULT_CHARS: usize = 100_000;
+pub const MAX_MCP_RESULT_CHARS: usize = 50_000;
 
 /// Which built-in tools a request offers. `fetch_url` is always offered; the others depend on
 /// the conversation (AI-09).
@@ -1585,7 +1585,7 @@ Skills are instructions for particular tasks. When a request matches a skill's d
         let mcp = "x".repeat(MAX_MCP_RESULT_CHARS);
         assert_eq!(truncate_result_to(&mcp, MAX_MCP_RESULT_CHARS), mcp);
         let out = truncate_result_to(&format!("{mcp}yz"), MAX_MCP_RESULT_CHARS);
-        assert!(out.starts_with(&"x".repeat(25_000)) && out.ends_with("xyz"));
+        assert!(out.starts_with(&"x".repeat(12_500)) && out.ends_with("xyz"));
         assert!(out.contains("[… 2 characters left out …]"));
     }
 

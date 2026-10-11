@@ -3,11 +3,10 @@ import { Button, TextField } from "@/components/controls";
 import { Dialog, toast } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
+import { MIN_PASSWORD_LENGTH } from "@/features/onboarding/PasswordStrength";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import s from "./Dialogs.module.css";
-
-const MIN_PASSWORD = 8;
 
 export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -28,7 +27,7 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (busy) return;
-    if (next.length < MIN_PASSWORD) return setError({ field: "next", message: t("sync.password.short") });
+    if (next.length < MIN_PASSWORD_LENGTH) return setError({ field: "next", message: t("sync.password.short") });
     if (next !== confirmation) return setError({ field: "confirm", message: t("sync.password.mismatch") });
     setBusy(true);
     setError(null);

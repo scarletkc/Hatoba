@@ -20,7 +20,7 @@ Settings → AI → **Custom Instructions**, between Web Search and Skills. Good
 
 The host editor (`references/hosts-and-connecting.md`) has an **AI Notes** section after **Notes**. Good for what the assistant should know about that host: what runs there, important paths and services, what to avoid (for example "never restart postgresql during business hours").
 
-- Up to 32 KB, with the same size and token estimate. Text over the limit keeps the host from being saved until it is shortened.
+- Up to 16 KB, with the same size and token estimate. Text over the limit keeps the host from being saved until it is shortened.
 - The notes are part of the host: they save with **Save**, sync with the host, and are copied by **Duplicate** in the host's row menu. The host's **Notes** section is for you and never goes to the assistant; **AI Notes** does.
 - Every request of a conversation on that host carries them: the terminal tab's host, or the conversation's host on the home tab. When a conversation moves to another host, the next requests carry the new host's notes.
 

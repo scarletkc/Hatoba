@@ -106,7 +106,7 @@ pub struct HostInput {
     /// Required when `proxy_mode` is `proxy`, ignored otherwise.
     pub proxy_id: Option<String>,
     pub note: String,
-    /// At most 32 KB of UTF-8 (AI-37).
+    /// At most 16 KB of UTF-8 (AI-37).
     pub ai_notes: String,
     /// Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14).
     pub env: Vec<HostEnvVar>,

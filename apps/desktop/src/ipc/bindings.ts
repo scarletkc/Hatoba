@@ -1093,7 +1093,7 @@ export type HostInput = {
 	/**  Required when `proxy_mode` is `proxy`, ignored otherwise. */
 	proxy_id: string | null,
 	note: string,
-	/**  At most 32 KB of UTF-8 (AI-37). */
+	/**  At most 16 KB of UTF-8 (AI-37). */
 	ai_notes: string,
 	/**  Names are trimmed; see `hatoba_core::model::check_host_env` for the rules (SSH-14). */
 	env: HostEnvVar[],

@@ -10,7 +10,7 @@ import { estimateTokens } from "./meter";
 /** The longest custom instructions, in bytes of UTF-8 (AI-36). */
 export const INSTRUCTIONS_MAX_BYTES = 32 * 1024;
 /** The longest AI notes of a host, in bytes of UTF-8 (AI-37). */
-export const HOST_NOTES_MAX_BYTES = 32 * 1024;
+export const HOST_NOTES_MAX_BYTES = 16 * 1024;
 
 /** Characters as Rust counts them (Unicode code points), so an emoji counts once, not twice. */
 export function charCount(text: string): number {

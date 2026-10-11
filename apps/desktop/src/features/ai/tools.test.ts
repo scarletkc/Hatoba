@@ -298,9 +298,22 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
       prefixes: ["git pull", "systemctl restart"],
       savable: true,
     });
-    // Interpreters, deleting and network transfers are allowed for the conversation only.
-    for (const line of ["rm -rf build", "python3 deploy.py", "curl -X POST https://example.com", "mkfs.ext4 /dev/sdb1", "git pull && rm x"])
+    // Interpreters, deleting and network transfers are allowed for the conversation only, also when
+    // named with a directory or a version.
+    for (const line of [
+      "rm -rf build",
+      "/bin/rm -rf build",
+      "python3 deploy.py",
+      "/usr/bin/python3 deploy.py",
+      "python3.12 deploy.py",
+      "curl -X POST https://example.com",
+      "/usr/bin/curl -X POST https://example.com",
+      "mkfs.ext4 /dev/sdb1",
+      "/sbin/mkfs.ext4 /dev/sdb1",
+      "git pull && rm x",
+    ])
       expect(allowanceScope("run_command", cmd(line), null), line).toMatchObject({ kind: "command", savable: false });
+    expect(allowanceScope("run_command", cmd("/usr/bin/git pull"), null)).toMatchObject({ kind: "command", savable: true });
     expect(allowanceScope("run_command", cmd("sudo reboot"), null)).toBeNull();
     expect(allowanceScope("fetch_url", { url: "https://Docs.Example.com/x?y" }, null)).toEqual({ kind: "domain", domain: "docs.example.com" });
     expect(allowanceScope("fetch_url", { url: "ftp://x" }, null)).toBeNull();
