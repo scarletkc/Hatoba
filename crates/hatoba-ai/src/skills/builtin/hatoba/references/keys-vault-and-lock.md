@@ -17,7 +17,7 @@ On first launch the window offers two ways to start:
 
 - **Create a New Vault** sets a master password (at least 8 characters, with a strength hint: Weak, Fair, Strong, Very strong; a password that is too easy to guess is refused) and then shows a recovery code.
 - **Restore from Cloud** is for a new device that should join an existing sync setup. See `references/sync.md`.
-- The recovery code is shown once. **Save as Text** or **Print** it, then type its last group to confirm; **Finish Setup** completes the setup. It is the only way back in if the master password is forgotten. A new code can be generated in Settings → Security (**Generate New Code…**), and then the old one stops working.
+- The recovery code is shown once. **Save as Text** or **Print** it, then tick the box to confirm it is saved; **Finish Setup** completes the setup. It is the only way back in if the master password is forgotten. A new code can be generated in Settings → Security (**Generate New Code…**), and then the old one stops working.
 
 | en | zh-CN | ja |
 |---|---|---|

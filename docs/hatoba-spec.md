@@ -862,7 +862,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | ID | Requirement | Priority |
 |---|---|---|
 | VAULT-01 | Create the master password on first launch | P0 |
-| VAULT-02 | Generate a recovery code, and continue only after the user confirms it is saved by re-entering its last group | P0 |
+| VAULT-02 | Generate a recovery code, and continue only after the user confirms it is saved | P0 |
 | VAULT-03 | Unlock screen, with an increasing delay after repeated wrong passwords | P0 |
 | VAULT-04 | Auto-lock (see SEC-02) | P0 |
 | VAULT-05 | Change the master password | P1 |
