@@ -276,6 +276,15 @@ impl Turn {
             self.sink.send(AiTurnEvent::TurnEnded { reason });
         }
     }
+
+    /// Ends a turn whose task has finished. A cancelled turn is ended by what cancelled it (a
+    /// stop or a deletion), after the entries a stop stores, so its task never sends
+    /// `turn_ended` before them.
+    fn finish(&self, reason: AiTurnEndReason) {
+        if !self.cancel.is_cancelled() {
+            self.end(reason);
+        }
+    }
 }
 
 /// Why a turn stops before its next step.
@@ -481,16 +490,18 @@ impl AiManager {
     /// cancelled result for every call without one, and sends those entries and
     /// `turn_ended { stopped }` on the turn's channel. Returns the entries it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
+        // Taken before the cancel wakes the turn's task, which drops what streamed when its
+        // request ends.
+        let streamed = self
+            .running(conversation_id)
+            .and_then(|turn| guard(&turn.streamed).take().map(|s| (s, turn.context.tab)));
         let turn = self.cancel(conversation_id);
         self.forget_file_bases(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
-            let streamed = turn.as_ref().and_then(|turn| {
-                guard(&turn.streamed)
-                    .take()
-                    .and_then(|s| s.into_entry(turn.context.tab))
-            });
-            if let Some(response) = streamed {
+            if let Some(response) =
+                streamed.and_then(|(streamed, terminal)| streamed.into_entry(terminal))
+            {
                 let entry = AiEntry::assistant(now_ms(), response);
                 match append(v, conversation_id, &entry) {
                     Ok(entry_id) => stored.push(entry_view(&entry_id, &entry)),
@@ -1001,7 +1012,7 @@ impl AiManager {
                         .await
                 }
             };
-            turn.end(reason);
+            turn.finish(reason);
             manager.forget(&conversation_id, &turn);
             tracing::info!(conversation_id = %conversation_id, ?reason, "AI turn ended");
         })
@@ -1077,8 +1088,9 @@ impl AiManager {
                 )
                 .await
             };
-            // A stop took what had streamed already; a failed request stores nothing. A complete
-            // response stays until it is stored, so a stop before that keeps it.
+            // A stop took what had streamed before it cancelled the request; a failed request
+            // stores nothing. A complete response stays until it is stored, so a stop before that
+            // keeps it.
             if result.is_err() {
                 guard(&turn.streamed).take();
             }
