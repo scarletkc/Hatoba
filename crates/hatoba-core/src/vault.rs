@@ -1094,7 +1094,8 @@ impl Vault {
             None => self.store.transaction(|tx| {
                 tx.delete_meta(meta::SYNC_BACKEND)?;
                 tx.delete_meta(meta::SYNC_CURSOR)?;
-                tx.delete_meta(meta::SYNC_LAST_AT)
+                tx.delete_meta(meta::SYNC_LAST_AT)?;
+                tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)
             }),
         }
     }
@@ -1265,8 +1266,9 @@ impl Vault {
     /// When the remote is this same vault (a device that synced before), every item is queued
     /// again so the next round reconciles both sides. Otherwise each live item is sealed under
     /// the remote vault key and queued as new. The local settings are sealed again but not
-    /// queued, at revision 0, so the remote's settings replace them on the first pull and the
-    /// app never shows defaults meanwhile. Tombstones, items that cannot be decrypted, and the
+    /// queued, at revision 0, so the app never shows defaults meanwhile, and the remote's settings
+    /// replace them on the first pull even if they were edited in between
+    /// ([`meta::ADOPT_REMOTE_SETTINGS`]). Tombstones, items that cannot be decrypted, and the
     /// conflict log are dropped, and the device-local data sealed under the vault key is sealed
     /// again. Returns whether the vault key changed, so the caller can drop what still holds the
     /// old one (biometric unlock).
@@ -1316,6 +1318,7 @@ impl Vault {
                     })?;
                 }
                 tx.clear_conflicts()?;
+                tx.set_meta(meta::ADOPT_REMOTE_SETTINGS, "1")?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
                 match &recent {
                     Some(sealed) => tx.set_meta(meta::RECENT_TARGETS, sealed)?,

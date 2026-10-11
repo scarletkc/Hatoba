@@ -29,7 +29,7 @@ use std::sync::Arc;
 use serde::Serialize;
 
 use crate::error::{Error, Result};
-use crate::model::{Item, new_id};
+use crate::model::{Item, SETTINGS_ID, new_id};
 use crate::store::{ItemRow, NewConflict, StoreOps, StoreTx, meta};
 use crate::sync::backend::{Change, MAX_CHANGES_PER_PUSH, PushResult, RemoteItem, SyncBackend};
 use crate::sync::conflict::{DEFAULT_CONFLICT_SUFFIX, Decision, Side, conflict_copy, decide};
@@ -313,6 +313,14 @@ fn apply_remote(
     from_push: bool,
     batch: &mut Batch,
 ) -> Result<Disposition> {
+    // The first settings item after joining another vault replaces the local one outright.
+    if remote.id == SETTINGS_ID && tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)?.is_some() {
+        tx.upsert_item_row(&remote_row(remote))?;
+        tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
+        batch.touched.push(remote.id.clone());
+        batch.pulled += 1;
+        return Ok(Disposition::Adopted);
+    }
     let Some(local) = tx.item_row(&remote.id)? else {
         tx.upsert_item_row(&remote_row(remote))?;
         batch.touched.push(remote.id.clone());

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
@@ -44,18 +44,22 @@ export function D1Step({
       ? { message: errorMessage(t, error), offline: true }
       : { message: t("sync.token.err"), offline: false };
 
+  // Only the latest pick's answer counts: whether the database holds a vault decides the flow.
+  const picked = useRef("");
   const pickDatabase = async (databaseId: string) => {
+    picked.current = databaseId;
     update({ databaseId, initialized: false, checking: true });
     try {
       const result = await api.sync_test(config(databaseId));
-      update({ initialized: result.ok && result.initialized, checking: false });
+      if (picked.current === databaseId) update({ initialized: result.ok && result.initialized, checking: false });
     } catch {
-      update({ checking: false });
+      if (picked.current === databaseId) update({ checking: false });
     }
   };
 
   const runVerify = async () => {
     if (!canVerify) return;
+    picked.current = "";
     update({ verify: { status: "testing" }, databaseId: "", databases: [], initialized: false });
     try {
       const result = await api.sync_test(config(""));
@@ -68,7 +72,10 @@ export function D1Step({
     }
   };
 
-  const reset = (patch: Partial<D1Form>) => update({ ...EMPTY_D1, accountId: form.accountId, apiToken: form.apiToken, ...patch });
+  const reset = (patch: Partial<D1Form>) => {
+    picked.current = "";
+    update({ ...EMPTY_D1, accountId: form.accountId, apiToken: form.apiToken, ...patch });
+  };
 
   const verifiedLine =
     verify.status === "ok"

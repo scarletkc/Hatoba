@@ -477,12 +477,18 @@ async fn join_merges_another_vault_into_the_cloud() {
         .await
         .unwrap();
     // Until the first pull, the local settings stay, and they are not queued to overwrite the
-    // cloud's.
+    // cloud's, even when edited meanwhile.
     assert_eq!(c.v().settings().auto_lock_minutes, 7);
+    c.clock.advance(60_000);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.auto_lock_minutes = 9;
+        }
+    });
     assert_eq!(
         c.pending(),
-        4,
-        "local host, key, chat and message; not the settings"
+        5,
+        "local host, key, chat, message and the edited settings"
     );
     c.sync().await;
     assert!(joined.rekeyed);
@@ -528,6 +534,11 @@ async fn join_merges_another_vault_into_the_cloud() {
 
     // The local data reaches the other device, readable under the cloud's vault key.
     a.sync().await;
+    assert_eq!(
+        a.v().settings().auto_lock_minutes,
+        42,
+        "the cloud kept its settings"
+    );
     assert_eq!(a.snapshot(), c.snapshot());
     assert_eq!(a.name_of(&local_host).as_deref(), Some("local-host"));
     assert_eq!(a.name_of(&local_key).as_deref(), Some("local-key"));
