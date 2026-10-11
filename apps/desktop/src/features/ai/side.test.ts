@@ -177,6 +177,15 @@ describe("askSideQuestion (AI-42)", () => {
     expect(getSlot(HOME_SLOT).side).toBeNull();
   });
 
+  it("stays stopped when a failure arrives after the stop", async () => {
+    const p = pending();
+    askSideQuestion(HOME_SLOT, "why?");
+    stopSideQuestion(HOME_SLOT);
+    p.fail("ai", "the provider is overloaded");
+    await flush();
+    expect(getSlot(HOME_SLOT).side).toMatchObject({ phase: "stopped", error: null });
+  });
+
   it("replaces a side question still on its way, and keeps the input area as the newer one left it", async () => {
     const first = pending();
     askSideQuestion(HOME_SLOT, "first");

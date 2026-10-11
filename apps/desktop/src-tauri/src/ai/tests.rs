@@ -4977,7 +4977,8 @@ fn last_user_message(body: &Value) -> String {
 
 /// AI-41: the changes of the file tools are listed for Revert, which waits until the conversation
 /// is idle and needs the tab connected; the next message notes each revert once, oldest call
-/// first, and an edit of that message notes them again.
+/// first, and an edit of that message notes them again. A side question (AI-42) carries the notes
+/// without using them up.
 #[tokio::test]
 async fn reverted_file_changes_are_noted_once_on_the_next_message() {
     let f = Fixture::new(vec![
@@ -4994,6 +4995,7 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
             ),
         ]),
         answer("Changed both."),
+        answer("You reverted both."),
         answer("Noted."),
         answer("Fine."),
         answer("Noted again."),
@@ -5107,12 +5109,19 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         hatoba_ai::tools::file_revert_block("/home/ops/app.conf", "e1", "edit_file", false),
         hatoba_ai::tools::file_revert_block("/srv/new.conf", "w1", "write_file", true),
     );
+    // AI-42: a side question asked meanwhile starts with them too, and leaves them for the message.
+    let (answer, _) = f.side(&conv, "what did I undo?", None).await;
+    assert_eq!(answer.unwrap().text, "You reverted both.");
+    assert_eq!(
+        last_user_message(&f.requests().await[2]),
+        format!("{notes}{}", side_message("what did I undo?"))
+    );
     let (second, sink) = f.send(Some(&conv), "why did you change them?").await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
     let requests = f.requests().await;
     assert_eq!(
-        last_user_message(&requests[2]),
+        last_user_message(&requests[3]),
         format!("{notes}why did you change them?")
     );
     assert_eq!(super::title_of(&format!("{notes}typed")), "typed");
@@ -5122,7 +5131,7 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
     let (_, sink) = f.send(Some(&conv), "ok").await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
-    assert_eq!(last_user_message(&f.requests().await[3]), "ok");
+    assert_eq!(last_user_message(&f.requests().await[4]), "ok");
 
     // An edit of the message that noted them deletes the note with it, so the new one notes
     // them again.
@@ -5132,7 +5141,7 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     assert_eq!(
-        last_user_message(&f.requests().await[4]),
+        last_user_message(&f.requests().await[5]),
         format!("{notes}why?")
     );
 }

@@ -1,7 +1,7 @@
 //! AI assistant commands (spec §13): providers, search providers and the synced settings of
 //! Settings → AI, conversations with history search (AI-24), and the turn protocol of §13.1 with
-//! edit and resend (AI-26) and side questions (AI-42), which runs in [`crate::ai`]. Skills and MCP servers have their own
-//! modules ([`super::skills`], [`super::mcp`]).
+//! edit and resend (AI-26) and side questions (AI-42), which run in [`crate::ai`]. Skills and MCP
+//! servers have their own modules ([`super::skills`], [`super::mcp`]).
 //! API keys go one way to Rust: views say only whether a key is saved (AI-01).
 
 use std::sync::Arc;

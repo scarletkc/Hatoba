@@ -25,6 +25,6 @@ The answer streams into a bubble with a dashed border at the end of the conversa
 | Not saved | 不会保存 | 保存されません |
 
 - Nothing of it is stored, synced, exported or searched, and later requests leave it out, so the assistant does not remember it in the conversation. To keep something from it, send it as a normal message.
-- Closing the bubble, asking another side question, sending a message (**Edit and Resend** and **Retry** too) or opening another conversation in the panel discards it; an answer still coming stops first.
+- Closing the bubble, asking another side question, sending a message (**Edit and Resend**, and **Retry** after a failed reply, too) or opening another conversation in the panel discards it; an answer still coming stops first.
 - The stop button on the bubble, or Esc in the panel while the answer comes, stops only that side question; Esc again stops the turn. Stopping the turn leaves the side question running, and locking the vault stops it.
 - A side question is a request to the model provider like any other, so it uses tokens; the provider's prompt cache usually serves most of the conversation.

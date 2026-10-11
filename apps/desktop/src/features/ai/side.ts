@@ -3,8 +3,8 @@ import type { Slot } from "./store";
 
 /**
  * A side question (AI-42) and its answer as the panel shows them, at the end of the conversation.
- * Nothing stores either: closing the bubble, a newer side question or another conversation in the
- * slot discards them.
+ * Nothing stores either: closing the bubble, a newer side question, a message or another conversation
+ * in the slot discards them.
  */
 export interface SideQuestion {
   /** Tells a question's events from those of the one that replaced it. */
