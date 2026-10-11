@@ -1,8 +1,11 @@
-import type { MessageKey, Params } from "@/i18n";
+import { LOCALES, translate, type MessageKey, type Params } from "@/i18n";
 import type { AiEntryView, AiModelRef } from "@/ipc/types";
 import { lastModel, sameModel } from "./models";
 
 type Tr = (key: MessageKey, params?: Params) => string;
+
+/** The most characters a conversation's title holds, as Rust cuts it (AI-23). */
+const MAX_TITLE_CHARS = 200;
 
 /**
  * For each tool call, keyed `entry index:call index`, the index of the result that answers it: the first
@@ -71,9 +74,14 @@ export function forkModel(entries: AiEntryView[], entryId: string): AiModelRef |
   return sameModel(answered, lastModel(entries.slice(0, at + 1))) ? null : answered;
 }
 
-/** AI-41: a fork's title, "*title* (fork)" in the panel's language; a fork of a fork keeps its title rather than marking it twice. */
+/**
+ * AI-41: a fork's title, "*title* (fork)" in the panel's language, with the original's title cut so the mark
+ * still fits in a title. A fork of a fork keeps its title, whichever language marked it, as it synced from
+ * a device that may use another.
+ */
 export function forkTitle(t: Tr, title: string): string {
-  const mark = t("ai.fork.title", { title: "" }).trim();
   const original = title.trim() || t("ai.untitled");
-  return original.endsWith(mark) ? original : t("ai.fork.title", { title: original });
+  if (LOCALES.some((locale) => original.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim()))) return original;
+  const room = MAX_TITLE_CHARS - [...t("ai.fork.title", { title: "" })].length;
+  return t("ai.fork.title", { title: [...original].slice(0, room).join("").trimEnd() });
 }

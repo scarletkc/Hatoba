@@ -79,4 +79,20 @@ describe("forkTitle", () => {
     expect(forkTitle(tr("en"), "Disk usage (fork)")).toBe("Disk usage (fork)");
     expect(forkTitle(tr("en"), "  ")).toBe("Untitled conversation (fork)");
   });
+
+  it("keeps a title another language marked", () => {
+    expect(forkTitle(tr("ja"), "Disk usage (fork)")).toBe("Disk usage (fork)");
+    expect(forkTitle(tr("en"), "磁盘空间（分支）")).toBe("磁盘空间（分支）");
+    expect(forkTitle(tr("zh-CN"), "ディスク（分岐）")).toBe("ディスク（分岐）");
+  });
+
+  it("cuts a long title so the mark still fits in 200 characters", () => {
+    for (const locale of ["en", "zh-CN", "ja"] as const) {
+      const title = forkTitle(tr(locale), "日".repeat(200));
+      expect([...title].length).toBe(200);
+      expect(title.endsWith(translate(locale, "ai.fork.title", { title: "" }).trim())).toBe(true);
+    }
+    // A cut that ends at a space leaves none before the mark.
+    expect(forkTitle(tr("en"), `${"a".repeat(192)} b`)).toBe(`${"a".repeat(192)} (fork)`);
+  });
 });
