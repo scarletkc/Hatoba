@@ -32,17 +32,17 @@ describe("MCP templates", () => {
     }
   });
 
-  it("keep GitHub read-only, with its default toolsets", () => {
+  it("give GitHub its default toolsets and a token that can write", () => {
     const github = template("github");
-    expect(github.url).toBe("https://api.githubcopilot.com/mcp/readonly");
+    expect(github.url).toBe("https://api.githubcopilot.com/mcp/");
     expect(github.alwaysAsk).toBe(false);
     expect(github.headers.map((h) => h.key)).toEqual(["Authorization"]);
     const token = new URL(github.tokenUrl);
     expect(token.pathname).toBe("/settings/personal-access-tokens/new");
-    expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual(["read", "read", "read"]);
+    expect(["contents", "issues", "pull_requests"].map((p) => token.searchParams.get(p))).toEqual(["write", "write", "write"]);
   });
 
-  it("turn on Always ask for servers whose tools can change data", () => {
+  it("turn on Always ask for Linear and Cloudflare", () => {
     expect(MCP_TEMPLATES.filter((x) => x.alwaysAsk).map((x) => x.id)).toEqual(["linear", "cloudflare"]);
   });
 });
@@ -50,7 +50,7 @@ describe("MCP templates", () => {
 describe("templateMcpForm", () => {
   it("fills in an HTTP server with the header names and empty values", () => {
     const f = templateMcpForm(template("github"), []);
-    expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/readonly", command: "", args: [], env: [] });
+    expect(f).toMatchObject({ name: "github", kind: "http", url: "https://api.githubcopilot.com/mcp/", command: "", args: [], env: [] });
     expect(f.headers).toMatchObject([
       { key: "Authorization", saved: false, draft: { mode: "replace", value: "" }, template: { placeholder: "Bearer github_pat_…", bearer: true } },
     ]);
@@ -85,7 +85,7 @@ describe("templateMcpForm", () => {
       name: "github",
       transport: {
         kind: "http",
-        url: "https://api.githubcopilot.com/mcp/readonly",
+        url: "https://api.githubcopilot.com/mcp/",
         headers: [{ key: "Authorization", value: "Bearer github_pat_x" }],
       },
       always_ask: false,

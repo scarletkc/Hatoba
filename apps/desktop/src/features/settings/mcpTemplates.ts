@@ -18,7 +18,7 @@ export interface McpTemplate {
   name: string;
   url: string;
   headers: McpTemplateHeader[];
-  /** On for a server whose tools can change data (AI-31). */
+  /** Whether the server starts with Always ask on (AI-31). */
   alwaysAsk: boolean;
   /** Where the user creates the token the template asks for. */
   tokenUrl: string;
@@ -26,16 +26,17 @@ export interface McpTemplate {
 
 export const MCP_TEMPLATES: readonly McpTemplate[] = [
   {
-    // github/github-mcp-server, docs/remote-server.md: `/readonly` keeps the default toolsets to their read tools. The
-    // token link fills in a fine-grained token with read access to what those toolsets reach.
+    // github/github-mcp-server: the base URL with the default toolsets, as GitHub's own one-click install uses, and
+    // docs/remote-server.md for `/readonly` and X-MCP-Toolsets. The token link fills in a fine-grained token with read
+    // and write access to what those toolsets reach.
     id: "github",
     label: "GitHub",
     icon: "github-logo",
     name: "github",
-    url: "https://api.githubcopilot.com/mcp/readonly",
+    url: "https://api.githubcopilot.com/mcp/",
     headers: [{ key: "Authorization", placeholder: "Bearer github_pat_…", bearer: true }],
     alwaysAsk: false,
-    tokenUrl: "https://github.com/settings/personal-access-tokens/new?name=Hatoba+MCP&contents=read&issues=read&pull_requests=read",
+    tokenUrl: "https://github.com/settings/personal-access-tokens/new?name=Hatoba+MCP&contents=write&issues=write&pull_requests=write",
   },
   {
     // linear.app/docs/mcp: an API key in `Authorization: Bearer` instead of the OAuth flow.
