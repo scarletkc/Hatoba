@@ -319,8 +319,63 @@ pub struct Verifier {
     pub session_id: Option<String>,
 }
 
+fn known_host_keys(vault: &Vault, host: &str, port: u16) -> Vec<(String, KnownHost)> {
+    vault
+        .known_hosts()
+        .into_iter()
+        .filter(|(_, k)| k.host.eq_ignore_ascii_case(host) && k.port == port)
+        .collect()
+}
+
+fn host_key_status<'a>(
+    known: &'a [(String, KnownHost)],
+    key: &HostKeyInfo,
+) -> (HostKeyPromptKind, Option<&'a KnownHost>) {
+    let same_type = known.iter().find(|(_, k)| k.key_type == key.key_type);
+    let kind = if same_type.is_some() {
+        HostKeyPromptKind::Changed
+    } else {
+        HostKeyPromptKind::New
+    };
+    let previous = same_type.or_else(|| known.first()).map(|(_, k)| k);
+    (kind, previous)
+}
+
+fn save_host_key(vault: &mut Vault, host: &str, port: u16, key: &HostKeyInfo) -> AppResult<()> {
+    for (id, _) in known_host_keys(vault, host, port)
+        .into_iter()
+        .filter(|(_, k)| k.key_type == key.key_type)
+    {
+        vault.delete(&id)?;
+    }
+    let now = now_ms();
+    let record = KnownHost {
+        host: host.to_owned(),
+        port,
+        key_type: key.key_type.clone(),
+        public_key: key.public_key.clone(),
+        fingerprint: key.fingerprint.clone(),
+        first_seen_at: now,
+        updated_at: 0,
+    };
+    vault.put(None, Item::KnownHost(record))?;
+    Ok(())
+}
+
 #[async_trait]
 impl HostKeyVerifier for Verifier {
+    async fn known_key_types(&self, host: &str, port: u16) -> Vec<String> {
+        let state = state(&self.app);
+        let vault = state.vault();
+        if !vault.is_unlocked() {
+            return Vec::new();
+        }
+        known_host_keys(&vault, host, port)
+            .into_iter()
+            .map(|(_, k)| k.key_type)
+            .collect()
+    }
+
     async fn verify(&self, host: &str, port: u16, key: &HostKeyInfo) -> bool {
         let state = state(&self.app);
         let known: Vec<(String, KnownHost)> = {
@@ -328,11 +383,7 @@ impl HostKeyVerifier for Verifier {
             if !vault.is_unlocked() {
                 return false;
             }
-            vault
-                .known_hosts()
-                .into_iter()
-                .filter(|(_, k)| k.host.eq_ignore_ascii_case(host) && k.port == port)
-                .collect()
+            known_host_keys(&vault, host, port)
         };
         if known
             .iter()
@@ -340,9 +391,9 @@ impl HostKeyVerifier for Verifier {
         {
             return true;
         }
-        // A known host presenting a different key — of any type — is blocked until the user
-        // explicitly chooses "update fingerprint" (downgrade to another key type included).
-        let previous = known.first().map(|(_, k)| k.clone());
+        // A known host presenting a different key of a saved type is blocked until the user
+        // explicitly chooses "update fingerprint"; another type needs a new trust decision.
+        let (kind, previous) = host_key_status(&known, key);
         let request_id = uuid::Uuid::now_v7().to_string();
         let (tx, rx) = oneshot::channel();
         lock(&state.ssh.hostkey_waiters).insert(request_id.clone(), tx);
@@ -353,13 +404,9 @@ impl HostKeyVerifier for Verifier {
             port,
             key_type: key.key_type.clone(),
             fingerprint: key.fingerprint.clone(),
-            kind: if previous.is_some() {
-                HostKeyPromptKind::Changed
-            } else {
-                HostKeyPromptKind::New
-            },
-            known_fingerprint: previous.as_ref().map(|k| k.fingerprint.clone()),
-            known_key_type: previous.as_ref().map(|k| k.key_type.clone()),
+            kind,
+            known_fingerprint: previous.map(|k| k.fingerprint.clone()),
+            known_key_type: previous.map(|k| k.key_type.clone()),
         };
         if prompt.emit(&self.app).is_err() {
             lock(&state.ssh.hostkey_waiters).remove(&request_id);
@@ -368,23 +415,7 @@ impl HostKeyVerifier for Verifier {
         let accepted = matches!(tokio::time::timeout(PROMPT_TIMEOUT, rx).await, Ok(Ok(true)));
         lock(&state.ssh.hostkey_waiters).remove(&request_id);
         if accepted {
-            let saved = state.with_unlocked(|v| {
-                for (id, _) in &known {
-                    v.delete(id)?;
-                }
-                let now = now_ms();
-                let record = KnownHost {
-                    host: host.to_owned(),
-                    port,
-                    key_type: key.key_type.clone(),
-                    public_key: key.public_key.clone(),
-                    fingerprint: key.fingerprint.clone(),
-                    first_seen_at: now,
-                    updated_at: 0,
-                };
-                v.put(None, Item::KnownHost(record))?;
-                Ok(())
-            });
+            let saved = state.with_unlocked(|v| save_host_key(v, host, port, key));
             match saved {
                 Ok(()) => sync::local_change(&self.app),
                 Err(e) => tracing::warn!("could not save the accepted host key: {}", e.detail),
@@ -559,14 +590,11 @@ fn auth_kind(auth: &AuthMethod) -> &'static str {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
-    use std::sync::{Arc, Mutex};
 
-    use hatoba_ssh::{AuthMethod, ConnectConfig};
+    use hatoba_core::KdfParams;
     use tracing_subscriber::{fmt, prelude::*};
-    use zeroize::Zeroizing;
 
-    use super::Attempt;
-    use crate::error::{AppError, SshErrorKind};
+    use super::*;
 
     /// A writer the test reads back.
     #[derive(Clone, Default)]
@@ -618,5 +646,113 @@ mod tests {
         }
         assert!(!text.contains("SECRET"), "{text}");
         assert!(!text.contains("SERVER-TEXT"), "{text}");
+    }
+
+    fn key(key_type: &str, public_key: &str) -> HostKeyInfo {
+        HostKeyInfo {
+            key_type: key_type.to_owned(),
+            public_key: public_key.to_owned(),
+            fingerprint: format!("SHA256:{public_key}"),
+        }
+    }
+
+    fn record(host: &str, port: u16, key: &HostKeyInfo) -> KnownHost {
+        KnownHost {
+            host: host.to_owned(),
+            port,
+            key_type: key.key_type.clone(),
+            public_key: key.public_key.clone(),
+            fingerprint: key.fingerprint.clone(),
+            first_seen_at: 1,
+            updated_at: 0,
+        }
+    }
+
+    fn known(key: &HostKeyInfo) -> (String, KnownHost) {
+        (hatoba_core::new_id(), record("demo.example", 22, key))
+    }
+
+    #[test]
+    fn host_key_of_another_type_is_new_with_the_previous_key_as_context() {
+        let rsa = key("ssh-rsa", "trusted-rsa");
+        let ed25519 = key("ssh-ed25519", "received-ed25519");
+        let known = vec![known(&rsa)];
+        let (kind, previous) = host_key_status(&known, &ed25519);
+        assert_eq!(kind, HostKeyPromptKind::New);
+        assert_eq!(previous.unwrap().fingerprint, rsa.fingerprint);
+    }
+
+    #[test]
+    fn changed_key_uses_the_previous_key_of_the_same_type() {
+        let rsa = key("ssh-rsa", "trusted-rsa");
+        let ed25519 = key("ssh-ed25519", "trusted-ed25519");
+        let changed = key("ssh-ed25519", "changed-ed25519");
+        let known = vec![known(&rsa), known(&ed25519)];
+        let (kind, previous) = host_key_status(&known, &changed);
+        assert_eq!(kind, HostKeyPromptKind::Changed);
+        assert_eq!(previous.unwrap().fingerprint, ed25519.fingerprint);
+    }
+
+    #[test]
+    fn unknown_host_key_is_new_without_previous_context() {
+        let (kind, previous) = host_key_status(&[], &key("ssh-ed25519", "received"));
+        assert_eq!(kind, HostKeyPromptKind::New);
+        assert!(previous.is_none());
+    }
+
+    #[test]
+    fn saving_a_key_preserves_other_types_hosts_and_ports() {
+        let mut vault = Vault::open_in_memory().unwrap();
+        vault
+            .create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+        let rsa = key("ssh-rsa", "trusted-rsa");
+        let ed25519 = key("ssh-ed25519", "trusted-ed25519");
+        let changed = key("ssh-ed25519", "changed-ed25519");
+        for (host, port, key) in [
+            ("demo.example", 22, &rsa),
+            ("DEMO.EXAMPLE", 22, &ed25519),
+            ("demo.example", 2222, &ed25519),
+            ("other.example", 22, &ed25519),
+        ] {
+            vault
+                .put(None, Item::KnownHost(record(host, port, key)))
+                .unwrap();
+        }
+        save_host_key(&mut vault, "demo.example", 22, &changed).unwrap();
+        let records = vault.known_hosts();
+        assert_eq!(records.len(), 4);
+        assert!(
+            records
+                .iter()
+                .any(|(_, k)| k.port == 22 && k.public_key == rsa.public_key)
+        );
+        assert!(
+            !records
+                .iter()
+                .any(|(_, k)| k.host.eq_ignore_ascii_case("demo.example")
+                    && k.port == 22
+                    && k.public_key == ed25519.public_key)
+        );
+        assert!(
+            records
+                .iter()
+                .any(|(_, k)| k.port == 22 && k.public_key == changed.public_key)
+        );
+    }
+
+    #[test]
+    fn trusting_another_type_keeps_the_original_key() {
+        let mut vault = Vault::open_in_memory().unwrap();
+        vault
+            .create_with_params(&hatoba_core::new_id(), KdfParams::for_tests())
+            .unwrap();
+        let rsa = key("ssh-rsa", "trusted-rsa");
+        let ed25519 = key("ssh-ed25519", "received-ed25519");
+        vault
+            .put(None, Item::KnownHost(record("demo.example", 22, &rsa)))
+            .unwrap();
+        save_host_key(&mut vault, "demo.example", 22, &ed25519).unwrap();
+        assert_eq!(vault.known_hosts().len(), 2);
     }
 }

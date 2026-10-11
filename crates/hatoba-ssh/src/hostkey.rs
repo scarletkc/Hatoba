@@ -39,6 +39,10 @@ impl HostKeyInfo {
 /// implementation may wait for user input.
 #[async_trait]
 pub trait HostKeyVerifier: Send + Sync {
+    async fn known_key_types(&self, _host: &str, _port: u16) -> Vec<String> {
+        Vec::new()
+    }
+
     /// `host` and `port` are the address configured for the hop being
     /// verified (not the resolved IP).
     async fn verify(&self, host: &str, port: u16, key: &HostKeyInfo) -> bool;

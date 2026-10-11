@@ -812,7 +812,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | SSH-01 | Password authentication | P0 |
 | SSH-02 | Private key authentication with ed25519, ecdsa, and rsa keys, including passphrase-protected keys | P0 |
 | SSH-03 | Ask-every-time mode: prompt for the password when connecting, without saving it | P0 |
-| SSH-04 | Host key verification: on first connect, show the fingerprint for confirmation (TOFU), then save it as a `known_host` item that syncs. When the fingerprint changes, **block the connection** with a prominent warning, and continue only when the user explicitly chooses to update the fingerprint | P0 |
+| SSH-04 | Host key verification: prefer the key types already saved for each host:port, including each ProxyJump hop. On first connect, show the fingerprint for confirmation (TOFU), then save it as a `known_host` item that syncs. A key of a type not yet saved requires the same explicit trust confirmation, showing any saved key of another type as context and keeping it when the new type is accepted. When a key of a saved type changes, **block the connection** with a prominent warning showing the previous key of that type, and continue only when the user explicitly chooses to update that type's fingerprint; other types remain saved | P0 |
 | SSH-05 | Connection timeout (15 seconds by default), with readable error messages that tell DNS failure, refused connection, authentication failure, and timeout apart | P0 |
 | SSH-06 | Keepalive (30 seconds by default) and disconnect detection | P0 |
 | SSH-07 | After a disconnect, show a **Reconnect** button in the tab instead of reconnecting on its own forever | P0 |
@@ -831,11 +831,11 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | TERM-01 | Multiple tabs, one session per tab, and several tabs for the same host at once | P0 |
 | TERM-02 | `xterm-256color` and truecolor, UTF-8. **Chinese and Japanese wide characters must render correctly, and Windows input methods such as Microsoft Pinyin and the Microsoft Japanese IME must place the candidate window and commit text correctly** | P0 |
 | TERM-03 | Sync the PTY size when the window or a panel resizes | P0 |
-| TERM-04 | Copy and paste, with a confirmation before pasting multiple lines | P0 |
+| TERM-04 | Copy and paste. A single-line paste drops its trailing line breaks, so the command does not run, and needs no confirmation. Multi-line text is pasted unchanged after a confirmation, which the user can turn off | P0 |
 | TERM-05 | Scrollback of 10,000 lines by default, configurable | P0 |
 | TERM-06 | Font, font size, and theme (light, dark, or system) | P0 |
 | TERM-07 | Search in the terminal | P1 |
-| TERM-08 | Clickable links | P1 |
+| TERM-08 | HTTP and HTTPS links open in the system browser on Ctrl+click (Cmd+click on macOS); other URL schemes are not opened | P1 |
 | TERM-09 | Split panes | P2 |
 | TERM-10 | Save session logs to local files | P2 |
 | TERM-11 | Snippets (saved commands) | P2 |

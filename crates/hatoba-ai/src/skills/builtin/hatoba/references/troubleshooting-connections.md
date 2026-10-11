@@ -104,7 +104,7 @@ Set it in the host editor: **Organization & Network** → **Jump Host**, then pi
 - Each hop connects and authenticates with its own saved settings (address, port, user, method). A jump host must use a saved password, a key with its passphrase saved, or **SSH Agent**. **Ask Each Time** and an unsaved key passphrase cannot be answered for a hop, so the connection fails with code INVALID_INPUT and the Detail "jump host <name> needs a saved password or key". Fix it in the jump host's own editor.
 - Hatoba opens the next hop through a tunnel of the previous one. The destination's name is resolved and reached from the jump host, not from this PC. If the jump host cannot reach it, you get a `channel` failure: `jump host could not open a tunnel to <host>:<port>`.
 - A chain's Detail starts with `hop i/N (host:port)`, counting from the first jump host; hop N is the final host. Hop 1 refused, timed out or failed authentication means the jump host itself. The 15-second limit is per hop.
-- Each hop has its own host key prompt (first connection, or changed key) and may ask for a verification code.
+- Each hop has its own host key prompts (below) and may ask for a verification code.
 - If a jump host's connection dies later, the disconnect reason reads "the connection through jump host … was lost". The status bar shows "via" and the jump host's name.
 - To isolate a problem, connect to the jump host alone, then use **Test Connection** on the final host.
 - Not supported: `ProxyCommand`. Use a jump host, a proxy (below), or a system VPN or tunnel. Importing an SSH config keeps `ProxyJump` only when its first hop names a host that exists in Hatoba; otherwise the import warns.
@@ -115,8 +115,9 @@ The choices are in `references/hosts-and-connecting.md`. Only the first hop (the
 
 ## Host key prompts and changes
 
-- The first connection to a host:port shows a dialog with the key type and fingerprint. Compare it with the server's, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server. **Trust and Connect** saves it to the vault, and it syncs to the other devices. **Cancel** fails the connection with the `host_key_rejected` kind.
-- **Host key has changed** appears when the saved fingerprint differs. Causes: the server was reinstalled or got new keys, another machine now answers at that address (a reused IP, a load balancer), or a man-in-the-middle. The dialog shows the trusted and the received fingerprint. **Disconnect** is the default. Only when the change is explained, **Update Fingerprint and Connect** replaces the saved one, on all synced devices. There is no screen to list or delete saved fingerprints.
+- First connection: compare the fingerprint with the server's, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server. **Trust and Connect** saves and syncs it; **Cancel** fails with `host_key_rejected`.
+- Hatoba asks for a key type already saved for the host:port, so adding a type on the server changes nothing. **New host key for …** means it offers none: the old type was removed, or another machine answers there. The other type's trusted key is shown for reference; it never matches. Verify the new one as on a first connection; trusting it keeps the other.
+- **Host key has changed**: a saved type's key differs, after a reinstall or new keys, another machine at that address (reused IP, load balancer), or a man-in-the-middle. **Disconnect** is the default. When the change is explained, **Update Fingerprint and Connect** replaces that type's fingerprint on all synced devices. Saved fingerprints have no list or delete screen.
 
 | en | zh-CN | ja |
 |---|---|---|

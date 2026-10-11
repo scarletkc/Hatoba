@@ -151,7 +151,16 @@ impl fmt::Debug for ConnectConfig {
     }
 }
 
-fn russh_config(cfg: &ConnectConfig) -> Arc<client::Config> {
+fn russh_config(cfg: &ConnectConfig, known_key_types: &[String]) -> Arc<client::Config> {
+    let mut preferred = russh::Preferred::default();
+    preferred.key.to_mut().sort_by_key(|algorithm| {
+        let key_type = if matches!(algorithm, russh::keys::Algorithm::Rsa { .. }) {
+            "ssh-rsa"
+        } else {
+            algorithm.as_str()
+        };
+        !known_key_types.iter().any(|known| known == key_type)
+    });
     let keepalive = (!cfg.keepalive_interval.is_zero()).then_some(cfg.keepalive_interval);
     // Backstop for writes that stall on a dead peer (keepalives cannot help
     // while the event loop is blocked in `write`), and for keepalive replies
@@ -160,6 +169,7 @@ fn russh_config(cfg: &ConnectConfig) -> Arc<client::Config> {
         .filter(|_| cfg.keepalive_max > 0)
         .map(|i| i.saturating_mul(cfg.keepalive_max.saturating_add(2)));
     Arc::new(client::Config {
+        preferred,
         keepalive_interval: keepalive,
         keepalive_max: cfg.keepalive_max as usize,
         inactivity_timeout: inactivity,
@@ -280,7 +290,6 @@ pub async fn connect(
     cfg: ConnectConfig,
     verifier: Arc<dyn HostKeyVerifier>,
 ) -> Result<SshSession, SshError> {
-    let config = russh_config(&cfg);
     let interactive = cfg.keyboard_interactive.as_ref();
 
     let mut specs: Vec<HopSpec<'_>> = cfg
@@ -305,6 +314,8 @@ pub async fn connect(
     let mut first_rtt = None;
     let mut last: Option<Hop> = None;
     for (i, spec) in specs.iter().enumerate() {
+        let known_key_types = verifier.known_key_types(spec.host, spec.port).await;
+        let config = russh_config(&cfg, &known_key_types);
         let via = jumps.last().map(|j| &j.handle);
         let proxy = cfg.proxy.as_ref().filter(|_| i == 0);
         let mut hop = connect_hop(
@@ -784,5 +795,62 @@ pub(crate) async fn wait_request_reply(
             }
             Some(_) => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use russh::keys::{Algorithm, HashAlg};
+
+    fn config() -> ConnectConfig {
+        ConnectConfig::new("demo.example", 22, "demo", AuthMethod::None)
+    }
+
+    #[test]
+    fn known_rsa_prefers_sha2_and_preserves_the_default_algorithms() {
+        let cfg = russh_config(&config(), &["ssh-rsa".to_owned()]);
+        let keys = cfg.preferred.key.as_ref();
+        assert_eq!(
+            keys[0],
+            Algorithm::Rsa {
+                hash: Some(HashAlg::Sha512)
+            }
+        );
+        assert_eq!(
+            keys[1],
+            Algorithm::Rsa {
+                hash: Some(HashAlg::Sha256)
+            }
+        );
+        assert_eq!(keys[2], Algorithm::Rsa { hash: None });
+        let defaults = russh::Preferred::default();
+        assert_eq!(&keys[3..], &defaults.key[..4]);
+        assert_eq!(keys.len(), defaults.key.len());
+        assert_eq!(cfg.preferred.kex, defaults.kex);
+    }
+
+    #[test]
+    fn unknown_or_unsupported_types_do_not_change_or_extend_the_defaults() {
+        let defaults = russh::Preferred::default();
+        for known in [
+            Vec::new(),
+            vec!["ssh-dss".to_owned(), "unsupported".to_owned()],
+        ] {
+            assert_eq!(russh_config(&config(), &known).preferred.key, defaults.key);
+        }
+    }
+
+    #[test]
+    fn multiple_known_types_keep_their_relative_default_order() {
+        let known = vec!["ssh-rsa".to_owned(), "ssh-ed25519".to_owned()];
+        let cfg = russh_config(&config(), &known);
+        assert_eq!(cfg.preferred.key[0], Algorithm::Ed25519);
+        assert_eq!(
+            cfg.preferred.key[1],
+            Algorithm::Rsa {
+                hash: Some(HashAlg::Sha512)
+            }
+        );
     }
 }

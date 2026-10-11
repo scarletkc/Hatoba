@@ -516,6 +516,8 @@ export class LiveSession {
 
   /** Paste text as the user's input (bracketed when the remote asked for it), confirming multi-line pastes. */
   async paste(text: string) {
+    const trimmed = text.replace(/[\r\n]+$/, "");
+    if (!/[\r\n]/.test(trimmed)) text = trimmed;
     if (!text || this.status !== "connected") return;
     if (/[\r\n]/.test(text) && useTermSettings.getState().settings.confirm_multiline_paste) {
       const ok = await confirmMultilinePaste(text);

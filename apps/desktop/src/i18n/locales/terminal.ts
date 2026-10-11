@@ -111,6 +111,9 @@ export default defineMessages({
     // host key dialogs (SSH-04)
     "terminal.hostkey.newTitle": "首次连接到 {host}:{port}",
     "terminal.hostkey.newBody": "信任之前，请确认这个指纹与你的服务器的指纹一致。",
+    "terminal.hostkey.additionalTitle": "{host}:{port} 提供了新的主机密钥",
+    "terminal.hostkey.additionalBody":
+      "已信任这台服务器另一种类型的密钥。信任之前，请确认现在收到的指纹与你的服务器的指纹一致。",
     "terminal.hostkey.keyType": "密钥类型",
     "terminal.hostkey.fingerprint": "指纹",
     "terminal.hostkey.trust": "信任并连接",
@@ -272,6 +275,9 @@ export default defineMessages({
 
     "terminal.hostkey.newTitle": "First connection to {host}:{port}",
     "terminal.hostkey.newBody": "Check that this fingerprint matches your server’s before you trust it.",
+    "terminal.hostkey.additionalTitle": "New host key for {host}:{port}",
+    "terminal.hostkey.additionalBody":
+      "A key of another type is already trusted for this server. Check that the received fingerprint matches your server’s before you trust it.",
     "terminal.hostkey.keyType": "Key type",
     "terminal.hostkey.fingerprint": "Fingerprint",
     "terminal.hostkey.trust": "Trust and Connect",
@@ -428,6 +434,9 @@ export default defineMessages({
 
     "terminal.hostkey.newTitle": "{host}:{port} への初回接続",
     "terminal.hostkey.newBody": "信頼する前に、このフィンガープリントがサーバーのものと一致することを確認してください。",
+    "terminal.hostkey.additionalTitle": "{host}:{port} の新しいホストキー",
+    "terminal.hostkey.additionalBody":
+      "このサーバーでは別の種類の鍵を信頼済みです。信頼する前に、今回受信したフィンガープリントがサーバーのものと一致することを確認してください。",
     "terminal.hostkey.keyType": "鍵の種類",
     "terminal.hostkey.fingerprint": "フィンガープリント",
     "terminal.hostkey.trust": "信頼して接続",
