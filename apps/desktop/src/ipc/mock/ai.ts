@@ -1,8 +1,9 @@
 import type { TabSource } from "@/app/tabs";
 import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
+import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
-import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
+import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
@@ -30,6 +31,7 @@ type AiApi = Pick<
   | "ai_conversation_rename"
   | "ai_conversation_pin"
   | "ai_conversation_delete"
+  | "ai_conversation_fork"
   | "ai_send"
   | "ai_retry"
   | "ai_tool_result"
@@ -133,6 +135,8 @@ const DAY = 24 * HOUR;
  *              screenshots and demo video show: two commands, a fix, `curl` typed into the shell, a summary
  *   noprovider (Settings → AI mock) no provider is configured
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
+ * A fork (AI-41) copies a conversation into a new one, like Rust: Fork from Here on a message or under a
+ * reply, or Fork in History.
  * Like Rust, a message that moves the conversation to another host (AI-09) or goes to another model
  * than the last reply (AI-05) is stored with Hatoba's note before it, which the panel shows as a
  * divider: open a conversation from history in a tab on another host, or pick another model.
@@ -143,6 +147,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const zh = detectLocale() === "zh-CN";
   const convs = new Map<string, Conv>();
   const turns = new Map<string, Turn>();
+  /** Conversations a Compact (AI-21) runs for. */
+  const compacting = new Set<string>();
   /** By reply entry id: whether its request offered the terminal tools (AI-09). */
   const replyTerminal = new Map<string, boolean>();
   /** Like Rust's `AssistantEntry.interrupted`, which the view does not carry: replies the user stopped (§13.1). */
@@ -1167,6 +1173,56 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       stopTurn(id);
       convs.delete(id);
     },
+    ai_conversation_fork: async (id, entryId, title) => {
+      await delay(120);
+      const c = need(id);
+      if (turns.has(id) || compacting.has(id) || c.runningUntil > Date.now())
+        fail("invalid_input", "The conversation can be forked once its turn or compaction has ended.", { field: "conversation_id" });
+      const name = [...title.trim()].slice(0, 200).join("");
+      if (!name) fail("invalid_input", "the title is empty", { field: "title" });
+      const at = entryId === null ? c.entries.length - 1 : c.entries.findIndex((e) => e.entry_id === entryId);
+      if (entryId !== null && at < 0) fail("not_found", "message not found");
+      if (at < 0) fail("invalid_input", "the conversation has no messages", { field: "conversation_id" });
+      const copies = entryId === null ? [...c.entries.keys()] : forkCopies(c.entries, at);
+      if (!copies) return fail("invalid_input", "A conversation can be forked from one of your messages or from a finished reply.", { field: "entry_id" });
+      // New, increasing ids; what Rust keeps in an entry's JSON goes with the copy.
+      const copied = copies.map((i) => {
+        const e = c.entries[i];
+        const entry_id = newId();
+        const terminal = replyTerminal.get(e.entry_id);
+        if (terminal !== undefined) replyTerminal.set(entry_id, terminal);
+        if (interrupted.has(e.entry_id)) interrupted.add(entry_id);
+        return { ...e, entry_id };
+      });
+      // The copy of the entry the original's context starts at, or the newest copied summary.
+      let start = -1;
+      const origin = c.view.context_start;
+      if (origin) {
+        const from = c.entries.findIndex((e) => e.entry_id >= origin);
+        start = from >= 0 && from <= at ? from : c.entries.slice(0, at + 1).findLastIndex((e) => e.role === "summary");
+      }
+      // The place the copies came from: the original's, unless a later message moved it (AI-09).
+      const moved = c.entries
+        .slice(at + 1)
+        .flatMap((e) => (e.role === "user" ? parseMessage(e.text).notes : []))
+        .find((n) => n.kind === "host_change");
+      let host_id = c.view.host_id;
+      let quick_target = c.view.quick_target;
+      if (moved?.kind === "host_change") {
+        const target = /\s/.test(moved.from) ? null : parseQuickConnect(moved.from);
+        const named = ((await deps.hosts?.()) ?? []).filter((h) => moved.from && h.name === moved.from);
+        quick_target = target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
+        host_id = !quick_target && named.length === 1 ? named[0].id : null;
+      }
+      const now = Date.now();
+      const fork: Conv = {
+        view: { id: newId(), title: name, host_id, quick_target, pinned: false, context_start: copied[start]?.entry_id ?? null, effort: c.view.effort, created_at: now, updated_at: now },
+        entries: copied,
+        runningUntil: 0,
+      };
+      convs.set(fork.view.id, fork);
+      return view(fork);
+    },
     ai_send: async (input, onEvent) => {
       await delay(120);
       if (!input.text.trim()) fail("invalid_input", "the message is empty", { field: "text" });
@@ -1261,7 +1317,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ai_compact: async (id) => {
       const c = need(id);
       if (turns.has(id)) fail("invalid_input", "a turn is running");
+      compacting.add(id);
       await delay(1500);
+      compacting.delete(id);
       // The summary no longer holds the files the model read (AI-38…40).
       forgetSeen(id);
       const entry: AiEntryView = {

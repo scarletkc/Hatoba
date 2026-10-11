@@ -7,7 +7,7 @@ import { api } from "@/ipc/api";
 import type { AiConversationView, AiSearchHit, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { deleteConversation, exportConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
+import { conversationBusy, deleteConversation, exportConversation, forkConversation, loadHistory, openConversation, pinConversation, renameConversation } from "./actions";
 import { sortConversations } from "./models";
 import { conversationPlace, placeName } from "./place";
 import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
@@ -74,6 +74,11 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     onClose();
   };
 
+  const fork = (c: AiConversationView) => {
+    void forkConversation(slotId, c.id, null);
+    onClose();
+  };
+
   const remove = async (c: AiConversationView) => {
     const ok = await confirm({
       title: t("ai.history.deleteTitle", { title: c.title || t("ai.untitled") }),
@@ -89,6 +94,8 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
     e.stopPropagation();
     setMenuEntries([
       { label: t("ai.history.open"), icon: "chat-circle-dots", onSelect: () => open(c) },
+      // AI-41: a copy of the whole conversation, which opens here; not while it is busy in its tab.
+      { label: t("ai.history.fork"), icon: "git-fork", disabled: conversationBusy(c.id), onSelect: () => fork(c) },
       { label: t("btn.rename"), icon: "pencil-simple", onSelect: () => setRenaming(c.id) },
       { label: t(c.pinned ? "ai.history.unpin" : "ai.history.pin"), icon: c.pinned ? "push-pin-slash" : "push-pin", onSelect: () => void pinConversation(c.id, !c.pinned) },
       { label: t("ai.history.export"), icon: "export", onSelect: () => void exportConversation(c.id) },

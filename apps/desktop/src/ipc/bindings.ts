@@ -233,6 +233,11 @@ export const commands = {
 	aiConversationPin: (id: string, pinned: boolean) => __TAURI_INVOKE<AiConversationView>("ai_conversation_pin", { id, pinned }),
 	aiConversationDelete: (id: string) => __TAURI_INVOKE<null>("ai_conversation_delete", { id }),
 	/**
+	 *  AI-41: copies the conversation up to the entry `entry_id`, or all of it without one, into a
+	 *  new conversation titled `title`, and returns the new conversation.
+	 */
+	aiConversationFork: (id: string, entryId: string | null, title: string) => __TAURI_INVOKE<AiConversationView>("ai_conversation_fork", { id, entryId, title }),
+	/**
 	 *  Stores the user's message and starts a turn; its events stream on `channel` until
 	 *  `turn_ended`.
 	 */

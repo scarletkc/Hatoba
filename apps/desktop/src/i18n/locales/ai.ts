@@ -230,6 +230,7 @@ export default defineMessages({
     "ai.history.more": "更多操作",
     "ai.history.renameLabel": "对话标题",
     "ai.history.export": "导出为 Markdown…",
+    "ai.history.fork": "创建分支",
 
     // history search (AI-24)
     "ai.search": "搜索对话",
@@ -253,6 +254,11 @@ export default defineMessages({
     "ai.edit.confirmTitle": "编辑并重新发送这条消息？",
     "ai.edit.confirmBody": "这条消息之后的 {n} 条消息会在所有同步的设备上删除，无法恢复。",
     "ai.edit.confirm": "删除并重新发送",
+
+    // fork (AI-41)
+    "ai.fork": "从这里创建分支",
+    "ai.fork.title": "{title}（分支）",
+    "ai.fork.done": "已创建分支，原对话仍在历史对话中。",
 
     // tools menu (AI-30, AI-32)
     "ai.tools": "MCP 工具",
@@ -505,6 +511,7 @@ export default defineMessages({
     "ai.history.more": "More",
     "ai.history.renameLabel": "Conversation title",
     "ai.history.export": "Export as Markdown…",
+    "ai.history.fork": "Fork",
 
     "ai.search": "Search conversations",
     "ai.search.clear": "Clear Search",
@@ -526,6 +533,11 @@ export default defineMessages({
     "ai.edit.confirmBody": "The {n} messages after it are deleted on every synced device and can’t be recovered.",
     "ai.edit.confirmBody_one": "The message after it is deleted on every synced device and can’t be recovered.",
     "ai.edit.confirm": "Delete and Resend",
+
+    // fork (AI-41)
+    "ai.fork": "Fork from Here",
+    "ai.fork.title": "{title} (fork)",
+    "ai.fork.done": "Forked. The original conversation stays in History.",
 
     "ai.tools": "MCP tools",
     "ai.tools.summary": "This conversation uses {on} of {total} MCP servers",
@@ -772,6 +784,7 @@ export default defineMessages({
     "ai.history.more": "その他の操作",
     "ai.history.renameLabel": "会話のタイトル",
     "ai.history.export": "Markdown として書き出す…",
+    "ai.history.fork": "分岐",
 
     "ai.search": "会話を検索",
     "ai.search.clear": "検索をクリア",
@@ -792,6 +805,11 @@ export default defineMessages({
     "ai.edit.confirmTitle": "このメッセージを編集して再送信しますか？",
     "ai.edit.confirmBody": "このメッセージより後の {n} 件のメッセージは、同期しているすべてのデバイスから削除され、元に戻せません。",
     "ai.edit.confirm": "削除して再送信",
+
+    // fork (AI-41)
+    "ai.fork": "ここから分岐",
+    "ai.fork.title": "{title}（分岐）",
+    "ai.fork.done": "分岐しました。元の会話は履歴に残っています。",
 
     "ai.tools": "MCP ツール",
     "ai.tools.summary": "この会話は {total} 個中 {on} 個の MCP サーバーを使います",

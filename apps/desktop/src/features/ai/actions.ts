@@ -46,6 +46,7 @@ import {
 } from "./attachments";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
+import { forkModel, forkTitle } from "./fork";
 import { conversationModel } from "./models";
 import {
   blankSlot,
@@ -684,6 +685,12 @@ function slotBusy(slotId: string): boolean {
   return !!s.turn || s.remoteRunning || s.compacting || runners.has(slotId);
 }
 
+/** Whether a conversation is busy in the slot that shows it (`slotBusy`); one no slot shows is not. */
+export function conversationBusy(id: string): boolean {
+  const slotId = slotOf(id);
+  return !!slotId && slotBusy(slotId);
+}
+
 /**
  * Moves a slot's conversation to another slot; the source gets a new conversation. A running turn moves
  * with it (Connect to host moves the home tab's), but it never uses the terminal of the slot it moved to:
@@ -1061,6 +1068,29 @@ export async function renameConversation(id: string, title: string) {
 export async function pinConversation(id: string, pinned: boolean) {
   try {
     updateConversation(await api.ai_conversation_pin(id, pinned));
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+  }
+}
+
+/**
+ * AI-41: copies a conversation up to the entry `entryId` (all of it with null) into a new conversation, and
+ * opens that in the slot as History's Open does (AI-09). Not while the conversation is busy.
+ */
+export async function forkConversation(slotId: string, id: string, entryId: string | null) {
+  if (conversationBusy(id)) return;
+  const shown = slotOf(id);
+  const source = shown ? getSlot(shown) : null;
+  const original = source?.conversation ?? useAi.getState().history?.find((c) => c.id === id) ?? null;
+  // A message the original's next reply answered with another model goes on with that model (AI-05).
+  const model = entryId && source ? forkModel(source.entries, entryId) : null;
+  try {
+    const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? ""));
+    updateConversation(fork);
+    await openConversation(slotId, fork.id);
+    if (model && getSlot(slotId).conversationId === fork.id) setSlotModel(slotId, model);
+    toast(t("ai.fork.done"), "success");
+    focusInput();
   } catch (e) {
     toast(aiErrorMessage(e), "error");
   }

@@ -27,9 +27,9 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 
 - Header: the conversation title, the tab's host, the permission mode button, **History**, **New Conversation**, and close.
 - Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the paperclip, the context meter, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting, for example during the compaction before it.
-- Messages: each of yours shows the time you sent it, and each reply, once it is finished, the time it ended (hover for the full date and time). **Copy** next to one of your messages copies what you typed, without the attachments; **Copy** under a reply copies its Markdown, without the reasoning and tool calls, and a reply that used tools is copied whole, with its text from before and after the calls.
+- Messages: each of yours shows the time you sent it, and each reply, once it is finished, the time it ended (hover for the full date and time). **Copy** next to one of your messages copies what you typed, without the attachments; **Copy** under a reply copies its Markdown, without the reasoning and tool calls, and a reply that used tools is copied whole, with its text from before and after the calls. **Fork from Here** beside them copies the conversation up to that point into a new one (`references/ai-history.md`).
 - A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
-- Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
+- Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal. To continue on another host and leave the original where it is, fork it instead.
 - A quick connection counts as a host named by its `user@host:port`, in the panel and in History, so a conversation that moves from one to a saved host or to another quick connection gets the same notice and divider. Saving a quick connection as a host (**Save as Host…**) keeps the same server, so a conversation that continues on the saved host gets neither.
 - With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands, send input, or read, edit or write files: those tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host or a quick connection, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation; a quick connection saved as a host since opens as that host.
 - A new terminal tab starts with its own empty conversation, and the home tab's chat stays on the home tab. While the tab's conversation has no messages and the home tab's chat has some and is not working, waiting for approval or compacting, the panel offers **Continue Here**, which moves that chat into the tab and gives the home tab a new conversation. Whatever the tab's input holds stays, a selection or diagnostics chip included; when it holds nothing, the home tab's unsent text and attachments come along. The next message moves the chat to the tab's host.
@@ -132,30 +132,9 @@ What goes with a message is covered in `references/ai-attachments.md`: the termi
 
 The **Model** picker (with its **Thinking Level** row), the context meter, **Compact**, automatic compaction and the reasoning display are in `references/ai-models.md`. Provider and model setup is in `references/ai-settings.md`.
 
-## History, search, export, edit
+## History, edit and fork
 
-**History** lists conversations, pinned first and then by last activity, each with its title, host and time. The title starts as the first line of the first message. Conversations are encrypted and sync with the vault. The search box searches titles and message text. The menu of a conversation (More) has:
-
-| en | zh-CN | ja |
-|---|---|---|
-| Search conversations | 搜索对话 | 会話を検索 |
-| Open | 打开 | 開く |
-| Rename | 重命名 | 名前を変更 |
-| Pin | 置顶 | ピン留め |
-| Unpin | 取消置顶 | ピン留めを外す |
-| Export as Markdown… | 导出为 Markdown… | Markdown として書き出す… |
-| Delete… | 删除… | 削除… |
-| More | 更多操作 | その他の操作 |
-
-- **Delete…** removes the conversation on every synced device for good, after a confirmation.
-- **Export as Markdown…** saves the conversation as a Markdown file, with each divider as a line.
-- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Edit and Resend | 编辑并重新发送 | 編集して再送信 |
-| Resend | 重新发送 | 再送信 |
-| Delete and Resend | 删除并重新发送 | 削除して再送信 |
+**History** (search, open, rename, pin, export, delete), **Edit and Resend**, and forking a conversation (**Fork from Here**, **Fork**) are in `references/ai-history.md`.
 
 ## MCP tools menu
 

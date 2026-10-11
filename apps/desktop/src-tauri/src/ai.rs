@@ -11,8 +11,8 @@
 //! which starts the servers that need it, and compacts the context first when the request would
 //! pass 90% of the model's context window (AI-22). A Compact request (AI-21) is the request a
 //! turn would send next with the instruction after it, built by the same function, so it reuses
-//! the prefix the provider cached. History search (AI-24) and edit and resend (AI-26) are here
-//! too.
+//! the prefix the provider cached. History search (AI-24), edit and resend (AI-26) and forking
+//! (AI-41) are here too.
 //!
 //! Everything works on a [`SharedVault`] and two small traits, [`EventSink`] (where a turn's
 //! events go) and [`AiEnv`] (the sync trigger and the tab's SSH session), so the turn tests run
@@ -36,7 +36,8 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
-    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, Usage, fix_up_missing_results,
+    AiEntry, AssistantEntry, EntryBody, Finish, ToolCall, ToolStatus, Usage,
+    fix_up_missing_results, pair_results,
 };
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -120,6 +121,9 @@ const AUTO_COMPACT_TENTHS: u64 = 9;
 
 /// The rough text-to-token ratio of estimates, the same as the panel's meter (AI-20).
 const CHARS_PER_TOKEN: usize = 4;
+
+/// The most characters a conversation's title holds (AI-23), so a fork's title is cut to it.
+const MAX_TITLE_CHARS: usize = 200;
 
 /// Characters of a search snippet (AI-24), and how many of them come before the match.
 const SNIPPET_CHARS: usize = 120;
@@ -615,6 +619,128 @@ impl AiManager {
         tracing::info!(conversation_id, "AI conversation deleted");
         env.changed();
         Ok(())
+    }
+
+    /// `ai_conversation_fork` (AI-41): copies the conversation up to the entry `entry_id`, or all
+    /// of it without one, into a new conversation titled `title` ([`fork_copies`]), and returns
+    /// the new conversation. The original is not touched. Refused while a turn of the
+    /// conversation runs, waiting for approval included, or while it is compacted.
+    pub fn fork_conversation(
+        &self,
+        vault: &SharedVault,
+        env: &dyn AiEnv,
+        conversation_id: &str,
+        entry_id: Option<&str>,
+        title: &str,
+    ) -> AppResult<AiConversationView> {
+        let title: String = title.trim().chars().take(MAX_TITLE_CHARS).collect();
+        if title.is_empty() {
+            return Err(AppError::invalid("title", "the title is empty"));
+        }
+        let view = {
+            let mut v = unlocked(vault)?;
+            let original = find_conversation(&v, conversation_id)?;
+            if self.busy(conversation_id) {
+                return Err(AppError::invalid(
+                    "conversation_id",
+                    "The conversation can be forked once its turn or compaction has ended.",
+                ));
+            }
+            // The stored JSON is copied as it is, raw messages included; the decoded entries
+            // decide what is copied. Unreadable entries are left out, as from every request.
+            let mut ids = Vec::new();
+            let mut jsons = Vec::new();
+            let mut entries = Vec::new();
+            for hatoba_core::StoredEntry { entry_id, json } in v.ai_entries(conversation_id)? {
+                match serde_json::from_str::<AiEntry>(&json) {
+                    Ok(entry) => {
+                        ids.push(entry_id);
+                        jsons.push(json);
+                        entries.push(entry);
+                    }
+                    Err(_) => tracing::warn!(
+                        conversation_id,
+                        entry_id = %entry_id,
+                        "unreadable conversation entry not forked"
+                    ),
+                }
+            }
+            let at = match entry_id {
+                Some(entry_id) => Some(
+                    ids.iter()
+                        .position(|id| id == entry_id)
+                        .ok_or_else(|| AppError::not_found("message"))?,
+                ),
+                None => entries.len().checked_sub(1),
+            };
+            let Some(at) = at else {
+                return Err(AppError::invalid(
+                    "conversation_id",
+                    "the conversation has no messages",
+                ));
+            };
+            let copies = fork_copies(&entries, at, entry_id.is_none()).ok_or_else(|| {
+                AppError::invalid(
+                    "entry_id",
+                    "A conversation can be forked from one of your messages or from a finished \
+                     reply.",
+                )
+            })?;
+            // Indices up to `at` are copied in place, so they are also their copies' indices.
+            let context_start = original.context_start.as_deref().and_then(|start| {
+                let from = ids.partition_point(|id| id.as_str() < start);
+                if from <= at {
+                    Some(from)
+                } else {
+                    entries[..=at]
+                        .iter()
+                        .rposition(|e| matches!(e.body, EntryBody::Summary { .. }))
+                }
+            });
+            // AI-09: the host the copies came from, which a message after them may have moved
+            // the original away from.
+            let moved = entries[at + 1..].iter().find_map(|e| match &e.body {
+                EntryBody::User { text } => note_attr(text, HOST_CHANGE, "from"),
+                _ => None,
+            });
+            let place = match moved {
+                Some(from) => place_named(&v, &from),
+                None => Place {
+                    host_id: original.host_id.clone(),
+                    quick_target: original.quick_target.clone(),
+                },
+            };
+            let fork = AiConversation {
+                title,
+                host_id: place.host_id,
+                quick_target: place.quick_target,
+                pinned: false,
+                context_start: None,
+                effort: original.effort,
+                created_at: now_ms(),
+                updated_at: 0,
+            };
+            let copied: Vec<&str> = copies.iter().map(|&i| jsons[i].as_str()).collect();
+            let (id, _) = v.ai_create_conversation(fork, &copied, context_start)?;
+            tracing::info!(
+                conversation_id,
+                fork = %id,
+                entries = copied.len(),
+                "AI conversation forked"
+            );
+            conversation_view(&v, &id, &find_conversation(&v, &id)?)
+        };
+        env.changed();
+        Ok(view)
+    }
+
+    /// A turn of the conversation runs, perhaps waiting for approval, or one of its compactions
+    /// or tools does.
+    fn busy(&self, conversation_id: &str) -> bool {
+        self.is_running(conversation_id)
+            || guard(&self.0.ops)
+                .values()
+                .any(|op| op.conversation_id.as_deref() == Some(conversation_id))
     }
 
     // ---- turns ----
@@ -2069,6 +2195,30 @@ fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
     })
 }
 
+/// AI-41: the entries a fork copies, by index, in order: every entry up to `at`, `at` included,
+/// and each tool result stored after it that answers a call of a copied assistant entry
+/// ([`pair_results`]), so no copied call loses its result; `whole` copies every entry. `None`
+/// when `at` is no fork point: a user entry, or an assistant entry whose every call has a result.
+fn fork_copies(entries: &[AiEntry], at: usize, whole: bool) -> Option<Vec<usize>> {
+    if whole {
+        return Some((0..entries.len()).collect());
+    }
+    let pairs = pair_results(entries);
+    match &entries.get(at)?.body {
+        EntryBody::User { .. } => {}
+        EntryBody::Assistant(a)
+            if (0..a.tool_calls.len()).all(|c| pairs.contains_key(&(at, c))) => {}
+        _ => return None,
+    }
+    let mut answers: Vec<usize> = pairs
+        .iter()
+        .filter(|&(&(call, _), &result)| call <= at && result > at)
+        .map(|(_, &result)| result)
+        .collect();
+    answers.sort_unstable();
+    Some((0..=at).chain(answers).collect())
+}
+
 /// AI-26: the user's message `entry_id` that an edit replaces, and the newest summary before it
 /// (where a `context_start` that pointed at a deleted entry moves).
 fn edited_entry(
@@ -2917,6 +3067,56 @@ fn names_server(v: &Vault, from: &str, here: &AiQuickTarget) -> bool {
         || v.hosts().iter().any(|(_, h)| {
             h.name == from && AiQuickTarget::new(&h.username, &h.address, h.port) == *here
         })
+}
+
+/// AI-41: the place a `host_change` note's `from` names: the quick-connect target it writes as
+/// `user@host:port`, or else the only saved host with that display name. Neither when it names
+/// none, as for a host that no longer exists, whose name the note leaves empty.
+fn place_named(v: &Vault, from: &str) -> Place {
+    if let Some(target) = parse_target(from) {
+        return Place {
+            host_id: None,
+            quick_target: Some(target),
+        };
+    }
+    let mut named = v
+        .hosts()
+        .into_iter()
+        .filter(|(_, h)| !from.is_empty() && h.name == from);
+    match (named.next(), named.next()) {
+        (Some((host_id, _)), None) => Place {
+            host_id: Some(host_id),
+            quick_target: None,
+        },
+        _ => Place {
+            host_id: None,
+            quick_target: None,
+        },
+    }
+}
+
+/// A quick-connect target as [`target_name`] writes it (`user@host:port`, an IPv6 address in
+/// brackets), in the form a conversation records it. `None` for anything else, such as a display
+/// name.
+fn parse_target(label: &str) -> Option<AiQuickTarget> {
+    if label.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let (username, rest) = label.rsplit_once('@')?;
+    let (address, port) = rest.rsplit_once(':')?;
+    if !port.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let port = port.parse().ok()?;
+    let address = match address.strip_prefix('[') {
+        Some(inner) => inner.strip_suffix(']')?,
+        None if address.contains(':') => return None,
+        None => address,
+    };
+    if username.is_empty() || address.is_empty() {
+        return None;
+    }
+    Some(AiQuickTarget::new(username, address, port))
 }
 
 /// Where a message moves its conversation (AI-09): to a saved host, or to the quick-connect

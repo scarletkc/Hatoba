@@ -243,7 +243,8 @@ pub fn fix_up_missing_results(entries: &[AiEntry]) -> Vec<String> {
 /// For each tool call, keyed by `(assistant entry index, call index)`, the index of the `tool`
 /// entry that answers it: the first result with that id stored after the call and not taken by
 /// an earlier call.
-pub(crate) fn pair_results(entries: &[AiEntry]) -> HashMap<(usize, usize), usize> {
+#[must_use]
+pub fn pair_results(entries: &[AiEntry]) -> HashMap<(usize, usize), usize> {
     let mut results: HashMap<&str, VecDeque<usize>> = HashMap::new();
     for (i, entry) in entries.iter().enumerate() {
         if let EntryBody::Tool { tool_call_id, .. } = &entry.body {

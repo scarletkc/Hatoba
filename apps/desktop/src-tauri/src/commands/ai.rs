@@ -721,6 +721,22 @@ pub async fn ai_conversation_delete(
         .delete_conversation(&state.vault, &AppEnv(app), &id)
 }
 
+/// AI-41: copies the conversation up to the entry `entry_id`, or all of it without one, into a
+/// new conversation titled `title`, and returns the new conversation.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_conversation_fork(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    entry_id: Option<String>,
+    title: String,
+) -> AppResult<AiConversationView> {
+    state
+        .ai
+        .fork_conversation(&state.vault, &AppEnv(app), &id, entry_id.as_deref(), &title)
+}
+
 // ───────────────────────── turns (§13.1) ─────────────────────────
 
 /// Stores the user's message and starts a turn; its events stream on `channel` until

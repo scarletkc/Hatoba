@@ -265,6 +265,8 @@ export interface HatobaApi {
   ai_conversation_rename(id: string, title: string): Promise<AiConversationView>;
   ai_conversation_pin(id: string, pinned: boolean): Promise<AiConversationView>;
   ai_conversation_delete(id: string): Promise<void>;
+  /** AI-41: copies the conversation up to the entry `entry_id`, or all of it with null, into a new conversation titled `title`. */
+  ai_conversation_fork(id: string, entry_id: string | null, title: string): Promise<AiConversationView>;
   /** Stores the user's message and starts a turn; events stream to `onEvent` until `turn_ended` (§13.1). */
   ai_send(input: AiSendInput, onEvent: (event: AiTurnEvent) => void): Promise<AiSendStarted>;
   /** Retry after an error: sends the next request from the stored conversation on a new channel. */
