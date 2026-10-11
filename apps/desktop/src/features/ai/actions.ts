@@ -70,7 +70,7 @@ import {
   type TabSelection,
 } from "./store";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
-import { allowanceOf, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
+import { allowanceOf, CALL_MCP_TOOL, grantKey, mcpOffResult, mustAsk, needsSession, toolKind, type ToolKind } from "./tools";
 import {
   editedFiles,
   entriesBefore,
@@ -350,10 +350,24 @@ class TurnRunner {
     // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
     if (needsSession(kind) && !this.target()) return this.answer(convId, call.id, NO_TAB);
     // AI-31: an MCP call's tool, resolved the way Rust runs the call; its Always allow and its server's
-    // Always ask decide whether it asks.
+    // Always ask decide whether it asks. A `call_mcp_tool` call (AI-44) counts as the tool it names.
     let mcp: McpToolInfo | null = null;
     if (kind === "mcp") {
-      mcp = await api.mcp_tool_info(convId, call.name).catch(() => null);
+      if (call.name === CALL_MCP_TOOL) {
+        const proxy = await api.mcp_proxy_info(convId, call.arguments).catch(() => null);
+        if (!this.acting) return;
+        // Nothing would run (arguments that do not match the tool's schema, a tool the conversation does
+        // not have, a deleted server): Rust answers it with that error, without asking.
+        if (proxy && !proxy.runs) {
+          this.setCall({ id: call.id, state: "running" });
+          await this.execute(convId, call, kind, null);
+          this.countCall();
+          return;
+        }
+        mcp = proxy?.tool ?? null;
+      } else {
+        mcp = await api.mcp_tool_info(convId, call.name).catch(() => null);
+      }
       if (!this.acting) return;
       // AI-30: a server switched off in the tools menu runs nothing more, in this turn too.
       if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
