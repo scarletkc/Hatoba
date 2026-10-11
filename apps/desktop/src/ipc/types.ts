@@ -903,6 +903,8 @@ export interface AiConversationDetail {
   entries: AiEntryView[];
   /** A turn of this conversation is running in Rust (its events go to the channel that started it). */
   running: boolean;
+  /** The changes of its `edit_file` and `write_file` calls that this device can revert, or has reverted (AI-41). */
+  file_changes: AiFileChange[];
 }
 
 /** What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
@@ -981,6 +983,27 @@ export interface AiFilePreview {
   /** Most of the file's line breaks are CRLF, and the write keeps them. */
   crlf: boolean;
 }
+
+/** A change an `edit_file` or `write_file` call made, kept on this device so the user can revert it (AI-41). */
+export interface AiFileChange {
+  /** The entry id of the response that made the call. */
+  response_id: string;
+  tool_call_id: string;
+  /** The file's path as the call resolved it. */
+  path: string;
+  /** The call created the file, so a revert deletes it. */
+  created: boolean;
+  reverted: boolean;
+}
+
+/** Why a revert did not happen (AI-41). `detail` names the server for `other_server`, and what failed for `unfinished` and `failed`. */
+export type AiRevertFailure = "disconnected" | "other_server" | "permission_denied" | "not_text" | "timed_out" | "unfinished" | "failed";
+
+/** The outcome of a revert (AI-41). `changed`: the file no longer holds what the call wrote, so nothing was written; `current` is null when it no longer exists. */
+export type AiFileRevert =
+  | { status: "reverted" }
+  | { status: "changed"; path: string; written: string; current: string | null }
+  | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────
 

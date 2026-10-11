@@ -2,7 +2,9 @@ import type {
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
+  AiFileChange,
   AiFilePreview,
+  AiFileRevert,
   AiModel,
   AiProviderInput,
   AiProviderView,
@@ -279,6 +281,14 @@ export interface HatobaApi {
    * once per call and the call writes only over what it read.
    */
   ai_file_preview(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiFilePreview>;
+  /** AI-41: the changes of the conversation's `edit_file` and `write_file` calls that this device keeps. */
+  ai_file_changes(conversation_id: string): Promise<AiFileChange[]>;
+  /**
+   * AI-41: reverts the change of the call `tool_call_id` of the response `response_id` on the conversation's
+   * tab `session_id`, only while the file holds what the call wrote. A file the call created is deleted, so
+   * the panel asks first.
+   */
+  ai_file_revert(conversation_id: string, response_id: string, tool_call_id: string, session_id: string | null): Promise<AiFileRevert>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */

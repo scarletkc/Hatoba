@@ -57,6 +57,8 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.AiConversationDetail, Ui.AiConversationDetail>>,
   Check<Assignable<Rust.AiEntryView, Ui.AiEntryView>>,
   Check<Assignable<Rust.AiFilePreview, Ui.AiFilePreview>>,
+  Check<Assignable<Rust.AiFileChange, Ui.AiFileChange>>,
+  Check<Assignable<Rust.AiFileRevert, Ui.AiFileRevert>>,
   Check<Assignable<Rust.AiSendStarted, Ui.AiSendStarted>>,
   Check<Assignable<Rust.AiTurnEvent, Ui.AiTurnEvent>>,
   Check<Assignable<Rust.AiSearchHit, Ui.AiSearchHit>>,

@@ -11,7 +11,9 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFileChange,
   AiFilePreview,
+  AiFileRevert,
   AiModelRef,
   AiPermissionMode,
   AiToolCall,
@@ -417,7 +419,10 @@ class TurnRunner {
       }
       // AI-08: tools use the tab's current session, so they follow a reconnect.
       const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
-      this.addEntry(await api.ai_tool_run(convId, call.id, sessionId, edited));
+      const result = await api.ai_tool_run(convId, call.id, sessionId, edited);
+      this.addEntry(result);
+      // AI-41: a write keeps a snapshot, which the call's block can now revert.
+      if ((kind === "edit_file" || kind === "write_file") && result.role === "tool" && result.status === "ok") void refreshFileChanges(this.slotId, convId);
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -621,6 +626,50 @@ export async function stopTurn(slotId: string) {
   }
 }
 
+/** AI-41: reads again which changes of the conversation's file tool calls this device keeps. */
+export async function refreshFileChanges(slotId: string, convId: string) {
+  try {
+    const fileChanges = await api.ai_file_changes(convId);
+    if (getSlot(slotId).conversationId === convId) patchSlot(slotId, { fileChanges });
+  } catch {
+    // Locked or deleted meanwhile; the next load reads them again.
+  }
+}
+
+/**
+ * AI-41: reverts the change of a file tool call on the slot's tab, once the conversation is idle. A file the
+ * call created is deleted, so the user confirms first; `onStart` runs once the revert is under way. Null when
+ * nothing was asked of Rust or it refused; otherwise what the revert did, for the call's block to show.
+ */
+export async function revertFileChange(slotId: string, change: AiFileChange, onStart?: () => void): Promise<AiFileRevert | null> {
+  const convId = getSlot(slotId).conversationId;
+  if (!convId || slotBusy(slotId)) return null;
+  if (change.created) {
+    const ok = await confirm({
+      title: t("ai.revert.deleteTitle", { path: change.path }),
+      body: t("ai.revert.deleteBody"),
+      confirmLabel: t("ai.revert.delete"),
+      danger: true,
+    });
+    if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
+  }
+  const target = attachedTab(slotId);
+  const sessionId = target?.tab.status === "connected" ? (target.tab.sessionId ?? null) : null;
+  onStart?.();
+  try {
+    const outcome = await api.ai_file_revert(convId, change.response_id, change.tool_call_id, sessionId);
+    if (outcome.status === "reverted") {
+      const same = (c: AiFileChange) => c.response_id === change.response_id && c.tool_call_id === change.tool_call_id;
+      patchSlot(slotId, (s) => (s.conversationId === convId ? { fileChanges: s.fileChanges.map((c) => (same(c) ? { ...c, reverted: true } : c)) } : {}));
+      toast(t("ai.revert.done", { path: change.path }), "success");
+    }
+    return outcome;
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+    return null;
+  }
+}
+
 /** The user's answer to an approval card (AI-17) or the tool call limit (AI-18). */
 export function decideCall(slotId: string, decision: Decision) {
   runners.get(slotId)?.decide(decision);
@@ -664,6 +713,7 @@ export async function reloadSlot(slotId: string) {
     patchSlot(slotId, (s) => ({
       conversation: detail.conversation,
       entries: s.turn ? s.entries : detail.entries,
+      fileChanges: detail.file_changes,
       loading: false,
       loadFailed: false,
       remoteRunning: detail.running && !runners.has(slotId),

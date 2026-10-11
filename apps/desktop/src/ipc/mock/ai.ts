@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
+import { fileRevertNote, noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
 import { formatTarget, sameTarget } from "@/features/hosts/quickConnect";
@@ -9,6 +9,8 @@ import type {
   AiConversationView,
   AiEffort,
   AiEntryView,
+  AiFileChange,
+  AiFileRevert,
   AiFinish,
   AiSearchHit,
   AiToolCall,
@@ -35,6 +37,8 @@ type AiApi = Pick<
   | "ai_tool_result"
   | "ai_tool_run"
   | "ai_file_preview"
+  | "ai_file_changes"
+  | "ai_file_revert"
   | "ai_stop"
   | "ai_compact"
   | "ai_search"
@@ -110,6 +114,9 @@ const DAY = 24 * HOUR;
  *   "unread"          edit_file of a file the conversation has not read, which is refused
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
+ * An edit or write that ran can be reverted from its block while the conversation is idle (AI-41), and
+ * the next message notes it. "listen" then "edit" changes one file twice: reverting the first then shows
+ * the diff of the second, which is in the way.
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
  * Keywords come from the typed text. A message without one gets an answer about what it carries:
  * pasted text and files (AI-35) with their size, else the terminal selection (AI-10).
@@ -695,6 +702,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
     }
+    notes.push(...pendingReverts(c.view.id, earlier));
     return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
   }
 
@@ -789,6 +797,29 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ["/etc/motd", "Welcome to prod-api.\nMaintenance window: Sundays 02:00–04:00 UTC.\n"],
     ["/srv/app/web.config", '<?xml version="1.0"?>\r\n<configuration>\r\n  <appSettings>\r\n    <add key="mode" value="production" />\r\n  </appSettings>\r\n</configuration>\r\n'],
   ]);
+  /** AI-41: what each edit or write that ran changed, by conversation, like Rust's snapshots. */
+  interface Snapshot {
+    change: AiFileChange;
+    tool: string;
+    before: string | null;
+    after: string;
+  }
+  const snapshots = new Map<string, Snapshot[]>();
+  const fileChangesOf = (convId: string) => (snapshots.get(convId) ?? []).map((s) => ({ ...s.change }));
+  /** Like Rust's `pending_reverts`: reverted calls in `earlier` that no user entry after the call notes yet, oldest call first. */
+  function pendingReverts(convId: string, earlier: AiEntryView[]): Note[] {
+    const at = (s: Snapshot) => earlier.findIndex((e) => e.entry_id === s.change.response_id);
+    const order = (s: Snapshot) => {
+      const e = earlier[at(s)];
+      return e?.role === "assistant" ? e.tool_calls.findIndex((x) => x.id === s.change.tool_call_id) : -1;
+    };
+    return (snapshots.get(convId) ?? [])
+      .filter((s) => s.change.reverted && at(s) >= 0 && order(s) >= 0)
+      .filter((s) => !earlier.slice(at(s) + 1).some((e) => e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === s.change.tool_call_id)))
+      .sort((a, b) => at(a) - at(b) || order(a) - order(b))
+      .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created));
+  }
+
   /** What each approval card read, like Rust's: the call writes only over it (AI-39). */
   const fileBases = new Map<string, string | null>();
   /** What the model has seen of each file, by conversation and resolved path, like Rust's (§13.4). */
@@ -913,6 +944,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if ("error" in after) return { status: "error", content: after.error };
         remoteFiles.set(key, after.text);
         seenFiles.set(seenKey(c.view.id, path), after.text);
+        const response = c.entries.find((e) => e.role === "assistant" && e.tool_calls.some((t) => t.id === x.id));
+        if (response) {
+          const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
+          const change = { response_id: response.entry_id, tool_call_id: x.id, path: key, created: current === null, reverted: false };
+          snapshots.set(c.view.id, [...kept, { change, tool: x.name, before: current, after: after.text }]);
+        }
         const count = fileLines(after.text).length;
         if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
         return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
@@ -1110,7 +1147,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await delay(120);
       const c = need(id);
       settleRemote(c);
-      return { conversation: view(c), entries: c.entries.map((e) => ({ ...e })), running: turns.has(id) || c.runningUntil > Date.now() };
+      return {
+        conversation: view(c),
+        entries: c.entries.map((e) => ({ ...e })),
+        running: turns.has(id) || c.runningUntil > Date.now(),
+        file_changes: fileChangesOf(id),
+      };
     },
     ai_conversation_rename: async (id, title) => {
       const c = need(id);
@@ -1125,6 +1167,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     ai_conversation_delete: async (id) => {
       stopTurn(id);
       convs.delete(id);
+      snapshots.delete(id);
     },
     ai_send: async (input, onEvent) => {
       await delay(120);
@@ -1212,6 +1255,30 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const shown = (text: string) => (crlf ? text.replace(/\r\n/g, "\n") : text);
       return { path, before: before === null ? null : shown(before), after: shown(after.text), error: null, crlf };
     },
+    ai_file_changes: async (id) => {
+      need(id);
+      return fileChangesOf(id);
+    },
+    ai_file_revert: async (id, responseId, callId, sessionId) => {
+      const c = need(id);
+      if (turns.has(id) || c.runningUntil > Date.now()) fail("invalid_input", "The conversation is busy; revert the change once it is idle.", { field: "conversation_id" });
+      const snapshot = (snapshots.get(id) ?? []).find((s) => s.change.response_id === responseId && s.change.tool_call_id === callId);
+      if (!snapshot) return fail("not_found", "file change not found");
+      if (snapshot.change.reverted) fail("invalid_input", "the change was reverted already", { field: "tool_call_id" });
+      if (!sessionId) return { status: "failed", reason: "disconnected", detail: null } satisfies AiFileRevert;
+      await delay(500);
+      const path = snapshot.change.path;
+      const current = remoteFiles.get(path) ?? null;
+      const shown = (text: string) => text.replace(/\r\n/g, "\n");
+      // Like Rust: only while the file holds exactly what the call wrote.
+      if (current !== snapshot.after) return { status: "changed", path, written: shown(snapshot.after), current: current === null ? null : shown(current) } satisfies AiFileRevert;
+      if (snapshot.before === null) remoteFiles.delete(path);
+      else remoteFiles.set(path, snapshot.before);
+      snapshot.change = { ...snapshot.change, reverted: true };
+      // The model reads the file again before it changes it.
+      seenFiles.delete(`${id}:${path}`);
+      return { status: "reverted" } satisfies AiFileRevert;
+    },
     ai_stop: async (id) => {
       const c = convs.get(id);
       if (c?.runningUntil) c.runningUntil = 0;
@@ -1266,6 +1333,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         .find((n) => n.kind === "host_change");
       let cameFrom: string | null = moved?.kind === "host_change" ? moved.from : null;
       c.entries = c.entries.slice(0, i);
+      // Like Rust: the snapshots of the calls the deleted responses made go with them (AI-41).
+      snapshots.set(id, (snapshots.get(id) ?? []).filter((s) => c.entries.some((e) => e.entry_id === s.change.response_id)));
       if (c.view.context_start && !c.entries.some((e) => e.entry_id === c.view.context_start)) {
         const summary = [...c.entries].reverse().find((e) => e.role === "summary");
         c.view = { ...c.view, context_start: summary?.entry_id ?? null };

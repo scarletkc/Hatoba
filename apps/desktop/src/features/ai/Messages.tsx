@@ -4,10 +4,10 @@ import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/cont
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
-import type { AiEntryView, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
+import type { AiEntryView, AiFileChange, AiFileRevert, AiRevertFailure, AiToolCall, HostView, McpToolAnnotations, McpToolInfo } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
-import { decideCall, editAndResend, retryTurn, stopTurn, tooMuchMessage, type Decision } from "./actions";
+import { decideCall, editAndResend, retryTurn, revertFileChange, stopTurn, tooMuchMessage, type Decision } from "./actions";
 import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
@@ -91,6 +91,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return null;
   }, [entries]);
   const replies = useMemo(() => findReplies(entries), [entries]);
+  // AI-41: the changes of file tool calls this device keeps, by response and call.
+  const changes = useMemo(() => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])), [slot.fileChanges]);
 
   // Follow new content while the view is at the bottom.
   useLayoutEffect(() => {
@@ -136,6 +138,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
   // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
   const running = !!turn || slot.remoteRunning;
+  // AI-41: a revert waits until the conversation is idle, so the next message tells the model before it acts again.
+  const busy = running || slot.compacting || slot.loading;
 
   return (
     <div
@@ -181,6 +185,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 reasoning={entry.reasoning}
                 calls={entry.tool_calls}
                 view={(call) => callView(call, entry.entry_id === lastAssistant)}
+                change={(call) => changes.get(`${entry.entry_id}:${call.id}`)}
+                busy={busy}
                 host={host}
                 finish={entry.finish}
                 flash={flash}
@@ -288,11 +294,11 @@ function UserMessage({ text, at, pending, onResend }: { text: string; at: number
   );
 }
 
-const NOTE_ICONS = { host_change: "arrows-left-right", model_change: "swap" } as const;
+const NOTE_ICONS = { host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise" } as const;
 
 /**
  * A note Hatoba stored before a message: the conversation moved to another host, a terminal became
- * attached or went away, or it went to another model.
+ * attached or went away, it went to another model, or the user reverted a file tool's change.
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
@@ -450,6 +456,8 @@ function AssistantMessage({
   reasoning,
   calls,
   view,
+  change,
+  busy,
   host,
   streaming,
   finish,
@@ -461,6 +469,10 @@ function AssistantMessage({
   reasoning: string | null;
   calls: AiToolCall[];
   view: (call: AiToolCall) => CallView;
+  /** AI-41: the change a call made that this device keeps, to revert. */
+  change?: (call: AiToolCall) => AiFileChange | undefined;
+  /** The conversation is not idle, so nothing is reverted now. */
+  busy?: boolean;
   host: HostInfo | null;
   streaming?: boolean;
   finish?: string;
@@ -476,7 +488,7 @@ function AssistantMessage({
       {text && <Markdown text={text} streaming={streaming && calls.length === 0} />}
       {!text && !reasoning && calls.length === 0 && !streaming && finish !== "tool_calls" && <EmptyReply />}
       {calls.map((call) => (
-        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} host={host} flash={flash === `call:${call.id}`} />
+        <ToolBlock key={call.id} slotId={slotId} call={call} view={view(call)} change={change?.(call)} busy={!!busy} host={host} flash={flash === `call:${call.id}`} />
       ))}
       {reply && (
         <div className={s.replyFoot}>
@@ -571,8 +583,27 @@ function StatusChip({ view, name }: { view: CallView; name: string }) {
   }
 }
 
-/** Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. */
-function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: AiToolCall; view: CallView; host: HostInfo | null; flash?: boolean }) {
+/**
+ * Each call is a collapsible block with its input, output and status (§9); approval cards appear in place. A
+ * change of a file tool call this device keeps can be reverted from it (AI-41).
+ */
+function ToolBlock({
+  slotId,
+  call,
+  view,
+  change,
+  busy,
+  host,
+  flash,
+}: {
+  slotId: string;
+  call: AiToolCall;
+  view: CallView;
+  change?: AiFileChange;
+  busy: boolean;
+  host: HostInfo | null;
+  flash?: boolean;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const kind = toolKind(call.name);
@@ -590,6 +621,12 @@ function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: 
         <span className={s.toolName}>{toolLabel(t, call.name)}</span>
         <span className={s.toolSummary}>{summary}</span>
         <StatusChip view={view} name={call.name} />
+        {change?.reverted && (
+          <span className={s.chip}>
+            <Icon name="arrow-counter-clockwise" size={11} />
+            {t("ai.revert.reverted")}
+          </span>
+        )}
         <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
       </button>
       {open && (
@@ -602,9 +639,70 @@ function ToolBlock({ slotId, call, view, host, flash }: { slotId: string; call: 
               <pre className={cx(s.pre, s.output, "selectable")}>{view.entry.content || t("ai.call.noOutput")}</pre>
             </>
           )}
+          {change && !change.reverted && <RevertChange slotId={slotId} change={change} busy={busy} />}
         </div>
       )}
       {view.kind === "limit" && <LimitCard slotId={slotId} />}
+    </div>
+  );
+}
+
+const REVERT_FAILURES: Record<AiRevertFailure, MessageKey> = {
+  disconnected: "ai.revert.failed.disconnected",
+  other_server: "ai.revert.failed.otherServer",
+  permission_denied: "ai.revert.failed.permissionDenied",
+  not_text: "ai.revert.failed.notText",
+  timed_out: "ai.revert.failed.timedOut",
+  unfinished: "ai.revert.failed.unfinished",
+  failed: "ai.revert.failed.failed",
+};
+
+/**
+ * AI-41: Revert on the block of a file tool call that wrote, with what it restores and what it does not, and
+ * why a revert left the file as it is: the diff from what the call wrote to the file now, or the failure.
+ */
+function RevertChange({ slotId, change, busy }: { slotId: string; change: AiFileChange; busy: boolean }) {
+  const t = useT();
+  const [reverting, setReverting] = useState(false);
+  const [outcome, setOutcome] = useState<AiFileRevert | null>(null);
+  const revert = async () => {
+    try {
+      const next = await revertFileChange(slotId, change, () => {
+        setReverting(true);
+        setOutcome(null);
+      });
+      if (next) setOutcome(next);
+    } finally {
+      setReverting(false);
+    }
+  };
+  return (
+    <div className={s.revert}>
+      <div className={s.revertRow}>
+        <Button size="sm" icon="arrow-counter-clockwise" busy={reverting} disabled={busy} title={busy ? t("ai.revert.busy") : undefined} onClick={() => void revert()}>
+          {t(reverting ? "ai.revert.reverting" : "ai.revert.action")}
+        </Button>
+        <span className={s.meta}>{t("ai.revert.hint")}</span>
+      </div>
+      {outcome?.status === "changed" &&
+        (outcome.current === null ? (
+          <div className={s.fieldError} role="alert">
+            {t("ai.revert.gone")}
+          </div>
+        ) : (
+          <>
+            <div className={s.fieldError} role="alert">
+              {t("ai.revert.changed")}
+            </div>
+            <FileChange state={{ preview: { path: outcome.path, before: outcome.written, after: outcome.current, error: null, crlf: false }, loading: false, failure: null }} />
+          </>
+        ))}
+      {outcome?.status === "failed" && (
+        <div className={s.fieldError} role="alert">
+          {t(REVERT_FAILURES[outcome.reason], { server: outcome.detail ?? "" })}
+          {outcome.detail && outcome.reason !== "other_server" && <div className={cx(s.revertDetail, "selectable")}>{outcome.detail}</div>}
+        </div>
+      )}
     </div>
   );
 }
