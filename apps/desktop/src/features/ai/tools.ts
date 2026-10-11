@@ -43,13 +43,14 @@ export function toolKind(name: string): ToolKind {
 /**
  * AI-45: the MCP tool a `call_mcp_tool` call names, and that tool's arguments as JSON: an object, or a
  * string that holds one, `{}` when left out, as Rust reads them. Null for any other call, or one whose
- * arguments name no tool.
+ * arguments name no MCP tool: Rust runs no other tool through it (a call that names `run_command`
+ * returns an error), so such a call is shown as it is.
  */
 export function proxyCall(name: string, json: string): { tool: string; arguments: string } | null {
   if (name !== CALL_MCP_TOOL) return null;
   const args = parseArgs(json);
   const tool = typeof args?.tool === "string" ? args.tool.trim() : "";
-  if (!args || !tool) return null;
+  if (!args || !splitMcpName(tool)) return null;
   const inner = args.arguments;
   if (inner === undefined || inner === null || (typeof inner === "string" && !inner.trim())) return { tool, arguments: "{}" };
   if (typeof inner === "string") {

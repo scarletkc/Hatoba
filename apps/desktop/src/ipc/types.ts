@@ -947,6 +947,9 @@ export type AiTurnEndReason = "completed" | "length" | "refused" | "empty" | "st
 
 /** Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
 export type AiTurnEvent =
+  /** A new conversation's turn is registered under this id, which it is stored under with its message; sent
+   * before the message waits for the MCP servers (AI-45), so a stop can name the turn before `ai_send` returns. */
+  | { kind: "opened"; conversation_id: string }
   | { kind: "request_started" }
   | { kind: "text"; delta: string }
   | { kind: "reasoning"; delta: string }

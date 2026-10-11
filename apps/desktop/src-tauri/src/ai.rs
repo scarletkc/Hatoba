@@ -1001,6 +1001,13 @@ impl AiManager {
             env.changed();
         }
         let (id, turn, notes, moved_to, came_from, created, edit) = registered?;
+        // AI-45: the panel learns a new conversation's id before the servers start, so a stop
+        // meanwhile names its turn, as for a conversation it knows.
+        if created.is_some() {
+            turn.emit(AiTurnEvent::Opened {
+                conversation_id: id.clone(),
+            });
+        }
         let stopped = || {
             AppError::new(
                 ErrorCode::Cancelled,
@@ -1018,7 +1025,7 @@ impl AiManager {
         // message, with the notes it would start with. A new conversation has nothing to compact.
         let mut deleted = false;
         let compact = match created {
-            Some(_) => Ok(false),
+            Some(_) => Ok((false, false)),
             None => (|| {
                 let mut v = unlocked(vault)?;
                 if turn.cancel.is_cancelled() {
@@ -1035,26 +1042,28 @@ impl AiManager {
                 let from = entries.context_from(conversation.context_start.as_deref());
                 let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
                 // AI-45: the message that defers the MCP tools takes their definitions out of its
-                // requests, which the last response's usage counts.
-                let saved = if !listed.is_empty() && !mcp_deferred(&entries.list) {
+                // requests, which the last response's usage counts, and out of its Compact request.
+                let defers = !listed.is_empty() && !mcp_deferred(&entries.list);
+                let saved = if defers {
                     deferred_saving(&v, &turn.context, &self.0.mcp.latest(&id))
                 } else {
                     0
                 };
-                compaction_before(
+                let compact = compaction_before(
                     &v,
                     &id,
                     &turn.context,
                     &format!("{notes}{listed}{text}"),
                     saved,
-                )
+                )?;
+                Ok((compact, defers))
             })(),
         };
         if deleted {
             env.changed();
         }
-        let compact = match compact {
-            Ok(compact) => compact,
+        let (compact, defers) = match compact {
+            Ok(decided) => decided,
             Err(e) => {
                 turn.end(AiTurnEndReason::Stopped);
                 self.forget(&id, &turn);
@@ -1066,8 +1075,9 @@ impl AiManager {
         // A failed compaction is logged and the message goes anyway: the request may still fit,
         // and if it does not, the provider's error says so. A stop meanwhile is checked below.
         if compact
-            && let Err(CompactFailure::Failed { .. }) =
-                self.compact_before(vault, env.as_ref(), &id, &turn).await
+            && let Err(CompactFailure::Failed { .. }) = self
+                .compact_before(vault, env.as_ref(), &id, &turn, defers)
+                .await
         {
             tracing::warn!(conversation_id = %id, "AI message sent without compaction");
         }
@@ -1372,7 +1382,7 @@ impl AiManager {
         Box::pin(async move {
             let compacted = if compact {
                 manager
-                    .compact_before(&vault, env.as_ref(), &conversation_id, &turn)
+                    .compact_before(&vault, env.as_ref(), &conversation_id, &turn, false)
                     .await
             } else {
                 Ok(())
@@ -1442,8 +1452,10 @@ impl AiManager {
             // Calls of this response map back through the names this request offered, or, once
             // the conversation's MCP tools are deferred (AI-45), through the names the model was
             // told of: by the newest message's list or the latest search, which record their own,
-            // so a name the model read keeps meaning that tool when servers change mid-turn.
-            if !offers_deferred(&request.tools) {
+            // so a name the model read keeps meaning that tool when servers change mid-turn. A
+            // retry after a restart or the lock, which forget them, records this request's, so
+            // names never resolve through every server running on the device.
+            if !offers_deferred(&request.tools) || !self.0.mcp.has_offer(conversation_id) {
                 self.0.mcp.record_offer(conversation_id, offer);
             }
             turn.emit(AiTurnEvent::RequestStarted);
@@ -1988,6 +2000,7 @@ impl AiManager {
                 server_id.as_deref(),
                 &offer,
                 COMPACT_INSTRUCTION,
+                false,
             )?
         };
         let summary = match self.summarize(conversation_id, compact, &op.cancel).await {
@@ -2099,14 +2112,17 @@ impl AiManager {
 
     /// AI-22, before a new message or a retry: builds the Compact request from the request the
     /// turn would send next, with the MCP tools it would offer (starting their servers, as the
-    /// turn would), then compacts like [`Self::auto_compact`]. The conversation counts as
-    /// compacting from the start, which refuses a side question (AI-42).
+    /// turn would), then compacts like [`Self::auto_compact`]. `defers`: the new message defers
+    /// the conversation's MCP tools (AI-45), so its requests, and this one, offer `search_tools`
+    /// and `call_mcp_tool`. The conversation counts as compacting from the start, which refuses a
+    /// side question (AI-42).
     async fn compact_before(
         &self,
         vault: &SharedVault,
         env: &dyn AiEnv,
         conversation_id: &str,
         turn: &Turn,
+        defers: bool,
     ) -> Result<(), CompactFailure> {
         let _compaction = self.start_compaction(conversation_id);
         let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
@@ -2122,6 +2138,7 @@ impl AiManager {
                 turn.server_id.as_deref(),
                 &offer,
                 COMPACT_INSTRUCTION,
+                defers,
             )
             .map_err(|e| CompactFailure::Failed {
                 status: None,
@@ -2413,7 +2430,9 @@ fn summary_of(response: &AssistantEntry) -> Option<String> {
 }
 
 /// The Compact request (AI-21) for the conversation's context, built from the next request of a
-/// turn with `context` and `server_id` whose MCP tools are `offer`, with less output.
+/// turn with `context` and `server_id` whose MCP tools are `offer`, with less output. `defers`:
+/// the message it comes before defers the MCP tools (AI-45), which its stored entries do not say
+/// yet.
 fn compact_request(
     v: &Vault,
     conversation_id: &str,
@@ -2421,11 +2440,12 @@ fn compact_request(
     server_id: Option<&str>,
     offer: &Offer,
     instruction: &str,
+    defers: bool,
 ) -> AppResult<SideRequest> {
     let conversation = find_conversation(v, conversation_id)?;
     let mut entries = Entries::load(v, conversation_id)?;
     let from = entries.context_from(conversation.context_start.as_deref());
-    let deferred = mcp_deferred(&entries.list);
+    let deferred = defers || mcp_deferred(&entries.list);
     let list = entries.list.split_off(from);
     if !compactable(&list) {
         return Err(AppError::invalid("conversation_id", "nothing to compact"));

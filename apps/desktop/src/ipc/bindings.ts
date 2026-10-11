@@ -734,7 +734,13 @@ export type AiTurnEndReason = "completed" | "length" | "refused" |
 "empty" | "stopped" | "error";
 
 /**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
-export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
+export type AiTurnEvent = 
+/**
+ *  The turn of a new conversation is registered under this id, which the conversation is
+ *  stored under with its message. Sent before the message waits for the MCP servers (AI-45),
+ *  so a stop can name the turn before `ai_send` returns.
+ */
+{ kind: "opened"; conversation_id: string } | { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
 /**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
 { kind: "entry"; entry: AiEntryView } | 
 /**  One response finished. With `tool_calls`, Rust waits for every call's result. */

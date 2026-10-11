@@ -529,6 +529,61 @@ async fn a_name_keeps_its_tool_when_a_server_goes_mid_turn() {
     f.mcp.shutdown().await;
 }
 
+/// After a restart or the lock nothing is recorded for a deferred conversation, so a retry records
+/// the offer of its request: a name means the conversation's tool, not one of every server running
+/// on the device numbered together, whatever the conversation's tools menu says.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_retry_after_the_lock_resolves_names_through_the_conversation_tools() {
+    let f = Fixture::new(vec![
+        ResponseTemplate::new(500).set_body_json(json!({"error": {"message": "overloaded"}})),
+        calls_of(&[call_proxy("c1", "mcp__twin__act", json!({}))]),
+        answer("Done."),
+    ])
+    .await;
+    f.set_context_window(WINDOW);
+    let (_files, _big, _mock) = servers(&f).await;
+    let (a, _a_mock) = twin(&f, "a").await;
+    let (b, _b_mock) = twin(&f, "b").await;
+    // Device-wide, `off` comes first (servers sort by name, then ID) and would own the name.
+    let (off, on, label) = if a < b { (a, b, "b") } else { (b, a, "a") };
+    let context = AiTurnContext {
+        disabled_mcp_servers: vec![off.clone()],
+        ..f.context()
+    };
+    let (conv, failed) = f.exchange(None, "hello", context.clone()).await;
+    assert_eq!(failed, AiTurnEndReason::Error);
+    assert!(user_texts(&f, &conv)[0].contains("- twin (1 tool): mcp__twin__act\n"));
+
+    // The lock stops the servers and forgets what was recorded.
+    {
+        let mut v = lock(&f.vault);
+        f.manager.stop_all(&mut v);
+        v.lock();
+    }
+    f.mcp.stop_all(&f.vault).await;
+    lock(&f.vault).unlock(PW).unwrap();
+    // Another conversation's request starts every server, `off` too.
+    f.mcp
+        .offer(&f.vault, &f.context(), &CancellationToken::new())
+        .await;
+
+    let sink = f.retry(&conv, context).unwrap();
+    sink.tool_calls_done(1).await;
+    let info = proxy_info(
+        &lock(&f.vault),
+        &f.mcp,
+        &conv,
+        r#"{"tool": "mcp__twin__act", "arguments": {}}"#,
+    );
+    assert_eq!(info.tool.unwrap().server_id, on);
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(view_content(&c1).1, AiToolStatus::Ok);
+    assert!(view_content(&c1).2.contains(&format!("{label} act")));
+    sink.ended().await;
+    f.idle(&conv).await;
+    f.mcp.shutdown().await;
+}
+
 /// More than 128 tools in a request, built-in ones included, defer the MCP tools however little of
 /// a large window their definitions take, since OpenAI's Chat Completions API refuses more; 128
 /// do not. Once deferred, they stay deferred with 128 again.
@@ -611,16 +666,20 @@ async fn a_compaction_lists_the_tools_again_and_keeps_the_prefix() {
     f.mcp.shutdown().await;
 }
 
+/// An answer whose request the provider counted as `prompt_tokens` tokens.
+fn answer_using(text: &str, prompt_tokens: u64) -> ResponseTemplate {
+    sse(&[
+        json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}),
+        json!({"choices": [], "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 5}}),
+    ])
+}
+
 /// The message that defers the MCP tools takes their definitions out of its requests, so the
 /// check for a compaction (AI-22) does not count them, though the last response's usage does.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_message_that_defers_does_not_compact_for_the_tools_it_drops() {
-    let used = sse(&[
-        json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": "One."}}]}),
-        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}),
-        json!({"choices": [], "usage": {"prompt_tokens": 26_900, "completion_tokens": 5}}),
-    ]);
-    let f = Fixture::new(vec![used, answer("Two.")]).await;
+    let f = Fixture::new(vec![answer_using("One.", 26_900), answer("Two.")]).await;
     // A window large enough for the tools, then a model with a smaller one.
     f.set_context_window(100_000);
     let (_files, _big, _mock) = servers(&f).await;
@@ -641,6 +700,36 @@ async fn the_message_that_defers_does_not_compact_for_the_tools_it_drops() {
     f.mcp.shutdown().await;
 }
 
+/// When the message that defers the MCP tools needs a compaction all the same, its Compact
+/// request is the next request (AI-21): it offers `search_tools` and `call_mcp_tool`, as the
+/// message's requests do, and not the definitions it leaves out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_compaction_before_the_message_that_defers_offers_the_deferred_tools() {
+    let f = Fixture::new(vec![
+        answer_using("One.", 33_000),
+        answer("SUMMARY: the user said hello."),
+        answer("Two."),
+    ])
+    .await;
+    f.set_context_window(100_000);
+    let (_files, _big, _mock) = servers(&f).await;
+    let (conv, _) = f.exchange(None, "hello", f.context()).await;
+    f.set_context_window(WINDOW);
+    f.exchange(Some(&conv), "again", f.context()).await;
+
+    assert!(
+        f.entries(&conv)
+            .iter()
+            .any(|e| matches!(e.body, EntryBody::Summary { .. }))
+    );
+    let requests = f.requests().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(tool_names(&requests[1]), deferred_tools());
+    assert_eq!(tool_names(&requests[2]), deferred_tools());
+    assert_eq!(prefix(&requests[1]), prefix(&requests[2]));
+    f.mcp.shutdown().await;
+}
+
 /// Waits until a turn is registered, which then waits on the MCP servers its message starts.
 async fn turn_registered(f: &Fixture) {
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -651,7 +740,8 @@ async fn turn_registered(f: &Fixture) {
 }
 
 /// A message waits for the MCP servers before it is stored; a stop meanwhile stores nothing (an
-/// edit's message and the entries after it stay), and the lock meanwhile creates no conversation.
+/// edit's message and the entries after it stay, and a new conversation, whose id the panel gets
+/// before the wait, is not created), and the lock meanwhile creates no conversation.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_message_stopped_while_the_servers_start_is_not_stored() {
     use crate::dto::McpServerState;
@@ -705,24 +795,52 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
     assert_eq!(stopped.code, ErrorCode::Cancelled);
     assert_eq!(f.entries(&conv), entries);
 
+    // A new conversation: its id reaches the panel before the wait, and a stop by that id stores
+    // nothing and creates no conversation.
+    let spawn_new = |f: &Fixture| {
+        let sink = Arc::new(Sink::default());
+        let (manager, vault, env, context) =
+            (f.manager.clone(), f.vault.clone(), f.env(), f.context());
+        let events = sink.clone();
+        let send = tokio::spawn(async move {
+            manager
+                .send(
+                    &vault,
+                    env,
+                    AiSendInput {
+                        conversation_id: None,
+                        text: "new".into(),
+                        context,
+                    },
+                    events,
+                )
+                .await
+                .map(|(started, _)| started)
+        });
+        (send, sink)
+    };
+    let (send, sink) = spawn_new(&f);
+    sink.until("opened", |events| {
+        events
+            .iter()
+            .any(|e| matches!(e, AiTurnEvent::Opened { .. }))
+    })
+    .await;
+    let opened = sink
+        .events()
+        .iter()
+        .find_map(|e| match e {
+            AiTurnEvent::Opened { conversation_id } => Some(conversation_id.clone()),
+            _ => None,
+        })
+        .unwrap();
+    f.manager.stop(&f.vault, f.env.as_ref(), &opened);
+    let stopped = send.await.unwrap().unwrap_err();
+    assert_eq!(stopped.code, ErrorCode::Cancelled);
+    assert!(lock(&f.vault).get(&opened).is_none());
+
     // A new conversation, then the lock, while the server is still starting.
-    let sink = Arc::new(Sink::default());
-    let (manager, vault, env, context) = (f.manager.clone(), f.vault.clone(), f.env(), f.context());
-    let send = tokio::spawn(async move {
-        manager
-            .send(
-                &vault,
-                env,
-                AiSendInput {
-                    conversation_id: None,
-                    text: "new".into(),
-                    context,
-                },
-                sink,
-            )
-            .await
-            .map(|(started, _)| started)
-    });
+    let (send, _) = spawn_new(&f);
     turn_registered(&f).await;
     {
         let mut v = lock(&f.vault);

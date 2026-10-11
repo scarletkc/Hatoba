@@ -277,6 +277,8 @@ describe("calls through call_mcp_tool (AI-45)", () => {
     expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x"}')).toEqual({ tool: "mcp__gh__x", arguments: "{}" });
     expect(proxyCall("call_mcp_tool", '{"arguments":{}}')).toBeNull();
     expect(proxyCall("mcp__gh__x", '{"tool":"mcp__gh__y"}')).toBeNull();
+    // Only an MCP tool: Rust does not run a built-in tool through it.
+    expect(proxyCall("call_mcp_tool", '{"tool":"run_command","arguments":{"command":"rm -rf /"}}')).toBeNull();
   });
 
   it("show as the tool they name, and an edit changes only that tool's arguments", () => {
@@ -285,6 +287,9 @@ describe("calls through call_mcp_tool (AI-45)", () => {
     expect(shown).toEqual({ id: "c1", name: "mcp__gh__create_issue", arguments: '{"title":"x"}' });
     expect(toolLabel((key, params) => `${key}:${params?.server}/${params?.tool}`, shown.name)).toBe("ai.tool.mcp:gh/create_issue");
     expect(shownCall({ id: "c2", name: "run_command", arguments: "{}" }).name).toBe("run_command");
+    // A call that names a built-in tool shows as the call it is, not as that tool.
+    const builtin = { id: "c3", name: "call_mcp_tool", arguments: '{"tool":"write_file","arguments":{"path":"/etc/hosts"}}' };
+    expect(shownCall(builtin)).toEqual(builtin);
     expect(JSON.parse(proxyArguments(call.arguments, '{"title":"y"}'))).toEqual({ tool: "mcp__gh__create_issue", arguments: { title: "y" } });
   });
 });

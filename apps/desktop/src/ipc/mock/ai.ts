@@ -1448,6 +1448,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         c = need(input.conversation_id);
       } else {
         const id = newId();
+        // Like Rust: the new conversation's id goes out before the message waits for the MCP servers (AI-45).
+        onEvent({ kind: "opened", conversation_id: id });
         c = {
           view: {
             id,

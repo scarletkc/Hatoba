@@ -232,6 +232,16 @@ class TurnRunner {
     return this.disposed;
   }
 
+  /**
+   * Rust registered a new conversation's turn under `convId` before storing its message (AI-45). A stop
+   * names it from now on, so it works while the MCP servers start; one asked for before is sent now.
+   */
+  private opened(convId: string) {
+    if (this.convId) return;
+    this.convId = convId;
+    if (this.stopping) void this.requestStop(convId);
+  }
+
   /** `ai_send` stored the conversation. A stop asked for before that is sent now. */
   started(convId: string) {
     this.convId = convId;
@@ -241,6 +251,10 @@ class TurnRunner {
 
   onEvent = (ev: AiTurnEvent) => {
     if (this.disposed) return;
+    if (ev.kind === "opened") {
+      this.opened(ev.conversation_id);
+      return;
+    }
     // After the end (e.g. the fallback below), only stored entries still matter.
     if (this.ended) {
       if (ev.kind === "entry") this.addEntry(ev.entry);
@@ -552,7 +566,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
       extras: [...extras, ...s.extras],
     }));
     restore();
-    // Stopped before it was stored (during its compaction, AI-22): the message is back in the input.
+    // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
+    // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
     return false;
   }

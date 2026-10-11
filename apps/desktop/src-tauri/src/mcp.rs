@@ -1017,6 +1017,12 @@ impl McpManager {
         guard(&self.0.offers).insert(conversation_id.to_owned(), Arc::new(offer));
     }
 
+    /// Whether an offer is recorded for the conversation: none after a start of the app or the
+    /// lock until its next request, message or `search_tools` call (AI-45).
+    pub fn has_offer(&self, conversation_id: &str) -> bool {
+        guard(&self.0.offers).contains_key(conversation_id)
+    }
+
     /// The tool behind `name` in a call of the conversation: from the offer recorded last
     /// ([`Self::record_offer`]), or, when this run of the app recorded none, from the running
     /// servers. The approval card (`mcp_tool_info`) and the call (`ai_tool_run`) both resolve

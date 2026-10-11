@@ -143,7 +143,7 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 The plug button in the input area (**MCP tools**) lists the MCP servers that are on for this device, with their state, and a switch for each. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
 
-When a conversation's MCP tool definitions would take a tenth of the model's context window or more (3,200 tokens when it is not set), or a request would carry more than 128 tools in all, they no longer go with each request, so the provider's prompt cache keeps working: a message lists the tools by name (a divider "Listed N MCP tools"), and the assistant looks a tool up with **Search MCP tools** before it calls it. The conversation stays that way. While servers start, the panel says "Starting MCP servers…".
+Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -153,5 +153,6 @@ When a conversation's MCP tool definitions would take a tenth of the model's con
 | Starts when needed | 需要时启动 | 必要なときに起動 |
 | Starting… | 正在启动… | 起動しています… |
 | Failed | 出错 | エラー |
+| Starting MCP servers… | 正在启动 MCP 服务器… | MCP サーバーを起動しています… |
 
 Provider and tool errors in the panel are explained in `references/troubleshooting-ai.md`.

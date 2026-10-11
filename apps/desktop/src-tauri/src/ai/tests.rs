@@ -119,6 +119,7 @@ fn ended(e: &AiTurnEvent) -> Option<AiTurnEndReason> {
 
 fn kind(e: &AiTurnEvent) -> &'static str {
     match e {
+        AiTurnEvent::Opened { .. } => "opened",
         AiTurnEvent::RequestStarted => "request_started",
         AiTurnEvent::Text { .. } => "text",
         AiTurnEvent::Reasoning { .. } => "reasoning",

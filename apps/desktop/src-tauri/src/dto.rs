@@ -1485,6 +1485,12 @@ pub enum AiTurnEndReason {
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AiTurnEvent {
+    /// The turn of a new conversation is registered under this id, which the conversation is
+    /// stored under with its message. Sent before the message waits for the MCP servers (AI-45),
+    /// so a stop can name the turn before `ai_send` returns.
+    Opened {
+        conversation_id: String,
+    },
     RequestStarted,
     Text {
         delta: String,
