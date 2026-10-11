@@ -190,7 +190,8 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
   const subdomainNeeded = !!plan && !plan.subdomain && plan.worker !== "has_vault";
   const subdomainOk = LABEL.test(form.subdomain.trim());
   const existing = plan?.worker === "has_vault";
-  const canJoin = existing && !form.inspecting && !nameError;
+  // Joining goes through the Worker's workers.dev URL; without a subdomain it has none.
+  const canJoin = existing && !!plan?.subdomain && !form.inspecting && !nameError;
   const canDeploy = !!plan && !existing && plan.worker !== "foreign" && !form.inspecting && !nameError && (!subdomainNeeded || subdomainOk);
 
   const inspect = async (f: DeployForm) => {
@@ -373,7 +374,14 @@ function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; 
   if (!plan) return null;
 
   const worker = form.workerName.trim();
-  if (plan.worker === "has_vault") return <Callout icon="info">{t("sync.dep.plan.hasVault", { name: worker })}</Callout>;
+  if (plan.worker === "has_vault")
+    return plan.subdomain ? (
+      <Callout icon="info">{t("sync.dep.plan.hasVault", { name: worker })}</Callout>
+    ) : (
+      <Callout icon="warning" iconColor="var(--orange)">
+        {t("sync.dep.plan.hasVaultNoUrl", { name: worker })}
+      </Callout>
+    );
   if (plan.worker === "foreign")
     return (
       <Callout icon="warning" iconColor="var(--orange)">
