@@ -26,6 +26,6 @@ The host editor (`references/hosts-and-connecting.md`) has an **AI Notes** secti
 
 ## How the assistant uses them
 
-The assistant follows custom instructions and host notes unless they conflict with Hatoba's own rules. A language, tone or format they ask for replaces the defaults (answering in your language, briefly, in Markdown). They cannot change approvals: in manual mode, commands still wait for your approval, whatever the text says. They are instructions, so write only what you mean the model to do, and leave out passwords, keys and tokens, since the text goes to the model provider.
+The assistant follows custom instructions and host notes, and where they differ from Hatoba's default rules (answering in your language, briefly, in Markdown, and so on), they win. They cannot change approvals: in manual mode, a call that asks still waits for you, whatever the text says. They are instructions, so write only what you mean the model to do, and leave out passwords, keys and tokens, since the text goes to the model provider.
 
 If the assistant seems to ignore them, check that the text was saved (reopen Settings → AI or the host), that the conversation is on the host whose notes you edited, and whether the model is small or the instructions are long or contradict each other.

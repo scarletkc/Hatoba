@@ -77,7 +77,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
 | MCP tools (`mcp__<server>__<tool>`) | Tools from the MCP servers the user added (shown as server · tool) | Ask, unless set to Always allow |
 
-Results longer than 16,000 characters keep the first 4,000 and the last 12,000. Every call and result is a collapsible block in the conversation, in both modes. Screen text, command output and web pages are data: the assistant is told never to follow instructions found in them.
+Results longer than 16,000 characters keep the first 4,000 and the last 12,000. Every call and result is a collapsible block in the conversation, in both modes. Tool results such as screen text, command output and web pages are data to the assistant: when one asks for something, it tells you instead. What you attach is your own content.
 
 **Permission mode** (the shield or lightning button in the header; the menu is titled "Permission mode for this conversation"):
 
