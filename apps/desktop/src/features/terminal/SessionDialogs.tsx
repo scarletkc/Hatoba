@@ -42,6 +42,7 @@ type HostKeyItem = PromptItem & { kind: "hostkey" };
 function HostKeyNew({ item }: { item: HostKeyItem }) {
   const t = useT();
   const p = item.prompt;
+  const additional = p.known_key_type !== null && p.known_fingerprint !== null;
   const reject = useCallback(() => answerHostKey(item, false), [item]);
   return (
     <Modal center onClose={reject} closeOnBackdrop={false}>
@@ -49,11 +50,16 @@ function HostKeyNew({ item }: { item: HostKeyItem }) {
         <div className={s.head}>
           <Icon name="shield-check" size={20} color="var(--accent)" />
           <div id="hk-title" className={s.title}>
-            {t("terminal.hostkey.newTitle", { host: p.host, port: p.port })}
+            {t(additional ? "terminal.hostkey.additionalTitle" : "terminal.hostkey.newTitle", { host: p.host, port: p.port })}
           </div>
         </div>
-        <div className={s.body}>{t("terminal.hostkey.newBody")}</div>
-        <Fingerprint label={t("terminal.hostkey.fingerprint")} keyType={p.key_type} value={p.fingerprint} />
+        <div className={s.body}>
+          {t(additional ? "terminal.hostkey.additionalBody" : "terminal.hostkey.newBody", { keyType: p.key_type })}
+        </div>
+        {additional && (
+          <Fingerprint label={t("terminal.hostkey.known")} keyType={p.known_key_type!} value={p.known_fingerprint!} />
+        )}
+        <Fingerprint label={t(additional ? "terminal.hostkey.received" : "terminal.hostkey.fingerprint")} keyType={p.key_type} value={p.fingerprint} />
         <div className={s.actions}>
           <Button onClick={reject}>{t("btn.cancel")}</Button>
           <Button variant="primary" onClick={() => answerHostKey(item, true)}>

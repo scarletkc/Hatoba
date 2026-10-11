@@ -115,8 +115,9 @@ The choices are in `references/hosts-and-connecting.md`. Only the first hop (the
 
 ## Host key prompts and changes
 
-- The first connection to a host:port shows a dialog with the key type and fingerprint. Compare it with the server's, for example `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server. **Trust and Connect** saves it to the vault, and it syncs to the other devices. **Cancel** fails the connection with the `host_key_rejected` kind.
-- **Host key has changed** appears when the saved fingerprint differs. Causes: the server was reinstalled or got new keys, another machine now answers at that address (a reused IP, a load balancer), or a man-in-the-middle. The dialog shows the trusted and the received fingerprint. **Disconnect** is the default. Only when the change is explained, **Update Fingerprint and Connect** replaces the saved one, on all synced devices. There is no screen to list or delete saved fingerprints.
+- On first connection to host:port, compare the fingerprint with the administrator's (for example, `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server). **Trust and Connect** saves and syncs it; **Cancel** fails with `host_key_rejected`.
+- Saved types are preferred per host:port. A new type needs **Trust and Connect** after administrator verification; the other saved key is context, not proof, and is kept.
+- **Host key has changed** blocks a changed key of a saved type, showing both fingerprints. Causes: reinstall, key rotation, reused IP, load balancer, or interception. **Disconnect** is default. After verifying the change, **Update Fingerprint and Connect** replaces only that type on all synced devices. Saved keys have no list or delete screen.
 
 | en | zh-CN | ja |
 |---|---|---|

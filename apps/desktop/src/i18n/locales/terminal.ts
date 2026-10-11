@@ -115,6 +115,9 @@ export default defineMessages({
     "terminal.hostkey.newTitle": "首次连接到 {host}:{port}",
     "terminal.hostkey.newBody":
       "Hatoba 还不认识这台服务器。请把下面的指纹与服务器管理员提供的指纹核对。信任后，指纹会保存到保险库并随云同步到你的其他设备。",
+    "terminal.hostkey.additionalTitle": "{host}:{port} 提供了新的主机密钥",
+    "terminal.hostkey.additionalBody":
+      "这台服务器已保存其他类型的主机密钥，但还没有信任 {keyType} 类型的密钥。请向服务器管理员核对新指纹后再信任。已信任的密钥会保留。",
     "terminal.hostkey.keyType": "密钥类型",
     "terminal.hostkey.fingerprint": "指纹",
     "terminal.hostkey.trust": "信任并连接",
@@ -280,6 +283,9 @@ export default defineMessages({
     "terminal.hostkey.newTitle": "First connection to {host}:{port}",
     "terminal.hostkey.newBody":
       "Hatoba doesn’t know this server yet. Compare the fingerprint below with the one your server administrator gave you. If you trust it, it is saved to your vault and synced to your other devices.",
+    "terminal.hostkey.additionalTitle": "New host key for {host}:{port}",
+    "terminal.hostkey.additionalBody":
+      "A key of another type is already trusted for this server, but its {keyType} key is not yet trusted. Verify the new fingerprint with the server administrator before trusting it. The existing key will be kept.",
     "terminal.hostkey.keyType": "Key type",
     "terminal.hostkey.fingerprint": "Fingerprint",
     "terminal.hostkey.trust": "Trust and Connect",
@@ -440,6 +446,9 @@ export default defineMessages({
     "terminal.hostkey.newTitle": "{host}:{port} への初回接続",
     "terminal.hostkey.newBody":
       "Hatoba はこのサーバーをまだ知りません。以下のフィンガープリントを、サーバー管理者から受け取ったものと照合してください。信頼すると、保管庫に保存され、他のデバイスにも同期されます。",
+    "terminal.hostkey.additionalTitle": "{host}:{port} の新しいホストキー",
+    "terminal.hostkey.additionalBody":
+      "このサーバーでは別の種類の鍵を信頼済みですが、{keyType} の鍵はまだ信頼されていません。信頼する前に、新しいフィンガープリントをサーバー管理者に確認してください。信頼済みの鍵は保持されます。",
     "terminal.hostkey.keyType": "鍵の種類",
     "terminal.hostkey.fingerprint": "フィンガープリント",
     "terminal.hostkey.trust": "信頼して接続",

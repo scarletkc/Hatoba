@@ -81,9 +81,9 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 | Paste | Ctrl+V, Ctrl+Shift+V, or Shift+Insert | ⌘V |
 | Find in the terminal | Ctrl+Shift+F | ⌘F |
 
-- Pasting text with line breaks first shows **Paste multiple lines?** with a preview, and **Paste** confirms. The check can be turned off in Settings → General (**Confirm before pasting multiple lines**). Pasting needs a connected tab.
+- A single-line paste has trailing CR/LF characters removed and is pasted without confirmation, so a copied command does not run immediately. Its spaces are kept. Text with internal line breaks is kept unchanged and first shows **Paste multiple lines?** with a preview; **Paste** confirms. The check can be turned off in Settings → General (**Confirm before pasting multiple lines**), but single-line trailing newlines are still removed. Pasting needs a connected tab.
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
-- Links in the output open in the default browser with Ctrl+click (⌘+click on macOS). A plain click only selects text.
+- HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
 | en | zh-CN | ja |
 |---|---|---|

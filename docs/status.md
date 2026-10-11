@@ -23,7 +23,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 
 | ID | Name | Status | Notes |
 |---|---|---|---|
-| SSH-01…07 | Connection, authentication, fingerprints, timeouts, reconnect | ✅ | |
+| SSH-01…07 | Connection, authentication, fingerprints, timeouts, reconnect | ✅ | Host-key types saved for each host:port are preferred per hop. New types need explicit trust; changed keys of saved types stay blocked. Tests cover negotiation, prompt classification, and retaining other types |
 | SSH-08 | keyboard-interactive | ✅ | |
 | SSH-09 | ssh-agent | 🟡 | The Windows named pipe needs verification on a real machine. Pageant (P2) ⬜ |
 | SSH-10 | ProxyJump | ✅ | |
@@ -31,8 +31,8 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SSH-12 | Import PuTTY sessions | ⬜ | P2 |
 | SSH-13 | SOCKS5 and HTTP proxies | 🟡 | Tests run against in-process proxies; needs a try in the app with a real proxy |
 | SSH-14 | Per-host environment variables | 🟡 | Integration tests send them to OpenSSH on Linux; needs a try in the app against a real server |
-| TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin and the Japanese IME needs verification on a real Windows machine |
-| TERM-07, 08 | Terminal search, links | ✅ | |
+| TERM-01…06 | Tabs, colors, wide characters, PTY, paste, scrollback, appearance | ✅ / 🟡 | The candidate window position for Microsoft Pinyin and the Japanese IME needs verification on a real Windows machine. Paste tests cover trimming single-line trailing newlines and preserving multi-line confirmation |
+| TERM-07, 08 | Terminal search, links | ✅ | Opener capability and link tests cover both HTTP and HTTPS, rejecting other schemes |
 | TERM-09…11 | Split panes, session logs, Snippets | ⬜ | P2 |
 | TERM-12 | Resource usage in the status bar | 🟡 | Integration tests run the sampling against OpenSSH on Linux; needs a try in the app against a real server |
 | SFTP-01…04 | File panel, transfers, file operations, attributes | ✅ | |
