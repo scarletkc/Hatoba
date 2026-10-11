@@ -1,6 +1,6 @@
 //! MCP server commands (spec §13.9): the servers of Settings → AI (AI-29), their state on this
 //! device (enabled, Always allow, AI-31), their live status (AI-32), the tool behind a name the
-//! model called, directly or through `call_mcp_tool` (AI-44), and import and export in the
+//! model called, directly or through `call_mcp_tool` (AI-45), and import and export in the
 //! `mcpServers` format (AI-33). The connections run in
 //! [`crate::mcp::McpManager`].
 //!
@@ -586,7 +586,7 @@ pub async fn mcp_tool_info(
     state.with_unlocked(|v| Ok(tool_info(v, &state.mcp, &conversation_id, &name)))
 }
 
-/// AI-44: what the approval card of a `call_mcp_tool` call needs, as `ai_tool_run` resolves the
+/// AI-45: what the approval card of a `call_mcp_tool` call needs, as `ai_tool_run` resolves the
 /// call: the tool it names, and whether it runs. A call that does not run (arguments that do not
 /// match the tool's input schema, a tool the conversation does not have, a deleted server) gets
 /// its error result without asking.
@@ -610,7 +610,7 @@ pub(crate) fn proxy_info(
     }
 }
 
-/// The MCP tool a `call_mcp_tool` call names (AI-44), for its approval card.
+/// The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card.
 #[tauri::command]
 #[specta::specta]
 pub async fn mcp_proxy_info(

@@ -353,7 +353,7 @@ const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
  * to another host, a terminal became attached or went away, it went to another model, the user
- * reverted a file tool's change, or it listed the deferred MCP tools (AI-44).
+ * reverted a file tool's change, or it listed the deferred MCP tools (AI-45).
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
@@ -707,7 +707,7 @@ function ToolBlock({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // AI-44: a `call_mcp_tool` call shows as the MCP tool it names.
+  // AI-45: a `call_mcp_tool` call shows as the MCP tool it names.
   const shown = shownCall(call);
   const kind = toolKind(shown.name);
   const summary = callSummary(shown.name, shown.arguments);
@@ -1038,7 +1038,7 @@ function ShownInput({ text, command }: { text: string; command?: boolean }) {
 /**
  * AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. An MCP call (AI-31)
  * shows its server, the tool's description and hints in place of the host, and offers Always allow.
- * Allow for this conversation (AI-19) is on every card. A `call_mcp_tool` call (AI-44) shows, and edits,
+ * Allow for this conversation (AI-19) is on every card. A `call_mcp_tool` call (AI-45) shows, and edits,
  * the tool it names and that tool's own arguments.
  */
 function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToolCall; host: HostInfo | null; mcp: McpToolInfo | null }) {
@@ -1347,7 +1347,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
 function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   const t = useT();
   const { turn, outcome } = slot;
-  // AI-44: a message waits for the MCP servers its requests use before it is stored.
+  // AI-45: a message waits for the MCP servers its requests use before it is stored.
   const mcpStarting = useMcp((st) => Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)));
 
   if (slot.remoteRunning)

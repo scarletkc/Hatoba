@@ -3,7 +3,7 @@ import type { AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
- * once a conversation's MCP tools are deferred, through `call_mcp_tool` (AI-44).
+ * once a conversation's MCP tools are deferred, through `call_mcp_tool` (AI-45).
  */
 export const READ_TERMINAL = "read_terminal";
 export const RUN_COMMAND = "run_command";
@@ -33,7 +33,7 @@ export type ToolKind =
 
 const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
 
-/** A call's kind; a `call_mcp_tool` call (AI-44) is an MCP call, approved as the tool it names. */
+/** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
   if (BUILTIN.includes(name)) return name as ToolKind;
   if (name === CALL_MCP_TOOL || /^mcp__.+__.+/.test(name)) return "mcp";
@@ -41,7 +41,7 @@ export function toolKind(name: string): ToolKind {
 }
 
 /**
- * AI-44: the MCP tool a `call_mcp_tool` call names, and that tool's arguments as JSON: an object, or a
+ * AI-45: the MCP tool a `call_mcp_tool` call names, and that tool's arguments as JSON: an object, or a
  * string that holds one, `{}` when left out, as Rust reads them. Null for any other call, or one whose
  * arguments name no tool.
  */
@@ -59,13 +59,13 @@ export function proxyCall(name: string, json: string): { tool: string; arguments
   return { tool, arguments: JSON.stringify(inner) };
 }
 
-/** A call as the panel and the export show it: a `call_mcp_tool` call as the MCP tool it names, with that tool's arguments (AI-44). */
+/** A call as the panel and the export show it: a `call_mcp_tool` call as the MCP tool it names, with that tool's arguments (AI-45). */
 export function shownCall<T extends { name: string; arguments: string }>(call: T): T {
   const proxy = proxyCall(call.name, call.arguments);
   return proxy ? { ...call, name: proxy.tool, arguments: proxy.arguments } : call;
 }
 
-/** The arguments a `call_mcp_tool` call runs with after the user edited the tool's own on its card (AI-17, AI-44). */
+/** The arguments a `call_mcp_tool` call runs with after the user edited the tool's own on its card (AI-17, AI-45). */
 export function proxyArguments(json: string, edited: string): string {
   const args = parseArgs(json) ?? {};
   return JSON.stringify({ ...args, arguments: JSON.parse(edited) as unknown });
@@ -87,7 +87,7 @@ export function needsSession(kind: ToolKind): boolean {
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `web_search`, `read_skill` and `search_tools` (AI-44) run without asking and
+ * §13.5: in manual approval mode `read_terminal`, `web_search`, `read_skill` and `search_tools` (AI-45) run without asking and
  * everything else waits for the user, `read_file` included (it can send `~/.ssh` or `.env` to the
  * provider); bypass runs everything. Unknown tools never run, so never ask.
  */

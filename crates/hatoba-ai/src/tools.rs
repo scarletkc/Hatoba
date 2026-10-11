@@ -30,9 +30,9 @@ pub const WEB_SEARCH: &str = "web_search";
 pub const FETCH_URL: &str = "fetch_url";
 /// `read_skill` (AI-28).
 pub const READ_SKILL: &str = "read_skill";
-/// `search_tools` (AI-44), offered in place of deferred MCP tools.
+/// `search_tools` (AI-45), offered in place of deferred MCP tools.
 pub const SEARCH_TOOLS: &str = "search_tools";
-/// `call_mcp_tool` (AI-44), which calls a deferred MCP tool.
+/// `call_mcp_tool` (AI-45), which calls a deferred MCP tool.
 pub const CALL_MCP_TOOL: &str = "call_mcp_tool";
 
 /// Results longer than this many characters are shortened (§13.4).
@@ -327,7 +327,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     tools
 }
 
-/// The tools a request offers in place of deferred MCP tools (AI-44): `search_tools`, then
+/// The tools a request offers in place of deferred MCP tools (AI-45): `search_tools`, then
 /// `call_mcp_tool`. They are the same whatever servers are on, so the tool definitions never
 /// change with them. `arguments` has no `type`, which every provider accepts for a value of any
 /// type (Gemini refuses an `object` without `properties`), and a string holding an object is

@@ -7,7 +7,7 @@
 //!   list and call its tools, and shut it down (AI-32).
 //! - [`tool_names`] and [`clean_schema`]: what a request offers the model (AI-30).
 //! - [`deferred`]: `search_tools`, `call_mcp_tool` and the `mcp_tools` note of a conversation
-//!   whose MCP tools are deferred (AI-44).
+//!   whose MCP tools are deferred (AI-45).
 //! - [`config`]: import and export in the `mcpServers` format (AI-33).
 //!
 //! Nothing here logs an environment or header value, a tool's arguments or result, or a server's

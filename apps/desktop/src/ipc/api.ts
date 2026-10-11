@@ -368,7 +368,7 @@ export interface HatobaApi {
    */
   mcp_tool_info(conversation_id: string, name: string): Promise<McpToolInfo | null>;
   /**
-   * AI-44: the MCP tool a `call_mcp_tool` call with `args` names, resolved as `ai_tool_run` resolves it, and
+   * AI-45: the MCP tool a `call_mcp_tool` call with `args` names, resolved as `ai_tool_run` resolves it, and
    * whether the call runs: one whose arguments do not match the tool's schema, or that names no tool of the
    * conversation or a deleted server's, gets its error result without asking.
    */

@@ -54,7 +54,7 @@ function attachmentLabel(t: Tr, a: Attachment): string {
 
 /** A call with its input and result in fenced blocks. A rejected call's result is the user's reason. */
 function toolCall(t: Tr, call: AiToolCall, result: ToolEntry | undefined): string {
-  // AI-44: a `call_mcp_tool` call as the MCP tool it names.
+  // AI-45: a `call_mcp_tool` call as the MCP tool it names.
   const shown = shownCall(call);
   const parts = [`**${toolLabel(t, shown.name)}** · ${callStatus(t, call, result)}`, `${t("ai.call.input")}:`, fenced(prettyArgs(shown.arguments) || "{}", "json")];
   if (result?.status === "rejected") {

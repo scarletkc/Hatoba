@@ -15,7 +15,7 @@
 //!   stop every server; a server whose configuration changed restarts.
 //! - [`Offer`]: the MCP tools one request offered, with the names the model sees (AI-30). A
 //!   conversation keeps the offer of its latest request, or of its latest `search_tools` call
-//!   (AI-44), so a call maps back to the server and tool that request or search named.
+//!   (AI-45), so a call maps back to the server and tool that request or search named.
 //!
 //! Locks: the vault mutex comes before the manager's own locks, never after; the servers map
 //! before a server's state, and one server's state at a time. Status events read the device
@@ -360,7 +360,7 @@ impl Offer {
             .collect()
     }
 
-    /// The tools as the deferred list and `search_tools` see them (AI-44), in the offer's order.
+    /// The tools as the deferred list and `search_tools` see them (AI-45), in the offer's order.
     pub fn listed(&self) -> Vec<ListedTool<'_>> {
         self.tools
             .iter()
@@ -1023,7 +1023,7 @@ impl McpManager {
         self.latest(conversation_id).find(name).cloned()
     }
 
-    /// The tools of the conversation's latest request or `search_tools` call (AI-44), or, when
+    /// The tools of the conversation's latest request or `search_tools` call (AI-45), or, when
     /// this run of the app made neither, of the running servers.
     pub fn latest(&self, conversation_id: &str) -> Arc<Offer> {
         let offer = guard(&self.0.offers).get(conversation_id).cloned();

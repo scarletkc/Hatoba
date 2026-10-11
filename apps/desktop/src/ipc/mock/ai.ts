@@ -505,7 +505,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
       if (want("mcp")) {
         const mcp = await mcpCall(turn, words);
-        // AI-44: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
+        // AI-45: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
         if (want("deferred")) {
           calls.push(call("search_tools", { query: "issues" }));
           calls.push(call("call_mcp_tool", { tool: mcp.name, arguments: JSON.parse(mcp.arguments) as unknown }));
@@ -822,7 +822,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   }
 
   /**
-   * AI-44, for the demo: a message with "deferred" in it lists the tools of the running MCP servers in an
+   * AI-45, for the demo: a message with "deferred" in it lists the tools of the running MCP servers in an
    * `mcp_tools` note, as Rust does once a conversation's MCP tools take a tenth of the context window.
    */
   async function deferredList(context: AiTurnContext, text: string): Promise<string> {
@@ -1157,7 +1157,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           };
         return { status: "error", content: `There is no enabled skill named "${String(args.name ?? "")}".` };
       case "search_tools": {
-        // AI-44: the running servers' tools whose names or descriptions have a word of the query.
+        // AI-45: the running servers' tools whose names or descriptions have a word of the query.
         await wait(300);
         const words = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
         const found: string[] = [];
@@ -1177,7 +1177,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       default: {
         // An MCP tool (AI-30): the server's text content, or an error result when no running server offers it.
         await wait(700);
-        // AI-44: `call_mcp_tool` runs the tool it names with that tool's arguments.
+        // AI-45: `call_mcp_tool` runs the tool it names with that tool's arguments.
         if (x.name === "call_mcp_tool") {
           const named = typeof args.tool === "string" ? args.tool : "";
           args = (args.arguments && typeof args.arguments === "object" ? args.arguments : {}) as Record<string, unknown>;

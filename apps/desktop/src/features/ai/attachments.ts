@@ -205,7 +205,7 @@ export function attachmentTokens(a: Attachment): number {
  * A note Hatoba writes before a message (§13.1, AI-05, AI-09, AI-41), never the user: the reply before
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
  * became attached or stopped being attached, it went to another model, or the user reverted the change
- * a file tool call made, or this message lists the deferred MCP tools (AI-44). `from` of a host change
+ * a file tool call made, or this message lists the deferred MCP tools (AI-45). `from` of a host change
  * is empty when the earlier host no longer exists; a model is named as `Name (id)`, or by its ID alone. A
  * revert's `path` is the file's path as the call resolved it, and `body` its text for the model; the
  * MCP tool list counts its servers and tools, and `body` lists them.

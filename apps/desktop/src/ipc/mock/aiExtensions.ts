@@ -716,7 +716,7 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     },
     // Like Rust without a recorded offer: the running servers' names (the mock's turns offer them all).
     mcp_tool_info: async (_conversationId, name): Promise<McpToolInfo | null> => toolInfo(name),
-    // AI-44: the tool a `call_mcp_tool` call names; the mock checks no schema.
+    // AI-45: the tool a `call_mcp_tool` call names; the mock checks no schema.
     mcp_proxy_info: async (_conversationId, args): Promise<McpProxyInfo> => {
       let name = "";
       try {

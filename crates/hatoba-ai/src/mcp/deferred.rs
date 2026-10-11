@@ -1,4 +1,4 @@
-//! Deferred MCP tools (AI-44): once a conversation's MCP tool definitions come to a tenth of the
+//! Deferred MCP tools (AI-45): once a conversation's MCP tool definitions come to a tenth of the
 //! model's context window, its requests offer [`SEARCH_TOOLS`](crate::tools::SEARCH_TOOLS) and
 //! [`CALL_MCP_TOOL`](crate::tools::CALL_MCP_TOOL) in their place, so the tool definitions and the
 //! system prompt never change with the servers and the provider's prompt cache keeps serving them.
@@ -52,7 +52,7 @@ pub fn window(context_window: Option<u64>) -> u64 {
     context_window.filter(|w| *w > 0).unwrap_or(UNKNOWN_WINDOW)
 }
 
-/// Whether MCP tool definitions of `tokens` defer a conversation's MCP tools (AI-44).
+/// Whether MCP tool definitions of `tokens` defer a conversation's MCP tools (AI-45).
 #[must_use]
 pub fn defer_due(tokens: u64, context_window: Option<u64>) -> bool {
     tokens.saturating_mul(100) >= window(context_window).saturating_mul(DEFER_PERCENT)

@@ -70,7 +70,7 @@ describe("notes as dividers (AI-05, AI-09)", () => {
   });
 });
 
-describe("the list of deferred MCP tools (AI-44)", () => {
+describe("the list of deferred MCP tools (AI-45)", () => {
   // `deferred::list_block` in crates/hatoba-ai/src/mcp/deferred.rs.
   const stored =
     '<mcp_tools servers="2" tools="3">\nThe MCP tools you can call with call_mcp_tool from this message on, by server.\n- files (2 tools): mcp__files__echo, mcp__files__env\n- web (1 tool): mcp__web__lookup\n</mcp_tools>\n\nhello';

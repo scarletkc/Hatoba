@@ -13,7 +13,7 @@
 //! is stored: from the first message whose MCP tool definitions come to a tenth of the window, the
 //! conversation's requests offer `search_tools` and `call_mcp_tool` in their place, and its
 //! messages list the tools in an `mcp_tools` note, so the tool definitions and the system prompt
-//! stay the same whatever the servers do (AI-44). A Compact request (AI-21) is the request a
+//! stay the same whatever the servers do (AI-45). A Compact request (AI-21) is the request a
 //! turn would send next with the instruction after it, built by the same function, so it reuses
 //! the prefix the provider cached. A side question (AI-42) sends the same request with the
 //! question after it, and stores nothing. History search (AI-24), edit and resend (AI-26) and
@@ -964,10 +964,10 @@ impl AiManager {
         .await
     }
 
-    /// Registers the turn, starts the MCP servers its requests use (AI-44), compacts first when
+    /// Registers the turn, starts the MCP servers its requests use (AI-45), compacts first when
     /// the new message needs it (AI-22), stores the user's message (in place of `replace` and the
     /// entries after it, for an edit) with the thinking level (AI-05), the move its note tells of
-    /// (AI-09) and the list of deferred MCP tools (AI-44), and returns the turn's task. A new
+    /// (AI-09) and the list of deferred MCP tools (AI-45), and returns the turn's task. A new
     /// conversation is created with its message.
     #[expect(
         clippy::too_many_arguments,
@@ -1008,7 +1008,7 @@ impl AiManager {
             )
         };
 
-        // AI-44: the servers the message's requests use start, and list their tools again after
+        // AI-45: the servers the message's requests use start, and list their tools again after
         // `tools/list_changed`, before the message is stored, which decides whether it defers
         // them and lists them. A server that fails offers no tools, as for any request.
         let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
@@ -1059,7 +1059,7 @@ impl AiManager {
             if let Some(conversation) = created {
                 v.put(Some(&id), Item::AiConversation(conversation))?;
             }
-            // AI-44: the list of deferred MCP tools, when the model has not seen it, read after a
+            // AI-45: the list of deferred MCP tools, when the model has not seen it, read after a
             // compaction, whose summary leaves it out.
             let listed = {
                 let conversation = find_conversation(&v, &id)?;
@@ -1075,7 +1075,7 @@ impl AiManager {
                 }
                 listed
             };
-            // AI-05, AI-09, AI-44: Hatoba's notes come before what the panel sent (spec §13.3).
+            // AI-05, AI-09, AI-45: Hatoba's notes come before what the panel sent (spec §13.3).
             let text = format!("{notes}{listed}{text}");
             let entry = match came_from {
                 Some(came_from) => AiEntry::user_from(now_ms(), text, came_from),
@@ -1649,7 +1649,7 @@ impl AiManager {
         })
     }
 
-    /// `search_tools` (AI-44): searches the MCP tools the running turn's requests use, refreshed
+    /// `search_tools` (AI-45): searches the MCP tools the running turn's requests use, refreshed
     /// as for a request first, so a server that sent `tools/list_changed` during the turn is
     /// relisted before the search, and keeps them as the conversation's latest tools, so a call
     /// of a tool the search found resolves to it. Without a running turn, which a call of the
@@ -2728,7 +2728,7 @@ fn prepare_locked(
 
 /// The conversation's next request (§13.1) for its context `entries`: the system prompt that
 /// offers tools, the built-in tools, then the MCP tools of `offer`, or `search_tools` and
-/// `call_mcp_tool` when the conversation's MCP tools are `deferred` (AI-44). Every request of a turn,
+/// `call_mcp_tool` when the conversation's MCP tools are `deferred` (AI-45). Every request of a turn,
 /// every Compact request (AI-21) and every side question's (AI-42) is built here, so the last two
 /// have their turn's prefix. The error is a sentence for the panel.
 fn next_request(
@@ -2743,7 +2743,7 @@ fn next_request(
     let (system, mut tools) = prompt(v, context, None, server_id);
     // AI-30: after the built-in tools, those of the MCP servers, with or without a tab (AI-09),
     // or, once the conversation's MCP tools are deferred, the two tools that stand for them
-    // whatever servers are on (AI-44).
+    // whatever servers are on (AI-45).
     if deferred {
         tools.extend(tools::deferred_mcp_tools());
     } else {
@@ -3231,9 +3231,9 @@ enum Job {
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
-    /// `call_mcp_tool` (AI-44).
+    /// `call_mcp_tool` (AI-45).
     Mcp(Box<OfferedTool>, Map<String, Value>),
-    /// `search_tools` (AI-44), which [`AiManager::search_tools`] runs, since it reads the
+    /// `search_tools` (AI-45), which [`AiManager::search_tools`] runs, since it reads the
     /// conversation's MCP tools.
     SearchTools(deferred::SearchArgs),
 }
@@ -3352,7 +3352,7 @@ impl Job {
     }
 }
 
-/// AI-44: the MCP tool a `call_mcp_tool` call with `arguments` calls in the conversation, with the
+/// AI-45: the MCP tool a `call_mcp_tool` call with `arguments` calls in the conversation, with the
 /// tool's arguments, resolved as a direct call is (from the conversation's latest request or
 /// search, AI-30). The error is the call's result when it cannot run, so it neither asks nor
 /// runs: arguments that cannot be read, a name the conversation has no tool of, a server that was
@@ -3663,7 +3663,7 @@ const MODEL_CHANGE: &str = "model_change";
 /// a file tool call (AI-41), one for each call.
 const FILE_REVERT: &str = "file_revert";
 /// The tag of the note Hatoba puts before a message that comes with another list of deferred MCP
-/// tools than the model last saw (AI-44). A conversation with one is deferred.
+/// tools than the model last saw (AI-45). A conversation with one is deferred.
 const MCP_TOOLS: &str = deferred::LIST_TAG;
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
@@ -3829,7 +3829,7 @@ fn note_block<'a>(text: &'a str, tag: &str) -> Option<&'a str> {
     None
 }
 
-/// AI-44: whether a conversation's MCP tools are deferred, which they are from the first message
+/// AI-45: whether a conversation's MCP tools are deferred, which they are from the first message
 /// that listed them in an `mcp_tools` note. `entries` is every entry of the conversation, so a
 /// compaction leaves the choice as it was.
 fn mcp_deferred(entries: &[AiEntry]) -> bool {
@@ -3839,7 +3839,7 @@ fn mcp_deferred(entries: &[AiEntry]) -> bool {
     })
 }
 
-/// AI-44: the `mcp_tools` note the conversation's next message starts with, when its requests
+/// AI-45: the `mcp_tools` note the conversation's next message starts with, when its requests
 /// offer the MCP tools of `offer`: none while its MCP tools are offered directly, which they stay
 /// until their definitions come to a tenth of the model's context window; then the list of those
 /// tools, unless the newest note in the context (`entries` from `from` on) lists them already. No

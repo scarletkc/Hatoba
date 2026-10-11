@@ -1,4 +1,4 @@
-//! Deferred MCP tools (AI-44) in turns against mock Chat Completions and Anthropic Messages
+//! Deferred MCP tools (AI-45) in turns against mock Chat Completions and Anthropic Messages
 //! providers: the threshold, `search_tools` and `call_mcp_tool` with their approvals, the
 //! `mcp_tools` notes, servers that go away, and that the tool definitions and the system prompt
 //! stay byte for byte the same from request to request.
@@ -180,7 +180,7 @@ fn deferred_tools() -> Vec<String> {
         .collect()
 }
 
-/// Below the threshold the MCP tools go to the provider directly, as before AI-44, and no message
+/// Below the threshold the MCP tools go to the provider directly, as before AI-45, and no message
 /// lists them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mcp_tools_below_the_threshold_are_offered_directly() {
@@ -205,7 +205,7 @@ async fn mcp_tools_below_the_threshold_are_offered_directly() {
     f.mcp.shutdown().await;
 }
 
-/// AI-44 on Chat Completions: past a tenth of the window the first message lists the tools, the
+/// AI-45 on Chat Completions: past a tenth of the window the first message lists the tools, the
 /// requests offer `search_tools` and `call_mcp_tool` with the same tools and system prompt before
 /// and after a search and a call, a search finds by keyword and by name, a call runs the tool it
 /// names under that tool's approvals, arguments are checked against its schema, a tool added by
@@ -575,7 +575,7 @@ fn anthropic_use(id: &str, name: &str, input: &Value) -> ResponseTemplate {
     anthropic_stream(&events)
 }
 
-/// AI-44 on Anthropic Messages: the same tools and system prompt (and the top-level
+/// AI-45 on Anthropic Messages: the same tools and system prompt (and the top-level
 /// `cache_control`) in every request, before and after a search and a call; the schema reaches
 /// the model in a `tool_result`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

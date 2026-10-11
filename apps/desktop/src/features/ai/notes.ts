@@ -8,7 +8,7 @@ type Tr = (key: MessageKey, params?: Params) => string;
  * message, and in an export (§13.1, AI-05, AI-09, AI-41): that the user stopped the reply before it,
  * where the conversation moved, whether a terminal became attached or went away, which model it went
  * to, and what came before, which file's change the user reverted, or how many MCP tools it listed
- * (AI-44). A host that no longer exists is named as deleted; a model by its name.
+ * (AI-45). A host that no longer exists is named as deleted; a model by its name.
  */
 export function noteLabel(t: Tr, note: Note): string {
   switch (note.kind) {

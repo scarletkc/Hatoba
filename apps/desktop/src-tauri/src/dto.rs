@@ -1930,7 +1930,7 @@ pub struct McpToolInfo {
     pub tool: McpToolView,
 }
 
-/// What the approval card of a `call_mcp_tool` call needs (AI-44).
+/// What the approval card of a `call_mcp_tool` call needs (AI-45).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct McpProxyInfo {
     /// The tool the call names, as `mcp_tool_info` gives a direct call's; null when the

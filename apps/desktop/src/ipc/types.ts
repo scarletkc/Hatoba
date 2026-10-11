@@ -1223,7 +1223,7 @@ export interface McpToolInfo {
   tool: McpToolView;
 }
 
-/** What the approval card of a `call_mcp_tool` call needs (AI-44). */
+/** What the approval card of a `call_mcp_tool` call needs (AI-45). */
 export interface McpProxyInfo {
   /** The tool the call names, as `mcp_tool_info` gives a direct call's; null when the conversation has no tool of that name or its server was deleted. */
   tool: McpToolInfo | null;

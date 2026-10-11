@@ -261,7 +261,7 @@ describe("the change of a file call from its arguments (AI-41)", () => {
   });
 });
 
-describe("calls through call_mcp_tool (AI-44)", () => {
+describe("calls through call_mcp_tool (AI-45)", () => {
   it("are MCP calls, and search_tools runs without asking", () => {
     expect(toolKind("call_mcp_tool")).toBe("mcp");
     expect(toolKind("search_tools")).toBe("search_tools");
