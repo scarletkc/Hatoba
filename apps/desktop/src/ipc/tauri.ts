@@ -215,6 +215,7 @@ export function createTauriApi(): HatobaApi {
     mcp_server_stop: (id) => call("mcp_server_stop", { id }),
     mcp_set_always_allow: (serverId, tool, allow) => call("mcp_set_always_allow", { serverId, tool, allow }),
     mcp_tool_info: (conversationId, name) => call("mcp_tool_info", { conversationId, name }),
+    mcp_proxy_info: (conversationId, args) => call("mcp_proxy_info", { conversationId, callArguments: args }),
     mcp_import_preview: (json) => call("mcp_import_preview", { json }),
     mcp_import: (json) => call("mcp_import", { json }),
     mcp_export: () => call("mcp_export"),

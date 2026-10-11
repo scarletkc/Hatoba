@@ -10,6 +10,7 @@ import type {
   McpServerView,
   McpToolAnnotations,
   McpToolInfo,
+  McpProxyInfo,
   McpToolView,
   McpTransportView,
   SkillDetail,
@@ -39,6 +40,7 @@ type AiExtensionsApi = Pick<
   | "mcp_server_stop"
   | "mcp_set_always_allow"
   | "mcp_tool_info"
+  | "mcp_proxy_info"
   | "mcp_import_preview"
   | "mcp_import"
   | "mcp_export"
@@ -567,6 +569,16 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     return { servers, skipped };
   };
 
+  /** The tool of a running server that a request names `name`. */
+  const toolInfo = (name: string): McpToolInfo | null => {
+    for (const e of entries) {
+      if (e.state !== "running") continue;
+      const def = e.tools.find((d) => toolName(e.view.name, d.tool) === name);
+      if (def) return { server_id: e.view.id, server_name: e.view.name, always_ask: e.view.always_ask, tool: toolView(e, def) };
+    }
+    return null;
+  };
+
   const placeholder = (key: string) => `<${key.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}>`;
 
   return {
@@ -703,13 +715,18 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
       if (e.state === "running") publish(e);
     },
     // Like Rust without a recorded offer: the running servers' names (the mock's turns offer them all).
-    mcp_tool_info: async (_conversationId, name): Promise<McpToolInfo | null> => {
-      for (const e of entries) {
-        if (e.state !== "running") continue;
-        const def = e.tools.find((d) => toolName(e.view.name, d.tool) === name);
-        if (def) return { server_id: e.view.id, server_name: e.view.name, always_ask: e.view.always_ask, tool: toolView(e, def) };
+    mcp_tool_info: async (_conversationId, name): Promise<McpToolInfo | null> => toolInfo(name),
+    // AI-45: the tool a `call_mcp_tool` call names; the mock checks no schema.
+    mcp_proxy_info: async (_conversationId, args): Promise<McpProxyInfo> => {
+      let name = "";
+      try {
+        const parsed: unknown = JSON.parse(args);
+        if (parsed && typeof parsed === "object" && typeof (parsed as { tool?: unknown }).tool === "string") name = (parsed as { tool: string }).tool;
+      } catch {
+        // Not JSON: names no tool.
       }
-      return null;
+      const tool = name ? toolInfo(name) : null;
+      return { tool, runs: tool !== null };
     },
     mcp_import_preview: async (json): Promise<McpImportPreview> => {
       await wait(150);

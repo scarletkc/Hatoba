@@ -1485,6 +1485,12 @@ pub enum AiTurnEndReason {
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AiTurnEvent {
+    /// The turn of a new conversation is registered under this id, which the conversation is
+    /// stored under with its message. Sent before the message waits for the MCP servers (AI-45),
+    /// so a stop can name the turn before `ai_send` returns.
+    Opened {
+        conversation_id: String,
+    },
     RequestStarted,
     Text {
         delta: String,
@@ -1930,6 +1936,16 @@ pub struct McpToolInfo {
     pub server_name: String,
     pub always_ask: bool,
     pub tool: McpToolView,
+}
+
+/// What the approval card of a `call_mcp_tool` call needs (AI-45).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpProxyInfo {
+    /// The tool the call names, as `mcp_tool_info` gives a direct call's; null when the
+    /// conversation has no tool of that name or its server was deleted.
+    pub tool: Option<McpToolInfo>,
+    /// False when the call cannot run: it then gets its error result without asking.
+    pub runs: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

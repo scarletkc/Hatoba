@@ -81,6 +81,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.McpServerStatus, Ui.McpServerStatus>>,
   Check<Assignable<Rust.McpServerStatus, Ui.EventMap["ai://mcp-status"]>>,
   Check<Assignable<Rust.McpToolInfo, Ui.McpToolInfo>>,
+  Check<Assignable<Rust.McpProxyInfo, Ui.McpProxyInfo>>,
   Check<Assignable<Rust.McpImportPreview, Ui.McpImportPreview>>,
 ];
 

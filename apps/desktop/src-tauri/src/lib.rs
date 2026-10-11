@@ -182,6 +182,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             mcp_cmd::mcp_server_stop,
             mcp_cmd::mcp_set_always_allow,
             mcp_cmd::mcp_tool_info,
+            mcp_cmd::mcp_proxy_info,
             mcp_cmd::mcp_import_preview,
             mcp_cmd::mcp_import,
             mcp_cmd::mcp_export,

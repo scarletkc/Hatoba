@@ -29,12 +29,13 @@ import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { forkPoints } from "./fork";
 import { Markdown } from "./Markdown";
+import { useMcp } from "./mcp";
 import { noteLabel, noteTitle } from "./notes";
 import { replies as findReplies, type ReplyEnd } from "./replies";
 import { revertFailure } from "./revertText";
 import { sideRunning, type SideQuestion } from "./side";
 import { patchSlot, useAi, type Slot } from "./store";
-import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, SEND_KEYS, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
+import { callFileChange, callSummary, exitStatusOf, offersAllowHere, parseArgs, prettyArgs, proxyArguments, proxyCall, SEND_KEYS, shownCall, shownText, toolKind, toolLabel, type SendKey, type ToolKind } from "./tools";
 import { callRevealKey, editedFiles, revealKey, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
@@ -50,6 +51,7 @@ const TOOL_ICON: Record<ToolKind, string> = {
   web_search: "magnifying-glass",
   fetch_url: "globe",
   read_skill: "book-open",
+  search_tools: "list-magnifying-glass",
   mcp: "plug",
   unknown: "question",
 };
@@ -346,12 +348,12 @@ function UserMessage({
   );
 }
 
-const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise" } as const;
+const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise", mcp_tools: "plug" } as const;
 
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved
- * to another host, a terminal became attached or went away, it went to another model, or the user
- * reverted a file tool's change.
+ * to another host, a terminal became attached or went away, it went to another model, the user
+ * reverted a file tool's change, or it listed the deferred MCP tools (AI-45).
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
@@ -707,8 +709,10 @@ function ToolBlock({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const kind = toolKind(call.name);
-  const summary = callSummary(call.name, call.arguments);
+  // AI-45: a `call_mcp_tool` call shows as the MCP tool it names.
+  const shown = shownCall(call);
+  const kind = toolKind(shown.name);
+  const summary = callSummary(shown.name, shown.arguments);
   const revertible = change?.state === "written" || change?.state === "unfinished";
   const revert = useRevert(slotId, change);
   useEffect(() => {
@@ -722,7 +726,7 @@ function ToolBlock({
       <div className={s.toolHeadRow}>
         <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
-          <span className={s.toolName}>{toolLabel(t, call.name)}</span>
+          <span className={s.toolName}>{toolLabel(t, shown.name)}</span>
           <span className={s.toolSummary}>{summary}</span>
           {change?.state === "reverted" ? (
             <span className={s.chip}>
@@ -756,7 +760,7 @@ function ToolBlock({
           ) : (
             <>
               <div className={s.label}>{t("ai.call.input")}</div>
-              <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>
+              <pre className={cx(s.pre, "selectable")}>{prettyArgs(shown.arguments) || "{}"}</pre>
             </>
           )}
           {view.kind === "result" && (
@@ -1036,19 +1040,22 @@ function ShownInput({ text, command }: { text: string; command?: boolean }) {
 /**
  * AI-17: the tool, the tab's host, and the full input, with Run, Edit and Reject. An MCP call (AI-31)
  * shows its server, the tool's description and hints in place of the host, and offers Always allow.
- * Allow for this conversation (AI-19) is on every card.
+ * Allow for this conversation (AI-19) is on every card. A `call_mcp_tool` call (AI-45) shows, and edits,
+ * the tool it names and that tool's own arguments.
  */
 function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToolCall; host: HostInfo | null; mcp: McpToolInfo | null }) {
   const t = useT();
-  const kind = toolKind(call.name);
-  const args = useMemo(() => parseArgs(call.arguments) ?? {}, [call.arguments]);
+  const shown = useMemo(() => shownCall(call), [call]);
+  const proxied = proxyCall(call.name, call.arguments) !== null;
+  const kind = toolKind(shown.name);
+  const args = useMemo(() => parseArgs(shown.arguments) ?? {}, [shown.arguments]);
   const [mode, setMode] = useState<"view" | "edit" | "reject">("view");
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(kind, args, call.arguments));
+  const [draft, setDraft] = useState<Draft>(() => draftFrom(kind, args, shown.arguments));
   const [reason, setReason] = useState("");
   const [invalid, setInvalid] = useState(false);
   // AI-42: a side question about the call, which neither runs nor rejects it.
   const [question, setQuestion] = useState<string | null>(null);
-  const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, call.name);
+  const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, shown.name);
   const bypass = useAi((st) => st.slots[slotId]?.mode === "bypass");
   // AI-39, AI-40: an edit or write shows its diff, which follows the text changed in Edit.
   const fileChange = kind === "edit_file" || kind === "write_file";
@@ -1070,7 +1077,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
     const next = argsFrom(kind, args, draft);
     if ("error" in next) return setInvalid(true);
     const same = next.json === JSON.stringify(args);
-    decideCall(slotId, { kind: "run", edited: same ? null : next.json, allow, refusal });
+    const edited = proxied ? proxyArguments(call.arguments, next.json) : next.json;
+    decideCall(slotId, { kind: "run", edited: same ? null : edited, allow, refusal });
   };
   const reject = () => decideCall(slotId, { kind: "reject", reason: reason.trim() });
   const ask = () => {
@@ -1221,7 +1229,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
           {kind !== "run_command" && kind !== "send_input" && kind !== "fetch_url" && kind !== "read_file" && !fileChange && (
             <>
               {mcp && <div className={s.label}>{t("ai.approval.arguments")}</div>}
-              <ShownInput text={prettyArgs(call.arguments) || "{}"} />
+              <ShownInput text={prettyArgs(shown.arguments) || "{}"} />
             </>
           )}
         </div>
@@ -1341,6 +1349,8 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
 function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
   const t = useT();
   const { turn, outcome } = slot;
+  // AI-45: a message waits for the MCP servers its requests use before it is stored.
+  const mcpStarting = useMcp((st) => Object.values(st.status).some((x) => x.state === "starting" && !slot.mcpOff.includes(x.server_id)));
 
   if (slot.remoteRunning)
     return (
@@ -1354,7 +1364,8 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
     // A streaming response shows itself (its reasoning header says it is thinking), and so does a call.
     if (live && (live.text || live.reasoning || live.toolCalls.length > 0)) return null;
     if (turn.call) return null;
-    const key: MessageKey = turn.phase === "tools" ? "ai.status.working" : "ai.status.waiting";
+    const key: MessageKey =
+      turn.phase === "tools" ? "ai.status.working" : turn.phase === "starting" && mcpStarting ? "ai.status.mcpStarting" : "ai.status.waiting";
     return (
       <div className={s.status}>
         <Spinner size={13} />

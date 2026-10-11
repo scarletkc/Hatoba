@@ -137,6 +137,8 @@ export default defineMessages({
     "ai.note.terminalDetached": "终端不再可用",
     "ai.note.modelChange": "已切换到 {to}（之前是 {from}）",
     "ai.note.fileRevert": "已撤销对 {path} 的修改",
+    "ai.note.mcpTools": "列出了 {n} 个 MCP 工具",
+    "ai.note.mcpToolsNone": "没有可用的 MCP 工具",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "撤销修改",
@@ -190,6 +192,7 @@ export default defineMessages({
     "ai.tool.web_search": "搜索网页",
     "ai.tool.fetch_url": "读取网页",
     "ai.tool.read_skill": "读取技能",
+    "ai.tool.search_tools": "搜索 MCP 工具",
     "ai.tool.mcp": "{server} · {tool}",
     "ai.call.input": "输入",
     "ai.call.output": "输出",
@@ -262,6 +265,7 @@ export default defineMessages({
 
     // turn states
     "ai.status.waiting": "等待模型响应…",
+    "ai.status.mcpStarting": "正在启动 MCP 服务器…",
     "ai.status.working": "正在处理…",
     "ai.status.compacting": "正在压缩对话…",
     "ai.status.remote": "这个对话正在生成回复…",
@@ -497,6 +501,9 @@ export default defineMessages({
     "ai.note.terminalDetached": "Terminal no longer available",
     "ai.note.modelChange": "Switched to {to} (was {from})",
     "ai.note.fileRevert": "Reverted the change to {path}",
+    "ai.note.mcpTools": "Listed {n} MCP tools",
+    "ai.note.mcpTools_one": "Listed 1 MCP tool",
+    "ai.note.mcpToolsNone": "No MCP tools available",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "Revert",
@@ -549,6 +556,7 @@ export default defineMessages({
     "ai.tool.web_search": "Web search",
     "ai.tool.fetch_url": "Fetch page",
     "ai.tool.read_skill": "Read skill",
+    "ai.tool.search_tools": "Search MCP tools",
     "ai.tool.mcp": "{server} · {tool}",
     "ai.call.input": "Input",
     "ai.call.output": "Output",
@@ -619,6 +627,7 @@ export default defineMessages({
     "ai.limit.body_one": "The assistant paused after 1 tool call. Let it continue?",
 
     "ai.status.waiting": "Waiting for the model…",
+    "ai.status.mcpStarting": "Starting MCP servers…",
     "ai.status.working": "Working…",
     "ai.status.compacting": "Compacting the conversation…",
     "ai.status.remote": "A response is being generated…",
@@ -848,6 +857,8 @@ export default defineMessages({
     "ai.note.terminalDetached": "ターミナルを使えなくなりました",
     "ai.note.modelChange": "{to} に切り替えました（以前は {from}）",
     "ai.note.fileRevert": "{path} への変更を元に戻しました",
+    "ai.note.mcpTools": "MCP ツールを {n} 個一覧にしました",
+    "ai.note.mcpToolsNone": "使える MCP ツールはありません",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "元に戻す",
@@ -900,6 +911,7 @@ export default defineMessages({
     "ai.tool.web_search": "Web 検索",
     "ai.tool.fetch_url": "ページを取得",
     "ai.tool.read_skill": "スキルを読む",
+    "ai.tool.search_tools": "MCP ツールを検索",
     "ai.tool.mcp": "{server} · {tool}",
     "ai.call.input": "入力",
     "ai.call.output": "出力",
@@ -969,6 +981,7 @@ export default defineMessages({
     "ai.limit.body": "ツールを {n} 回呼び出したため、アシスタントは一時停止しました。続けますか？",
 
     "ai.status.waiting": "モデルの応答を待っています…",
+    "ai.status.mcpStarting": "MCP サーバーを起動しています…",
     "ai.status.working": "処理しています…",
     "ai.status.compacting": "会話を圧縮しています…",
     "ai.status.remote": "この会話の応答を生成しています…",

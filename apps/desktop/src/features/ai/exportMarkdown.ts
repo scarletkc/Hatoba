@@ -4,7 +4,7 @@ import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { parseMessage, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "./notes";
-import { exitStatusOf, prettyArgs, toolKind, toolLabel } from "./tools";
+import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "./tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
 type Tr = (key: MessageKey, params?: Params) => string;
@@ -54,7 +54,9 @@ function attachmentLabel(t: Tr, a: Attachment): string {
 
 /** A call with its input and result in fenced blocks. A rejected call's result is the user's reason. */
 function toolCall(t: Tr, call: AiToolCall, result: ToolEntry | undefined): string {
-  const parts = [`**${toolLabel(t, call.name)}** · ${callStatus(t, call, result)}`, `${t("ai.call.input")}:`, fenced(prettyArgs(call.arguments) || "{}", "json")];
+  // AI-45: a `call_mcp_tool` call as the MCP tool it names.
+  const shown = shownCall(call);
+  const parts = [`**${toolLabel(t, shown.name)}** · ${callStatus(t, call, result)}`, `${t("ai.call.input")}:`, fenced(prettyArgs(shown.arguments) || "{}", "json")];
   if (result?.status === "rejected") {
     const reason = result.content.trim();
     if (reason) parts.push(`${t("ai.approval.reason")}:`, fenced(reason));

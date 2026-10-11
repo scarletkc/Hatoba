@@ -371,6 +371,8 @@ export const commands = {
 	always_ask: boolean,
 	tool: McpToolView,
 } | null>("mcp_tool_info", { conversationId, name }),
+	/**  The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card. */
+	mcpProxyInfo: (conversationId: string, callArguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, callArguments }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */
@@ -732,7 +734,13 @@ export type AiTurnEndReason = "completed" | "length" | "refused" |
 "empty" | "stopped" | "error";
 
 /**  Streamed on the channel of `ai_send` / `ai_retry` for the whole turn (§13.1). */
-export type AiTurnEvent = { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
+export type AiTurnEvent = 
+/**
+ *  The turn of a new conversation is registered under this id, which the conversation is
+ *  stored under with its message. Sent before the message waits for the MCP servers (AI-45),
+ *  so a stop can name the turn before `ai_send` returns.
+ */
+{ kind: "opened"; conversation_id: string } | { kind: "request_started" } | { kind: "text"; delta: string } | { kind: "reasoning"; delta: string } | { kind: "tool_call"; id: string; name: string; arguments: string } | { kind: "usage"; input_tokens: number; output_tokens: number; estimated: boolean } | 
 /**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
 { kind: "entry"; entry: AiEntryView } | 
 /**  One response finished. With `tool_calls`, Rust waits for every call's result. */
@@ -1192,6 +1200,17 @@ export type McpImportServer = {
 export type McpImportSkipped = {
 	name: string,
 	reason: string,
+};
+
+/**  What the approval card of a `call_mcp_tool` call needs (AI-45). */
+export type McpProxyInfo = {
+	/**
+	 *  The tool the call names, as `mcp_tool_info` gives a direct call's; null when the
+	 *  conversation has no tool of that name or its server was deleted.
+	 */
+	tool: McpToolInfo | null,
+	/**  False when the call cannot run: it then gets its error result without asking. */
+	runs: boolean,
 };
 
 export type McpSecretInput = {

@@ -16,7 +16,10 @@ import {
   parseArgs,
   parseReadTerminal,
   parseSendInput,
+  proxyArguments,
+  proxyCall,
   runsInFrontend,
+  shownCall,
   shownText,
   splitMcpName,
   toolKind,
@@ -255,5 +258,38 @@ describe("the change of a file call from its arguments (AI-41)", () => {
     expect(callFileChange("write_file", JSON.stringify({ path: "b", content: "x\n" }))).toMatchObject({ before: "", after: "x\n" });
     expect(callFileChange("read_file", JSON.stringify({ path: "b" }))).toBeNull();
     expect(callFileChange("edit_file", "{")).toBeNull();
+  });
+});
+
+describe("calls through call_mcp_tool (AI-45)", () => {
+  it("are MCP calls, and search_tools runs without asking", () => {
+    expect(toolKind("call_mcp_tool")).toBe("mcp");
+    expect(toolKind("search_tools")).toBe("search_tools");
+    expect(needsApproval(toolKind("call_mcp_tool"), "manual")).toBe(true);
+    expect(needsApproval(toolKind("search_tools"), "manual")).toBe(false);
+    expect(runsInFrontend(toolKind("search_tools"))).toBe(false);
+    expect(callSummary("search_tools", '{"query":"issues"}')).toBe("issues");
+  });
+
+  it("name the tool and its arguments, an object or a string that holds one, as Rust reads them", () => {
+    expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x","arguments":{"a":1}}')).toEqual({ tool: "mcp__gh__x", arguments: '{"a":1}' });
+    expect(proxyCall("call_mcp_tool", '{"tool":" mcp__gh__x ","arguments":"{\\"a\\": 1}"}')).toEqual({ tool: "mcp__gh__x", arguments: '{"a":1}' });
+    expect(proxyCall("call_mcp_tool", '{"tool":"mcp__gh__x"}')).toEqual({ tool: "mcp__gh__x", arguments: "{}" });
+    expect(proxyCall("call_mcp_tool", '{"arguments":{}}')).toBeNull();
+    expect(proxyCall("mcp__gh__x", '{"tool":"mcp__gh__y"}')).toBeNull();
+    // Only an MCP tool: Rust does not run a built-in tool through it.
+    expect(proxyCall("call_mcp_tool", '{"tool":"run_command","arguments":{"command":"rm -rf /"}}')).toBeNull();
+  });
+
+  it("show as the tool they name, and an edit changes only that tool's arguments", () => {
+    const call = { id: "c1", name: "call_mcp_tool", arguments: '{"tool":"mcp__gh__create_issue","arguments":{"title":"x"}}' };
+    const shown = shownCall(call);
+    expect(shown).toEqual({ id: "c1", name: "mcp__gh__create_issue", arguments: '{"title":"x"}' });
+    expect(toolLabel((key, params) => `${key}:${params?.server}/${params?.tool}`, shown.name)).toBe("ai.tool.mcp:gh/create_issue");
+    expect(shownCall({ id: "c2", name: "run_command", arguments: "{}" }).name).toBe("run_command");
+    // A call that names a built-in tool shows as the call it is, not as that tool.
+    const builtin = { id: "c3", name: "call_mcp_tool", arguments: '{"tool":"write_file","arguments":{"path":"/etc/hosts"}}' };
+    expect(shownCall(builtin)).toEqual(builtin);
+    expect(JSON.parse(proxyArguments(call.arguments, '{"title":"y"}'))).toEqual({ tool: "mcp__gh__create_issue", arguments: { title: "y" } });
   });
 });
