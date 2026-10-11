@@ -625,6 +625,45 @@ async fn join_uploads_the_local_settings_when_the_cloud_has_none() {
 }
 
 #[tokio::test]
+async fn cloud_settings_uploaded_before_the_joined_device_gets_to_still_win() {
+    let (server, clock, a, _b) = world();
+    a.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.font_size = 42;
+        }
+    });
+    server.fail_next("login");
+    assert!(
+        enable_sync(&a.vault, &a.backend, PW, Some(SETUP_TOKEN), a.info())
+            .await
+            .is_err()
+    );
+    server.set_offline(false);
+
+    // The joined device finds no settings in the cloud, but its upload fails...
+    let c = own_vault_device(&server, &clock);
+    join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    let offline = Arc::clone(&server);
+    c.backend.on_next_pull(move || offline.set_offline(true));
+    assert!(matches!(c.try_sync().await, Err(Error::Offline)));
+    server.set_offline(false);
+    // ...and the first device uploads its settings before the joined device, edited later, retries.
+    enable(&a).await;
+    c.clock.advance(60_000);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.font_size = 9;
+        }
+    });
+    c.sync().await;
+    assert_eq!(c.v().settings().terminal.font_size, 42);
+    a.sync().await;
+    assert_eq!(a.v().settings().terminal.font_size, 42);
+}
+
+#[tokio::test]
 async fn a_new_remote_syncs_settings_as_usual_after_a_pending_join() {
     let (server, clock, a, _b) = world();
     enable(&a).await;

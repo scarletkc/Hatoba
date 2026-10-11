@@ -267,20 +267,22 @@ fn apply_pull_page(
             .unwrap_or(0);
         let cursor = current.max(next_since).max(batch.max_seq);
         tx.set_meta(meta::SYNC_CURSOR, &cursor.to_string())?;
-        if last && adoption_pending(tx)? {
+        if last
+            && adoption_pending(tx)?
+            && let Some(row) = tx.item_row(SETTINGS_ID)?.filter(|row| !row.deleted)
+        {
             // The whole cloud was pulled without a settings item: it has none, so the settings
-            // kept from before the join go up instead.
-            if let Some(row) = tx.item_row(SETTINGS_ID)?.filter(|row| !row.deleted) {
-                tx.upsert_item_row(&ItemRow { dirty: true, ..row })?;
-            }
-            tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
+            // kept from before the join go up instead. The adoption stays pending until the
+            // server takes them, so settings another device uploads first still win.
+            tx.upsert_item_row(&ItemRow { dirty: true, ..row })?;
         }
         Ok(batch)
     })?;
     finish_batch(ctx, batch, report)
 }
 
-/// Whether this device joined the current backend's vault and has yet to see its settings.
+/// Whether this device joined the current backend's vault and the two have yet to agree on
+/// settings.
 fn adoption_pending(tx: &StoreTx<'_>) -> Result<bool> {
     let Some(joined) = tx.get_meta(meta::ADOPT_REMOTE_SETTINGS)? else {
         return Ok(false);
@@ -591,6 +593,10 @@ fn apply_push_results(
                         *revision,
                         sent.envelope.as_deref().filter(|_| !sent.deleted),
                     )?;
+                    if id == SETTINGS_ID && adoption_pending(tx)? {
+                        // The joined cloud had no settings and now holds this device's.
+                        tx.delete_meta(meta::ADOPT_REMOTE_SETTINGS)?;
+                    }
                     pushed_ok += 1;
                 }
                 PushResult::Conflict { server, .. } => {
