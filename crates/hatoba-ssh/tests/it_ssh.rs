@@ -630,6 +630,115 @@ async fn exec_status_stdout_stderr_and_stdin() {
     );
 }
 
+/// A call dropped midway, as a timeout or a stop drops it, closes its channel. The command then
+/// gets the end of its stdin rather than waiting for the rest for good, as `cat > path` in a file
+/// tool's write cut off by its timeout would (AI-39, AI-40).
+#[tokio::test]
+async fn exec_dropped_midway_closes_its_channel() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let done = server.area("exec_dropped").join("done");
+    // Nothing reads stdin for a while, so 16 MiB of it stops at the channel's window.
+    let command = format!("sleep 2; cat > /dev/null; touch '{}'", done.display());
+    let call = session.exec_output(&command, Some(vec![b'x'; 16 << 20]));
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), call)
+            .await
+            .is_err()
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !done.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "the command still waits for its stdin"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// A call dropped before the server confirmed its channel closes the channel once confirmed: more
+/// such calls than the server's `MaxSessions` (100) leave room for the next one.
+#[tokio::test]
+async fn exec_dropped_while_its_channel_opens_closes_it() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    for _ in 0..120 {
+        // Polled once, so the open is asked for, then dropped.
+        tokio::select! {
+            biased;
+            _ = session.exec_output("true", None) => {}
+            () = std::future::ready(()) => {}
+        }
+        // The test runs on one thread: without a pause the connection's task would not send the
+        // request before the next call, and the next calls would find its queue full and never
+        // ask, so fewer channels than `MaxSessions` could leak.
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        match session.exec_output("echo ok", None).await {
+            Ok(out) => {
+                assert_eq!(out.stdout, b"ok\n");
+                break;
+            }
+            Err(e) => assert!(Instant::now() < deadline, "no channel opens: {e}"),
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
+/// The file tools' read and write (AI-38…40) through sshd and the user's login shell.
+#[tokio::test]
+async fn remote_files_are_read_and_written_in_place() {
+    use std::os::unix::fs::MetadataExt;
+
+    use hatoba_ssh::remote_file::{self, Expect, RemoteFileError};
+
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let area = server.area("remote_file");
+    let path = area.join("it's $HOME.conf");
+    std::fs::write(&path, b"listen 80;\r\n").unwrap();
+    let inode = std::fs::metadata(&path).unwrap().ino();
+    let name = path.to_str().unwrap();
+
+    let file = remote_file::read(&session, name, 1024).await.unwrap();
+    assert_eq!(file.path, name);
+    let read = file.bytes;
+    assert_eq!(read, b"listen 80;\r\n");
+    assert!(matches!(
+        remote_file::read(&session, name, 4).await,
+        Err(RemoteFileError::TooLarge(12))
+    ));
+
+    remote_file::write(&session, name, b"listen 443;\r\n", Expect::Content(&read))
+        .await
+        .unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"listen 443;\r\n");
+    assert_eq!(std::fs::metadata(&path).unwrap().ino(), inode);
+    // What the first read saw is gone, so a second write against it is refused.
+    assert!(matches!(
+        remote_file::write(&session, name, b"x", Expect::Content(&read)).await,
+        Err(RemoteFileError::Changed)
+    ));
+
+    let new = area.join("new.txt");
+    let new_name = new.to_str().unwrap();
+    assert!(matches!(
+        remote_file::read(&session, new_name, 1024).await,
+        Err(RemoteFileError::NotFound)
+    ));
+    remote_file::write(
+        &session,
+        new_name,
+        &pseudo_random(256 * 1024, 5),
+        Expect::Missing,
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read(&new).unwrap(), pseudo_random(256 * 1024, 5));
+}
+
 // --------------------------------------------------------------------------- probe & errors on a live server
 
 #[tokio::test]

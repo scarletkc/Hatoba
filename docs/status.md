@@ -119,6 +119,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-10 | Terminal selection and connection diagnostics as attachments, **Ask AI** | ✅ | |
 | AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |
 | AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
+| AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-16…18 | Manual approval and bypass modes, approval card, tool call limit | ✅ | |
 | AI-19 | Allow a tool for the rest of a conversation | ✅ | |
 | AI-20, 21 | Context meter, compaction | ✅ | |

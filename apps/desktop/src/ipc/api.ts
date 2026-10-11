@@ -2,6 +2,7 @@ import type {
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
+  AiFilePreview,
   AiModel,
   AiProviderInput,
   AiProviderView,
@@ -270,8 +271,14 @@ export interface HatobaApi {
   ai_retry(conversation_id: string, context: AiTurnContext, onEvent: (event: AiTurnEvent) => void): Promise<void>;
   /** Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
   ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
-  /** Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`, ...) and stores its result. */
+  /** Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...) and stores its result. */
   ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiEntryView>;
+  /**
+   * AI-39, AI-40: the change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
+   * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file
+   * once per call and the call writes only over what it read.
+   */
+  ai_file_preview(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiFilePreview>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
   /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */

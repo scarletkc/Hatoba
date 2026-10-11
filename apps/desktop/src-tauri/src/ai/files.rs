@@ -1,0 +1,948 @@
+//! The file tools on the tab's host (AI-38…40), the preview the approval card shows for
+//! `edit_file` and `write_file`, and the record of what the model has seen of each file (spec
+//! §13.4, "File tools"). The text work is in `hatoba_ai::files`, the exec scripts in
+//! `hatoba_ssh::remote_file`.
+
+use std::collections::HashMap;
+use std::future::Future;
+use std::sync::Mutex;
+use std::time::Duration;
+
+use hatoba_ai::entry::ToolStatus;
+use hatoba_ai::files::{self, MAX_FILE_BYTES, TextFile};
+use hatoba_ai::tools::{self, EditFileArgs, ReadFileArgs, WriteFileArgs};
+use hatoba_ssh::SshSession;
+use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
+use tokio_util::sync::CancellationToken;
+
+use super::{guard, parse};
+use crate::dto::AiFilePreview;
+
+/// How long a read or a write may take.
+const TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A file tool's result while the tab has no live session (AI-08).
+const DISCONNECTED: &str = "The terminal tab is disconnected, so the tool did not run. Ask the \
+     user to reconnect the tab.";
+
+/// The cancelled result of an `edit_file` or `write_file` call that ran when the turn stopped:
+/// its write, if it had begun, was not cut off.
+pub(super) const WRITE_STOPPED: &str = "If Hatoba had begun writing the file when the user \
+     stopped, the write ran to its end, so the file may have changed. Read it with read_file \
+     before you change it.";
+
+/// A call of a file tool, with its arguments.
+pub(super) enum FileJob {
+    Read(ReadFileArgs),
+    Edit(EditFileArgs),
+    Write(WriteFileArgs),
+}
+
+impl FileJob {
+    /// `Some` for a file tool's name: its arguments, or the message for arguments that do not
+    /// parse.
+    pub(super) fn parse(name: &str, arguments: &str) -> Option<Result<Self, String>> {
+        Some(match name {
+            tools::READ_FILE => parse(arguments).map(Self::Read),
+            tools::EDIT_FILE => parse(arguments).map(Self::Edit),
+            tools::WRITE_FILE => parse(arguments).map(Self::Write),
+            _ => return None,
+        })
+    }
+
+    fn path(&self) -> &str {
+        match self {
+            Self::Read(a) => &a.path,
+            Self::Edit(a) => &a.path,
+            Self::Write(a) => &a.path,
+        }
+    }
+}
+
+/// The server a session is connected to, as the record of what the model has seen names it.
+fn server(session: &SshSession) -> String {
+    format!(
+        "{}@{}:{}",
+        session.username(),
+        session.host(),
+        session.port()
+    )
+}
+
+/// What the model has seen of each file, by conversation (§13.4, "What the model has seen"). In
+/// memory only, until the app quits; compaction, edit and resend, and deleting the conversation
+/// free a conversation's.
+#[derive(Default)]
+pub(super) struct Seen(Mutex<HashMap<String, SeenFiles>>);
+
+/// One conversation's record, by server and resolved path.
+type SeenFiles = HashMap<(String, String), Sight>;
+
+/// A file as the model last saw it.
+struct Sight {
+    /// Its POSIX `cksum` checksum and size.
+    sum: (u32, u64),
+    /// The response whose call read or wrote it: the sight counts while that response is in the
+    /// conversation's context.
+    response: String,
+}
+
+/// Where a call of a file tool is in its conversation: the response that made it and the ids of
+/// the entries in the conversation's context, in order.
+#[derive(Default)]
+pub(super) struct Place {
+    pub response: String,
+    pub context: Vec<String>,
+}
+
+/// What a call's result shows the model of a file. `tool_run` records it once it has stored the
+/// result, so a call that a stop or the lock ends records nothing.
+#[derive(Debug)]
+pub(super) struct Shown {
+    server: String,
+    path: String,
+    sum: (u32, u64),
+}
+
+impl Shown {
+    fn new(server: &str, path: &str, bytes: &[u8]) -> Self {
+        Self {
+            server: server.to_owned(),
+            path: path.to_owned(),
+            sum: remote_file::cksum(bytes),
+        }
+    }
+}
+
+impl Seen {
+    /// The model has seen `bytes` as the file at `path` on `server`, in a result of a call that
+    /// `response` made.
+    #[cfg(test)]
+    pub(super) fn record(
+        &self,
+        conversation_id: &str,
+        response: &str,
+        server: &str,
+        path: &str,
+        bytes: &[u8],
+    ) {
+        self.insert(conversation_id, response, Shown::new(server, path, bytes));
+    }
+
+    /// The model has seen the file as `shown`, in a stored result of a call that `response` made.
+    pub(super) fn insert(&self, conversation_id: &str, response: &str, shown: Shown) {
+        guard(&self.0)
+            .entry(conversation_id.to_owned())
+            .or_default()
+            .insert(
+                (shown.server, shown.path),
+                Sight {
+                    sum: shown.sum,
+                    response: response.to_owned(),
+                },
+            );
+    }
+
+    /// Forgets what the conversation has seen: its summary or the entries an edit deleted no
+    /// longer hold the files it read.
+    pub(super) fn forget(&self, conversation_id: &str) {
+        guard(&self.0).remove(conversation_id);
+    }
+
+    /// The conversation has a record of some file.
+    #[cfg(test)]
+    pub(super) fn knows(&self, conversation_id: &str) -> bool {
+        guard(&self.0).contains_key(conversation_id)
+    }
+}
+
+/// Where a file tool checks what the model has seen, and notes what its result shows: the
+/// conversation's record, where the call is in the conversation, and the note.
+#[derive(Clone, Copy)]
+pub(super) struct SeenBy<'a> {
+    pub seen: &'a Seen,
+    pub conversation_id: &'a str,
+    pub place: &'a Place,
+    /// What the call's result shows of a file, for `tool_run` to record once it stores it.
+    pub shown: &'a Mutex<Option<Shown>>,
+}
+
+impl SeenBy<'_> {
+    /// The call's result shows the model `bytes` as the file at `path` on `server`.
+    fn shows(&self, server: &str, path: &str, bytes: &[u8]) {
+        *guard(self.shown) = Some(Shown::new(server, path, bytes));
+    }
+
+    /// AI-39, AI-40: `tool` may change `file` on `server` only when the model saw it as it is, in
+    /// a result that is still in the conversation's context. `given` is the path as the model
+    /// wrote it.
+    fn check(
+        &self,
+        server: &str,
+        file: &RemoteFile,
+        tool: &str,
+        given: &str,
+    ) -> Result<(), String> {
+        let seen = guard(&self.seen.0)
+            .get(self.conversation_id)
+            .and_then(|files| files.get(&(server.to_owned(), file.path.clone())))
+            .filter(|sight| {
+                self.place
+                    .context
+                    .binary_search_by(|id| id.as_str().cmp(&sight.response))
+                    .is_ok()
+            })
+            .map(|sight| sight.sum);
+        match seen {
+            Some(sum) if sum == remote_file::cksum(&file.bytes) => Ok(()),
+            Some(_) => Err(format!(
+                "{given} changed since you last read it, by the user or another program, so \
+                 {tool} did not change it. Call read_file on it again, then call {tool} again \
+                 with what it holds now."
+            )),
+            None => Err(format!(
+                "{given} has not been read in this conversation, so {tool} did not change it. \
+                 Call read_file on it, then call {tool} again."
+            )),
+        }
+    }
+}
+
+/// The `edit_file` and `write_file` calls running now, by SSH session id. A write that has begun is
+/// not cut off, so a lock that disconnects sessions closes a session once its calls have ended, at
+/// most the 30 seconds of a write (§13.4, "File tools").
+#[derive(Default)]
+pub(super) struct Writes(tokio::sync::watch::Sender<HashMap<String, usize>>);
+
+impl Writes {
+    /// A call that may write on the session runs until the returned guard drops.
+    pub(super) fn begin(&self, session_id: &str) -> Writing<'_> {
+        self.0
+            .send_modify(|runs| *runs.entry(session_id.to_owned()).or_default() += 1);
+        Writing(self, session_id.to_owned())
+    }
+
+    /// Returns once no call that may write runs on the session.
+    pub(super) async fn ended(&self, session_id: &str) {
+        // The sender lives as long as `self`, so the wait cannot fail.
+        let _ = self
+            .0
+            .subscribe()
+            .wait_for(|runs| !runs.contains_key(session_id))
+            .await;
+    }
+}
+
+pub(super) struct Writing<'a>(&'a Writes, String);
+
+impl Drop for Writing<'_> {
+    fn drop(&mut self) {
+        self.0.0.send_modify(|runs| {
+            if let Some(n) = runs.get_mut(&self.1) {
+                *n -= 1;
+                if *n == 0 {
+                    runs.remove(&self.1);
+                }
+            }
+        });
+    }
+}
+
+/// What the approval card read for a call: the file as read, or `None` when it did not exist,
+/// and the server it was read from. The write checks the file against it, so the user approved
+/// the change to this content.
+#[derive(Clone, Debug)]
+pub(super) struct Base {
+    /// The path as the call gives it.
+    pub path: String,
+    pub server: String,
+    pub file: Option<RemoteFile>,
+}
+
+/// Why a file tool or a preview ended without a result of its own.
+pub(super) enum Stop {
+    /// The turn stopped or the vault locked before a write began.
+    Cancelled,
+    /// The message for the model, or for the approval card.
+    Failed(String),
+    /// A write failed after it may have begun: the message says the file may be cut short, and
+    /// stands when the connection is gone too.
+    Unfinished(String),
+}
+
+impl From<String> for Stop {
+    fn from(message: String) -> Self {
+        Self::Failed(message)
+    }
+}
+
+/// `work`, unless `cancel` fires first.
+async fn unless_cancelled<T>(
+    cancel: &CancellationToken,
+    work: impl Future<Output = Result<T, String>>,
+) -> Result<T, Stop> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(Stop::Cancelled),
+        result = work => result.map_err(Stop::Failed),
+    }
+}
+
+/// Runs a file tool. `base` is what the approval card read for the call, if it showed one. A stop
+/// ends the call while it reads, but never cuts a write off once it has begun.
+pub(super) async fn run(
+    session: Option<SshSession>,
+    job: FileJob,
+    base: Option<Base>,
+    seen: SeenBy<'_>,
+    cancel: &CancellationToken,
+) -> (ToolStatus, String) {
+    let Some(session) = session else {
+        return (ToolStatus::Error, DISCONNECTED.to_owned());
+    };
+    let result = match job {
+        FileJob::Read(args) => unless_cancelled(cancel, read(&session, &args, seen)).await,
+        FileJob::Edit(args) => edit(&session, &args, base, seen, cancel).await,
+        FileJob::Write(args) => write(&session, &args, base, seen, cancel).await,
+    };
+    match result {
+        Ok(text) => (ToolStatus::Ok, text),
+        Err(Stop::Cancelled) => (ToolStatus::Cancelled, String::new()),
+        Err(Stop::Failed(_)) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
+        Err(Stop::Failed(message) | Stop::Unfinished(message)) => (ToolStatus::Error, message),
+    }
+}
+
+/// An `edit_file` or `write_file` call for its approval card, with its path, or the preview that
+/// says why there is no diff to show.
+pub(super) fn preview_job(name: &str, arguments: &str) -> Result<(FileJob, String), AiFilePreview> {
+    match FileJob::parse(name, arguments) {
+        Some(Ok(job @ (FileJob::Edit(_) | FileJob::Write(_)))) => {
+            let path = job.path().to_owned();
+            Ok((job, path))
+        }
+        Some(Err(message)) => Err(failed_preview("", message)),
+        _ => Err(failed_preview("", format!("{name} shows no diff."))),
+    }
+}
+
+/// Reads the file the approval card shows a change to.
+pub(super) async fn read_base(
+    session: Option<SshSession>,
+    path: &str,
+    cancel: &CancellationToken,
+) -> Result<Base, Stop> {
+    let Some(session) = session else {
+        return Err(Stop::Failed(DISCONNECTED.to_owned()));
+    };
+    match unless_cancelled(cancel, read_bytes(&session, path)).await {
+        Ok(file) => Ok(Base {
+            path: path.to_owned(),
+            server: server(&session),
+            file,
+        }),
+        Err(Stop::Failed(_)) if session.is_closed() => Err(Stop::Failed(DISCONNECTED.to_owned())),
+        Err(stop) => Err(stop),
+    }
+}
+
+/// The change `job` makes to `base`, as the approval card shows it, or the refusal running it
+/// would give, such as for a file the model has not read.
+pub(super) fn preview_of(job: &FileJob, base: &Base, seen: SeenBy<'_>) -> AiFilePreview {
+    let path = &base.path;
+    let tool = match job {
+        FileJob::Edit(_) => tools::EDIT_FILE,
+        _ => tools::WRITE_FILE,
+    };
+    if let Some(file) = &base.file
+        && let Err(message) = seen.check(&base.server, file, tool, path)
+    {
+        return failed_preview(path, message);
+    }
+    let before = match base
+        .file
+        .as_ref()
+        .map(|f| decode(path, &f.bytes))
+        .transpose()
+    {
+        Ok(before) => before,
+        Err(message) => return failed_preview(path, message),
+    };
+    let after = match job {
+        FileJob::Edit(args) => before
+            .as_ref()
+            .ok_or_else(|| missing_for_edit(path))
+            .and_then(|file| files::apply_edit(path, file, args).map(|e| e.file)),
+        FileJob::Write(args) => new_content(path, before.as_ref(), &args.content),
+        FileJob::Read(_) => Err(format!("{} shows no diff.", tools::READ_FILE)),
+    };
+    match after {
+        Ok(after) => AiFilePreview {
+            path: path.clone(),
+            before: before.as_ref().map(TextFile::display_text),
+            after: Some(after.display_text()),
+            error: None,
+            crlf: before.as_ref().is_some_and(|f| f.crlf),
+        },
+        Err(message) => failed_preview(path, message),
+    }
+}
+
+pub(super) fn failed_preview(path: &str, message: String) -> AiFilePreview {
+    AiFilePreview {
+        path: path.to_owned(),
+        before: None,
+        after: None,
+        error: Some(message),
+        crlf: false,
+    }
+}
+
+/// `read_file`: a page of the file. The model has now seen the whole file as it was read.
+async fn read(
+    session: &SshSession,
+    args: &ReadFileArgs,
+    seen: SeenBy<'_>,
+) -> Result<String, String> {
+    let file = read_bytes(session, &args.path)
+        .await?
+        .ok_or_else(|| format!("{} does not exist.", args.path))?;
+    let page = files::read_page(
+        &args.path,
+        &decode(&args.path, &file.bytes)?,
+        args.offset,
+        args.limit,
+    )?;
+    seen.shows(&server(session), &file.path, &file.bytes);
+    Ok(page)
+}
+
+async fn edit(
+    session: &SshSession,
+    args: &EditFileArgs,
+    base: Option<Base>,
+    seen: SeenBy<'_>,
+    cancel: &CancellationToken,
+) -> Result<String, Stop> {
+    let server = server(session);
+    let (file, from_card) = unless_cancelled(
+        cancel,
+        current(session, &server, &args.path, base, tools::EDIT_FILE),
+    )
+    .await?;
+    let file = file.ok_or_else(|| missing_for_edit(&args.path))?;
+    seen.check(&server, &file, tools::EDIT_FILE, &args.path)?;
+    let edit = files::apply_edit(&args.path, &decode(&args.path, &file.bytes)?, args)?;
+    let new = edit.file.encode();
+    let expect = Expect::Content(&file.bytes);
+    let path = write_bytes(session, &args.path, &new, expect, from_card, cancel).await?;
+    seen.shows(&server, &path, &new);
+    Ok(files::edit_result(&args.path, &edit))
+}
+
+async fn write(
+    session: &SshSession,
+    args: &WriteFileArgs,
+    base: Option<Base>,
+    seen: SeenBy<'_>,
+    cancel: &CancellationToken,
+) -> Result<String, Stop> {
+    let server = server(session);
+    let (file, from_card) = unless_cancelled(
+        cancel,
+        current(session, &server, &args.path, base, tools::WRITE_FILE),
+    )
+    .await?;
+    // Replacing a file needs a record of it; creating one does not.
+    if let Some(file) = &file {
+        seen.check(&server, file, tools::WRITE_FILE, &args.path)?;
+    }
+    let before = file
+        .as_ref()
+        .map(|f| decode(&args.path, &f.bytes))
+        .transpose()?;
+    let new = new_content(&args.path, before.as_ref(), &args.content)?;
+    let bytes = new.encode();
+    let expect = file
+        .as_ref()
+        .map_or(Expect::Missing, |f| Expect::Content(&f.bytes));
+    let path = write_bytes(session, &args.path, &bytes, expect, from_card, cancel).await?;
+    seen.shows(&server, &path, &bytes);
+    Ok(files::write_result(&args.path, &new, file.is_none()))
+}
+
+/// The file `write_file` writes: `content` in the style of the file it replaces.
+fn new_content(path: &str, before: Option<&TextFile>, content: &str) -> Result<TextFile, String> {
+    let file = match before {
+        Some(before) => before.with_text(content),
+        None => TextFile {
+            text: content.to_owned(),
+            bom: false,
+            crlf: false,
+        },
+    };
+    files::check_result(path, &file)?;
+    Ok(file)
+}
+
+/// The file to change: what the approval card read, or without a card, the file as it is now.
+/// The flag says it came from the card.
+async fn current(
+    session: &SshSession,
+    server: &str,
+    path: &str,
+    base: Option<Base>,
+    tool: &str,
+) -> Result<(Option<RemoteFile>, bool), String> {
+    match card_read(base, server, path, tool)? {
+        Some(file) => Ok((file, true)),
+        None => Ok((read_bytes(session, path).await?, false)),
+    }
+}
+
+/// What the approval card read for the call (the file, or `None` when it did not exist), or
+/// `None` when no card read one. A card that read another path, or the file on another server
+/// than the tab is connected to now, showed the user a diff of something else, so the call
+/// writes nothing.
+fn card_read(
+    base: Option<Base>,
+    server: &str,
+    path: &str,
+    tool: &str,
+) -> Result<Option<Option<RemoteFile>>, String> {
+    match base {
+        None => Ok(None),
+        Some(base) if base.path == path && base.server == server => Ok(Some(base.file)),
+        Some(base) => Err(format!(
+            "{path} was not changed: the approval card showed the change to {} on {}, and the \
+             tab is now connected to {server}. Call {tool} again so that the user reviews the \
+             change on this server.",
+            base.path, base.server
+        )),
+    }
+}
+
+/// The file, `None` when it does not exist, or the message for the model.
+async fn read_bytes(session: &SshSession, path: &str) -> Result<Option<RemoteFile>, String> {
+    match tokio::time::timeout(TIMEOUT, remote_file::read(session, path, MAX_FILE_BYTES)).await {
+        Err(_) => Err(timed_out(path, Op::Read)),
+        Ok(Ok(file)) => Ok(Some(file)),
+        Ok(Err(RemoteFileError::NotFound)) => Ok(None),
+        Ok(Err(e)) => Err(describe(path, Op::Read, e, false)),
+    }
+}
+
+/// Writes `bytes` if the file is as `expect` says, and returns the path as resolved. `from_card`:
+/// `expect` is what the approval card read. A stop before the write prevents it; once it has
+/// begun it runs to the end (or the timeout), because closing the channel midway leaves the file
+/// cut short.
+async fn write_bytes(
+    session: &SshSession,
+    path: &str,
+    bytes: &[u8],
+    expect: Expect<'_>,
+    from_card: bool,
+    cancel: &CancellationToken,
+) -> Result<String, Stop> {
+    if cancel.is_cancelled() {
+        return Err(Stop::Cancelled);
+    }
+    match tokio::time::timeout(TIMEOUT, remote_file::write(session, path, bytes, expect)).await {
+        Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
+        Ok(Ok(resolved)) => Ok(resolved),
+        // The command may have begun writing when it failed or the connection went.
+        Ok(Err(e @ (RemoteFileError::Failed { .. } | RemoteFileError::Ssh(_)))) => {
+            Err(Stop::Unfinished(unfinished(path, &e, session.is_closed())))
+        }
+        Ok(Err(e)) => Err(Stop::Failed(describe(path, Op::Write, e, from_card))),
+    }
+}
+
+/// The message for a write that failed after it may have begun.
+fn unfinished(path: &str, error: &RemoteFileError, closed: bool) -> String {
+    let reconnect = if closed {
+        " once the user has reconnected the tab"
+    } else {
+        ""
+    };
+    format!(
+        "Writing {path} failed: {error}. The file may be unchanged, cut short or empty, so read \
+         it with read_file{reconnect} before you change it."
+    )
+}
+
+fn decode(path: &str, bytes: &[u8]) -> Result<TextFile, String> {
+    TextFile::decode(bytes).map_err(|why| {
+        format!("{path} cannot be read as text: {why}. The file tools read UTF-8 text files only.")
+    })
+}
+
+fn missing_for_edit(path: &str) -> String {
+    format!("{path} does not exist. Use write_file to create it.")
+}
+
+fn timed_out(path: &str, op: Op) -> String {
+    match op {
+        Op::Read => format!("Reading {path} did not finish within 30 seconds."),
+        Op::Write => format!(
+            "Writing {path} did not finish within 30 seconds. Hatoba closed its channel; the file \
+             may be partly written, so read it again before you change it."
+        ),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Op {
+    Read,
+    Write,
+}
+
+/// The message for the model when a read or write did not happen.
+fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> String {
+    let verb = if op == Op::Read { "read" } else { "write" };
+    match error {
+        RemoteFileError::InvalidPath => {
+            "The path is empty or has a line break, so nothing was read or written.".to_owned()
+        }
+        RemoteFileError::NotFound => format!("{path} does not exist."),
+        RemoteFileError::NoDirectory => format!(
+            "The directory of {path} does not exist, so the file was not created. Create the \
+             directory first, for example with mkdir -p in run_command."
+        ),
+        RemoteFileError::IsDirectory => format!("{path} is a directory, not a file."),
+        RemoteFileError::NotRegular => format!(
+            "{path} is not a regular file (it is a device, a pipe or a socket), so the file tools \
+             do not {verb} it."
+        ),
+        RemoteFileError::DanglingLink => format!(
+            "{path} is a symbolic link to a file that does not exist, so the file tools do not \
+             {verb} it: writing would create the link's target, which may be anywhere. Use the \
+             path the link should point to, or ask the user."
+        ),
+        RemoteFileError::PermissionDenied => format!(
+            "Permission denied: the user this tab is logged in as cannot {verb} {path}. The file \
+             tools never use sudo. To go on, use send_input to run a command with sudo in the \
+             terminal's shell, where the user can enter a password, or ask the user."
+        ),
+        RemoteFileError::TooLarge(size) => format!(
+            "{path} is {size} bytes, and the file tools read files up to 1 MB. Use run_command \
+             with grep, head, tail or sed -n to read parts of it."
+        ),
+        RemoteFileError::Changed if from_card => format!(
+            "{path} changed on the host after Hatoba read it for the approval card, so nothing \
+             was written. Read it again with read_file before you change it."
+        ),
+        RemoteFileError::Changed => format!(
+            "{path} changed on the host while Hatoba was changing it, so nothing was written. \
+             Read it again with read_file before you change it."
+        ),
+        RemoteFileError::Failed { status, stderr } => {
+            let mut message = format!("Could not {verb} {path}: ");
+            match status {
+                Some(code) => message.push_str(&format!("the command exited with status {code}")),
+                None => message.push_str("the command ended without an exit status"),
+            }
+            if !stderr.is_empty() {
+                message.push_str(&format!(" ({stderr})"));
+            }
+            message.push('.');
+            message
+        }
+        RemoteFileError::Ssh(e) => format!("Could not {verb} {path}: {}.", e.message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failures_tell_the_model_what_to_do() {
+        let denied = describe(
+            "/etc/shadow",
+            Op::Read,
+            RemoteFileError::PermissionDenied,
+            false,
+        );
+        assert!(denied.contains("cannot read /etc/shadow"));
+        assert!(denied.contains("send_input") && denied.contains("sudo"));
+        let changed = describe("a", Op::Write, RemoteFileError::Changed, true);
+        assert!(changed.contains("approval card") && changed.contains("nothing was written"));
+        assert!(!describe("a", Op::Write, RemoteFileError::Changed, false).contains("card"));
+        assert!(
+            describe(
+                "big.log",
+                Op::Read,
+                RemoteFileError::TooLarge(5_000_000),
+                false
+            )
+            .contains("5000000 bytes")
+        );
+        let full = RemoteFileError::Failed {
+            status: Some(1),
+            stderr: "cat: write error: No space left on device".into(),
+        };
+        assert_eq!(
+            unfinished("x", &full, false),
+            "Writing x failed: the command exited with status 1: cat: write error: No space left \
+             on device. The file may be unchanged, cut short or empty, so read it with read_file \
+             before you change it."
+        );
+        let gone = RemoteFileError::Ssh(hatoba_ssh::SshError::new(
+            hatoba_ssh::SshErrorKind::Disconnected,
+            "the connection closed",
+        ));
+        assert!(unfinished("x", &gone, true).contains("once the user has reconnected the tab"));
+    }
+
+    #[test]
+    fn writes_keep_the_style_of_the_file_they_replace() {
+        let crlf = TextFile::decode(b"a\r\nb\r\n").unwrap();
+        assert_eq!(
+            new_content("p", Some(&crlf), "x\ny\n").unwrap().encode(),
+            b"x\r\ny\r\n"
+        );
+        assert_eq!(
+            new_content("p", None, "x\ny\n").unwrap().encode(),
+            b"x\ny\n"
+        );
+        let big = "z".repeat(MAX_FILE_BYTES as usize + 1);
+        assert!(new_content("p", None, &big).unwrap_err().contains("1 MB"));
+    }
+
+    const SERVER: &str = "ops@db.example.net:22";
+
+    /// What the card read for `path`, resolved as the scripts resolve it with `$HOME` at `/home/ops`.
+    fn base(path: &str, bytes: Option<&[u8]>) -> Base {
+        let resolved = match path.strip_prefix("~/") {
+            Some(rest) => format!("/home/ops/{rest}"),
+            None if path.starts_with('/') => path.to_owned(),
+            None => format!("/home/ops/{path}"),
+        };
+        Base {
+            path: path.into(),
+            server: SERVER.into(),
+            file: bytes.map(|b| RemoteFile {
+                path: resolved,
+                bytes: b.to_vec(),
+            }),
+        }
+    }
+
+    fn job(name: &str, arguments: &str) -> FileJob {
+        preview_job(name, arguments).ok().unwrap().0
+    }
+
+    /// A call of response `e3`, with `e1` to `e3` in the conversation's context: a summary
+    /// replaced what came before `e1`.
+    fn place() -> Place {
+        Place {
+            response: "e3".into(),
+            context: vec!["e1".into(), "e2".into(), "e3".into()],
+        }
+    }
+
+    #[tokio::test]
+    async fn previews_show_the_change_against_what_was_read() {
+        // Without a session nothing is read, and the card says why.
+        let cancel = CancellationToken::new();
+        match read_base(None, "/etc/hosts", &cancel).await {
+            Err(Stop::Failed(message)) => assert_eq!(message, DISCONNECTED),
+            _ => panic!("expected the disconnected message"),
+        }
+
+        let seen = Seen::default();
+        let place = place();
+        let by = SeenBy {
+            seen: &seen,
+            conversation_id: "c1",
+            place: &place,
+            shown: &Mutex::default(),
+        };
+        let hosts = base("~/hosts", Some(b"127.0.0.1 a\r\n::1 a\r\n"));
+        seen.record(
+            "c1",
+            "e2",
+            SERVER,
+            "/home/ops/hosts",
+            b"127.0.0.1 a\r\n::1 a\r\n",
+        );
+        let edit = job(
+            tools::EDIT_FILE,
+            r#"{"path":"~/hosts","old_string":"::1 a\n","new_string":""}"#,
+        );
+        let card = preview_of(&edit, &hosts, by);
+        assert_eq!(card.error, None);
+        assert_eq!(card.before.as_deref(), Some("127.0.0.1 a\n::1 a\n"));
+        assert_eq!(card.after.as_deref(), Some("127.0.0.1 a\n"));
+        assert!(card.crlf);
+
+        // A new file needs no record.
+        let missing = base("/srv/new.txt", None);
+        let write = job(
+            tools::WRITE_FILE,
+            r#"{"path":"/srv/new.txt","content":"hello\n"}"#,
+        );
+        let card = preview_of(&write, &missing, by);
+        assert_eq!(
+            (card.before, card.after.as_deref()),
+            (None, Some("hello\n"))
+        );
+        let edit_missing = job(
+            tools::EDIT_FILE,
+            r#"{"path":"/srv/new.txt","old_string":"a","new_string":"b"}"#,
+        );
+        let error = preview_of(&edit_missing, &missing, by).error.unwrap();
+        assert!(error.contains("Use write_file"), "{error}");
+        let binary = base("/bin/ls", Some(b"\x7fELF\0"));
+        seen.record("c1", "e2", SERVER, "/bin/ls", b"\x7fELF\0");
+        let replace_ls = job(tools::WRITE_FILE, r#"{"path":"/bin/ls","content":"x"}"#);
+        let error = preview_of(&replace_ls, &binary, by).error.unwrap();
+        assert!(error.contains("cannot be read as text"), "{error}");
+
+        // Other tools and broken arguments have no diff.
+        let no_diff = |name, arguments| preview_job(name, arguments).err().unwrap().error.unwrap();
+        assert!(no_diff(tools::READ_FILE, r#"{"path":"a"}"#).contains("shows no diff"));
+        assert!(no_diff(tools::EDIT_FILE, "{").starts_with("The arguments are not valid"));
+    }
+
+    /// §13.4, "What the model has seen": a file is changed only as the model last saw it.
+    #[test]
+    fn files_change_only_as_the_model_last_saw_them() {
+        let seen = Seen::default();
+        let place = place();
+        let by = SeenBy {
+            seen: &seen,
+            conversation_id: "c1",
+            place: &place,
+            shown: &Mutex::default(),
+        };
+        let conf = base("~/app.conf", Some(b"port = 80\n"));
+        let edit = job(
+            tools::EDIT_FILE,
+            r#"{"path":"~/app.conf","old_string":"80","new_string":"8080"}"#,
+        );
+        let overwrite = job(
+            tools::WRITE_FILE,
+            r#"{"path":"~/app.conf","content":"port = 9090\n"}"#,
+        );
+
+        // Never read: both refused, on the card as in a run.
+        for call in [&edit, &overwrite] {
+            let error = preview_of(call, &conf, by).error.unwrap();
+            assert!(
+                error.contains("has not been read in this conversation"),
+                "{error}"
+            );
+            assert!(error.contains("Call read_file on it"), "{error}");
+        }
+
+        // Read (in any conversation but this one, or on another server): still refused.
+        seen.record("c2", "e2", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        seen.record(
+            "c1",
+            "e2",
+            "ops@other:22",
+            "/home/ops/app.conf",
+            b"port = 80\n",
+        );
+        assert!(preview_of(&edit, &conf, by).error.is_some());
+        // Read in a response the context no longer holds (a compaction or an edit, maybe on
+        // another device): refused too.
+        seen.record("c1", "e0", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        assert!(
+            preview_of(&edit, &conf, by)
+                .error
+                .unwrap()
+                .contains("has not been read")
+        );
+
+        // Read here: allowed.
+        seen.record("c1", "e2", SERVER, "/home/ops/app.conf", b"port = 80\n");
+        assert_eq!(preview_of(&edit, &conf, by).error, None);
+        assert_eq!(preview_of(&overwrite, &conf, by).error, None);
+
+        // Changed outside since (the user edited it in vim): refused until read again.
+        let changed = base("~/app.conf", Some(b"port = 81\n"));
+        let error = preview_of(&edit, &changed, by).error.unwrap();
+        assert!(error.contains("changed since you last read it"), "{error}");
+        assert!(preview_of(&overwrite, &changed, by).error.is_some());
+
+        // Its own write is what it saw last, so it can edit again; the old content no longer passes.
+        // A call only notes what its result shows: it counts once `tool_run` stores the result.
+        let shown = Mutex::default();
+        let wrote = SeenBy {
+            shown: &shown,
+            ..by
+        };
+        wrote.shows(SERVER, "/home/ops/app.conf", b"port = 8080\n");
+        let after_edit = base("~/app.conf", Some(b"port = 8080\n"));
+        let again = job(
+            tools::EDIT_FILE,
+            r#"{"path":"~/app.conf","old_string":"8080","new_string":"8081"}"#,
+        );
+        assert!(preview_of(&again, &after_edit, by).error.is_some());
+        seen.insert("c1", "e3", guard(&shown).take().unwrap());
+        assert_eq!(preview_of(&again, &after_edit, by).error, None);
+        assert!(preview_of(&edit, &conf, by).error.is_some());
+
+        // Compaction and edit and resend forget the conversation's records, and only its.
+        seen.forget("c1");
+        assert!(
+            preview_of(&again, &after_edit, by)
+                .error
+                .unwrap()
+                .contains("has not been read")
+        );
+        let other = SeenBy {
+            seen: &seen,
+            conversation_id: "c2",
+            place: &place,
+            shown: &Mutex::default(),
+        };
+        assert_eq!(preview_of(&edit, &conf, other).error, None);
+    }
+
+    /// A lock that disconnects sessions waits for the edits and writes that run on each.
+    #[tokio::test]
+    async fn writes_are_waited_for_by_session() {
+        let writes = Writes::default();
+        writes.ended("s1").await;
+        let first = writes.begin("s1");
+        let second = writes.begin("s1");
+        let other = writes.begin("s2");
+        let wait = |id| tokio::time::timeout(Duration::from_millis(50), writes.ended(id));
+        assert!(wait("s1").await.is_err());
+        assert!(wait("s3").await.is_ok());
+        drop(first);
+        assert!(wait("s1").await.is_err());
+        drop(second);
+        assert!(wait("s1").await.is_ok());
+        assert!(wait("s2").await.is_err());
+        drop(other);
+        assert!(wait("s2").await.is_ok());
+    }
+
+    /// A run writes over what its approval card read, and only on the server the card read it on.
+    #[test]
+    fn runs_write_over_what_the_card_showed() {
+        let conf = || Some(base("/etc/app.conf", Some(b"x\n")));
+        let read = card_read(conf(), SERVER, "/etc/app.conf", tools::EDIT_FILE).unwrap();
+        assert_eq!(read.unwrap().unwrap().bytes, b"x\n");
+        let missing = Some(base("/srv/new.txt", None));
+        assert_eq!(
+            card_read(missing, SERVER, "/srv/new.txt", tools::WRITE_FILE).unwrap(),
+            Some(None)
+        );
+        // Without a card, the run reads the file itself.
+        assert_eq!(
+            card_read(None, SERVER, "/etc/app.conf", tools::EDIT_FILE).unwrap(),
+            None
+        );
+        // The tab reconnected to another server since the card read the file.
+        let error = card_read(conf(), "ops@db2:22", "/etc/app.conf", tools::EDIT_FILE).unwrap_err();
+        assert!(error.contains("now connected to ops@db2:22"), "{error}");
+        assert!(error.contains("Call edit_file again"), "{error}");
+        assert!(card_read(conf(), SERVER, "/etc/other.conf", tools::EDIT_FILE).is_err());
+    }
+}

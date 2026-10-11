@@ -25,10 +25,10 @@ use crate::ai::{
     effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiModel, AiModelRef,
-    AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
-    AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext, AiTurnEvent,
-    DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
+    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFilePreview, AiModel,
+    AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
+    AiSendStarted, AiSettingsView, AiTestFailure, AiTestResult, AiToolResultInput, AiTurnContext,
+    AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -783,8 +783,34 @@ pub async fn ai_tool_result(
     )
 }
 
-/// Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`,
-/// `read_skill`, MCP tools) and stores its result.
+/// The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
+/// host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
+/// card, if they did.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_file_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: String,
+    tool_call_id: String,
+    session_id: Option<String>,
+    edited_arguments: Option<String>,
+) -> AppResult<AiFilePreview> {
+    state
+        .ai
+        .file_preview(
+            &state.vault,
+            &AppEnv(app),
+            &conversation_id,
+            &tool_call_id,
+            session_id.as_deref(),
+            edited_arguments.as_deref(),
+        )
+        .await
+}
+
+/// Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
+/// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_tool_run(

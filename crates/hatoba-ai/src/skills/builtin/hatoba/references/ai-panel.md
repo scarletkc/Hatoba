@@ -31,7 +31,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 - A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
 - Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal.
 - A quick connection counts as a host named by its `user@host:port`, in the panel and in History, so a conversation that moves from one to a saved host or to another quick connection gets the same notice and divider. Saving a quick connection as a host (**Save as Host…**) keeps the same server, so a conversation that continues on the saved host gets neither.
-- With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands or send input: those three tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host or a quick connection, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation; a quick connection saved as a host since opens as that host.
+- With no terminal tab (the home tab), or with a tab that is not connected, the assistant can still chat, search the web (when a search provider is set), fetch pages, read skills and use MCP tools. It cannot read the terminal, run commands, send input, or read, edit or write files: those tools are not offered, and a call to one anyway returns an error without asking. For a conversation that belongs to a host or a quick connection, the panel offers a "Connect to <host>" button that opens a tab and attaches the conversation; a quick connection saved as a host since opens as that host.
 - A new terminal tab starts with its own empty conversation, and the home tab's chat stays on the home tab. While the tab's conversation has no messages and the home tab's chat has some and is not working, waiting for approval or compacting, the panel offers **Continue Here**, which moves that chat into the tab and gives the home tab a new conversation. Whatever the tab's input holds stays, a selection or diagnostics chip included; when it holds nothing, the home tab's unsent text and attachments come along. The next message moves the chat to the tab's host.
 - When the terminal tools come or go between two messages, as when a home tab chat continues in a connected tab or a tab disconnects and connects again, the next message gets a divider above it, "Terminal now available" or "Terminal no longer available", and the assistant is told that its earlier replies had the tools of their time.
 
@@ -57,6 +57,9 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Read terminal | 读取终端 | ターミナルを読み取る |
 | Run command | 运行命令 | コマンドを実行 |
 | Type in terminal | 向终端输入 | ターミナルに入力 |
+| Read file | 读取文件 | ファイルを読む |
+| Edit file | 编辑文件 | ファイルを編集 |
+| Write file | 写入文件 | ファイルに書き込む |
 | Web search | 搜索网页 | Web 検索 |
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
@@ -66,6 +69,9 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | **Read terminal** (`read_terminal`) | Returns the visible screen plus up to 100 lines of scrollback (at most 1,000) as text, and whether a full-screen program (vim, htop) is active | Runs without asking |
 | **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 30 s by default, at most 600 s | Asks |
 | **Type in terminal** (`send_input`) | Types text into the shell as the keyboard would, optionally followed by Enter, Tab, Esc, Ctrl+C, Ctrl+D or an arrow key, then waits for output (10 s by default, at most 120 s). A command started this way keeps running if the turn is stopped | Asks |
+| **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, up to 16,000 characters at a time, paging on from a line. Files over 1 MB, binary files and anything but regular files are refused. Like the other file tools it never uses sudo | Asks |
+| **Edit file** (`edit_file`) | Replaces an exact piece of text in a file on the host and writes the file back in place, keeping its owner, mode and line breaks. Refused, in every mode, unless the assistant read the file in this conversation and it has not changed since. The approval card shows the change as a diff, and **Edit** changes the new text | Asks |
+| **Write file** (`write_file`) | Creates a file on the host or replaces its content; replacing a file needs the same read as Edit file. The approval card shows the content, or a diff for an existing file | Asks |
 | **Web search** (`web_search`) | Searches with the search provider chosen in Settings → AI. Not offered when none is chosen | Runs without asking |
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 16,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
@@ -111,7 +117,7 @@ An approval card appears in the conversation for a call that needs approval. It 
 - **Run** runs the call. **Edit** changes the input first (the model is told what you changed). **Reject** takes an optional reason that goes back to the model.
 - **Allow for This Conversation**: later calls of the same tool in this conversation run without asking until the app quits. For an MCP tool it means that tool of that server. A call whose tool cannot be named (its server was deleted, say) always asks, in both modes, has no such option, and never runs for a deleted server.
 - **Always Allow** (MCP tools only): stored on this device; change it in Settings → AI.
-- After the **Tool Call Limit** (25 by default) a turn pauses with "The assistant paused after N tool calls. Let it continue?" and the buttons **Stop** and **Continue**. **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A reply stopped while it was being written keeps the text shown so far, and the next message gets a divider above it, "Previous reply stopped", which tells the assistant its reply was cut off.
+- After the **Tool Call Limit** (25 by default) a turn pauses with "The assistant paused after N tool calls. Let it continue?" and the buttons **Stop** and **Continue**. **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A reply stopped mid-stream keeps its text so far, and the next message gets a "Previous reply stopped" divider.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -142,8 +148,8 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 | More | 更多操作 | その他の操作 |
 
 - **Delete…** removes the conversation on every synced device for good, after a confirmation.
-- **Export as Markdown…** saves the conversation as a Markdown file, with each divider (a stopped reply, a move to another host or model, a terminal that became available or went away) as a line.
-- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the stop, terminal and model dividers are worked out again for the tab and model it is resent with.
+- **Export as Markdown…** saves the conversation as a Markdown file, with each divider as a line.
+- **Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, after a confirmation (**Delete and Resend**). A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with.
 
 | en | zh-CN | ja |
 |---|---|---|

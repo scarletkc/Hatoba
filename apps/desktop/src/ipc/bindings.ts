@@ -242,10 +242,16 @@ export const commands = {
 	/**  Stores a result the frontend produced (`read_terminal`, `send_input`, a rejection). */
 	aiToolResult: (conversationId: string, toolCallId: string, result: AiToolResultInput) => __TAURI_INVOKE<AiEntryView>("ai_tool_result", { conversationId, toolCallId, result }),
 	/**
-	 *  Runs a tool that runs in Rust (`run_command` on `session_id`, `web_search`, `fetch_url`,
-	 *  `read_skill`, MCP tools) and stores its result.
+	 *  Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
+	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result.
 	 */
 	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiEntryView>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	/**
+	 *  The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
+	 *  host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
+	 *  card, if they did.
+	 */
+	aiFilePreview: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiFilePreview>("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
 	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
@@ -364,6 +370,26 @@ export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /**  A stored conversation entry (§13.7), without the provider's raw message. */
 export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
+
+/**
+ *  The change an `edit_file` or `write_file` call would make, for its approval card (AI-39,
+ *  AI-40). The texts show CRLF line breaks as `\n`; `crlf` says the write keeps them as CRLF.
+ */
+export type AiFilePreview = {
+	/**  The path the call names. */
+	path: string,
+	/**
+	 *  The file as Hatoba read it, or `None` when it does not exist (the call creates it) or
+	 *  `error` is set.
+	 */
+	before: string | null,
+	/**  The file after the call, or `None` when `error` is set. */
+	after: string | null,
+	/**  Why the call cannot apply: the error result running it would give the model. */
+	error: string | null,
+	/**  Most of the file's line breaks are CRLF, and the write keeps them. */
+	crlf: boolean,
+};
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
 

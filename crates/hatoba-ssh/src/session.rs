@@ -2,12 +2,13 @@
 
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
 use russh::client::{self, Handle, Msg};
-use russh::{Channel, ChannelMsg, Disconnect};
-use tokio::sync::mpsc;
+use russh::{Channel, ChannelMsg, ChannelReadHalf, ChannelWriteHalf, Disconnect};
+use tokio::sync::{mpsc, oneshot};
 use zeroize::Zeroizing;
 
 use crate::auth::{self, AuthContext};
@@ -643,18 +644,18 @@ impl SshSession {
         command: &str,
         stdin: Option<Vec<u8>>,
     ) -> Result<ExecOutput, SshError> {
-        let channel = self.open_channel().await?;
-        channel
+        let (mut reader, writer) = self.open_exec_channel().await?;
+        writer
+            .half()
             .exec(true, command.as_bytes().to_vec())
             .await
             .map_err(SshError::from)?;
-        let (mut reader, writer) = channel.split();
 
         let feed = async {
             if let Some(data) = stdin {
-                writer.data_bytes(Bytes::from(data)).await?;
+                writer.half().data_bytes(Bytes::from(data)).await?;
             }
-            writer.eof().await
+            writer.half().eof().await
         };
         tokio::pin!(feed);
         let mut feed_done = false;
@@ -699,7 +700,67 @@ impl SshSession {
                 },
             }
         }
+        writer.ended();
         Ok(out)
+    }
+
+    /// Opens and splits a session channel for [`exec_output`](Self::exec_output), its write half
+    /// in an [`ExecWriter`]. The open runs in a task of its own: a call dropped while the server
+    /// has yet to confirm the channel would otherwise leave it open on both sides once the
+    /// confirmation comes, with nothing holding it to close it.
+    async fn open_exec_channel(&self) -> Result<(ChannelReadHalf, ExecWriter), SshError> {
+        let (tx, rx) = oneshot::channel();
+        let session = self.clone();
+        tokio::spawn(async move {
+            let opened = session.open_channel().await.map(|channel| {
+                let (reader, writer) = channel.split();
+                (reader, ExecWriter::new(writer))
+            });
+            // Unsent or unreceived because the call was dropped, the writer closes the channel.
+            let _ = tx.send(opened);
+        });
+        rx.await.unwrap_or_else(|_| Err(self.close_error()))
+    }
+}
+
+/// The write half of an exec channel. Dropped before the channel ended (a timeout or a stop drops
+/// [`SshSession::exec_output`] midway, or it gave up on the command), it sends the channel's Close:
+/// the halves of a split channel send nothing when dropped, so the server would keep the channel,
+/// and a command still reading stdin would wait for the rest of it for good.
+struct ExecWriter {
+    half: Option<ChannelWriteHalf<Msg>>,
+    ended: AtomicBool,
+}
+
+impl ExecWriter {
+    fn new(half: ChannelWriteHalf<Msg>) -> Self {
+        Self {
+            half: Some(half),
+            ended: AtomicBool::new(false),
+        }
+    }
+
+    fn half(&self) -> &ChannelWriteHalf<Msg> {
+        self.half.as_ref().expect("taken only when dropped")
+    }
+
+    /// The server closed the channel, or the connection is gone: nothing to close.
+    fn ended(&self) {
+        self.ended.store(true, Ordering::Relaxed);
+    }
+}
+
+impl Drop for ExecWriter {
+    fn drop(&mut self) {
+        if self.ended.load(Ordering::Relaxed) {
+            return;
+        }
+        if let (Some(half), Ok(runtime)) = (self.half.take(), tokio::runtime::Handle::try_current())
+        {
+            runtime.spawn(async move {
+                let _ = half.close().await;
+            });
+        }
     }
 }
 
