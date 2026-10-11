@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use russh::client::{self, Handle, Msg};
-use russh::{Channel, ChannelMsg, ChannelWriteHalf, Disconnect};
-use tokio::sync::mpsc;
+use russh::{Channel, ChannelMsg, ChannelReadHalf, ChannelWriteHalf, Disconnect};
+use tokio::sync::{mpsc, oneshot};
 use zeroize::Zeroizing;
 
 use crate::auth::{self, AuthContext};
@@ -644,9 +644,7 @@ impl SshSession {
         command: &str,
         stdin: Option<Vec<u8>>,
     ) -> Result<ExecOutput, SshError> {
-        let channel = self.open_channel().await?;
-        let (mut reader, writer) = channel.split();
-        let writer = ExecWriter::new(writer);
+        let (mut reader, writer) = self.open_exec_channel().await?;
         writer
             .half()
             .exec(true, command.as_bytes().to_vec())
@@ -704,6 +702,24 @@ impl SshSession {
         }
         writer.ended();
         Ok(out)
+    }
+
+    /// Opens and splits a session channel for [`exec_output`](Self::exec_output), its write half
+    /// in an [`ExecWriter`]. The open runs in a task of its own: a call dropped while the server
+    /// has yet to confirm the channel would otherwise leave it open on both sides once the
+    /// confirmation comes, with nothing holding it to close it.
+    async fn open_exec_channel(&self) -> Result<(ChannelReadHalf, ExecWriter), SshError> {
+        let (tx, rx) = oneshot::channel();
+        let session = self.clone();
+        tokio::spawn(async move {
+            let opened = session.open_channel().await.map(|channel| {
+                let (reader, writer) = channel.split();
+                (reader, ExecWriter::new(writer))
+            });
+            // Unsent or unreceived because the call was dropped, the writer closes the channel.
+            let _ = tx.send(opened);
+        });
+        rx.await.unwrap_or_else(|_| Err(self.close_error()))
     }
 }
 

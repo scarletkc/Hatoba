@@ -656,6 +656,33 @@ async fn exec_dropped_midway_closes_its_channel() {
     }
 }
 
+/// A call dropped before the server confirmed its channel closes the channel once confirmed: more
+/// such calls than the server's `MaxSessions` (100) leave room for the next one.
+#[tokio::test]
+async fn exec_dropped_while_its_channel_opens_closes_it() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    for _ in 0..120 {
+        // Polled once, so the open is asked for, then dropped.
+        tokio::select! {
+            biased;
+            _ = session.exec_output("true", None) => {}
+            () = std::future::ready(()) => {}
+        }
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        match session.exec_output("echo ok", None).await {
+            Ok(out) => {
+                assert_eq!(out.stdout, b"ok\n");
+                break;
+            }
+            Err(e) => assert!(Instant::now() < deadline, "no channel opens: {e}"),
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
 /// The file tools' read and write (AI-38…40) through sshd and the user's login shell.
 #[tokio::test]
 async fn remote_files_are_read_and_written_in_place() {
