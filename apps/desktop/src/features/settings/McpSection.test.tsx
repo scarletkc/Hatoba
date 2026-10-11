@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { t } from "@/i18n";
 import { McpSection } from "./McpSection";
 
 // No Tauri here, so the section talks to the mock backend.
@@ -52,5 +53,22 @@ describe("McpSection", () => {
     act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     expect(document.querySelector("[role=dialog]")).toBeNull();
     expect(document.activeElement).toBe(button);
+  });
+
+  it("marks Context7's key as optional until its row is renamed", async () => {
+    const host = render(<McpSection />);
+    const button = await until(() => host.querySelector<HTMLButtonElement>("button[aria-haspopup=menu]"));
+    act(() => button.click());
+    const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((x) => x.textContent === "Context7");
+    act(() => item?.click());
+    const value = (key: string) => document.querySelector<HTMLInputElement>(`[role=dialog] input[aria-label="${key} ${t("aiSettings.mcp.f.valuePlaceholder")}"]`);
+    expect(value("Authorization")?.placeholder).toBe(t("aiSettings.mcp.f.optionalPlaceholder", { example: "ctx7sk-…" }));
+
+    const name = [...document.querySelectorAll<HTMLInputElement>("[role=dialog] input")].find((x) => x.value === "Authorization");
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "X-Key");
+      name?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(value("X-Key")?.placeholder).toBe("ctx7sk-…");
   });
 });
