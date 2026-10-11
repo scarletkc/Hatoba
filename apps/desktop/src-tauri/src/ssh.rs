@@ -470,11 +470,14 @@ pub async fn connect_for_task(
     connect_with(app, cfg, None).await
 }
 
+/// Every connection goes through here: terminals, quick connect, connection tests and tasks.
 pub async fn connect_with(
     app: &AppHandle,
     mut cfg: ConnectConfig,
     session_id: Option<String>,
 ) -> AppResult<SshSession> {
+    let attempt = Attempt::of(&cfg);
+    attempt.log_start();
     cfg.keyboard_interactive = Some(Arc::new(Interactive {
         app: app.clone(),
         session_id: session_id.clone(),
@@ -483,5 +486,137 @@ pub async fn connect_with(
         app: app.clone(),
         session_id,
     });
-    Ok(hatoba_ssh::connect(cfg, verifier).await?)
+    let result = hatoba_ssh::connect(cfg, verifier)
+        .await
+        .map_err(AppError::from);
+    attempt.log_end(&result);
+    result
+}
+
+/// What the log says about a connection (SEC-04): the target, the user name and the kind of
+/// authentication, and on failure the kind of error. Never a password, key or prompt answer,
+/// and not the error's text, which can quote the server.
+struct Attempt {
+    host: String,
+    port: u16,
+    user: String,
+    auth: &'static str,
+    jump_hosts: usize,
+    proxy: bool,
+}
+
+impl Attempt {
+    fn of(cfg: &ConnectConfig) -> Self {
+        Self {
+            host: cfg.host.clone(),
+            port: cfg.port,
+            user: cfg.username.clone(),
+            auth: auth_kind(&cfg.auth),
+            jump_hosts: cfg.jump.len(),
+            proxy: cfg.proxy.is_some(),
+        }
+    }
+
+    fn log_start(&self) {
+        tracing::info!(
+            host = %self.host,
+            port = self.port,
+            user = %self.user,
+            auth = self.auth,
+            jump_hosts = self.jump_hosts,
+            proxy = self.proxy,
+            "ssh connecting"
+        );
+    }
+
+    fn log_end<T>(&self, result: &AppResult<T>) {
+        match result {
+            Ok(_) => tracing::info!(host = %self.host, port = self.port, "ssh connected"),
+            Err(e) => tracing::info!(
+                host = %self.host,
+                port = self.port,
+                user = %self.user,
+                auth = self.auth,
+                code = ?e.code,
+                kind = ?e.ssh_kind,
+                "ssh connection failed"
+            ),
+        }
+    }
+}
+
+fn auth_kind(auth: &AuthMethod) -> &'static str {
+    match auth {
+        AuthMethod::Password(_) => "password",
+        AuthMethod::PrivateKey { .. } => "key",
+        AuthMethod::Agent => "agent",
+        AuthMethod::AgentThenAsk => "agent_then_ask",
+        AuthMethod::Ask => "ask",
+        AuthMethod::None => "none",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    use hatoba_ssh::{AuthMethod, ConnectConfig};
+    use tracing_subscriber::{fmt, prelude::*};
+    use zeroize::Zeroizing;
+
+    use super::Attempt;
+    use crate::error::{AppError, SshErrorKind};
+
+    /// A writer the test reads back.
+    #[derive(Clone, Default)]
+    struct Buffer(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Buffer {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn attempts_are_logged_without_credentials_or_error_text() {
+        let buffer = Buffer::default();
+        let writer = buffer.clone();
+        let subscriber = tracing_subscriber::registry().with(
+            fmt::layer()
+                .with_ansi(false)
+                .with_writer(move || writer.clone()),
+        );
+        let password = AuthMethod::Password(Zeroizing::new("PASSWORD-SECRET".into()));
+        let cfg = ConnectConfig::new("db.internal", 2222, "deploy", password);
+        tracing::subscriber::with_default(subscriber, || {
+            let attempt = Attempt::of(&cfg);
+            attempt.log_start();
+            let failed: Result<(), _> = Err(AppError::ssh(
+                SshErrorKind::AuthFailed,
+                "server said SERVER-TEXT",
+            ));
+            attempt.log_end(&failed);
+        });
+        let text = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        for expected in [
+            "ssh connecting",
+            "host=db.internal",
+            "port=2222",
+            "user=deploy",
+            "auth=\"password\"",
+            "ssh connection failed",
+            "code=Ssh",
+            "kind=Some(AuthFailed)",
+        ] {
+            assert!(text.contains(expected), "{expected} missing from {text}");
+        }
+        assert!(!text.contains("SECRET"), "{text}");
+        assert!(!text.contains("SERVER-TEXT"), "{text}");
+    }
 }
