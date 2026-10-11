@@ -1028,7 +1028,10 @@ function ShownInput({ text, command }: { text: string; command?: boolean }) {
 interface AllowLabels {
   here: string;
   hereHint: string;
-  /** Null for an MCP server set to Always ask in bypass mode, which asks anyway. */
+  /**
+   * Null for an MCP server set to Always ask in bypass mode, which asks anyway, and for commands that
+   * Always allow does not save (`savablePrefixes`).
+   */
   always: string | null;
   alwaysHint: string;
 }
@@ -1041,7 +1044,8 @@ function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp
       return {
         here: t("ai.approval.allowCommandHere", { prefix }),
         hereHint: t("ai.approval.allowCommandHereHint", { prefix }),
-        always: t("ai.approval.alwaysAllowCommand", { prefix }),
+        // Interpreters, deleting and the like are allowed for the conversation only (`savablePrefixes`).
+        always: scope.savable ? t("ai.approval.alwaysAllowCommand", { prefix }) : null,
         alwaysHint: t("ai.approval.alwaysAllowCommandHint", { prefix }),
       };
     }

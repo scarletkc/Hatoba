@@ -185,23 +185,25 @@ function gitReads(args: string[]): boolean {
   }
 }
 
-/** `docker` or `podman` listing or showing containers and images. */
+/**
+ * `docker` or `podman` listing containers and images. Not `inspect`, which prints a container's
+ * environment, where passwords often are.
+ */
 function dockerReads(args: string[]): boolean {
   const [sub, ...rest] = args;
   const follows = (xs: string[]) => xs.some((a) => refused(a, ["--follow"], "f"));
   switch (sub) {
     case "ps":
     case "images":
-    case "inspect":
     case "version":
     case "info":
       return true;
     case "logs":
       return !follows(rest);
     case "container":
-      return ["ls", "list", "ps", "inspect"].includes(rest[0]) || (rest[0] === "logs" && !follows(rest));
+      return ["ls", "list", "ps"].includes(rest[0]) || (rest[0] === "logs" && !follows(rest));
     case "image":
-      return ["ls", "list", "inspect"].includes(rest[0]);
+      return ["ls", "list"].includes(rest[0]);
     case "compose":
       return ["ps", "ls", "images", "version"].includes(rest[0]) || (rest[0] === "logs" && !follows(rest));
     default:
@@ -214,6 +216,9 @@ const KUBECTL_READS = ["get", "describe", "logs", "top", "version", "explain", "
 function kubectlReads(args: string[]): boolean {
   const sub = args[0];
   if (!KUBECTL_READS.includes(sub)) return false;
+  // `get secret -o yaml` prints the secrets' values.
+  const names = args.slice(1).filter((a) => !a.startsWith("-")).flatMap((a) => a.split(","));
+  if (sub === "get" && names.some((n) => /^secrets?($|[/.])/.test(n))) return false;
   return !args.some((a) => refused(a, ["--watch", "--follow", "--output-directory"], "wf"));
 }
 
@@ -318,8 +323,6 @@ const READ_ONLY: Record<string, Rule> = {
   last: free,
   lsof: free,
   getent: free,
-  printenv: free,
-  env: { ok: (args) => args.length === 0 },
   echo: free,
   printf: free,
   cd: free,
@@ -416,6 +419,60 @@ const SUBCOMMANDS = new Set([
 
 /** Commands that run another command, which a prefix of theirs would allow whatever it is. */
 const WRAPPERS = new Set(["sudo", "doas", "su", "env", "xargs", "nohup", "timeout", "nice", "ionice", "time", "watch", "exec", "eval", "command", "builtin", "sh", "bash", "zsh", "dash", "ksh", "fish", "busybox"]);
+
+/**
+ * Commands that a prefix saved for good would let run anything, delete or overwrite data, or send it
+ * elsewhere on the host: interpreters, deleting and formatting, permissions, processes and power, and
+ * network transfers. Their cards offer Allow for this conversation, not Always allow.
+ */
+const NOT_SAVED = new Set([
+  "python",
+  "python3",
+  "node",
+  "perl",
+  "ruby",
+  "php",
+  "lua",
+  "deno",
+  "bun",
+  "rm",
+  "rmdir",
+  "shred",
+  "dd",
+  "truncate",
+  "wipefs",
+  "fdisk",
+  "sfdisk",
+  "parted",
+  "chmod",
+  "chown",
+  "chgrp",
+  "kill",
+  "killall",
+  "pkill",
+  "reboot",
+  "shutdown",
+  "poweroff",
+  "halt",
+  "curl",
+  "wget",
+  "scp",
+  "rsync",
+  "nc",
+  "ncat",
+  "socat",
+  "ssh",
+  "sftp",
+  "ftp",
+]);
+
+/** Whether Always allow may save these prefixes (`allowancePrefixes`), which `NOT_SAVED` decides. */
+export function savablePrefixes(prefixes: readonly string[]): boolean {
+  return prefixes.every((p) => {
+    const name = prefixWords(p)[0] ?? "";
+    return !NOT_SAVED.has(name) && !name.startsWith("mkfs");
+  });
+}
 
 /** The most prefixes one allowance on a card names. */
 const MAX_PREFIXES = 3;

@@ -1,6 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
-import { allowancePrefixes, commandAllowed } from "./commandRules";
+import { allowancePrefixes, commandAllowed, savablePrefixes } from "./commandRules";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -128,7 +128,11 @@ export function mustAsk({ kind, mode, allowed, mcp }: AskInput): boolean {
  * and the server's own tool name (the name the model calls depends on the servers a request offered, so it
  * can mean another server later).
  */
-export type Scope = { kind: "command"; prefixes: string[] } | { kind: "domain"; domain: string } | { kind: "tool"; tool: ToolKind } | { kind: "mcp"; key: string };
+export type Scope =
+  | { kind: "command"; prefixes: string[]; savable: boolean }
+  | { kind: "domain"; domain: string }
+  | { kind: "tool"; tool: ToolKind }
+  | { kind: "mcp"; key: string };
 
 /** The host a saved approval is for (AI-19): a saved host by id, or a quick-connect target (`user@host:port`). */
 export interface HostRef {
@@ -163,7 +167,7 @@ export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mc
   switch (kind) {
     case "run_command": {
       const prefixes = allowancePrefixes(str(args.command));
-      return prefixes ? { kind: "command", prefixes } : null;
+      return prefixes ? { kind: "command", prefixes, savable: savablePrefixes(prefixes) } : null;
     }
     case "fetch_url": {
       const domain = urlDomain(str(args.url));
@@ -201,7 +205,7 @@ export function grantKeys(scope: Scope): string[] {
 export function savedFor(scope: Scope, host: HostRef | null): AiAllowance[] {
   switch (scope.kind) {
     case "command":
-      return host ? scope.prefixes.map((value) => ({ kind: "command", ...host, value })) : [];
+      return host && scope.savable ? scope.prefixes.map((value) => ({ kind: "command", ...host, value })) : [];
     case "tool":
       return host ? [{ kind: "tool", ...host, value: scope.tool }] : [];
     case "domain":

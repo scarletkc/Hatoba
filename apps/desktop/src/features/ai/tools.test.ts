@@ -293,18 +293,28 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
   });
 
   it("names what a card's approvals cover", () => {
-    expect(allowanceScope("run_command", cmd("cd /srv && git pull && systemctl restart app"), null)).toEqual({ kind: "command", prefixes: ["git pull", "systemctl restart"] });
+    expect(allowanceScope("run_command", cmd("cd /srv && git pull && systemctl restart app"), null)).toEqual({
+      kind: "command",
+      prefixes: ["git pull", "systemctl restart"],
+      savable: true,
+    });
+    // Interpreters, deleting and network transfers are allowed for the conversation only.
+    for (const line of ["rm -rf build", "python3 deploy.py", "curl -X POST https://example.com", "mkfs.ext4 /dev/sdb1", "git pull && rm x"])
+      expect(allowanceScope("run_command", cmd(line), null), line).toMatchObject({ kind: "command", savable: false });
     expect(allowanceScope("run_command", cmd("sudo reboot"), null)).toBeNull();
     expect(allowanceScope("fetch_url", { url: "https://Docs.Example.com/x?y" }, null)).toEqual({ kind: "domain", domain: "docs.example.com" });
     expect(allowanceScope("fetch_url", { url: "ftp://x" }, null)).toBeNull();
     expect(allowanceScope("write_file", {}, null)).toEqual({ kind: "tool", tool: "write_file" });
     expect(allowanceScope("read_file", {}, null)).toBeNull();
-    expect(grantKeys({ kind: "command", prefixes: ["git pull", "make"] })).toEqual(["run_command:git pull", "run_command:make"]);
+    expect(grantKeys({ kind: "command", prefixes: ["git pull", "make"], savable: true })).toEqual(["run_command:git pull", "run_command:make"]);
     expect(grantKeys({ kind: "domain", domain: "a.com" })).toEqual(["fetch_url:a.com"]);
   });
 
   it("saves commands and tools for the host, and domains for every tab", () => {
-    expect(savedFor({ kind: "command", prefixes: ["git pull"] }, quick)).toEqual([{ kind: "command", host_id: null, target: "root@10.0.0.5:22", value: "git pull" }]);
+    expect(savedFor({ kind: "command", prefixes: ["git pull"], savable: true }, quick)).toEqual([
+      { kind: "command", host_id: null, target: "root@10.0.0.5:22", value: "git pull" },
+    ]);
+    expect(savedFor({ kind: "command", prefixes: ["rm"], savable: false }, quick)).toEqual([]);
     expect(savedFor({ kind: "tool", tool: "send_input" }, web)).toEqual([{ kind: "tool", host_id: "h-web", target: null, value: "send_input" }]);
     expect(savedFor({ kind: "domain", domain: "a.com" }, web)).toEqual([{ kind: "domain", host_id: null, target: null, value: "a.com" }]);
     expect(savedFor({ kind: "mcp", key: "mcp:s1:x" }, web)).toEqual([]);
