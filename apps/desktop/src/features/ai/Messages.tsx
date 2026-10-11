@@ -735,18 +735,21 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
   const t = useT();
   const [input, setInput] = useState(false);
   const keeps = change?.state === "written" || change?.state === "unfinished";
-  const [kept, setKept] = useState<AiFilePreview | null | undefined>(undefined);
+  // undefined while it loads; "failed" when the snapshot could not be read, so nothing stands in for it.
+  const [kept, setKept] = useState<AiFilePreview | null | undefined | "failed">(undefined);
   useEffect(() => {
     if (!keeps || !change) return;
     let live = true;
-    void fileChangeDiff(slotId, change).then((preview) => {
-      if (live) setKept(preview);
-    });
+    fileChangeDiff(slotId, change).then(
+      (preview) => live && setKept(preview),
+      () => live && setKept("failed"),
+    );
     return () => {
       live = false;
     };
   }, [slotId, keeps, change]);
-  const preview = (keeps ? kept : null) ?? callFileChange(call.name, call.arguments);
+  const failed = keeps && kept === "failed";
+  const preview = failed ? null : ((keeps && kept !== "failed" ? kept : null) ?? callFileChange(call.name, call.arguments));
   return (
     <>
       <div className={s.labelRow}>
@@ -755,6 +758,7 @@ function CallChange({ slotId, call, change }: { slotId: string; call: AiToolCall
           {t(input ? "ai.call.hideInput" : "ai.call.showInput")}
         </LinkButton>
       </div>
+      {failed && <div className={s.fieldError}>{t("ai.call.changeUnreadable")}</div>}
       {preview && <FileChange state={{ preview, loading: keeps && kept === undefined, failure: null }} />}
       {(input || !preview) && <pre className={cx(s.pre, "selectable")}>{prettyArgs(call.arguments) || "{}"}</pre>}
     </>

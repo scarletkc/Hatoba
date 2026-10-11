@@ -589,7 +589,7 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
       revert,
       (change) =>
         slotBusy(slotId) ? Promise.resolve<AiFileRevert>({ status: "failed", reason: "failed", detail: t("ai.revert.busy") }) : revertChange(slotId, id, change),
-      (change) => fileChangeDiff(slotId, change),
+      (change) => fileChangeDiff(slotId, change).catch(() => null),
     );
     if (!send) return false;
   } else if (later > 0) {
@@ -671,11 +671,11 @@ export async function refreshFileChanges(slotId: string, convId: string) {
   }
 }
 
-/** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped, or when it cannot be read. */
+/** AI-41: what a call changed, from the snapshot this device keeps; null once it was reverted or dropped. Rejects when it cannot be read. */
 export async function fileChangeDiff(slotId: string, change: AiFileChange): Promise<AiFilePreview | null> {
   const convId = getSlot(slotId).conversationId;
   if (!convId) return null;
-  return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id).catch(() => null);
+  return api.ai_file_change_diff(convId, change.response_id, change.tool_call_id);
 }
 
 /**
@@ -696,7 +696,14 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
           : { title: t("ai.revert.restoreTitle", { path }), body: t("ai.revert.restoreBody"), confirmLabel: t("ai.revert.restore") }),
         danger: true,
       })
-    : await confirmRevert(change, await fileChangeDiff(slotId, change));
+    : await fileChangeDiff(slotId, change).then(
+        (preview) => confirmRevert(change, preview),
+        // The confirmation promises the diff it writes back: without it, nothing is asked or written.
+        (e: unknown) => {
+          toast(aiErrorMessage(e), "error");
+          return false;
+        },
+      );
   if (!ok || getSlot(slotId).conversationId !== convId || slotBusy(slotId)) return null;
   options.onStart?.();
   patchSlot(slotId, { reverting: true });
