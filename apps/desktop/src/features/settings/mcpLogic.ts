@@ -151,6 +151,15 @@ export function validateSecretRows(rows: readonly SecretRow[], kind: SecretKind)
 }
 
 /**
+ * The row problems to show. Like the dialog's other fields, an empty name or value is a problem only once the user
+ * tried to save, so a template's empty token is not an error before it is typed.
+ */
+export function shownRowProblems(problems: readonly (SecretRowProblem | null)[], submitted: boolean): (SecretRowProblem | null)[] {
+  if (submitted) return [...problems];
+  return problems.map((p) => (p?.key && p.key !== "empty" ? { key: p.key } : null));
+}
+
+/**
  * The `env` or `headers` of `McpTransportInput`: a saved value that is kept or replaced with nothing is `null`, which
  * keeps the saved value for that name; a row that is gone drops its value.
  */

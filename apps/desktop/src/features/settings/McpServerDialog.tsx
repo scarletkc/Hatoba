@@ -20,6 +20,7 @@ import {
   mcpFormToInput,
   newSecretRow,
   newUid,
+  shownRowProblems,
   splitCommandLine,
   validateMcpForm,
   type McpForm,
@@ -95,6 +96,7 @@ export function McpServerDialog({
   const nameProblem = show(problems.name);
   const commandProblem = show(problems.command);
   const urlProblem = show(problems.url);
+  const secretProblems = shownRowProblems(problems.secrets, submitted);
 
   const nameError = rejected.name ?? (nameProblem ? t(nameProblem === "empty" ? "aiSettings.mcp.err.nameRequired" : "aiSettings.mcp.err.nameTaken") : null);
   const commandError = rejected.command ?? (commandProblem ? t("aiSettings.mcp.err.commandRequired") : null);
@@ -308,7 +310,7 @@ export function McpServerDialog({
             key={form.kind}
             kind={form.kind === "stdio" ? "env" : "header"}
             rows={secrets}
-            problems={problems.secrets}
+            problems={secretProblems}
             valueFocusUid={valueFocusUid}
             onChange={setSecrets}
           />

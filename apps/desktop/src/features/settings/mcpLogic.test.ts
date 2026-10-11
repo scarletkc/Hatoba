@@ -17,6 +17,7 @@ import {
   savedSecretRows,
   secretInputs,
   serverState,
+  shownRowProblems,
   splitCommandLine,
   stderrText,
   toolAllowed,
@@ -27,6 +28,7 @@ import {
   withAlwaysAllow,
   type McpForm,
   type SecretRow,
+  type SecretRowProblem,
 } from "./mcpLogic";
 
 const stdioServer = (extra: Partial<McpServerView> = {}): McpServerView => ({
@@ -137,6 +139,12 @@ describe("environment and header rows", () => {
   it("checks header names as HTTP tokens", () => {
     expect(validateSecretRows([row("Authorization", "Bearer x"), row("X-Api-Key", "k")], "header")).toEqual([null, null]);
     expect(validateSecretRows([row("Bad Header", "x"), row("a:b", "x")], "header")).toEqual([{ key: "invalid" }, { key: "invalid" }]);
+  });
+
+  it("shows an empty name or value only once the user tried to save", () => {
+    const problems: (SecretRowProblem | null)[] = [null, { key: "empty" }, { value: "missing" }, { key: "duplicate", value: "missing" }, { key: "invalid" }];
+    expect(shownRowProblems(problems, false)).toEqual([null, null, null, { key: "duplicate" }, { key: "invalid" }]);
+    expect(shownRowProblems(problems, true)).toEqual(problems);
   });
 
   it("lets a saved row stay without a value", () => {
