@@ -316,8 +316,7 @@ pub async fn deploy_join(
         &config,
         |session| save_session(secrets, session),
     )
-    .await
-    .map_err(|e| crate::commands::sync::join_failed(&app, &state, e))?;
+    .await?;
     state.deploy.end(&handle);
     crate::commands::sync::joined_remote(&app, &state, Arc::new(backend), joined.rekeyed).await;
     Ok(())

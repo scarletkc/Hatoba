@@ -1264,12 +1264,15 @@ impl Vault {
     ///
     /// When the remote is this same vault (a device that synced before), every item is queued
     /// again so the next round reconciles both sides. Otherwise each live item is sealed under
-    /// the remote vault key and queued as new, and the remote's settings replace the local ones.
-    /// Tombstones, items that cannot be decrypted, and the conflict log are dropped, and the
-    /// device-local data sealed under the vault key is sealed again. Returns whether the vault key
-    /// changed, so the caller can drop what still holds the old one (biometric unlock).
+    /// the remote vault key and queued as new. The local settings are sealed again but not
+    /// queued, at revision 0, so the remote's settings replace them on the first pull and the
+    /// app never shows defaults meanwhile. Tombstones, items that cannot be decrypted, and the
+    /// conflict log are dropped, and the device-local data sealed under the vault key is sealed
+    /// again. Returns whether the vault key changed, so the caller can drop what still holds the
+    /// old one (biometric unlock).
     ///
-    /// An error after the transaction committed (reloading the items) leaves the vault locked.
+    /// Once the transaction has committed the join has happened: if reloading the items then
+    /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
     pub(crate) fn join_remote_vault(
         &mut self,
         remote: &VaultMeta,
@@ -1293,12 +1296,13 @@ impl Vault {
         self.store.transaction(|tx| {
             if rekey {
                 for row in tx.item_rows()? {
-                    let plain = match row.envelope.as_deref().filter(|_| !row.deleted) {
-                        Some(env) if row.id != SETTINGS_ID => {
+                    let plain = row
+                        .envelope
+                        .as_deref()
+                        .filter(|_| !row.deleted)
+                        .and_then(|env| {
                             crypto::open_json(&old, item_aad(&row.id).as_bytes(), env).ok()
-                        }
-                        _ => None,
-                    };
+                        });
                     let Some(plain) = plain else {
                         tx.delete_item_row(&row.id)?;
                         continue;
@@ -1307,7 +1311,7 @@ impl Vault {
                     tx.upsert_item_row(&ItemRow {
                         envelope: Some(envelope.to_json()),
                         revision: 0,
-                        dirty: true,
+                        dirty: row.id != SETTINGS_ID,
                         ..row
                     })?;
                 }
@@ -1343,8 +1347,8 @@ impl Vault {
         // be sealed under a key the vault no longer opens. Unlocking again with the remote's
         // password reloads them.
         if let Err(e) = self.finish_unlock(vault_key) {
+            tracing::warn!("could not reload the vault after joining: {e}");
             self.lock();
-            return Err(e);
         }
         Ok(rekey)
     }

@@ -466,9 +466,25 @@ async fn join_merges_another_vault_into_the_cloud() {
     c.v()
         .ai_put_file_snapshot(&snapshot, "SNAPSHOT-META", "SNAPSHOT-CONTENT")
         .unwrap();
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.auto_lock_minutes = 7;
+        }
+    });
     let device_id = c.v().device_id();
 
-    let joined = join(&c).await;
+    let joined = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    // Until the first pull, the local settings stay, and they are not queued to overwrite the
+    // cloud's.
+    assert_eq!(c.v().settings().auto_lock_minutes, 7);
+    assert_eq!(
+        c.pending(),
+        4,
+        "local host, key, chat and message; not the settings"
+    );
+    c.sync().await;
     assert!(joined.rekeyed);
     assert!(!joined.session.token.is_empty());
     assert_eq!(c.v().device_id(), device_id, "the device keeps its id");

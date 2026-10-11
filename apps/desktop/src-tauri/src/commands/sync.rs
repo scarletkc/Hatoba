@@ -200,27 +200,15 @@ pub async fn sync_join(
             }
         },
     )
-    .await
-    .map_err(|e| join_failed(&app, &state, e))?;
+    .await?;
     joined_remote(&app, &state, backend, joined.rekeyed).await;
     Ok(())
 }
 
-/// A join that failed after it committed leaves the vault locked (`Vault::join_remote_vault`):
-/// show the lock screen, so the user unlocks with the remote's password and sync starts.
-pub(crate) fn join_failed(app: &AppHandle, state: &AppState, e: hatoba_core::Error) -> AppError {
-    if !state.vault().is_unlocked() {
-        let _ = VaultLockedEvent {
-            reason: LockReason::Manual,
-        }
-        .emit(app);
-    }
-    e.into()
-}
-
 /// After flow C: drops the biometric unlock that wraps the old vault key, installs the backend
 /// and runs the first round. A failed round shows in the sync status and is retried like any
-/// other, so the join itself has succeeded.
+/// other, so the join itself has succeeded. A vault the join left locked (it could not reload)
+/// goes to the lock screen instead, and unlocking with the remote's password starts sync.
 pub(crate) async fn joined_remote(
     app: &AppHandle,
     state: &AppState,
@@ -229,6 +217,14 @@ pub(crate) async fn joined_remote(
 ) {
     if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
         tracing::warn!("could not remove the biometric unlock: {}", e.detail);
+    }
+    if !state.vault().is_unlocked() {
+        crate::lock::lock_vault(app, LockReason::Manual).await;
+        let _ = VaultLockedEvent {
+            reason: LockReason::Manual,
+        }
+        .emit(app);
+        return;
     }
     state.sync.set_backend(Some(backend));
     sync::emit_status(app);
