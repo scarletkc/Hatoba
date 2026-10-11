@@ -4975,6 +4975,17 @@ async fn no_turn_starts_while_a_revert_runs() {
         f.retry(&conv, f.context()).err().unwrap().code,
         ErrorCode::InvalidInput
     );
+    // Nor is the conversation compacted: the summary would come before the revert is recorded.
+    let compact = f
+        .manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .await
+        .unwrap_err();
+    assert!(
+        compact.detail.contains("being reverted"),
+        "{}",
+        compact.detail
+    );
     // Nothing was stored meanwhile.
     assert_eq!(f.detail(&conv).entries.len(), 2);
     drop(reverting);
@@ -5001,4 +5012,18 @@ async fn no_turn_starts_while_a_revert_runs() {
     };
     assert!(super::shares_id(&entries(&["dup", "dup", "c3"]), "dup"));
     assert!(!super::shares_id(&entries(&["dup", "dup", "c3"]), "c3"));
+
+    // A revert note is about the call of the newest response before it with that id, also when
+    // an older response used the same id.
+    let response = |calls: &[&str]| entries(calls).list.remove(0);
+    let list = [
+        response(&["call_1"]),
+        AiEntry::user(2, "next"),
+        response(&["call_1", "call_2"]),
+        AiEntry::user(4, "noted"),
+    ];
+    assert_eq!(super::response_with_call(&list[..3], "call_1"), Some(2));
+    assert_eq!(super::response_with_call(&list[..2], "call_1"), Some(0));
+    assert_eq!(super::response_with_call(&list[..3], "call_2"), Some(2));
+    assert_eq!(super::response_with_call(&list[..1], "call_2"), None);
 }

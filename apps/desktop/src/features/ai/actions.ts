@@ -569,9 +569,17 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   const id = slot.conversationId;
   if (!text || !id || slot.turn || slot.remoteRunning || slot.compacting || reverting(slotId)) return false;
   const later = laterMessages(slot.entries, entryId);
-  // Read again: the refresh after the turn's last write may not have arrived yet.
-  const fileChanges = await api.ai_file_changes(id).catch(() => slot.fileChanges);
-  if (getSlot(slotId).conversationId === id) patchSlot(slotId, { fileChanges });
+  // Read again: the refresh after the turn's last write may not have arrived yet. Without them the edit
+  // cannot tell which changes it would leave on the host, so it is not sent.
+  let fileChanges: AiFileChange[];
+  try {
+    fileChanges = await api.ai_file_changes(id);
+  } catch (e) {
+    toast(aiErrorMessage(e), "error");
+    return false;
+  }
+  if (!unlocked() || getSlot(slotId).conversationId !== id) return false;
+  patchSlot(slotId, { fileChanges });
   const { revert } = editedFiles(slot.entries, fileChanges, entryId);
   if (revert.length > 0) {
     // The list is the confirmation, also for a file a call created: each revert asks nothing more.
@@ -656,7 +664,8 @@ function refreshAllFileChanges() {
 export async function refreshFileChanges(slotId: string, convId: string) {
   try {
     const fileChanges = await api.ai_file_changes(convId);
-    if (getSlot(slotId).conversationId === convId) patchSlot(slotId, { fileChanges });
+    // The lock cleared them meanwhile: they name servers and paths.
+    if (unlocked() && getSlot(slotId).conversationId === convId) patchSlot(slotId, { fileChanges });
   } catch {
     // Locked or deleted meanwhile; the next load reads them again.
   }
@@ -708,6 +717,11 @@ export async function revertFileChange(slotId: string, change: AiFileChange, opt
   } finally {
     patchSlot(slotId, { reverting: false });
   }
+}
+
+/** The vault is unlocked: what a command returned may go into the store. */
+function unlocked(): boolean {
+  return useApp.getState().phase === "unlocked";
 }
 
 /** AI-41: a revert of the slot's conversation runs, so nothing is sent until it ends (Rust refuses it too). */
@@ -1125,7 +1139,7 @@ export function removeDiagnostics(tabId: string) {
 export async function compactConversation(slotId: string) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!id || slot.turn || slot.compacting) return;
+  if (!id || slot.turn || slot.compacting || reverting(slotId)) return;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");

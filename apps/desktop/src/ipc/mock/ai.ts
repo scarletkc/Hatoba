@@ -876,7 +876,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     };
     return (snapshots.get(convId) ?? [])
       .filter((s) => s.change.state === "reverted" && at(s) >= 0 && order(s) >= 0)
-      .filter((s) => !earlier.slice(at(s) + 1).some((e) => e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === s.change.tool_call_id)))
+      // A note is about the call of the newest response before it with that id.
+      .filter((s) => {
+        const id = s.change.tool_call_id;
+        return !earlier.some((e, j) => {
+          if (j <= at(s) || e.role !== "user" || !parseMessage(e.text).notes.some((n) => n.kind === "file_revert" && n.toolCallId === id)) return false;
+          return earlier.slice(0, j).findLastIndex((x) => x.role === "assistant" && x.tool_calls.some((c) => c.id === id)) === at(s);
+        });
+      })
       .sort((a, b) => at(a) - at(b) || order(a) - order(b))
       .map((s) => fileRevertNote(s.change.path, s.change.tool_call_id, s.tool, s.change.created));
   }

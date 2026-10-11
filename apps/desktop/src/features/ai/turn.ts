@@ -184,16 +184,19 @@ export function editedFiles(entries: AiEntryView[], changes: AiFileChange[], ent
   const deleted = entries.slice(i + 1);
   const responses = new Set(deleted.flatMap((e) => (e.role === "assistant" ? [e.entry_id] : [])));
   const kept = changes.filter((c) => responses.has(c.response_id));
-  const known = new Set(kept.filter((c) => c.state !== "dropped").map((c) => `${c.response_id}:${c.tool_call_id}`));
-  let untracked = 0;
+  const keyOf = (c: AiFileChange) => `${c.response_id}:${c.tool_call_id}`;
+  const known = new Set(kept.filter((c) => c.state !== "dropped").map(keyOf));
+  // A dropped change stays on the host too, also one whose write failed partway (its result is an error).
+  const staying = new Set(kept.filter((c) => c.state === "dropped").map(keyOf));
   let response: (AiEntryView & { role: "assistant" }) | null = null;
   for (const e of deleted) {
     if (e.role === "assistant") response = e;
     if (e.role !== "tool" || e.status !== "ok" || !response) continue;
     const call = response.tool_calls.find((c) => c.id === e.tool_call_id);
-    if ((call?.name === "edit_file" || call?.name === "write_file") && !known.has(`${response.entry_id}:${call.id}`)) untracked++;
+    const key = `${response.entry_id}:${e.tool_call_id}`;
+    if ((call?.name === "edit_file" || call?.name === "write_file") && !known.has(key)) staying.add(key);
   }
-  return { revert: kept.filter((c) => c.state === "written" || c.state === "unfinished"), untracked };
+  return { revert: kept.filter((c) => c.state === "written" || c.state === "unfinished"), untracked: staying.size };
 }
 
 /**

@@ -201,6 +201,8 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c6", "dropped")], "u2").untracked).toBe(1);
     expect(editedFiles(entries, [], "u2").untracked).toBe(3);
     expect(editedFiles(entries, [], "u1").untracked).toBe(4);
+    // c5 failed partway: its dropped change stays on the host as well, and counts once with c6.
+    expect(editedFiles(entries, [change("a2", "c2"), change("a2", "c3", "reverted"), change("a2", "c5", "dropped")], "u2").untracked).toBe(2);
   });
 
   it("finds nothing after the newest message or for one it does not have", () => {

@@ -601,7 +601,12 @@ impl AiManager {
             conversation: conversation_view(&v, conversation_id, &conversation),
             entries: entries.views(),
             running: self.is_running(conversation_id),
-            file_changes: file_changes(&v, conversation_id),
+            // A conversation stays readable when its snapshots cannot be read; the edit's question
+            // reads them again through `ai_file_changes`, which reports the error.
+            file_changes: file_changes(&v, conversation_id).unwrap_or_else(|e| {
+                tracing::warn!(conversation_id, code = ?e.code, "could not read the file snapshots");
+                Vec::new()
+            }),
         })
     }
 
@@ -614,7 +619,7 @@ impl AiManager {
     ) -> AppResult<Vec<AiFileChange>> {
         let v = unlocked(vault)?;
         find_conversation(&v, conversation_id)?;
-        Ok(file_changes(&v, conversation_id))
+        file_changes(&v, conversation_id)
     }
 
     /// What the call of `key` changed, from the snapshot this device keeps (AI-41), as the panel
@@ -1485,17 +1490,21 @@ impl AiManager {
         match (&mut outcome, found) {
             (AiFileRevert::Reverted { wrote }, _) => {
                 guard(&self.0.restore_bases).remove(&base_key);
-                match unlocked(vault).and_then(|mut v| Ok(v.ai_mark_file_reverted(&key)?)) {
-                    Ok(_) => {}
-                    Err(e) => tracing::warn!(
-                        conversation_id,
-                        code = ?e.code,
-                        "could not record a reverted file change"
-                    ),
-                }
+                // The file changed on the host either way, so the model reads it again.
                 self.0
                     .seen
                     .forget_file(conversation_id, &change.meta.server, &change.meta.path);
+                // Success is reported only once recorded, so the next message notes it. Reverting
+                // again finds the file as it held before the call, and records it then.
+                if let Err(e) = unlocked(vault).and_then(|mut v| Ok(v.ai_mark_file_reverted(&key)?))
+                {
+                    tracing::warn!(
+                        conversation_id,
+                        code = ?e.code,
+                        "could not record a reverted file change"
+                    );
+                    return Err(e);
+                }
                 tracing::info!(conversation_id, wrote = *wrote, "AI file change reverted");
             }
             (AiFileRevert::Changed { later, .. }, Some(found)) => {
@@ -1646,6 +1655,8 @@ impl AiManager {
         if self.is_running(conversation_id) {
             return Err(AppError::invalid("conversation_id", "a turn is running"));
         }
+        // AI-41: the summary would be built before the revert is recorded.
+        self.not_reverting(conversation_id)?;
         let entries = Entries::load(&v, conversation_id)?;
         if !cancel_open_calls(&mut v, conversation_id, &entries, &[])?.is_empty() {
             *stored = true;
@@ -3291,10 +3302,18 @@ fn pending_reverts(
         else {
             continue;
         };
-        let noted = earlier[at + 1..].iter().any(|e| match &e.body {
-            EntryBody::User { text } => noted_reverts(text).contains(&snapshot.tool_call_id),
-            _ => false,
-        });
+        // Responses may reuse a call id: a note is about the call of the newest response before it.
+        let noted = earlier
+            .iter()
+            .enumerate()
+            .skip(at + 1)
+            .any(|(j, e)| match &e.body {
+                EntryBody::User { text } => {
+                    noted_reverts(text).contains(&snapshot.tool_call_id)
+                        && response_with_call(&earlier[..j], &snapshot.tool_call_id) == Some(at)
+                }
+                _ => false,
+            });
         let meta = serde_json::from_str::<files::ChangeMeta>(&snapshot.meta);
         if let (false, Ok(meta)) = (noted, meta) {
             reverts.push(((at, order), snapshot.tool_call_id.clone(), meta));
@@ -3307,16 +3326,17 @@ fn pending_reverts(
         .collect()
 }
 
+/// The index of the newest response in `entries` that has a call with the id `tool_call_id`.
+fn response_with_call(entries: &[AiEntry], tool_call_id: &str) -> Option<usize> {
+    entries.iter().rposition(|e| match &e.body {
+        EntryBody::Assistant(a) => a.tool_calls.iter().any(|c| c.id == tool_call_id),
+        _ => false,
+    })
+}
+
 /// The changes of a conversation's file tool calls this device keeps (AI-41).
-fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
-    let snapshots = match v.ai_file_snapshots(conversation_id) {
-        Ok(snapshots) => snapshots,
-        Err(e) => {
-            tracing::warn!(conversation_id, "could not read the file snapshots: {e}");
-            return Vec::new();
-        }
-    };
-    snapshots
+fn file_changes(v: &Vault, conversation_id: &str) -> AppResult<Vec<AiFileChange>> {
+    Ok(v.ai_file_snapshots(conversation_id)?
         .into_iter()
         .filter_map(|s| {
             let meta: files::ChangeMeta = serde_json::from_str(&s.meta).ok()?;
@@ -3334,7 +3354,7 @@ fn file_changes(v: &Vault, conversation_id: &str) -> Vec<AiFileChange> {
                 },
             })
         })
-        .collect()
+        .collect())
 }
 
 /// A revert of a conversation's file change runs (AI-41) until this drops.
