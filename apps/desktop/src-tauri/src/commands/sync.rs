@@ -11,9 +11,11 @@ use hatoba_core::sync::{
 };
 use tauri::{AppHandle, State};
 
+use tauri_specta::Event;
+
 use crate::dto::{
     ConflictAction, ConflictField, ConflictResolution, ConflictView, D1Database, DeviceView,
-    ItemType, SyncConfigInput, SyncStatus, SyncTestResult,
+    ItemType, LockReason, SyncConfigInput, SyncStatus, SyncTestResult, VaultLockedEvent,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::state::AppState;
@@ -198,9 +200,22 @@ pub async fn sync_join(
             }
         },
     )
-    .await?;
+    .await
+    .map_err(|e| join_failed(&app, &state, e))?;
     joined_remote(&app, &state, backend, joined.rekeyed).await;
     Ok(())
+}
+
+/// A join that failed after it committed leaves the vault locked (`Vault::join_remote_vault`):
+/// show the lock screen, so the user unlocks with the remote's password and sync starts.
+pub(crate) fn join_failed(app: &AppHandle, state: &AppState, e: hatoba_core::Error) -> AppError {
+    if !state.vault().is_unlocked() {
+        let _ = VaultLockedEvent {
+            reason: LockReason::Manual,
+        }
+        .emit(app);
+    }
+    e.into()
 }
 
 /// After flow C: drops the biometric unlock that wraps the old vault key, installs the backend

@@ -904,6 +904,11 @@ export type DeployPlan = {
 	worker: DeployWorkerAction,
 	database: DeployDatabaseAction | null,
 	database_name: string | null,
+	/**
+	 *  For `has_vault`: the workers.dev URL to join it on (Flow C), or `None` when no workers.dev
+	 *  URL reaches the Worker.
+	 */
+	vault_url: string | null,
 };
 
 /**  Sent on the `deploy_run` channel as each step starts and ends. */

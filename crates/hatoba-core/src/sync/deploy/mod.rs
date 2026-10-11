@@ -297,6 +297,9 @@ pub struct Inspection {
     pub worker: WorkerPlan,
     /// The database, unless the Worker plan stops the deployment.
     pub database: Option<DatabasePlan>,
+    /// For [`WorkerPlan::HasVault`]: the workers.dev URL a device joins it on (flow C), or `None`
+    /// when the account has no subdomain or the Worker's workers.dev route is off.
+    pub vault_url: Option<String>,
 }
 
 /// What a database holds.
@@ -497,6 +500,7 @@ impl Deployment {
                         subdomain,
                         worker: WorkerPlan::Foreign,
                         database: None,
+                        vault_url: None,
                     });
                 }
                 Some(id) => (WorkerPlan::Update, Some(id)),
@@ -507,10 +511,17 @@ impl Deployment {
             && let Some(db) = self.api.database(account, &id).await?
         {
             if self.database_state(account, &db.uuid).await? == DatabaseState::HasVault {
+                let vault_url = match &subdomain {
+                    Some(s) if self.api.route_enabled(account, &target.worker_name).await? => {
+                        Some(format!("https://{}.{s}.workers.dev", target.worker_name))
+                    }
+                    _ => None,
+                };
                 return Ok(Inspection {
                     subdomain,
                     worker: WorkerPlan::HasVault,
                     database: None,
+                    vault_url,
                 });
             }
             return Ok(Inspection {
@@ -520,6 +531,7 @@ impl Deployment {
                     id: db.uuid,
                     name: db.name,
                 }),
+                vault_url: None,
             });
         }
         let database = self.pick_database(account, &target.database_name).await?;
@@ -527,6 +539,7 @@ impl Deployment {
             subdomain,
             worker: plan,
             database: Some(database),
+            vault_url: None,
         })
     }
 
@@ -535,18 +548,16 @@ impl Deployment {
     /// nothing.
     ///
     /// # Errors
-    /// [`Error::WorkerNotFound`] when step 2 finds anything else under the name, or the account
-    /// has no workers.dev subdomain to reach it on; API errors as for [`inspect`](Self::inspect).
+    /// [`Error::WorkerNotFound`] when step 2 finds anything else under the name, or no
+    /// workers.dev URL reaches it ([`Inspection::vault_url`]); API errors as for
+    /// [`inspect`](Self::inspect).
     pub async fn vault_worker_url(&self, target: &Target) -> Result<String> {
         match self.inspect(target).await? {
             Inspection {
                 worker: WorkerPlan::HasVault,
-                subdomain: Some(subdomain),
+                vault_url: Some(url),
                 ..
-            } => Ok(format!(
-                "https://{}.{subdomain}.workers.dev",
-                target.worker_name
-            )),
+            } => Ok(url),
             _ => Err(Error::WorkerNotFound),
         }
     }

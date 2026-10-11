@@ -45,7 +45,7 @@ Hatoba creates the Worker and the D1 database in the user's Cloudflare account t
 
 Safety rules: Hatoba never overwrites a Worker that is not a Hatoba sync Worker, nor a Worker that already holds a vault, nor a database that holds other data (it picks a free name such as `hatoba-2`). Existing empty Hatoba pieces from an earlier attempt are reused.
 
-If the Worker name already holds a vault (for example one deployed from another device), the review says so and the main button is **Connect** instead of **Deploy**: nothing is deployed, and the master password step joins this device to that vault (`references/sync.md`, "Join a cloud vault"). To deploy a separate Worker instead, choose another name under **Worker and database names**. If the account has no workers.dev subdomain, **Connect** stays off: join that Worker with **Connect a deployed Worker** and its URL instead.
+If the Worker name already holds a vault (for example one deployed from another device), the review says so and the main button is **Connect** instead of **Deploy**: nothing is deployed, and the master password step joins this device to that vault (`references/sync.md`, "Join a cloud vault"). To deploy a separate Worker instead, choose another name under **Worker and database names**. If that Worker has no workers.dev URL (the account has no subdomain, or the Worker is reachable only on a custom domain), **Connect** stays off: join it with **Connect a deployed Worker** and its URL instead.
 
 If a step fails, the page shows the error:
 

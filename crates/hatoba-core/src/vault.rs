@@ -1268,6 +1268,8 @@ impl Vault {
     /// Tombstones, items that cannot be decrypted, and the conflict log are dropped, and the
     /// device-local data sealed under the vault key is sealed again. Returns whether the vault key
     /// changed, so the caller can drop what still holds the old one (biometric unlock).
+    ///
+    /// An error after the transaction committed (reloading the items) leaves the vault locked.
     pub(crate) fn join_remote_vault(
         &mut self,
         remote: &VaultMeta,
@@ -1337,7 +1339,13 @@ impl Vault {
             tx.delete_meta(meta::SYNC_CURSOR)?;
             tx.delete_meta(meta::SYNC_LAST_AT)
         })?;
-        self.finish_unlock(vault_key)?;
+        // The join has committed: the old key and cache must not stay in use, or new edits would
+        // be sealed under a key the vault no longer opens. Unlocking again with the remote's
+        // password reloads them.
+        if let Err(e) = self.finish_unlock(vault_key) {
+            self.lock();
+            return Err(e);
+        }
         Ok(rekey)
     }
 

@@ -157,6 +157,7 @@ pub async fn deploy_inspect(
         },
         database,
         database_name,
+        vault_url: plan.vault_url,
     })
 }
 
@@ -315,7 +316,8 @@ pub async fn deploy_join(
         &config,
         |session| save_session(secrets, session),
     )
-    .await?;
+    .await
+    .map_err(|e| crate::commands::sync::join_failed(&app, &state, e))?;
     state.deploy.end(&handle);
     crate::commands::sync::joined_remote(&app, &state, Arc::new(backend), joined.rekeyed).await;
     Ok(())

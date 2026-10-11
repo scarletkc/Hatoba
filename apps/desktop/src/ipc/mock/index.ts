@@ -839,6 +839,7 @@ export function createMockApi(): HatobaApi {
         worker: fresh ? "create" : deployDemo === "vault" ? "has_vault" : deployDemo === "foreign" ? "foreign" : "create",
         database: "create",
         database_name: target.database_name,
+        vault_url: deployDemo === "vault" && !fresh ? `https://${target.worker_name}.kc.workers.dev` : null,
       };
     },
     deploy_run: async (handle, target, onProgress) => {

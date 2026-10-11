@@ -743,7 +743,7 @@ Step 2 decides what to do with resources that already have the chosen names, bef
 |---|---|
 | Not found | Create it |
 | A Hatoba Worker whose database holds no vault | Deploy over it and use the database bound as `DB`, whatever its name. This is what an earlier attempt leaves when it stops before `/v1/setup` |
-| A Hatoba Worker whose database holds a vault | Deploy nothing. The wizard offers **Connect**, which joins that vault through its workers.dev URL (Flow C, §6.6), or a different Worker name. Without a workers.dev subdomain there is no URL to join, so **Connect** is off and the wizard points to connecting the Worker by its URL. The sync settings record no deployment for a joined Worker, because the app did not deploy it, so an update treats it as deployed by hand |
+| A Hatoba Worker whose database holds a vault | Deploy nothing. The wizard offers **Connect**, which joins that vault through its workers.dev URL (Flow C, §6.6), or a different Worker name. When the account has no workers.dev subdomain or the Worker's workers.dev route is off (`GET /accounts/{account_id}/workers/scripts/{name}/subdomain`), there is no URL to join, so **Connect** is off and the wizard points to connecting the Worker by its URL. The sync settings record no deployment for a joined Worker, because the app did not deploy it, so an update treats it as deployed by hand |
 | Any other Worker | Stop and ask for a different Worker name. The app never overwrites a Worker it does not recognize |
 
 When the database bound to a Hatoba Worker no longer exists, the Worker gets a database through the table below, as a new Worker does.
