@@ -12,23 +12,25 @@ use std::fmt;
 use crate::error::SshError;
 use crate::session::{ExecOutput, SshSession};
 
-/// The line the read script prints before the file, so that anything the login shell's startup
-/// files print to stdout is told apart from the content.
+/// The line both scripts print before the resolved path (and the read script before the file),
+/// so that anything the login shell's startup files print to stdout is told apart from them.
 const MARKER: &[u8] = b"hatoba-file\n";
 
-/// Reads the file named on stdin, `$1` bytes at most. Exit statuses: 2 missing, 3 directory,
-/// 4 not readable, 5 larger than `$1` (its size on stderr), 6 not a regular file, 8 a symbolic
-/// link to nothing, 9 no path.
+/// Reads the file named on stdin, `$1` bytes at most, and prints the marker, the path as resolved
+/// and the file. A relative path or one that starts with `~/` is taken from `$HOME`. Exit
+/// statuses: 2 missing, 3 directory, 4 not readable, 5 larger than `$1` (its size on stderr),
+/// 6 not a regular file, 8 a symbolic link to nothing, 9 no path.
 const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
-     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; esac; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      [ -e \"$f\" ] || exit 2; [ -f \"$f\" ] || exit 6; \
      [ -r \"$f\" ] || exit 4; n=$(wc -c < \"$f\") || exit 4; n=$(echo $n); \
      [ \"$n\" -le \"$1\" ] || { echo \"$n\" >&2; exit 5; }; \
-     echo hatoba-file; exec cat -- \"$f\"";
+     echo hatoba-file; printf %s \"$f\"; echo; exec cat -- \"$f\"";
 
-/// Writes the rest of stdin to the file named on its first line, after checking the state on
-/// its second line: `any`, `missing`, or the file's `cksum` output (`crc size`). Exit statuses:
+/// Writes the rest of stdin to the file named on its first line, resolved as the read script
+/// resolves it, after checking the state on its second line: `any`, `missing`, or the file's
+/// `cksum` output (`crc size`). Prints the marker and the resolved path. Exit statuses:
 /// 2 no such directory, 3 directory, 4 not writable, 6 not a regular file, 7 not in the
 /// expected state, 8 a symbolic link to nothing (writing would create its target, wherever that
 /// is), 9 no path.
@@ -37,14 +39,14 @@ const READ_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// is caught. A write by another process in the moment between the check and `cat` is not: an
 /// in-place rewrite has no lock that every writer honors.
 const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
-     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; esac; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -f \"$f\" ] || exit 6; [ \"$g\" = missing ] && exit 7; \
      case $g in any) ;; *) c=$(cksum < \"$f\") || exit 4; set -- $c; \
      [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; fi; \
-     cat > \"$f\"";
+     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\"";
 
 /// What a write checks right before it writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,8 +121,22 @@ impl fmt::Display for RemoteFileError {
 
 impl std::error::Error for RemoteFileError {}
 
+/// A file read from the host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteFile {
+    /// The path as the script resolved it: absolute, with a relative path or one that starts
+    /// with `~/` taken from the home directory. Symbolic links and `..` are left as they are.
+    pub path: String,
+    /// The file's bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// Reads the file at `path`, refusing one larger than `max` bytes.
-pub async fn read(session: &SshSession, path: &str, max: u64) -> Result<Vec<u8>, RemoteFileError> {
+pub async fn read(
+    session: &SshSession,
+    path: &str,
+    max: u64,
+) -> Result<RemoteFile, RemoteFileError> {
     let (command, stdin) = read_request(path, max)?;
     let out = session
         .exec_output(&command, Some(stdin))
@@ -129,19 +145,20 @@ pub async fn read(session: &SshSession, path: &str, max: u64) -> Result<Vec<u8>,
     parse_read(&out, max)
 }
 
-/// Writes `content` to the file at `path` in place, if the file is in the state `expect` names.
+/// Writes `content` to the file at `path` in place, if the file is in the state `expect` names,
+/// and returns the path as resolved.
 pub async fn write(
     session: &SshSession,
     path: &str,
     content: &[u8],
     expect: Expect<'_>,
-) -> Result<(), RemoteFileError> {
+) -> Result<String, RemoteFileError> {
     let (command, stdin) = write_request(path, content, expect)?;
     let out = session
         .exec_output(&command, Some(stdin))
         .await
         .map_err(RemoteFileError::Ssh)?;
-    parse_write(&out)
+    parse_write(&out, path)
 }
 
 /// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
@@ -207,25 +224,36 @@ fn failed(out: &ExecOutput) -> RemoteFileError {
     }
 }
 
-fn parse_read(out: &ExecOutput, max: u64) -> Result<Vec<u8>, RemoteFileError> {
+/// What follows the marker line in a script's stdout: the resolved path and the rest. `None`
+/// without a marker and a path line after it. Lines a startup file printed come before the
+/// marker.
+fn after_marker(stdout: &[u8]) -> Option<(String, &[u8])> {
+    let start = if stdout.starts_with(MARKER) {
+        0
+    } else {
+        stdout
+            .windows(MARKER.len() + 1)
+            .position(|w| w[0] == b'\n' && &w[1..] == MARKER)?
+            + 1
+    };
+    let rest = &stdout[start + MARKER.len()..];
+    let end = rest.iter().position(|&b| b == b'\n')?;
+    let path = String::from_utf8_lossy(&rest[..end]).into_owned();
+    Some((path, &rest[end + 1..]))
+}
+
+fn parse_read(out: &ExecOutput, max: u64) -> Result<RemoteFile, RemoteFileError> {
     match out.exit_status {
         Some(0) => {
-            let start = if out.stdout.starts_with(MARKER) {
-                0
-            } else {
-                // Lines a startup file printed come before the marker.
-                out.stdout
-                    .windows(MARKER.len() + 1)
-                    .position(|w| w[0] == b'\n' && &w[1..] == MARKER)
-                    .map(|at| at + 1)
-                    .ok_or_else(|| failed(out))?
-            };
-            let content = &out.stdout[start + MARKER.len()..];
+            let (path, content) = after_marker(&out.stdout).ok_or_else(|| failed(out))?;
             // The file grew after the script measured it.
             if content.len() as u64 > max {
                 return Err(RemoteFileError::TooLarge(content.len() as u64));
             }
-            Ok(content.to_vec())
+            Ok(RemoteFile {
+                path,
+                bytes: content.to_vec(),
+            })
         }
         Some(2) => Err(RemoteFileError::NotFound),
         Some(3) => Err(RemoteFileError::IsDirectory),
@@ -239,9 +267,10 @@ fn parse_read(out: &ExecOutput, max: u64) -> Result<Vec<u8>, RemoteFileError> {
     }
 }
 
-fn parse_write(out: &ExecOutput) -> Result<(), RemoteFileError> {
+/// The resolved path of a write that succeeded; `given` when its stdout lost the path.
+fn parse_write(out: &ExecOutput, given: &str) -> Result<String, RemoteFileError> {
     match out.exit_status {
-        Some(0) => Ok(()),
+        Some(0) => Ok(after_marker(&out.stdout).map_or_else(|| given.to_owned(), |(path, _)| path)),
         Some(2) => Err(RemoteFileError::NoDirectory),
         Some(3) => Err(RemoteFileError::IsDirectory),
         Some(4) => Err(RemoteFileError::PermissionDenied),
@@ -316,21 +345,32 @@ mod tests {
             stderr: b"line 1\nwc: 99\n".to_vec(),
         };
         assert_eq!(
-            parse_read(&out(b"hatoba-file\nbody", 0), 10).unwrap(),
-            b"body"
+            parse_read(&out(b"hatoba-file\n/home/a/b c\nbody", 0), 10).unwrap(),
+            RemoteFile {
+                path: "/home/a/b c".into(),
+                bytes: b"body".to_vec()
+            }
         );
+        let noisy = parse_read(&out(b"motd\nhatoba-file\n/x\nhatoba-file\n", 0), 20).unwrap();
         assert_eq!(
-            parse_read(&out(b"motd\nhatoba-file\nhatoba-file\n", 0), 20).unwrap(),
-            b"hatoba-file\n"
+            (noisy.path.as_str(), &noisy.bytes[..]),
+            ("/x", &b"hatoba-file\n"[..])
         );
+        for broken in [&b"no marker"[..], b"hatoba-file\n/no/line/end"] {
+            assert!(matches!(
+                parse_read(&out(broken, 0), 20),
+                Err(RemoteFileError::Failed { .. })
+            ));
+        }
         assert!(matches!(
-            parse_read(&out(b"no marker", 0), 20),
-            Err(RemoteFileError::Failed { .. })
-        ));
-        assert!(matches!(
-            parse_read(&out(b"hatoba-file\n0123456789x", 0), 10),
+            parse_read(&out(b"hatoba-file\n/x\n0123456789x", 0), 10),
             Err(RemoteFileError::TooLarge(11))
         ));
+        assert_eq!(
+            parse_write(&out(b"motd\nhatoba-file\n/srv/a\n", 0), "a").unwrap(),
+            "/srv/a"
+        );
+        assert_eq!(parse_write(&out(b"", 0), "a").unwrap(), "a");
         let mut big = out(b"", 5);
         big.stderr = b"1048577\n".to_vec();
         assert!(matches!(
@@ -346,7 +386,8 @@ mod tests {
     }
 
     /// The scripts against the local `sh`, `wc`, `cksum` and `dirname` (GNU on Linux, BSD on
-    /// macOS), started the way a login shell would start them.
+    /// macOS), started the way a login shell would start them. They run in `/`, so relative paths
+    /// show that they are taken from `$HOME`.
     #[cfg(unix)]
     mod local_sh {
         use std::io::Write;
@@ -360,7 +401,7 @@ mod tests {
             let mut child = Command::new("sh")
                 .arg("-c")
                 .arg(command)
-                .current_dir(home)
+                .current_dir("/")
                 .env("HOME", home)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -376,9 +417,23 @@ mod tests {
             }
         }
 
-        fn read(home: &Path, path: &str, max: u64) -> Result<Vec<u8>, RemoteFileError> {
+        fn read_file(home: &Path, path: &str, max: u64) -> Result<RemoteFile, RemoteFileError> {
             let (command, stdin) = read_request(path, max)?;
             parse_read(&run(home, &command, &stdin), max)
+        }
+
+        fn read(home: &Path, path: &str, max: u64) -> Result<Vec<u8>, RemoteFileError> {
+            read_file(home, path, max).map(|f| f.bytes)
+        }
+
+        fn write_file(
+            home: &Path,
+            path: &str,
+            content: &[u8],
+            expect: Expect<'_>,
+        ) -> Result<String, RemoteFileError> {
+            let (command, stdin) = write_request(path, content, expect)?;
+            parse_write(&run(home, &command, &stdin), path)
         }
 
         fn write(
@@ -387,8 +442,7 @@ mod tests {
             content: &[u8],
             expect: Expect<'_>,
         ) -> Result<(), RemoteFileError> {
-            let (command, stdin) = write_request(path, content, expect)?;
-            parse_write(&run(home, &command, &stdin))
+            write_file(home, path, content, expect).map(|_| ())
         }
 
         fn is_root() -> bool {
@@ -413,6 +467,11 @@ mod tests {
             );
             std::fs::write(home.join("notes"), b"in home\n").unwrap();
             assert_eq!(read(home, "~/notes", 100).unwrap(), b"in home\n");
+            // `~/`, relative and absolute paths resolve to the same path.
+            let resolved = home.join("notes").to_str().unwrap().to_owned();
+            for path in ["~/notes", "notes", resolved.as_str()] {
+                assert_eq!(read_file(home, path, 100).unwrap().path, resolved, "{path}");
+            }
             std::fs::write(home.join("empty"), b"").unwrap();
             assert_eq!(read(home, "empty", 0).unwrap(), b"");
 
@@ -492,7 +551,10 @@ mod tests {
                 write(home, "new.txt", b"x", Expect::Content(b"")),
                 Err(RemoteFileError::Changed)
             ));
-            write(home, "new.txt", b"first line\n", Expect::Missing).unwrap();
+            assert_eq!(
+                write_file(home, "new.txt", b"first line\n", Expect::Missing).unwrap(),
+                home.join("new.txt").to_str().unwrap()
+            );
             assert_eq!(
                 std::fs::read(home.join("new.txt")).unwrap(),
                 b"first line\n"

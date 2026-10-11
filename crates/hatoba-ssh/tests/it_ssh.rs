@@ -645,7 +645,9 @@ async fn remote_files_are_read_and_written_in_place() {
     let inode = std::fs::metadata(&path).unwrap().ino();
     let name = path.to_str().unwrap();
 
-    let read = remote_file::read(&session, name, 1024).await.unwrap();
+    let file = remote_file::read(&session, name, 1024).await.unwrap();
+    assert_eq!(file.path, name);
+    let read = file.bytes;
     assert_eq!(read, b"listen 80;\r\n");
     assert!(matches!(
         remote_file::read(&session, name, 4).await,

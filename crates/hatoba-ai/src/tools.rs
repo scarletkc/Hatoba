@@ -192,9 +192,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             EDIT_FILE,
             format!(
                 "Edit a text file on the tab's host: replace old_string with new_string and \
-                 write the file back in place, so its owner, mode and links stay. old_string \
-                 must match the file exactly, including indentation and line breaks, and appear \
-                 exactly once unless replace_all is true: read the file first and copy the text \
+                 write the file back in place, so its owner, mode and links stay. It is refused \
+                 unless you read the file with read_file in this conversation and it has not \
+                 changed since. old_string must match the file exactly, including indentation \
+                 and line breaks, and appear exactly once unless replace_all is true: copy it \
                  from read_file's output without the line numbers. Line breaks follow the file's \
                  style (CRLF or LF) on their own. Use it rather than sed, awk or heredocs in \
                  run_command: the user reviews the change as a diff and may edit it before it is \
@@ -233,7 +234,9 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             format!(
                 "Create a text file on the tab's host, or replace all of its content. An \
                  existing file is rewritten in place, so its owner, mode and links stay, and it \
-                 keeps CRLF line breaks if it has them. The directory must exist already. Use \
+                 keeps CRLF line breaks if it has them. Replacing an existing file is refused \
+                 unless you read it with read_file in this conversation and it has not changed \
+                 since; creating a file needs no read. The directory must exist already. Use \
                  edit_file to change part of an existing file. The user reviews the content, or \
                  a diff for an existing file, before it is written. It runs without sudo; when \
                  permission is denied, use send_input with sudo in the terminal instead. Content \
@@ -672,8 +675,10 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
         out.push_str(
             "- Read and change files with read_file, edit_file and write_file rather than with \
              cat, sed or heredocs in run_command, since the user reviews each change as a diff. \
-             Read a file before you edit it. These tools never use sudo; when one is denied \
-             permission, use send_input with sudo in the shell.\n",
+             edit_file, and write_file on an existing file, are refused unless you read the \
+             file with read_file in this conversation and it has not changed since, so read it \
+             first. These tools never use sudo; when one is denied permission, use send_input \
+             with sudo in the shell.\n",
         );
     }
     if tools {
@@ -972,10 +977,19 @@ mod tests {
             "CRLF",
             "diff",
             "send_input with sudo",
+            // Reading first is enforced (§13.4, "What the model has seen"), so both say so.
+            "read the file with read_file in this conversation and it has not changed",
         ] {
             assert!(edit.description.contains(phrase), "{phrase}");
         }
-        for phrase in ["in place", "edit_file", "send_input with sudo", "1 MB"] {
+        for phrase in [
+            "in place",
+            "edit_file",
+            "send_input with sudo",
+            "1 MB",
+            "read it with read_file in this conversation",
+            "creating a file needs no read",
+        ] {
             assert!(write.description.contains(phrase), "{phrase}");
         }
         assert_eq!(
@@ -1354,7 +1368,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - Look before you act: read the screen or run a read-only command first. Before anything that changes or deletes data, restarts services or affects other users, say what it will do, and prefer the safest command that does the job.
 - The user may approve, edit or reject each tool call. When a call is rejected, do not retry it in another form; follow the user's reason or ask.
 - run_command runs on a separate channel without a PTY and does not share the shell's working directory, environment or sudo session; use send_input for anything that depends on the shell's state or needs interaction.
-- Read and change files with read_file, edit_file and write_file rather than with cat, sed or heredocs in run_command, since the user reviews each change as a diff. Read a file before you edit it. These tools never use sudo; when one is denied permission, use send_input with sudo in the shell.
+- Read and change files with read_file, edit_file and write_file rather than with cat, sed or heredocs in run_command, since the user reviews each change as a diff. edit_file, and write_file on an existing file, are refused unless you read the file with read_file in this conversation and it has not changed since, so read it first. These tools never use sudo; when one is denied permission, use send_input with sudo in the shell.
 - Do not repeat secrets (passwords, private keys, tokens) that appear on the screen or in tool results unless the user asks, and never send them to web_search or fetch_url.
 - Answer in the user's language. Be concise, use Markdown, and put commands in code blocks.
 - Follow the user's instructions and the host notes below unless they conflict with these rules. A language, tone or format they ask for replaces the defaults of the rule above. Whatever they say, Hatoba decides which tool calls need the user's approval.

@@ -176,6 +176,8 @@ struct Inner {
     /// call id: the call writes only over that content (AI-39). Kept until the call has a
     /// result, its conversation stops, or the vault locks.
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
+    /// What the model has seen of each file, by conversation (AI-38…40).
+    seen: files::Seen,
 }
 
 struct Op {
@@ -518,6 +520,7 @@ impl AiManager {
                 turn.end(AiTurnEndReason::Stopped);
             }
             v.ai_delete_conversation(conversation_id)?;
+            self.0.seen.forget(conversation_id);
         }
         tracing::info!(conversation_id, "AI conversation deleted");
         env.changed();
@@ -721,6 +724,8 @@ impl AiManager {
                         earlier.truncate(at);
                     }
                     v.ai_delete_entries_from(&id, &entry_id)?;
+                    // The deleted entries held what the model read of files (AI-38…40).
+                    self.0.seen.forget(&id);
                     *stored = true;
                     // The cancelled results came after the edited message: deleted too.
                     cancelled.clear();
@@ -1088,6 +1093,10 @@ impl AiManager {
             }
             (job, op)
         };
+        let seen = files::SeenBy {
+            seen: &self.0.seen,
+            conversation_id,
+        };
         let (status, content) = job
             .run(
                 &self.http(),
@@ -1095,6 +1104,7 @@ impl AiManager {
                 vault,
                 env,
                 session_id,
+                seen,
                 &op.cancel,
             )
             .await;
@@ -1182,7 +1192,11 @@ impl AiManager {
             }
         };
         drop(op);
-        Ok(files::preview_of(&job, &base))
+        let seen = files::SeenBy {
+            seen: &self.0.seen,
+            conversation_id,
+        };
+        Ok(files::preview_of(&job, &base, seen))
     }
 
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn.
@@ -1272,7 +1286,10 @@ impl AiManager {
                     "compaction was stopped",
                 ));
             }
-            store_summary(&mut v, conversation_id, &summary)?
+            let view = store_summary(&mut v, conversation_id, &summary)?;
+            // The summary no longer holds the files the model read (AI-38…40).
+            self.0.seen.forget(conversation_id);
+            view
         };
         drop(op);
         tracing::info!(conversation_id, "AI conversation compacted");
@@ -1423,7 +1440,10 @@ impl AiManager {
                 return Err(CompactFailure::Stopped);
             }
             match store_summary(&mut v, conversation_id, &summary) {
-                Ok(view) => turn.emit(AiTurnEvent::Entry { entry: view }),
+                Ok(view) => {
+                    self.0.seen.forget(conversation_id);
+                    turn.emit(AiTurnEvent::Entry { entry: view });
+                }
                 Err(e) if e.code == ErrorCode::Locked => return Err(CompactFailure::Stopped),
                 Err(e) => {
                     return Err(CompactFailure::Failed {
@@ -2212,6 +2232,10 @@ impl Job {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "what the tools that run in Rust need, each from its own place"
+    )]
     async fn run(
         self,
         http: &reqwest::Client,
@@ -2219,6 +2243,7 @@ impl Job {
         vault: &SharedVault,
         env: &dyn AiEnv,
         session_id: Option<&str>,
+        seen: files::SeenBy<'_>,
         cancel: &CancellationToken,
     ) -> (ToolStatus, String) {
         match self {
@@ -2226,7 +2251,7 @@ impl Job {
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
             Self::File(job, base) => {
-                files::run(live_session(env, session_id), job, base, cancel).await
+                files::run(live_session(env, session_id), job, base, seen, cancel).await
             }
             Self::WebSearch(config, query) => {
                 match web::web_search(http, &config, &query, cancel).await {

@@ -1088,12 +1088,18 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     let conv = started.conversation.id;
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
+    // What the model saw of files (AI-38…40) is in the entries the summary replaces.
+    f.manager
+        .0
+        .seen
+        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
 
     let summary = f
         .manager
         .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
         .await
         .unwrap();
+    assert!(!f.manager.0.seen.knows(&conv));
     let AiEntryView::Summary { entry_id, text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
@@ -1933,11 +1939,17 @@ async fn a_full_context_between_tool_calls_is_compacted_once() {
     let (started, sink) = f.send(None, "look at the screen").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
+    f.manager
+        .0
+        .seen
+        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
     // The screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
+    // AI-22 forgets what the model saw of files, as Compact does (AI-38…40).
+    assert!(!f.manager.0.seen.knows(&conv));
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 3);
@@ -2030,8 +2042,14 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
     assert_eq!(err.field.as_deref(), Some("text"));
     assert_eq!(f.entries(&conv).len(), 8);
 
-    // gamma comes after the context start (summary 2): the start stays.
+    // gamma comes after the context start (summary 2): the start stays. What the model saw of
+    // files (AI-38…40) may be in the deleted entries, so it is forgotten.
+    f.manager
+        .0
+        .seen
+        .record(&conv, "ops@db:22", "/etc/hosts", b"x");
     let (started, sink) = f.edit(&conv, &ids[6], "gamma-edited").await.unwrap();
+    assert!(!f.manager.0.seen.knows(&conv));
     assert_eq!(
         started.conversation.context_start.as_deref(),
         Some(ids[5].as_str())

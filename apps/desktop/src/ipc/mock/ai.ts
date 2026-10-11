@@ -107,6 +107,7 @@ const DAY = 24 * HOUR;
  *   "listen"          edit_file with replace_all         "nomatch"  edit_file whose old_string is missing
  *   "crlf"            edit_file of a CRLF file           "write"    write_file of a new file
  *   "bigfile"         write_file of a 1,200-line file, to see the diff paged
+ *   "unread"          edit_file of a file the conversation has not read, which is refused
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
  * It waits for every result, then answers from them. Other messages get a Markdown sample.
@@ -372,8 +373,15 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
         if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
         if (want("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
-        // AI-38…40: the file tools, on the mock's files.
-        if (want("read file", "cat ", "读取文件", "ファイルを読")) calls.push(call("read_file", { path: "/etc/nginx/sites-available/default" }));
+        // AI-38…40: the file tools, on the mock's files. A change to an existing file reads it first, as
+        // the model must; "unread" skips that to show the refusal.
+        const NGINX = "/etc/nginx/sites-available/default";
+        const readFirst = (path: string) => {
+          if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path)))) calls.push(call("read_file", { path }));
+        };
+        if (want("read file", "cat ", "读取文件", "ファイルを読")) readFirst(NGINX);
+        if (want("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
+        if (want("edit", "编辑", "編集")) readFirst(NGINX);
         if (want("edit", "编辑", "編集"))
           calls.push(
             call("edit_file", {
@@ -382,6 +390,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
               new_string: "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
             }),
           );
+        if (want("listen", "端口", "ポート", "nomatch", "不匹配", "不一致")) readFirst(NGINX);
+        if (want("crlf")) readFirst("/srv/app/web.config");
+        if (want("motd")) readFirst("/etc/motd");
         if (want("listen", "端口", "ポート")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "80 default_server", new_string: "8080 default_server", replace_all: true }));
         if (want("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
         if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
@@ -780,6 +791,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   ]);
   /** What each approval card read, like Rust's: the call writes only over it (AI-39). */
   const fileBases = new Map<string, string | null>();
+  /** What the model has seen of each file, by conversation and resolved path, like Rust's (§13.4). */
+  const seenFiles = new Map<string, string>();
+  const seenKey = (convId: string, path: string) => `${convId}:${filePath(path)}`;
+  const forgetSeen = (convId: string) => {
+    for (const key of [...seenFiles.keys()]) if (key.startsWith(`${convId}:`)) seenFiles.delete(key);
+  };
+  /** Why `name` may not change the file at `path`, which holds `current`; null when the model saw it so. */
+  function unseen(convId: string, name: string, path: string, current: string): string | null {
+    const seen = seenFiles.get(seenKey(convId, path));
+    if (seen === undefined) return `${path} has not been read in this conversation, so ${name} did not change it. Call read_file on it, then call ${name} again.`;
+    if (seen !== current)
+      return `${path} changed since you last read it, by the user or another program, so ${name} did not change it. Call read_file on it again, then call ${name} again with what it holds now.`;
+    return null;
+  }
 
   const filePath = (p: string) => (p === "~" ? "/home/deploy" : p.startsWith("~/") ? `/home/deploy/${p.slice(2)}` : p.startsWith("/") ? p : `/home/deploy/${p}`);
   const crlfOf = (text: string) => {
@@ -860,6 +885,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const path = String(args.path ?? "");
         const text = remoteFiles.get(filePath(path));
         if (text === undefined) return { status: "error", content: `${path} does not exist.` };
+        seenFiles.set(seenKey(c.view.id, path), text);
         const lines = fileLines(text);
         const from = Math.max(1, Number(args.offset ?? 1) || 1);
         const shown = lines.slice(from - 1, args.limit ? from - 1 + Number(args.limit) : undefined);
@@ -881,9 +907,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             status: "error",
             content: `${path} changed on the host after Hatoba read it for the approval card, so nothing was written. Read it again with read_file before you change it.`,
           };
+        const refused = current === null ? null : unseen(c.view.id, x.name, path, current);
+        if (refused) return { status: "error", content: refused };
         const after = fileAfter(x.name, args, current);
         if ("error" in after) return { status: "error", content: after.error };
         remoteFiles.set(key, after.text);
+        seenFiles.set(seenKey(c.view.id, path), after.text);
         const count = fileLines(after.text).length;
         if (x.name === "edit_file") return { status: "ok", content: `Edited ${path}: replaced 1 occurrence of old_string.\n` };
         return { status: "ok", content: current === null ? `Created ${path} (${count} lines).\n` : `Replaced the content of ${path} (${count} lines).\n` };
@@ -1175,6 +1204,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         fileBases.set(callId, remoteFiles.get(filePath(path)) ?? null);
       }
       const before = fileBases.get(callId) ?? null;
+      const refused = before === null ? null : unseen(id, x.name, path, before);
+      if (refused) return failed(refused);
       const after = fileAfter(x.name, args, before);
       if ("error" in after) return failed(after.error);
       const crlf = before !== null && crlfOf(before);
@@ -1190,6 +1221,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const c = need(id);
       if (turns.has(id)) fail("invalid_input", "a turn is running");
       await delay(1500);
+      // The summary no longer holds the files the model read (AI-38…40).
+      forgetSeen(id);
       const entry: AiEntryView = {
         role: "summary",
         entry_id: newId(),
@@ -1223,6 +1256,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (c.entries[i].role !== "user") fail("invalid_input", "only the user's messages can be edited", { field: "entry_id" });
       if (!text.trim()) fail("invalid_input", "the message is empty", { field: "text" });
       await checkModel(context);
+      forgetSeen(id);
       // The stopped turn's cancelled results go with everything else after the message.
       stopTurn(id);
       // Like Rust: the earliest move the deleted messages noted still tells where the earlier screens came from.
