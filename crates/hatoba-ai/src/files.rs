@@ -256,9 +256,22 @@ pub fn apply_edit(path: &str, file: &TextFile, args: &EditFileArgs) -> Result<Ed
              occurrence."
         ));
     }
+    let replaced = &found[..if replace_all { count } else { 1 }];
+    // The size comes first: replacing each of a million short matches with a long string would
+    // otherwise build gigabytes before the check.
+    let matched: usize = replaced
+        .iter()
+        .map(|&at| in_file(at + old.len()) - in_file(at))
+        .sum();
+    let size = (file.text.len() - matched) as u64
+        + (replaced.len() as u64).saturating_mul(new.len() as u64)
+        + if file.bom { 3 } else { 0 };
+    if size > MAX_FILE_BYTES {
+        return Err(too_large(path, size));
+    }
     let mut text = String::with_capacity(file.text.len());
     let mut copied = 0;
-    for &at in &found[..if replace_all { count } else { 1 }] {
+    for &at in replaced {
         text.push_str(&file.text[copied..in_file(at)]);
         text.push_str(&new);
         copied = in_file(at + old.len());
@@ -287,15 +300,19 @@ pub fn check_result(path: &str, file: &TextFile) -> Result<(), String> {
              was written."
         ));
     }
-    let size = file.text.len() + if file.bom { 3 } else { 0 };
-    if size as u64 > MAX_FILE_BYTES {
-        Err(format!(
-            "{path} would be {size} bytes, and the file tools write files up to 1 MB, so nothing \
-             was written."
-        ))
+    let size = file.text.len() as u64 + if file.bom { 3 } else { 0 };
+    if size > MAX_FILE_BYTES {
+        Err(too_large(path, size))
     } else {
         Ok(())
     }
+}
+
+fn too_large(path: &str, size: u64) -> String {
+    format!(
+        "{path} would be {size} bytes, and the file tools write files up to 1 MB, so nothing was \
+         written."
+    )
 }
 
 /// The `edit_file` result: how many occurrences were replaced, and the changed lines with a
@@ -525,6 +542,17 @@ mod tests {
 
     #[test]
     fn results_over_the_limit_are_refused() {
+        // Refused before the result is built: a megabyte of matches, each made 4,096 bytes.
+        let many = file(&"a".repeat(MAX_FILE_BYTES as usize));
+        let error = apply_edit("p", &many, &edit("a", &"b".repeat(4_096), true)).unwrap_err();
+        assert!(error.contains("4294967296 bytes"), "{error}");
+        // The exact size, BOM and CRLF included.
+        let crlf = TextFile::decode("\u{feff}x\r\ny\r\n".as_bytes()).unwrap();
+        let fits = "z".repeat(MAX_FILE_BYTES as usize - 3 - 4 - 1);
+        assert!(apply_edit("p", &crlf, &edit("x\n", &format!("{fits}\n"), false)).is_ok());
+        let over = format!("{fits}z\n");
+        assert!(apply_edit("p", &crlf, &edit("x\n", &over, false)).is_err());
+
         let f = file("x\n");
         let big = "y".repeat(MAX_FILE_BYTES as usize);
         assert!(

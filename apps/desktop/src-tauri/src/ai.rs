@@ -179,6 +179,9 @@ struct Inner {
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
     /// What the model has seen of each file, by conversation (AI-38…40).
     seen: files::Seen,
+    /// The `edit_file` and `write_file` calls running now, which a lock that disconnects SSH
+    /// sessions waits for.
+    writes: files::Writes,
 }
 
 struct Op {
@@ -1094,7 +1097,7 @@ impl AiManager {
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiEntryView> {
-        let (job, op, place) = {
+        let (job, op, place, _writing) = {
             let v = unlocked(vault)?;
             let conversation = find_conversation(&v, conversation_id)?;
             let entries = Entries::load(&v, conversation_id)?;
@@ -1112,12 +1115,15 @@ impl AiManager {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
             let mut place = files::Place::default();
+            // Counted under the guard a lock takes first, so the lock sees every write.
+            let writing = matches!(job, Job::File(FileJob::Edit(_) | FileJob::Write(_), _))
+                .then(|| self.0.writes.begin());
             if let Job::File(_, base) = &mut job {
                 *base = guard(&self.0.file_bases)
                     .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
                 place = file_place(&conversation, &entries);
             }
-            (job, op, place)
+            (job, op, place, writing)
         };
         let shown = Mutex::default();
         let seen = files::SeenBy {
@@ -1237,6 +1243,12 @@ impl AiManager {
             shown: &Mutex::default(),
         };
         Ok(files::preview_of(&job, &base, seen))
+    }
+
+    /// Returns once no `edit_file` or `write_file` call runs: a write that has begun runs to its
+    /// end, within 30 seconds, so a lock closes the SSH sessions after it (§13.4, "File tools").
+    pub async fn file_writes_ended(&self) {
+        self.0.writes.ended().await;
     }
 
     /// Drops what the approval cards of the conversation read (AI-39): none of its calls waits for

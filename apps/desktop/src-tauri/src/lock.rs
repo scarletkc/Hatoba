@@ -81,6 +81,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     state.deploy.clear();
     let disconnect = async {
         if disconnects_on_lock(&state) {
+            // A file write the assistant began runs to its end before its connection closes.
+            state.ai.file_writes_ended().await;
             state.ssh.disconnect_all().await;
         }
     };

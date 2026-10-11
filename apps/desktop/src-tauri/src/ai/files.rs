@@ -208,6 +208,34 @@ impl SeenBy<'_> {
     }
 }
 
+/// The `edit_file` and `write_file` calls running now. A write that has begun is not cut off, so
+/// a lock that disconnects SSH sessions waits for them, at most the 30 seconds of a write (§13.4,
+/// "File tools").
+#[derive(Default)]
+pub(super) struct Writes(tokio::sync::watch::Sender<usize>);
+
+impl Writes {
+    /// A call that may write runs until the returned guard drops.
+    pub(super) fn begin(&self) -> Writing<'_> {
+        self.0.send_modify(|n| *n += 1);
+        Writing(self)
+    }
+
+    /// Returns once no call that may write runs.
+    pub(super) async fn ended(&self) {
+        // The sender lives as long as `self`, so the wait cannot fail.
+        let _ = self.0.subscribe().wait_for(|&n| n == 0).await;
+    }
+}
+
+pub(super) struct Writing<'a>(&'a Writes);
+
+impl Drop for Writing<'_> {
+    fn drop(&mut self) {
+        self.0.0.send_modify(|n| *n -= 1);
+    }
+}
+
 /// What the approval card read for a call: the file as read, or `None` when it did not exist,
 /// and the server it was read from. The write checks the file against it, so the user approved
 /// the change to this content.
@@ -861,6 +889,21 @@ mod tests {
             shown: &Mutex::default(),
         };
         assert_eq!(preview_of(&edit, &conf, other).error, None);
+    }
+
+    /// A lock that disconnects sessions waits for the edits and writes that run.
+    #[tokio::test]
+    async fn writes_are_waited_for() {
+        let writes = Writes::default();
+        writes.ended().await;
+        let first = writes.begin();
+        let second = writes.begin();
+        let wait = || tokio::time::timeout(Duration::from_millis(50), writes.ended());
+        assert!(wait().await.is_err());
+        drop(first);
+        assert!(wait().await.is_err());
+        drop(second);
+        assert!(wait().await.is_ok());
     }
 
     /// A run writes over what its approval card read, and only on the server the card read it on.
