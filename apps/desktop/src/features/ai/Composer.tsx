@@ -86,8 +86,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     void sendMessage(slotId, slot.draft);
   };
 
-  // AI-42: the turn, if any, goes on; the answer shows at the end of the conversation.
-  const canSide = !!model && !blocked && canAskSide(slot, slot.draft);
+  // AI-42: the turn, if any, goes on; the answer shows at the end of the conversation. While a turn
+  // runs, Rust asks with the turn's model, not the one picked here that the fit is measured
+  // against, so the provider's own limit decides.
+  const canSide = !!model && (busy || !blocked) && canAskSide(slot, slot.draft);
   const askSide = () => {
     if (canSide) askSideQuestion(slotId, slot.draft);
   };

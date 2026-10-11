@@ -5,7 +5,7 @@ A side question asks the assistant about the conversation without stopping it: a
 ## Asking one
 
 - **Ask a Side Question** (the speech bubble beside **Send** or **Stop** in the input area), or Alt+Enter (⌥↩ on macOS), asks what the input box holds, with its attachments (`references/ai-attachments.md`). Plain Enter still sends a message, which stops a running turn; while a turn runs, the input box says so.
-- **Ask About This** on an approval card opens a box on the card with a suggested question about the call; **Ask** sends it, and Esc closes the box. The call is neither run nor rejected, and the card keeps waiting for **Run** or **Reject**.
+- **Ask About This** on an approval card opens a box on the card with a suggested question about the call; **Ask** sends it, and Esc closes the box. The call is neither run nor rejected, and the card keeps waiting for **Run** or **Reject**. It is not offered while you edit the call, since the assistant sees the call as the model wrote it.
 - The assistant answers from the conversation so far, with the conversation's model, and uses no tools. It is told which calls still wait for approval or are still running. If the model tries to use a tool anyway, Hatoba asks it once more without tools.
 
 | en | zh-CN | ja |

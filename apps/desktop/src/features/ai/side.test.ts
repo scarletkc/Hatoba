@@ -185,14 +185,15 @@ describe("askSideQuestion (AI-42)", () => {
     expect(getSlot(HOME_SLOT).side).toMatchObject({ question: "second", phase: "streaming", answer: "new" });
   });
 
-  it("shows a failure, and Retry asks the same question again", async () => {
+  it("shows a failure without what streamed of it, and Retry asks the same question again", async () => {
     patchSlot(HOME_SLOT, { extras: [{ id: "x1", attachment: paste }] });
     const p = pending();
     askSideQuestion(HOME_SLOT, "why?");
     const sent = p.input()?.text;
-    p.fail("ai", "Overloaded");
+    p.emit({ kind: "text", delta: "Let me check the logs." });
+    p.fail("ai", "the model answered with tool calls instead of text");
     await flush();
-    expect(getSlot(HOME_SLOT).side).toMatchObject({ phase: "error" });
+    expect(getSlot(HOME_SLOT).side).toMatchObject({ phase: "error", answer: "" });
     expect(getSlot(HOME_SLOT).side?.error).toBeTruthy();
 
     const again = pending();

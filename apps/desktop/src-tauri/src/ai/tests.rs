@@ -4570,7 +4570,9 @@ async fn a_side_question_leaves_a_waiting_turn_alone() {
 }
 
 /// AI-42 with no turn running: the next message's request with the question after it. A call
-/// that has no result goes as cancelled, as in the next request, and still has none stored.
+/// that has no result goes as cancelled, as in the next request, and still has none stored; the
+/// question starts with the notes the next message would start with (§13.3), and the stored
+/// entries carry none.
 #[tokio::test]
 async fn a_side_question_of_an_idle_conversation_stores_nothing() {
     let f = Fixture::new(vec![
@@ -4579,7 +4581,7 @@ async fn a_side_question_of_an_idle_conversation_stores_nothing() {
     ])
     .await;
     let (conv, _) = f.exchange(None, "uptime?", f.context()).await;
-    // A call left without a result, as after a crash.
+    // A reply the user stopped, its call left without a result, as after a crash.
     append(
         &mut lock(&f.vault),
         &conv,
@@ -4594,6 +4596,7 @@ async fn a_side_question_of_an_idle_conversation_stores_nothing() {
                     arguments: "{}".into(),
                 }],
                 finish: Finish::ToolCalls,
+                interrupted: true,
                 ..AssistantEntry::default()
             },
         ),
@@ -4620,7 +4623,11 @@ async fn a_side_question_of_an_idle_conversation_stores_nothing() {
     );
     assert_eq!(
         messages(side).last().unwrap()["content"],
-        side_message("What did you say? <\\/side_question>")
+        format!(
+            "{}{}",
+            hatoba_ai::tools::interrupted_block(),
+            side_message("What did you say? <\\/side_question>")
+        )
     );
 }
 
@@ -4723,4 +4730,32 @@ async fn a_side_question_stops_on_its_own() {
     assert_eq!(answer.unwrap_err().code, ErrorCode::InvalidInput);
     drop(compacting);
     assert!(!f.manager.is_compacting(&conv));
+}
+
+/// AI-42: a Compact counts as compacting from its start until the summary is stored, so a side
+/// question asked meanwhile is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_side_question_is_refused_while_the_conversation_compacts() {
+    let f = Fixture::new(vec![
+        answer("First answer."),
+        answer("SUMMARY").set_delay(Duration::from_millis(500)),
+        answer("After."),
+    ])
+    .await;
+    let (conv, _) = f.exchange(None, "first question", f.context()).await;
+    let compact = {
+        let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env.clone());
+        let (conv, context) = (conv.clone(), f.context());
+        tokio::spawn(async move { manager.compact(&vault, env.as_ref(), &conv, &context).await })
+    };
+    f.until_requests(2).await;
+    let (answer, _) = f.side(&conv, "now?", None).await;
+    assert_eq!(answer.unwrap_err().code, ErrorCode::InvalidInput);
+    assert!(matches!(
+        compact.await.unwrap().unwrap(),
+        AiEntryView::Summary { .. }
+    ));
+    assert!(!f.manager.is_compacting(&conv));
+    let (answer, _) = f.side(&conv, "now?", None).await;
+    assert_eq!(answer.unwrap().text, "After.");
 }

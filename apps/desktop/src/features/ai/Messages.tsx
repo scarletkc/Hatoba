@@ -808,6 +808,11 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
   const ask = () => {
     if (question !== null && askSideQuestion(slotId, question, false)) setQuestion(null);
   };
+  /** Edit and Reject close the box of a side question. */
+  const switchMode = (next: "edit" | "reject") => {
+    setMode(next);
+    setQuestion(null);
+  };
   const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
 
   return (
@@ -954,7 +959,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
         </div>
       )}
 
-      {question !== null && mode !== "reject" && (
+      {question !== null && mode === "view" && (
         <div className={s.rejectRow}>
           <input
             className={s.input}
@@ -1014,10 +1019,11 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
         </div>
       ) : (
         <div className={s.actions}>
-          <LinkButton tone="danger" className={s.rejectLink} onClick={() => setMode("reject")}>
+          <LinkButton tone="danger" className={s.rejectLink} onClick={() => switchMode("reject")}>
             {t("ai.approval.reject")}
           </LinkButton>
-          {question === null && (
+          {/* The model would see the call as stored, not as edited here, so not while editing. */}
+          {question === null && mode === "view" && (
             <LinkButton tone="muted" icon="chat-teardrop-dots" className={s.rejectLink} title={t("ai.side.askCardHint")} onClick={() => setQuestion(t("ai.side.suggest"))}>
               {t("ai.side.askCard")}
             </LinkButton>
@@ -1028,7 +1034,7 @@ function ApprovalCard({ slotId, call, host, mcp }: { slotId: string; call: AiToo
               {t("btn.cancel")}
             </Button>
           ) : (
-            <Button size="sm" icon="pencil-simple" onClick={() => setMode("edit")}>
+            <Button size="sm" icon="pencil-simple" onClick={() => switchMode("edit")}>
               {t("btn.edit")}
             </Button>
           )}

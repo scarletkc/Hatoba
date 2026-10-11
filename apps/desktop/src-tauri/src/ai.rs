@@ -934,14 +934,7 @@ impl AiManager {
                 // quick-connect target (HOST-12), which is no saved host, so the conversation
                 // records the target instead. On the home tab it stays where it was.
                 let target = tab_target(&context);
-                let moves = match (&context.host_id, &target) {
-                    (Some(host_id), _) => conversation.host_id.as_ref() != Some(host_id),
-                    (None, Some(target)) => {
-                        conversation.host_id.is_some()
-                            || conversation.quick_target.as_ref() != Some(target)
-                    }
-                    (None, None) => false,
-                };
+                let moves = moves_to(&conversation, context.host_id.as_deref(), target.as_ref());
                 let mut moved_to = None;
                 if moves {
                     if came_from.is_none() {
@@ -1481,7 +1474,8 @@ impl AiManager {
 
     /// `ai_compact` (AI-21): asks the model for a summary of the context with the request a turn
     /// would send next ([`compact_request`]), stores it as a `summary` entry and moves
-    /// `context_start` to it. Refused while a turn runs.
+    /// `context_start` to it. Refused while a turn runs. The conversation counts as compacting
+    /// until the summary is stored, which refuses a side question (AI-42).
     pub async fn compact(
         &self,
         vault: &SharedVault,
@@ -1489,6 +1483,7 @@ impl AiManager {
         conversation_id: &str,
         context: &AiTurnContext,
     ) -> AppResult<AiEntryView> {
+        let _compacting = self.start_compacting(conversation_id);
         let mut stored = false;
         let prepared = self.prepare_compact(vault, conversation_id, context, &mut stored);
         if stored {
@@ -1584,15 +1579,13 @@ impl AiManager {
     /// or has no text is dropped (none of its calls runs or is stored), and the request goes once
     /// more without tools, with the system prompt that says so. `None` when that answer is no
     /// summary either: an endpoint can still return calls without tools, and their text is then
-    /// only what comes before them. The conversation counts as compacting meanwhile, which
-    /// refuses a side question (AI-42).
+    /// only what comes before them.
     async fn summarize(
         &self,
         conversation_id: &str,
         compact: SideRequest,
         cancel: &CancellationToken,
     ) -> Result<Option<String>, AiError> {
-        let _compacting = self.start_compacting(conversation_id);
         let SideRequest {
             mut request,
             plain_system,
@@ -1624,7 +1617,8 @@ impl AiManager {
 
     /// AI-22, before a new message or a retry: builds the Compact request from the request the
     /// turn would send next, with the MCP tools it would offer (starting their servers, as the
-    /// turn would), then compacts like [`Self::auto_compact`].
+    /// turn would), then compacts like [`Self::auto_compact`]. The conversation counts as
+    /// compacting from the start, which refuses a side question (AI-42).
     async fn compact_before(
         &self,
         vault: &SharedVault,
@@ -1632,6 +1626,7 @@ impl AiManager {
         conversation_id: &str,
         turn: &Turn,
     ) -> Result<(), CompactFailure> {
+        let _compacting = self.start_compacting(conversation_id);
         let offer = self.0.mcp.offer(vault, &turn.context, &turn.cancel).await;
         let compact = {
             let v = lock(vault);
@@ -1656,7 +1651,8 @@ impl AiManager {
     }
 
     /// AI-22: runs a Compact request inside a turn, exactly like `ai_compact`, stores the
-    /// summary (moving `context_start` to it) and sends its entry on the turn's channel.
+    /// summary (moving `context_start` to it) and sends its entry on the turn's channel. The
+    /// conversation counts as compacting until the summary is stored (AI-42).
     async fn auto_compact(
         &self,
         vault: &SharedVault,
@@ -1665,6 +1661,7 @@ impl AiManager {
         turn: &Turn,
         compact: SideRequest,
     ) -> Result<(), CompactFailure> {
+        let _compacting = self.start_compacting(conversation_id);
         tracing::info!(conversation_id, "AI context nearly full; compacting");
         let summary = match self.summarize(conversation_id, compact, &turn.cancel).await {
             Ok(summary) => summary,
@@ -1740,8 +1737,8 @@ impl AiManager {
             return Err(AppError::invalid("text", "The question is empty."));
         }
         let stopped = || AppError::new(ErrorCode::Cancelled, "the side question was stopped");
-        let server_id = turn_server_id(env, &context);
-        let (side, context, server_id) = {
+        let next_server_id = turn_server_id(env, &context);
+        let side = {
             let v = unlocked(vault)?;
             find_conversation(&v, &conversation_id)?;
             if self.is_compacting(&conversation_id) {
@@ -1750,37 +1747,48 @@ impl AiManager {
                     "the conversation is being compacted",
                 ));
             }
-            // The running turn's next request, whose prefix the provider has cached.
-            let (context, server_id) = match self.running(&conversation_id) {
-                Some(turn) => (turn.context.clone(), turn.server_id.clone()),
-                None => (context, server_id),
-            };
-            (self.start_side(&conversation_id), context, server_id)
+            self.start_side(&conversation_id)
         };
         let cancel = side.op.token().clone();
-        // AI-30: the MCP tools the next request offers, so this request offers them too.
-        let offer = self.0.mcp.offer(vault, &context, &cancel).await;
-        let request = {
+        let request = loop {
+            // The running turn's next request, whose prefix the provider has cached, or the next
+            // message's when no turn runs.
+            let turn = self.running(&conversation_id);
+            let (context, server_id) = match &turn {
+                Some(turn) => (turn.context.clone(), turn.server_id.clone()),
+                None => (context.clone(), next_server_id.clone()),
+            };
+            // AI-30: the MCP tools that request offers, so this one offers them too.
+            let offer = self.0.mcp.offer(vault, &context, &cancel).await;
             let v = unlocked(vault)?;
             if cancel.is_cancelled() {
                 return Err(stopped());
             }
-            let open = if self.is_running(&conversation_id) {
-                OpenCalls::Pending {
-                    approval: approval_call_id.as_deref(),
-                }
-            } else {
-                OpenCalls::Cancelled
+            // A turn that started, ended or gave way to a new message meanwhile changed the
+            // entries, which must go with its context: start again from the turn there is now.
+            let now = self.running(&conversation_id);
+            let same = match (&turn, &now) {
+                (Some(before), Some(now)) => Arc::ptr_eq(before, now),
+                (before, now) => before.is_none() && now.is_none(),
             };
-            side_request(
+            if !same {
+                continue;
+            }
+            let timing = match turn {
+                Some(_) => SideTiming::DuringTurn {
+                    approval: approval_call_id.as_deref(),
+                },
+                None => SideTiming::Idle,
+            };
+            break side_request(
                 &v,
                 &conversation_id,
                 &context,
                 server_id.as_deref(),
                 &offer,
-                open,
+                timing,
                 &text,
-            )?
+            )?;
         };
         let response = match self
             .side_answer(&conversation_id, request, &cancel, on_event)
@@ -1954,44 +1962,51 @@ fn compact_request(
     ))
 }
 
-/// What a side question's request says of the calls without a result (AI-42).
+/// When a side question is asked (AI-42), which decides what its request adds for this request
+/// only.
 #[derive(Clone, Copy)]
-enum OpenCalls<'a> {
-    /// No turn runs: they go as cancelled, as in the conversation's next request.
-    Cancelled,
-    /// A turn runs: each gets a result for this request only, which says that the call waits for
-    /// the user's approval (the call `approval`, whose card waits) or has not finished.
-    Pending { approval: Option<&'a str> },
+enum SideTiming<'a> {
+    /// No turn runs: the request is the next message's, so the question starts with the notes
+    /// that message would start with (spec §13.3), and calls without a result go as cancelled.
+    Idle,
+    /// A turn runs, whose stored messages carry their notes: each of its calls without a result
+    /// gets one, which says that the call waits for the user's approval (the call `approval`,
+    /// whose card waits) or has not finished.
+    DuringTurn { approval: Option<&'a str> },
 }
 
 /// A side question's request (AI-42), built from the next request of a turn with `context` and
-/// `server_id` whose MCP tools are `offer`, like a Compact request: the calls without a result,
-/// answered as `open` says for this request only, then the question after its instruction.
+/// `server_id` whose MCP tools are `offer`, like a Compact request: what `timing` adds, then the
+/// question after its instruction. Nothing of it is stored.
 fn side_request(
     v: &Vault,
     conversation_id: &str,
     context: &AiTurnContext,
     server_id: Option<&str>,
     offer: &Offer,
-    open: OpenCalls<'_>,
+    timing: SideTiming<'_>,
     question: &str,
 ) -> AppResult<SideRequest> {
     let mut list = context_entries(v, conversation_id)?;
-    if let OpenCalls::Pending { approval } = open {
-        let now = now_ms();
-        for call_id in fix_up_missing_results(&list) {
-            let content = if approval == Some(call_id.as_str()) {
-                SIDE_AWAITING_APPROVAL
-            } else {
-                SIDE_PENDING
-            };
-            list.push(AiEntry::tool(now, call_id, ToolStatus::Ok, content));
+    let notes = match timing {
+        SideTiming::Idle => next_message_notes(v, conversation_id, context)?,
+        SideTiming::DuringTurn { approval } => {
+            let now = now_ms();
+            for call_id in fix_up_missing_results(&list) {
+                let content = if approval == Some(call_id.as_str()) {
+                    SIDE_AWAITING_APPROVAL
+                } else {
+                    SIDE_PENDING
+                };
+                list.push(AiEntry::tool(now, call_id, ToolStatus::Ok, content));
+            }
+            String::new()
         }
-    }
+    };
     let next = next_request(v, context, server_id, offer, list)
         .map_err(|message| AppError::invalid("model_id", message))?;
     let message = format!(
-        "{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
+        "{notes}{SIDE_QUESTION_INSTRUCTION}\n\n<side_question>\n{}\n</side_question>",
         escape_closing_tag(question.trim(), "side_question")
     );
     Ok(SideRequest::new(
@@ -3304,6 +3319,59 @@ fn moved_from(
         }
         (None, old) => old.as_ref().map(target_name),
     }
+}
+
+/// AI-09: whether the next message moves the conversation to the tab's host `host_id`, or to the
+/// tab's quick-connect `target` (HOST-12) when it has no saved host. On the home tab, with
+/// neither, it stays where it was.
+fn moves_to(
+    conversation: &AiConversation,
+    host_id: Option<&str>,
+    target: Option<&AiQuickTarget>,
+) -> bool {
+    match (host_id, target) {
+        (Some(host_id), _) => conversation.host_id.as_deref() != Some(host_id),
+        (None, Some(target)) => {
+            conversation.host_id.is_some() || conversation.quick_target.as_ref() != Some(target)
+        }
+        (None, None) => false,
+    }
+}
+
+/// The notes the conversation's next message would start with if it went with `context` (spec
+/// §13.3), as [`AiManager::open_turn`] works them out for a message that edits nothing. A side
+/// question of an idle conversation (AI-42) starts with them, unstored, so that its request reads
+/// the earlier entries the way the next message's will.
+fn next_message_notes(
+    v: &Vault,
+    conversation_id: &str,
+    context: &AiTurnContext,
+) -> AppResult<String> {
+    let conversation = find_conversation(v, conversation_id)?;
+    let earlier = Entries::load(v, conversation_id)?.list;
+    let target = tab_target(context);
+    let host_id = context.host_id.as_deref();
+    let (came_from, host_now) = if moves_to(&conversation, host_id, target.as_ref()) {
+        let came_from = moved_from(v, &conversation, host_id, target.as_ref());
+        let host_now = host_id
+            .and_then(|id| host_name(v, id))
+            .or_else(|| target.as_ref().map(target_name));
+        (came_from, host_now)
+    } else {
+        let host_now = conversation
+            .host_id
+            .as_deref()
+            .and_then(|id| host_name(v, id))
+            .or_else(|| conversation.quick_target.as_ref().map(target_name));
+        (None, host_now)
+    };
+    Ok(notes_before(
+        v,
+        &earlier,
+        came_from.as_deref(),
+        host_now.as_deref(),
+        context,
+    ))
 }
 
 /// How a stored model is named in a `model_change` note: its display name and ID, or the ID

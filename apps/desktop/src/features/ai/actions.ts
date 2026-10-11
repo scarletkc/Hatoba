@@ -589,7 +589,8 @@ async function runSide(slotId: string, q: SideQuestion, context: AiTurnContext, 
   } catch (e) {
     // Stopped, replaced by a newer side question, or the vault locked.
     if (toAppError(e).code === "cancelled") update((cur) => (sideRunning(cur) ? { ...cur, phase: "stopped" } : cur));
-    else update((cur) => ({ ...cur, phase: "error", error: aiErrorMessage(e) }));
+    // What streamed before the failure goes: it may be the start of an answer that was dropped.
+    else update((cur) => ({ ...cur, phase: "error", answer: "", error: aiErrorMessage(e) }));
   }
 }
 
