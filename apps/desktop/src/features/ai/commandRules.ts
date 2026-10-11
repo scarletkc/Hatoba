@@ -216,9 +216,11 @@ const KUBECTL_READS = ["get", "describe", "logs", "top", "version", "explain", "
 function kubectlReads(args: string[]): boolean {
   const sub = args[0];
   if (!KUBECTL_READS.includes(sub)) return false;
-  // `get secret -o yaml` prints the secrets' values.
+  // `get secret -o yaml` prints the secrets' values (resource types are case-insensitive), and so can
+  // `get` with a raw API path, a manifest or a kustomization, which name the objects another way.
   const names = args.slice(1).filter((a) => !a.startsWith("-")).flatMap((a) => a.split(","));
-  if (sub === "get" && names.some((n) => /^secrets?($|[/.])/.test(n))) return false;
+  if (sub === "get" && names.some((n) => /^secrets?($|[/.])/i.test(n))) return false;
+  if (sub === "get" && args.some((a) => refused(a, ["--raw", "--filename", "--kustomize"], "k"))) return false;
   return !args.some((a) => refused(a, ["--watch", "--follow", "--output-directory"], "wf"));
 }
 
@@ -296,7 +298,7 @@ const READ_ONLY: Record<string, Rule> = {
   grep: free,
   egrep: free,
   fgrep: free,
-  rg: { ok: without(["--pre"]) },
+  rg: { ok: without(["--pre", "--hostname-bin"]) },
   find: { ok: (args) => !args.some((a) => ["-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"].includes(a)) },
   wc: free,
   stat: free,
@@ -348,7 +350,10 @@ const READ_ONLY: Record<string, Rule> = {
   dmesg: { ok: dmesgReads },
   systemctl: { ok: systemctlReads },
   journalctl: {
-    ok: without(["--vacuum", "--rotate", "--follow", "--flush", "--sync", "--relinquish-var", "--smart-relinquish-var", "--setup-keys", "--update-catalog"], "f"),
+    ok: without(
+      ["--vacuum", "--rotate", "--follow", "--flush", "--sync", "--relinquish-var", "--smart-relinquish-var", "--setup-keys", "--update-catalog", "--cursor-file"],
+      "f",
+    ),
   },
   git: { ok: gitReads },
   docker: { ok: dockerReads },
@@ -417,6 +422,15 @@ const SUBCOMMANDS = new Set([
   "ufw",
 ]);
 
+/**
+ * Whether `word` names a command of `names`, also with a directory or a version: `/usr/bin/sudo` is
+ * `sudo`, and `python3.12` is `python`.
+ */
+function named(names: ReadonlySet<string>, word: string): boolean {
+  const base = word.slice(word.lastIndexOf("/") + 1);
+  return names.has(base) || names.has(base.replace(/[\d.]+$/, ""));
+}
+
 /** Commands that run another command, which a prefix of theirs would allow whatever it is. */
 const WRAPPERS = new Set(["sudo", "doas", "su", "env", "xargs", "nohup", "timeout", "nice", "ionice", "time", "watch", "exec", "eval", "command", "builtin", "sh", "bash", "zsh", "dash", "ksh", "fish", "busybox"]);
 
@@ -470,7 +484,7 @@ const NOT_SAVED = new Set([
 export function savablePrefixes(prefixes: readonly string[]): boolean {
   return prefixes.every((p) => {
     const name = prefixWords(p)[0] ?? "";
-    return !NOT_SAVED.has(name) && !name.startsWith("mkfs");
+    return !named(NOT_SAVED, name) && !name.slice(name.lastIndexOf("/") + 1).startsWith("mkfs");
   });
 }
 
@@ -491,9 +505,9 @@ export function allowancePrefixes(line: string): string[] | null {
   for (const c of commands) {
     if (readsOnly(c)) continue;
     const [name, sub] = c.words;
-    if (!plain(c.words) || WRAPPERS.has(name) || c.globs[0] || /\s/.test(name)) return null;
+    if (!plain(c.words) || named(WRAPPERS, name) || c.globs[0] || /\s/.test(name)) return null;
     let prefix = name;
-    if (SUBCOMMANDS.has(name)) {
+    if (named(SUBCOMMANDS, name)) {
       if (!sub || sub.startsWith("-") || c.globs[1] || /\s/.test(sub)) return null;
       prefix = `${name} ${sub}`;
     }

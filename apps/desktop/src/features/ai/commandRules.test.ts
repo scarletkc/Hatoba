@@ -141,6 +141,9 @@ describe("read-only commands (§13.5)", () => {
       "find . -name *.log",
       "find . '-del'ete",
       "rg --pre sh x",
+      // Runs the program it names to look up the host name.
+      "rg --hostname-bin=/tmp/helper x",
+      "rg --hostname-bin /tmp/helper x",
       "rg x *",
       "tail -f /var/log/syslog",
       "tail -fn 20 x",
@@ -151,6 +154,9 @@ describe("read-only commands (§13.5)", () => {
       "journalctl --vacuum-size=100M",
       "journalctl --vac=1",
       "journalctl --rotate",
+      // Writes the last entry's cursor to the file.
+      "journalctl -n 1 --cursor-file=/tmp/cursor",
+      "journalctl -n 1 --cursor-file /tmp/cursor",
       "date -s '2020-01-01'",
       "date 010100002020",
       "date --set=x",
@@ -197,6 +203,12 @@ describe("read-only commands (§13.5)", () => {
       "kubectl get secret db -o yaml",
       "kubectl get configmaps,secrets -A",
       "kubectl get secrets/db -o json",
+      "kubectl get Secrets -o yaml",
+      "kubectl get SECRET/db",
+      "kubectl get --raw=/api/v1/namespaces/default/secrets",
+      "kubectl get --raw /api/v1/namespaces/default/secrets",
+      "kubectl get --filename=secret.yaml -o yaml",
+      "kubectl get -k overlays/prod -o yaml",
       "docker inspect web",
       "docker container inspect web",
       "printenv",
@@ -251,6 +263,7 @@ describe("allowancePrefixes", () => {
     expect(allowancePrefixes("apt install -y nginx")).toEqual(["apt install"]);
     expect(allowancePrefixes("./deploy.sh --prod")).toEqual(["./deploy.sh"]);
     expect(allowancePrefixes("rm -rf /tmp/build")).toEqual(["rm"]);
+    expect(allowancePrefixes("/usr/bin/git pull")).toEqual(["/usr/bin/git pull"]);
   });
 
   it("leaves out read-only commands and repeats", () => {
@@ -261,6 +274,9 @@ describe("allowancePrefixes", () => {
   it("offers nothing it could not match later, or that would allow any command", () => {
     for (const line of [
       "sudo systemctl restart nginx",
+      "/usr/bin/sudo reboot",
+      "/bin/sh -c 'rm x'",
+      "/usr/bin/git",
       "LANG=C make",
       "xargs rm",
       "sh -c 'rm x'",
