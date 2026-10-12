@@ -1795,10 +1795,10 @@ export async function pinConversation(id: string, pinned: boolean) {
 
 /**
  * AI-43: copies a conversation up to the entry `entryId` (all of it with null) into a new conversation, and
- * opens that in the slot as History's Open does (AI-09). Not while the conversation is busy, or while a fork
- * of it is being made. The fork stays in History when opening it would stop or replace something: the slot
- * is busy (a turn running or waiting for approval, or a compaction), or was when Fork was chosen, or it moved
- * on while Rust copied (another conversation, a message, a turn or a compaction, even one that has ended since).
+ * opens that in the slot as History's Open does (AI-09), so a busy conversation the slot showed goes on in the
+ * background (AI-07). Not while the conversation is busy, or while a fork of it is being made. The fork stays in
+ * History when the slot moved on while Rust copied (another conversation, or a message, a turn or a compaction
+ * started, even one that has ended since), or a file change of its conversation is being reverted (AI-41).
  */
 export async function forkConversation(slotId: string, id: string, entryId: string | null) {
   if (conversationBusy(id) || useAi.getState().forking.includes(id)) return;
@@ -1811,18 +1811,24 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
   // The stored slot itself: one never used is not stored, and getSlot makes a new blank one each time.
   const before = useAi.getState().slots[slotId];
   const runner = runners.get(slotId);
-  const busy = slotBusy(slotId);
+  const working = slotWorking(slotId);
   try {
     // The number in the title skips those History has (AI-43).
     if (!useAi.getState().history) await loadHistory();
     const taken = (useAi.getState().history ?? []).map((c) => c.title);
     const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? "", taken));
     updateConversation(fork);
-    // Every message, stored entry and reload gives the slot a new entries array, so the same array means
-    // nothing happened in it meanwhile, however it ended.
+    // Every message, stored entry and reload gives the slot a new entries array, so in an idle slot the same array
+    // means nothing happened in it meanwhile, however it ended. A turn or compaction under way when Fork was chosen
+    // changes it too, but that is not the user moving on: only a turn or compaction started since is.
     const now = useAi.getState().slots[slotId];
-    const movedOn = now?.conversationId !== before?.conversationId || now?.entries !== before?.entries || runners.get(slotId) !== runner || now?.compacting !== before?.compacting;
-    if (busy || slotBusy(slotId) || movedOn) {
+    const started = runners.get(slotId);
+    const movedOn =
+      now?.conversationId !== before?.conversationId ||
+      (!!started && started !== runner) ||
+      (!!now?.compacting && !before?.compacting) ||
+      (!working && (now?.entries !== before?.entries || !!now?.turn));
+    if (movedOn || before?.reverting || now?.reverting) {
       toast(t("ai.fork.inHistory"), "success");
       return;
     }

@@ -22,7 +22,7 @@ vi.mock("@/components/overlay", async (importActual) => ({ ...(await importActua
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
 const { forkConversation } = await import("./actions");
-const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
+const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotOf, useAi } = await import("./store");
 
 const conversation = (id: string, title: string): AiConversationView => ({
   id,
@@ -56,7 +56,7 @@ beforeEach(() => {
   sideStop.mockReset().mockResolvedValue(undefined);
   get.mockResolvedValue({ conversation: copy, entries: [entry], running: false, file_changes: [] });
   list.mockResolvedValue([original]);
-  useAi.setState({ history: null, forking: [], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: original.id, conversation: original, entries: [entry] } } });
+  useAi.setState({ history: null, forking: [], background: {}, slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: original.id, conversation: original, entries: [entry] } } });
 });
 
 describe("forkConversation (AI-43)", () => {
@@ -118,17 +118,42 @@ describe("forkConversation (AI-43)", () => {
     expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
   });
 
-  it("forks from History without stopping the active tab's turn that waits for approval", async () => {
+  it("opens a fork from History over the active tab's turn waiting for approval, which goes on in the background (AI-07)", async () => {
     const other = conversation("c3", "Restart nginx");
     const waiting = { ...newTurn(), phase: "tools" as const, call: { id: "call-1", state: "approval" as const } };
     useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: waiting } } });
     fork.mockResolvedValue(copy);
     await forkConversation(HOME_SLOT, original.id, null);
     expect(fork).toHaveBeenCalledWith(original.id, null, "Disk usage (fork)");
-    expect(getSlot(HOME_SLOT).conversationId).toBe(other.id);
-    expect(getSlot(HOME_SLOT).turn).toBe(waiting);
-    expect(get).not.toHaveBeenCalled();
+    expect(getSlot(HOME_SLOT).conversationId).toBe(copy.id);
+    const parked = slotOf(other.id)!;
+    expect(useAi.getState().background).toEqual({ [parked]: HOME_SLOT });
+    expect(getSlot(parked).turn).toBe(waiting);
     expect(useAi.getState().history?.map((c) => c.id)).toEqual([copy.id, original.id, other.id]);
+    expect(toast).toHaveBeenCalledWith("Forked", "success");
+  });
+
+  it("opens the fork although the turn under way when Fork was chosen went on while Rust copied", async () => {
+    const other = conversation("c3", "Restart nginx");
+    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() } } });
+    const finish = held();
+    const pending = forkConversation(HOME_SLOT, original.id, null);
+    const reply: AiEntryView = { ...entry, entry_id: "e2", text: "Restarting." };
+    patchSlot(HOME_SLOT, (s) => ({ entries: [...s.entries, reply] }));
+    finish(copy);
+    await pending;
+    expect(getSlot(HOME_SLOT).conversationId).toBe(copy.id);
+    expect(getSlot(slotOf(other.id)!)).toMatchObject({ entries: [reply], turn: { phase: "starting" } });
+    expect(toast).toHaveBeenCalledWith("Forked", "success");
+  });
+
+  it("leaves a slot that started a compaction while Rust copied", async () => {
+    const finish = held();
+    const pending = forkConversation(HOME_SLOT, original.id, null);
+    patchSlot(HOME_SLOT, { compacting: true });
+    finish(copy);
+    await pending;
+    expect(getSlot(HOME_SLOT).conversationId).toBe(original.id);
     expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
   });
 

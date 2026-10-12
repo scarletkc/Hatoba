@@ -34,7 +34,7 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 
 ## Fork a conversation
 
-A fork copies a conversation up to a point into a new, separate conversation, which opens in the active tab. The original stays as it was, in History. When the active tab's conversation is working, waiting for approval, compacting or reverting a file edit, the fork does not replace it: it stays in History, and the panel says so. Use it to try another direction from an earlier message, or to go on with a conversation on another host without moving the original there.
+A fork copies a conversation up to a point into a new, separate conversation, which opens in the active tab. The original stays as it was, in History. When the active tab's conversation is still working or waiting for approval, it goes on in the tab's background, as when you open another conversation. If you start something else in the tab while the fork is being made (open another conversation, send a message, Compact), or the tab's conversation is reverting a file edit, the fork does not replace it: it stays in History, and the panel says so. Use it to try another direction from an earlier message, or to go on with a conversation on another host without moving the original there.
 
 - **Fork from Here** (the fork icon) is next to each of your messages, beside Copy, and under each finished reply, beside Copy and the time. A fork from your message includes it: send it again with **Edit and Resend**, or type a new message. A fork from a reply includes the reply with its tool calls and their results.
 - **Fork** in a conversation's History menu copies the whole conversation.
