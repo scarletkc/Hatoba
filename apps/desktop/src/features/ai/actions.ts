@@ -400,7 +400,8 @@ class TurnRunner {
   }
 
   private patchCalls(change: (calls: CallInfo[]) => CallInfo[]) {
-    if (this.disposed) return;
+    // Once the turn ended, the slot's turn is another one's, or none.
+    if (!this.active) return;
     patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, calls: change(s.turn.calls) } } : {}));
   }
 
@@ -432,17 +433,24 @@ class TurnRunner {
         const joins = await this.joins(convId);
         if (!this.acting) return;
         const batch = nextBatch(rest, joins);
-        rest = rest.slice(batch.length);
+        let done = 0;
         if (batch.length > 1) {
           const channel = (call: AiToolCall) => usesChannel(toolKind(call.name));
-          await runConcurrently(batch, channel, (call) => this.runAlongside(convId, call), () => this.acting);
-        } else {
-          try {
-            await this.handleCall(convId, batch[0]);
-          } finally {
-            this.endCall(batch[0].id);
-          }
+          // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
+          // applies to the turn's next call (§13.5), and the calls left run as the next batches.
+          const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
+          done = await runConcurrently(batch, channel, (call) => this.runAlongside(convId, call), starts);
         }
+        if (done === 0) {
+          if (!this.acting) return;
+          try {
+            await this.handleCall(convId, rest[0]);
+          } finally {
+            this.endCall(rest[0].id);
+          }
+          done = 1;
+        }
+        rest = rest.slice(done);
       }
     } finally {
       this.processing = false;
@@ -456,8 +464,14 @@ class TurnRunner {
    * show one. A call that asks runs alone.
    */
   private async joins(convId: string): Promise<(call: AiToolCall) => boolean> {
-    const saved = callMode(this.mode, getSlot(this.slotId).mode) === "bypass" ? [] : await savedAllowances().catch(() => []);
+    if (callMode(this.mode, getSlot(this.slotId).mode) !== "bypass") await savedAllowances().catch(() => []);
+    return this.joinsNow(convId);
+  }
+
+  /** `joins` with the saved approvals as read so far. */
+  private joinsNow(convId: string): (call: AiToolCall) => boolean {
     const mode = callMode(this.mode, getSlot(this.slotId).mode);
+    const saved = useAllowances.getState().list ?? [];
     const target = this.target();
     const host = target ? hostRefOf(target.tab) : null;
     const grants = useAi.getState().allowed[convId] ?? [];

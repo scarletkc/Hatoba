@@ -289,6 +289,24 @@ describe("calls that only read run together (§13.1)", () => {
     expect(ipc.judge).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the card for calls still waiting for room after a switch to a stricter mode", async () => {
+    const fetches = Array.from({ length: 12 }, (_, i) => call(`call_${i + 1}`, "fetch_url", { url: `https://nginx.org/${i + 1}` }));
+    await respond("bypass", fetches);
+    await until(() => running().length === 10);
+    // §13.5: a switch to a stricter mode applies to the turn's next call.
+    patchSlot(TAB, { mode: "manual" });
+    finish(...running());
+    await until(() => shown().join() === "call_11:approval");
+    expect(ran()).toHaveLength(10);
+    decideCall(TAB, { kind: "run", edited: null });
+    await until(() => running().join() === "call_11");
+    finish("call_11");
+    await until(() => shown().join() === "call_12:approval");
+    decideCall(TAB, { kind: "reject", reason: "" });
+    await until(() => shown().length === 0);
+    expect(ran()).toHaveLength(11);
+  });
+
   it("stops every running call of a batch on Stop and starts none of the rest", async () => {
     await respond("manual", [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)));
     await until(() => running().length === MAX_CONCURRENT_CHANNELS);

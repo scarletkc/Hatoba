@@ -501,6 +501,9 @@ impl AiManager {
             .is_some_and(|t| Arc::ptr_eq(t, turn))
         {
             turns.remove(conversation_id);
+            drop(turns);
+            // A result waiting for an earlier call's waits no more once the turn is over.
+            self.0.stored.notify_waiters();
         }
     }
 

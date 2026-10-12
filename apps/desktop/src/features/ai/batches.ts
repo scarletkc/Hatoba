@@ -36,15 +36,18 @@ export function toolBatches<T>(calls: readonly T[], joins: (call: T) => boolean)
  * Runs `run` for the calls of a batch, starting them in order, at most {@link MAX_CONCURRENT_CALLS} at once and of
  * those at most {@link MAX_CONCURRENT_CHANNELS} that `usesChannel`. A call starts only after every earlier one has,
  * so a call that waits for an earlier one's result to be stored never holds the room that one needs. Starts no
- * more once `going` is false, and resolves when every call it started has settled.
+ * more once `starts` refuses the next call, and resolves, once every call it started has settled, with how many it
+ * started.
  */
-export async function runConcurrently<T>(calls: readonly T[], usesChannel: (call: T) => boolean, run: (call: T) => Promise<void>, going: () => boolean): Promise<void> {
+export async function runConcurrently<T>(calls: readonly T[], usesChannel: (call: T) => boolean, run: (call: T) => Promise<void>, starts: (call: T) => boolean): Promise<number> {
   const running = new Set<Promise<void>>();
   let channels = 0;
+  let started = 0;
   for (const call of calls) {
     const channel = usesChannel(call);
     while (running.size >= MAX_CONCURRENT_CALLS || (channel && channels >= MAX_CONCURRENT_CHANNELS)) await Promise.race(running);
-    if (!going()) break;
+    if (!starts(call)) break;
+    started++;
     if (channel) channels++;
     const done: Promise<void> = run(call)
       .catch(() => {})
@@ -55,4 +58,5 @@ export async function runConcurrently<T>(calls: readonly T[], usesChannel: (call
     running.add(done);
   }
   await Promise.all(running);
+  return started;
 }

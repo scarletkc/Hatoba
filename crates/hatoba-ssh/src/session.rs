@@ -477,7 +477,7 @@ struct Inner {
 /// its channel again once one closes, instead of failing a command that runs beside others. The
 /// server frees a closed channel's session only once it has handled the close, which can come
 /// after it handled the next open, so for [`REOPEN_GRACE`] after a close a refused channel is
-/// also opened again.
+/// opened again every [`REOPEN_PAUSE`] first.
 #[derive(Default)]
 struct ExecChannels {
     state: Mutex<ExecState>,
@@ -833,17 +833,18 @@ impl SshSession {
                 if state.closes != closes {
                     break;
                 }
-                // A channel opening may open, and then close.
-                if state.open > 0 || state.opening > 0 {
-                    changed.await;
-                    continue;
-                }
+                // The server may not have freed the session of one that just closed yet.
                 if state
                     .closed_at
                     .is_some_and(|at| at.elapsed() < REOPEN_GRACE)
                 {
                     tokio::time::sleep(REOPEN_PAUSE).await;
                     break;
+                }
+                // A channel opening may open, and then close.
+                if state.open > 0 || state.opening > 0 {
+                    changed.await;
+                    continue;
                 }
                 return Err(refused);
             }

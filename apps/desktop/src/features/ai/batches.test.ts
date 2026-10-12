@@ -70,17 +70,20 @@ describe("runConcurrently", () => {
       for (const c of [...h.running]) h.finish.get(c)!();
       await flush();
     }
-    await done;
+    expect(await done).toBe(calls.length);
     expect(h.started).toEqual(calls);
     expect(h.most()).toBe(MAX_CONCURRENT_CALLS);
     expect(h.mostChannels()).toBe(MAX_CONCURRENT_CHANNELS);
   });
 
-  it("starts no more calls once told to stop, and waits for the ones it started", async () => {
+  it("starts no more calls once one may not start, and waits for the ones it started", async () => {
     const h = harness();
     let going = true;
     let settled = false;
-    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.channel, h.run, () => going).then(() => (settled = true));
+    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.channel, h.run, () => going).then((started) => {
+      settled = true;
+      return started;
+    });
     await flush();
     going = false;
     h.finish.get("ch0")!();
@@ -88,7 +91,7 @@ describe("runConcurrently", () => {
     expect(h.started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
     expect(settled).toBe(false);
     for (const c of ["ch1", "ch2", "ch3"]) h.finish.get(c)!();
-    await done;
+    expect(await done).toBe(4);
     expect(settled).toBe(true);
   });
 
