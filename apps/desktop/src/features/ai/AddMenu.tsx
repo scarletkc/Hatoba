@@ -163,7 +163,7 @@ function AddPopover({
       setView("main");
       return;
     }
-    if (view !== "main" || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     const list = items(el);
     const at = list.indexOf(document.activeElement as HTMLElement);
@@ -178,7 +178,7 @@ function AddPopover({
       role="dialog"
       aria-label={view === "main" ? t("ai.add") : t("ai.tools.title")}
       tabIndex={-1}
-      className={cx(s.popover, view === "main" && s.popoverMain)}
+      className={s.popover}
       style={pos}
       onKeyDown={onKeyDown}
     >
@@ -195,22 +195,22 @@ function AddPopover({
         />
       ) : (
         <>
-          <div className={s.headerRow}>
-            <button
-              type="button"
-              className={s.back}
-              aria-label={t("btn.back")}
-              title={t("btn.back")}
-              data-back
-              onClick={() => {
-                back.current = true;
-                setView("main");
-              }}
-            >
-              <Icon name="caret-left" size={13} />
-            </button>
-            <span className={s.header}>{t("ai.tools.title")}</span>
-          </div>
+          {/* The item that opened it, as a row of the menu, takes it back. */}
+          <button
+            type="button"
+            className={s.item}
+            title={t("btn.back")}
+            data-item
+            data-back
+            onClick={() => {
+              back.current = true;
+              setView("main");
+            }}
+          >
+            <Icon name="caret-left" className={s.itemIcon} />
+            <span className={cx(s.itemLabel, s.itemTitle)}>{t("ai.tools")}</span>
+          </button>
+          <div className={s.separator} />
           {!loaded && !failed && (
             <div className={s.note}>
               <Spinner size={13} />
@@ -225,14 +225,15 @@ function AddPopover({
           <div className={s.separator} />
           <button
             type="button"
-            className={s.manage}
+            className={s.item}
+            data-item
             onClick={() => {
               onClose(false);
               useApp.getState().openSettings(true, "ai");
             }}
           >
-            <Icon name="gear-six" />
-            {t("ai.tools.manage")}
+            <Icon name="gear-six" className={s.itemIcon} />
+            <span className={s.itemLabel}>{t("ai.tools.manage")}</span>
           </button>
         </>
       )}
@@ -241,9 +242,9 @@ function AddPopover({
   );
 }
 
-/** The menu's items that take the focus, in order: its buttons and the screen's switch. */
+/** The menu's items that take the focus, in order: its buttons and its switches. */
 function items(el: HTMLElement): HTMLElement[] {
-  return Array.from(el.querySelectorAll<HTMLElement>("[data-item]:not(:disabled), [data-switch] > button:not(:disabled)"));
+  return Array.from(el.querySelectorAll<HTMLElement>("[data-item]:not(:disabled), [role=switch]:not(:disabled)"));
 }
 
 function MainView({ slotId, slot, rows, onAddFiles, onTools }: { slotId: string; slot: Slot; rows: ToolsMenuRow[]; onAddFiles: () => void; onTools: () => void }) {
@@ -265,7 +266,7 @@ function MainView({ slotId, slot, rows, onAddFiles, onTools }: { slotId: string;
           <span className={s.itemLabel}>{t("ai.screen")}</span>
           {!terminal && <span className={s.itemNote}>{t("ai.screen.noTerminal")}</span>}
         </span>
-        <span className={s.itemSwitch} data-switch>
+        <span className={s.itemSwitch}>
           <Switch checked={terminal && on} disabled={!terminal} label={t("ai.screen")} onChange={(v) => setSlotScreen(slotId, v)} />
         </span>
       </div>

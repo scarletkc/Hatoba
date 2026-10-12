@@ -54,12 +54,13 @@
 }
 
 .model {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 24px;
   min-width: 0;
-  max-width: 62%;
+  overflow: hidden;
   padding: 0 7px;
   border: 0;
   border-radius: var(--radius-md);
@@ -82,6 +83,23 @@
   flex: none;
 }
 
+/* Only the icon fits: a square button like the others in the bar. */
+.modelIconOnly {
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+}
+
+/* The hidden copies that useModelFit measures. */
+.modelMeasure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .modelName {
   min-width: 0;
   overflow: hidden;
@@ -89,8 +107,8 @@
   white-space: nowrap;
 }
 
-/* The thinking level next to the model, when it is not Default (AI-05). In a narrow panel the model
- * name needs the room, and the level stays in the button's tooltip and the menu. */
+/* The thinking level next to the model, Default included (AI-05). Without room for it, it stays in
+ * the button's tooltip and the menu. */
 .modelEffort {
   flex: none;
   padding: 0 5px;
@@ -101,16 +119,8 @@
   white-space: nowrap;
 }
 
-/* The model's name keeps the room: the meter shows its ring alone (the numbers are on hover), and
- * a narrower panel drops the thinking level and the word next to bypass's orange lightning. */
-@container (max-width: 420px) {
-  .meterLabel {
-    display: none;
-  }
-}
-
+/* A narrow panel shows bypass as its orange lightning alone. */
 @container (max-width: 330px) {
-  .modelEffort,
   .mode span {
     display: none;
   }
@@ -160,6 +170,15 @@
 
 .meterWarn .ringValue {
   stroke: var(--orange);
+}
+
+/* The next message compacts first (AI-22). */
+.meterFull {
+  color: var(--red);
+}
+
+.meterFull .ringValue {
+  stroke: var(--red);
 }
 
 .compact {

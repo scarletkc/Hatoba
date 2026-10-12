@@ -6,6 +6,9 @@ export const CHARS_PER_TOKEN = 4;
 /** At this share of the context window the meter warns and offers Compact (AI-21). */
 export const WARN_RATIO = 0.8;
 
+/** Past this share the next message compacts the context before it is sent (AI-22). */
+export const AUTO_COMPACT_RATIO = 0.9;
+
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }

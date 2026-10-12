@@ -28,7 +28,7 @@ Under the current model, the same menu has a **Thinking Level** row. It lists **
 
 - **Default** sends no thinking or effort fields, so every provider accepts it and the depth is left to the provider. For newer Claude models it only turns the display of the reasoning on.
 - A higher level lets the model think longer and use more output tokens, so answers take longer and cost more. Pick a lower level for quick questions.
-- The model button shows the level when it is not Default. A level the model lacks is sent as the highest lower level it has (Default when there is none), and the menu shows the level that is actually sent.
+- The model button shows the level, Default included. When the input area has no room, it leaves out the level, then the model's name, and shows only its cube icon; hover it for both. A level the model lacks is sent as the highest lower level it has (Default when there is none), and the menu shows the level that is actually sent.
 - Each conversation keeps the level of its last message, and that syncs to the other devices. A new conversation starts at "Thinking level for new conversations" in Settings → AI (Default unless changed); the levels a model offers are set in the provider's model list (`references/ai-settings.md`).
 - If the provider refuses the level fields, Hatoba sends the message again without them and the panel says that the model doesn't accept the chosen level and the message went at its default level (`references/troubleshooting-ai.md`).
 - Model reasoning, when the provider returns it, is shown above the answer as **Reasoning**, collapsed.
@@ -39,7 +39,7 @@ Under the current model, the same menu has a **Thinking Level** row. It lists **
 
 ## Context and compaction
 
-The context meter left of the **Model** button is a ring with a percentage (the percentage only in a panel widened past about 440 pixels, or a token count when the model's context window is unknown) showing how much of the window the conversation uses; hover for the numbers. "≈" marks an estimate. At 80% it turns to a warning color and offers **Compact**; the window comes from the model's **Context** value in the provider.
+The context meter left of the **Model** button is a ring showing how much of the window the conversation uses (a token count when the model's context window is unknown); hover or click it for the percentage and the numbers. "≈" marks an estimate. At 80% it turns orange and offers **Compact**, and at 90% red: the next message compacts the conversation first; the window comes from the model's **Context** value in the provider.
 
 | en | zh-CN | ja |
 |---|---|---|

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { useApp } from "@/app/store";
 import { Icon, LinkButton } from "@/components/controls";
 import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
@@ -13,7 +13,7 @@ import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtr
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
-import { contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
+import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
 import { canAskSide } from "./side";
 import { getSlot, patchSlot, useAi, type Slot } from "./store";
@@ -190,7 +190,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
               if (files.length > 0) void attachFiles(slotId, files);
             }}
           />
-          <div className={s.grow} />
+          <div className={s.grow} data-grow />
           <ContextMeter slotId={slotId} slot={slot} m={meter} />
           <ModelPicker slotId={slotId} slot={slot} value={model} />
           {slot.conversationId && (
@@ -238,6 +238,8 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
   const settings = useAi((st) => st.catalog.settings);
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
+  const fullRef = useRef<HTMLSpanElement>(null);
+  const nameRef = useRef<HTMLSpanElement>(null);
   const current = findModel(providers, value);
   const offered = modelEfforts(current?.model);
   const effort = current ? effectiveEffort(chosenEffort(slot.effort, slot.conversationId, slot.conversation, settings), offered) : null;
@@ -271,23 +273,30 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
   }, [providers, value, slotId, offered, effort, t]);
 
   const modelName = current ? current.model.name || current.model.id : null;
-  const title = current ? [current.provider.name, modelName, ...(effort ? [`${t("ai.effort")}: ${t(effortKey(effort))}`] : [])].join(" · ") : t("ai.model");
+  const name = modelName ?? value?.model_id ?? t("ai.model.none");
+  const level = current ? t(effortKey(effort)) : null;
+  const title = current ? [current.provider.name, modelName, `${t("ai.effort")}: ${level}`].join(" · ") : t("ai.model");
+  const fit = useModelFit(ref, fullRef, nameRef, name, level);
   return (
     <>
       <button
         ref={ref}
         type="button"
-        className={s.model}
+        className={cx(s.model, fit === "icon" && s.modelIconOnly)}
         aria-haspopup="menu"
         aria-expanded={!!menu.anchor}
-        aria-label={t("ai.model")}
+        aria-label={current ? `${t("ai.model")}: ${title}` : t("ai.model")}
         title={title}
         disabled={entries.length === 0}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >
-        <span className={s.modelName}>{modelName ?? value?.model_id ?? t("ai.model.none")}</span>
-        {effort && <span className={s.modelEffort}>{t(effortKey(effort))}</span>}
-        <Icon name="caret-down" size={10} className={s.modelIcon} />
+        <Icon name="cube" size={13} className={s.modelIcon} />
+        {fit !== "icon" && <span className={s.modelName}>{name}</span>}
+        {fit === "full" && level && <span className={s.modelEffort}>{level}</span>}
+        {fit !== "icon" && <Icon name="caret-down" size={10} className={s.modelIcon} />}
+        {/* Hidden copies at their full width, which tell how much of the button fits. */}
+        <ModelLabel ref={fullRef} name={name} level={level} />
+        <ModelLabel ref={nameRef} name={name} level={null} />
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={220} />}
     </>
@@ -353,21 +362,75 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
   );
 }
 
-/** AI-20: a ring and a percentage (or only a count without a context window), numbers on hover. */
+/** What the model button shows: everything, the name without the thinking level, or its icon alone. */
+type ModelFit = "full" | "name" | "icon";
+
+/** The spacer's `min-width` in the bar (`.grow`). */
+const GROW_MIN = 4;
+
+/**
+ * Rather than cut the model's name short, the button drops the thinking level when the bar has no
+ * room for it, then the name, leaving its icon; the tooltip names both. The room is the button's
+ * own width plus what the spacer beside it takes beyond its minimum.
+ */
+function useModelFit(
+  button: RefObject<HTMLButtonElement | null>,
+  full: RefObject<HTMLSpanElement | null>,
+  nameOnly: RefObject<HTMLSpanElement | null>,
+  name: string,
+  level: string | null,
+): ModelFit {
+  const [fit, setFit] = useState<ModelFit>("full");
+  useLayoutEffect(() => {
+    const btn = button.current;
+    const grow = btn?.parentElement?.querySelector<HTMLElement>("[data-grow]");
+    if (!btn || !grow) return;
+    const update = () => {
+      const room = btn.offsetWidth + grow.offsetWidth - GROW_MIN + 0.5;
+      setFit((full.current?.offsetWidth ?? 0) <= room ? "full" : (nameOnly.current?.offsetWidth ?? 0) <= room ? "name" : "icon");
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(btn);
+    observer.observe(grow);
+    return () => observer.disconnect();
+  }, [button, full, nameOnly, name, level]);
+  return fit;
+}
+
+/** The model button's content at its full width, hidden, for `useModelFit` to measure. */
+function ModelLabel({ ref, name, level }: { ref: RefObject<HTMLSpanElement | null>; name: string; level: string | null }) {
+  return (
+    <span ref={ref} className={cx(s.model, s.modelMeasure)} aria-hidden>
+      <Icon name="cube" size={13} className={s.modelIcon} />
+      <span className={s.modelName}>{name}</span>
+      {level && <span className={s.modelEffort}>{level}</span>}
+      <Icon name="caret-down" size={10} className={s.modelIcon} />
+    </span>
+  );
+}
+
+/**
+ * AI-20: a ring whose color tells how full the context is: orange from 80%, where Compact is
+ * offered, red from 90%, where the next message compacts first. The share and the numbers are on
+ * hover and in its menu. Without a context window it shows the token count instead.
+ */
 function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: MeterState }) {
   const t = useT();
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
   const approx = m.estimated ? "≈" : "";
   const percent = m.ratio !== null ? Math.min(999, Math.round(m.ratio * 100)) : null;
-  const label =
-    percent === null ? `${approx}${formatTokens(m.tokens)}` : percent === 0 && m.tokens > 0 ? `${approx}<1%` : `${approx}${percent}%`;
+  const share = percent === null ? null : percent === 0 && m.tokens > 0 ? `${approx}<1%` : `${approx}${percent}%`;
+  const full = m.ratio !== null && m.ratio >= AUTO_COMPACT_RATIO;
   const nf = new Intl.NumberFormat(t.locale);
   const detail =
     m.window !== null
       ? t("ai.meter.detail", { used: nf.format(m.tokens), total: nf.format(m.window) })
       : t("ai.meter.detailUnknown", { used: nf.format(m.tokens) });
-  const title = m.estimated ? `${detail}\n${t("ai.meter.estimated")}` : detail;
+  const summary = share ? `${share} · ${detail}` : detail;
+  const title = m.estimated ? `${summary}\n${t("ai.meter.estimated")}` : summary;
   const canCompact = !!slot.conversationId && !slot.turn && !slot.compacting && slot.entries.length > 0;
 
   return (
@@ -380,15 +443,14 @@ function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: Mete
       <button
         ref={ref}
         type="button"
-        className={cx(s.meter, m.warn && s.meterWarn)}
+        className={cx(s.meter, m.warn && s.meterWarn, full && s.meterFull)}
         title={title}
         aria-haspopup="menu"
         aria-expanded={!!menu.anchor}
-        aria-label={`${t("ai.meter")}: ${detail}`}
+        aria-label={`${t("ai.meter")}: ${summary}`}
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >
-        {m.ratio !== null && <Ring ratio={m.ratio} />}
-        <span className={cx(m.ratio !== null && s.meterLabel)}>{label}</span>
+        {m.ratio !== null ? <Ring ratio={m.ratio} /> : <span>{`${approx}${formatTokens(m.tokens)}`}</span>}
       </button>
       {menu.anchor && (
         <Menu
@@ -396,7 +458,7 @@ function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: Mete
           onClose={menu.close}
           minWidth={220}
           entries={[
-            { kind: "header", label: detail },
+            { kind: "header", label: summary },
             ...(m.estimated ? [{ kind: "header" as const, label: t("ai.meter.estimated") }] : []),
             { kind: "separator" },
             { label: t("ai.compact.menu"), icon: "arrows-in-line-vertical", disabled: !canCompact, onSelect: () => void compactConversation(slotId) },
