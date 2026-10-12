@@ -1351,9 +1351,10 @@ impl Vault {
     /// remote's settings item as read just before, replaces the local one. When the remote has
     /// none that its key opens (none yet, or a damaged one), the local one is queued dated at the
     /// epoch, older than any settings of the remote's own devices, which therefore replace it
-    /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones, items that cannot be decrypted, and the conflict log
-    /// are dropped, and every [`SealedLocal`] is sealed again. Returns whether the vault key
-    /// changed, so the caller can drop what still holds the old one (biometric unlock).
+    /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones,
+    /// items that cannot be decrypted, and the conflict log are dropped, and every
+    /// [`SealedLocal`] is sealed again. Returns whether the vault key changed, so the caller can
+    /// drop what still holds the old one (biometric unlock).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
     /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
