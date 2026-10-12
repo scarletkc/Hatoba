@@ -120,7 +120,10 @@ pub(crate) fn is_blocked(ip: IpAddr) -> bool {
                 return is_blocked(IpAddr::V4(v4));
             }
             let first = v6.segments()[0];
-            is_local_network(IpAddr::V6(v6)) || v6.is_multicast() || (first & 0xffc0) == 0xfec0 // fec0::/10 site-local (deprecated)
+            is_local_network(IpAddr::V6(v6))
+                || v6.is_multicast()
+                // fec0::/10 site-local (deprecated)
+                || (first & 0xffc0) == 0xfec0
         }
     }
 }

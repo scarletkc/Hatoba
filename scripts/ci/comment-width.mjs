@@ -9,13 +9,86 @@ import { ROOT } from "../release/version.mjs";
 
 export const MAX_WIDTH = 100;
 
-/** The comment lines in `text` that are longer than MAX_WIDTH, by 1-based line number. */
+const isIdent = (char) => char !== undefined && /[\p{XID_Continue}]/u.test(char);
+
+/**
+ * The 1-based numbers of the lines in Rust source `text` that hold comment text, whether the
+ * comment fills the line or trails code. Comment markers inside string and char literals do not
+ * count.
+ */
+export function commentLines(text) {
+  const chars = [...text.replaceAll("\r\n", "\n")];
+  const lines = new Set();
+  let line = 1;
+  let i = 0;
+  // Steps over one character, counting the lines it ends.
+  const step = () => {
+    if (chars[i] === "\n") line++;
+    i++;
+  };
+  while (i < chars.length) {
+    const char = chars[i];
+    const next = chars[i + 1];
+    if (char === "/" && next === "/") {
+      lines.add(line);
+      while (i < chars.length && chars[i] !== "\n") i++;
+    } else if (char === "/" && next === "*") {
+      // Block comments nest.
+      let depth = 0;
+      do {
+        lines.add(line);
+        if (chars[i] === "/" && chars[i + 1] === "*") {
+          depth++;
+          i += 2;
+        } else if (chars[i] === "*" && chars[i + 1] === "/") {
+          depth--;
+          i += 2;
+        } else {
+          step();
+        }
+      } while (i < chars.length && depth > 0);
+    } else if (char === '"') {
+      i++;
+      while (i < chars.length && chars[i] !== '"') {
+        if (chars[i] === "\\") i++;
+        step();
+      }
+      i++;
+    } else if (char === "r" && !isIdent(chars[i - 1] === "b" || chars[i - 1] === "c" ? chars[i - 2] : chars[i - 1])) {
+      // A raw string, r"…" or r#"…"#, also after b or c; otherwise an identifier such as r#type.
+      let end = i + 1;
+      while (chars[end] === "#") end++;
+      if (chars[end] !== '"') {
+        i++;
+        continue;
+      }
+      const close = '"' + "#".repeat(end - i - 1);
+      i = end + 1;
+      while (i < chars.length && chars.slice(i, i + close.length).join("") !== close) step();
+      i += close.length;
+    } else if (char === "'" && next === "\\") {
+      // An escaped char literal such as '\'' or '\u{2192}'.
+      i += 3;
+      while (i < chars.length && chars[i] !== "'") i++;
+      i++;
+    } else if (char === "'" && chars[i + 2] === "'") {
+      // A char literal such as '"' or '/'; a lifetime such as 'a has no closing quote.
+      i += 3;
+    } else {
+      step();
+    }
+  }
+  return lines;
+}
+
+/** The lines in `text` that hold comment text and are longer than MAX_WIDTH. */
 export function longComments(text) {
+  const comments = commentLines(text);
   const found = [];
   text.split(/\r?\n/).forEach((line, index) => {
     // Characters, not UTF-16 units or bytes: an arrow such as → is one character but three bytes.
     const width = [...line].length;
-    if (width > MAX_WIDTH && line.trimStart().startsWith("//")) found.push({ line: index + 1, width });
+    if (width > MAX_WIDTH && comments.has(index + 1)) found.push({ line: index + 1, width });
   });
   return found;
 }
