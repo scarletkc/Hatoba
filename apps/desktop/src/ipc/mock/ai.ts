@@ -1659,7 +1659,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await delay(200);
       const q = query.trim().toLowerCase();
       if (!q) return [];
-      const textOf = (e: AiEntryView) => (e.role === "user" || e.role === "assistant" || e.role === "summary" ? e.text : "");
+      // Like Rust, without the screen a message showed (AI-46): its text is the host's.
+      const withoutScreen = (text: string) => {
+        const note = parseMessage(text).notes.find((n) => n.kind === "terminal_state");
+        return note ? text.replace(`${noteBlock(note)}\n\n`, "") : text;
+      };
+      const textOf = (e: AiEntryView) => (e.role === "user" ? withoutScreen(e.text) : e.role === "assistant" || e.role === "summary" ? e.text : "");
       const hits: AiSearchHit[] = [];
       for (const c of [...convs.values()].sort((a, b) => view(b).last_activity - view(a).last_activity)) {
         const entry = c.entries.find((e) => textOf(e).toLowerCase().includes(q));
