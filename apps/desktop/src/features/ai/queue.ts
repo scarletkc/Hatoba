@@ -19,7 +19,8 @@ export function withinCap(m: QueuedMessage): boolean {
 
 /**
  * §13.1: a second message queued, or the input area sent with the queued message, makes one message
- * in the order it was written: the texts a blank line apart, and the attachments in turn.
+ * in the order it was written: the texts a blank line apart, and the pastes and files in turn. The
+ * diagnostics and the selection go before them, as in any message (`orderAttachments`).
  */
 export function joinMessages(first: QueuedMessage, then: QueuedMessage): QueuedMessage {
   return {
