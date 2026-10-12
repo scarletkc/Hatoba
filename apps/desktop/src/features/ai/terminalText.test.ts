@@ -28,28 +28,40 @@ describe("readBuffer (AI-11)", () => {
     [""],
   ];
 
-  it("returns the screen and the requested scrollback, joining soft wraps", () => {
-    const r = readBuffer(buffer(rows, 2), 6, 1);
-    expect(r).toEqual({ text: "old 2\n$ echo abc\ndefghij klmnop\n$", alternate: false, scrollback: 1 });
+  it("returns the last lines up to the last one with text, joining soft wraps, and counts all lines", () => {
+    expect(readBuffer(buffer(rows, 2), 6, 2)).toEqual({ text: "defghij klmnop\n$", alternate: false, shown: 2, total: 5 });
+    // The count reaches into the scrollback when the screen has fewer lines.
+    expect(readBuffer(buffer(rows, 2), 6, 4)).toEqual({ text: "old 2\n$ echo abc\ndefghij klmnop\n$", alternate: false, shown: 4, total: 5 });
   });
 
   it("keeps spaces at the wrap point and trims trailing blank lines", () => {
-    const r = readBuffer(buffer([["abc def   "], ["ghi", true], [""]], 0, "normal", 10), 3, 0);
+    const r = readBuffer(buffer([["abc def   "], ["ghi", true], [""]], 0, "normal", 10), 3, 100);
     expect(r.text).toBe("abc def   ghi");
   });
 
-  it("caps scrollback at what exists and widens to a wrapped line's start", () => {
-    expect(readBuffer(buffer(rows, 2), 6, 1000).scrollback).toBe(2);
+  it("stops at the first row and reads a wrapped line whole", () => {
+    expect(readBuffer(buffer(rows, 2), 6, 1000)).toEqual({ text: "old 1\nold 2\n$ echo abc\ndefghij klmnop\n$", alternate: false, shown: 5, total: 5 });
     const wrapped = buffer([["aaaaaaaaaa"], ["bbbbbbbbbb", true], ["cc", true], ["$ "]], 3);
-    const r = readBuffer(wrapped, 1, 1);
-    expect(r.text).toBe("aaaaaaaaaabbbbbbbbbbcc\n$");
-    expect(r.scrollback).toBe(3);
+    expect(readBuffer(wrapped, 1, 2)).toEqual({ text: "aaaaaaaaaabbbbbbbbbbcc\n$", alternate: false, shown: 2, total: 2 });
+    // A wrapped line above the ones read counts once.
+    expect(readBuffer(wrapped, 1, 1)).toEqual({ text: "$", alternate: false, shown: 1, total: 2 });
+  });
+
+  it("reads at least one line and reports an empty terminal", () => {
+    expect(readBuffer(buffer(rows, 2), 6, 0).text).toBe("$");
+    expect(readBuffer(buffer([[""], [""]], 0), 2, 100)).toEqual({ text: "", alternate: false, shown: 0, total: 0 });
+  });
+
+  it("reads as many lines as a terminal_state note by default", () => {
+    const long = Array.from({ length: 30 }, (_, i): [string] => [`row ${i}`]);
+    expect(readBuffer(buffer(long, 0), 30, null)).toMatchObject({ shown: SCREEN_NOTE_LINES, total: 30 });
+    expect(readBuffer(buffer(long, 0, "alternate"), 30, null)).toMatchObject({ shown: 30, total: 30 });
   });
 
   it("reports the alternate screen", () => {
-    const r = readBuffer(buffer([["top - 09:41"], ["Tasks: 1"]], 0, "alternate"), 2, 100);
-    expect(r.alternate).toBe(true);
-    expect(r.scrollback).toBe(0);
+    const alt = buffer([["top - 09:41"], ["Tasks: 1"]], 0, "alternate");
+    expect(readBuffer(alt, 2, 100)).toEqual({ text: "top - 09:41\nTasks: 1", alternate: true, shown: 2, total: 2 });
+    expect(readBuffer(alt, 2, 1)).toEqual({ text: "Tasks: 1", alternate: true, shown: 1, total: 2 });
   });
 });
 

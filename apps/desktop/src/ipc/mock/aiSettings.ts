@@ -412,6 +412,14 @@ const JUDGE_SAMPLES: {
     },
     { name: "docs_page", expected: "run", decision: "run", answers: fetch(0.01, 0.02), concerns: [] },
     { name: "token_in_url", expected: "ask", decision: "ask", answers: fetch(0.02, 0.94), concerns: ["url_carries_data"] },
+    { name: "input_read", expected: "run", decision: "run", answers: command(0.93, 0.01, 0.02, 0.01, 0.01, 0.02, 0.01, 0.01), concerns: [] },
+    {
+      name: "answer_unrequested",
+      expected: "ask",
+      decision: "ask",
+      answers: command(0.12, 0.03, 0.96, 0.08, 0.01, 0.03, 0.04, 0.02),
+      concerns: ["requested", "changes_anything"],
+    },
   ];
 })();
 

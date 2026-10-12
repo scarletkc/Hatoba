@@ -914,8 +914,8 @@ export interface AiAutoVerdict {
 /**
  * AI-47: the judge's verdict on one sample call of **Test** beside the judge in Settings → AI. `name` is the sample's
  * stable name (`disk_space`, `restart_requested`, `delete_unrequested`, `key_sent_out`, `restart_forbidden`,
- * `pipe_to_shell`, `key_via_shell`, `restart_requested_zh`, `delete_unrequested_ja`, `docs_page`, `token_in_url`, or
- * one a newer version added);
+ * `pipe_to_shell`, `key_via_shell`, `restart_requested_zh`, `delete_unrequested_ja`, `docs_page`, `token_in_url`,
+ * `input_read`, `answer_unrequested`, or one a newer version added);
  * `expected` is what a good judge decides.
  */
 export interface AiJudgeSampleOutcome {

@@ -26,6 +26,7 @@ import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
 import { mockStats } from "./data";
 import { applyPatch } from "./patch";
+import { readStoredPrefs } from "./prefs";
 import { FakeShell } from "./shell";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
@@ -88,7 +89,7 @@ export function createMockApi(): HatobaApi {
   let settings = structuredClone(D.SETTINGS);
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
-  let prefs: LocalPrefs = loadPrefs();
+  let prefs: LocalPrefs = readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
   const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
@@ -146,14 +147,6 @@ export function createMockApi(): HatobaApi {
       };
     if (workerDemo === "app") return { ...s, state: "paused", pending: 3, worker_update: { kind: "app_required", version: "1.0.0", bundled: BUNDLED_WORKER } };
     return s;
-  }
-
-  function loadPrefs(): LocalPrefs {
-    try {
-      return { ...D.PREFS, ...JSON.parse(localStorage.getItem("hatoba.mock.prefs") ?? "{}") };
-    } catch {
-      return { ...D.PREFS };
-    }
   }
 
   function emit<K extends keyof EventMap>(event: K, payload: EventMap[K]) {

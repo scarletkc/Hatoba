@@ -400,6 +400,8 @@ const SAMPLE_LABEL: Record<string, MessageKey> = {
   delete_unrequested_ja: "aiSettings.judge.sample.delete_unrequested_ja",
   docs_page: "aiSettings.judge.sample.docs_page",
   token_in_url: "aiSettings.judge.sample.token_in_url",
+  input_read: "aiSettings.judge.sample.input_read",
+  answer_unrequested: "aiSettings.judge.sample.answer_unrequested",
 };
 
 const DECISION_LABEL: Record<AiJudgeDecision, MessageKey> = {
@@ -412,8 +414,8 @@ const asExpected = (o: AiJudgeSampleOutcome) => o.verdict.failure === null && o.
 
 /**
  * AI-47: the judge of Auto mode, which syncs: a model of any provider, System One ones included, or none, which
- * leaves Auto unavailable. **Test** runs sample calls with the judge the picker shows and lists each decision
- * against the one expected, since probabilities differ between backends.
+ * leaves Auto unavailable. **Test** runs sample calls with the judge the picker shows and counts the decisions that
+ * match the ones expected, since probabilities differ between backends; **Details** lists each one.
  */
 function JudgeSection({
   providers,
@@ -426,6 +428,8 @@ function JudgeSection({
 }) {
   const t = useT();
   const [test, setTest] = useState<JudgeTest | null>(null);
+  /** Whether the samples of the test's outcome show; each test starts with them hidden. */
+  const [details, setDetails] = useState(false);
   /** Bumped by each test, so that only the last one's answer shows. */
   const generation = useRef(0);
   const choices = judgeChoices(providers);
@@ -437,6 +441,7 @@ function JudgeSection({
     const judge = value;
     const mine = ++generation.current;
     setTest({ judge, state: "running" });
+    setDetails(false);
     try {
       const outcomes = await api.ai_judge_test(judge);
       if (mine === generation.current) setTest({ judge, state: "done", outcomes });
@@ -462,7 +467,7 @@ function JudgeSection({
             {t("aiSettings.judge.test")}
           </Button>
         </SettingRow>
-        {shown && <JudgeTestResult test={shown} />}
+        {shown && <JudgeTestResult test={shown} details={details} onDetails={() => setDetails((open) => !open)} />}
       </Group>
       <div className={s.sectionHint}>{t("aiSettings.judge.hint")}</div>
     </section>
@@ -470,11 +475,11 @@ function JudgeSection({
 }
 
 /**
- * The outcome of **Test** beside the judge (AI-47): how many samples came out as expected, then each sample with the
- * decision expected, the judge's, and its answers or why it gave none. A sample that ran when it should have asked
- * is red, one that asked when it could have run orange (it only costs a click).
+ * The outcome of **Test** beside the judge (AI-47): how many samples came out as expected, and under **Details** each
+ * sample with the decision expected, the judge's, and its answers or why it gave none. A sample that ran when it
+ * should have asked is red, one that asked when it could have run orange (it only costs a click).
  */
-function JudgeTestResult({ test }: { test: JudgeTest }) {
+function JudgeTestResult({ test, details, onDetails }: { test: JudgeTest; details: boolean; onDetails: () => void }) {
   const t = useT();
   if (test.state === "running") {
     return (
@@ -498,38 +503,55 @@ function JudgeTestResult({ test }: { test: JudgeTest }) {
   const summary = matched === outcomes.length ? "var(--green)" : ranWrongly ? "var(--red)" : "var(--orange)";
   return (
     <div className={s.judgeResult}>
-      <div className={s.judgeStatus} role="status">
+      <div className={s.judgeStatus}>
         <StatusDot color={summary} />
-        {t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}
+        <span role="status">{t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}</span>
+        <Button
+          size="xs"
+          className={s.judgeDetails}
+          trailingIcon={details ? "caret-up" : "caret-down"}
+          aria-expanded={details}
+          onClick={onDetails}
+        >
+          {t("aiSettings.judge.test.details")}
+        </Button>
       </div>
-      <ul className={s.samples}>
-        {outcomes.map((o) => {
-          const failed = o.verdict.failure !== null;
-          const ok = asExpected(o);
-          const mark = ok
-            ? { icon: "check-circle", color: "var(--green)", label: t("aiSettings.judge.test.match") }
-            : failed
-              ? { icon: "warning-circle", color: "var(--orange)", label: t("aiSettings.judge.test.unanswered") }
-              : { icon: "x-circle", color: o.verdict.decision === "run" ? "var(--red)" : "var(--orange)", label: t("aiSettings.judge.test.mismatch") };
-          return (
-            <li key={o.name} className={s.sample}>
-              <span className={s.sampleMark} role="img" aria-label={mark.label} title={mark.label}>
-                <Icon name={mark.icon} fill color={mark.color} />
-              </span>
-              <span className={s.sampleText}>
-                <span className={s.sampleName}>{SAMPLE_LABEL[o.name] ? t(SAMPLE_LABEL[o.name]) : o.name}</span>
-                <span className={s.sampleMeta}>
-                  {t("aiSettings.judge.test.expected", { decision: t(DECISION_LABEL[o.expected]) })}
-                  <span className={s.dot}>·</span>
-                  <span className={ok ? undefined : s.sampleOff}>{t("aiSettings.judge.test.judged", { decision: t(DECISION_LABEL[o.verdict.decision]) })}</span>
-                </span>
-                <span className={cx(s.sampleDetail, "selectable")}>{failed ? verdictText(t, o.verdict) : answersText(t, o.verdict.answers)}</span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      {details && <JudgeSamples outcomes={outcomes} />}
     </div>
+  );
+}
+
+/** **Details** of a test's outcome: each sample with the decision expected, the judge's, and its answers. */
+function JudgeSamples({ outcomes }: { outcomes: AiJudgeSampleOutcome[] }) {
+  const t = useT();
+  return (
+    <ul className={s.samples}>
+      {outcomes.map((o) => {
+        const failed = o.verdict.failure !== null;
+        const ok = asExpected(o);
+        const mark = ok
+          ? { icon: "check-circle", color: "var(--green)", label: t("aiSettings.judge.test.match") }
+          : failed
+            ? { icon: "warning-circle", color: "var(--orange)", label: t("aiSettings.judge.test.unanswered") }
+            : { icon: "x-circle", color: o.verdict.decision === "run" ? "var(--red)" : "var(--orange)", label: t("aiSettings.judge.test.mismatch") };
+        return (
+          <li key={o.name} className={s.sample}>
+            <span className={s.sampleMark} role="img" aria-label={mark.label} title={mark.label}>
+              <Icon name={mark.icon} fill color={mark.color} />
+            </span>
+            <span className={s.sampleText}>
+              <span className={s.sampleName}>{SAMPLE_LABEL[o.name] ? t(SAMPLE_LABEL[o.name]) : o.name}</span>
+              <span className={s.sampleMeta}>
+                {t("aiSettings.judge.test.expected", { decision: t(DECISION_LABEL[o.expected]) })}
+                <span className={s.dot}>·</span>
+                <span className={ok ? undefined : s.sampleOff}>{t("aiSettings.judge.test.judged", { decision: t(DECISION_LABEL[o.verdict.decision]) })}</span>
+              </span>
+              <span className={cx(s.sampleDetail, "selectable")}>{failed ? verdictText(t, o.verdict) : answersText(t, o.verdict.answers)}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -18,19 +18,20 @@ const POLL_MS = 100;
 export const NO_TAB = "No terminal tab is attached to this conversation, so terminal tools cannot run.";
 export const DISCONNECTED = "The terminal tab is disconnected. Ask the user to reconnect it, then try again.";
 
-function screenText(session: LiveSession, lines: number): ScreenText {
+function screenText(session: LiveSession, lines: number | null): ScreenText {
   const term = session.term;
   return readBuffer(term.buffer.active, term.rows, lines);
 }
 
 function describeScreen(s: ScreenText): string {
+  const { shown, total } = s;
   const head = s.alternate
-    ? "Alternate screen: yes. A full-screen program (such as vim or htop) is running; this is its current screen."
-    : `Alternate screen: no. This is the visible screen with ${s.scrollback} line(s) of scrollback above it.`;
-  return `${head}\n\n${s.text || "(the screen is empty)"}`;
+    ? `Alternate screen: yes. A full-screen program (such as vim or htop) is running; ${shown < total ? `these are the last ${shown} of its screen's ${total} lines` : `this is its whole screen, ${total} line(s)`}.`
+    : `Alternate screen: no. ${shown < total ? `These are the last ${shown} of the terminal's ${total} lines` : `This is all of the terminal's ${total} line(s)`}.`;
+  return `${head}\n\n${s.text || "(the terminal is empty)"}`;
 }
 
-/** AI-11: the screen and up to `lines` scrollback lines as plain text. */
+/** AI-11: the terminal's last `lines` lines as plain text. */
 export function readTerminal(session: LiveSession, json: string): ToolOutcome {
   const args = parseReadTerminal(json);
   if (!args.ok) return { status: "error", content: `Invalid arguments: ${args.error}` };

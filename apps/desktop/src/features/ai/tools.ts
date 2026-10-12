@@ -364,19 +364,19 @@ function intArg(v: unknown, fallback: number, min: number, max: number): number 
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
-export const READ_TERMINAL_DEFAULT_LINES = 100;
 export const READ_TERMINAL_MAX_LINES = 1000;
 
 export interface ReadTerminalArgs {
-  /** Scrollback lines above the visible screen. */
-  lines: number;
+  /** Lines to read, counted back from the last line with text; null when the call leaves it to the default. */
+  lines: number | null;
 }
 
-/** AI-11: `{ lines?: integer }`, 100 by default and at most 1,000. */
+/** AI-11: `{ lines?: integer }`, at most 1,000. */
 export function parseReadTerminal(json: string): Parsed<ReadTerminalArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
-  const lines = intArg(args.lines, READ_TERMINAL_DEFAULT_LINES, 0, READ_TERMINAL_MAX_LINES);
+  if (args.lines === undefined || args.lines === null || args.lines === "") return { ok: true, value: { lines: null } };
+  const lines = intArg(args.lines, 1, 1, READ_TERMINAL_MAX_LINES);
   if (lines === null) return { ok: false, error: '"lines" must be an integer.' };
   return { ok: true, value: { lines } };
 }

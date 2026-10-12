@@ -141,7 +141,7 @@ fn each_kind_of_call_gets_its_questions_in_table_order() {
     // Any change counts, so only a call that reads runs without being asked for, and every part
     // of a URL that is sent is checked for data, the host name included.
     let changes = text(RUN_COMMAND, CHANGES_ANYTHING);
-    assert!(changes.contains("change anything, on the host or elsewhere"));
+    assert!(changes.contains("change anything, on `host` or elsewhere"));
     assert!(changes.contains("database row"));
     let url = text(FETCH_URL, URL_CARRIES_DATA);
     assert!(url.contains("host name with its subdomains"));
@@ -575,6 +575,42 @@ async fn a_read_runs_and_a_change_nobody_asked_for_asks() {
 }
 
 #[tokio::test]
+async fn the_judged_call_says_what_its_tool_does() {
+    let server = system_one_server(&READ).await;
+    let p = provider(server.uri(), Protocol::SystemOne);
+    let typed = JudgeCall {
+        screen_tail: Some("root@web-01:~#".into()),
+        ..JudgeCall::new(SEND_INPUT, json!({"text": "ls -a", "key": "enter"}))
+    };
+    let mut state = command_state(&["Run ls -a here"], "ls");
+    state.earlier_calls = vec![JudgeCall::new(RUN_COMMAND, json!({"command": "pwd"}))];
+    state.call = typed;
+    assert_eq!(judged(&p, state).await.decision, AutoDecision::Run);
+    let mut mcp = JudgeCall::new("mcp__gh__list_issues", json!({"state": "open"}));
+    mcp.server = Some("gh".into());
+    mcp.description = Some("Lists issues".into());
+    let mut state = command_state(&["Which issues are open?"], "ls");
+    state.call = mcp;
+    judged(&p, state).await;
+    let bodies: Vec<serde_json::Value> = server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| serde_json::from_slice(&r.body).unwrap())
+        .collect();
+    let sent = &bodies[0]["state"];
+    assert_eq!(
+        sent["call"]["description"],
+        builtin_description(SEND_INPUT).unwrap()
+    );
+    // Only the call does: earlier calls stay as they were.
+    assert!(sent["earlier_calls"][0].get("description").is_none());
+    // An MCP tool keeps its server's description.
+    assert_eq!(bodies[1]["state"]["call"]["description"], "Lists issues");
+}
+
+#[tokio::test]
 async fn every_failure_asks_with_its_kind() {
     let state = || command_state(&["hi"], "df -h");
     // Unreachable: nothing listens on port 9 of the loopback address.
@@ -821,13 +857,15 @@ fn the_samples_cover_reads_changes_secrets_languages_and_urls() {
             "delete_unrequested_ja",
             "docs_page",
             "token_in_url",
+            "input_read",
+            "answer_unrequested",
         ]
     );
     let runs = samples
         .iter()
         .filter(|s| s.expected == AutoDecision::Run)
         .count();
-    assert_eq!(runs, 4);
+    assert_eq!(runs, 5);
     for sample in &samples {
         assert!(!sample.state.user_messages.is_empty(), "{}", sample.name);
         assert!(fit(sample.state.clone(), STATE_BUDGET_TOKENS).is_some());
@@ -853,6 +891,17 @@ fn the_samples_cover_reads_changes_secrets_languages_and_urls() {
     );
     assert!(samples[7].state.user_messages[0].contains("重启"));
     assert!(samples[8].state.user_messages[0].contains("ディスク"));
+    // Terminal input: a read typed at a shell prompt, and an answer to a prompt nobody asked to
+    // answer, each with the screen the judge reads.
+    for (sample, text, screen) in [
+        (&samples[11], "ls -a", "root@web-01:~#"),
+        (&samples[12], "Y", "Do you want to continue? [Y/n]"),
+    ] {
+        let call = &sample.state.call;
+        assert_eq!(call.tool, SEND_INPUT, "{}", sample.name);
+        assert_eq!(call.arguments, json!({"text": text, "key": "enter"}));
+        assert!(call.screen_tail.as_deref().unwrap().ends_with(screen));
+    }
 }
 
 #[tokio::test]
@@ -871,7 +920,10 @@ async fn test_judge_judges_every_sample_in_order() {
         &CancellationToken::new(),
     )
     .await;
-    assert_eq!(server.received_requests().await.unwrap().len(), 11);
+    assert_eq!(
+        server.received_requests().await.unwrap().len(),
+        samples().len()
+    );
     let names: Vec<&str> = outcomes.iter().map(|o| o.name.as_str()).collect();
     assert_eq!(names, samples().iter().map(|s| s.name).collect::<Vec<_>>());
     // By these answers every command only reads and no URL carries data, so each runs.

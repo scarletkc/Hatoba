@@ -435,13 +435,14 @@ describe("the permission mode notes (AI-16)", () => {
     expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${auto}\n\nWe restarted nginx.`)])).toBe("auto");
   });
 
-  it("tells the mode the model was last told of, which a summary carries and manual approval is before any", () => {
-    expect(notedPermission([])).toBe("manual");
+  it("tells the mode the model was last told of, which a summary carries, and none before any note", () => {
+    expect(notedPermission([])).toBeNull();
+    expect(notedPermission([user("first"), user("second")])).toBeNull();
     expect(notedPermission([user(`${bypass}\n\nfirst`), user("second")])).toBe("bypass");
     expect(notedPermission([user(`${bypass}\n\nfirst`), user(`${manual}\n\nthird`)])).toBe("manual");
-    // The model sees nothing before a summary: its own note says the mode, or manual approval.
+    // The model sees nothing before a summary: its own note says the mode, or none does.
     expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${bypass}\n\nWe cleaned /tmp.`), user("next")])).toBe("bypass");
-    expect(notedPermission([user(`${bypass}\n\nfirst`), summary("We cleaned /tmp.")])).toBe("manual");
+    expect(notedPermission([user(`${bypass}\n\nfirst`), summary("We cleaned /tmp.")])).toBeNull();
     expect(splitPermissionNote(`${bypass}\n\nWe cleaned /tmp.`)).toEqual({ mode: "bypass", summary: "We cleaned /tmp." });
     expect(splitPermissionNote("We cleaned /tmp.")).toEqual({ mode: null, summary: "We cleaned /tmp." });
   });
