@@ -58,6 +58,11 @@ export function UnlockScreen() {
     if (!throttled && !recovering) input.current?.focus();
   }, [throttled, recovering]);
 
+  // The wrong password stays in the field, which is disabled with its Show button for the delay.
+  useEffect(() => {
+    if (throttled) setRevealed(false);
+  }, [throttled]);
+
   // The backend may already be throttling when the screen appears (e.g. after an idle lock).
   useEffect(() => {
     if (vault?.retry_at) setRetryAt(vault.retry_at);

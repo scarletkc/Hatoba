@@ -2,12 +2,14 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale, t } from "@/i18n";
+import type { VaultStatus } from "@/ipc/types";
 
 vi.mock("@/app/TitleBar", () => ({ WindowChrome: () => null }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
 const { UnlockScreen } = await import("./UnlockScreen");
+const { useApp } = await import("@/app/store");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -15,6 +17,7 @@ let unmount: (() => void) | null = null;
 afterEach(() => {
   act(() => unmount?.());
   unmount = null;
+  useApp.setState({ vault: null });
 });
 
 function show() {
@@ -57,6 +60,16 @@ describe("unlock screen", () => {
     act(() => {
       window.dispatchEvent(new Event("blur"));
     });
+    expect(field.type).toBe("password");
+  });
+
+  it("hides the password when a delay starts, since the field and its button are disabled", () => {
+    const { field, reveal } = show();
+    act(() => reveal().click());
+    expect(field.type).toBe("text");
+    act(() => useApp.setState({ vault: { retry_at: Date.now() + 30_000 } as VaultStatus }));
+    expect(field.disabled).toBe(true);
+    expect(reveal().disabled).toBe(true);
     expect(field.type).toBe("password");
   });
 });
