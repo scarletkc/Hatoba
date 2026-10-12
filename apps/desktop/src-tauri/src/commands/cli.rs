@@ -93,19 +93,16 @@ pub fn restore(state: &AppState) {
 
 #[cfg(test)]
 mod tests {
-    use hatoba_core::{KdfParams, Vault};
+    use hatoba_core::Vault;
 
     use super::{enabled, set_enabled};
     use crate::commands::settings::merge_prefs;
     use crate::dto::LocalPrefs;
 
+    /// Startup reads the setting before any unlock, so the vault here is never unlocked.
     #[test]
-    fn the_setting_is_kept_while_locked_and_survives_saving_the_other_prefs() {
+    fn the_setting_needs_no_unlock_and_survives_saving_the_other_prefs() {
         let mut vault = Vault::open_in_memory().unwrap();
-        vault
-            .create_with_params("pw", KdfParams::for_tests())
-            .unwrap();
-        vault.lock();
         assert!(!enabled(&vault).unwrap());
 
         set_enabled(&mut vault, true).unwrap();
