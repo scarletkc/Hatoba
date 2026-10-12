@@ -1681,15 +1681,18 @@ mod tests {
         // A blank screen shows nothing.
         assert_eq!(terminal_state_block("prod-api", false, " \n\t\n"), "");
         assert_eq!(terminal_state_block("prod-api", false, ""), "");
-        // A long one keeps its start and its end, and counts all of its lines.
+        // A long one keeps its first quarter and the rest from its end, and counts all of its
+        // lines: 4,013 characters keep 1,000 and 3,000.
         let long = format!("top\n{}\nprompt $", "x".repeat(MAX_SCREEN_CHARS));
-        let block = terminal_state_block("h", true, &long);
-        assert!(block.starts_with(
-            "<terminal_state host=\"h\" alternate_screen=\"true\" lines=\"3\">\ntop\n"
-        ));
-        assert!(block.ends_with("prompt $\n</terminal_state>\n\n"));
-        assert!(block.contains("characters left out"));
-        assert!(block.len() < MAX_SCREEN_CHARS + 200);
+        assert_eq!(
+            terminal_state_block("h", true, &long),
+            format!(
+                "<terminal_state host=\"h\" alternate_screen=\"true\" lines=\"3\">\ntop\n{}\n\n\
+                 [… 13 characters left out …]\n\n{}\nprompt $\n</terminal_state>\n\n",
+                "x".repeat(996),
+                "x".repeat(2_991)
+            )
+        );
     }
 
     /// The whole prompt of a request with a terminal attached, written out so a change to its
