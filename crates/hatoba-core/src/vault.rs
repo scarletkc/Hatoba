@@ -974,7 +974,8 @@ impl Vault {
         self.store.host_show_stats(host_id).unwrap_or(false)
     }
 
-    /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while locked.
+    /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while
+    /// locked.
     ///
     /// # Errors
     /// Storage errors.
