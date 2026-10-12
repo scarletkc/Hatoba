@@ -74,7 +74,7 @@ const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${SHELL:-sh}; \
      a() { case $(LC_ALL=C kill -0 $t 2>&1) in *\"No such process\"*) return 1;; esac; }; \
      b() { [ -r /proc/self/stat ] || return 0; for f in /proc/[0-9]*/stat; do \
      read -r l <\"$f\" 2>/dev/null || continue; l=${l##*) }; set -- $l; \
-     [ \"$3\" = \"$p\" ] && [ \"$1\" != Z ] && return 0; done; return 1; }; \
+     [ \"$3\" = \"$p\" ] && case $1 in Z) ;; *) return 0;; esac; done; return 1; }; \
      ( IFS= read -r x; trap \"\" TERM; kill -TERM $t 2>/dev/null; \
      if sleep 0.1 2>/dev/null; then i=0.1 j=20 k=10; else i=1 j=2 k=1; fi; \
      while a && [ $j -gt 0 ]; do sleep $i; j=$((j-1)); done; \
@@ -392,16 +392,14 @@ async fn sleep_until(deadline: Option<Instant>) {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufReader, Read, Write};
-    use std::process::{Child, Command, Stdio};
-    use std::thread;
-    use std::time::Instant;
-
     use super::*;
 
+    /// As for the file tools' scripts: one line without single quotes or backslashes, and no
+    /// `!` but that of `$!`, which csh and tcsh leave alone even with their history on.
     #[test]
-    fn script_is_one_line_without_single_quotes_or_backslashes() {
+    fn script_survives_any_login_shell() {
         assert!(!SCRIPT.contains(['\'', '\\', '\n']));
+        assert!(!SCRIPT.replace("$!", "").contains('!'));
     }
 
     #[test]
@@ -450,233 +448,244 @@ mod tests {
         }
     }
 
-    // ---- the script, run with the local `sh` ----
+    /// The script with the local `sh`, started as a login shell would start it.
+    #[cfg(unix)]
+    mod local_sh {
+        use std::io::{BufRead, BufReader, Read, Write};
+        use std::process::{Child, Command, Stdio};
+        use std::thread;
+        #[cfg(target_os = "linux")]
+        use std::time::Instant;
 
-    struct Local {
-        child: Child,
-        marker: String,
-        ready: String,
-    }
+        use super::super::*;
 
-    /// Starts the script as sshd would, with `SHELL` set, and sends `command` once it is ready.
-    fn start(path: Option<&str>, command: &str) -> Local {
-        let n = nonce();
-        let marker = marker(n);
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", SCRIPT, "sh", &n.to_string()])
-            .env("SHELL", "/bin/sh")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        if let Some(path) = path {
-            cmd.env("PATH", path);
+        struct Local {
+            child: Child,
+            marker: String,
+            ready: String,
         }
-        let mut child = cmd.spawn().unwrap();
-        let mut ready = String::new();
-        BufReader::new(child.stdout.as_mut().unwrap())
-            .read_line(&mut ready)
+
+        /// Starts the script as sshd would, with `SHELL` set, and sends `command` once it is ready.
+        fn start(path: Option<&str>, command: &str) -> Local {
+            let n = nonce();
+            let marker = marker(n);
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", SCRIPT, "sh", &n.to_string()])
+                .env("SHELL", "/bin/sh")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            if let Some(path) = path {
+                cmd.env("PATH", path);
+            }
+            let mut child = cmd.spawn().unwrap();
+            let mut ready = String::new();
+            BufReader::new(child.stdout.as_mut().unwrap())
+                .read_line(&mut ready)
+                .unwrap();
+            let lines = command.matches('\n').count() + 1;
+            write!(
+                child.stdin.as_mut().unwrap(),
+                "{lines}\n{command}\n{marker}-end\n"
+            )
             .unwrap();
-        let lines = command.matches('\n').count() + 1;
-        write!(
-            child.stdin.as_mut().unwrap(),
-            "{lines}\n{command}\n{marker}-end\n"
-        )
-        .unwrap();
-        Local {
-            child,
-            marker,
-            ready,
+            Local {
+                child,
+                marker,
+                ready,
+            }
         }
-    }
 
-    /// Waits for the script, after closing its stdin first when `stop` is given (in seconds), and
-    /// returns its exit status, stdout and stderr.
-    fn finish(mut local: Local, stop: Option<f64>) -> (Option<i32>, String, String) {
-        let mut stdout = local.child.stdout.take().unwrap();
-        let mut stderr = local.child.stderr.take().unwrap();
-        let out = thread::spawn(move || {
-            let mut s = String::new();
-            stdout.read_to_string(&mut s).unwrap();
-            s
-        });
-        let err = thread::spawn(move || {
-            let mut s = String::new();
-            stderr.read_to_string(&mut s).unwrap();
-            s
-        });
-        let stdin = local.child.stdin.take();
-        if let Some(secs) = stop {
-            thread::sleep(Duration::from_secs_f64(secs));
-            drop(stdin);
-        } else {
-            // Kept open until the script ends, as the channel keeps it.
+        /// Waits for the script, after closing its stdin first when `stop` is given (in seconds),
+        /// and returns its exit status, stdout and stderr.
+        fn finish(mut local: Local, stop: Option<f64>) -> (Option<i32>, String, String) {
+            let mut stdout = local.child.stdout.take().unwrap();
+            let mut stderr = local.child.stderr.take().unwrap();
+            let out = thread::spawn(move || {
+                let mut s = String::new();
+                stdout.read_to_string(&mut s).unwrap();
+                s
+            });
+            let err = thread::spawn(move || {
+                let mut s = String::new();
+                stderr.read_to_string(&mut s).unwrap();
+                s
+            });
+            let stdin = local.child.stdin.take();
+            if let Some(secs) = stop {
+                thread::sleep(Duration::from_secs_f64(secs));
+                drop(stdin);
+            } else {
+                // Kept open until the script ends, as the channel keeps it.
+                let status = local.child.wait().unwrap();
+                drop(stdin);
+                return (status.code(), out.join().unwrap(), err.join().unwrap());
+            }
             let status = local.child.wait().unwrap();
-            drop(stdin);
-            return (status.code(), out.join().unwrap(), err.join().unwrap());
+            (status.code(), out.join().unwrap(), err.join().unwrap())
         }
-        let status = local.child.wait().unwrap();
-        (status.code(), out.join().unwrap(), err.join().unwrap())
-    }
 
-    /// The processes whose command line holds `needle`.
-    fn running(needle: &str) -> Vec<String> {
-        let out = Command::new("ps")
-            .args(["-eo", "pid=,args="])
-            .output()
-            .unwrap();
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .filter(|l| l.contains(needle) && !l.contains("ps -eo"))
-            .map(str::to_owned)
-            .collect()
-    }
-
-    #[test]
-    fn script_runs_a_command_and_keeps_its_output_and_status() {
-        let local = start(None, "echo out; printf 'two\\nlines' >&2\nexit 3");
-        assert!(local.ready.starts_with(&format!("{} ", local.marker)));
-        let (status, stdout, stderr) = finish(local, None);
-        assert_eq!(status, Some(3));
-        assert_eq!(stdout, "out\n");
-        assert_eq!(stderr, "two\nlines");
-    }
-
-    #[test]
-    fn script_gives_the_command_an_empty_stdin() {
-        let local = start(None, "cat; echo read $?");
-        let (status, stdout, _) = finish(local, None);
-        assert_eq!((status, stdout.as_str()), (Some(0), "read 0\n"));
-    }
-
-    /// With GNU `env`, the command does not inherit the SIGINT and SIGQUIT that a script ignores
-    /// for what it starts in the background.
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn script_gives_the_command_default_signals() {
-        let gnu_env = Command::new("env")
-            .args(["--default-signal=INT,QUIT", "true"])
-            .status()
-            .is_ok_and(|s| s.success());
-        let local = start(None, "grep SigIgn /proc/$$/status");
-        assert!(local.ready.ends_with(" setsid\n"), "{}", local.ready);
-        let (_, stdout, _) = finish(local, None);
-        if gnu_env {
-            assert_eq!(stdout, "SigIgn:\t0000000000000000\n");
-        }
-    }
-
-    #[test]
-    fn script_does_not_run_a_command_cut_short() {
-        let mut child = Command::new("sh")
-            .args(["-c", SCRIPT, "sh", "41"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(b"2\necho first\n")
-            .unwrap();
-        let out = child.wait_with_output().unwrap();
-        assert_eq!(out.status.code(), Some(9));
-        assert!(!String::from_utf8_lossy(&out.stdout).contains("first"));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn script_ends_the_whole_command_when_its_stdin_ends() {
-        let tag = format!("31{}", nonce() % 1000);
-        // `sleep` is not the shell's last command, so the shell forks it and waits.
-        for command in [
-            format!("sleep {tag}"),
-            format!("cd /tmp && sleep {tag}; echo after"),
-        ] {
-            let local = start(None, &command);
-            let marker = local.marker.clone();
-            let began = Instant::now();
-            let (_, stdout, _) = finish(local, Some(0.5));
-            assert!(began.elapsed() < Duration::from_secs(3), "{command}");
-            assert_eq!(stdout, format!("{marker} ended\n"), "{command}");
-            assert!(running(&format!("sleep {tag}")).is_empty(), "{command}");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn script_kills_what_ignores_term() {
-        let tag = format!("32{}", nonce() % 1000);
-        let local = start(None, &format!("trap '' TERM; sleep {tag}; echo after"));
-        let marker = local.marker.clone();
-        let (status, stdout, _) = finish(local, Some(0.3));
-        assert_eq!(stdout, format!("{marker} ended\n"));
-        assert_eq!(status, Some(137));
-        assert!(running(&format!("sleep {tag}")).is_empty());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn script_leaves_a_finished_commands_background_jobs_alone() {
-        let tag = format!("33{}", nonce() % 1000);
-        let local = start(
-            None,
-            &format!("sleep {tag} >/dev/null 2>&1 </dev/null & echo started"),
-        );
-        let (status, stdout, _) = finish(local, None);
-        assert_eq!((status, stdout.as_str()), (Some(0), "started\n"));
-        let left = running(&format!("sleep {tag}"));
-        assert_eq!(left.len(), 1, "{left:?}");
-        let pid = left[0].split_whitespace().next().unwrap();
-        Command::new("kill").arg(pid).status().unwrap();
-    }
-
-    /// A directory of links to the tools the script needs, without `setsid` and with or without
-    /// `perl`, as on macOS and the BSDs.
-    #[cfg(target_os = "linux")]
-    fn tools_without_setsid(perl: bool) -> tempfile::TempDir {
-        let dir = tempfile::tempdir().unwrap();
-        let mut tools = vec!["sh", "head", "env", "sleep", "cat", "grep"];
-        if perl {
-            tools.push("perl");
-        }
-        for tool in tools {
-            let out = Command::new("sh")
-                .args(["-c", &format!("command -v {tool}")])
+        /// The processes whose command line holds `needle`.
+        #[cfg(target_os = "linux")]
+        fn running(needle: &str) -> Vec<String> {
+            let out = Command::new("ps")
+                .args(["-eo", "pid=,args="])
                 .output()
                 .unwrap();
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-            std::os::unix::fs::symlink(path, dir.path().join(tool)).unwrap();
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter(|l| l.contains(needle) && !l.contains("ps -eo"))
+                .map(str::to_owned)
+                .collect()
         }
-        dir
-    }
 
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn script_falls_back_to_perl_and_then_to_the_commands_own_process() {
-        let has_perl = Command::new("sh")
-            .args(["-c", "command -v perl"])
-            .output()
-            .is_ok_and(|o| o.status.success());
-        for (perl, way, report) in [(true, "perl", "ended"), (false, "none", "unknown")] {
-            if perl && !has_perl {
-                continue;
-            }
-            let dir = tools_without_setsid(perl);
-            let path = dir.path().to_str().unwrap();
-            let tag = format!("34{}", nonce() % 1000);
-            // Without a group, TERM reaches only the command's own process.
-            let local = start(Some(path), &format!("exec sleep {tag}"));
-            assert_eq!(local.ready, format!("{} {way}\n", local.marker));
-            let marker = local.marker.clone();
-            let (_, stdout, _) = finish(local, Some(0.3));
-            assert_eq!(stdout, format!("{marker} {report}\n"), "{way}");
-            assert!(running(&format!("sleep {tag}")).is_empty(), "{way}");
+        #[test]
+        fn script_runs_a_command_and_keeps_its_output_and_status() {
+            let local = start(None, "echo out; printf 'two\\nlines' >&2\nexit 3");
+            assert!(local.ready.starts_with(&format!("{} ", local.marker)));
+            let (status, stdout, stderr) = finish(local, None);
+            assert_eq!(status, Some(3));
+            assert_eq!(stdout, "out\n");
+            assert_eq!(stderr, "two\nlines");
+        }
 
-            let local = start(Some(path), "grep SigIgn /proc/$$/status");
+        #[test]
+        fn script_gives_the_command_an_empty_stdin() {
+            let local = start(None, "cat; echo read $?");
+            let (status, stdout, _) = finish(local, None);
+            assert_eq!((status, stdout.as_str()), (Some(0), "read 0\n"));
+        }
+
+        /// With GNU `env`, the command does not inherit the SIGINT and SIGQUIT that a script
+        /// ignores for what it starts in the background.
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_gives_the_command_default_signals() {
+            let gnu_env = Command::new("env")
+                .args(["--default-signal=INT,QUIT", "true"])
+                .status()
+                .is_ok_and(|s| s.success());
+            let local = start(None, "grep SigIgn /proc/$$/status");
+            assert!(local.ready.ends_with(" setsid\n"), "{}", local.ready);
             let (_, stdout, _) = finish(local, None);
-            if perl {
+            if gnu_env {
                 assert_eq!(stdout, "SigIgn:\t0000000000000000\n");
+            }
+        }
+
+        #[test]
+        fn script_does_not_run_a_command_cut_short() {
+            let mut child = Command::new("sh")
+                .args(["-c", SCRIPT, "sh", "41"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(b"2\necho first\n")
+                .unwrap();
+            let out = child.wait_with_output().unwrap();
+            assert_eq!(out.status.code(), Some(9));
+            assert!(!String::from_utf8_lossy(&out.stdout).contains("first"));
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_ends_the_whole_command_when_its_stdin_ends() {
+            let tag = format!("31{}", nonce() % 1000);
+            // `sleep` is not the shell's last command, so the shell forks it and waits.
+            for command in [
+                format!("sleep {tag}"),
+                format!("cd /tmp && sleep {tag}; echo after"),
+            ] {
+                let local = start(None, &command);
+                let marker = local.marker.clone();
+                let began = Instant::now();
+                let (_, stdout, _) = finish(local, Some(0.5));
+                assert!(began.elapsed() < Duration::from_secs(3), "{command}");
+                assert_eq!(stdout, format!("{marker} ended\n"), "{command}");
+                assert!(running(&format!("sleep {tag}")).is_empty(), "{command}");
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_kills_what_ignores_term() {
+            let tag = format!("32{}", nonce() % 1000);
+            let local = start(None, &format!("trap '' TERM; sleep {tag}; echo after"));
+            let marker = local.marker.clone();
+            let (status, stdout, _) = finish(local, Some(0.3));
+            assert_eq!(stdout, format!("{marker} ended\n"));
+            assert_eq!(status, Some(137));
+            assert!(running(&format!("sleep {tag}")).is_empty());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_leaves_a_finished_commands_background_jobs_alone() {
+            let tag = format!("33{}", nonce() % 1000);
+            let local = start(
+                None,
+                &format!("sleep {tag} >/dev/null 2>&1 </dev/null & echo started"),
+            );
+            let (status, stdout, _) = finish(local, None);
+            assert_eq!((status, stdout.as_str()), (Some(0), "started\n"));
+            let left = running(&format!("sleep {tag}"));
+            assert_eq!(left.len(), 1, "{left:?}");
+            let pid = left[0].split_whitespace().next().unwrap();
+            Command::new("kill").arg(pid).status().unwrap();
+        }
+
+        /// A directory of links to the tools the script needs, without `setsid` and with or without
+        /// `perl`, as on macOS and the BSDs.
+        #[cfg(target_os = "linux")]
+        fn tools_without_setsid(perl: bool) -> tempfile::TempDir {
+            let dir = tempfile::tempdir().unwrap();
+            let mut tools = vec!["sh", "head", "env", "sleep", "cat", "grep"];
+            if perl {
+                tools.push("perl");
+            }
+            for tool in tools {
+                let out = Command::new("sh")
+                    .args(["-c", &format!("command -v {tool}")])
+                    .output()
+                    .unwrap();
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+                std::os::unix::fs::symlink(path, dir.path().join(tool)).unwrap();
+            }
+            dir
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_falls_back_to_perl_and_then_to_the_commands_own_process() {
+            let has_perl = Command::new("sh")
+                .args(["-c", "command -v perl"])
+                .output()
+                .is_ok_and(|o| o.status.success());
+            for (perl, way, report) in [(true, "perl", "ended"), (false, "none", "unknown")] {
+                if perl && !has_perl {
+                    continue;
+                }
+                let dir = tools_without_setsid(perl);
+                let path = dir.path().to_str().unwrap();
+                let tag = format!("34{}", nonce() % 1000);
+                // Without a group, TERM reaches only the command's own process.
+                let local = start(Some(path), &format!("exec sleep {tag}"));
+                assert_eq!(local.ready, format!("{} {way}\n", local.marker));
+                let marker = local.marker.clone();
+                let (_, stdout, _) = finish(local, Some(0.3));
+                assert_eq!(stdout, format!("{marker} {report}\n"), "{way}");
+                assert!(running(&format!("sleep {tag}")).is_empty(), "{way}");
+
+                let local = start(Some(path), "grep SigIgn /proc/$$/status");
+                let (_, stdout, _) = finish(local, None);
+                if perl {
+                    assert_eq!(stdout, "SigIgn:\t0000000000000000\n");
+                }
             }
         }
     }
