@@ -113,7 +113,10 @@ export function FormRow({
   htmlFor?: string;
 }) {
   return (
-    <div className={cx(l.formRow, top && l.formRowTop)} style={columns ? ({ "--form-columns": columns } as CSSProperties) : undefined}>
+    <div
+      className={cx(l.formRow, top && l.formRowTop)}
+      style={columns ? ({ "--form-columns": columns } as CSSProperties) : undefined}
+    >
       <label className={l.formLabel} htmlFor={htmlFor}>
         {label}
       </label>

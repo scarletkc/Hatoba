@@ -16,7 +16,7 @@
   container-type: inline-size;
 }
 
-/* A narrow page leaves the host's name and drops its group. */
+/* A narrow page shows the host's name without its group. */
 @container (max-width: 420px) {
   .crumbGroup,
   .crumbSep {

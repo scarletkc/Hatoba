@@ -17,7 +17,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--fg);
+}
+
+.stateText {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sep {
@@ -167,6 +173,27 @@
 
 @container (max-width: 560px) {
   .statsText {
+    display: none;
+  }
+
+  .stats {
+    flex: none;
+  }
+}
+
+/* Beside the AI panel in a small window, the bar also drops the latency and the SFTP button's label
+ * (its title still names it), then the target. */
+@container (max-width: 460px) {
+  .latency,
+  .sftpLabel {
+    display: none;
+  }
+}
+
+@container (max-width: 360px) {
+  .sep,
+  .target,
+  .via {
     display: none;
   }
 }

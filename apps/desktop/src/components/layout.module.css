@@ -203,10 +203,9 @@
   min-height: 44px;
 }
 
-/* Keeps its words whole; a long value gives up its room instead. */
+/* Keeps its text on one line; a long value gives up its room instead. */
 .rowLabel {
-  flex: 1;
-  min-width: min-content;
+  flex: 1 0 auto;
 }
 
 .rowValue {

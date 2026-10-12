@@ -39,6 +39,11 @@
   padding: 0 14px;
 }
 
+/* The add link keeps its text on one line; the hint beside it wraps instead. */
+.footRow > button {
+  flex: none;
+}
+
 /* No variables yet: the hint sits left, the add link right. */
 .footSplit {
   justify-content: space-between;

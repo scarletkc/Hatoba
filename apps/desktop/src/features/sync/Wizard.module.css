@@ -40,7 +40,7 @@
 }
 
 /* A narrow card, as beside the AI panel in a small window, has less padding, and only the current
- * step keeps its name in the progress header (the others still have it for screen readers). */
+ * step shows its name in the progress header. Font size 0 keeps the other names for screen readers. */
 @container (max-width: 400px) {
   .body {
     padding: 20px 20px 22px;

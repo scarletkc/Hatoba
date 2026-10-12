@@ -70,7 +70,7 @@ export function StatusBar({
     <div className={s.bar}>
       <span className={s.state} role="status">
         <StatusDot color={DOT[status]} />
-        {t(`terminal.status.${status}`)}
+        <span className={s.stateText}>{t(`terminal.status.${status}`)}</span>
       </span>
       <span className={s.sep} />
       {target && <span className={s.target}>{target}</span>}
@@ -113,7 +113,7 @@ export function StatusBar({
         onClick={onToggleSftp}
       >
         <Icon name="folder-simple" size={14} />
-        {t("terminal.sftp")}
+        <span className={s.sftpLabel}>{t("terminal.sftp")}</span>
       </button>
       <IconButton
         icon="dots-three"
