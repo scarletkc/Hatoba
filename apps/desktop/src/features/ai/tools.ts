@@ -87,7 +87,7 @@ export function isFileTool(kind: ToolKind): kind is "read_file" | "edit_file" | 
   return kind === "read_file" || kind === "edit_file" || kind === "write_file";
 }
 
-/** The search tools (AI-48, AI-49), which run `find` and `grep` in Rust over an exec channel of the tab's connection. */
+/** The search tools (AI-48, AI-49), which run `find`, and `rg` or `grep`, in Rust over an exec channel of the tab's connection. */
 export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
   return kind === "grep" || kind === "glob";
 }

@@ -10,12 +10,15 @@
 //! checked with GNU `find -xtype f`, or by the helper, one `sh` for many links, where `find` lacks
 //! it: links to directories are not followed, and a FIFO, which grep would wait on, is left out.
 //! `.git` is skipped, and so are `/proc`, `/sys`, `/dev` and `/run` when the search starts at `/`.
+//! No `-exec … +` is inside parentheses, where BusyBox `find` never runs it: the name tests are
+//! repeated instead.
 //!
 //! `grep` runs `rg` where the host has one that knows the options it needs, and `grep -E`
 //! otherwise, on the pattern as Hatoba translated it for `grep -E`. `find` lists the directories
 //! and `rg` searches the files in each (`--max-depth 1`, following links), so it searches the files
 //! `grep -E` would and skips binary files as it skips them in a directory. `grep` gets `-I` and
-//! `--null` where it has them.
+//! `--null` where it has them, and checks the pattern on an empty line, since BusyBox `grep`
+//! compiles it only once it reads one.
 //!
 //! Messages are in English (`LC_MESSAGES=C`, with an `LC_ALL` moved to the character and collation
 //! categories, where it would override that), so the caller can count the files that could not be
@@ -80,12 +83,12 @@ macro_rules! watchdog {
 }
 
 /// Lists the files, and the symbolic links to files, below the directory named on stdin's first
-/// line (with stdin's second line, when not empty, appended), at most `$3` levels down unless
-/// stdin's third line is `-`, whose names match one of the `find -name` patterns on the lines after
-/// the fourth, [`GLOB_LINKS`] (any name without one). Prints the marker, the directory with `/.`
-/// after it, and at most `$1` bytes of `find`'s output; ends after `$2` seconds. Exit statuses as
-/// for [`resolve!`], and 4 not readable, 6 not a directory (the path as resolved on stderr), 9 no
-/// path.
+/// line (with stdin's second line, when not empty, appended), at most as many levels down as its
+/// third line says (`-` for any), whose names match one of the `find -name` patterns on the lines
+/// after the fourth, [`GLOB_LINKS`] (any name without one). Prints the marker, the directory with
+/// `/.` after it, and at most `$1` bytes of `find`'s output; ends after `$2` seconds. Exit statuses
+/// as for [`resolve!`], and 4 not readable, 6 not a directory (the path as resolved on stderr), 9
+/// no path.
 const GLOB_SCRIPT: &str = concat!(
     "c=$1; t=$2; IFS= read -r f || exit 9; IFS= read -r s || exit 9; IFS= read -r d || exit 9; \
      IFS= read -r h || exit 9; ",
