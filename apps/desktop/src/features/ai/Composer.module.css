@@ -101,7 +101,14 @@
   white-space: nowrap;
 }
 
-/* A narrow panel keeps the model's name: bypass is still the orange lightning. */
+/* The model's name keeps the room: the meter shows its ring alone (the numbers are on hover), and
+ * a narrower panel drops the thinking level and the word next to bypass's orange lightning. */
+@container (max-width: 420px) {
+  .meterLabel {
+    display: none;
+  }
+}
+
 @container (max-width: 330px) {
   .modelEffort,
   .mode span {
@@ -192,7 +199,7 @@
   background: color-mix(in srgb, var(--fg) 85%, var(--win) 15%);
 }
 
-/* AI-16: the permission mode, beside the model selector. */
+/* AI-16: the permission mode, beside the + menu. */
 .mode {
   flex: none;
   display: inline-flex;

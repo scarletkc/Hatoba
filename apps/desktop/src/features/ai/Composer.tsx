@@ -37,8 +37,9 @@ function isSideQuestionKey(e: KeyboardEvent): boolean {
 }
 
 /**
- * The input area (§9): the attachment chips, a multi-line box, the + menu, the model selector, the
- * permission mode (AI-16), the context meter, Ask a Side Question (AI-42) and Send / Stop.
+ * The input area (§9): the attachment chips, a multi-line box, and under it the + menu and the
+ * permission mode (AI-16) on the left, the model selector, the context meter, Ask a Side Question
+ * (AI-42) and Send / Stop on the right.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
@@ -177,7 +178,6 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         />
         <div className={s.bar}>
           <AddButton slotId={slotId} slot={slot} onAddFiles={() => fileRef.current?.click()} />
-          <ModelPicker slotId={slotId} slot={slot} value={model} />
           <ModeButton slotId={slotId} mode={slot.mode} />
           <input
             ref={fileRef}
@@ -191,6 +191,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
             }}
           />
           <div className={s.grow} />
+          <ModelPicker slotId={slotId} slot={slot} value={model} />
           <ContextMeter slotId={slotId} slot={slot} m={meter} />
           {slot.conversationId && (
             <button
@@ -282,12 +283,11 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
         aria-label={t("ai.model")}
         title={title}
         disabled={entries.length === 0}
-        onClick={() => ref.current && menu.openBelow(ref.current)}
+        onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >
-        <Icon name="cube" size={13} className={s.modelIcon} />
         <span className={s.modelName}>{modelName ?? value?.model_id ?? t("ai.model.none")}</span>
         {effort && <span className={s.modelEffort}>{t(effortKey(effort))}</span>}
-        <Icon name="caret-up-down" size={11} className={s.modelIcon} />
+        <Icon name="caret-down" size={10} className={s.modelIcon} />
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={220} />}
     </>
@@ -295,8 +295,8 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
 }
 
 /**
- * AI-16: the conversation's permission mode, beside the model selector. Manual approval shows only
- * its shield; bypass also its name. The first switch to bypass on a device asks first.
+ * AI-16: the conversation's permission mode, beside the + menu. Manual approval shows only its
+ * shield; bypass also its name. The first switch to bypass on a device asks first.
  */
 function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }) {
   const t = useT();
@@ -388,7 +388,7 @@ function ContextMeter({ slotId, slot, m }: { slotId: string; slot: Slot; m: Mete
         onClick={() => ref.current && menu.openBelow(ref.current, true)}
       >
         {m.ratio !== null && <Ring ratio={m.ratio} />}
-        <span>{label}</span>
+        <span className={cx(m.ratio !== null && s.meterLabel)}>{label}</span>
       </button>
       {menu.anchor && (
         <Menu
