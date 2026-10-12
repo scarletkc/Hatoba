@@ -4,6 +4,7 @@ import {
   allowanceOf,
   allowanceScope,
   callAllowed,
+  callMode,
   callFileChange,
   callSummary,
   exitStatusOf,
@@ -173,6 +174,15 @@ describe("display helpers", () => {
     expect(exitStatusOf("exit status: 0\nstdout:\nok")).toBe(0);
     expect(exitStatusOf("Exit code 127")).toBe(127);
     expect(exitStatusOf("no status here")).toBeNull();
+  });
+});
+
+describe("the mode a call runs in (§13.5)", () => {
+  it("keeps a turn that started in manual approval asking, and asks at once after a switch to it", () => {
+    expect(callMode("manual", "bypass")).toBe("manual");
+    expect(callMode("bypass", "manual")).toBe("manual");
+    expect(callMode("manual", "manual")).toBe("manual");
+    expect(callMode("bypass", "bypass")).toBe("bypass");
   });
 });
 

@@ -77,6 +77,7 @@ import {
   allowanceScope,
   CALL_MCP_TOOL,
   callAllowed,
+  callMode,
   grantKeys,
   mcpOffResult,
   mustAsk,
@@ -213,6 +214,8 @@ class TurnRunner {
   slotId: string;
   /** The tab the turn started on, the only one whose terminal its tools may use (AI-08). */
   private readonly tab: string;
+  /** The permission mode the turn's requests name (§13.5); a switch to bypass waits for the next turn. */
+  private readonly mode: AiPermissionMode;
   convId: string | null;
   private ended = false;
   private disposed = false;
@@ -223,10 +226,11 @@ class TurnRunner {
   private readonly ready: Promise<string | null>;
   private resolveReady!: (id: string | null) => void;
 
-  constructor(slotId: string, convId: string | null) {
+  constructor(slotId: string, convId: string | null, mode: AiPermissionMode) {
     this.slotId = slotId;
     this.tab = slotId;
     this.convId = convId;
+    this.mode = mode;
     this.ready = new Promise((resolve) => (this.resolveReady = resolve));
     if (convId) this.resolveReady(convId);
   }
@@ -398,7 +402,7 @@ class TurnRunner {
     // tab's host for commands and tools; and §13.5's commands that only read.
     const target = this.target();
     const host = target ? hostRefOf(target.tab) : null;
-    const mode = getSlot(this.slotId).mode;
+    const mode = callMode(this.mode, getSlot(this.slotId).mode);
     const saved = kind !== "mcp" && needsApproval(kind, mode) ? await savedAllowances().catch(() => []) : [];
     if (!this.acting) return;
     const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host);
@@ -546,7 +550,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
   runners.get(slotId)?.dispose(); // Rust stops that turn when the message arrives
 
   const { text, extras, restore } = takeAttachments(slotId, typed);
-  const runner = new TurnRunner(slotId, slot.conversationId);
+  const runner = new TurnRunner(slotId, slot.conversationId, context.permission_mode);
   runners.set(slotId, runner);
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text };
   patchSlot(slotId, (s) => ({
@@ -719,7 +723,7 @@ export async function retryTurn(slotId: string) {
     return;
   }
   discardSideQuestion(slotId);
-  const runner = new TurnRunner(slotId, id);
+  const runner = new TurnRunner(slotId, id, context.permission_mode);
   runners.set(slotId, runner);
   patchSlot(slotId, { turn: newTurn(), outcome: null, effortIgnored: false });
   try {
@@ -789,7 +793,7 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   }
   discardSideQuestion(slotId);
 
-  const runner = new TurnRunner(slotId, id);
+  const runner = new TurnRunner(slotId, id, context.permission_mode);
   runners.set(slotId, runner);
   // Rust keeps the notes of the message it replaces (AI-05, AI-09), so its dividers stay while it is sent.
   const original = now.entries.find((e) => e.entry_id === entryId);

@@ -98,6 +98,14 @@ export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   return kind === "run_command" || kind === "send_input" || kind === "edit_file" || kind === "write_file" || kind === "fetch_url" || kind === "mcp";
 }
 
+/**
+ * §13.5: the mode a call of a turn runs in. The turn's requests named the mode it `started` in, so a
+ * switch to bypass waits for the next turn, while a switch to manual approval applies at once.
+ */
+export function callMode(started: AiPermissionMode, now: AiPermissionMode): AiPermissionMode {
+  return started === "manual" || now === "manual" ? "manual" : "bypass";
+}
+
 /** What decides whether a call waits for the user. */
 export interface AskInput {
   kind: ToolKind;
