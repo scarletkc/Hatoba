@@ -782,6 +782,12 @@ export type AiTurnContext = {
 	session_id: string | null,
 	/**  MCP servers switched off for this conversation (AI-30, P2). */
 	disabled_mcp_servers: string[],
+	/**
+	 *  The conversation's permission mode on this device (AI-16), which the system prompt names
+	 *  (§13.5). The frontend applies it to each call; a switch reaches the prompt with the next
+	 *  turn.
+	 */
+	permission_mode: AiPermissionMode,
 };
 
 export type AiTurnEndReason = "completed" | "length" | "refused" | 

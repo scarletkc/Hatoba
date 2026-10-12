@@ -1,6 +1,6 @@
 # Reverting the assistant's file changes
 
-Servers rarely keep a history of their configuration files, so Hatoba keeps one for the assistant's **Edit file** and **Write file** calls (`references/ai-panel.md`). Every call that wrote a file can be reverted from its block in the conversation.
+Servers rarely keep a history of their configuration files, so Hatoba keeps one for the assistant's **Edit file** and **Write file** calls (`references/ai-tools.md`). Every call that wrote a file can be reverted from its block in the conversation.
 
 | en | zh-CN | ja |
 |---|---|---|

@@ -34,8 +34,9 @@ use super::{
 use super::{Halt, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
-    AiRevertFailure, AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput,
-    AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, QuickTarget,
+    AiPermissionMode, AiRevertFailure, AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent,
+    AiSideQuestionInput, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
+    AiTurnEvent, QuickTarget,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -351,6 +352,7 @@ impl Fixture {
             tab: true,
             session_id: None,
             disabled_mcp_servers: Vec::new(),
+            permission_mode: AiPermissionMode::Manual,
         }
     }
 
@@ -3599,6 +3601,28 @@ async fn the_prompt_names_the_model_and_the_server_and_carries_instructions_and_
     let system = system_of(&f.requests().await[2]);
     assert!(!system.contains("SSH server"), "{system}");
     assert!(system.contains("<user_instructions>"), "{system}");
+}
+
+#[tokio::test]
+async fn the_prompt_names_the_permission_mode_of_each_turn() {
+    let f = Fixture::new(vec![answer("One."), answer("Two.")]).await;
+    let bypass = AiTurnContext {
+        permission_mode: AiPermissionMode::Bypass,
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "first", bypass).await;
+    // §13.5: the mode is the device's, so it goes in the system prompt, not in a stored note.
+    f.exchange(Some(&conv), "second", f.context()).await;
+    let requests = f.requests().await;
+    let first = system_of(&requests[0]);
+    assert!(first.contains("\n- Permission mode: bypass. "), "{first}");
+    assert!(!first.contains("approval card"), "{first}");
+    let second = system_of(&requests[1]);
+    assert!(
+        second.contains("\n- Permission mode: manual approval. "),
+        "{second}"
+    );
+    assert_eq!(f.user_texts(&conv), ["first", "second"]);
 }
 
 #[tokio::test]

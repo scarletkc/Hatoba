@@ -1543,6 +1543,10 @@ pub struct AiTurnContext {
     pub session_id: Option<String>,
     /// MCP servers switched off for this conversation (AI-30, P2).
     pub disabled_mcp_servers: Vec<String>,
+    /// The conversation's permission mode on this device (AI-16), which the system prompt names
+    /// (§13.5). The frontend applies it to each call; a switch reaches the prompt with the next
+    /// turn.
+    pub permission_mode: AiPermissionMode,
 }
 
 #[derive(Clone, Deserialize, Type)]

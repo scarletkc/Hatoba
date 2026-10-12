@@ -1,6 +1,6 @@
 # Troubleshooting: AI assistant, search, skills and MCP
 
-Settings are in `references/ai-settings.md` and the panel in `references/ai-panel.md`. The messages are shown exactly as the app prints them in each language. Messages that contain a status code or the provider's own text are paraphrased.
+Settings are in `references/ai-settings.md`, the panel in `references/ai-panel.md`, and tools and approvals in `references/ai-tools.md`. The messages are shown exactly as the app prints them in each language. Messages that contain a status code or the provider's own text are paraphrased.
 
 ## The provider returned an error
 

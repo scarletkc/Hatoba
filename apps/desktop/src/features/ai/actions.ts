@@ -131,14 +131,16 @@ export function slotEffort(slotId: string): AiEffort | null {
 /**
  * What a request may act on: the tab's host or quick-connect target and, when connected, its terminal
  * tools and session, whose server's identification string the system prompt states (AI-08, AI-09,
- * §13.1). The home tab names the conversation's own host or target, which leaves it where it is.
+ * §13.1), and the permission mode the prompt names (§13.5). The home tab names the conversation's own
+ * host or target, which leaves it where it is.
  */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
   if (!model) return null;
   const attached = attachedTab(slotId);
   const connected = !!attached && attached.tab.status === "connected";
-  const conversation = getSlot(slotId).conversation;
+  const slot = getSlot(slotId);
+  const conversation = slot.conversation;
   return {
     provider_id: model.provider_id,
     model_id: model.model_id,
@@ -147,7 +149,8 @@ export function turnContext(slotId: string): AiTurnContext | null {
     target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
     tab: connected,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
-    disabled_mcp_servers: getSlot(slotId).mcpOff,
+    disabled_mcp_servers: slot.mcpOff,
+    permission_mode: slot.mode,
   };
 }
 

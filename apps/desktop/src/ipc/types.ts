@@ -972,6 +972,8 @@ export interface AiTurnContext {
   session_id: string | null;
   /** MCP servers switched off for this conversation in the tools menu (AI-30, P2). */
   disabled_mcp_servers: string[];
+  /** The conversation's permission mode on this device (AI-16), which the system prompt names (§13.5). */
+  permission_mode: AiPermissionMode;
 }
 
 export interface AiSendInput {

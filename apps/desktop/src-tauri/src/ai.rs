@@ -48,8 +48,8 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, FetchUrlArgs, PromptContext, PromptModel, PromptTools, ReadSkillArgs, RunCommandArgs,
-    ToolSet, WebSearchArgs, escape_closing_tag,
+    self, FetchUrlArgs, PromptContext, PromptModel, PromptPermission, PromptTools, ReadSkillArgs,
+    RunCommandArgs, ToolSet, WebSearchArgs, escape_closing_tag,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
@@ -67,9 +67,10 @@ use zeroize::Zeroizing;
 
 use crate::dto::{
     AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
-    AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiSearchHit, AiSendInput,
-    AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall, AiToolResultInput,
-    AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiPermissionMode, AiSearchHit,
+    AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall,
+    AiToolResultInput, AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
+    AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -3130,6 +3131,10 @@ fn prompt(
         host_notes: host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
         skills: &skills,
         tools: offered,
+        permission: match context.permission_mode {
+            AiPermissionMode::Manual => PromptPermission::Manual,
+            AiPermissionMode::Bypass => PromptPermission::Bypass,
+        },
     });
     let defs = if fallback.is_none() {
         builtin_tools(v, context)

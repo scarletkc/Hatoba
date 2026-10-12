@@ -16,7 +16,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 use zeroize::Zeroizing;
 
 use super::{DeviceState, McpEvents, McpManager, OfferedTool};
-use crate::dto::{AiTurnContext, McpServerState, McpServerStatus};
+use crate::dto::{AiPermissionMode, AiTurnContext, McpServerState, McpServerStatus};
 use hatoba_ai::entry::ToolStatus;
 
 /// Selects the mock's behaviour: `serve`.
@@ -356,6 +356,7 @@ fn context(disabled: &[&str]) -> AiTurnContext {
         tab: true,
         session_id: None,
         disabled_mcp_servers: disabled.iter().map(|s| (*s).to_owned()).collect(),
+        permission_mode: AiPermissionMode::Manual,
     }
 }
 
