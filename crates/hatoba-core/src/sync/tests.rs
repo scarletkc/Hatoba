@@ -729,6 +729,39 @@ async fn join_reconnects_a_device_that_synced_before() {
 }
 
 #[tokio::test]
+async fn join_requires_sync_to_be_off() {
+    let (server, clock, a, _b) = world();
+    enable(&a).await;
+    let c = own_vault_device(&server, &clock);
+    c.put(host("local-host"));
+
+    // Another setup finishes while the join reads the cloud: the commit is refused.
+    let vault = Arc::clone(&c.vault);
+    c.backend.on_next_pull(move || {
+        vault
+            .lock()
+            .unwrap()
+            .set_sync_config(Some(&config()))
+            .unwrap();
+    });
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::SyncAlreadyConfigured), "got {err:?}");
+    c.v().lock();
+    c.v().unlock(LOCAL_PW).unwrap();
+    assert_eq!(c.names(), ["local-host"], "still this device's own vault");
+
+    // A device that already syncs is refused before it asks the server anything.
+    let pulls = server.pull_calls();
+    let err = join_remote_vault(&c.vault, &c.backend, PW, c.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::SyncAlreadyConfigured));
+    assert_eq!(server.pull_calls(), pulls);
+}
+
+#[tokio::test]
 async fn join_errors_leave_the_local_vault_alone() {
     let (server, clock, a, _b) = world();
     let c = own_vault_device(&server, &clock);

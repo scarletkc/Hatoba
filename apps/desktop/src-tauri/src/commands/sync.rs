@@ -149,6 +149,7 @@ pub async fn sync_configure(
     config: SyncConfigInput,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     let (cfg, backend) = backend_from_input(&config)?;
     let setup_token = match &config {
         SyncConfigInput::Worker { setup_token, .. } => setup_token
@@ -182,6 +183,7 @@ pub async fn sync_join(
     config: SyncConfigInput,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     // A lock or a disconnect while this waits for the server ends it: nothing is saved and the
     // vault stays as it was (§6.3), even if it was unlocked again meanwhile.
     let generation = state.sync.generation();

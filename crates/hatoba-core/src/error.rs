@@ -109,6 +109,9 @@ pub enum Error {
     /// Sync is not configured on this device.
     #[error("sync is not configured")]
     SyncNotConfigured,
+    /// Sync is already set up on this device, so it cannot join a cloud vault.
+    #[error("sync is already set up on this device")]
+    SyncAlreadyConfigured,
     /// Any other server-side failure; the string is a short code, never user data.
     #[error("sync server error: {0}")]
     Server(String),
@@ -194,6 +197,7 @@ impl Error {
             Self::RemoteInitialized => "remote_initialized",
             Self::RateLimited { .. } => "rate_limited",
             Self::SyncNotConfigured => "sync_not_configured",
+            Self::SyncAlreadyConfigured => "sync_already_configured",
             Self::Server(_) => "server",
             Self::Protocol(_) => "protocol",
             Self::InvalidUrl(_) => "invalid_url",

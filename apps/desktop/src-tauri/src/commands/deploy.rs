@@ -233,6 +233,7 @@ pub async fn deploy_setup(
     handle: String,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     let deployment = state.deploy.get(&handle)?;
     let mut deployment = deployment.lock().await;
     let deployed = deployment
@@ -293,6 +294,7 @@ pub async fn deploy_join(
     target: DeployTarget,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     // As in `sync_join`: a lock or a disconnect while this waits ends it.
     let generation = state.sync.generation();
     let target = self::target(target);

@@ -27,6 +27,10 @@ export type ErrorCode =
   | "sync_offline"
   | "remote_initialized"
   | "remote_not_initialized"
+  /** Another sync setup (flow A or C, §6.6) is still running. */
+  | "sync_setup_busy"
+  /** Sync is already on for this device, so it cannot join a cloud vault (flow C). */
+  | "sync_already_configured"
   | "cloudflare_token"
   | "cloudflare_permission"
   | "cloudflare"

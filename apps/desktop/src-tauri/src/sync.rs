@@ -76,6 +76,8 @@ pub struct SyncController {
     wake: Notify,
     /// Serialises sync rounds (scheduler vs. "Sync now").
     round: tokio::sync::Mutex<()>,
+    /// Held for the whole of a sync setup ([`begin_setup`](Self::begin_setup)).
+    setup: tokio::sync::Mutex<()>,
 }
 
 impl Default for SyncController {
@@ -94,6 +96,7 @@ impl Default for SyncController {
             }),
             wake: Notify::new(),
             round: tokio::sync::Mutex::new(()),
+            setup: tokio::sync::Mutex::new(()),
         }
     }
 }
@@ -140,6 +143,18 @@ impl SyncController {
     /// forgets its credentials, unless it is the one installed. Returns whether it installed.
     pub fn set_backend_if(&self, generation: u64, backend: Arc<dyn SyncBackend>) -> bool {
         self.install(Some(generation), Some(backend))
+    }
+
+    /// Reserves sync setup for a command that sets up sync on the existing vault (flows A and C,
+    /// §6.6) until the guard drops. While one runs, another is refused: two that interleave could
+    /// leave the vault sealed under one cloud vault's key while syncing with the other.
+    pub fn begin_setup(&self) -> AppResult<tokio::sync::MutexGuard<'_, ()>> {
+        self.setup.try_lock().map_err(|_| {
+            AppError::new(
+                crate::error::ErrorCode::SyncSetupBusy,
+                "another sync setup is still running",
+            )
+        })
     }
 
     /// Keeps sync rounds from running while a command saves credentials for the connection, so
@@ -690,6 +705,16 @@ mod tests {
             expires_at: i64::MAX,
         }));
         Arc::new(backend)
+    }
+
+    #[test]
+    fn one_sync_setup_runs_at_a_time() {
+        let sync = SyncController::default();
+        let first = sync.begin_setup().unwrap();
+        let refused = sync.begin_setup().unwrap_err();
+        assert_eq!(refused.code, crate::error::ErrorCode::SyncSetupBusy);
+        drop(first);
+        assert!(sync.begin_setup().is_ok());
     }
 
     #[tokio::test]

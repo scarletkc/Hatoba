@@ -269,7 +269,8 @@ pub struct Joined {
 /// remote that holds this same vault is reconciled item by item, and any other vault receives
 /// every local item as a new one and replaces the local settings with its own. Either way the
 /// local master password becomes the remote's and `config` is recorded. The vault must be
-/// unlocked.
+/// unlocked and have no sync configured, which is checked again in the commit: a setup that
+/// finished meanwhile makes the join fail rather than move a syncing vault to another key.
 ///
 /// `keep_credentials` stores the session (and whatever else the backend needs, such as a D1 API
 /// token) after sign-in, under the vault lock and only while the vault is still unlocked, right
@@ -279,8 +280,9 @@ pub struct Joined {
 /// the local ones. An interrupted round resumes like any other.
 ///
 /// # Errors
-/// [`Error::Locked`], [`Error::RemoteNotInitialized`], [`Error::WrongPassword`],
-/// [`Error::WeakKdfParams`], transport errors, and whatever `keep_credentials` returns.
+/// [`Error::Locked`], [`Error::SyncAlreadyConfigured`], [`Error::RemoteNotInitialized`],
+/// [`Error::WrongPassword`], [`Error::WeakKdfParams`], transport errors, and whatever
+/// `keep_credentials` returns.
 pub async fn join_remote_vault(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -290,11 +292,8 @@ pub async fn join_remote_vault(
     keep_credentials: impl FnOnce(&Session) -> Result<()> + Send,
 ) -> Result<Joined> {
     let device_id = with_vault(vault, |v| {
-        if v.is_unlocked() {
-            Ok(v.device_id())
-        } else {
-            Err(Error::Locked)
-        }
+        joinable(v)?;
+        Ok(v.device_id())
     })?;
     if !backend.health().await?.initialized {
         return Err(Error::RemoteNotInitialized);
@@ -304,9 +303,7 @@ pub async fn join_remote_vault(
     // takes the remote's as they stand now, in the same commit.
     let settings = find_remote_item(backend, SETTINGS_ID).await?;
     let rekeyed = with_vault(vault, |v| {
-        if !v.is_unlocked() {
-            return Err(Error::Locked);
-        }
+        joinable(v)?;
         keep_credentials(&auth.session)?;
         v.join_remote_vault(&auth.meta, auth.vault_key, config, settings.as_ref())
     })?;
@@ -314,6 +311,17 @@ pub async fn join_remote_vault(
         session: auth.session,
         rekeyed,
     })
+}
+
+/// Flow C's precondition: an unlocked vault with no sync configured.
+fn joinable(v: &Vault) -> Result<()> {
+    if !v.is_unlocked() {
+        Err(Error::Locked)
+    } else if v.sync_config()?.is_some() {
+        Err(Error::SyncAlreadyConfigured)
+    } else {
+        Ok(())
+    }
 }
 
 /// Signs in again after the session expired or was revoked ("authentication expired").

@@ -1008,6 +1008,10 @@ export type DroppedFileRefusal =
 "unreadable";
 
 export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+/**  Another sync setup (flow A or C, §6.6) is still running. */
+"sync_setup_busy" | 
+/**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
+"sync_already_configured" | 
 /**  In-app deployment (§6.7): Cloudflare rejected the API token. */
 "cloudflare_token" | 
 /**  The API token lacks the permission in `permission`. */
