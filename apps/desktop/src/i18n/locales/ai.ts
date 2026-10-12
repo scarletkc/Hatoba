@@ -57,7 +57,7 @@ export default defineMessages({
     // AI-42: side questions
     "ai.side.ask": "顺便问一句",
     "ai.side.askHint": "顺便问一句（{key}）：不打断当前任务，回答也不会保存",
-    "ai.input.placeholderBusy": "Enter 会停止当前任务再发送；{key} 顺便问一句，不打断它",
+    "ai.input.placeholderBusy": "Enter 停止并发送，{key} 顺便问一句",
     "ai.side.title": "顺便一问",
     "ai.side.notSaved": "不会保存",
     "ai.side.notSavedHint": "这个回答不会存进对话，之后的请求也不会带上它",
@@ -429,7 +429,7 @@ export default defineMessages({
     // AI-42: side questions
     "ai.side.ask": "Ask a Side Question",
     "ai.side.askHint": "Ask a side question ({key}): the turn keeps going, and the answer is not saved",
-    "ai.input.placeholderBusy": "Enter stops the turn and sends; {key} asks a side question without stopping it",
+    "ai.input.placeholderBusy": "Enter stops and sends; {key} asks a side question",
     "ai.side.title": "Side question",
     "ai.side.notSaved": "Not saved",
     "ai.side.notSavedHint": "This answer is not kept in the conversation or sent with later requests",
@@ -796,7 +796,7 @@ export default defineMessages({
     // AI-42: side questions
     "ai.side.ask": "ついでに質問",
     "ai.side.askHint": "ついでに質問（{key}）：作業は止まらず、回答は保存されません",
-    "ai.input.placeholderBusy": "Enter は作業を止めて送信します。{key} なら止めずについでに質問できます",
+    "ai.input.placeholderBusy": "Enter で止めて送信、{key} でついでに質問",
     "ai.side.title": "ついでの質問",
     "ai.side.notSaved": "保存されません",
     "ai.side.notSavedHint": "この回答は会話に残らず、以降のリクエストにも含まれません",

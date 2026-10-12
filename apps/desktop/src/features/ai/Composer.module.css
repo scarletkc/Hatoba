@@ -28,6 +28,7 @@
   font-size: var(--text-md);
   line-height: 1.5;
   overflow-y: auto;
+  text-overflow: ellipsis;
 }
 
 /* The box shows focus with its ring; the global :focus-visible outline would draw a second, square one. */
@@ -35,8 +36,14 @@
   outline: none;
 }
 
+/* One line, cut with an ellipsis in a narrow panel: the box grows with the typed text, so a
+ * second line would be clipped. Chromium draws the ellipsis only with `text-overflow` on the box
+ * as well; typed text wraps, so it never shows there. */
 .input::placeholder {
   color: var(--fg3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bar {
