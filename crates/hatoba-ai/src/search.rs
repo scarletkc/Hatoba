@@ -533,6 +533,8 @@ impl Root {
                     }
                 })
             }
+            // A file given as the path is searched whatever the glob says, as rg searches a file
+            // it is given.
             None => (printed == self.shown).then(|| self.shown.clone()),
         }
     }
@@ -1167,10 +1169,10 @@ mod tests {
             out,
             "4 matching lines in 2 files under /srv, sorted by path:\n/srv/a:x:1\n/srv/b:3\n"
         );
-        // A file searched on its own.
+        // A file searched on its own, whatever the glob says, as with rg.
         let out = grep_result(
-            &grep(r#"{"pattern":"x","output_mode":"count"}"#),
-            &Search::new(Some("/etc/hosts"), None).unwrap(),
+            &grep(r#"{"pattern":"x","output_mode":"count","glob":"*.conf"}"#),
+            &search(Some("/etc/hosts"), "*.conf"),
             &found("/etc/hosts", "/etc/hosts:2\n", ""),
         );
         assert!(out.starts_with("2 matching lines in 1 file in /etc/hosts"));

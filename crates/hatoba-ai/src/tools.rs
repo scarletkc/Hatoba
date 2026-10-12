@@ -258,8 +258,9 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
              find and grep on a separate exec channel. `path` is a file, or a directory searched \
              with its subdirectories; a relative path or `~/` starts at the user's home \
              directory. `pattern` is a POSIX extended regular expression, as grep -E reads it, \
-             where \\d, \\s and \\w work too. `glob` limits the search to the files glob would \
-             find. output_mode files_with_matches (the default) returns the paths of the files \
+             where \\d, \\s and \\w work too. `glob` limits a directory's search to the files glob \
+             would find; a file given as `path` is searched whatever its name, as with rg. \
+             output_mode files_with_matches (the default) returns the paths of the files \
              with a matching line, count the number of matching lines in each, and content the \
              lines as path:line:text, with `context` lines around each as path-line-text. \
              Results are sorted by path, at most `limit` entries (files, or lines for content; \
