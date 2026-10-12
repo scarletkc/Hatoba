@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { useApp } from "@/app/store";
 import type { AiConversationView, AiEntryView, AiFileChange, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView } from "@/ipc/types";
-import type { DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionAttachment, SelectionState } from "./attachments";
+import type { Attachment, DiagnosticsAttachment, FileAttachment, PasteAttachment, SelectionAttachment, SelectionState } from "./attachments";
 import type { EffortPick } from "./effort";
 import type { SideQuestion } from "./side";
 import type { TurnOutcome, TurnState } from "./turn";
@@ -62,13 +62,14 @@ export interface PendingAttachment {
 /**
  * A message that waits for the running turn to end (§13.1): what was typed and what it took from the
  * input area, at most one set of diagnostics and one selection (`chips`, AI-10), then the pastes and
- * files. `restore` brings back the chips it took, once it goes back into the input area.
+ * files. Once it goes back into the input area, `restore` brings back the chips it took that are still in
+ * `kept`: one removed from the queued message stays removed.
  */
 export interface QueuedMessage {
   typed: string;
   chips: (DiagnosticsAttachment | SelectionAttachment)[];
   extras: PendingAttachment[];
-  restore: () => void;
+  restore: (kept: readonly Attachment[]) => void;
 }
 
 /** A tab's selection; `hidden` is the `seq` whose chip was removed or sent (it shows again once the selection changes). */

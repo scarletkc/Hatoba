@@ -528,16 +528,16 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason, stoppedByUser:
  * A message of the typed text with what the input area sends with it (AI-10, AI-35): the diagnostics, the
  * selection chip, then the pastes and files. A message takes at most one selection and one set of
  * diagnostics, so a chip whose kind the queued message it joins (`beside`) has already stays for a later
- * one. `restore` brings back the chips of a message that was not sent.
+ * one. For a message that was not sent, `restore` brings back those of its chips still in `kept`.
  */
 function inputMessage(slotId: string, typed: string, beside: QueuedMessage | null): QueuedMessage {
   const has = (kind: "selection" | "diagnostics") => !!beside?.chips.some((c) => c.kind === kind);
   const selection = has("selection") ? null : selectionAttachment(slotId);
   const hiddenBefore = tabSelection(slotId).hidden;
   const diagnostics = slotId === HOME_SLOT || has("diagnostics") ? null : (useAi.getState().diagnostics[slotId] ?? null);
-  const restore = () => {
-    if (selection) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
-    if (diagnostics) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
+  const restore = (kept: readonly Attachment[]) => {
+    if (selection && kept.includes(selection)) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
+    if (diagnostics && kept.includes(diagnostics)) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
   };
   return { typed, chips: [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])], extras: getSlot(slotId).extras, restore };
 }
@@ -586,7 +586,7 @@ function giveBackQueued(slotId: string) {
   const queued = getSlot(slotId).queued;
   if (!queued) return;
   patchSlot(slotId, (s) => ({ ...messageBack(s, queued), queued: null }));
-  queued.restore();
+  queued.restore(queued.chips);
 }
 
 /** **Edit** on the queued message, or ↑ in the empty input box: it goes back into the box to be changed (§13.1). */
@@ -665,7 +665,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     // A message queued meanwhile goes back too, after this one.
     giveBackQueued(target);
     patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null, ...messageBack(s, message) }));
-    message.restore();
+    message.restore(message.chips);
     // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
     // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
@@ -723,7 +723,7 @@ export function askSideQuestion(slotId: string, raw: string, fromInput = true): 
   if (fromInput) {
     const taken = takeInput(slotId, typed);
     text = messageText(taken);
-    sideInputs.set(id, { raw, extras: taken.extras, restore: taken.restore });
+    sideInputs.set(id, { raw, extras: taken.extras, restore: () => taken.restore(taken.chips) });
   }
   void runSide(slotId, newSideQuestion(id, convId, typed, text), context, approvalCall(slot));
   return true;
@@ -917,15 +917,23 @@ function restoreDraft(slotId: string, text: string) {
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => {} }));
 }
 
+/** The slots whose turn an earlier page started the user is stopping: its end sends the queued message (§13.1). */
+const remoteStops = new Set<string>();
+
 /** Stop, or Esc in the panel (AI-18); the queued message goes once the turn has stopped (§13.1). */
 export async function stopTurn(slotId: string) {
   const runner = runners.get(slotId);
   if (runner) return runner.stop();
   const slot = getSlot(slotId);
   if (slot.remoteRunning && slot.conversationId) {
-    await api.ai_stop(slot.conversationId).catch(() => {});
-    patchSlot(slotId, { remoteRunning: false });
-    await reloadSlot(slotId);
+    remoteStops.add(slotId);
+    try {
+      await api.ai_stop(slot.conversationId).catch(() => {});
+      patchSlot(slotId, { remoteRunning: false });
+      await reloadSlot(slotId);
+    } finally {
+      remoteStops.delete(slotId);
+    }
     await sendQueued(slotId);
   }
 }
@@ -1082,8 +1090,9 @@ export async function reloadSlot(slotId: string) {
   try {
     const detail = await api.ai_conversation_get(id);
     if (getSlot(slotId).conversationId !== id) return;
-    // §13.1: a turn an earlier page started ended on its own, and nothing tells how, so its queued message goes back.
-    const remoteEnded = getSlot(slotId).remoteRunning && !detail.running;
+    // §13.1: a turn an earlier page started ended on its own, and nothing tells how, so its queued message goes
+    // back. A poll that sees the end of one the user is stopping leaves it to the stop, which sends it.
+    const remoteEnded = getSlot(slotId).remoteRunning && !detail.running && !remoteStops.has(slotId);
     patchSlot(slotId, (s) => ({
       conversation: detail.conversation,
       entries: s.turn ? s.entries : detail.entries,

@@ -17,9 +17,23 @@ vi.mock("@/ipc/api", async (importActual) => ({
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { editQueued, discardQueued, newConversation, noteSelection, queueMessage, resetForLock, selectionAttachment, sendMessage, stopTurn, tabSelection } = await import("./actions");
+const {
+  askAiAboutConnection,
+  discardQueued,
+  editQueued,
+  newConversation,
+  noteSelection,
+  queueMessage,
+  reloadSlot,
+  removeQueuedAttachment,
+  resetForLock,
+  selectionAttachment,
+  sendMessage,
+  stopTurn,
+  tabSelection,
+} = await import("./actions");
 const { Composer } = await import("./Composer");
-const { joinMessages, messageBack, sendsQueued } = await import("./queue");
+const { joinMessages, messageBack, sendsQueued, takenBeside } = await import("./queue");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
 const { newTurn } = await import("./turn");
 type Slot = import("./store").Slot;
@@ -102,9 +116,9 @@ describe("joining queued messages (§13.1)", () => {
     const b = message("and restart it", ["x2"]);
     const joined = joinMessages(a, b);
     expect(joined).toMatchObject({ typed: "check the logs\n\nand restart it", extras: [{ id: "x1" }, { id: "x2" }] });
-    joined.restore();
-    expect(a.restore).toHaveBeenCalled();
-    expect(b.restore).toHaveBeenCalled();
+    joined.restore([]);
+    expect(a.restore).toHaveBeenCalledWith([]);
+    expect(b.restore).toHaveBeenCalledWith([]);
   });
 
   it("goes back into the input area before what it holds", () => {
@@ -114,6 +128,15 @@ describe("joining queued messages (§13.1)", () => {
       draft: "queued\n\ntyped since",
       extras: [{ id: "x1" }, { id: "x2" }],
     });
+  });
+
+  it("leaves the input area's chip of a kind the queued message has", () => {
+    const selection = { kind: "selection" as const, host: "", lines: 1, text: "502", truncated: false };
+    const diagnostics = { kind: "diagnostics" as const, host: "prod", text: "timeout" };
+    const queued = { ...message("why?"), chips: [selection] };
+    const input = [diagnostics, { ...selection, text: "504" }, paste("log")];
+    expect(takenBeside(input, null)).toEqual(input);
+    expect(takenBeside(input, queued)).toEqual([diagnostics, paste("log")]);
   });
 
   it("is sent after a turn that completed or that the user stopped", () => {
@@ -198,6 +221,35 @@ describe("the queued message (§13.1)", () => {
       expect(tabSelection(TAB).hidden).toBeNull();
       expect(ipc.send).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it("leaves out, when it goes back, a chip removed from it", async () => {
+    const sent = turns();
+    await running(sent, TAB);
+    noteSelection(TAB, "502 Bad Gateway");
+    askAiAboutConnection(TAB, "prod-api", "kind: timeout");
+    queueMessage(TAB, "why?");
+    for (const chip of getSlot(TAB).queued?.chips ?? []) removeQueuedAttachment(TAB, chip);
+    editQueued(TAB);
+    expect(getSlot(TAB)).toMatchObject({ queued: null, draft: "why?" });
+    expect(selectionAttachment(TAB)).toBeNull();
+    expect(useAi.getState().diagnostics[TAB]).toBeUndefined();
+  });
+
+  it("is sent once Stop has stopped a turn an earlier page started, and goes back when that turn ends on its own", async () => {
+    const sent = turns();
+    patchSlot(HOME_SLOT, { remoteRunning: true });
+    queueMessage(HOME_SLOT, "after the remote turn");
+    // The poll sees the turn end while the stop is on its way.
+    ipc.stop.mockImplementationOnce(() => reloadSlot(HOME_SLOT));
+    await stopTurn(HOME_SLOT);
+    expect(sent.map((x) => x.text)).toEqual(["after the remote turn"]);
+
+    useAi.setState({ slots: { [HOME_SLOT]: slot({ remoteRunning: true }) } });
+    queueMessage(HOME_SLOT, "after the remote turn");
+    await reloadSlot(HOME_SLOT);
+    expect(getSlot(HOME_SLOT)).toMatchObject({ remoteRunning: false, queued: null, draft: "after the remote turn" });
+    expect(ipc.send).toHaveBeenCalledTimes(1);
   });
 
   it("takes at most one selection: a second one stays in the input area", async () => {

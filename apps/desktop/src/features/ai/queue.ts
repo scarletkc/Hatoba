@@ -26,11 +26,20 @@ export function joinMessages(first: QueuedMessage, then: QueuedMessage): QueuedM
     typed: [first.typed, then.typed].filter(Boolean).join("\n\n"),
     chips: [...first.chips, ...then.chips],
     extras: [...first.extras, ...then.extras],
-    restore: () => {
-      first.restore();
-      then.restore();
+    restore: (kept) => {
+      first.restore(kept);
+      then.restore(kept);
     },
   };
+}
+
+/**
+ * Of the input area's attachments, those a message joining `queued` takes: a message takes at most one
+ * selection and one set of diagnostics (AI-10), so a chip of a kind the queued message has stays.
+ */
+export function takenBeside(attachments: Attachment[], queued: QueuedMessage | null): Attachment[] {
+  if (!queued) return attachments;
+  return attachments.filter((a) => (a.kind !== "selection" && a.kind !== "diagnostics") || !queued.chips.some((c) => c.kind === a.kind));
 }
 
 /** A message going back into the input area comes before what it holds: its text first, its pastes and files first. */
