@@ -3,9 +3,11 @@ import type { AiModel, AiProviderView, SearchProviderView } from "@/ipc/types";
 import {
   addModels,
   changedSettings,
+  decisionDrafts,
   firstModelRef,
   formatEfforts,
   formatTokenCount,
+  judgeChoices,
   keyForInput,
   matchesFilter,
   modelChoices,
@@ -69,6 +71,18 @@ describe("suggestProtocol", () => {
   it("picks anthropic when the path ends in /anthropic", () => {
     expect(suggestProtocol("https://api.deepseek.com/anthropic")).toBe("anthropic");
     expect(suggestProtocol("https://example.com/api/anthropic/")).toBe("anthropic");
+  });
+
+  it("picks system_one for TypeSafe, a /systemone path and Workers AI's /ai/run (AI-47)", () => {
+    expect(suggestProtocol("https://api.typesafe.ai/v1")).toBe("system_one");
+    expect(suggestProtocol("api.typesafe.ai")).toBe("system_one");
+    expect(suggestProtocol("https://openrouter.ai/api/v1/systemone/")).toBe("system_one");
+    expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run")).toBe("system_one");
+    expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/run/@cf/cloudflare/clef-flash")).toBe("system_one");
+    // OpenRouter's chat endpoint and Workers AI's OpenAI-compatible one chat.
+    expect(suggestProtocol("https://openrouter.ai/api/v1")).toBe("chat_completions");
+    expect(suggestProtocol("https://api.cloudflare.com/client/v4/accounts/abc123/ai/v1")).toBe("chat_completions");
+    expect(suggestProtocol("https://example.com/ai/running")).toBe("chat_completions");
   });
 
   it("keeps chat_completions for everything else", () => {
@@ -205,6 +219,14 @@ describe("model rows", () => {
     ]);
   });
 
+  it("leaves token limits and thinking levels out of a System One provider's models (AI-47)", () => {
+    const rows = [draft("jev-latest", "Jev", "bogus", "64K", { efforts: ["low"], adaptive: true })];
+    expect(validateModels(decisionDrafts(rows))).toEqual([null]);
+    expect(toModels(decisionDrafts(rows))).toEqual([model("jev-latest", { name: "Jev" })]);
+    // The rows themselves keep them, for a switch back to a protocol that chats.
+    expect(rows[0].context).toBe("bogus");
+  });
+
   it("removes by ID", () => {
     expect(removeModel(rows(model("a"), model("b")), "a").map((d) => d.id)).toEqual(["b"]);
   });
@@ -295,6 +317,22 @@ describe("default model", () => {
     expect(sanitizeSettings({ ...base, judge_model: { provider_id: "a", model_id: "gone" } }, providers, search).judge_model).toBeNull();
     expect(changedSettings(base, sanitizeSettings(base, [provider("c", [model("c1")])], search))).toEqual({ judge_model: null });
     expect(changedSettings(base, { ...base, judge_model: { ...judge } })).toBeNull();
+  });
+
+  it("offers System One models only as the judge, and drops a default model on one (AI-47)", () => {
+    const jev: AiProviderView = { ...provider("j", [model("jev-latest")]), protocol: "system_one" };
+    const all = [jev, ...providers];
+    expect(modelChoices(all).map((c) => c.ref.provider_id)).not.toContain("j");
+    expect(judgeChoices(all).map((c) => `${c.providerName}/${c.ref.model_id}`)).toEqual(["J/jev-latest", "A/a1", "A/a2", "C/c1"]);
+    expect(firstModelRef(all)).toEqual({ provider_id: "a", model_id: "a1" });
+    expect(firstModelRef([jev])).toBeNull();
+
+    const onJev = { provider_id: "j", model_id: "jev-latest" };
+    const base = { default_model: onJev, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: onJev };
+    const clean = sanitizeSettings(base, all, search);
+    expect(clean.default_model).toBeNull();
+    expect(clean.judge_model).toEqual(onJev);
+    expect(changedSettings(base, resolveSettings(base, all, search))).toEqual({ default_model: { provider_id: "a", model_id: "a1" } });
   });
 
   it("saves only the defaults that change when the providers do", () => {

@@ -33,7 +33,7 @@
 //! results, provider messages or keys.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -55,9 +55,9 @@ use hatoba_ai::tools::{
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
-    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
-    AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES,
-    SearchKind as CoreSearchKind, SearchProvider,
+    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModelRef as CoreModelRef,
+    AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    MAX_HOST_AI_NOTES_BYTES, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{SnapshotKey, SnapshotState, Vault};
@@ -70,9 +70,9 @@ use zeroize::Zeroizing;
 use crate::dto::{
     AiAutoVerdict, AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
     AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiJudgeAnswer, AiJudgeDecision,
-    AiPermissionMode, AiSearchHit, AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent,
-    AiSideQuestionInput, AiToolCall, AiToolResultInput, AiToolRun, AiToolStatus, AiTurnContext,
-    AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiJudgeSampleOutcome, AiModelRef, AiPermissionMode, AiSearchHit, AiSendInput, AiSendStarted,
+    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall, AiToolResultInput, AiToolRun,
+    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -1915,6 +1915,55 @@ impl AiManager {
         Ok(auto_view(&auto))
     }
 
+    /// `ai_judge_test` (AI-47): **Test** beside the judge in Settings → AI. Judges the sample
+    /// calls of [`judge::samples`] with `judge`, the model the pane shows before it is saved, or
+    /// with the saved judge when that is `None`. The model must be listed by its provider, of any
+    /// protocol. The requests are a background op, so the lock ends them and the outcomes ask as
+    /// `cancelled`. Only how many came out as expected and the kinds of failure are logged.
+    pub async fn judge_test(
+        &self,
+        vault: &SharedVault,
+        judge: Option<AiModelRef>,
+    ) -> AppResult<Vec<AiJudgeSampleOutcome>> {
+        let (chosen, provider, model, op) = {
+            let v = unlocked(vault)?;
+            let chosen = judge
+                .map(|m| CoreModelRef {
+                    provider_id: m.provider_id,
+                    model_id: m.model_id,
+                })
+                .or_else(|| v.settings().ai.judge_model)
+                .ok_or_else(|| AppError::invalid("judge_model", "no judge model is chosen"))?;
+            let (provider, model) = resolve_model(&v, &chosen.provider_id, &chosen.model_id)
+                .map_err(|e| AppError::invalid("judge_model", e))?;
+            (chosen, provider, model, self.background_op())
+        };
+        let outcomes = judge::test_judge(&self.http(), &provider, &model, op.token()).await;
+        drop(op);
+        let as_expected = outcomes
+            .iter()
+            .filter(|o| o.verdict.failure.is_none() && o.verdict.decision == o.expected)
+            .count();
+        let failures: BTreeSet<&str> = outcomes
+            .iter()
+            .filter_map(|o| o.verdict.failure.map(JudgeFailure::as_str))
+            .collect();
+        tracing::info!(
+            samples = outcomes.len(),
+            as_expected,
+            ?failures,
+            "AI judge tested"
+        );
+        Ok(outcomes
+            .into_iter()
+            .map(|o| AiJudgeSampleOutcome {
+                name: o.name,
+                expected: decision_view(o.expected),
+                verdict: auto_view(&o.verdict.to_auto(&chosen.provider_id, &chosen.model_id)),
+            })
+            .collect())
+    }
+
     /// Returns once no `edit_file` or `write_file` call runs on the SSH session: a write that has
     /// begun runs to its end, within 30 seconds, so a lock closes the session after it (§13.4,
     /// "File tools").
@@ -3353,10 +3402,7 @@ fn auto_view(verdict: &AutoVerdict) -> AiAutoVerdict {
     AiAutoVerdict {
         provider_id: verdict.provider_id.clone(),
         model_id: verdict.model_id.clone(),
-        decision: match verdict.decision {
-            AutoDecision::Run => AiJudgeDecision::Run,
-            AutoDecision::Ask => AiJudgeDecision::Ask,
-        },
+        decision: decision_view(verdict.decision),
         answers: answers
             .into_iter()
             .map(|(question, probability)| AiJudgeAnswer {
@@ -3366,6 +3412,14 @@ fn auto_view(verdict: &AutoVerdict) -> AiAutoVerdict {
             .collect(),
         concerns: verdict.concerns.clone(),
         failure: verdict.failure.clone(),
+    }
+}
+
+/// A decision of the judge, for the panel (AI-47).
+fn decision_view(decision: AutoDecision) -> AiJudgeDecision {
+    match decision {
+        AutoDecision::Run => AiJudgeDecision::Run,
+        AutoDecision::Ask => AiJudgeDecision::Ask,
     }
 }
 

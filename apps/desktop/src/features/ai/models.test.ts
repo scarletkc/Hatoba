@@ -49,6 +49,16 @@ describe("conversationModel (AI-05)", () => {
     expect(hasModels(providers)).toBe(true);
     expect(hasModels([provider("a", [])])).toBe(false);
   });
+
+  it("never picks a model of a System One provider, which cannot chat (AI-47)", () => {
+    const jev: AiProviderView = { ...provider("j", ["jev-latest"]), protocol: "system_one" };
+    const onJev = { provider_id: "j", model_id: "jev-latest" };
+    const all = [jev, ...providers];
+    // The user's pick, the model a conversation used last, and the default all fall through.
+    expect(conversationModel([reply("j", "jev-latest")], all, { ...settings, default_model: onJev }, onJev)).toEqual({ provider_id: "b", model_id: "b1" });
+    expect(conversationModel([], [jev], null)).toBeNull();
+    expect(hasModels([jev])).toBe(false);
+  });
 });
 
 describe("sortConversations (AI-23)", () => {

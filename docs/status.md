@@ -124,6 +124,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-41 | Revert a file tool's change | 🟡 | The delete script runs against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-16…18 | Manual approval and bypass modes, read-only commands without asking, approval card, Stop | ✅ | |
+| AI-47 | Auto mode: a judge (a System One endpoint or a model that chats) that lets safe or requested calls skip the approval card, its hard rules, the verdict on each call, **Test** in Settings | 🟡 | Unit tests cover the System One requests and the chat-model adapter against mock servers, the rules, what the judge reads, and the panel's flow, and the panel and settings were tried with the mock backend. Not yet tried against Jev, Clef, or a real model, so the thresholds are starting values |
 | AI-19 | Allow commands by prefix, pages by domain, or a tool, for a conversation or saved on the device | ✅ | |
 | AI-20, 21 | Context meter, compaction | ✅ | |
 | AI-22 | Automatic compaction | ✅ | |

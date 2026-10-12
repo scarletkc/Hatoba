@@ -132,7 +132,7 @@ describe("password prompts (AI-47)", () => {
   });
 });
 
-describe("MCP servers set to Always ask (AI-47)", () => {
+describe("MCP servers set to Always ask, and tools that cannot be found (AI-47)", () => {
   const info = (always_ask: boolean): McpToolInfo => ({
     server_id: "s1",
     server_name: "github",
@@ -146,10 +146,10 @@ describe("MCP servers set to Always ask (AI-47)", () => {
     },
   });
 
-  it("send their tools to the card, and leave the others to the judge", () => {
+  it("send those tools to the card, and leave the others to the judge", () => {
     expect(hardRule({ kind: "mcp", args: {}, mcp: info(true) })).toEqual({ kind: "mcp_always_ask" });
     expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: info(false) })).toBeNull();
-    expect(hardRule({ kind: "mcp", args: {}, mcp: null })).toBeNull();
+    expect(hardRule({ kind: "mcp", args: {}, mcp: null })).toEqual({ kind: "mcp_unknown" });
   });
 
   it("apply no rule to the file tools and fetch_url", () => {

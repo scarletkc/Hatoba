@@ -24,7 +24,7 @@ import { Composer } from "./Composer";
 import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
-import { conversationModel, hasModels } from "./models";
+import { chats, conversationModel, hasModels } from "./models";
 import { connectionFor, movedFrom } from "./place";
 import { sideRunning } from "./side";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
@@ -187,7 +187,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
           <Spinner size={14} />
         </div>
       ) : !ready ? (
-        <NoProvider none={catalog.providers.length === 0} />
+        <NoProvider none={!catalog.providers.some(chats)} />
       ) : (
         <>
           <Notices slotId={slotId} slot={slot} tab={tab} tabHost={tabHost} hosts={hosts} />

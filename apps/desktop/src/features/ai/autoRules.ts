@@ -6,7 +6,8 @@ import type { ToolKind } from "./tools";
  * AI-47: the hard rules of Auto mode. A call that manual approval would ask about goes to the judge first,
  * except one these send straight to the approval card, so that no model decides it:
  *
- * - an MCP tool whose server is set to **Always ask** (AI-31);
+ * - an MCP tool whose server is set to **Always ask** (AI-31), or a tool that cannot be found (its server was
+ *   deleted, say), which asks in every mode;
  * - a `run_command` command or `send_input` text with hidden or bidirectional characters, which could show
  *   the judge and the user something other than what runs;
  * - a `run_command` command or `send_input` text that names one of {@link ALWAYS_ASK_COMMANDS};
@@ -28,6 +29,8 @@ export const ALWAYS_ASK_COMMANDS: readonly string[] = ["shred", "dd", "mkfs", "w
 export type HardRule =
   /** The MCP tool's server is set to Always ask (AI-31). */
   | { kind: "mcp_always_ask" }
+  /** The MCP call's tool cannot be found, so it asks in every mode (AI-31). */
+  | { kind: "mcp_unknown" }
   /** The command or the text has hidden or bidirectional characters. */
   | { kind: "hidden" }
   /** The command or the text names `command`: one of {@link ALWAYS_ASK_COMMANDS}, or `rm -r`. */
@@ -39,7 +42,7 @@ export interface HardRuleInput {
   kind: ToolKind;
   /** The call's arguments; a `call_mcp_tool` call's are those of the tool it names. */
   args: Record<string, unknown>;
-  /** An MCP call's tool (`mcp_tool_info`). */
+  /** An MCP call's tool (`mcp_tool_info`), null when it cannot be found. */
   mcp?: McpToolInfo | null;
   /** For `send_input`, the screen's last lines, the cursor's line last. */
   screen?: string | null;
@@ -47,7 +50,7 @@ export interface HardRuleInput {
 
 /** The hard rule that sends a call in Auto mode straight to the approval card, or null when the judge decides it (AI-47). */
 export function hardRule({ kind, args, mcp, screen }: HardRuleInput): HardRule | null {
-  if (kind === "mcp") return mcp?.always_ask ? { kind: "mcp_always_ask" } : null;
+  if (kind === "mcp") return !mcp ? { kind: "mcp_unknown" } : mcp.always_ask ? { kind: "mcp_always_ask" } : null;
   if (kind !== "run_command" && kind !== "send_input") return null;
   const value = kind === "run_command" ? args.command : args.text;
   const text = typeof value === "string" ? value : "";

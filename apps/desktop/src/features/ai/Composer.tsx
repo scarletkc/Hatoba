@@ -29,7 +29,7 @@ import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTermi
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
-import { findModel, judgeChosen, sameModel } from "./models";
+import { chats, findModel, judgeChosen, sameModel } from "./models";
 import { messageAttachments, messageText, takenBeside } from "./queue";
 import { canAskSide } from "./side";
 import { getSlot, patchSlot, useAi, type QueuedMessage, type Slot } from "./store";
@@ -312,8 +312,9 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
 }
 
 /**
- * AI-05: every provider's models, grouped by provider, and under the current model the thinking
- * levels it offers. The selector shows the level the next message is sent at.
+ * AI-05: the models of every provider that chats (not System One ones, AI-47), grouped by provider, and
+ * under the current model the thinking levels it offers. The selector shows the level the next message is
+ * sent at.
  */
 function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; value: AiModelRef | null }) {
   const t = useT();
@@ -330,7 +331,7 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
   const entries = useMemo(() => {
     const list: MenuEntry[] = [];
     for (const p of providers) {
-      if (p.models.length === 0) continue;
+      if (!chats(p) || p.models.length === 0) continue;
       if (list.length > 0) list.push({ kind: "separator" });
       list.push({ kind: "header", label: p.name });
       for (const m of p.models) {

@@ -26,11 +26,11 @@ use crate::ai::{
 };
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiConversationDetail, AiConversationView, AiEntryView,
-    AiFileChange, AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput,
-    AiProviderView, AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch, AiSettingsView,
-    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure, AiTestResult, AiToolResultInput,
-    AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile, SearchKind, SearchProviderInput,
-    SearchProviderView,
+    AiFileChange, AiFilePreview, AiFileRevert, AiJudgeSampleOutcome, AiModel, AiModelRef,
+    AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
+    AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure,
+    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile,
+    SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -560,13 +560,15 @@ pub async fn search_provider_test(
 // ───────────────────────── synced settings ─────────────────────────
 
 /// The model reference the settings field `field` holds after `patch`, from `current`: one the
-/// user changed must name an existing provider that lists the model; an unchanged one is kept as
-/// it is, even when it dangles.
+/// user changed must name an existing provider that lists the model, and with `chats` a provider
+/// that chats, not a System One one (AI-47); an unchanged one is kept as it is, even when it
+/// dangles.
 fn patched_model(
     v: &Vault,
     field: &str,
     current: Option<&CoreRef>,
     patch: &Clearable<AiModelRef>,
+    chats: bool,
 ) -> AppResult<Option<CoreRef>> {
     let m = match patch {
         Clearable::Keep => return Ok(current.cloned()),
@@ -583,6 +585,9 @@ fn patched_model(
         if !provider.models.iter().any(|x| x.id == m.model_id) {
             return Err(AppError::invalid(field, "the provider has no such model"));
         }
+        if chats && provider.protocol == CoreProtocol::SystemOne {
+            return Err(AppError::invalid(field, "a System One model cannot chat"));
+        }
     }
     Ok(Some(CoreRef {
         provider_id: m.provider_id.clone(),
@@ -593,8 +598,9 @@ fn patched_model(
 /// Writes the fields `patch` sets over the stored `Settings.ai`, as `settings_save` does for the
 /// terminal, and returns whether that changed them. A reference the user changed must point at an
 /// existing provider and model or search provider; an unchanged one is kept as it is, even when it
-/// dangles (e.g. the item it names has not synced to this device yet). The judge of Auto mode
-/// (AI-47) may be a model of any provider, a System One one included.
+/// dangles (e.g. the item it names has not synced to this device yet). The default model must be
+/// one that chats; the judge of Auto mode (AI-47) may be a model of any provider, a System One one
+/// included.
 pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppResult<bool> {
     let mut settings = v.settings();
     let current = &settings.ai;
@@ -603,12 +609,14 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
         "default_model",
         current.default_model.as_ref(),
         &patch.default_model,
+        true,
     )?;
     let judge_model = patched_model(
         v,
         "judge_model",
         current.judge_model.as_ref(),
         &patch.judge_model,
+        false,
     )?;
     let search_provider_id = match &patch.search_provider_id {
         Clearable::Keep => current.search_provider_id.clone(),
@@ -1006,6 +1014,18 @@ pub async fn ai_judge(
             screen_tail.as_deref(),
         )
         .await
+}
+
+/// AI-47: **Test** beside the judge in Settings → AI. Judges sample calls with `judge`, which
+/// need not be saved yet, or with the saved judge when it is `None`, and returns each verdict
+/// with the decision expected. Fails only when the judge does not name a listed model.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_judge_test(
+    state: State<'_, AppState>,
+    judge: Option<AiModelRef>,
+) -> AppResult<Vec<AiJudgeSampleOutcome>> {
+    state.ai.judge_test(&state.vault, judge).await
 }
 
 /// Stops the turn: aborts the request and running tools, cancels calls without a result.
@@ -1538,6 +1558,11 @@ mod tests {
             assert_eq!(err.field.as_deref(), Some("judge_model"));
         }
         assert_eq!(v.settings().ai.judge_model, None);
+        // A System One model cannot chat, so it is no default model.
+        let default = patch(|p| p.default_model = Clearable::Set(model(&jev.id, "jev-latest")));
+        let err = save_ai_settings(&mut v, &default).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("default_model"));
+        assert_eq!(v.settings().ai.default_model, None);
         // A System One model, or any provider's.
         for (provider_id, model_id) in [(jev.id.as_str(), "jev-latest"), (chat.id.as_str(), "m1")] {
             let chosen = patch(|p| p.judge_model = Clearable::Set(model(provider_id, model_id)));

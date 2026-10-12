@@ -1332,6 +1332,18 @@ pub struct AiAutoVerdict {
     pub failure: Option<String>,
 }
 
+/// The judge's verdict on one sample call of **Test** beside the judge in Settings → AI
+/// (`ai_judge_test`, AI-47).
+#[derive(Debug, Clone, Serialize, Type, PartialEq)]
+pub struct AiJudgeSampleOutcome {
+    /// The sample's stable name, such as `restart_requested`; a newer version may add others.
+    pub name: String,
+    /// The decision a good judge gives the sample.
+    pub expected: AiJudgeDecision,
+    /// What the judge decided, with its answers in the order it asks its questions.
+    pub verdict: AiAutoVerdict,
+}
+
 /// What an AI approval saved on this device lets run without asking (AI-19).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

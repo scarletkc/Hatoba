@@ -281,6 +281,15 @@ export const commands = {
 	 */
 	aiJudge: (conversationId: string, toolCallId: string, screenTail: string | null) => __TAURI_INVOKE<AiAutoVerdict>("ai_judge", { conversationId, toolCallId, screenTail }),
 	/**
+	 *  AI-47: **Test** beside the judge in Settings → AI. Judges sample calls with `judge`, which
+	 *  need not be saved yet, or with the saved judge when it is `None`, and returns each verdict
+	 *  with the decision expected. Fails only when the judge does not name a listed model.
+	 */
+	aiJudgeTest: (judge: {
+	provider_id: string,
+	model_id: string,
+} | null) => __TAURI_INVOKE<AiJudgeSampleOutcome[]>("ai_judge_test", { judge }),
+	/**
 	 *  The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
 	 *  host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
 	 *  card, if they did.
@@ -620,6 +629,19 @@ export type AiJudgeDecision =
 "run" | 
 /**  The approval card asks, as in manual approval. */
 "ask";
+
+/**
+ *  The judge's verdict on one sample call of **Test** beside the judge in Settings → AI
+ *  (`ai_judge_test`, AI-47).
+ */
+export type AiJudgeSampleOutcome = {
+	/**  The sample's stable name, such as `restart_requested`; a newer version may add others. */
+	name: string,
+	/**  The decision a good judge gives the sample. */
+	expected: AiJudgeDecision,
+	/**  What the judge decided, with its answers in the order it asks its questions. */
+	verdict: AiAutoVerdict,
+};
 
 /**  A model of a provider (AI-03). Token limits are `None` when unknown. */
 export type AiModel = {

@@ -5,12 +5,14 @@
 use super::*;
 use crate::ai::{auto_view, find_conversation, guard, judge_state, open_call_at, screen_tail};
 use crate::commands::ai::save_ai_settings;
-use crate::dto::{AiAutoVerdict, AiJudgeDecision, AiModelRef, AiSettingsPatch, Clearable};
+use crate::dto::{
+    AiAutoVerdict, AiJudgeDecision, AiJudgeSampleOutcome, AiModelRef, AiSettingsPatch, Clearable,
+};
 use crate::mcp::tests::{put_server, set_enabled, stdio_server};
 use hatoba_ai::entry::{AutoDecision, AutoVerdict};
 use hatoba_ai::judge::{
     self, CHANGES_SYSTEM, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, SENDS_DATA_OUT,
-    TOUCHES_SECRETS,
+    TOUCHES_SECRETS, URL_CARRIES_DATA,
 };
 use hatoba_ai::tools::{PermissionMode, permission_mode_block, terminal_state_block};
 
@@ -96,11 +98,9 @@ fn auto(f: &Fixture) -> AiTurnContext {
 }
 
 impl Fixture {
-    /// Stores a System One provider for `server` with the model `jev-latest` and chooses it as
-    /// the judge in Settings → AI. Returns the provider's id.
-    fn choose_judge(&self, server: &MockServer) -> String {
-        let mut v = lock(&self.vault);
-        let id = v
+    /// Stores a System One provider for `server` with the model `jev-latest`. Returns its id.
+    fn add_system_one(&self, server: &MockServer) -> String {
+        lock(&self.vault)
             .put(
                 None,
                 Item::AiProvider(AiProvider {
@@ -116,7 +116,14 @@ impl Fixture {
                     ..AiProvider::default()
                 }),
             )
-            .unwrap();
+            .unwrap()
+    }
+
+    /// Stores a System One provider for `server` with the model `jev-latest` and chooses it as
+    /// the judge in Settings → AI. Returns the provider's id.
+    fn choose_judge(&self, server: &MockServer) -> String {
+        let id = self.add_system_one(server);
+        let mut v = lock(&self.vault);
         let chosen = AiSettingsPatch {
             judge_model: Clearable::Set(AiModelRef {
                 provider_id: id.clone(),
@@ -673,5 +680,188 @@ async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
             "third".to_owned(),
             format!("{}fourth", permission_mode_block(PermissionMode::Bypass)),
         ]
+    );
+}
+
+// ───────────────────────── Test beside the judge in Settings → AI ─────────────────────────
+
+/// A System One endpoint that answers as a good judge would, from the call's arguments and the
+/// user's words, so that every sample of **Test** comes out as expected.
+struct GoodJudge;
+
+impl Respond for GoodJudge {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let body: Value = request.body_json().unwrap();
+        let call = body["state"]["call"]["arguments"].to_string();
+        let said = body["state"]["user_messages"].to_string();
+        let answers: serde_json::Map<String, Value> = body["questions"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|id| {
+                let yes = match id.as_str() {
+                    REQUESTED => said.contains("restart") || said.contains("重启"),
+                    FORBIDDEN => said.contains("don't"),
+                    CHANGES_SYSTEM => call.contains("restart") || call.contains("-delete"),
+                    DESTROYS_DATA => call.contains("-delete"),
+                    TOUCHES_SECRETS | SENDS_DATA_OUT => call.contains("id_ed25519"),
+                    URL_CARRIES_DATA => call.contains("?k="),
+                    _ => false,
+                };
+                let p = if yes { 0.95 } else { 0.02 };
+                (id.clone(), json!({"type": "noul", "noul": p}))
+            })
+            .collect();
+        ResponseTemplate::new(200).set_body_json(json!({
+            "model": "jev-1.13.0",
+            "answers": answers,
+            "usage": {"input_tokens": 1, "output_tokens": 1}
+        }))
+    }
+}
+
+fn judge_ref(provider_id: &str, model_id: &str) -> AiModelRef {
+    AiModelRef {
+        provider_id: provider_id.into(),
+        model_id: model_id.into(),
+    }
+}
+
+#[tokio::test]
+async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the_saved_one() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let endpoint = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .respond_with(GoodJudge)
+        .mount(&endpoint)
+        .await;
+    let jev = f.add_system_one(&endpoint);
+
+    // The judge the pane shows, not saved yet.
+    let outcomes = f
+        .manager
+        .judge_test(&f.vault, Some(judge_ref(&jev, "jev-latest")))
+        .await
+        .unwrap();
+    let names: Vec<&str> = outcomes.iter().map(|o| o.name.as_str()).collect();
+    let samples = judge::samples();
+    assert_eq!(names, samples.iter().map(|s| s.name).collect::<Vec<_>>());
+    for o in &outcomes {
+        assert_eq!(o.verdict.failure, None, "{}", o.name);
+        assert_eq!(o.verdict.decision, o.expected, "{}", o.name);
+        assert_eq!(o.verdict.provider_id, jev);
+        assert_eq!(o.verdict.model_id, "jev-latest");
+    }
+    let runs = outcomes
+        .iter()
+        .filter(|o| o.expected == AiJudgeDecision::Run)
+        .count();
+    assert_eq!(runs, 4);
+    // The answers in the order the judge asks, and what kept a call from running.
+    let asked = |o: &AiJudgeSampleOutcome| -> Vec<String> {
+        o.verdict
+            .answers
+            .iter()
+            .map(|a| a.question.clone())
+            .collect()
+    };
+    assert_eq!(asked(&outcomes[0]), judge::question_ids("run_command"));
+    assert_eq!(asked(&outcomes[7]), judge::question_ids("fetch_url"));
+    assert_eq!(
+        outcomes[2].verdict.concerns,
+        [REQUESTED, CHANGES_SYSTEM, DESTROYS_DATA]
+    );
+    assert_eq!(outcomes[8].verdict.concerns, [URL_CARRIES_DATA]);
+    assert_eq!(outcomes[1].verdict.answers[0].probability, 0.95);
+
+    // The key goes in the header only, and nothing was saved.
+    let sent = endpoint.received_requests().await.unwrap();
+    assert_eq!(sent.len(), 9);
+    for request in &sent {
+        assert_eq!(
+            request.headers.get("authorization").unwrap(),
+            format!("Bearer {JUDGE_KEY}").as_str()
+        );
+        assert!(!String::from_utf8_lossy(&request.body).contains(JUDGE_KEY));
+    }
+    assert_eq!(lock(&f.vault).settings().ai.judge_model, None);
+
+    // Without one, the saved judge.
+    let err = f.manager.judge_test(&f.vault, None).await.unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("judge_model"));
+    f.choose_judge(&endpoint);
+    let saved = f.manager.judge_test(&f.vault, None).await.unwrap();
+    assert_eq!(saved.len(), 9);
+    assert!(saved.iter().all(|o| o.verdict.decision == o.expected));
+    assert_eq!(endpoint.received_requests().await.unwrap().len(), 18);
+}
+
+#[tokio::test]
+async fn test_needs_a_listed_model_of_any_protocol_and_reports_failures_as_verdicts() {
+    // The chat provider's endpoint has no answer for any request.
+    let f = Fixture::new(Vec::new()).await;
+    for (provider_id, model_id) in [("gone", "jev-latest"), (f.provider_id.as_str(), "m9")] {
+        let err = f
+            .manager
+            .judge_test(&f.vault, Some(judge_ref(provider_id, model_id)))
+            .await
+            .unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("judge_model"), "{provider_id}");
+    }
+    // A saved judge whose provider is gone, as one deleted on another device.
+    {
+        let mut v = lock(&f.vault);
+        let mut settings = v.settings();
+        settings.ai.judge_model = Some(hatoba_core::model::AiModelRef {
+            provider_id: "gone".into(),
+            model_id: "jev-latest".into(),
+        });
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+    let err = f.manager.judge_test(&f.vault, None).await.unwrap_err();
+    assert_eq!(err.field.as_deref(), Some("judge_model"));
+    assert!(f.requests().await.is_empty());
+
+    // A model of a provider that chats may judge too; a judge that fails asks, and says why.
+    let outcomes = f
+        .manager
+        .judge_test(&f.vault, Some(judge_ref(&f.provider_id, "m1")))
+        .await
+        .unwrap();
+    assert_eq!(outcomes.len(), 9);
+    for o in &outcomes {
+        assert_eq!(o.verdict.decision, AiJudgeDecision::Ask, "{}", o.name);
+        assert_eq!(o.verdict.failure.as_deref(), Some("refused"), "{}", o.name);
+        assert!(o.verdict.answers.is_empty() && o.verdict.concerns.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn the_lock_ends_a_test_of_the_judge() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let hanging = system_one(&ASKED_FOR, Duration::from_secs(30)).await;
+    let jev = f.add_system_one(&hanging);
+    let testing = {
+        let (manager, vault) = (f.manager.clone(), f.vault.clone());
+        tokio::spawn(async move {
+            manager
+                .judge_test(&vault, Some(judge_ref(&jev, "jev-latest")))
+                .await
+        })
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while bodies(&hanging).await.len() < 9 {
+        assert!(Instant::now() < deadline, "the judge was not asked");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let locked_at = Instant::now();
+    f.manager.stop_all(&mut lock(&f.vault));
+    let outcomes = testing.await.unwrap().unwrap();
+    assert!(locked_at.elapsed() < Duration::from_secs(5));
+    assert!(
+        outcomes
+            .iter()
+            .all(|o| o.verdict.failure.as_deref() == Some("cancelled"))
     );
 }

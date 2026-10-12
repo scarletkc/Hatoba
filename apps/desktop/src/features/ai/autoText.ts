@@ -84,6 +84,8 @@ export function ruleText(t: Tr, rule: HardRule): string {
   switch (rule.kind) {
     case "mcp_always_ask":
       return t("ai.auto.rule.mcpAlwaysAsk");
+    case "mcp_unknown":
+      return t("ai.auto.rule.mcpUnknown");
     case "hidden":
       return t("ai.auto.rule.hidden");
     case "command":

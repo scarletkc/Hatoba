@@ -175,6 +175,7 @@ export function createTauriApi(): HatobaApi {
     ai_tool_run: (conversationId, toolCallId, sessionId, editedArguments, judged) =>
       call("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments, judged }),
     ai_judge: (conversationId, toolCallId, screenTail) => call("ai_judge", { conversationId, toolCallId, screenTail }),
+    ai_judge_test: (judge) => call("ai_judge_test", { judge }),
     ai_file_preview: (conversationId, toolCallId, sessionId, editedArguments) =>
       call("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
     ai_file_changes: (conversationId) => call("ai_file_changes", { conversationId }),

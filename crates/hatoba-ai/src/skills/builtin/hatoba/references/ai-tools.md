@@ -32,11 +32,11 @@ What the assistant can call, which calls wait for the user, and the approval car
 | **Search MCP tools** (`search_tools`) | With many MCP tools (see the MCP tools menu in `references/ai-panel.md`), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
 | `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
-Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in both modes. Tool results are data to the assistant: when one asks for something, it tells you instead.
+Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in every mode. Tool results are data to the assistant: when one asks for something, it tells you instead.
 
 ## Permission mode
 
-The shield or lightning button next to the + button in the input area (the lightning also shows "Bypass" unless the panel is narrow); the menu is titled "Permission mode for this conversation".
+The shield, robot or lightning button next to the + button in the input area (the robot also shows "Auto" and the lightning "Bypass" unless the panel is narrow); the menu is titled "Permission mode for this conversation".
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -50,11 +50,16 @@ The shield or lightning button next to the + button in the input area (the light
 | Permission mode: Bypass | 权限模式：绕过批准 | 権限モード：承認をバイパス |
 | Permission mode: Auto | 权限模式：自动批准 | 権限モード：自動承認 |
 | Permission mode: Manual approval | 权限模式：手动批准 | 権限モード：手動承認 |
+| Needs a judge | 需要判定模型 | 判定モデルが必要 |
+| Choose a Judge in Settings → AI | 在设置 → AI 中选择判定模型 | 設定 → AI で判定モデルを選ぶ |
+| Checking | 判定中 | 判定中 |
 
 - **Manual approval** (the default): tools marked "Asks" wait for you.
+- **Auto**: a call that Manual approval would ask about first goes to a judge, a model chosen in Settings → AI → **Auto Mode** (`references/ai-settings.md`). The call runs without the card when the judge finds that it only reads, or that it is a change you asked for that deletes nothing, touches no credentials and sends nothing out; any other call shows the card, which says what concerned the judge, with its probabilities, or why it could not decide (no judge, no answer in time, an error). The judge never blocks a call. These always show the card without asking the judge: tools of MCP servers set to **Always ask** and tools that can't be found, input with hidden characters, a command that names recursive `rm`, `shred`, `dd`, `mkfs`, `wipefs`, `fdisk`, `sfdisk`, `parted`, `shutdown`, `reboot`, `poweroff` or `halt` (even as an argument), and typing while the screen asks for a password. `sudo` alone does not. While the judge checks a call, its block shows "Checking"; a call Auto ran shows **Auto**, and opening the block shows the judge's answers. Auto needs a judge: until one is chosen, the menu shows it disabled with "Needs a judge" and offers "Choose a Judge in Settings → AI". No confirmation is asked.
+- What the judge receives: the text you typed in the conversation (attachments are only named), your custom instructions and the host's AI notes, the host's name, the arguments of the assistant's calls, and for typing into the terminal the screen's last 10 lines. Never command output, files it read or the assistant's replies. A judge on another service than the conversation's model receives them too.
 - **Bypass**: every tool runs without asking, except tools of MCP servers set to **Always ask**. It is riskier: text on the screen or in a page can steer the assistant. Switching to Bypass for the first time on a device shows a confirmation ("Let the assistant act without asking?", button **Turn On Bypass**).
 - The switch changes the current conversation on this device until the app quits. The default for new conversations is Settings → AI → **This Device** → **Default Permission Mode** (device-local, not synced).
-- The assistant is told which mode the conversation is in. In Manual approval it calls the tool and lets the approval card ask, instead of asking first in chat. In Bypass it asks in chat before it deletes data, does something that cannot be undone, restarts a service or affects other users, unless you asked for exactly that. A switch reaches the assistant with your next message, which gets a divider above it, "Permission mode: Bypass" or "Permission mode: Manual approval" (a first message gets one only in Bypass): a switch to Bypass while it is working applies from your next message, and a switch to Manual approval applies at once. Switching does not change the system prompt, so the provider's prompt cache keeps working, and compacting the conversation keeps the mode.
+- The assistant is told which mode the conversation is in. In Manual approval and Auto it calls the tool and lets the approval card ask, instead of asking first in chat. In Bypass it asks in chat before it deletes data, does something that cannot be undone, restarts a service or affects other users, unless you asked for exactly that. A switch reaches the assistant with your next message, which gets a divider above it, "Permission mode: Auto", "Permission mode: Bypass" or "Permission mode: Manual approval" (a first message gets one only in Auto or Bypass). The modes go from Manual approval, the strictest, to Auto and Bypass: a switch to a less strict mode while it is working applies from your next message, and a switch to a stricter one applies at once. Switching does not change the system prompt, so the provider's prompt cache keeps working, and compacting the conversation keeps the mode.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -63,6 +68,21 @@ The shield or lightning button next to the + button in the input area (the light
 | Default Permission Mode | 默认权限模式 | 既定の権限モード |
 | Default Model | 默认模型 | 既定のモデル |
 | Always ask | 始终询问 | 常に確認 |
+
+### When Auto cannot judge
+
+When the judge could not decide, the call's card says why:
+
+| en | zh-CN | ja |
+|---|---|---|
+| Auto could not judge this call: no judge is chosen in Settings → AI. | 自动批准模式无法判定这次调用：没有在设置 → AI 中选择判定模型。 | 自動承認モードはこの呼び出しを判定できませんでした：設定 → AI で判定モデルが選ばれていません。 |
+| Auto could not judge this call: it is too long for the judge. | 自动批准模式无法判定这次调用：调用的内容太长，判定模型读不下。 | 自動承認モードはこの呼び出しを判定できませんでした：呼び出しの内容が長すぎて判定モデルが読み込めません。 |
+| Auto could not judge this call: the judge did not answer in time. | 自动批准模式无法判定这次调用：判定模型没有及时回答。 | 自動承認モードはこの呼び出しを判定できませんでした：判定モデルが時間内に回答しませんでした。 |
+| Auto could not judge this call: the judge could not be reached. | 自动批准模式无法判定这次调用：无法连接判定模型。 | 自動承認モードはこの呼び出しを判定できませんでした：判定モデルに接続できませんでした。 |
+| Auto could not judge this call: the judge refused the request. | 自动批准模式无法判定这次调用：判定模型拒绝了请求。 | 自動承認モードはこの呼び出しを判定できませんでした：判定モデルがリクエストを拒否しました。 |
+| Auto could not judge this call: the judge’s answer could not be read. | 自动批准模式无法判定这次调用：无法读取判定模型的回答。 | 自動承認モードはこの呼び出しを判定できませんでした：判定モデルの回答を読み取れませんでした。 |
+
+The judge has 10 seconds (a System One model) or 30 seconds (a chat model), and one retry after a network error, a rate limit or a server error. A call too long for it is one that writes or sends a lot of text. For the others, **Test** beside the judge (`references/ai-settings.md`) shows whether it answers; a refusal usually means a wrong key or model ID, and an unreadable answer a chat model that does not follow forced tool calls, where a System One model or another chat model helps.
 
 ## Approval cards
 
@@ -81,5 +101,5 @@ An approval card appears in the conversation for a call that needs approval. It 
 | Hidden characters shown as escapes | 不可见的字符已显示为转义 | 見えない文字をエスケープで表示 |
 
 - **Run** runs the call. **Edit** changes the input first (the model is told what you changed). **Reject** takes an optional reason that goes back to the model.
-- **Allow for This Conversation** lets later calls it covers run without asking until the app quits; **Always Allow** saves that on this device. The buttons name what they cover, such as "Always Allow “git pull” on This Host" or "Always Allow example.com"; **Saved Approvals** in `references/ai-settings.md` has the rules. An edit or write card that shows why it can't apply offers neither, and a call whose tool cannot be named (its server was deleted, say) always asks, in both modes.
+- **Allow for This Conversation** lets later calls it covers run without asking until the app quits; **Always Allow** saves that on this device. The buttons name what they cover, such as "Always Allow “git pull” on This Host" or "Always Allow example.com"; **Saved Approvals** in `references/ai-settings.md` has the rules. An edit or write card that shows why it can't apply offers neither, and a call whose tool cannot be named (its server was deleted, say) always asks, in every mode.
 - **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A reply stopped mid-stream keeps its text so far, and the next message gets a "Previous reply stopped" divider.
