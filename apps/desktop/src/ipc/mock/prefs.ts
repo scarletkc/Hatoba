@@ -1,7 +1,7 @@
 import type { LocalPrefs } from "../types";
 import { PREFS } from "./data";
 
-type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode";
+type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode" | "dashboard_layout";
 
 /** The values this build knows for each pref that is one of a set; the record keys keep them complete. */
 const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
@@ -9,12 +9,14 @@ const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
   appearance: { system: true, light: true, dark: true },
   density: { regular: true, compact: true },
   ai_permission_mode: { manual: true, auto: true, bypass: true },
+  dashboard_layout: { cards: true, table: true },
 };
 
 /** Whether `value` reads as the pref `key`, as serde reads Rust's `LocalPrefs`. */
 function fits(key: keyof LocalPrefs, value: unknown): boolean {
   if (Object.hasOwn(CHOICES, key)) return typeof value === "string" && Object.hasOwn(CHOICES[key as ChoicePref], value);
   if (key === "default_proxy_id") return value === null || typeof value === "string";
+  if (key === "dashboard_hidden_columns") return Array.isArray(value) && value.every((v) => typeof v === "string");
   const fallback = PREFS[key];
   // Rust stores the numbers as u32.
   if (typeof fallback === "number") return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff;

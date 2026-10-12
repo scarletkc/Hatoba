@@ -24,7 +24,7 @@ use crate::sftp::SftpClient;
 use crate::shell;
 pub use crate::shell::{ShellEvent, ShellHandle, ShellOptions};
 use crate::stats;
-pub use crate::stats::{ServerStats, StatsEvent, StatsHandle};
+pub use crate::stats::{MountStats, ServerStats, StatsEvent, StatsHandle};
 
 /// Upper bound for output collected by [`SshSession::exec_output`].
 const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;

@@ -30,6 +30,7 @@ import type {
   BuiltinSkillView,
   ConflictView,
   ConnectOptions,
+  DashboardEvent,
   DeployOutcome,
   DeployPlan,
   DeployProgress,
@@ -133,6 +134,8 @@ export interface HatobaApi {
   host_set_favorite(id: string, favorite: boolean): Promise<void>;
   /** TERM-12: show the server's resource usage in this host's terminals (device-local). */
   host_set_show_stats(id: string, on: boolean): Promise<void>;
+  /** HOST-13: leave a host or a group out of the dashboard, or bring it back (device-local). */
+  dashboard_set_shown(id: string, shown: boolean): Promise<void>;
   /** SEC-08: Rust copies the saved password to the clipboard and clears it after this device's delay. */
   host_copy_password(id: string): Promise<void>;
   groups_list(): Promise<GroupView[]>;
@@ -140,6 +143,16 @@ export interface HatobaApi {
   group_delete(id: string): Promise<void>;
   tags_list(): Promise<TagCount[]>;
   hosts_probe(ids: string[]): Promise<ProbeResult[]>;
+  /**
+   * HOST-13: reads the resource usage of `host_ids` every `interval_secs` in the background, in place of the
+   * earlier watch, until `dashboard_unwatch` with the id this resolves to, or the lock. Hosts both watches read
+   * keep their connections.
+   */
+  dashboard_watch(host_ids: string[], interval_secs: number, onEvent: (event: DashboardEvent) => void): Promise<number>;
+  /** Stops the watch; its connections close a minute later unless the page watches their hosts again. */
+  dashboard_unwatch(watch_id: number): Promise<void>;
+  /** **Retry**: signs in to a held host again, and tries an offline or failed one now. */
+  dashboard_retry(host_id: string): Promise<void>;
   ssh_config_preview(): Promise<SshConfigCandidate[]>;
   /** Also imports the unencrypted identity files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
   ssh_config_import(aliases: string[], keyFiles: string[]): Promise<ImportResult>;

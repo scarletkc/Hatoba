@@ -63,6 +63,8 @@ export const commands = {
 	hostSetFavorite: (id: string, favorite: boolean) => __TAURI_INVOKE<null>("host_set_favorite", { id, favorite }),
 	/**  Turns the resource usage in a host's terminals on or off on this device (TERM-12). */
 	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
+	/**  Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-13). */
+	dashboardSetShown: (id: string, shown: boolean) => __TAURI_INVOKE<null>("dashboard_set_shown", { id, shown }),
 	/**
 	 *  SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
 	 *  and clears it after the device's delay (90 s by default; 0 never clears it) if the clipboard
@@ -75,6 +77,20 @@ export const commands = {
 	tagsList: () => __TAURI_INVOKE<TagCount[]>("tags_list"),
 	/**  HOST-10: TCP connect only (no authentication), 3 s timeout, probed concurrently. */
 	hostsProbe: (ids: string[]) => __TAURI_INVOKE<ProbeResult[]>("hosts_probe", { ids }),
+	/**
+	 *  Reads the resource usage of `host_ids` every `interval_secs` (1 to 60) in the background,
+	 *  in place of the page's earlier watch, until `dashboard_unwatch` with the returned id or the
+	 *  lock. What happens to each host streams on `channel`. Hosts both watches read keep their
+	 *  connections.
+	 */
+	dashboardWatch: (hostIds: string[], intervalSecs: number, channel: Channel<DashboardEvent>) => __TAURI_INVOKE<number>("dashboard_watch", { hostIds, intervalSecs, channel }),
+	/**
+	 *  Stops the watch `watch_id`; the connections close a minute later unless the page watches
+	 *  their hosts again.
+	 */
+	dashboardUnwatch: (watchId: number) => __TAURI_INVOKE<void>("dashboard_unwatch", { watchId }),
+	/**  **Retry**: signs in to a held host again, and tries an offline or failed one now. */
+	dashboardRetry: (hostId: string) => __TAURI_INVOKE<void>("dashboard_retry", { hostId }),
 	sshConfigPreview: () => __TAURI_INVOKE<SshConfigCandidate[]>("ssh_config_preview"),
 	/**
 	 *  SSH-11: creates hosts for the chosen aliases. It imports as keys only the unencrypted
@@ -1057,6 +1073,49 @@ export type D1Database = {
 	region: string | null,
 };
 
+/**  Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host. */
+export type DashboardEvent = 
+/**
+ *  Whether the host's first hop answered the HOST-10 probe: the host itself, or its
+ *  outermost jump host.
+ */
+{ kind: "probe"; host_id: string; online: boolean } | 
+/**  Waiting for one of the connection slots, or signing in. */
+{ kind: "connecting"; host_id: string } | 
+/**  Connected and reading, over the dashboard's own connection or a tab's (`tab`). */
+{ kind: "reading"; host_id: string; os: string | null; tab: boolean } | 
+/**  A reading, one per interval. */
+{ kind: "stats"; host_id: string; stats: ServerStatsView } | 
+/**
+ *  The server does not run Linux, so only its online status shows. `system` is its name,
+ *  or empty when unknown.
+ */
+{ kind: "unsupported"; host_id: string; system: string } | 
+/**
+ *  The connection needs the user; the dashboard waits for **Retry**, a change to the host,
+ *  or a tab on it. `error` is the server's answer, when there was one.
+ */
+{ kind: "held"; host_id: string; hold: DashboardHold; error: AppError | null } | 
+/**  Connecting or reading failed; tried again after a minute. */
+{ kind: "failed"; host_id: string; error: AppError };
+
+/**  Why the dashboard does not sign in to a host on its own: the connection needs the user. */
+export type DashboardHold = 
+/**  The host or a jump host asks for its password on every connection (SSH-03). */
+"password" | 
+/**  The key's passphrase is not saved, or the saved one is wrong. */
+"passphrase" | 
+/**  The server wants keyboard-interactive answers, such as a verification code (SSH-08). */
+"prompt" | 
+/**  The server's host key is not trusted yet (SSH-04). */
+"host_key_new" | 
+/**  The server's host key differs from the trusted one (SSH-04). */
+"host_key_changed" | 
+/**  The server rejected the saved credentials. Not tried again until **Retry**. */
+"sign_in_failed";
+
+export type DashboardLayout = "cards" | "table";
+
 export type Density = "regular" | "compact";
 
 export type DeployDatabaseAction = "create" | 
@@ -1229,6 +1288,11 @@ export type GroupView = {
 	name: string,
 	parent_id: string | null,
 	sort: number,
+	/**
+	 *  The dashboard shows the group's hosts on this device (HOST-13). Device-local, and on
+	 *  until turned off.
+	 */
+	dashboard: boolean,
 };
 
 /**  One of a host's environment variables (SSH-14). */
@@ -1307,6 +1371,11 @@ export type HostView = {
 	 *  Device-local, like `last_connected_at`, and off until turned on.
 	 */
 	show_stats: boolean,
+	/**
+	 *  The dashboard shows the host on this device (HOST-13). Device-local, like
+	 *  `last_connected_at`, and on until turned off.
+	 */
+	dashboard: boolean,
 	/**  Environment variables the terminal asks the server to set (SSH-14). */
 	env: HostEnvVar[],
 };
@@ -1382,6 +1451,19 @@ export type LocalPrefs = {
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,
+	/**  HOST-13: the dashboard shows cards or a table. */
+	dashboard_layout: DashboardLayout,
+	/**  HOST-13: the table columns turned off. */
+	dashboard_hidden_columns: string[],
+	/**  HOST-13: seconds between readings, 1 to 60. */
+	dashboard_interval_secs: number,
+	/**
+	 *  HOST-13: the CPU, memory and disk use, in percent, past which a value stands out; 0
+	 *  turns one off.
+	 */
+	dashboard_cpu_alert: number,
+	dashboard_mem_alert: number,
+	dashboard_disk_alert: number,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -1492,6 +1574,17 @@ export type McpTransportInput = { kind: "stdio"; command: string; args: string[]
 
 export type McpTransportView = { kind: "stdio"; command: string; args: string[]; env_keys: string[] } | { kind: "http"; url: string; header_keys: string[] };
 
+/**  One mounted filesystem's space, in bytes, as `df -P` reports it. */
+export type MountView = {
+	/**  What is mounted, such as `/dev/sda1` or `nas:/export`. */
+	source: string,
+	mount_point: string,
+	total: number,
+	used: number,
+	/**  Space left for unprivileged users. */
+	available: number,
+};
+
 export type Platform = "windows" | "macos" | "linux";
 
 export type ProbeResult = {
@@ -1595,6 +1688,11 @@ export type ServerStatsView = {
 	/**  Space left for unprivileged users, as `df` counts it. */
 	disk_available: number | null,
 	uptime_secs: number | null,
+	/**  Bytes received and sent since the server booted, over `net_interfaces`. */
+	net_rx_total: number | null,
+	net_tx_total: number | null,
+	/**  Every mounted filesystem that stores files, each device once, at most 32 (HOST-13). */
+	mounts: MountView[],
 };
 
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";

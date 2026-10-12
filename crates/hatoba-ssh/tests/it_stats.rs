@@ -62,6 +62,11 @@ async fn readings_arrive_each_interval_and_stop_with_the_handle() {
     assert!(first.load.is_some());
     assert!(first.uptime_secs.is_some());
     assert!(first.disk_total.unwrap() >= first.disk_used.unwrap());
+    assert!(
+        first.mounts.iter().any(|m| m.mount_point == "/"),
+        "{:?}",
+        first.mounts
+    );
 
     let second = reading(&mut rx).await;
     let cpu = second.cpu_percent.expect("a CPU share from two readings");

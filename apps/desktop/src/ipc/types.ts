@@ -152,6 +152,8 @@ export interface HostView {
   os: string | null;
   /** The host's terminals show the server's resource usage; device-local, never synced, off until turned on (TERM-12). */
   show_stats: boolean;
+  /** The dashboard shows the host; device-local, never synced, on until turned off (HOST-13). */
+  dashboard: boolean;
   /** Environment variables the terminal asks the server to set (SSH-14). */
   env: HostEnvVar[];
 }
@@ -192,6 +194,8 @@ export interface GroupView {
   name: string;
   parent_id: string | null;
   sort: number;
+  /** The dashboard shows the group's hosts; device-local, never synced, on until turned off (HOST-13). */
+  dashboard: boolean;
 }
 
 export interface GroupInput {
@@ -392,7 +396,42 @@ export interface ServerStatsView {
   /** Space left for unprivileged users, as `df` counts it. */
   disk_available: number | null;
   uptime_secs: number | null;
+  /** Bytes received and sent since the server booted, over `net_interfaces`. */
+  net_rx_total: number | null;
+  net_tx_total: number | null;
+  /** Every mounted filesystem that stores files, each device once, at most 32 (HOST-13). */
+  mounts: MountView[];
 }
+
+/** One mounted filesystem's space in bytes, as `df -P` reports it. */
+export interface MountView {
+  /** What is mounted, such as `/dev/sda1` or `nas:/export`. */
+  source: string;
+  mount_point: string;
+  total: number;
+  used: number;
+  /** Space left for unprivileged users. */
+  available: number;
+}
+
+/** Why the dashboard does not sign in to a host on its own (HOST-13). */
+export type DashboardHold = "password" | "passphrase" | "prompt" | "host_key_new" | "host_key_changed" | "sign_in_failed";
+
+/** Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host. */
+export type DashboardEvent =
+  /** Whether the host's first hop (the host, or its outermost jump host) answered the HOST-10 probe. */
+  | { kind: "probe"; host_id: string; online: boolean }
+  /** Waiting for a connection slot, or signing in. */
+  | { kind: "connecting"; host_id: string }
+  /** Connected and reading, over the dashboard's own connection or a tab's. */
+  | { kind: "reading"; host_id: string; os: string | null; tab: boolean }
+  | { kind: "stats"; host_id: string; stats: ServerStatsView }
+  /** The server does not run Linux; only its online status shows. */
+  | { kind: "unsupported"; host_id: string; system: string }
+  /** The connection needs the user; held until **Retry**, a change to the host, or a tab on it. */
+  | { kind: "held"; host_id: string; hold: DashboardHold; error: AppError | null }
+  /** Connecting or reading failed; tried again after a minute. */
+  | { kind: "failed"; host_id: string; error: AppError };
 
 /** Streamed on the channel of `ssh_stats_start` (TERM-12). `unsupported` and `ended` come last. */
 export type StatsEvent =
@@ -735,6 +774,16 @@ export interface LocalPrefs {
   lock_disconnects_sessions: boolean;
   /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
   clipboard_clear_secs: number;
+  /** HOST-13: the dashboard shows cards or a table. */
+  dashboard_layout: "cards" | "table";
+  /** HOST-13: the table columns turned off. */
+  dashboard_hidden_columns: string[];
+  /** HOST-13: seconds between readings, 1 to 60. */
+  dashboard_interval_secs: number;
+  /** HOST-13: the use in percent past which a value stands out; 0 turns one off. */
+  dashboard_cpu_alert: number;
+  dashboard_mem_alert: number;
+  dashboard_disk_alert: number;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */

@@ -44,7 +44,7 @@ pub use probe::{tcp_probe, tcp_probe_via};
 pub use proxy::{ProxyConfig, ProxyKind};
 pub use server_os::{ServerOs, server_os};
 pub use session::{
-    AuthMethod, ConnectConfig, ExecOutput, JumpHop, ServerStats, ShellEvent, ShellHandle,
-    ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
+    AuthMethod, ConnectConfig, ExecOutput, JumpHop, MountStats, ServerStats, ShellEvent,
+    ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
 };
 pub use sftp::{FileEntry, SftpClient, TransferDirection, TransferProgress};

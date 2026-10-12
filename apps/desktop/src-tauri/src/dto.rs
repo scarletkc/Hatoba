@@ -83,6 +83,9 @@ pub struct HostView {
     /// The host's terminals show the server's resource usage on this device (TERM-12).
     /// Device-local, like `last_connected_at`, and off until turned on.
     pub show_stats: bool,
+    /// The dashboard shows the host on this device (HOST-13). Device-local, like
+    /// `last_connected_at`, and on until turned off.
+    pub dashboard: bool,
     /// Environment variables the terminal asks the server to set (SSH-14).
     pub env: Vec<HostEnvVar>,
 }
@@ -125,6 +128,9 @@ pub struct GroupView {
     pub name: String,
     pub parent_id: Option<String>,
     pub sort: i32,
+    /// The dashboard shows the group's hosts on this device (HOST-13). Device-local, and on
+    /// until turned off.
+    pub dashboard: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -373,6 +379,23 @@ pub struct ServerStatsView {
     /// Space left for unprivileged users, as `df` counts it.
     pub disk_available: Option<u64>,
     pub uptime_secs: Option<u64>,
+    /// Bytes received and sent since the server booted, over `net_interfaces`.
+    pub net_rx_total: Option<u64>,
+    pub net_tx_total: Option<u64>,
+    /// Every mounted filesystem that stores files, each device once, at most 32 (HOST-13).
+    pub mounts: Vec<MountView>,
+}
+
+/// One mounted filesystem's space, in bytes, as `df -P` reports it.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct MountView {
+    /// What is mounted, such as `/dev/sda1` or `nas:/export`.
+    pub source: String,
+    pub mount_point: String,
+    pub total: u64,
+    pub used: u64,
+    /// Space left for unprivileged users.
+    pub available: u64,
 }
 
 /// Streamed on the channel of `ssh_stats_start` (TERM-12).
@@ -380,12 +403,69 @@ pub struct ServerStatsView {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StatsEvent {
     /// A reading, one per interval.
-    Stats { stats: ServerStatsView },
+    Stats { stats: Box<ServerStatsView> },
     /// The server does not run Linux; the last event. `system` is its name, such as `FreeBSD`,
     /// or empty when unknown.
     Unsupported { system: String },
     /// Sampling stopped on its own (the script failed or the connection ended); the last event.
     Ended { error: crate::error::AppError },
+}
+
+// ───────────────────────── Dashboard (HOST-13) ─────────────────────────
+
+/// Why the dashboard does not sign in to a host on its own: the connection needs the user.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardHold {
+    /// The host or a jump host asks for its password on every connection (SSH-03).
+    Password,
+    /// The key's passphrase is not saved, or the saved one is wrong.
+    Passphrase,
+    /// The server wants keyboard-interactive answers, such as a verification code (SSH-08).
+    Prompt,
+    /// The server's host key is not trusted yet (SSH-04).
+    HostKeyNew,
+    /// The server's host key differs from the trusted one (SSH-04).
+    HostKeyChanged,
+    /// The server rejected the saved credentials. Not tried again until **Retry**.
+    SignInFailed,
+}
+
+/// Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DashboardEvent {
+    /// Whether the host's first hop answered the HOST-10 probe: the host itself, or its
+    /// outermost jump host.
+    Probe { host_id: String, online: bool },
+    /// Waiting for one of the connection slots, or signing in.
+    Connecting { host_id: String },
+    /// Connected and reading, over the dashboard's own connection or a tab's (`tab`).
+    Reading {
+        host_id: String,
+        os: Option<String>,
+        tab: bool,
+    },
+    /// A reading, one per interval.
+    Stats {
+        host_id: String,
+        stats: Box<ServerStatsView>,
+    },
+    /// The server does not run Linux, so only its online status shows. `system` is its name,
+    /// or empty when unknown.
+    Unsupported { host_id: String, system: String },
+    /// The connection needs the user; the dashboard waits for **Retry**, a change to the host,
+    /// or a tab on it. `error` is the server's answer, when there was one.
+    Held {
+        host_id: String,
+        hold: DashboardHold,
+        error: Option<crate::error::AppError>,
+    },
+    /// Connecting or reading failed; tried again after a minute.
+    Failed {
+        host_id: String,
+        error: crate::error::AppError,
+    },
 }
 
 // ───────────────────────── SFTP ─────────────────────────
@@ -877,6 +957,17 @@ pub struct LocalPrefs {
     pub lock_disconnects_sessions: bool,
     /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
     pub clipboard_clear_secs: u32,
+    /// HOST-13: the dashboard shows cards or a table.
+    pub dashboard_layout: DashboardLayout,
+    /// HOST-13: the table columns turned off.
+    pub dashboard_hidden_columns: Vec<String>,
+    /// HOST-13: seconds between readings, 1 to 60.
+    pub dashboard_interval_secs: u32,
+    /// HOST-13: the CPU, memory and disk use, in percent, past which a value stands out; 0
+    /// turns one off.
+    pub dashboard_cpu_alert: u32,
+    pub dashboard_mem_alert: u32,
+    pub dashboard_disk_alert: u32,
 }
 
 impl Default for LocalPrefs {
@@ -896,8 +987,21 @@ impl Default for LocalPrefs {
             lock_on_sleep: true,
             lock_disconnects_sessions: false,
             clipboard_clear_secs: 90,
+            dashboard_layout: DashboardLayout::Cards,
+            dashboard_hidden_columns: Vec::new(),
+            dashboard_interval_secs: 3,
+            dashboard_cpu_alert: 90,
+            dashboard_mem_alert: 90,
+            dashboard_disk_alert: 90,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DashboardLayout {
+    Cards,
+    Table,
 }
 
 impl LocalPrefs {

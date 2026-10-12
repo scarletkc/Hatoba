@@ -1,6 +1,7 @@
 //! Live SSH sessions, host-key verification (SSH-04) and interactive prompts (SSH-08).
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -29,6 +30,8 @@ const PROMPT_TIMEOUT: Duration = Duration::from_secs(600);
 pub struct LiveSession {
     pub session: SshSession,
     pub shell: ShellHandle,
+    /// The saved host the terminal connected to; `None` for a quick connection (HOST-12).
+    pub host_id: Option<String>,
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
     pub forwards: Mutex<HashMap<String, ForwardHandle>>,
@@ -37,10 +40,11 @@ pub struct LiveSession {
 }
 
 impl LiveSession {
-    pub fn new(session: SshSession, shell: ShellHandle) -> Self {
+    pub fn new(session: SshSession, shell: ShellHandle, host_id: Option<String>) -> Self {
         Self {
             session,
             shell,
+            host_id,
             sftp: OnceCell::new(),
             forwards: Mutex::new(HashMap::new()),
             stats: Mutex::new(None),
@@ -133,6 +137,19 @@ impl SshManager {
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {
             sessions.remove(id);
         }
+    }
+
+    /// The connection of a terminal open on the saved host, which the dashboard reads over
+    /// (HOST-13). The newest tab's, when several are open.
+    pub fn connection_for_host(&self, host_id: &str) -> Option<SshSession> {
+        lock(&self.sessions)
+            .iter()
+            .filter(|(_, live)| {
+                live.host_id.as_deref() == Some(host_id) && !live.session.is_closed()
+            })
+            // Session ids are UUIDv7, so the largest is the newest.
+            .max_by(|(a, _), (b, _)| a.cmp(b))
+            .map(|(_, live)| live.session.clone())
     }
 
     pub fn take(&self, id: &str) -> Option<Arc<LiveSession>> {
@@ -256,9 +273,9 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
-/// The proxy of a connection to `host`: the choice of its first hop, which is its outermost
-/// jump host, or the host itself without one. A broken jump chain ends where it breaks.
-pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {
+/// The first hop of a connection to `host`: its outermost jump host, or the host itself without
+/// one. A broken jump chain ends where it breaks.
+pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
     let mut first = host;
     let mut seen = HashSet::new();
     while let Some(jump) = first
@@ -269,7 +286,12 @@ pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyCon
     {
         first = jump;
     }
-    resolve_proxy(vault, &first.proxy)
+    first
+}
+
+/// The proxy of a connection to `host`: the choice of its first hop.
+pub fn connection_proxy(vault: &Vault, host: &Host) -> AppResult<Option<ProxyConfig>> {
+    resolve_proxy(vault, &first_hop(vault, host).proxy)
 }
 
 /// Builds the connection config for `host`, resolving its ProxyJump chain (SSH-10) and the
@@ -320,7 +342,7 @@ pub struct Verifier {
     pub session_id: Option<String>,
 }
 
-fn known_host_keys(vault: &Vault, host: &str, port: u16) -> Vec<(String, KnownHost)> {
+pub(crate) fn known_host_keys(vault: &Vault, host: &str, port: u16) -> Vec<(String, KnownHost)> {
     vault
         .known_hosts()
         .into_iter()
@@ -473,6 +495,99 @@ impl KeyboardInteractive for Interactive {
         (answers.len() == request.prompts.len())
             .then(|| answers.into_iter().map(Zeroizing::new).collect())
     }
+}
+
+/// What stopped a connection made without the user (HOST-13): the host key it could not check,
+/// or a prompt the server wanted answered. Nothing is ever asked.
+#[derive(Default)]
+pub struct Unattended {
+    host_key: Mutex<Option<HostKeyPromptKind>>,
+    prompted: AtomicBool,
+}
+
+impl Unattended {
+    /// The host key was not trusted yet (`New`) or differs from the trusted one (`Changed`).
+    pub fn host_key(&self) -> Option<HostKeyPromptKind> {
+        *lock(&self.host_key)
+    }
+
+    /// The server asked for keyboard-interactive answers beyond the saved password (2FA).
+    pub fn prompted(&self) -> bool {
+        self.prompted.load(Ordering::Relaxed)
+    }
+}
+
+/// Accepts only host keys already trusted (SSH-04) and records any other, without asking.
+struct UnattendedVerifier {
+    app: AppHandle,
+    outcome: Arc<Unattended>,
+}
+
+#[async_trait]
+impl HostKeyVerifier for UnattendedVerifier {
+    async fn known_key_types(&self, host: &str, port: u16) -> Vec<String> {
+        let state = state(&self.app);
+        let vault = state.vault();
+        if !vault.is_unlocked() {
+            return Vec::new();
+        }
+        known_host_keys(&vault, host, port)
+            .into_iter()
+            .map(|(_, k)| k.key_type)
+            .collect()
+    }
+
+    async fn verify(&self, host: &str, port: u16, key: &HostKeyInfo) -> bool {
+        let known = {
+            let state = state(&self.app);
+            let vault = state.vault();
+            if !vault.is_unlocked() {
+                return false;
+            }
+            known_host_keys(&vault, host, port)
+        };
+        if known
+            .iter()
+            .any(|(_, k)| k.key_type == key.key_type && k.public_key == key.public_key)
+        {
+            return true;
+        }
+        let (kind, _) = host_key_status(&known, key);
+        *lock(&self.outcome.host_key) = Some(kind);
+        false
+    }
+}
+
+/// Answers no keyboard-interactive prompt, so a login that needs one fails at once.
+struct UnattendedPrompts(Arc<Unattended>);
+
+#[async_trait]
+impl KeyboardInteractive for UnattendedPrompts {
+    async fn respond(&self, _request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
+        self.0.prompted.store(true, Ordering::Relaxed);
+        None
+    }
+}
+
+/// Connects without the user (HOST-13): a host key that is not trusted yet and a prompt from
+/// the server both fail the connection, and the returned [`Unattended`] says which did.
+pub async fn connect_unattended(
+    app: &AppHandle,
+    mut cfg: ConnectConfig,
+) -> (AppResult<SshSession>, Arc<Unattended>) {
+    let outcome = Arc::new(Unattended::default());
+    let attempt = Attempt::of(&cfg);
+    attempt.log_start();
+    cfg.keyboard_interactive = Some(Arc::new(UnattendedPrompts(Arc::clone(&outcome))));
+    let verifier = Arc::new(UnattendedVerifier {
+        app: app.clone(),
+        outcome: Arc::clone(&outcome),
+    });
+    let result = hatoba_ssh::connect(cfg, verifier)
+        .await
+        .map_err(AppError::from);
+    attempt.log_end(&result);
+    (result, outcome)
 }
 
 /// `user@host:port`, with an IPv6 address in brackets.

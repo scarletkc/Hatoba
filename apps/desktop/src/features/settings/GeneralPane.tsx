@@ -11,7 +11,22 @@ import { pickSavePath } from "@/lib/native";
 import { defaultRightClick } from "@/lib/platform";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 
-/** Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), backup (VAULT-07). */
+/** Seconds between the dashboard's readings (HOST-13). */
+const INTERVALS = [1, 2, 3, 5, 10, 30, 60];
+/** The thresholds offered, in percent; 0 is off. */
+const THRESHOLDS = [0, 70, 75, 80, 85, 90, 95];
+const ALERTS = [
+  ["dashboard_cpu_alert", "dashboard.settings.cpuAlert"],
+  ["dashboard_mem_alert", "dashboard.settings.memAlert"],
+  ["dashboard_disk_alert", "dashboard.settings.diskAlert"],
+] as const;
+
+/** The choices, with a stored value that is not one of them (set by another build) kept in its place. */
+function withCurrent(choices: number[], current: number): number[] {
+  return choices.includes(current) ? choices : [...choices, current].sort((a, b) => a - b);
+}
+
+/** Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the dashboard (HOST-13), backup (VAULT-07). */
 export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
@@ -60,6 +75,29 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
           <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
         </SettingRow>
+      </Group>
+
+      <Group>
+        <SettingRow label={t("dashboard.settings.interval")} hint={t("dashboard.settings.interval.hint")}>
+          <PopupSelect<number>
+            ariaLabel={t("dashboard.settings.interval")}
+            value={prefs.dashboard_interval_secs}
+            minWidth={110}
+            options={withCurrent(INTERVALS, prefs.dashboard_interval_secs).map((n) => ({ value: n, label: t("dashboard.settings.seconds", { n }) }))}
+            onChange={(dashboard_interval_secs) => setPrefs({ dashboard_interval_secs })}
+          />
+        </SettingRow>
+        {ALERTS.map(([key, label]) => (
+          <SettingRow key={key} label={t(label)} hint={key === "dashboard_disk_alert" ? t("dashboard.settings.alert.hint") : undefined}>
+            <PopupSelect<number>
+              ariaLabel={t(label)}
+              value={prefs[key]}
+              minWidth={110}
+              options={withCurrent(THRESHOLDS, prefs[key]).map((n) => ({ value: n, label: n === 0 ? t("dashboard.settings.off") : `${n}%` }))}
+              onChange={(value) => setPrefs({ [key]: value })}
+            />
+          </SettingRow>
+        ))}
       </Group>
 
       <Group>

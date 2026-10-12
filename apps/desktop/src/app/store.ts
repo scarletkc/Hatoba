@@ -22,7 +22,9 @@ export type Page =
       prefill?: QuickTarget;
     }
   | { kind: "keys" }
-  | { kind: "sync" };
+  | { kind: "sync" }
+  /** The status and resource usage of the hosts a filter shows (HOST-13). */
+  | { kind: "dashboard"; filter: HostFilter };
 
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
@@ -43,6 +45,12 @@ export const DEFAULT_PREFS: LocalPrefs = {
   lock_on_sleep: true,
   lock_disconnects_sessions: false,
   clipboard_clear_secs: 90,
+  dashboard_layout: "cards",
+  dashboard_hidden_columns: [],
+  dashboard_interval_secs: 3,
+  dashboard_cpu_alert: 90,
+  dashboard_mem_alert: 90,
+  dashboard_disk_alert: 90,
 };
 
 interface AppState {

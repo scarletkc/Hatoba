@@ -6,6 +6,9 @@ if [ "$system" != Linux ] || [ ! -r /proc/stat ]; then
 fi
 # The routing tables there are; awk stops at a file it cannot open.
 routes=$(for f in /proc/net/route /proc/net/ipv6_route; do [ -r "$f" ] && printf '%s ' "$f"; done)
+# A network filesystem that stopped answering would hold `df` up; `timeout` bounds it where present.
+dft=
+command -v timeout >/dev/null 2>&1 && dft="timeout 5"
 echo "@cpus $(grep -c '^cpu[0-9]' /proc/stat)"
 while :; do
   echo @cpu
@@ -29,6 +32,8 @@ while :; do
   read -r line < /proc/uptime && echo "$line"
   echo @disk
   df -kP / 2>/dev/null
+  echo @mounts
+  $dft df -kP 2>/dev/null
   echo @end
   sleep "$1" || exit
 done
