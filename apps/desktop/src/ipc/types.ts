@@ -888,7 +888,7 @@ export type AiJudgeDecision = "run" | "ask";
 
 /**
  * One of the judge's answers (AI-47): `probability` is that of yes. The questions are `requested`, `forbidden`,
- * `changes_system`, `destroys_data`, `touches_secrets`, `sends_data_out`, `sensitive_file` and `url_carries_data`,
+ * `changes_anything`, `destroys_data`, `touches_secrets`, `sends_data_out`, `sensitive_file` and `url_carries_data`,
  * in that order; a call gets those of its tool.
  */
 export interface AiJudgeAnswer {

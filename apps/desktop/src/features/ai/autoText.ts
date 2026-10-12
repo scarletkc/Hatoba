@@ -12,7 +12,7 @@ export const JUDGE_ERROR = "error";
 const QUESTION: Record<string, MessageKey> = {
   requested: "ai.auto.q.requested",
   forbidden: "ai.auto.q.forbidden",
-  changes_system: "ai.auto.q.changes_system",
+  changes_anything: "ai.auto.q.changes_anything",
   destroys_data: "ai.auto.q.destroys_data",
   touches_secrets: "ai.auto.q.touches_secrets",
   sends_data_out: "ai.auto.q.sends_data_out",
@@ -27,7 +27,7 @@ const QUESTION: Record<string, MessageKey> = {
 const CONCERN: Record<string, MessageKey> = {
   requested: "ai.auto.concern.requested",
   forbidden: "ai.auto.concern.forbidden",
-  changes_system: "ai.auto.concern.changes_system",
+  changes_anything: "ai.auto.concern.changes_anything",
   destroys_data: "ai.auto.concern.destroys_data",
   touches_secrets: "ai.auto.concern.touches_secrets",
   sends_data_out: "ai.auto.concern.sends_data_out",
@@ -52,7 +52,7 @@ export function percent(p: number): string {
   return `${Math.round(Math.min(1, Math.max(0, p)) * 100)}%`;
 }
 
-/** The judge's answers in its order, such as "requested 96% · changes system 71%"; an unknown question by its id. */
+/** The judge's answers in its order, such as "requested 96% · changes something 71%"; an unknown question by its id. */
 export function answersText(t: Tr, answers: readonly AiJudgeAnswer[]): string {
   return answers.map((a) => `${QUESTION[a.question] ? t(QUESTION[a.question]) : a.question} ${percent(a.probability)}`).join(" · ");
 }

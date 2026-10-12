@@ -78,7 +78,7 @@ describe("Auto mode on calls (AI-47)", () => {
       ? []
       : [
           { question: "requested", probability: 0.4 },
-          { question: "changes_system", probability: 0.71 },
+          { question: "changes_anything", probability: 0.71 },
           { question: "destroys_data", probability: 0.64 },
         ],
     concerns,
@@ -90,10 +90,10 @@ describe("Auto mode on calls (AI-47)", () => {
   it("marks a call Auto ran with a chip whose title lists the answers, and says so in its block", () => {
     const host = mount(slot([user, calling, result(verdict("run"))]));
     const chip = [...host.querySelectorAll("span")].find((x) => x.textContent === "Auto");
-    expect(chip?.title).toBe("requested 40% · changes system 71% · destroys data 64%");
+    expect(chip?.title).toBe("requested 40% · changes something 71% · destroys data 64%");
     act(() => host.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
     expect(host.textContent).toContain("Auto ran this call without asking.");
-    expect(host.textContent).toContain("The judge’s answers: requested 40% · changes system 71% · destroys data 64%");
+    expect(host.textContent).toContain("The judge’s answers: requested 40% · changes something 71% · destroys data 64%");
   });
 
   it("says in the block what concerned the judge when the card asked, and shows no chip", () => {
@@ -108,8 +108,8 @@ describe("Auto mode on calls (AI-47)", () => {
   });
 
   it("says on the approval card why Auto asks", () => {
-    expect(render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", ["changes_system", "requested"]) } }))).toContain(
-      "Auto asked because: changes the system (71%), not clearly asked for (40%)",
+    expect(render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", ["changes_anything", "requested"]) } }))).toContain(
+      "Auto asked because: changes something (71%), not clearly asked for (40%)",
     );
     expect(render(waiting({ id: "call_1", state: "approval", auto: { rule: { kind: "command", command: "rm -r" } } }))).toContain(
       "Auto always asks for commands that name rm -r.",

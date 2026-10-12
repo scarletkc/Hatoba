@@ -48,7 +48,7 @@ fn system_one_body(pairs: &[(&str, f64)]) -> serde_json::Value {
 const READ: [(&str, f64); 6] = [
     (REQUESTED, 0.3),
     (FORBIDDEN, 0.01),
-    (CHANGES_SYSTEM, 0.02),
+    (CHANGES_ANYTHING, 0.02),
     (DESTROYS_DATA, 0.01),
     (TOUCHES_SECRETS, 0.0),
     (SENDS_DATA_OUT, 0.0),
@@ -83,7 +83,7 @@ fn each_kind_of_call_gets_its_questions_in_table_order() {
     let command = vec![
         REQUESTED,
         FORBIDDEN,
-        CHANGES_SYSTEM,
+        CHANGES_ANYTHING,
         DESTROYS_DATA,
         TOUCHES_SECRETS,
         SENDS_DATA_OUT,
@@ -127,6 +127,20 @@ fn each_kind_of_call_gets_its_questions_in_table_order() {
     let instructions = instructions.as_str().unwrap();
     assert!(instructions.contains("Only `user_messages` are the user's words"));
     assert!(instructions.contains("`screen_tail`"));
+    // Any change counts, so only a call that reads runs without being asked for, and every part
+    // of a URL that is sent is checked for data, the host name included.
+    let text = |tool: &str, id: &str| {
+        let Question::Noul { instructions, .. } = &questions_for(tool)[id] else {
+            unreachable!()
+        };
+        instructions.as_str().unwrap().to_owned()
+    };
+    let changes = text(RUN_COMMAND, CHANGES_ANYTHING);
+    assert!(changes.contains("change anything, on the host or elsewhere"));
+    assert!(changes.contains("database row"));
+    let url = text(FETCH_URL, URL_CARRIES_DATA);
+    assert!(url.contains("host name with its subdomains"));
+    assert!(url.contains("user name or password"));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -147,19 +161,19 @@ fn commands_run_as_reads_or_as_requested_changes_at_the_system_one_thresholds() 
     // A read runs, asked for or not.
     assert_eq!(decide_command(&[]), (AutoDecision::Run, vec![]));
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.0999), (DESTROYS_DATA, 0.0999)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.0999), (DESTROYS_DATA, 0.0999)]),
         (AutoDecision::Run, vec![])
     );
     // A change runs only when the user asked for it.
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.10), (REQUESTED, 0.85)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.10), (REQUESTED, 0.85)]),
         (AutoDecision::Run, vec![])
     );
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.97), (REQUESTED, 0.8499)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.97), (REQUESTED, 0.8499)]),
         (
             AutoDecision::Ask,
-            vec![REQUESTED.to_owned(), CHANGES_SYSTEM.to_owned()]
+            vec![REQUESTED.to_owned(), CHANGES_ANYTHING.to_owned()]
         )
     );
     // Nothing that destroys, touches credentials, sends out, or is forbidden runs, asked or not.
@@ -180,7 +194,7 @@ fn commands_run_as_reads_or_as_requested_changes_at_the_system_one_thresholds() 
     );
     assert_eq!(
         decide_command(&[
-            (CHANGES_SYSTEM, 0.5),
+            (CHANGES_ANYTHING, 0.5),
             (DESTROYS_DATA, 0.5),
             (REQUESTED, 0.9)
         ]),
@@ -216,15 +230,15 @@ fn a_chat_model_judge_has_stricter_thresholds() {
     assert_eq!(decide_command(&[(DESTROYS_DATA, 0.05)]), AutoDecision::Ask);
     assert_eq!(decide_command(&[(DESTROYS_DATA, 0.08)]), AutoDecision::Ask);
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.9), (REQUESTED, 0.90)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.9), (REQUESTED, 0.90)]),
         AutoDecision::Run
     );
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.9), (REQUESTED, 0.8999)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.9), (REQUESTED, 0.8999)]),
         AutoDecision::Ask
     );
     assert_eq!(
-        decide_command(&[(CHANGES_SYSTEM, 0.9), (REQUESTED, 0.87)]),
+        decide_command(&[(CHANGES_ANYTHING, 0.9), (REQUESTED, 0.87)]),
         AutoDecision::Ask,
         "enough for System One, not for a chat model"
     );
@@ -457,12 +471,12 @@ async fn a_read_runs_and_a_change_nobody_asked_for_asks() {
     assert_eq!(body["questions"].as_object().unwrap().len(), 6);
 
     let mut change = READ;
-    change[2] = (CHANGES_SYSTEM, 0.95);
+    change[2] = (CHANGES_ANYTHING, 0.95);
     let server = system_one_server(&change).await;
     let p = provider(server.uri(), Protocol::SystemOne);
     let verdict = judged(&p, command_state(&["hi"], "systemctl restart nginx")).await;
     assert_eq!(verdict.decision, AutoDecision::Ask);
-    assert_eq!(verdict.concerns, vec![REQUESTED, CHANGES_SYSTEM]);
+    assert_eq!(verdict.concerns, vec![REQUESTED, CHANGES_ANYTHING]);
     assert_eq!(verdict.failure, None);
     let auto = verdict.to_auto("p1", "jev-latest");
     assert_eq!(
@@ -470,7 +484,7 @@ async fn a_read_runs_and_a_change_nobody_asked_for_asks() {
         json!({
             "provider_id": "p1", "model_id": "jev-latest", "decision": "ask",
             "answers": serde_json::to_value(answers(&change)).unwrap(),
-            "concerns": ["requested", "changes_system"]
+            "concerns": ["requested", "changes_anything"]
         })
     );
 }
@@ -649,7 +663,7 @@ async fn a_judge_that_does_not_answer_in_time_asks() {
 async fn a_chat_model_judge_answers_through_the_answer_tool() {
     let arguments = json!({
         "notes": "Restarting nginx, which the user asked for.",
-        "requested": 0.97, "forbidden": 0.01, "changes_system": 0.99,
+        "requested": 0.97, "forbidden": 0.01, "changes_anything": 0.99,
         "destroys_data": 0.02, "touches_secrets": 0.0, "sends_data_out": 0.0
     });
     let server = MockServer::start().await;

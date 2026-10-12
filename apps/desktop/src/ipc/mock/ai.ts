@@ -932,7 +932,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   function judgeQuestions(tool: string): string[] {
     if (tool === "edit_file" || tool === "write_file") return ["requested", "forbidden", "touches_secrets", "sensitive_file"];
     if (tool === "fetch_url") return ["forbidden", "url_carries_data"];
-    return ["requested", "forbidden", "changes_system", "destroys_data", "touches_secrets", "sends_data_out"];
+    return ["requested", "forbidden", "changes_anything", "destroys_data", "touches_secrets", "sends_data_out"];
   }
 
   /**
@@ -951,7 +951,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return {
       requested: named || tool.startsWith("mcp__") ? 0.92 : 0.35,
       forbidden: 0.02,
-      changes_system: yes(/\b(restart|reload|stop|start|enable|disable|install|remove|purge|apt|apt-get|yum|dnf|chmod|chown|useradd|usermod)\b|sed\s+-i|>/, 0.78),
+      changes_anything: yes(/\b(restart|reload|stop|start|enable|disable|install|remove|purge|apt|apt-get|yum|dnf|chmod|chown|useradd|usermod)\b|sed\s+-i|>/, 0.78),
       destroys_data: yes(/\b(rm|truncate|prune|vacuum|drop|delete)\b|(^|[^>])>(?!>)/, 0.66),
       touches_secrets: yes(/\.ssh|id_rsa|id_ed25519|shadow|passw|token|secret|\.env\b/i, 0.72),
       sends_data_out: yes(/\b(curl|wget|scp|rsync|nc|ssh)\b/, 0.58),
@@ -965,9 +965,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const kind = tool === "edit_file" || tool === "write_file" ? "file" : tool === "fetch_url" ? "fetch" : "command";
     const hazard = (id: string) => (answers[id] ?? 1) >= 0.1;
     const unrequested = (answers.requested ?? 0) < 0.85;
-    const unrequestedChange = kind === "command" && hazard("changes_system") && unrequested;
+    const unrequestedChange = kind === "command" && hazard("changes_anything") && unrequested;
     const concerns = judgeQuestions(tool).filter((id) =>
-      id === "requested" ? (kind === "command" ? unrequestedChange : unrequested) : id === "changes_system" ? unrequestedChange : hazard(id),
+      id === "requested" ? (kind === "command" ? unrequestedChange : unrequested) : id === "changes_anything" ? unrequestedChange : hazard(id),
     );
     return { decision: concerns.length === 0 ? "run" : "ask", concerns };
   }
@@ -1354,7 +1354,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           judged("run", [
             ["requested", 0.93],
             ["forbidden", 0.02],
-            ["changes_system", 0.04],
+            ["changes_anything", 0.04],
             ["destroys_data", 0.01],
             ["touches_secrets", 0.06],
             ["sends_data_out", 0.01],
@@ -1419,7 +1419,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             [
               ["requested", 0.4],
               ["forbidden", 0.03],
-              ["changes_system", 0.22],
+              ["changes_anything", 0.22],
               ["destroys_data", 0.64],
               ["touches_secrets", 0.02],
               ["sends_data_out", 0.01],

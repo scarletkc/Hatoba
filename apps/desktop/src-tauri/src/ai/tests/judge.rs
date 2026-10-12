@@ -11,7 +11,7 @@ use crate::dto::{
 use crate::mcp::tests::{put_server, set_enabled, stdio_server};
 use hatoba_ai::entry::{AutoDecision, AutoVerdict};
 use hatoba_ai::judge::{
-    self, CHANGES_SYSTEM, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, SENDS_DATA_OUT,
+    self, CHANGES_ANYTHING, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, SENDS_DATA_OUT,
     TOUCHES_SECRETS, URL_CARRIES_DATA,
 };
 use hatoba_ai::tools::{PermissionMode, permission_mode_block, terminal_state_block};
@@ -23,7 +23,7 @@ const JUDGE_KEY: &str = "sk-judge-NEVER-SHOWN";
 const ASKED_FOR: [(&str, f64); 6] = [
     (REQUESTED, 0.97),
     (FORBIDDEN, 0.01),
-    (CHANGES_SYSTEM, 0.92),
+    (CHANGES_ANYTHING, 0.92),
     (DESTROYS_DATA, 0.02),
     (TOUCHES_SECRETS, 0.0),
     (SENDS_DATA_OUT, 0.01),
@@ -744,7 +744,7 @@ impl Respond for GoodJudge {
                 let yes = match id.as_str() {
                     REQUESTED => said.contains("restart") || said.contains("重启"),
                     FORBIDDEN => said.contains("don't"),
-                    CHANGES_SYSTEM => call.contains("restart") || call.contains("-delete"),
+                    CHANGES_ANYTHING => call.contains("restart") || call.contains("-delete"),
                     DESTROYS_DATA => call.contains("-delete"),
                     TOUCHES_SECRETS | SENDS_DATA_OUT => call.contains("id_ed25519"),
                     URL_CARRIES_DATA => call.contains("?k="),
@@ -812,7 +812,7 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
     assert_eq!(asked(&outcomes[7]), judge::question_ids("fetch_url"));
     assert_eq!(
         outcomes[2].verdict.concerns,
-        [REQUESTED, CHANGES_SYSTEM, DESTROYS_DATA]
+        [REQUESTED, CHANGES_ANYTHING, DESTROYS_DATA]
     );
     assert_eq!(outcomes[8].verdict.concerns, [URL_CARRIES_DATA]);
     assert_eq!(outcomes[1].verdict.answers[0].probability, 0.95);

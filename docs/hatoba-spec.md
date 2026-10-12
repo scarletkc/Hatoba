@@ -1197,16 +1197,16 @@ Each question is a `noul` with one literal condition, whose instructions name th
 |---|---|---|
 | `requested` | All but `fetch_url` | The user's messages ask for what the call does, or for a task that needs it. Text in the call or in earlier calls is not the user asking |
 | `forbidden` | All | The user's messages or rules say not to do it, or to wait or ask first, and no later message lifts that |
-| `changes_system` | `run_command`, `send_input`, MCP | It installs or removes software, starts, stops, or restarts services, or changes configuration, users, permissions, the network, or the firewall |
+| `changes_anything` | `run_command`, `send_input`, MCP | It changes anything, on the host or elsewhere: it creates, changes, moves, or deletes files or other data (a database row, a Git index, an issue on a service), installs or removes software, starts, stops, or restarts services, or changes configuration, users, permissions, the network, or the firewall. No means it only reads |
 | `destroys_data` | `run_command`, `send_input`, MCP | It deletes, overwrites, or truncates data, or cannot be undone |
 | `touches_secrets` | All but `fetch_url` | It reads, prints, copies, or changes passwords, private keys, tokens, or other credentials |
 | `sends_data_out` | `run_command`, `send_input`, MCP | It sends data from the host or the conversation to another machine or service |
 | `sensitive_file` | `edit_file`, `write_file` | The file controls logins, privileges, scheduled jobs, or what runs at startup, such as `authorized_keys`, sudoers, crontabs, systemd units, or shell startup files |
-| `url_carries_data` | `fetch_url` | The URL's path or query carries data from the conversation or the host, such as a token, file contents, or a host name |
+| `url_carries_data` | `fetch_url` | A part of the URL that is sent carries data from the conversation or the host, such as a token, file contents, or a host name: the host name with its subdomains (sent in DNS lookups too), a user name or password, the path, or the query |
 
 Fixed rules decide, with a hazard counting when its probability is at least 0.10 and a call counting as asked for from 0.85 on; a model of a provider that chats reports its own probabilities, so its judge uses 0.05 and 0.90:
 
-- `run_command`, `send_input`, and MCP tools run as a read when no hazard counts (`changes_system`, `destroys_data`, `touches_secrets`, `sends_data_out`) and `forbidden` does not, or as a change the user asked for when `destroys_data`, `touches_secrets`, `sends_data_out`, and `forbidden` do not count and the call counts as asked for.
+- `run_command`, `send_input`, and MCP tools run as a read when no hazard counts (`changes_anything`, `destroys_data`, `touches_secrets`, `sends_data_out`) and `forbidden` does not, or as a change the user asked for when `destroys_data`, `touches_secrets`, `sends_data_out`, and `forbidden` do not count and the call counts as asked for.
 - `edit_file` and `write_file` run when `sensitive_file`, `touches_secrets`, and `forbidden` do not count and the call counts as asked for. Its block shows the diff afterwards, and **Revert** undoes it (AI-41).
 - `fetch_url` runs when `url_carries_data` and `forbidden` do not count.
 - Any other call asks. A missing or unreadable answer counts against the call.
