@@ -4,7 +4,7 @@ import type { AiConversationView, AiEntryView, AiFileChange, AiModelRef, AiPermi
 import type { Attachment, DiagnosticsAttachment, SelectionAttachment, SelectionState } from "./attachments";
 import type { EffortPick } from "./effort";
 import type { SideQuestion } from "./side";
-import type { TurnOutcome, TurnState } from "./turn";
+import { approvalOf, type TurnOutcome, type TurnState } from "./turn";
 
 /** The slot of the home tab: a conversation with no terminal, which gets every tool but the terminal's (AI-09). */
 export const HOME_SLOT = "home";
@@ -203,8 +203,7 @@ export type Activity = "idle" | "running" | "waiting";
 /** What the tab bar shows for a slot (AI-07): a turn running, or one waiting for the user; a call Auto's judge checks runs (AI-47). */
 export function slotActivity(slot: Slot | undefined): Activity {
   if (!slot) return "idle";
-  const call = slot.turn?.call;
-  if (call?.state === "approval") return "waiting";
+  if (approvalOf(slot.turn)) return "waiting";
   return slot.turn || slot.remoteRunning ? "running" : "idle";
 }
 

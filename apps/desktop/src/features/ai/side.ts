@@ -1,5 +1,6 @@
 import type { AiFinish, AiSideEvent } from "@/ipc/types";
 import type { Slot } from "./store";
+import { approvalOf } from "./turn";
 
 /**
  * A side question (AI-42) and its answer as the panel shows them, at the end of the conversation.
@@ -52,6 +53,5 @@ export function canAskSide(slot: Slot, text: string): boolean {
 
 /** The call whose approval card waits, which the request tells the model about (AI-17). */
 export function approvalCall(slot: Slot): string | null {
-  const call = slot.turn?.call;
-  return call?.state === "approval" ? call.id : null;
+  return approvalOf(slot.turn)?.id ?? null;
 }

@@ -36,7 +36,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 | **Search MCP tools** (`search_tools`) | With many MCP tools (see the MCP tools menu in `references/ai-panel.md`), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
 | `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
-Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in every mode. Tool results are data to the assistant: when one asks for something, it tells you instead.
+Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in every mode. Calls of one reply that only read and don't wait for approval run at the same time; other calls run one at a time, in order. Tool results are data to the assistant: when one asks for something, it tells you instead.
 
 ## Permission mode
 

@@ -5,7 +5,9 @@
 //! the turn's channel, stores the assistant entry and, when the response has tool calls, waits
 //! until every call has a stored result before it sends the next request. The frontend runs
 //! `read_terminal` and `send_input` and reports with `ai_tool_result`; `ai_tool_run` runs the
-//! other tools here. What is stored is exactly what the model receives (§13.7).
+//! other tools here. The frontend may run several calls of a response at once, and their results
+//! are stored in the order of the calls. What is stored is exactly what the model receives
+//! (§13.7).
 //!
 //! Before each request the turn asks the [`McpManager`] for the MCP tools to offer (AI-30),
 //! which starts the servers that need it, and compacts the context first when the request would
@@ -230,6 +232,9 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+    /// Woken when a tool result is stored, for the results that wait for an earlier call's
+    /// ([`AiManager::waits_for_earlier`]).
+    stored: Notify,
 }
 
 /// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
@@ -1575,7 +1580,9 @@ impl AiManager {
     /// `ai_tool_result`: stores a result the frontend produced (`read_terminal`, `send_input`, a
     /// rejection). The call must belong to the conversation's newest response, have no result,
     /// and not be running in Rust. With `judged`, the result keeps the judge's verdict (AI-47).
-    pub fn tool_result(
+    /// It is stored once every earlier call of the response has a result
+    /// ([`Self::waits_for_earlier`]).
+    pub async fn tool_result(
         &self,
         vault: &SharedVault,
         env: &dyn AiEnv,
@@ -1593,24 +1600,41 @@ impl AiManager {
                 input.edited_arguments.as_deref(),
             ),
         };
-        let view = {
-            let mut v = unlocked(vault)?;
-            find_conversation(&v, conversation_id)?;
-            open_call(&Entries::load(&v, conversation_id)?, tool_call_id)?;
-            if self.call_running(conversation_id, tool_call_id) {
-                return Err(AppError::invalid(
-                    "tool_call_id",
-                    "the tool call is already running",
-                ));
+        let cancel = self.turn_token(conversation_id);
+        // Once read, the response the call belongs to: a wait reads it and what follows it.
+        let mut response = None;
+        let view = loop {
+            let stored = self.0.stored.notified();
+            tokio::pin!(stored);
+            // Registered before the check, so a result stored in between still wakes it.
+            stored.as_mut().enable();
+            {
+                let mut v = unlocked(vault)?;
+                find_conversation(&v, conversation_id)?;
+                let entries = Entries::load_open(&v, conversation_id, response.as_deref())?;
+                open_call(&entries, tool_call_id)?;
+                if self.call_running(conversation_id, tool_call_id) {
+                    return Err(AppError::invalid(
+                        "tool_call_id",
+                        "the tool call is already running",
+                    ));
+                }
+                if !self.waits_for_earlier(conversation_id, &entries, tool_call_id, &cancel)? {
+                    break self.store_result(
+                        &mut v,
+                        conversation_id,
+                        tool_call_id,
+                        status,
+                        content,
+                        input.judged,
+                    )?;
+                }
+                response = entries.newest_response();
             }
-            self.store_result(
-                &mut v,
-                conversation_id,
-                tool_call_id,
-                status,
-                content,
-                input.judged,
-            )?
+            tokio::select! {
+                () = cancel.cancelled() => {}
+                () = stored => {}
+            }
         };
         env.changed();
         Ok(view)
@@ -1708,31 +1732,46 @@ impl AiManager {
         };
         let content = result_content(status, content, edited_arguments);
         let shown = guard(&shown).take();
-        let view = {
-            let mut v = unlocked(vault)?;
-            find_conversation(&v, conversation_id)?;
-            if let Err(e) = open_call(&Entries::load(&v, conversation_id)?, tool_call_id) {
-                // A stop stored a cancelled result while the tool ran.
-                return Err(if op.cancel.is_cancelled() {
-                    AppError::new(ErrorCode::Cancelled, "the tool call was stopped")
-                } else {
-                    e
-                });
+        let mut response = None;
+        let view = loop {
+            let stored = self.0.stored.notified();
+            tokio::pin!(stored);
+            // Registered before the check, so a result stored in between still wakes it.
+            stored.as_mut().enable();
+            {
+                let mut v = unlocked(vault)?;
+                find_conversation(&v, conversation_id)?;
+                let entries = Entries::load_open(&v, conversation_id, response.as_deref())?;
+                if let Err(e) = open_call(&entries, tool_call_id) {
+                    // A stop stored a cancelled result while the tool ran.
+                    return Err(if op.cancel.is_cancelled() {
+                        AppError::new(ErrorCode::Cancelled, "the tool call was stopped")
+                    } else {
+                        e
+                    });
+                }
+                if !self.waits_for_earlier(conversation_id, &entries, tool_call_id, &op.cancel)? {
+                    let view = self.store_result(
+                        &mut v,
+                        conversation_id,
+                        tool_call_id,
+                        status,
+                        content,
+                        judged,
+                    )?;
+                    // The model sees the file now that the result is stored (AI-38…40), under
+                    // the guard that a stop or the lock would have taken first.
+                    if let Some(shown) = shown {
+                        self.0.seen.insert(conversation_id, &place.response, shown);
+                    }
+                    break view;
+                }
+                response = entries.newest_response();
             }
-            let view = self.store_result(
-                &mut v,
-                conversation_id,
-                tool_call_id,
-                status,
-                content,
-                judged,
-            )?;
-            // The model sees the file now that the result is stored (AI-38…40), under the guard
-            // that a stop or the lock would have taken first.
-            if let Some(shown) = shown {
-                self.0.seen.insert(conversation_id, &place.response, shown);
+            tokio::select! {
+                () = op.cancel.cancelled() => {}
+                () = stored => {}
             }
-            view
         };
         drop(op);
         env.changed();
@@ -2148,6 +2187,25 @@ impl AiManager {
         guard(&self.0.pending_verdicts).retain(|(id, _), _| id != conversation_id);
     }
 
+    /// Whether the result of the open call `tool_call_id` waits until a call before it in the
+    /// conversation's newest response has one (§13.1): while the conversation's turn runs and is
+    /// not being stopped (`cancel`), results are stored in the order of the calls, whichever
+    /// finishes first. A stop stores the open calls' cancelled results.
+    fn waits_for_earlier(
+        &self,
+        conversation_id: &str,
+        entries: &Entries,
+        tool_call_id: &str,
+        cancel: &CancellationToken,
+    ) -> AppResult<bool> {
+        if cancel.is_cancelled() || !self.is_running(conversation_id) {
+            return Ok(false);
+        }
+        let (from, index) = open_call_at(entries, tool_call_id)?;
+        let answered = pair_results(&entries.list[from..]);
+        Ok((0..index).any(|c| !answered.contains_key(&(0, c))))
+    }
+
     /// Stores a tool result, sends it on the running turn's channel and wakes the turn. The
     /// judge's verdict on the call (AI-47) goes with the result when Auto decided the call
     /// (`judged`), and is dropped otherwise.
@@ -2175,6 +2233,7 @@ impl AiManager {
             });
             turn.results.notify_one();
         }
+        self.0.stored.notify_waiters();
         tracing::info!(conversation_id, ?status, "AI tool result stored");
         Ok(view)
     }
@@ -4119,6 +4178,24 @@ impl Entries {
             conversation_id,
             v.ai_entries_from(conversation_id, entry_id)?,
         ))
+    }
+
+    /// The entries from `response` on, or all of them before it is known: the checks of an open
+    /// call read only the conversation's newest response and what follows it.
+    fn load_open(v: &Vault, conversation_id: &str, response: Option<&str>) -> AppResult<Self> {
+        match response {
+            Some(id) => Self::load_from(v, conversation_id, id),
+            None => Self::load(v, conversation_id),
+        }
+    }
+
+    /// The id of the newest response.
+    fn newest_response(&self) -> Option<String> {
+        let at = self
+            .list
+            .iter()
+            .rposition(|e| matches!(e.body, EntryBody::Assistant(_)))?;
+        Some(self.ids[at].clone())
     }
 
     fn decode(conversation_id: &str, stored: Vec<hatoba_core::StoredEntry>) -> Self {

@@ -168,7 +168,8 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   const callView = (call: AiToolCall, newest: boolean): CallView => {
     const result = results.get(call.id);
     if (result) return { kind: "result", entry: result };
-    if (turn?.call?.id === call.id) return { kind: turn.call.state, mcp: turn.call.mcp, auto: turn.call.auto };
+    const handled = turn?.calls.find((c) => c.id === call.id);
+    if (handled) return { kind: handled.state, mcp: handled.mcp, auto: handled.auto };
     return newest && turn ? { kind: "queued" } : { kind: "none" };
   };
 
@@ -1485,7 +1486,7 @@ function TurnStatus({ slotId, slot }: { slotId: string; slot: Slot }) {
     const live = turn.live;
     // A streaming response shows itself (its reasoning header says it is thinking), and so does a call.
     if (live && (live.text || live.reasoning || live.toolCalls.length > 0)) return null;
-    if (turn.call) return null;
+    if (turn.calls.length > 0) return null;
     const key: MessageKey =
       turn.phase === "tools" ? "ai.status.working" : turn.phase === "starting" && mcpStarting ? "ai.status.mcpStarting" : "ai.status.waiting";
     return (

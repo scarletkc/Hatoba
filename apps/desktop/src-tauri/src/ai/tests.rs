@@ -439,7 +439,7 @@ impl Fixture {
         Ok(sink)
     }
 
-    fn result(
+    async fn result(
         &self,
         conversation_id: &str,
         tool_call_id: &str,
@@ -447,18 +447,20 @@ impl Fixture {
         content: &str,
         edited_arguments: Option<&str>,
     ) -> AppResult<AiEntryView> {
-        self.manager.tool_result(
-            &self.vault,
-            self.env.as_ref(),
-            conversation_id,
-            tool_call_id,
-            &AiToolResultInput {
-                status,
-                content: content.into(),
-                edited_arguments: edited_arguments.map(str::to_owned),
-                judged: false,
-            },
-        )
+        self.manager
+            .tool_result(
+                &self.vault,
+                self.env.as_ref(),
+                conversation_id,
+                tool_call_id,
+                &AiToolResultInput {
+                    status,
+                    content: content.into(),
+                    edited_arguments: edited_arguments.map(str::to_owned),
+                    judged: false,
+                },
+            )
+            .await
     }
 
     async fn run(
@@ -588,6 +590,7 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
 
     let stored = f
         .result(&conv, "call_1", AiToolStatus::Ok, "$ df -h\n42%", None)
+        .await
         .unwrap();
     assert_eq!(
         view_content(&stored),
@@ -689,10 +692,12 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
     // Results answer the newest response only.
     let again = f
         .result(&conv, "call_1", AiToolStatus::Ok, "twice", None)
+        .await
         .unwrap_err();
     assert_eq!(again.code, ErrorCode::NotFound);
     assert_eq!(
         f.result(&conv, "nope", AiToolStatus::Ok, "", None)
+            .await
             .unwrap_err()
             .code,
         ErrorCode::NotFound
@@ -718,6 +723,7 @@ async fn an_edited_call_tells_the_model_what_ran() {
     let edited = r#"{"text":"ls /tmp/x","key":"enter"}"#;
     let stored = f
         .result(&conv, "call_1", AiToolStatus::Ok, "a b c", Some(edited))
+        .await
         .unwrap();
     let (_, status, content) = view_content(&stored);
     assert_eq!(status, AiToolStatus::Ok);
@@ -747,6 +753,7 @@ async fn a_rejection_sends_the_users_reason() {
             "  not on prod  ",
             None,
         )
+        .await
         .unwrap();
     assert_eq!(
         view_content(&stored),
@@ -1074,6 +1081,108 @@ async fn a_stop_noted_on_a_message_without_a_reply_is_not_noted_again() {
     );
 }
 
+/// The panel runs the calls of a response that only read at once (§13.1); their results are
+/// stored in the order of the calls, whichever finishes first, so the conversation reads as the
+/// model made the calls.
+#[tokio::test]
+async fn results_are_stored_in_the_order_of_the_calls() {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("call_1", "read_terminal", json!({})),
+            ("call_2", "read_skill", json!({"name": "hatoba"})),
+            ("call_3", "read_terminal", json!({"lines": 5})),
+        ]),
+        answer("All read."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "look around").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    let first = async {
+        // The later calls finish first, and wait.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let kinds: Vec<&str> = f
+            .entries(&conv)
+            .iter()
+            .map(|e| match e.body {
+                EntryBody::Tool { .. } => "tool",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(kinds, ["other", "other"], "nothing stored before call_1");
+        f.result(&conv, "call_1", AiToolStatus::Ok, "first", None)
+            .await
+    };
+    let (third, second, first) = tokio::join!(
+        f.result(&conv, "call_3", AiToolStatus::Ok, "third", None),
+        f.run(&conv, "call_2", None, None),
+        first,
+    );
+    for stored in [first, second, third] {
+        stored.unwrap();
+    }
+    let entries = f.entries(&conv);
+    let stored: Vec<&str> = entries[2..5].iter().map(|e| tool_entry(e).0).collect();
+    assert_eq!(stored, ["call_1", "call_2", "call_3"]);
+    let shown: Vec<String> = sink
+        .entries()
+        .into_iter()
+        .filter_map(|e| match e {
+            AiEntryView::Tool { tool_call_id, .. } => Some(tool_call_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(shown, ["call_1", "call_2", "call_3"]);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+}
+
+/// A result that waits for an earlier call's stops waiting on a stop, which gives every call
+/// without a result a cancelled one (AI-18).
+#[tokio::test]
+async fn stopping_ends_the_wait_of_results_for_earlier_calls() {
+    let f = Fixture::new(vec![calls(&[
+        ("call_1", "run_command", json!({"command": "uptime"})),
+        ("call_2", "read_skill", json!({"name": "hatoba"})),
+        ("call_3", "read_terminal", json!({})),
+    ])])
+    .await;
+    let (started, sink) = f.send(None, "look around").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    let stop = async {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    };
+    let (run, result, ()) = tokio::join!(
+        f.run(&conv, "call_2", None, None),
+        f.result(&conv, "call_3", AiToolStatus::Ok, "late", None),
+        stop,
+    );
+    assert_eq!(run.unwrap_err().code, ErrorCode::Cancelled);
+    assert_eq!(result.unwrap_err().code, ErrorCode::InvalidInput);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    let entries = f.entries(&conv);
+    let cancelled: Vec<(&str, ToolStatus)> = entries[2..]
+        .iter()
+        .map(|e| {
+            let (id, status, _) = tool_entry(e);
+            (id, status)
+        })
+        .collect();
+    assert_eq!(
+        cancelled,
+        [
+            ("call_1", ToolStatus::Cancelled),
+            ("call_2", ToolStatus::Cancelled),
+            ("call_3", ToolStatus::Cancelled),
+        ]
+    );
+    f.idle(&conv).await;
+}
+
 #[tokio::test]
 async fn stopping_while_a_tool_waits_cancels_the_calls_without_a_result() {
     let f = Fixture::new(vec![calls(&[
@@ -1085,6 +1194,7 @@ async fn stopping_while_a_tool_waits_cancels_the_calls_without_a_result() {
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     f.result(&conv, "call_1", AiToolStatus::Ok, "screen", None)
+        .await
         .unwrap();
 
     f.manager.stop(&f.vault, f.env.as_ref(), &conv);
@@ -1117,6 +1227,7 @@ async fn stopping_while_a_tool_waits_cancels_the_calls_without_a_result() {
     // The call has its result now, so a late report or run is refused.
     assert_eq!(
         f.result(&conv, "call_2", AiToolStatus::Ok, "late", None)
+            .await
             .unwrap_err()
             .code,
         ErrorCode::InvalidInput
@@ -1147,6 +1258,7 @@ async fn locking_stops_every_turn() {
     assert!(!f.manager.is_running(&conv));
     assert_eq!(
         f.result(&conv, "call_1", AiToolStatus::Ok, "late", None)
+            .await
             .unwrap_err()
             .code,
         ErrorCode::Locked
@@ -1381,6 +1493,7 @@ async fn the_thinking_level_goes_with_every_request_and_stays_with_the_conversat
     assert_eq!(stored_effort(&f, &conv), Some(CoreEffort::Max));
     sink.done_with(AiFinish::ToolCalls).await;
     f.result(&conv, "call_1", AiToolStatus::Ok, "found", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -1576,6 +1689,7 @@ async fn a_compact_request_is_the_next_request_with_the_instruction_after_it() {
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     f.result(&conv, "c1", AiToolStatus::Ok, "Use% 42%", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -1759,6 +1873,7 @@ async fn an_anthropic_compaction_between_tool_calls_asks_for_less_output() {
     sink.done_with(AiFinish::ToolCalls).await;
     // The screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     assert_eq!(summaries(&sink).len(), 1);
@@ -2507,6 +2622,7 @@ async fn a_full_context_between_tool_calls_is_compacted_once() {
     remember_a_file(&f, &conv, "c1");
     // The screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -3339,6 +3455,7 @@ async fn calls_that_share_an_id_get_error_results_and_never_run() {
     let err = f.run(&conv, "dup", Some("s1"), None).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidInput);
     f.result(&conv, "c3", AiToolStatus::Ok, "the screen", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     let requests = f.requests().await;
@@ -3419,7 +3536,9 @@ async fn a_running_call_is_not_run_or_answered_again() {
     let mut first = Box::pin(f.run(&conv, "c1", None, None));
     assert!(poll_once(&mut first).await.is_pending());
     let second = f.run(&conv, "c1", None, None).await;
-    let result = f.result(&conv, "c1", AiToolStatus::Error, "The tool failed", None);
+    let result = f
+        .result(&conv, "c1", AiToolStatus::Error, "The tool failed", None)
+        .await;
     for err in [second.unwrap_err(), result.unwrap_err()] {
         assert_eq!(err.code, ErrorCode::InvalidInput);
         assert_eq!(err.detail, "the tool call is already running");
@@ -3437,6 +3556,7 @@ async fn a_running_call_is_not_run_or_answered_again() {
     let err = f.run(&conv, "c1", None, None).await.unwrap_err();
     assert_eq!(err.detail, "the tool call already has a result");
     f.result(&conv, "c2", AiToolStatus::Ok, "the screen", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.mcp.shutdown().await;
@@ -4920,8 +5040,11 @@ async fn a_side_question_leaves_a_waiting_turn_alone() {
     );
 
     f.result(&conv, "c1", AiToolStatus::Ok, "removed", None)
+        .await
         .unwrap();
-    f.result(&conv, "c2", AiToolStatus::Ok, "$ ", None).unwrap();
+    f.result(&conv, "c2", AiToolStatus::Ok, "$ ", None)
+        .await
+        .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     let next = f.requests().await[2].to_string();
     assert!(!next.contains("Is that safe?"));
@@ -5220,6 +5343,7 @@ async fn a_side_question_is_refused_while_the_context_is_compacted_automatically
 
     // Between tool calls: the screen alone is about 1,000 tokens.
     f.result(&conv, "c1", AiToolStatus::Ok, &"z".repeat(4_000), None)
+        .await
         .unwrap();
     f.wait_for_requests(4).await;
     refused().await;
@@ -5407,8 +5531,10 @@ async fn reverted_file_changes_are_noted_once_on_the_next_message() {
         ErrorCode::InvalidInput
     );
     f.result(&conv, "e1", AiToolStatus::Ok, "Edited app.conf", None)
+        .await
         .unwrap();
     f.result(&conv, "w1", AiToolStatus::Ok, "Created /srv/new.conf", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -5552,8 +5678,10 @@ async fn an_edit_before_a_call_deletes_its_snapshot() {
     );
     keep_a_change(&f, &conv, &response, "w1", "/srv/new.conf", "write_file");
     f.result(&conv, "e1", AiToolStatus::Ok, "Edited", None)
+        .await
         .unwrap();
     f.result(&conv, "w1", AiToolStatus::Ok, "Created", None)
+        .await
         .unwrap();
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
@@ -5731,9 +5859,11 @@ async fn writes_keep_their_snapshot_before_they_begin() {
         ]
     );
     f.result(&conv, "w1", AiToolStatus::Ok, "Created", None)
+        .await
         .unwrap();
     for call in ["w2", "w3", "e1"] {
         f.result(&conv, call, AiToolStatus::Error, "Failed", None)
+            .await
             .unwrap();
     }
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);

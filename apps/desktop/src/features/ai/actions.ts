@@ -51,6 +51,7 @@ import {
 import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowances } from "./allowances";
 import { hardRule, type HardRule } from "./autoRules";
 import { JUDGE_ERROR } from "./autoText";
+import { nextBatch, runConcurrently } from "./batches";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
@@ -86,6 +87,7 @@ import {
   CALL_MCP_TOOL,
   callAllowed,
   callMode,
+  concurrencySafe,
   grantKeys,
   mcpOffResult,
   mustAsk,
@@ -95,6 +97,7 @@ import {
   savedFor,
   shownCall,
   toolKind,
+  usesChannel,
   type HostRef,
   type Scope,
   type ToolKind,
@@ -110,6 +113,7 @@ import {
   reduceTurnEvent,
   unansweredCalls,
   upsertEntry,
+  withCall,
   type AutoAsk,
   type CallInfo,
   type CallState,
@@ -245,7 +249,8 @@ const runners = new Map<string, TurnRunner>();
 
 /**
  * Drives one turn (§13.1) for the slot it belongs to: applies the streamed events, then handles the
- * tool calls of each response one at a time, in order, applying the permission mode (§13.5).
+ * tool calls of each response in order, applying the permission mode (§13.5): a run of calls that only
+ * read and need no approval card runs together, and every other call runs alone (`nextBatch`).
  * `read_terminal` and `send_input` run here; other tools run in Rust.
  */
 class TurnRunner {
@@ -384,9 +389,19 @@ class TurnRunner {
     void afterTurn(this.slotId, reason, this.stopping);
   }
 
-  private setCall(call: CallInfo | null) {
+  /** Shows what a call being handled waits for, in place of what it showed before. */
+  private setCall(call: CallInfo) {
+    this.patchCalls((calls) => withCall(calls, call));
+  }
+
+  /** The call is handled: its result shows, if it has one. */
+  private endCall(callId: string) {
+    this.patchCalls((calls) => calls.filter((c) => c.id !== callId));
+  }
+
+  private patchCalls(change: (calls: CallInfo[]) => CallInfo[]) {
     if (this.disposed) return;
-    patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, call } } : {}));
+    patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, calls: change(s.turn.calls) } } : {}));
   }
 
   private wait(callId: string, state: CallState, mcp?: McpToolInfo | null, auto?: AutoAsk | null): Promise<Decision> {
@@ -412,13 +427,57 @@ class TurnRunner {
       if (!this.active || this.stopping) return;
       this.rejected = false;
       this.prefetch(convId, calls);
-      for (const call of calls) {
-        if (!this.active || this.stopping) return;
-        await this.handleCall(convId, call);
+      for (let rest = calls; rest.length > 0; ) {
+        // §13.1: decided as each batch starts, with the mode and the approvals the calls before it left.
+        const joins = await this.joins(convId);
+        if (!this.acting) return;
+        const batch = nextBatch(rest, joins);
+        rest = rest.slice(batch.length);
+        if (batch.length > 1) {
+          const channel = (call: AiToolCall) => usesChannel(toolKind(call.name));
+          await runConcurrently(batch, channel, (call) => this.runAlongside(convId, call), () => this.acting);
+        } else {
+          try {
+            await this.handleCall(convId, batch[0]);
+          } finally {
+            this.endCall(batch[0].id);
+          }
+        }
       }
     } finally {
       this.processing = false;
-      if (this.active) this.setCall(null);
+      if (this.active) this.patchCalls(() => []);
+    }
+  }
+
+  /**
+   * §13.1: whether a call runs together with the calls beside it: it only reads (`concurrencySafe`), and in the mode
+   * of now and with the approvals of now, it neither shows an approval card nor goes to Auto's judge, which may
+   * show one. A call that asks runs alone.
+   */
+  private async joins(convId: string): Promise<(call: AiToolCall) => boolean> {
+    const saved = callMode(this.mode, getSlot(this.slotId).mode) === "bypass" ? [] : await savedAllowances().catch(() => []);
+    const mode = callMode(this.mode, getSlot(this.slotId).mode);
+    const target = this.target();
+    const host = target ? hostRefOf(target.tab) : null;
+    const grants = useAi.getState().allowed[convId] ?? [];
+    return (call) => {
+      const kind = toolKind(call.name);
+      const args = parseArgs(call.arguments) ?? {};
+      return concurrencySafe(kind, args) && !mustAsk({ kind, mode, allowed: callAllowed(kind, args, null, grants, saved, host) });
+    };
+  }
+
+  /** Runs a call of a batch whose calls run together (§13.1), which needs no approval card. */
+  private async runAlongside(convId: string, call: AiToolCall) {
+    try {
+      const kind = toolKind(call.name);
+      if (needsSession(kind) && !this.target()) return await this.answer(convId, call.id, NO_TAB);
+      if (!this.acting) return;
+      this.setCall({ id: call.id, state: "running" });
+      await this.execute(convId, call, kind, null, false);
+    } finally {
+      this.endCall(call.id);
     }
   }
 

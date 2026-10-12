@@ -687,6 +687,72 @@ async fn exec_dropped_while_its_channel_opens_closes_it() {
     }
 }
 
+/// Commands on one connection run at once, each on an exec channel of its own, as the AI
+/// assistant runs the calls of a response that only read (§13.1). A server that allows fewer
+/// sessions than they need refuses some channels; those open once another closes.
+#[tokio::test]
+async fn exec_channels_the_server_refuses_open_once_others_close() {
+    // Two sessions per connection, and the shell holds one: one exec channel at a time.
+    let Some(server) = SshdServer::start_max_sessions(2) else {
+        return;
+    };
+    let session = server.connect_key("ed25519", None).await;
+    let (_shell, _rx) = session.open_shell(ShellOptions::default()).await.unwrap();
+    let started = Instant::now();
+    let runs = (0..4).map(|i| {
+        let session = session.clone();
+        async move { session.exec(&format!("sleep 0.3; echo {i}"), None).await }
+    });
+    for (i, run) in futures::future::join_all(runs)
+        .await
+        .into_iter()
+        .enumerate()
+    {
+        let (status, out) = run.unwrap_or_else(|e| panic!("command {i}: {e}"));
+        assert_eq!((status, out), (0, format!("{i}\n").into_bytes()));
+    }
+    assert!(
+        started.elapsed() >= Duration::from_millis(1200),
+        "the server ran them one at a time, yet they took {:?}",
+        started.elapsed()
+    );
+
+    // With room for more, they run together.
+    let Some(server) = SshdServer::start() else {
+        return;
+    };
+    let session = server.connect_key("ed25519", None).await;
+    let started = Instant::now();
+    let runs = (0..4).map(|_| session.exec("sleep 0.5", None));
+    for run in futures::future::join_all(runs).await {
+        assert_eq!(run.unwrap().0, 0);
+    }
+    assert!(
+        started.elapsed() < Duration::from_millis(1500),
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+/// A channel the server refuses while no other exec channel of the connection is open is an
+/// error, at once: nothing would free a session for it.
+#[tokio::test]
+async fn exec_channel_refused_with_none_other_open_fails() {
+    let Some(server) = SshdServer::start_max_sessions(1) else {
+        return;
+    };
+    let session = server.connect_key("ed25519", None).await;
+    let (_shell, _rx) = session.open_shell(ShellOptions::default()).await.unwrap();
+    let started = Instant::now();
+    let error = session.exec("true", None).await.unwrap_err();
+    assert_eq!(error.kind, SshErrorKind::Channel, "{error}");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "failed after {:?}",
+        started.elapsed()
+    );
+}
+
 /// The file tools' read and write (AI-38…40) through sshd and the user's login shell.
 #[tokio::test]
 async fn remote_files_are_read_and_written_in_place() {

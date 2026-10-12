@@ -907,6 +907,12 @@ fn permission_rule(terminal: bool) -> String {
     )
 }
 
+/// The rule that lets the model make independent tool calls together (§13.1), as Claude Code, Codex
+/// and Cursor tell their models.
+const PARALLEL_CALLS_RULE: &str = "- You can call several tools in one response. When calls do not \
+     depend on each other, such as reading several files or running several checks, make them \
+     together in the same response rather than one at a time.\n";
+
 /// Hatoba's system prompt: an opening that says what the assistant can do in this request, then
 /// sections in XML tags. Deterministic: the same context gives the same bytes.
 #[must_use]
@@ -1010,6 +1016,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     }
     if tools {
         out.push_str(&permission_rule(terminal));
+        out.push_str(PARALLEL_CALLS_RULE);
     }
     if terminal {
         out.push_str(
@@ -1498,6 +1505,7 @@ mod tests {
             // for that.
             "Fall back to the shell when these tools cannot do the job, such as finding files by \
              size or age, or files that need sudo.",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(prompt.contains(needle), "missing {needle:?}");
         }
@@ -1539,6 +1547,7 @@ mod tests {
             "You are the model \"Claude Opus 5.5\"",
             "<attachments>",
             "- alpha: First one\n- zeta: Last one\n",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(detached.contains(needle), "missing {needle:?}");
         }
@@ -1575,6 +1584,7 @@ mod tests {
             "<skills>",
             "- alpha:",
             "SSH server",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(!bare.contains(absent), "unexpected {absent:?}");
         }
@@ -1987,6 +1997,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
   - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval. So call the tool rather than asking for permission in prose first. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
   - Bypass: your tool calls run as soon as you make them, without the user seeing them first; only the tools of MCP servers the user set to always ask wait for approval. So before anything that deletes data, cannot be undone, restarts services or affects other users, unless the user asked for exactly that, stop and ask in chat, and go on only after the user agrees.
 - After a rejection, do not repeat the same call unchanged: change your approach as the user's reason says, or ask.
+- You can call several tools in one response. When calls do not depend on each other, such as reading several files or running several checks, make them together in the same response rather than one at a time.
 - Prefer glob to find files, grep to search them, and read_file, edit_file and write_file to read and change them, over the same work with find, grep, cat, sed or heredocs in the shell: edit_file and write_file show the user the change and can be reverted. Fall back to the shell when these tools cannot do the job, such as finding files by size or age, or files that need sudo. Use send_input for anything that needs the shell's working directory, environment or sudo session, or that is interactive, and run_command for the rest.
 - Answer in the user's language. Be concise, use Markdown, and put commands in code blocks.
 - Follow the user's instructions and the host notes below; where they differ from the rules above, follow them instead. Which tool calls need the user's approval is still up to Hatoba.

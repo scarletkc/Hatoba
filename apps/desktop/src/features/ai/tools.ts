@@ -1,6 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
-import { allowancePrefixes, commandAllowed, savablePrefixes } from "./commandRules";
+import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes } from "./commandRules";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -95,6 +95,34 @@ export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
 /** Tools that act on the tab's SSH session and return an error while it is disconnected (AI-08). */
 export function needsSession(kind: ToolKind): boolean {
   return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
+}
+
+/** Tools that open an exec channel on the tab's SSH connection for each call. */
+export function usesChannel(kind: ToolKind): boolean {
+  return kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
+}
+
+/**
+ * §13.1: whether a call can run at the same time as the calls beside it: a tool that only reads, or a `run_command`
+ * call whose command line only reads (§13.5). Edits, writes, typing into the shell, other commands and MCP tools run
+ * alone.
+ */
+export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>): boolean {
+  switch (kind) {
+    case "read_terminal":
+    case "read_file":
+    case "grep":
+    case "glob":
+    case "web_search":
+    case "fetch_url":
+    case "read_skill":
+    case "search_tools":
+      return true;
+    case "run_command":
+      return readsOnlyCommand(str(args.command));
+    default:
+      return false;
+  }
 }
 
 /**
