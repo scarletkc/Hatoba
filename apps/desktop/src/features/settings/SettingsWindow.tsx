@@ -10,6 +10,7 @@ import { cx } from "@/lib/cx";
 import { AboutPane } from "./AboutPane";
 import { AiPane } from "./AiPane";
 import { AppearancePane } from "./AppearancePane";
+import { useFreshReads } from "./freshReads";
 import { GeneralPane } from "./GeneralPane";
 import { ProxiesPane } from "./ProxiesPane";
 import { SecurityPane } from "./SecurityPane";
@@ -50,21 +51,16 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
     setTabState(next);
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .settings_get()
-      .then((v) => {
-        if (cancelled) return;
-        settingsRef.current = v;
-        setSettings(v);
-      })
-      .catch((e) => !cancelled && toast(`${t("settings.loadFailed")} ${errorMessage(t, e)}`, "error"));
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const reads = useFreshReads(
+    api.settings_get,
+    (v) => {
+      settingsRef.current = v;
+      setSettings(v);
+    },
+    (e) => {
+      if (!settingsRef.current) toast(`${t("settings.loadFailed")} ${errorMessage(t, e)}`, "error");
+    },
+  );
 
   // Escape closes the window, but a dialog or menu opened from inside it gets the key first. The
   // check runs while the key is travelling down (capture), before those layers close themselves.
@@ -80,23 +76,17 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
     if (!escapeBlocked.current) closeRef.current();
   }, []);
 
-  const update = useCallback(
-    (patch: Partial<SettingsView>) => {
-      const current = settingsRef.current;
-      if (!current) return;
-      const next = { ...current, ...patch };
-      settingsRef.current = next;
-      setSettings(next);
-      api.settings_save(next).catch((e) => toast(errorMessage(t, e), "error"));
-    },
-    [t],
-  );
   const updateTerminal = useCallback(
     (patch: Partial<TerminalSettings>) => {
       const current = settingsRef.current;
-      if (current) update({ terminal: { ...current.terminal, ...patch } });
+      if (!current) return;
+      const next = { ...current, terminal: { ...current.terminal, ...patch } };
+      settingsRef.current = next;
+      setSettings(next);
+      // Only the changed fields: the others keep what is stored, which may be newer than this window.
+      reads.save(() => api.settings_save({ terminal: patch })).catch((e) => toast(errorMessage(t, e), "error"));
     },
-    [update],
+    [t, reads],
   );
 
   const onTabKey = (e: KeyboardEvent) => {
@@ -108,7 +98,7 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
     requestAnimationFrame(() => document.getElementById(`settings-tab-${next.id}`)?.focus());
   };
 
-  const pane = { settings, update, updateTerminal };
+  const pane = { settings, updateTerminal };
   const current = TABS.find((x) => x.id === tab)!;
 
   return (

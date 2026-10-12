@@ -10,10 +10,11 @@ import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiAllowance, AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsView, SearchProviderView } from "@/ipc/types";
+import type { AiAllowance, AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsPatch, AiSettingsView, SearchProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { modelChoices, parseBaseUrl, resolveSettings, sameRef, sameSettings, sanitizeSettings } from "./aiLogic";
+import { changedSettings, modelChoices, parseBaseUrl, resolveSettings, sameRef, sanitizeSettings } from "./aiLogic";
 import { aiErrorMessage } from "./aiShared";
+import { useFreshReads } from "./freshReads";
 import { McpSection } from "./McpSection";
 import { ProviderDialog } from "./ProviderDialog";
 import { SearchSection } from "./SearchSection";
@@ -51,38 +52,44 @@ export function AiPane() {
     if (live.current) setData(next);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+
+  const reads = useFreshReads(
+    async (): Promise<Data> => {
       const [providers, search, settings] = await Promise.all([
         api.ai_providers_list(),
         api.search_providers_list(),
         api.ai_settings_get(),
       ]);
-      if (live.current) commit({ providers, search, settings: sanitizeSettings(settings, providers, search) });
-    } catch (e) {
-      if (live.current) setLoadError(e);
-    }
-  }, [commit]);
+      return { providers, search, settings: sanitizeSettings(settings, providers, search) };
+    },
+    (next) => {
+      setLoadError(null);
+      commit(next);
+    },
+    setLoadError,
+  );
 
-  useEffect(() => {
-    live.current = true;
-    void load();
-    return () => {
-      live.current = false;
-    };
-  }, [load]);
+  /** Shows a change of the lists that a dialog has saved. */
+  const edit = (next: Data) => {
+    reads.edited();
+    commit(next);
+  };
 
-  /** Stores the synced settings. On failure the pane shows what the backend has. */
-  const saveSettings = async (settings: AiSettingsView) => {
+  /** Stores the fields in `patch` of the synced settings. On failure the pane shows what the backend has. */
+  const saveSettings = async (patch: AiSettingsPatch) => {
     const cur = dataRef.current;
     if (!cur) return;
-    commit({ ...cur, settings });
+    commit({ ...cur, settings: { ...cur.settings, ...patch } });
     try {
-      await api.ai_settings_save(settings);
+      await reads.save(() => api.ai_settings_save(patch));
     } catch (e) {
       toast(aiErrorMessage(t, e), "error");
-      void load();
     }
   };
 
@@ -90,9 +97,9 @@ export function AiPane() {
   const setProviders = (providers: AiProviderView[]) => {
     const cur = dataRef.current;
     if (!cur) return;
-    commit({ ...cur, providers });
-    const next = resolveSettings(cur.settings, providers, cur.search);
-    if (!sameSettings(next, cur.settings)) void saveSettings(next);
+    edit({ ...cur, providers });
+    const changes = changedSettings(cur.settings, resolveSettings(cur.settings, providers, cur.search));
+    if (changes) void saveSettings(changes);
   };
 
   const removeProvider = async (p: AiProviderView) => {
@@ -134,7 +141,13 @@ export function AiPane() {
             <StatusRow
               icon={<Icon name="warning-circle" color="var(--red)" />}
               action={
-                <Button size="sm" onClick={() => void load()}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setLoadError(null);
+                    reads.refresh();
+                  }}
+                >
                   {t("btn.retry")}
                 </Button>
               }
@@ -167,7 +180,7 @@ export function AiPane() {
                 <ModelSelect
                   providers={providers}
                   value={data.settings.default_model}
-                  onChange={(default_model) => void saveSettings({ ...data.settings, default_model })}
+                  onChange={(default_model) => void saveSettings({ default_model })}
                 />
               </SettingRow>
               <SettingRow label={t("aiSettings.default.effort")} hint={t("aiSettings.default.effortHint")}>
@@ -175,7 +188,7 @@ export function AiPane() {
                   ariaLabel={t("aiSettings.default.effort")}
                   value={data.settings.default_effort}
                   options={[null, ...EFFORTS].map((e) => ({ value: e, label: t(effortKey(e)) }))}
-                  onChange={(default_effort) => void saveSettings({ ...data.settings, default_effort })}
+                  onChange={(default_effort) => void saveSettings({ default_effort })}
                   minWidth={160}
                 />
               </SettingRow>
@@ -185,21 +198,20 @@ export function AiPane() {
           <SearchSection
             providers={data.search}
             chosenId={data.settings.search_provider_id}
-            onChoose={(id) => void saveSettings({ ...data.settings, search_provider_id: id })}
+            onChoose={(id) => void saveSettings({ search_provider_id: id })}
             onSaved={(view) => {
               const cur = dataRef.current;
               if (!cur) return;
-              const search = upsert(cur.search, view);
-              commit({ ...cur, search });
-              void saveSettings({ ...cur.settings, search_provider_id: view.id });
+              edit({ ...cur, search: upsert(cur.search, view) });
+              void saveSettings({ search_provider_id: view.id });
             }}
             onRemoved={(id) => {
               const cur = dataRef.current;
               if (!cur) return;
               const search = cur.search.filter((x) => x.id !== id);
-              commit({ ...cur, search });
-              const next = sanitizeSettings(cur.settings, cur.providers, search);
-              if (!sameSettings(next, cur.settings)) void saveSettings(next);
+              edit({ ...cur, search });
+              const changes = changedSettings(cur.settings, sanitizeSettings(cur.settings, cur.providers, search));
+              if (changes) void saveSettings(changes);
             }}
           />
         </>
@@ -208,7 +220,7 @@ export function AiPane() {
       {data && (
         <InstructionsSection
           value={data.settings.custom_instructions}
-          onSave={(custom_instructions) => void saveSettings({ ...(dataRef.current?.settings ?? data.settings), custom_instructions })}
+          onSave={(custom_instructions) => void saveSettings({ custom_instructions })}
         />
       )}
       <SkillsSection
@@ -216,7 +228,7 @@ export function AiPane() {
           data
             ? {
                 enabled: data.settings.builtin_skill_enabled,
-                onChange: (enabled) => void saveSettings({ ...(dataRef.current?.settings ?? data.settings), builtin_skill_enabled: enabled }),
+                onChange: (enabled) => void saveSettings({ builtin_skill_enabled: enabled }),
               }
             : null
         }

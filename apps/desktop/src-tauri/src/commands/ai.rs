@@ -27,9 +27,10 @@ use crate::ai::{
 use crate::dto::{
     AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
     AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView,
-    AiSearchHit, AiSendInput, AiSendStarted, AiSettingsView, AiSideAnswer, AiSideEvent,
-    AiSideQuestionInput, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext,
-    AiTurnEvent, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
+    AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer,
+    AiSideEvent, AiSideQuestionInput, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun,
+    AiTurnContext, AiTurnEvent, Clearable, DroppedFile, SearchKind, SearchProviderInput,
+    SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -548,15 +549,17 @@ pub async fn search_provider_test(
 
 // ───────────────────────── synced settings ─────────────────────────
 
-/// Saves `Settings.ai`. A reference the user changed must point at an existing provider and model
-/// or search provider; an unchanged one is kept as it is, even when it dangles (e.g. the item it
-/// names has not synced to this device yet).
-pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResult<()> {
+/// Writes the fields `patch` sets over the stored `Settings.ai`, as `settings_save` does for the
+/// terminal, and returns whether that changed them. A reference the user changed must point at an
+/// existing provider and model or search provider; an unchanged one is kept as it is, even when it
+/// dangles (e.g. the item it names has not synced to this device yet).
+pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppResult<bool> {
     let mut settings = v.settings();
     let current = &settings.ai;
-    let default_model = match &input.default_model {
-        None => None,
-        Some(m) => {
+    let default_model = match &patch.default_model {
+        Clearable::Keep => current.default_model.clone(),
+        Clearable::Clear => None,
+        Clearable::Set(m) => {
             let unchanged = current
                 .default_model
                 .as_ref()
@@ -579,16 +582,23 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
             })
         }
     };
-    let search_provider_id = match &input.search_provider_id {
-        Some(id) if current.search_provider_id.as_ref() != Some(id) => {
-            find_search_provider(v, id).map_err(|_| {
-                AppError::invalid("search_provider_id", "search provider not found")
-            })?;
+    let search_provider_id = match &patch.search_provider_id {
+        Clearable::Keep => current.search_provider_id.clone(),
+        Clearable::Clear => None,
+        Clearable::Set(id) => {
+            if current.search_provider_id.as_ref() != Some(id) {
+                find_search_provider(v, id).map_err(|_| {
+                    AppError::invalid("search_provider_id", "search provider not found")
+                })?;
+            }
             Some(id.clone())
         }
-        other => other.clone(),
     };
-    if input.custom_instructions.len() > MAX_CUSTOM_INSTRUCTIONS_BYTES {
+    if patch
+        .custom_instructions
+        .as_ref()
+        .is_some_and(|text| text.len() > MAX_CUSTOM_INSTRUCTIONS_BYTES)
+    {
         return Err(AppError::invalid(
             "custom_instructions",
             "custom instructions are limited to 32 KB",
@@ -596,13 +606,22 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
     }
     let ai = AiSettings {
         default_model,
-        default_effort: input.default_effort.map(core_effort),
+        default_effort: match patch.default_effort {
+            Clearable::Keep => current.default_effort,
+            Clearable::Clear => None,
+            Clearable::Set(effort) => Some(core_effort(effort)),
+        },
         search_provider_id,
-        builtin_skill_enabled: input.builtin_skill_enabled,
-        custom_instructions: input.custom_instructions.clone(),
+        builtin_skill_enabled: patch
+            .builtin_skill_enabled
+            .unwrap_or(current.builtin_skill_enabled),
+        custom_instructions: patch
+            .custom_instructions
+            .clone()
+            .unwrap_or_else(|| current.custom_instructions.clone()),
     };
     if ai == settings.ai {
-        return Ok(());
+        return Ok(false);
     }
     settings.ai = ai;
     let item = Item::Settings(settings);
@@ -615,7 +634,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, input: &AiSettingsView) -> AppResu
         ));
     }
     v.put(Some(SETTINGS_ID), item)?;
-    Ok(())
+    Ok(true)
 }
 
 #[tauri::command]
@@ -629,10 +648,11 @@ pub fn ai_settings_get(state: State<'_, AppState>) -> AppResult<AiSettingsView> 
 pub fn ai_settings_save(
     app: AppHandle,
     state: State<'_, AppState>,
-    settings: AiSettingsView,
+    patch: AiSettingsPatch,
 ) -> AppResult<()> {
-    state.with_unlocked(|v| save_ai_settings(v, &settings))?;
-    sync::local_change(&app);
+    if state.with_unlocked(|v| save_ai_settings(v, &patch))? {
+        sync::local_change(&app);
+    }
     Ok(())
 }
 
@@ -1196,6 +1216,20 @@ mod tests {
         assert!(stored[0].1.api_key.is_empty());
     }
 
+    /// A change of `Settings.ai` to save.
+    fn patch(change: impl FnOnce(&mut AiSettingsPatch)) -> AiSettingsPatch {
+        let mut patch = AiSettingsPatch::default();
+        change(&mut patch);
+        patch
+    }
+
+    fn model(provider_id: &str, model_id: &str) -> AiModelRef {
+        AiModelRef {
+            provider_id: provider_id.into(),
+            model_id: model_id.into(),
+        }
+    }
+
     #[test]
     fn deleting_providers_clears_the_settings_that_named_them() {
         let mut v = vault();
@@ -1212,20 +1246,11 @@ mod tests {
             None,
         )
         .unwrap();
-        save_ai_settings(
-            &mut v,
-            &AiSettingsView {
-                default_model: Some(AiModelRef {
-                    provider_id: provider.id.clone(),
-                    model_id: "m1".into(),
-                }),
-                default_effort: None,
-                search_provider_id: Some(search.id.clone()),
-                builtin_skill_enabled: true,
-                custom_instructions: String::new(),
-            },
-        )
-        .unwrap();
+        let chosen = patch(|p| {
+            p.default_model = Clearable::Set(model(&provider.id, "m1"));
+            p.search_provider_id = Clearable::Set(search.id.clone());
+        });
+        assert!(save_ai_settings(&mut v, &chosen).unwrap());
         assert_eq!(
             v.settings().ai.default_model,
             Some(CoreRef {
@@ -1236,69 +1261,53 @@ mod tests {
 
         // AI-34: the built-in skill's switch is stored with them.
         assert!(ai_settings_view(&v.settings().ai).builtin_skill_enabled);
-        let off = AiSettingsView {
-            builtin_skill_enabled: false,
-            ..ai_settings_view(&v.settings().ai)
-        };
+        let off = patch(|p| p.builtin_skill_enabled = Some(false));
         save_ai_settings(&mut v, &off).unwrap();
         assert!(!v.settings().ai.builtin_skill_enabled);
         assert!(v.settings().ai.default_model.is_some());
 
         // AI-05: the default thinking level is stored with them, and Default is `None`.
-        let level = AiSettingsView {
-            default_effort: Some(AiEffort::Xhigh),
-            ..ai_settings_view(&v.settings().ai)
-        };
+        let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::Xhigh));
         save_ai_settings(&mut v, &level).unwrap();
         assert_eq!(v.settings().ai.default_effort, Some(CoreEffort::Xhigh));
         assert_eq!(
             ai_settings_view(&v.settings().ai).default_effort,
             Some(AiEffort::Xhigh)
         );
-        let default = AiSettingsView {
-            default_effort: None,
-            ..ai_settings_view(&v.settings().ai)
-        };
+        let default = patch(|p| p.default_effort = Clearable::Clear);
         save_ai_settings(&mut v, &default).unwrap();
         assert_eq!(v.settings().ai.default_effort, None);
 
         // AI-36: custom instructions are stored with them.
-        let instructions = AiSettingsView {
-            custom_instructions: "Answer in English.\n<host> means the tab's host.".into(),
-            ..ai_settings_view(&v.settings().ai)
-        };
-        save_ai_settings(&mut v, &instructions).unwrap();
+        let instructions = |text: &str| patch(|p| p.custom_instructions = Some(text.into()));
+        let before = ai_settings_view(&v.settings().ai);
+        save_ai_settings(
+            &mut v,
+            &instructions("Answer in English.\n<host> means the tab's host."),
+        )
+        .unwrap();
         assert_eq!(
-            v.settings().ai.custom_instructions,
-            "Answer in English.\n<host> means the tab's host."
+            ai_settings_view(&v.settings().ai),
+            AiSettingsView {
+                custom_instructions: "Answer in English.\n<host> means the tab's host.".into(),
+                ..before
+            }
         );
-        assert_eq!(ai_settings_view(&v.settings().ai), instructions);
         // Up to 32 KB of UTF-8.
         let text = format!("{}xy", "日".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES / 3));
         assert_eq!(text.len(), MAX_CUSTOM_INSTRUCTIONS_BYTES);
-        let longest = AiSettingsView {
-            custom_instructions: text.clone(),
-            ..ai_settings_view(&v.settings().ai)
-        };
-        save_ai_settings(&mut v, &longest).unwrap();
+        save_ai_settings(&mut v, &instructions(&text)).unwrap();
         // Within the limit, but its JSON does not fit a synced item: refused only with sync on.
-        let quotes = AiSettingsView {
-            custom_instructions: "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES),
-            ..ai_settings_view(&v.settings().ai)
-        };
-        save_ai_settings(&mut v, &quotes).unwrap();
-        save_ai_settings(&mut v, &longest).unwrap();
+        let quotes = "\"".repeat(MAX_CUSTOM_INSTRUCTIONS_BYTES);
+        save_ai_settings(&mut v, &instructions(&quotes)).unwrap();
+        save_ai_settings(&mut v, &instructions(&text)).unwrap();
         let config = hatoba_core::sync::SyncConfig::Worker {
             url: "https://sync.example.workers.dev".into(),
             deployment: None,
         };
         v.set_sync_config(Some(&config)).unwrap();
-        for refused in [format!("{text}z"), quotes.custom_instructions] {
-            let too_long = AiSettingsView {
-                custom_instructions: refused,
-                ..ai_settings_view(&v.settings().ai)
-            };
-            let err = save_ai_settings(&mut v, &too_long).unwrap_err();
+        for refused in [format!("{text}z"), quotes] {
+            let err = save_ai_settings(&mut v, &instructions(&refused)).unwrap_err();
             assert_eq!(err.field.as_deref(), Some("custom_instructions"));
             assert_eq!(v.settings().ai.custom_instructions, text);
         }
@@ -1314,65 +1323,111 @@ mod tests {
     #[test]
     fn ai_settings_reject_new_references_to_nothing_but_keep_dangling_ones() {
         let mut v = vault();
-        let err = save_ai_settings(
-            &mut v,
-            &AiSettingsView {
-                default_model: Some(AiModelRef {
-                    provider_id: "0190a0a0-0000-7000-8000-000000000000".into(),
-                    model_id: "m1".into(),
-                }),
-                default_effort: None,
-                search_provider_id: None,
-                builtin_skill_enabled: true,
-                custom_instructions: String::new(),
-            },
-        )
-        .unwrap_err();
+        let missing = patch(|p| {
+            p.default_model = Clearable::Set(model("0190a0a0-0000-7000-8000-000000000000", "m1"));
+        });
+        let err = save_ai_settings(&mut v, &missing).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("default_model"));
         let input = provider_input(None, None);
         let provider = save_provider(&mut v, &input, input.base_url.clone()).unwrap();
-        let wrong_model = AiSettingsView {
-            default_model: Some(AiModelRef {
-                provider_id: provider.id.clone(),
-                model_id: "m2".into(),
-            }),
-            default_effort: None,
-            search_provider_id: None,
-            builtin_skill_enabled: true,
-            custom_instructions: String::new(),
-        };
+        let wrong_model = patch(|p| p.default_model = Clearable::Set(model(&provider.id, "m2")));
         assert!(save_ai_settings(&mut v, &wrong_model).is_err());
-        let err = save_ai_settings(
-            &mut v,
-            &AiSettingsView {
-                default_model: None,
-                default_effort: None,
-                search_provider_id: Some("nope".into()),
-                builtin_skill_enabled: true,
-                custom_instructions: String::new(),
-            },
-        )
-        .unwrap_err();
+        let nope = patch(|p| p.search_provider_id = Clearable::Set("nope".into()));
+        let err = save_ai_settings(&mut v, &nope).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("search_provider_id"));
+        assert_eq!(v.settings().ai, AiSettings::default());
 
-        // A reference that synced in before its item is kept when another field changes.
+        // A reference that synced in before its item is kept when another field changes, and
+        // can be sent back unchanged.
         let mut settings = v.settings();
         settings.ai.default_model = Some(CoreRef {
             provider_id: "elsewhere".into(),
             model_id: "m9".into(),
         });
         v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
-        let dangling = AiSettingsView {
-            default_model: Some(AiModelRef {
+        let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::High));
+        assert!(save_ai_settings(&mut v, &level).unwrap());
+        let dangling = patch(|p| p.default_model = Clearable::Set(model("elsewhere", "m9")));
+        assert!(!save_ai_settings(&mut v, &dangling).unwrap());
+        assert_eq!(
+            v.settings().ai.default_model,
+            Some(CoreRef {
                 provider_id: "elsewhere".into(),
                 model_id: "m9".into(),
-            }),
-            default_effort: None,
-            search_provider_id: None,
-            builtin_skill_enabled: true,
-            custom_instructions: String::new(),
-        };
-        save_ai_settings(&mut v, &dangling).unwrap();
+            })
+        );
+    }
+
+    #[test]
+    fn a_save_from_a_stale_pane_keeps_the_fields_it_leaves_out() {
+        let mut v = vault();
+        let input = provider_input(None, None);
+        let provider = save_provider(&mut v, &input, input.base_url.clone()).unwrap();
+        let chosen = patch(|p| p.default_model = Clearable::Set(model(&provider.id, "m1")));
+        save_ai_settings(&mut v, &chosen).unwrap();
+        // Settings → AI reads the settings, then a sync round pulls another device's changes.
+        let shown = ai_settings_view(&v.settings().ai);
+        let mut pulled = v.settings();
+        pulled.ai.custom_instructions = "Answer in Japanese.".into();
+        pulled.ai.builtin_skill_enabled = false;
+        v.put(Some(SETTINGS_ID), Item::Settings(pulled)).unwrap();
+
+        // The user picks a thinking level in that pane.
+        assert_eq!(shown.default_effort, None);
+        let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::Low));
+        assert!(save_ai_settings(&mut v, &level).unwrap());
+
+        let ai = v.settings().ai;
+        assert_eq!(ai.default_effort, Some(CoreEffort::Low));
+        assert_eq!(ai.custom_instructions, "Answer in Japanese.");
+        assert!(!ai.builtin_skill_enabled);
+        assert_eq!(ai.default_model.map(|m| m.model_id), Some("m1".into()));
+    }
+
+    #[test]
+    fn a_patch_that_changes_nothing_writes_nothing() {
+        let mut v = vault();
+        let before = v.settings();
+        let shown = ai_settings_view(&before.ai);
+        let same = patch(|p| {
+            p.default_effort = shown
+                .default_effort
+                .map_or(Clearable::Clear, Clearable::Set);
+            p.search_provider_id = Clearable::Clear;
+            p.builtin_skill_enabled = Some(shown.builtin_skill_enabled);
+            p.custom_instructions = Some(shown.custom_instructions.clone());
+        });
+        assert!(!save_ai_settings(&mut v, &same).unwrap());
+        assert!(!save_ai_settings(&mut v, &AiSettingsPatch::default()).unwrap());
+        assert_eq!(v.settings(), before);
+    }
+
+    #[test]
+    fn a_patch_tells_a_field_left_out_from_one_cleared() {
+        let read =
+            |json: serde_json::Value| -> AiSettingsPatch { serde_json::from_value(json).unwrap() };
+        let empty = read(serde_json::json!({}));
+        assert_eq!(empty.default_model, Clearable::Keep);
+        assert_eq!(empty.default_effort, Clearable::Keep);
+        assert_eq!(empty.search_provider_id, Clearable::Keep);
+        assert!(empty.builtin_skill_enabled.is_none() && empty.custom_instructions.is_none());
+        let cleared = read(serde_json::json!({
+            "default_model": null,
+            "default_effort": null,
+            "search_provider_id": null,
+        }));
+        assert_eq!(cleared.default_model, Clearable::Clear);
+        assert_eq!(cleared.default_effort, Clearable::Clear);
+        assert_eq!(cleared.search_provider_id, Clearable::Clear);
+        let set = read(serde_json::json!({
+            "default_model": {"provider_id": "p", "model_id": "m"},
+            "default_effort": "high",
+            "builtin_skill_enabled": false,
+        }));
+        assert_eq!(set.default_model, Clearable::Set(model("p", "m")));
+        assert_eq!(set.default_effort, Clearable::Set(AiEffort::High));
+        assert_eq!(set.builtin_skill_enabled, Some(false));
+        assert_eq!(set.search_provider_id, Clearable::Keep);
     }
 
     #[test]

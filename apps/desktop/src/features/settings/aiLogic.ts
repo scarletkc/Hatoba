@@ -5,6 +5,7 @@ import type {
   AiModelRef,
   AiProtocol,
   AiProviderView,
+  AiSettingsPatch,
   AiSettingsView,
   AiTestFailure,
   SearchKind,
@@ -318,14 +319,15 @@ export function resolveSettings(
   return clean.default_model ? clean : { ...clean, default_model: firstModelRef(providers) };
 }
 
-export function sameSettings(a: AiSettingsView, b: AiSettingsView): boolean {
-  return (
-    sameRef(a.default_model, b.default_model) &&
-    a.default_effort === b.default_effort &&
-    a.search_provider_id === b.search_provider_id &&
-    a.builtin_skill_enabled === b.builtin_skill_enabled &&
-    a.custom_instructions === b.custom_instructions
-  );
+/** The fields of `next` that differ from `prev`, to save; null when none does. */
+export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiSettingsPatch | null {
+  const patch: AiSettingsPatch = {};
+  if (!sameRef(prev.default_model, next.default_model)) patch.default_model = next.default_model;
+  if (prev.default_effort !== next.default_effort) patch.default_effort = next.default_effort;
+  if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;
+  if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
+  if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
+  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 export const SEARCH_KINDS: readonly SearchKind[] = ["brave", "tavily", "searxng"];

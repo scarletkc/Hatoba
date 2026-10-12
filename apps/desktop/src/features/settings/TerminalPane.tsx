@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/app/store";
 import { Icon, Segmented, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
@@ -21,14 +21,21 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const term = settings?.terminal;
   const fontFamily = term?.font_family;
   const [font, setFont] = useState(fontFamily ?? defaultFont);
+  /** What the font field showed when the user started typing in it; null while they are not. */
+  const typedFrom = useRef<string | null>(null);
   useEffect(() => {
-    if (fontFamily !== undefined) setFont(fontFamily);
+    // A font synced from another device shows, unless the user is typing in the field.
+    if (fontFamily !== undefined && typedFrom.current === null) setFont(fontFamily);
   }, [fontFamily]);
 
   if (!term) return <Pane>{null}</Pane>;
 
   const commitFont = () => {
+    const from = typedFrom.current;
+    typedFrom.current = null;
     const next = font.trim() || defaultFont;
+    // Typed and changed back: nothing to save, and the field shows the stored font again.
+    if (next === from) return setFont(term.font_family);
     setFont(next);
     if (next !== term.font_family) updateTerminal({ font_family: next });
   };
@@ -46,7 +53,10 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
               aria-label={t("settings.term.font")}
               value={font}
               placeholder={defaultFont}
-              onChange={(e) => setFont(e.target.value)}
+              onChange={(e) => {
+                typedFrom.current ??= font;
+                setFont(e.target.value);
+              }}
               onBlur={commitFont}
               onKeyDown={(e) => e.key === "Enter" && !isImeEvent(e) && commitFont()}
             />

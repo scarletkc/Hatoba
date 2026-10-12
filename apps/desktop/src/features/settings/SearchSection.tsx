@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, LinkButton, TextField } from "@/components/controls";
 import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { PopupSelect, confirm, toast } from "@/components/overlay";
@@ -40,6 +40,8 @@ export function SearchSection({
   const [test, setTest] = useState<TestState>(IDLE);
   /** Bumped when the form changes, so the answer to an older test is dropped. */
   const generation = useRef(0);
+  /** The user typed an address or key that is not saved. */
+  const typed = useRef(false);
 
   const needsUrl = kind ? searchNeedsUrl(kind) : false;
   const hasSavedKey = !!saved?.has_api_key;
@@ -52,7 +54,21 @@ export function SearchSection({
     setError(null);
     setTest(IDLE);
     generation.current++;
+    typed.current = false;
   };
+
+  // A choice or address changed on another device shows, unless the form holds an edit of the user's:
+  // an address or key typed, or a kind picked that is not saved yet.
+  const chosenKind = providers.find((p) => p.id === chosenId)?.kind ?? null;
+  const savedUrl = saved?.base_url ?? null;
+  const synced = useRef({ chosenKind, savedUrl });
+  useEffect(() => {
+    const before = synced.current;
+    if (before.chosenKind === chosenKind && before.savedUrl === savedUrl) return;
+    synced.current = { chosenKind, savedUrl };
+    if (!typed.current && !saving && kind === before.chosenKind) reset(chosenKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the synced values change, not on edits
+  }, [chosenKind, savedUrl]);
 
   const choose = (next: SearchKind | null) => {
     if (next === kind) return;
@@ -68,6 +84,7 @@ export function SearchSection({
     setError(null);
     setTest(IDLE);
     generation.current++;
+    typed.current = true;
   };
 
   const toInput = (): SearchProviderInput | null => {
@@ -124,6 +141,7 @@ export function SearchSection({
       setKey(KEEP);
       setBaseUrl(view.base_url ?? "");
       setTest(IDLE);
+      typed.current = false;
     } catch (err) {
       setError(aiErrorMessage(t, err));
     } finally {

@@ -205,8 +205,11 @@ function useGlobalEvents() {
       }),
       api.listen("sync://status", (status) => {
         useApp.getState().setSync(status);
-        // Pulls may have changed hosts/keys; refresh what the UI shows.
-        if (status.state === "idle" && useApp.getState().phase === "unlocked") void useVaultData.getState().reload();
+        // Pulls may have changed hosts, keys and settings; refresh what the UI shows.
+        if (status.state === "idle" && useApp.getState().phase === "unlocked") {
+          void useVaultData.getState().reload();
+          useApp.getState().refreshSynced();
+        }
       }),
       api
         .listen("window://chrome", ({ floating }) => useApp.setState({ floating }))
