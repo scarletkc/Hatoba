@@ -23,6 +23,8 @@ tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-opener = "2.7"
+# HOST-13: another launch hands `hatoba …` arguments to the running app.
+tauri-plugin-single-instance = "2.5"
 # Signed updates (spec §11). Same TLS stack as the update check below; no v1 .zip bundles.
 tauri-plugin-updater = { version = "2.13", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
@@ -61,6 +63,8 @@ tauri = { version = "2.12", features = ["test"] }
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8"
+# HOST-13: the user's PATH in HKCU\Environment.
+winreg = "0.56"
 windows = { version = "0.62", features = [
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_System_Power",
