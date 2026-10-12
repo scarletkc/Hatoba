@@ -504,7 +504,7 @@ class TurnRunner {
     if (!this.acting) return null;
     // A verdict asked for ahead may come from a judge the user has cleared or replaced since, while an earlier call
     // waited: the call is judged again, by the judge chosen now, which asks when there is none.
-    if (prefetched && verdict.decision === "run") {
+    if (prefetched) {
       const current = await judgeStillChosen(verdict);
       if (!this.acting) return null;
       if (!current) verdict = await this.askJudge(convId, call.id, screen);

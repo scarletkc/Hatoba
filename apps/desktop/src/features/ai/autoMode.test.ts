@@ -321,6 +321,27 @@ describe("a turn in Auto mode (AI-47)", () => {
     expect(ipc.run.mock.calls.map((c) => c[1])).toEqual(["call_1"]);
   });
 
+  it("judges a call again when its judge was replaced after it asked ahead, and the new judge decides", async () => {
+    let replaced = false;
+    ipc.judge.mockImplementation(async () => (replaced ? verdict("run") : verdict("ask", ["destroys_data"])));
+    await respond("auto", [
+      call("call_1", "run_command", { command: "sudo systemctl restart nginx" }),
+      call("call_2", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" }),
+    ]);
+    await until(() => current()?.id === "call_1" && current()?.state === "approval");
+    replaced = true;
+    ipc.settings.mockResolvedValue(settings({ provider_id: "p1", model_id: "m1" }));
+    decideCall(TAB, { kind: "run", edited: null });
+
+    // The old judge's "ask" does not count either: the judge chosen now lets the call run.
+    await until(() => ipc.run.mock.calls.length === 2);
+    expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1", "call_2", "call_2"]);
+    expect(ipc.run.mock.calls.map((c) => [c[1], c[4]])).toEqual([
+      ["call_1", true],
+      ["call_2", true],
+    ]);
+  });
+
   it("runs a call judged ahead when its judge is still the one chosen", async () => {
     ipc.judge.mockResolvedValue(verdict("run"));
     await respond("auto", [call("call_1", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" })]);
