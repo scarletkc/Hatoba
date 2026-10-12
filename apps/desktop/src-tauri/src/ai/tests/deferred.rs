@@ -164,13 +164,15 @@ fn prefix(body: &Value) -> (String, String) {
     )
 }
 
-const BUILTIN: [&str; 8] = [
+const BUILTIN: [&str; 10] = [
     "read_terminal",
     "run_command",
     "send_input",
     "read_file",
     "edit_file",
     "write_file",
+    "grep",
+    "glob",
     "fetch_url",
     "read_skill",
 ];

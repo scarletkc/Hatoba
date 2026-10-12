@@ -77,6 +77,7 @@ use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
 use crate::state::now_ms;
 use files::FileJob;
+use search::SearchJob;
 
 /// The line a result starts with when the user edited the call before it ran (AI-17).
 const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it ran with";
@@ -3326,6 +3327,8 @@ enum Job {
     RunCommand(RunCommandArgs),
     /// `read_file`, `edit_file` or `write_file`, with what the approval card read for it.
     File(FileJob, Option<files::Base>),
+    /// `grep` or `glob`.
+    Search(SearchJob),
     WebSearch(SearchConfig, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
@@ -3364,6 +3367,12 @@ impl Job {
         if let Some(parsed) = FileJob::parse(name, arguments) {
             return match parsed {
                 Ok(job) => Self::File(job, None),
+                Err(message) => Self::error(message),
+            };
+        }
+        if let Some(parsed) = SearchJob::parse(name, arguments) {
+            return match parsed {
+                Ok(job) => Self::Search(job),
                 Err(message) => Self::error(message),
             };
         }
@@ -3427,6 +3436,7 @@ impl Job {
             Self::File(job, base) => {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
             }
+            Self::Search(job) => search::run(live_session(env, session_id), job, cancel).await,
             Self::WebSearch(config, query) => {
                 match web::web_search(http, &config, &query, cancel).await {
                     Ok(results) => (
@@ -4955,5 +4965,6 @@ pub fn error_kind(e: &AiError) -> &'static str {
 }
 
 mod files;
+mod search;
 #[cfg(test)]
 mod tests;

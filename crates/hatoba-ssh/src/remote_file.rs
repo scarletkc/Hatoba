@@ -250,7 +250,7 @@ pub async fn delete(
 }
 
 /// `sh -c '<script>' sh [arg]`: a command line every common login shell reads the same way.
-fn command(script: &str, arg: Option<&str>) -> String {
+pub(crate) fn command(script: &str, arg: Option<&str>) -> String {
     debug_assert!(!script.contains(['\'', '\\', '\n']));
     match arg {
         Some(arg) => format!("sh -c '{script}' sh {arg}"),
@@ -320,7 +320,7 @@ fn delete_request(path: &str, expect: &[u8]) -> Result<(String, Vec<u8>), Remote
     ))
 }
 
-fn last_line(stderr: &[u8]) -> String {
+pub(crate) fn last_line(stderr: &[u8]) -> String {
     String::from_utf8_lossy(stderr)
         .lines()
         .rev()
@@ -340,7 +340,7 @@ fn failed(out: &ExecOutput) -> RemoteFileError {
 /// What follows the marker line in a script's stdout: the resolved path and the rest. `None`
 /// without a marker and a path line after it. Lines a startup file printed come before the
 /// marker.
-fn after_marker(stdout: &[u8]) -> Option<(String, &[u8])> {
+pub(crate) fn after_marker(stdout: &[u8]) -> Option<(String, &[u8])> {
     let start = if stdout.starts_with(MARKER) {
         0
     } else {

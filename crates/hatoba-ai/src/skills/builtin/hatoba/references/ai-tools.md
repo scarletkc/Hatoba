@@ -12,6 +12,8 @@ What the assistant can call, which calls wait for the user, and the approval car
 | Read file | 读取文件 | ファイルを読む |
 | Edit file | 编辑文件 | ファイルを編集 |
 | Write file | 写入文件 | ファイルに書き込む |
+| Search in files | 在文件中搜索 | ファイル内を検索 |
+| Find files | 查找文件 | ファイルを探す |
 | Web search | 搜索网页 | Web 検索 |
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
@@ -25,6 +27,8 @@ What the assistant can call, which calls wait for the user, and the approval car
 | **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, a page of up to 30,000 characters at a time. Binary files and anything but regular files are refused; edits and writes refuse files over 1 MB. Like the other file tools it never uses sudo | Runs without asking |
 | **Edit file** (`edit_file`) | Replaces an exact piece of text in a file on the host and writes the file back in place, keeping its owner, mode and line breaks. Refused, in every mode, unless the assistant read the file in this conversation and it has not changed since. The approval card shows the diff; **Edit** changes the new text | Asks, unless allowed |
 | **Write file** (`write_file`) | Creates a file on the host or replaces its content, which needs the same read as Edit file. The approval card shows the content, or a diff for an existing file. Both can be reverted (`references/ai-file-changes.md`) | Asks, unless allowed |
+| **Search in files** (`grep`) | Searches the text files of a file or directory on the host for lines that match a regular expression and returns the files, the number of matching lines in each, or the lines with some around them, sorted by path. Binary files and `.git` directories are skipped; like the file tools it never uses sudo | Runs without asking |
+| **Find files** (`glob`) | Lists the files on the host whose paths match a pattern such as `**/*.conf`, sorted by path, at most 1,000 | Runs without asking |
 | **Web search** (`web_search`) | Searches with the search provider chosen in Settings → AI. Not offered when none is chosen | Runs without asking |
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 30,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks, unless allowed |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |

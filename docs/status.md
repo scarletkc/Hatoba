@@ -122,6 +122,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-42 | Side questions that leave a running turn alone | 🟡 | The panel was tried with the mock backend. Not yet tried against the real providers |
 | AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
+| AI-47, 48 | Search tools: `grep`, `glob` | 🟡 | The scripts run against the local `sh`, `find` and `grep` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server, or against BusyBox |
 | AI-41 | Revert a file tool's change | 🟡 | The delete script runs against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-16…18 | Manual approval and bypass modes, read-only commands without asking, approval card, Stop | ✅ | |
 | AI-19 | Allow commands by prefix, pages by domain, or a tool, for a conversation or saved on the device | ✅ | |

@@ -761,6 +761,62 @@ async fn remote_files_are_read_and_written_in_place() {
     assert!(!new.exists());
 }
 
+/// The search tools' find and grep (AI-47, AI-48) through sshd and the user's login shell.
+#[tokio::test]
+async fn remote_searches_find_files_and_lines() {
+    use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError};
+
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let area = server.area("remote_search");
+    std::fs::create_dir_all(area.join("conf.d")).unwrap();
+    std::fs::write(area.join("conf.d/it's $HOME.conf"), "listen 8080;\n").unwrap();
+    std::fs::write(area.join("nginx.conf"), "include conf.d/*.conf;\n").unwrap();
+    let root = area.to_str().unwrap();
+
+    let names = ["*.conf".to_owned()];
+    let found = remote_search::glob(&session, root, None, &names, 1 << 20)
+        .await
+        .unwrap();
+    assert_eq!(found.start, format!("{root}/."));
+    let mut listed: Vec<&str> = std::str::from_utf8(&found.stdout)
+        .unwrap()
+        .lines()
+        .collect();
+    listed.sort_unstable();
+    assert_eq!(
+        listed,
+        [
+            format!("{root}/./conf.d/it's $HOME.conf"),
+            format!("{root}/./nginx.conf")
+        ]
+    );
+
+    let query = GrepQuery {
+        path: root,
+        max_depth: None,
+        names: &[],
+        pattern: "listen[[:space:]]+[0-9]+;",
+        ignore_case: false,
+        mode: GrepMode::Lines { context: 0 },
+    };
+    let found = remote_search::grep(&session, &query, 1 << 20)
+        .await
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(found.stdout).unwrap(),
+        format!("{root}/./conf.d/it's $HOME.conf:1:listen 8080;\n")
+    );
+    let bad = GrepQuery {
+        pattern: "(",
+        ..query
+    };
+    assert!(matches!(
+        remote_search::grep(&session, &bad, 1 << 20).await,
+        Err(RemoteSearchError::BadPattern(_))
+    ));
+}
+
 // ----------------------------------------------------------------- probe & errors on a live server
 
 #[tokio::test]

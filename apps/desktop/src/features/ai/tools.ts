@@ -12,6 +12,8 @@ export const SEND_INPUT = "send_input";
 export const READ_FILE = "read_file";
 export const EDIT_FILE = "edit_file";
 export const WRITE_FILE = "write_file";
+export const GREP = "grep";
+export const GLOB = "glob";
 export const WEB_SEARCH = "web_search";
 export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
@@ -25,6 +27,8 @@ export type ToolKind =
   | "read_file"
   | "edit_file"
   | "write_file"
+  | "grep"
+  | "glob"
   | "web_search"
   | "fetch_url"
   | "read_skill"
@@ -32,7 +36,7 @@ export type ToolKind =
   | "mcp"
   | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
+const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
 
 /** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
@@ -83,15 +87,20 @@ export function isFileTool(kind: ToolKind): kind is "read_file" | "edit_file" | 
   return kind === "read_file" || kind === "edit_file" || kind === "write_file";
 }
 
+/** The search tools (AI-47, AI-48), which run `find` and `grep` in Rust over an exec channel of the tab's connection. */
+export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
+  return kind === "grep" || kind === "glob";
+}
+
 /** Tools that act on the tab's SSH session and return an error while it is disconnected (AI-08). */
 export function needsSession(kind: ToolKind): boolean {
-  return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind);
+  return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `read_file`, `web_search`, `read_skill` and `search_tools`
- * (AI-45) run without asking and everything else waits for the user; bypass runs everything. Unknown tools
- * never run, so never ask.
+ * §13.5: in manual approval mode `read_terminal`, `read_file`, `grep`, `glob`, `web_search`, `read_skill` and
+ * `search_tools` (AI-45) run without asking and everything else waits for the user; bypass runs everything.
+ * Unknown tools never run, so never ask.
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
@@ -284,6 +293,8 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   read_file: "ai.tool.read_file",
   edit_file: "ai.tool.edit_file",
   write_file: "ai.tool.write_file",
+  grep: "ai.tool.grep",
+  glob: "ai.tool.glob",
   web_search: "ai.tool.web_search",
   fetch_url: "ai.tool.fetch_url",
   read_skill: "ai.tool.read_skill",
@@ -440,6 +451,10 @@ export function callSummary(name: string, json: string): string {
     case "edit_file":
     case "write_file":
       return firstLine(str(args.path));
+    case "grep":
+      return [str(args.pattern), str(args.path), str(args.glob)].filter(Boolean).join(" · ");
+    case "glob":
+      return [str(args.pattern), str(args.path)].filter(Boolean).join(" · ");
     case "read_terminal":
       return args.lines !== undefined ? str(args.lines) : "";
     default: {

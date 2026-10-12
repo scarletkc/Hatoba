@@ -10,6 +10,7 @@ import {
   exitStatusOf,
   grantKeys,
   isFileTool,
+  isSearchTool,
   keySequence,
   mcpOffResult,
   mustAsk,
@@ -84,6 +85,20 @@ describe("tool kinds", () => {
     }
     expect(isFileTool("run_command")).toBe(false);
   });
+
+  it("runs the search tools in Rust on the tab's session, without asking (AI-47, AI-48)", () => {
+    for (const name of ["grep", "glob"]) {
+      const kind = toolKind(name);
+      expect(kind).toBe(name);
+      expect(isSearchTool(kind)).toBe(true);
+      expect(isFileTool(kind)).toBe(false);
+      expect(runsInFrontend(kind)).toBe(false);
+      expect(needsSession(kind)).toBe(true);
+      expect(needsApproval(kind, "manual")).toBe(false);
+      expect(allowanceScope(kind, { pattern: "x" }, null)).toBeNull();
+    }
+    expect(isSearchTool("read_file")).toBe(false);
+  });
 });
 
 describe("permission modes (§13.5)", () => {
@@ -101,7 +116,7 @@ describe("permission modes (§13.5)", () => {
   });
 
   it("runs everything in bypass mode", () => {
-    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
+    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
       expect(needsApproval(kind, "bypass")).toBe(false);
     }
   });
@@ -168,6 +183,8 @@ describe("display helpers", () => {
     expect(callSummary("read_file", '{"path":"/var/log/syslog","offset":200}')).toBe("/var/log/syslog:200");
     expect(callSummary("edit_file", '{"path":"~/.bashrc","old_string":"a","new_string":"b"}')).toBe("~/.bashrc");
     expect(callSummary("write_file", '{"path":"/srv/new.txt","content":"x"}')).toBe("/srv/new.txt");
+    expect(callSummary("grep", '{"pattern":"listen 8080","path":"/etc/nginx","glob":"*.conf"}')).toBe("listen 8080 · /etc/nginx · *.conf");
+    expect(callSummary("glob", '{"pattern":"**/*.conf"}')).toBe("**/*.conf");
   });
 
   it("finds the exit status in a run_command result", () => {

@@ -10,6 +10,7 @@
 //! - [`models`]: model listing (AI-03) and Test Connection (AI-04).
 //! - [`tools`]: built-in tool definitions, the system prompt and tool result helpers (§13.4).
 //! - [`files`]: the text side of `read_file`, `edit_file` and `write_file` (AI-38…40).
+//! - [`search`]: the text side of `grep` and `glob` (AI-47, AI-48).
 //! - [`web`]: `web_search` (AI-14) and `fetch_url` (AI-15).
 //! - [`skills`]: `SKILL.md`, folder and `.zip` import, `.zip` export (§13.8).
 //! - [`mcp`]: the MCP client for stdio and Streamable HTTP servers, tool names and schemas, and
@@ -28,6 +29,7 @@ pub mod mcp;
 pub mod models;
 mod net;
 pub mod provider;
+pub mod search;
 pub mod skills;
 pub mod tools;
 pub mod web;

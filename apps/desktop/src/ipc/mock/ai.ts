@@ -138,6 +138,7 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
  *   "cutshort"        write_file whose write fails halfway, leaving the file cut short
+ *   "grep"            grep of the proxy lines under /etc   "glob"     glob of the nginx sites (AI-47, AI-48)
  *   "rmfile"          run_command `rm /etc/motd`     "symlink"  run_command that puts a link in the place
  *                     of the file "write" creates, so reverting "motd" offers to create the file again and
  *                     reverting "write" stops at the link (AI-41)
@@ -450,7 +451,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Terminal tools only with a connected tab; a request without one does not offer them.
       const wantsTerminal = want(
         ...["disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
-        ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込"],
+        ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
       );
       if (terminal) {
         if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
@@ -466,6 +467,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path)))) calls.push(call("read_file", { path }));
         };
         if (want("read file", "cat ", "读取文件", "ファイルを読")) readFirst(NGINX);
+        if (want("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
+        if (want("grep")) calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
         if (want("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
         if (want("edit", "编辑", "編集")) readFirst(NGINX);
         if (want("edit", "编辑", "編集"))
@@ -1024,6 +1027,48 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const fileLines = (text: string) => (text === "" ? [] : text.replace(/\n$/, "").split("\n").map((l) => l.replace(/\r$/, "")));
   const FILE_DISCONNECTED = "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
 
+  /**
+   * AI-47, AI-48: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results. The
+   * glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a JS RegExp.
+   */
+  function search(name: string, args: Record<string, unknown>): string {
+    const root = filePath(String(args.path || "~")).replace(/\/$/, "") || "/";
+    const glob = String((name === "glob" ? args.pattern : args.glob) ?? "");
+    const source = glob
+      .replace(/[.+^$()|\\]/g, "\\$&")
+      .replace(/\*\*\//g, "\u0000")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\?/g, "[^/]")
+      .replace(/\u0000/g, "(?:.*/)?");
+    const globRe = new RegExp(glob.includes("/") ? `^${source}$` : `(?:^|/)${source}$`);
+    const paths = [...remoteFiles.keys()]
+      .filter((p) => p.startsWith(`${root}/`) && (!glob || globRe.test(p.slice(root.length + 1))))
+      .sort();
+    const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
+    if (name === "glob")
+      return paths.length ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n` : `No files under ${root} match ${glob}.\n`;
+    let re: RegExp;
+    try {
+      re = new RegExp(String(args.pattern ?? ""), args.ignore_case ? "i" : "");
+    } catch (e) {
+      return `grep -E on the host refused the pattern, so nothing was searched: ${String(e)}.`;
+    }
+    const hits = paths.map((p) => ({ p, lines: fileLines(remoteFiles.get(p) ?? "") })).filter((f) => f.lines.some((l) => re.test(l)));
+    const matching = hits.reduce((n, f) => n + f.lines.filter((l) => re.test(l)).length, 0);
+    if (!hits.length) return `No lines match the pattern under ${root}.\n`;
+    if (args.output_mode === "content") {
+      const context = Number(args.context ?? 0) || 0;
+      const out = hits.flatMap(({ p, lines }) => {
+        const shown = new Set(lines.flatMap((l, i) => (re.test(l) ? Array.from({ length: 2 * context + 1 }, (_, k) => i - context + k) : [])));
+        return lines.flatMap((l, i) => (shown.has(i) ? [`${p}${re.test(l) ? ":" : "-"}${i + 1}${re.test(l) ? ":" : "-"}${l}`] : []));
+      });
+      return `${matching} matching lines in ${files(hits.length)} under ${root}, sorted by path:\n${out.join("\n")}\n`;
+    }
+    if (args.output_mode === "count")
+      return `${matching} matching lines in ${files(hits.length)} under ${root}, sorted by path:\n${hits.map(({ p, lines }) => `${p}:${lines.filter((l) => re.test(l)).length}`).join("\n")}\n`;
+    return `${files(hits.length)} with a matching line under ${root}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`;
+  }
+
   /** The file after an edit or a write, or the error the model gets, as `hatoba_ai::files` computes them. */
   function fileAfter(name: string, args: Record<string, unknown>, before: string | null): { text: string } | { error: string } {
     const path = String(args.path ?? "");
@@ -1090,6 +1135,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         await wait(secs ? Math.min(secs, 15) * 1000 : 1100);
         const r = exec(command);
         return { status: "ok", content: `exit status: ${r.status}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}` };
+      }
+      case "glob":
+      case "grep": {
+        if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };
+        await wait(500);
+        return { status: "ok", content: search(x.name, args) };
       }
       case "read_file": {
         if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };

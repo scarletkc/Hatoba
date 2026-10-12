@@ -63,6 +63,8 @@ const TOOL_ICON: Record<ToolKind, string> = {
   read_file: "file-text",
   edit_file: "note-pencil",
   write_file: "file-plus",
+  grep: "file-magnifying-glass",
+  glob: "files",
   web_search: "magnifying-glass",
   fetch_url: "globe",
   read_skill: "book-open",
