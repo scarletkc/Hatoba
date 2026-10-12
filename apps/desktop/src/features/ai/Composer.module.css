@@ -384,3 +384,27 @@
   flex: none;
   margin-top: 1px;
 }
+
+/* AI-32, AI-50: the MCP servers the conversation uses that failed, above the input box, with `/mcp`. */
+.mcpFailed {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--red);
+}
+
+.mcpFailedText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mcpFailedLink {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}

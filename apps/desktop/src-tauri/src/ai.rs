@@ -71,8 +71,8 @@ use crate::dto::{
     AiAutoVerdict, AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
     AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiJudgeAnswer, AiJudgeDecision,
     AiJudgeSampleOutcome, AiModelRef, AiPermissionMode, AiSearchHit, AiSendInput, AiSendStarted,
-    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall, AiToolResultInput, AiToolRun,
-    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiToolCall, AiToolResultInput,
+    AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -2184,13 +2184,15 @@ impl AiManager {
     /// `ai_compact` (AI-21): asks the model for a summary of the context with the request a turn
     /// would send next ([`compact_request`]), stores it as a `summary` entry and moves
     /// `context_start` to it. Refused while a turn runs. The conversation counts as compacting
-    /// until the summary is stored, which refuses a side question (AI-42).
+    /// until the summary is stored, which refuses a side question (AI-42). `instructions`: the
+    /// user's own for the summary, which `/compact <instructions>` gives (AI-50).
     pub async fn compact(
         &self,
         vault: &SharedVault,
         env: &dyn AiEnv,
         conversation_id: &str,
         context: &AiTurnContext,
+        instructions: Option<&str>,
     ) -> AppResult<AiEntryView> {
         let mut stored = false;
         let prepared = self.prepare_compact(vault, conversation_id, context, &mut stored);
@@ -2215,7 +2217,7 @@ impl AiManager {
                 context,
                 server_id.as_deref(),
                 &offer,
-                COMPACT_INSTRUCTION,
+                &compact_instruction(instructions),
                 false,
             )?
         };
@@ -2637,6 +2639,19 @@ impl SideRequest {
     fn compact(v: &Vault, context: &AiTurnContext, mut next: Request, instruction: &str) -> Self {
         next.model.max_output_tokens = Some(compact_output_tokens(&next.model));
         Self::new(v, context, next, instruction, PromptTools::None)
+    }
+}
+
+/// The instruction of a Compact request (AI-21), with the user's own instructions for the summary
+/// when `/compact <instructions>` gave some (AI-50).
+fn compact_instruction(instructions: Option<&str>) -> String {
+    match instructions.map(str::trim).filter(|s| !s.is_empty()) {
+        None => COMPACT_INSTRUCTION.to_owned(),
+        Some(extra) => format!(
+            "{COMPACT_INSTRUCTION}\n\nThe user gave these instructions for the summary, which \
+             come first:\n<compact_instructions>\n{}\n</compact_instructions>",
+            escape_closing_tag(extra, "compact_instructions")
+        ),
     }
 }
 
@@ -4035,24 +4050,8 @@ fn enabled_skills(v: &Vault) -> Vec<(String, hatoba_core::model::Skill)> {
 /// the built-in skill while it is switched on, with `version` filled in (AI-34).
 fn read_skill(v: &Vault, args: &ReadSkillArgs, version: &str) -> Job {
     let name = args.name.trim();
-    let builtin = v.settings().ai.builtin_skill_enabled;
-    let enabled = enabled_skills(v);
-    // `(path, content)` of every file of the skill, SKILL.md included.
-    let files: Vec<(String, String)> = if builtin && name == BUILTIN_NAME {
-        let skill = builtin_skill(version);
-        std::iter::once((SKILL_MD.to_owned(), skill.body))
-            .chain(skill.files.into_iter().map(|f| (f.path, f.content)))
-            .collect()
-    } else if let Some((skill_id, _)) = enabled.iter().find(|(_, s)| s.name == name) {
-        v.skill_files(skill_id)
-            .into_iter()
-            .map(|(_, f)| (f.path, f.content))
-            .collect()
-    } else {
-        let mut names: Vec<&str> = enabled.iter().map(|(_, s)| s.name.as_str()).collect();
-        if builtin {
-            names.push(BUILTIN_NAME);
-        }
+    let Some(files) = enabled_skill_files(v, name, version) else {
+        let mut names: Vec<String> = skill_commands(v).into_iter().map(|c| c.name).collect();
         names.sort_unstable();
         let list = if names.is_empty() {
             "none".to_owned()
@@ -4084,6 +4083,61 @@ fn read_skill(v: &Vault, args: &ReadSkillArgs, version: &str) -> Job {
             ))
         }
     }
+}
+
+/// `(path, content)` of every file of the enabled skill `name`, `SKILL.md` included: the built-in
+/// one while it is switched on, with `version` filled in (AI-34). `None` when no enabled skill
+/// has that name.
+fn enabled_skill_files(v: &Vault, name: &str, version: &str) -> Option<Vec<(String, String)>> {
+    if name == BUILTIN_NAME {
+        if !v.settings().ai.builtin_skill_enabled {
+            return None;
+        }
+        let skill = builtin_skill(version);
+        return Some(
+            std::iter::once((SKILL_MD.to_owned(), skill.body))
+                .chain(skill.files.into_iter().map(|f| (f.path, f.content)))
+                .collect(),
+        );
+    }
+    let enabled = enabled_skills(v);
+    let (skill_id, _) = enabled.iter().find(|(_, s)| s.name == name)?;
+    Some(
+        v.skill_files(skill_id)
+            .into_iter()
+            .map(|(_, f)| (f.path, f.content))
+            .collect(),
+    )
+}
+
+/// AI-50: the skills the panel's `/` menu offers as commands: every enabled skill, and the
+/// built-in one while it is switched on (AI-34), sorted by name, as the system prompt lists them
+/// (AI-28).
+pub fn skill_commands(v: &Vault) -> Vec<AiSkillCommand> {
+    let mut commands: Vec<AiSkillCommand> = enabled_skills(v)
+        .into_iter()
+        .map(|(_, s)| AiSkillCommand {
+            name: s.name,
+            description: s.description,
+        })
+        .collect();
+    if v.settings().ai.builtin_skill_enabled {
+        commands.push(AiSkillCommand {
+            name: BUILTIN_NAME.to_owned(),
+            description: builtin_description(),
+        });
+    }
+    commands.sort_by(|a, b| a.name.cmp(&b.name));
+    commands
+}
+
+/// AI-50: what a `/<skill>` command attaches in its `skill` block: the skill's `SKILL.md` as
+/// `read_skill` returns it, whole.
+pub fn skill_text(v: &Vault, name: &str, version: &str) -> AppResult<String> {
+    enabled_skill_files(v, name.trim(), version)
+        .and_then(|files| files.into_iter().find(|(p, _)| p == SKILL_MD))
+        .map(|(_, content)| content)
+        .ok_or_else(|| AppError::not_found("skill"))
 }
 
 /// A path inside a skill as the model may write it: `./references\x.md` is `references/x.md`.
@@ -4390,6 +4444,110 @@ const ATTACHMENTS: &[AttachmentKind] = &[
             format!("[file {}, {}]", name.unwrap_or_default(), lines_of(attrs))
         },
         attributes: |attrs| matches!(attrs, [("name", _), ("lines", lines)] if is_count(lines)),
+    },
+    AttachmentKind {
+        tag: "host_file",
+        note: false,
+        title: |attrs| {
+            let path = attrs.get(1).map(|(_, path)| attribute_text(path));
+            path.as_deref()
+                .map(|p| p.rsplit('/').find(|part| !part.is_empty()).unwrap_or(p))
+                .unwrap_or_default()
+                .to_owned()
+        },
+        placeholder: |attrs| {
+            let path = attrs.get(1).map(|(_, path)| attribute_text(path));
+            format!(
+                "[file {} on the host, {}]",
+                path.unwrap_or_default(),
+                lines_of(attrs)
+            )
+        },
+        attributes: |attrs| matches!(attrs, [("host", _), ("path", _), ("lines", lines)] if is_count(lines)),
+    },
+    AttachmentKind {
+        tag: "host_directory",
+        note: false,
+        title: |attrs| {
+            attrs
+                .get(1)
+                .map(|(_, path)| attribute_text(path))
+                .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let path = attrs.get(1).map(|(_, path)| attribute_text(path));
+            let entries = attrs.get(2).map_or("0", |(_, n)| *n);
+            format!(
+                "[listing of the directory {} on the host, {entries} entries]",
+                path.unwrap_or_default()
+            )
+        },
+        attributes: |attrs| match attrs {
+            [("host", _), ("path", _), ("entries", entries)]
+            | [
+                ("host", _),
+                ("path", _),
+                ("entries", entries),
+                ("truncated", "true"),
+            ] => is_count(entries),
+            _ => false,
+        },
+    },
+    AttachmentKind {
+        tag: "mcp_resource",
+        note: false,
+        title: |attrs| {
+            attrs
+                .get(1)
+                .map(|(_, uri)| attribute_text(uri))
+                .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let server = attrs.first().map(|(_, server)| attribute_text(server));
+            let uri = attrs.get(1).map(|(_, uri)| attribute_text(uri));
+            format!(
+                "[MCP resource {} of {}, {}]",
+                uri.unwrap_or_default(),
+                server.unwrap_or_default(),
+                lines_of(attrs)
+            )
+        },
+        attributes: |attrs| matches!(attrs, [("server", _), ("uri", _), ("lines", lines)] if is_count(lines)),
+    },
+    AttachmentKind {
+        tag: "skill",
+        note: false,
+        title: |attrs| {
+            attrs
+                .first()
+                .map(|(_, name)| format!("/{}", attribute_text(name)))
+                .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let name = attrs.first().map(|(_, name)| attribute_text(name));
+            format!("[skill /{} run]", name.unwrap_or_default())
+        },
+        attributes: |attrs| matches!(attrs, [("name", _)]),
+    },
+    AttachmentKind {
+        tag: "mcp_prompt",
+        note: false,
+        title: |attrs| {
+            attrs
+                .get(1)
+                .map(|(_, name)| attribute_text(name))
+                .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let server = attrs.first().map(|(_, server)| attribute_text(server));
+            let name = attrs.get(1).map(|(_, name)| attribute_text(name));
+            format!(
+                "[MCP prompt {} of {} run]",
+                name.unwrap_or_default(),
+                server.unwrap_or_default()
+            )
+        },
+        attributes: |attrs| matches!(attrs, [("server", _), ("name", _)]),
     },
 ];
 
@@ -5466,6 +5624,7 @@ pub fn error_kind(e: &AiError) -> &'static str {
 }
 
 mod files;
+pub mod mentions;
 mod search;
 #[cfg(test)]
 mod tests;

@@ -184,7 +184,7 @@ export function createTauriApi(): HatobaApi {
       call("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
     ai_session_server: (sessionId) => call("ai_session_server", { sessionId }),
     ai_stop: (conversationId) => call("ai_stop", { conversationId }),
-    ai_compact: (conversationId, context) => call("ai_compact", { conversationId, context }),
+    ai_compact: (conversationId, context, instructions) => call("ai_compact", { conversationId, context, instructions }),
     ai_side_question: (input, onEvent) => {
       const channel = new Channel<AiSideEvent>();
       channel.onmessage = onEvent;
@@ -199,6 +199,10 @@ export function createTauriApi(): HatobaApi {
       return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
     },
     ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
+    ai_skill_commands: () => call("ai_skill_commands"),
+    ai_skill_text: (name) => call("ai_skill_text", { name }),
+    ai_host_list: (sessionId, path) => call("ai_host_list", { sessionId, path }),
+    ai_host_read: (sessionId, path) => call("ai_host_read", { sessionId, path }),
     ai_allowances_list: () => call("ai_allowances_list"),
     ai_allowance_add: (allowance) => call("ai_allowance_add", { allowance }),
     ai_allowance_remove: (allowance) => call("ai_allowance_remove", { allowance }),
@@ -223,6 +227,9 @@ export function createTauriApi(): HatobaApi {
     mcp_set_always_allow: (serverId, tool, allow) => call("mcp_set_always_allow", { serverId, tool, allow }),
     mcp_tool_info: (conversationId, name) => call("mcp_tool_info", { conversationId, name }),
     mcp_proxy_info: (conversationId, args) => call("mcp_proxy_info", { conversationId, callArguments: args }),
+    mcp_warm: (disabled) => call("mcp_warm", { disabledMcpServers: disabled }),
+    mcp_prompt_get: (serverId, name, args) => call("mcp_prompt_get", { serverId, name, promptArguments: args }),
+    mcp_resource_read: (serverId, uri) => call("mcp_resource_read", { serverId, uri }),
     mcp_import_preview: (json) => call("mcp_import_preview", { json }),
     mcp_import: (json) => call("mcp_import", { json }),
     mcp_export: () => call("mcp_export"),

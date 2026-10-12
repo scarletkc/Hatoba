@@ -49,7 +49,7 @@ The context meter left of the **Model** button is a ring showing how much of the
 | Everything above is outside the context | 以上内容不在上下文中 | ここより上はコンテキストに含まれません |
 | Context | 上下文窗口 | コンテキスト |
 
-- **Compact** (also **Compact Conversation** in the meter's menu) asks the model to summarize the conversation. The summary becomes the start of the context; earlier messages stay visible, marked "Everything above is outside the context".
+- **Compact** (also **Compact Conversation** in the meter's menu, or `/compact` in the input box) asks the model to summarize the conversation. Text after `/compact`, such as `/compact keep the nginx changes`, tells the summary what to keep. `/model` opens the **Model** picker. The summary becomes the start of the context; earlier messages stay visible, marked "Everything above is outside the context".
 - Hatoba also compacts by itself before a request that would pass 90% of the context window (the status reads "Compacting the conversation…"). **Stop** during that compaction cancels the message and puts it back in the input. When that happens between tool calls, the summary records where the task stands and the assistant carries on from it.
 - A message with large attachments can be too big to fit: see `references/ai-attachments.md`.
 

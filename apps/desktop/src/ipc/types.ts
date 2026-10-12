@@ -1331,6 +1331,42 @@ export interface McpServerStatus {
   stderr: string[];
   /** The tools from the last successful listing. */
   tools: McpToolView[];
+  /** The prompts from the last successful listing, which the panel's `/` menu offers (AI-50). */
+  prompts: McpPromptView[];
+  /** The resources from the last successful listing, which the panel's `@` menu offers (AI-51). */
+  resources: McpResourceView[];
+}
+
+/** A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`. */
+export interface McpPromptView {
+  /** The command's name after `/`, `mcp__<server>__<prompt>` cleaned as tool names are (AI-30). */
+  command: string;
+  /** The prompt's name on its server. */
+  name: string;
+  title: string | null;
+  description: string;
+  arguments: McpPromptArgumentView[];
+}
+
+export interface McpPromptArgumentView {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+/** A server's resource (AI-51), which the `@` menu offers. */
+export interface McpResourceView {
+  uri: string;
+  name: string;
+  title: string | null;
+  description: string;
+  mime_type: string | null;
+}
+
+/** A value for one argument of an MCP prompt (AI-50). */
+export interface McpPromptArgumentInput {
+  name: string;
+  value: string;
 }
 
 /** The MCP tool behind a name the model called, for the approval card (AI-31). */
@@ -1370,6 +1406,28 @@ export type DroppedFileRefusal = "image" | "too_large" | "binary" | "unreadable"
 
 /** A text file dropped on the AI panel in the desktop app (AI-35), named by its base name only, never its path. */
 export type DroppedFile = { status: "ok"; name: string; text: string } | { status: "refused"; name: string; reason: DroppedFileRefusal };
+
+/** One entry of a directory on the tab's host, for the panel's `@` menu (AI-51). */
+export interface AiHostEntry {
+  name: string;
+  /** A directory, or a symbolic link to one. */
+  dir: boolean;
+}
+
+/** Why a path on the tab's host cannot be listed or attached (AI-51). `wrong_kind`: a directory to read, or a file to list. */
+export type AiHostRefusal = "disconnected" | "not_found" | "wrong_kind" | "not_regular" | "permission_denied" | "too_large" | "binary" | "failed";
+
+/** A directory on the tab's host (AI-51): its entries sorted by name, or why it cannot be listed. `path` as the host resolved it. */
+export type AiHostListing = { status: "ok"; path: string; entries: AiHostEntry[]; cut: boolean } | { status: "refused"; reason: AiHostRefusal };
+
+/** A text file on the tab's host for an `@` mention (AI-51), or why it cannot be attached. */
+export type AiHostFile = { status: "ok"; path: string; text: string } | { status: "refused"; reason: AiHostRefusal };
+
+/** An enabled skill the panel's `/` menu offers as a command (AI-50), the built-in one included. */
+export interface AiSkillCommand {
+  name: string;
+  description: string;
+}
 
 // ───────────────────────── Events (§10.2) ─────────────────────────
 

@@ -851,7 +851,7 @@ function giveBackSideInput(convId: string, id: number) {
  * not stored. A side question already on its way in the conversation is replaced, and what it took from the
  * input area stays out.
  */
-export function askSideQuestion(slotId: string, raw: string, fromInput = true): boolean {
+export function askSideQuestion(slotId: string, raw: string, fromInput = true, shown: string = raw): boolean {
   const slot = getSlot(slotId);
   const typed = raw.trim();
   const convId = slot.conversationId;
@@ -867,7 +867,8 @@ export function askSideQuestion(slotId: string, raw: string, fromInput = true): 
   if (fromInput) {
     const taken = takeInput(slotId, typed);
     text = messageText(taken);
-    sideInputs.set(id, { raw, message: taken });
+    // What goes back into the box when the question fails: what was typed, `/btw` included (AI-50).
+    sideInputs.set(id, { raw: shown, message: taken });
   }
   void runSide(slotId, newSideQuestion(id, convId, typed, text), context, approvalCall(slot));
   return true;
@@ -1054,10 +1055,15 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
   }
 }
 
-/** Puts a message that was not sent back into the slot's input, before what it holds: its typed text, and its pastes and files. */
+/**
+ * Puts a message that was not sent back into the slot's input, before what it holds: its typed text, and its attachments
+ * but the tab's selection and diagnostics (pastes, files, and what the `/` and `@` menus attached).
+ */
 function restoreDraft(slotId: string, text: string) {
   const { attachments, typed } = parseMessage(text);
-  const extras: PendingAttachment[] = attachments.flatMap((a) => (a.kind === "paste" || a.kind === "file" ? [{ id: `x${++extraSeq}`, attachment: a }] : []));
+  const extras: PendingAttachment[] = attachments.flatMap((a) =>
+    a.kind !== "selection" && a.kind !== "diagnostics" ? [{ id: `x${++extraSeq}`, attachment: a }] : [],
+  );
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
 }
 
@@ -1456,7 +1462,7 @@ export function hideSelection(tabId: string) {
 }
 
 /** The host name the selection block carries: the tab host's display name. */
-function selectionHost(tabId: string): string {
+export function selectionHost(tabId: string): string {
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return "";
   return useVaultData.getState().hosts.find((h) => h.id === tab.hostId)?.name ?? tab.title;
@@ -1510,11 +1516,27 @@ export function tooMuchMessage(): string {
 
 /** Adds a paste or a file to the slot's next message, unless the message would pass the cap. */
 function addExtra(slotId: string, attachment: PasteAttachment | FileAttachment): boolean {
-  if (!fitsMessage(pendingAttachments(slotId), attachment)) {
+  return addAttachment(slotId, attachment);
+}
+
+/**
+ * Adds an attachment that is neither the tab's selection nor its diagnostics to the slot's next message, unless the
+ * message would pass the cap (AI-35): a paste or a file at the end, what the `@` menu attached (AI-51) too, and the
+ * skill or MCP prompt of a `/` command (AI-50) first, in place of one the same command attached before, so that
+ * running the command again does not attach it twice.
+ */
+export function addAttachment(slotId: string, attachment: Exclude<Attachment, InputChip>, command?: string): boolean {
+  const others = command ? getSlot(slotId).extras.filter((x) => x.command !== command) : getSlot(slotId).extras;
+  const pending = [...pickInput(liveChips(slotId), others).chips, ...others.map((x) => x.attachment)];
+  if (!fitsMessage(pending, attachment)) {
     toast(tooMuchMessage(), "error");
     return false;
   }
-  patchSlot(slotId, (s) => ({ extras: [...s.extras, { id: `x${++extraSeq}`, attachment }] }));
+  const added: PendingAttachment = { id: `x${++extraSeq}`, attachment, ...(command ? { command } : {}) };
+  patchSlot(slotId, (s) => {
+    const rest = command ? s.extras.filter((x) => x.command !== command) : s.extras;
+    return { extras: command ? [added, ...rest] : [...rest, added] };
+  });
   return true;
 }
 
@@ -1598,8 +1620,11 @@ export function removeDiagnostics(tabId: string) {
   });
 }
 
-/** AI-21 Compact: the summary becomes the start of the context. */
-export async function compactConversation(slotId: string) {
+/**
+ * AI-21 Compact: the summary becomes the start of the context. `instructions`: what `/compact <instructions>` asks
+ * of the summary (AI-50).
+ */
+export async function compactConversation(slotId: string, instructions: string | null = null) {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
   if (!id || slot.turn || slot.compacting || reverting(slotId)) return;
@@ -1610,7 +1635,7 @@ export async function compactConversation(slotId: string) {
   }
   patchSlot(slotId, { compacting: true });
   try {
-    const entry = await api.ai_compact(id, context);
+    const entry = await api.ai_compact(id, context, instructions);
     // The slot that shows the conversation now: it may have moved meanwhile (Connect to host).
     const target = slotOf(id);
     if (!target) return;

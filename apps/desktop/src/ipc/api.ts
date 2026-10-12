@@ -7,6 +7,8 @@ import type {
   AiFileChange,
   AiFilePreview,
   AiFileRevert,
+  AiHostFile,
+  AiHostListing,
   AiJudgeSampleOutcome,
   AiModel,
   AiModelRef,
@@ -19,6 +21,7 @@ import type {
   AiSideAnswer,
   AiSideEvent,
   AiSideQuestionInput,
+  AiSkillCommand,
   AiTestResult,
   AiToolResultInput,
   AiToolRun,
@@ -51,6 +54,7 @@ import type {
   KeyView,
   LocalPrefs,
   McpImportPreview,
+  McpPromptArgumentInput,
   McpServerInput,
   McpServerStatus,
   McpServerView,
@@ -334,8 +338,11 @@ export interface HatobaApi {
   ai_session_server(session_id: string | null): Promise<string | null>;
   /** Stops the turn: aborts the request and running tools, cancels calls without a result. */
   ai_stop(conversation_id: string): Promise<void>;
-  /** AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
-  ai_compact(conversation_id: string, context: AiTurnContext): Promise<AiEntryView>;
+  /**
+   * AI-21: summarizes the context with the given model and moves `context_start` to the summary. `instructions`:
+   * what `/compact <instructions>` asks of the summary (AI-50).
+   */
+  ai_compact(conversation_id: string, context: AiTurnContext, instructions: string | null): Promise<AiEntryView>;
   /**
    * AI-42: asks a side question about the conversation without stopping its turn. The answer streams to
    * `onEvent` and comes back whole; nothing is stored. A newer side question of the conversation, `ai_side_stop`
@@ -355,6 +362,14 @@ export interface HatobaApi {
    * in order, named by the file's base name.
    */
   ai_read_dropped_files(paths: string[]): Promise<DroppedFile[]>;
+  /** AI-50: the skills the panel's `/` menu offers as commands, sorted by name. */
+  ai_skill_commands(): Promise<AiSkillCommand[]>;
+  /** AI-50: the `SKILL.md` of the enabled skill `name`, which a `/<skill>` command attaches; `not_found` otherwise. */
+  ai_skill_text(name: string): Promise<string>;
+  /** AI-51: the entries of the directory `path` on the host of the tab's session, for the `@` menu. */
+  ai_host_list(session_id: string, path: string): Promise<AiHostListing>;
+  /** AI-51: the text file `path` on the host of the tab's session, which an `@` mention attaches. */
+  ai_host_read(session_id: string, path: string): Promise<AiHostFile>;
   /** AI-19: the approvals saved on this device, oldest first. */
   ai_allowances_list(): Promise<AiAllowance[]>;
   /** AI-19: saves an approval on this device; resolves to them all. */
@@ -402,6 +417,16 @@ export interface HatobaApi {
    * conversation or a deleted server's, gets its error result without asking.
    */
   mcp_proxy_info(conversation_id: string, args: string): Promise<McpProxyInfo>;
+  /**
+   * AI-50, AI-51: the panel's `/` or `@` menu opened. Starts the servers a conversation with `disabled` switched
+   * off uses, as its next message would, and lists their prompts and resources again after a `list_changed`;
+   * `ai://mcp-status` brings them. Resolves at once.
+   */
+  mcp_warm(disabled: string[]): Promise<void>;
+  /** AI-50: gets a server's prompt `name` with its arguments, as the text a `/` command attaches; fails with `ai` and the reason. */
+  mcp_prompt_get(server_id: string, name: string, args: McpPromptArgumentInput[]): Promise<string>;
+  /** AI-51: reads a server's resource at `uri`, as the text an `@` mention attaches; fails with `ai` and the reason. */
+  mcp_resource_read(server_id: string, uri: string): Promise<string>;
   /** AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
   mcp_import_preview(json: string): Promise<McpImportPreview>;
   /** Adds every importable server; env and header values move into the vault. */

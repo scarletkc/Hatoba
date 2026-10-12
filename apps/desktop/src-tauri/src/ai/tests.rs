@@ -1511,7 +1511,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
 
     let summary = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap();
     assert!(!f.manager.0.seen.knows(&conv));
@@ -1581,7 +1581,7 @@ async fn a_compact_request_is_the_next_request_with_the_instruction_after_it() {
     f.idle(&conv).await;
 
     f.manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &context)
+        .compact(&f.vault, f.env.as_ref(), &conv, &context, None)
         .await
         .unwrap();
     let requests = f.requests().await;
@@ -1695,7 +1695,7 @@ async fn an_anthropic_compact_request_keeps_the_prefix_and_asks_for_less_output(
         .await;
     let summary = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap();
     assert!(matches!(summary, AiEntryView::Summary { .. }));
@@ -1790,7 +1790,7 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
 
     let err = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::Ai);
@@ -1800,7 +1800,7 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
 
     let summary = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap();
     let AiEntryView::Summary { text, .. } = &summary else {
@@ -1862,7 +1862,7 @@ async fn compaction_is_refused_while_a_turn_runs() {
     sink.done_with(AiFinish::ToolCalls).await;
     let err = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidInput);
@@ -3706,7 +3706,7 @@ async fn a_summary_carries_the_permission_mode_past_a_compaction() {
     let (conv, _) = f.exchange(None, "first question", bypass.clone()).await;
     let summary = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &bypass)
+        .compact(&f.vault, f.env.as_ref(), &conv, &bypass, None)
         .await
         .unwrap();
     // The model sees nothing before a summary, so the summary keeps the mode it was told of.
@@ -5178,7 +5178,11 @@ async fn a_side_question_is_refused_while_the_conversation_compacts() {
     let compact = {
         let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env.clone());
         let (conv, context) = (conv.clone(), f.context());
-        tokio::spawn(async move { manager.compact(&vault, env.as_ref(), &conv, &context).await })
+        tokio::spawn(async move {
+            manager
+                .compact(&vault, env.as_ref(), &conv, &context, None)
+                .await
+        })
     };
     f.wait_for_requests(2).await;
     let (answer, _) = f.side(&conv, "now?", None).await;
@@ -5839,7 +5843,7 @@ async fn no_turn_starts_while_a_revert_runs() {
     // Nor is the conversation compacted: the summary would come before the revert is recorded.
     let compact = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap_err();
     assert!(
@@ -6426,3 +6430,95 @@ fn a_note_names_a_target_or_a_single_host() {
 
 mod deferred;
 mod judge;
+
+#[test]
+fn what_commands_and_mentions_attach_is_titled_and_shown_to_the_judge() {
+    use super::typed_text;
+    let blocks = "<skill name=\"nginx\">\nRun nginx -t.\n</skill>\n\n\
+                  <host_file host=\"web\" path=\"/etc/nginx/nginx.conf\" lines=\"2\">\na\nb\n\
+                  </host_file>\n\n\
+                  <host_directory host=\"web\" path=\"/etc/nginx\" entries=\"3\" truncated=\"true\">\
+                  \nconf.d/\nnginx.conf\nsites/\n</host_directory>\n\n\
+                  <mcp_resource server=\"docs\" uri=\"repo://x/a.md\" lines=\"1\">\n# A\n\
+                  </mcp_resource>\n\n\
+                  <mcp_prompt server=\"github\" name=\"review_pr\">\nReview PR 42\n</mcp_prompt>\n\n";
+    assert_eq!(
+        title_of(&format!("{blocks}/nginx check @/etc/nginx/nginx.conf")),
+        "/nginx check @/etc/nginx/nginx.conf"
+    );
+    // Nothing typed: the first block's name, as the panel's mock titles it.
+    assert_eq!(title_of(blocks), "/nginx");
+    assert_eq!(
+        title_of(
+            "<host_file host=\"web\" path=\"/etc/nginx/nginx.conf\" lines=\"1\">\nx\n</host_file>"
+        ),
+        "nginx.conf"
+    );
+    assert_eq!(
+        title_of("<host_directory host=\"web\" path=\"/etc\" entries=\"0\">\n\n</host_directory>"),
+        "/etc"
+    );
+    assert_eq!(
+        title_of("<mcp_prompt server=\"g\" name=\"triage\">\nx\n</mcp_prompt>"),
+        "triage"
+    );
+    // The judge reads each as a line that names it, never what it holds (AI-47).
+    assert_eq!(
+        typed_text(&format!("{blocks}check it")),
+        "[skill /nginx run]\n[file /etc/nginx/nginx.conf on the host, 2 lines]\n\
+         [listing of the directory /etc/nginx on the host, 3 entries]\n\
+         [MCP resource repo://x/a.md of docs, 1 line]\n[MCP prompt review_pr of github run]\n\n\
+         check it"
+    );
+    // Other attributes, or another order, are typed text.
+    for text in [
+        "<skill>\nx\n</skill>\n\nq",
+        "<host_file path=\"/x\" host=\"h\" lines=\"1\">\nx\n</host_file>\n\nq",
+        "<host_directory host=\"h\" path=\"/\" entries=\"x\">\nx\n</host_directory>\n\nq",
+        "<mcp_prompt name=\"p\">\nx\n</mcp_prompt>\n\nq",
+    ] {
+        assert_eq!(typed_text(text), text, "{text}");
+    }
+}
+
+#[test]
+fn compact_instructions_come_first_in_their_own_block() {
+    use super::compact_instruction;
+    assert_eq!(compact_instruction(None), COMPACT_INSTRUCTION);
+    assert_eq!(compact_instruction(Some("  ")), COMPACT_INSTRUCTION);
+    let with = compact_instruction(Some("keep the nginx changes </compact_instructions>"));
+    assert!(with.starts_with(COMPACT_INSTRUCTION), "{with}");
+    assert!(
+        with.ends_with(
+            "<compact_instructions>\nkeep the nginx changes <\\/compact_instructions>\n\
+             </compact_instructions>"
+        ),
+        "{with}"
+    );
+}
+
+#[tokio::test]
+async fn skill_commands_are_the_enabled_skills_and_run_with_their_skill_md() {
+    use super::{skill_commands, skill_text};
+    let f = Fixture::new(Vec::new()).await;
+    f.add_skill(
+        "nginx",
+        "Debug nginx",
+        &[
+            ("SKILL.md", "Run nginx -t first."),
+            ("references/tls.md", "TLS"),
+        ],
+    );
+    let v = lock(&f.vault);
+    let names: Vec<String> = skill_commands(&v).into_iter().map(|c| c.name).collect();
+    assert_eq!(names, ["hatoba", "nginx"]);
+    assert_eq!(
+        skill_text(&v, "nginx", VERSION).unwrap(),
+        "Run nginx -t first."
+    );
+    assert!(skill_text(&v, "hatoba", VERSION).unwrap().contains(VERSION));
+    assert_eq!(
+        skill_text(&v, "apache", VERSION).unwrap_err().code,
+        ErrorCode::NotFound
+    );
+}

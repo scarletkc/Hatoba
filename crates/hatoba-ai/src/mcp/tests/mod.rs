@@ -188,6 +188,118 @@ fn debug_prints_only_the_origin_of_a_url_and_the_count_of_arguments() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stdio_session_lists_and_gets_prompts_and_resources() {
+    let conn = McpConnection::connect(&mock_command("serve"), &http_client(), CONNECT)
+        .await
+        .unwrap();
+    assert!(conn.offers_prompts() && conn.offers_resources());
+
+    // A prompt without a name is left out.
+    let prompts = conn.list_prompts().await.unwrap();
+    assert_eq!(
+        prompts,
+        [
+            McpPrompt {
+                name: "review".into(),
+                title: Some("Review".into()),
+                description: "Reviews a change".into(),
+                arguments: vec![
+                    McpPromptArgument {
+                        name: "pr".into(),
+                        description: "The PR number".into(),
+                        required: true,
+                    },
+                    McpPromptArgument {
+                        name: "focus".into(),
+                        description: String::new(),
+                        required: false,
+                    },
+                ],
+            },
+            McpPrompt {
+                name: "chat".into(),
+                title: None,
+                description: String::new(),
+                arguments: Vec::new(),
+            },
+        ]
+    );
+    let text = conn
+        .get_prompt("review", args(json!({"pr": "42", "focus": "tests"})), CALL)
+        .await
+        .unwrap();
+    assert_eq!(text, "Review PR 42 for tests");
+    // Roles are named when the prompt has more than the user's messages.
+    let text = conn.get_prompt("chat", Map::new(), CALL).await.unwrap();
+    assert_eq!(text, "[user]\nhi\n\n[assistant]\n[image content omitted]");
+    let err = conn.get_prompt("nope", Map::new(), CALL).await.unwrap_err();
+    assert_eq!(err, McpError::Server("Unknown prompt (code -32602)".into()));
+
+    // Two pages; a resource without a name is named by its URI.
+    let resources = conn.list_resources().await.unwrap();
+    assert_eq!(
+        resources,
+        [
+            McpResource {
+                uri: "file:///notes.md".into(),
+                name: "notes.md".into(),
+                title: None,
+                description: "Notes".into(),
+                mime_type: Some("text/markdown".into()),
+            },
+            McpResource {
+                uri: "mem://logo".into(),
+                name: "mem://logo".into(),
+                title: None,
+                description: String::new(),
+                mime_type: Some("image/png".into()),
+            },
+        ]
+    );
+    assert_eq!(
+        conn.read_resource("file:///notes.md", CALL).await.unwrap(),
+        "# Notes\n[binary content omitted]"
+    );
+    assert!(matches!(
+        conn.read_resource("mem://logo", CALL).await,
+        Err(McpError::Protocol(message)) if message.contains("no text content")
+    ));
+
+    // The list_changed notifications flip their flags until the next listing.
+    assert!(!conn.prompts_changed() && !conn.resources_changed());
+    assert_eq!(
+        call(&conn, "notify_lists", json!({})).await.content,
+        "notified"
+    );
+    assert!(conn.prompts_changed() && conn.resources_changed() && !conn.tools_changed());
+    conn.list_prompts().await.unwrap();
+    assert!(!conn.prompts_changed() && conn.resources_changed());
+    conn.list_resources().await.unwrap();
+    assert!(!conn.resources_changed());
+    conn.shutdown().await;
+}
+
+#[test]
+fn prompt_and_resource_text() {
+    assert_eq!(prompt_text(&json!({"messages": []})), None);
+    assert_eq!(prompt_text(&json!({})), None);
+    assert_eq!(
+        prompt_text(&json!({"messages": [
+            {"role": "user", "content": {"type": "text", "text": "a"}},
+            {"role": "user", "content": {"type": "resource",
+                "resource": {"uri": "x", "text": "b"}}}
+        ]}))
+        .as_deref(),
+        Some("a\n\nb")
+    );
+    assert!(resource_text(&json!({})).is_err());
+    assert_eq!(
+        resource_text(&json!({"contents": [{"uri": "x", "text": ""}]})).unwrap(),
+        ""
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdio_session_lists_calls_and_shuts_down() {
     let conn = McpConnection::connect(&mock_command("serve"), &http_client(), CONNECT)
         .await

@@ -800,6 +800,8 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
              directory first, for example with mkdir -p in run_command."
         ),
         RemoteFileError::IsDirectory => format!("{path} is a directory, not a file."),
+        // Only a listing (the panel's `@` menu, AI-51) asks for a directory.
+        RemoteFileError::NotDirectory => format!("{path} is not a directory."),
         RemoteFileError::NotRegular => format!(
             "{path} is not a regular file (it is a device, a pipe or a socket), so the file tools \
              do not {verb} it."

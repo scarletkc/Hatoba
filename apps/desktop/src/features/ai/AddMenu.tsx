@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
@@ -8,7 +8,7 @@ import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { setMcpServerOff, setSlotScreen } from "./actions";
-import { loadMcp, toolsMenuRows, toolsSummary, transportLabel, useMcp, type ToolsMenuRow } from "./mcp";
+import { loadMcp, toolsMenuRows, transportLabel, useMcp, type ToolsMenuRow } from "./mcp";
 import { sendsScreen, useAi, type Slot } from "./store";
 import s from "./AddMenu.module.css";
 
@@ -18,34 +18,23 @@ const STATE_LABEL: Record<Exclude<McpServerState, "running">, MessageKey> = {
   failed: "ai.tools.failed",
 };
 
-type View = "main" | "tools";
-
 /**
- * The input area's + menu: Add Text Files (AI-35), Send Terminal Screen for this conversation
- * (AI-46) and, in its place when chosen, the tools menu (AI-30). The tools menu lists the MCP
- * servers enabled on this device with their state, and switches each one off for this conversation
- * until the app quits.
+ * The input area's + menu: Add Text Files (AI-35) and Send Terminal Screen for this conversation (AI-46). The MCP
+ * servers are in `/mcp` (AI-50), which `McpPopover` shows.
  */
 export function AddButton({ slotId, slot, onAddFiles }: { slotId: string; slot: Slot; onAddFiles: () => void }) {
   const t = useT();
   const ref = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const servers = useMcp((st) => st.servers);
-  const status = useMcp((st) => st.status);
-  const rows = useMemo(() => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []), [servers, status, slot.mcpOff]);
-  const failed = toolsSummary(rows).failed;
+  // Without a connected terminal, the screen switch is off and disabled, with a note under it.
+  const terminal = useTabs((st) => st.tabs.some((x) => x.id === slotId && x.status === "connected"));
 
-  useEffect(() => {
-    if (useMcp.getState().servers === null) void loadMcp();
-  }, []);
   useEffect(() => setAnchor(null), [slotId]);
 
   const toggle = () => {
     if (anchor) return setAnchor(null);
-    void loadMcp();
     if (ref.current) setAnchor(ref.current.getBoundingClientRect());
   };
-  const label = failed ? `${t("ai.add")} · ${t("ai.tools.someFailed")}` : t("ai.add");
 
   return (
     <>
@@ -55,164 +44,66 @@ export function AddButton({ slotId, slot, onAddFiles }: { slotId: string; slot: 
         className={cx(s.button, anchor && s.buttonOpen)}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
-        aria-label={label}
-        title={label}
+        aria-label={t("ai.add")}
+        title={t("ai.add")}
         data-add-trigger
         onClick={toggle}
       >
         <Icon name="plus" size={14} />
-        {failed && <span className={s.failedDot} />}
       </button>
       {anchor && (
-        <AddPopover
+        <Popover
           anchor={anchor}
-          slotId={slotId}
-          slot={slot}
-          rows={rows}
-          onAddFiles={onAddFiles}
+          label={t("ai.add")}
+          trigger="[data-add-trigger]"
+          layoutKey={String(terminal)}
           onClose={(restoreFocus) => {
             setAnchor(null);
             if (restoreFocus) ref.current?.focus();
           }}
-        />
+        >
+          {(close) => (
+            <MainView
+              slotId={slotId}
+              slot={slot}
+              terminal={terminal}
+              onAddFiles={() => {
+                close(true);
+                onAddFiles();
+              }}
+            />
+          )}
+        </Popover>
       )}
     </>
   );
 }
 
-function AddPopover({
-  anchor,
-  slotId,
-  slot,
-  rows,
-  onAddFiles,
-  onClose,
-}: {
-  anchor: DOMRect;
-  slotId: string;
-  slot: Slot;
-  rows: ToolsMenuRow[];
-  onAddFiles: () => void;
-  onClose: (restoreFocus: boolean) => void;
-}) {
+/**
+ * AI-50 `/mcp`: the MCP servers enabled on this device with their state (AI-32) and, for one that failed, its error
+ * and the last lines of its stderr, a switch that turns each off for this conversation until the app quits (AI-30), and
+ * the way to Settings → AI. It opens above the input box.
+ */
+export function McpPopover({ slotId, slot, anchor, onClose }: { slotId: string; slot: Slot; anchor: DOMRect; onClose: (restoreFocus: boolean) => void }) {
   const t = useT();
-  const ref = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<View>("main");
-  const loaded = useMcp((st) => st.servers !== null);
+  const servers = useMcp((st) => st.servers);
+  const status = useMcp((st) => st.status);
+  const loaded = servers !== null;
   const failed = useMcp((st) => st.failed);
-  const terminal = useTabs((st) => st.tabs.some((x) => x.id === slotId && x.status === "connected"));
-  const [pos, setPos] = useState({ left: anchor.left, top: anchor.top });
-  const locked = useOverlaysLocked();
+  const rows = useMemo(() => (servers ? toolsMenuRows(servers, status, slot.mcpOff) : []), [servers, status, slot.mcpOff]);
 
   useEffect(() => {
-    if (locked) onClose(false);
-  }, [locked, onClose]);
+    void loadMcp();
+  }, []);
 
-  // Above the button (the input area is at the bottom of the panel), kept inside the window.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const b = windowSurface();
-    const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
-    let top = anchor.top - r.height - 6;
-    if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
-    setPos({ left, top: Math.max(b.top + 8, top) });
-  }, [anchor, rows, loaded, failed, view, terminal]);
-
-  // The first item has the focus when the menu opens, the back button in the tools menu, and the
-  // tools item after going back.
-  const back = useRef(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const target = view === "tools" ? el.querySelector<HTMLElement>("[data-back]") : back.current ? el.querySelector<HTMLElement>("[data-tools]") : items(el)[0];
-    (target ?? el).focus({ preventScroll: true });
-  }, [view]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Element;
-      // The button toggles the menu itself; closing here would make its click reopen it.
-      if (ref.current && !ref.current.contains(target) && !target.closest?.("[data-add-trigger]")) onClose(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose(true);
-      }
-    };
-    const close = () => onClose(false);
-    window.addEventListener("mousedown", onDown, true);
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", onDown, true);
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("blur", close);
-    };
-  }, [onClose]);
-
-  // ↑/↓ move between the menu's items, ← goes back from the tools menu.
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const el = ref.current;
-    if (!el) return;
-    if (e.key === "ArrowLeft" && view === "tools") {
-      e.preventDefault();
-      back.current = true;
-      setView("main");
-      return;
-    }
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    e.preventDefault();
-    const list = items(el);
-    const at = list.indexOf(document.activeElement as HTMLElement);
-    const next = e.key === "ArrowDown" ? at + 1 : at <= 0 ? list.length - 1 : at - 1;
-    list[next % list.length]?.focus();
-  };
-
-  if (locked) return null;
-  return createPortal(
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label={view === "main" ? t("ai.add") : t("ai.tools.title")}
-      tabIndex={-1}
-      className={s.popover}
-      style={pos}
-      onKeyDown={onKeyDown}
-    >
-      {view === "main" ? (
-        <MainView
-          slotId={slotId}
-          slot={slot}
-          rows={rows}
-          terminal={terminal}
-          onAddFiles={() => {
-            onClose(true);
-            onAddFiles();
-          }}
-          onTools={() => setView("tools")}
-        />
-      ) : (
+  return (
+    <Popover anchor={anchor} label={t("ai.tools.title")} wide layoutKey={`${rows.length}:${loaded}:${failed}`} onClose={onClose}>
+      {(close) => (
         <>
-          {/* The item that opened it, as a row of the menu, takes it back. */}
-          <button
-            type="button"
-            className={s.item}
-            title={t("btn.back")}
-            aria-label={t("btn.back")}
-            data-item
-            data-back
-            onClick={() => {
-              back.current = true;
-              setView("main");
-            }}
-          >
-            <Icon name="caret-left" className={s.itemIcon} />
-            <span className={cx(s.itemLabel, s.itemTitle)}>{t("ai.tools")}</span>
-          </button>
+          <div className={cx(s.item, s.itemTitle, s.itemStatic)}>
+            <Icon name="plug" className={s.itemIcon} />
+            <span className={s.itemLabel}>{t("ai.tools.title")}</span>
+          </div>
           <div className={s.separator} />
           {!loaded && !failed && (
             <div className={s.note}>
@@ -231,7 +122,7 @@ function AddPopover({
             className={s.item}
             data-item
             onClick={() => {
-              onClose(false);
+              close(false);
               useApp.getState().openSettings(true, "ai");
             }}
           >
@@ -240,6 +131,97 @@ function AddPopover({
           </button>
         </>
       )}
+    </Popover>
+  );
+}
+
+/**
+ * A menu of buttons and switches above `anchor`, kept inside the window, whose first item takes the focus. A click
+ * outside it, Esc and the window losing focus close it; ↑/↓ move between its items. `trigger` is a selector for the
+ * button that opened it, which toggles it itself. `layoutKey` changes when its height may have changed.
+ */
+function Popover({
+  anchor,
+  label,
+  trigger,
+  wide,
+  layoutKey,
+  onClose,
+  children,
+}: {
+  anchor: DOMRect;
+  label: string;
+  trigger?: string;
+  wide?: boolean;
+  layoutKey?: string;
+  onClose: (restoreFocus: boolean) => void;
+  children: (close: (restoreFocus: boolean) => void) => ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: anchor.left, top: anchor.top });
+  const locked = useOverlaysLocked();
+
+  useEffect(() => {
+    if (locked) onClose(false);
+  }, [locked, onClose]);
+
+  // Above the anchor (the input area is at the bottom of the panel), kept inside the window.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const b = windowSurface();
+    const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
+    let top = anchor.top - r.height - 6;
+    if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
+    setPos({ left, top: Math.max(b.top + 8, top) });
+  }, [anchor, layoutKey]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    (items(el)[0] ?? el).focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Element;
+      // The button toggles the menu itself; closing here would make its click reopen it.
+      if (ref.current && !ref.current.contains(target) && !(trigger && target.closest?.(trigger))) onClose(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose(true);
+      }
+    };
+    const close = () => onClose(false);
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", close);
+    };
+  }, [onClose, trigger]);
+
+  // ↑/↓ move between the menu's items.
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
+    e.preventDefault();
+    const list = items(el);
+    const at = list.indexOf(document.activeElement as HTMLElement);
+    const next = e.key === "ArrowDown" ? at + 1 : at <= 0 ? list.length - 1 : at - 1;
+    list[next % list.length]?.focus();
+  };
+
+  if (locked) return null;
+  return createPortal(
+    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={cx(s.popover, wide && s.popoverWide)} style={pos} onKeyDown={onKeyDown}>
+      {children(onClose)}
     </div>,
     document.body,
   );
@@ -250,26 +232,10 @@ function items(el: HTMLElement): HTMLElement[] {
   return Array.from(el.querySelectorAll<HTMLElement>("[data-item]:not(:disabled), [role=switch]:not(:disabled)"));
 }
 
-function MainView({
-  slotId,
-  slot,
-  rows,
-  terminal,
-  onAddFiles,
-  onTools,
-}: {
-  slotId: string;
-  slot: Slot;
-  rows: ToolsMenuRow[];
-  /** Whether the tab is connected: without a terminal, the screen switch is off and disabled. */
-  terminal: boolean;
-  onAddFiles: () => void;
-  onTools: () => void;
-}) {
+function MainView({ slotId, slot, terminal, onAddFiles }: { slotId: string; slot: Slot; terminal: boolean; onAddFiles: () => void }) {
   const t = useT();
   const settings = useAi((st) => st.catalog.settings);
   const on = sendsScreen(slot, settings);
-  const sum = toolsSummary(rows);
   return (
     <>
       <button type="button" className={s.item} data-item onClick={onAddFiles}>
@@ -287,25 +253,6 @@ function MainView({
           <Switch checked={terminal && on} disabled={!terminal} label={t("ai.screen")} onChange={(v) => setSlotScreen(slotId, v)} />
         </span>
       </div>
-      <div className={s.separator} />
-      <button
-        type="button"
-        className={s.item}
-        data-item
-        data-tools
-        title={sum.total > 0 ? t("ai.tools.summary", { on: sum.on, total: sum.total }) : undefined}
-        onClick={onTools}
-      >
-        <Icon name="plug" className={s.itemIcon} />
-        <span className={s.itemLabel}>{t("ai.tools")}</span>
-        {sum.failed && <span className={s.itemDot} title={t("ai.tools.someFailed")} />}
-        {sum.total > 0 && (
-          <span className={s.itemHint}>
-            {sum.on}/{sum.total}
-          </span>
-        )}
-        <Icon name="caret-right" size={12} className={s.itemCaret} />
-      </button>
     </>
   );
 }

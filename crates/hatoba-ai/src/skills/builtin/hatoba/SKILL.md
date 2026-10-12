@@ -73,7 +73,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
 | `references/sync-worker.md` | The sync Worker: deploying it from Hatoba, connecting a Worker deployed by hand, direct D1 mode, upgrading the Worker |
-| `references/ai-panel.md` | Using the AI assistant: the panel, one conversation per tab, moving between hosts, the MCP tools menu |
+| `references/ai-panel.md` | Using the AI assistant: the panel, one conversation per tab, moving between hosts, `/` commands (`/btw`, `/clear`, `/compact`, `/mcp`, `/model`, skills, MCP prompts) and `@` mentions, the MCP servers of a conversation |
 | `references/ai-tools.md` | What the AI assistant can call and which calls wait for the user: the tools, permission modes (Manual approval, Auto, Bypass), approval cards, Allow for This Conversation and Always Allow |
 | `references/ai-history.md` | AI conversation history: search, open, rename, pin, export and delete, Edit and Resend, and forking a conversation into a new one |
 | `references/ai-models.md` | The model picker, the Thinking Level (Default to Max), the context meter, Compact and automatic compaction, the reasoning display |

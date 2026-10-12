@@ -8,7 +8,16 @@ import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
 import { hideSelection, noteSelection, removeDiagnostics, removeExtra } from "./actions";
-import { attachmentTokens, chipShown, makeAttachment, type Attachment, type DiagnosticsAttachment, type Note, type SelectionAttachment } from "./attachments";
+import {
+  attachmentTokens,
+  chipShown,
+  makeAttachment,
+  pathName,
+  type Attachment,
+  type DiagnosticsAttachment,
+  type Note,
+  type SelectionAttachment,
+} from "./attachments";
 import { formatTokens } from "./meter";
 import { pickInput } from "./queue";
 import { HOME_SLOT, NO_SELECTION, useAi } from "./store";
@@ -325,6 +334,53 @@ export function AttachmentChipFor({ attachment: a, onRemove, onPasteAsText }: { 
           onRemove={onRemove}
         />
       );
+    default: {
+      const shown = shownAttachment(t, a);
+      return (
+        <AttachmentChip
+          icon={shown.icon}
+          label={shown.title}
+          size={size}
+          badge={shown.badge}
+          previewTitle={t("ai.file.preview")}
+          removeLabel={t("ai.file.remove", { name: shown.name })}
+          head={shown.from}
+          body={body}
+          more={moreText}
+          onRemove={onRemove}
+        />
+      );
+    }
+  }
+}
+
+type Tr = ReturnType<typeof useT>;
+
+/**
+ * How a chip, a sent message's card and the export show what the `/` and `@` menus attached (AI-50, AI-51): its icon,
+ * its title, the name × removes, where it came from, and a mark for a listing that was cut.
+ */
+export function shownAttachment(
+  t: (key: Parameters<Tr>[0], params?: Parameters<Tr>[1]) => string,
+  a: Exclude<Attachment, { kind: "diagnostics" | "selection" | "paste" | "file" }>,
+): { icon: string; title: string; name: string; from: string; badge?: string } {
+  switch (a.kind) {
+    case "host_file":
+      return { icon: "file-text", title: t("ai.file", { name: pathName(a.path), n: a.lines }), name: pathName(a.path), from: t("ai.mention.from", { host: a.host, path: a.path }) };
+    case "host_directory":
+      return {
+        icon: "folder-open",
+        title: t("ai.mention.folderChip", { name: pathName(a.path), n: a.entries }),
+        name: pathName(a.path),
+        from: t("ai.mention.from", { host: a.host, path: a.path }),
+        badge: a.truncated ? t("ai.selection.truncated") : undefined,
+      };
+    case "mcp_resource":
+      return { icon: "database", title: t("ai.file", { name: pathName(a.uri), n: a.lines }), name: pathName(a.uri), from: t("ai.mention.resourceFrom", { server: a.server, uri: a.uri }) };
+    case "skill":
+      return { icon: "book-open-text", title: t("ai.cmd.skillChip", { name: a.name }), name: `/${a.name}`, from: "" };
+    case "mcp_prompt":
+      return { icon: "chat-text", title: t("ai.cmd.promptChip", { name: a.name }), name: a.name, from: t("ai.cmd.promptFrom", { server: a.server }) };
   }
 }
 
@@ -378,5 +434,9 @@ export function AttachmentCardFor({ attachment: a }: { attachment: Attachment })
       return <AttachmentCard icon="clipboard-text" title={t("ai.paste", { n: a.lines })} body={a.text} />;
     case "file":
       return <AttachmentCard icon="file-text" title={t("ai.file", { name: a.name, n: a.lines })} body={a.text} />;
+    default: {
+      const shown = shownAttachment(t, a);
+      return <AttachmentCard icon={shown.icon} title={shown.title} host={shown.from || undefined} badge={shown.badge} body={a.text} />;
+    }
   }
 }

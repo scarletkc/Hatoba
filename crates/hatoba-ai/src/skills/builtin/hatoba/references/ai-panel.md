@@ -26,7 +26,7 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 The panel shows the conversation of the active tab, and switching tabs switches the panel. Every terminal tab has its own conversation, and the home tab (host list, Keys, Cloud Sync) has a chat-only one. A tab shows a small sparkle while its assistant is working and a hand while it waits for your approval.
 
 - Header: the conversation title, the tab's host, **History**, **New Conversation**, and close.
-- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), under it on the left the + button (**Add Files and More**, a menu with **Add Text Files…**, **Send Terminal Screen** and **MCP Tools**) and the permission mode button, and on the right the context meter, the **Model** picker, **Ask a Side Question**, and **Send (Enter)** (replaced by **Stop** while a turn runs).
+- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing; `/` starts a command and `@` adds context, below), under it on the left the + button (**Add Files and More**, a menu with **Add Text Files…** and **Send Terminal Screen**) and the permission mode button, and on the right the context meter, the **Model** picker, **Ask a Side Question**, and **Send (Enter)** (replaced by **Stop** while a turn runs). A line above the box names an MCP server this conversation uses that failed to start, with `/mcp`.
 - Sending while the assistant works: Enter queues the message instead of interrupting. It shows above the input box, "Queued: sends when the turn ends", with its text, its attachments, **Edit** and ×, and goes by itself once the turn completes. Enter again adds to it, so the two go as one message. **Edit**, or Up in the empty box, puts it back into the box, before anything typed since; × deletes it. Ctrl+Enter (⌘↩ on macOS) stops the turn and sends at once: the queued message first, then the box, or just the queued message when the box is empty. **Stop** or Esc also stops the turn and then sends the queued message (the Stop button's tooltip says so); to stop without sending it, delete it first. A turn waiting for approval keeps waiting: queuing never approves or rejects a call. When the turn ends any other way (a provider error, a reply cut off, declined or without an answer), the vault locks, or another conversation opens in the tab, the queued message goes back into the input box unsent; closing the tab discards it. Its terminal selection and diagnostics come back as chips too: if the tab has a newer selection or newer diagnostics by then, the returned chip goes with the next message and the newer one waits for a later message. It is kept only in memory, never saved or synced. A message takes at most one terminal selection, so while the queued message has one, a new selection stays in the input area for a later message.
 - Messages: each of yours shows the time you sent it, and each reply, once it is finished, the time it ended (hover for the full date and time). **Copy** next to one of your messages copies what you typed, without the attachments; **Copy** under a reply copies its Markdown, without the reasoning and tool calls, and a reply that used tools is copied whole, with its text from before and after the calls. **Fork from Here** beside them copies the conversation up to that point into a new one (`references/ai-history.md`).
 - A conversation acts only on its own tab, never on another, in any permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
@@ -50,11 +50,31 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Edit | 编辑 | 編集 |
 | Remove the Queued Message | 删除排队的消息 | 待機中のメッセージを削除 |
 | Add Files and More | 添加文件等 | ファイルなどを追加 |
-| MCP Tools | MCP 工具 | MCP ツール |
 | The assistant is working | AI 助手正在工作 | アシスタントが作業中です |
 | The assistant is waiting for you | AI 助手在等你确认 | アシスタントが確認を待っています |
 | Reconnect | 重新连接 | 再接続 |
 | Continue Here | 在这里继续 | ここで続ける |
+
+## `/` commands and `@` mentions
+
+Type `/` at the start of the box for commands, or `@` at the start of a word to add context. A menu opens above the box and filters as you type; Up and Down move, Enter or Tab picks, Esc closes it. The Enter that commits an input method's candidate never picks.
+
+- `/btw <question>`: a side question (`references/ai-side-questions.md`).
+- `/clear` (also `/new`, `/reset`): a new conversation.
+- `/compact [instructions]`: compacts the conversation; text after it tells the summary what to keep (`references/ai-models.md`).
+- `/mcp`: the MCP servers of this conversation (below).
+- `/model`: opens the **Model** picker.
+- `/<skill>`: runs an enabled skill, the built-in `/hatoba` included. Its `SKILL.md` goes with the message, which the panel shows as a chip, so the assistant follows it without reading it first.
+- `/mcp__<server>__<prompt> [arguments]`: runs a prompt of an MCP server. Words after it fill the prompt's arguments in order, a word in quotes may hold spaces, and the last argument takes the rest. The prompt's text goes with the message.
+- Enter on a command in the menu runs it when it needs nothing more; otherwise, and with Tab, it completes the name. A message that starts with `/` and names no command goes as typed.
+- `@` lists the home directory of the tab's host; type a path (`@/etc/ng`, `@~/app/`) and pick a folder to go into it. Picking a file attaches it, up to 256 KB of UTF-8 text, and picking the first row of a folder attaches its list of entries. The text keeps `@` and the path.
+- `@` also lists the resources of running MCP servers (`@server:uri`), which attach the same way, and **Text Files from This Computer…**, which opens the file picker.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Commands | 命令 | コマンド |
+| Add context | 添加上下文 | コンテキストを追加 |
+| Text Files from This Computer… | 这台电脑上的文本文件… | このコンピューターのテキストファイル… |
 
 ## Tools and approvals
 
@@ -72,9 +92,9 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 **History** (search, open, rename, pin, export, delete), **Edit and Resend**, and forking a conversation (**Fork from Here**, **Fork**) are in `references/ai-history.md`.
 
-## MCP tools menu
+## MCP servers: `/mcp`
 
-**MCP Tools** in the input area's + menu shows, in place of the menu, the MCP servers that are on for this device, with their state, and a switch for each; the back arrow (or ←) returns to the menu. The item shows how many of them this conversation uses, such as 2/3, and a red dot marks it and the + button while a server has an error. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-mcp.md`.
+`/mcp` opens the MCP servers that are on for this device above the input box, with their state, the error and the last lines of stderr of one that failed, and a switch for each. While a server this conversation uses has failed, a red line above the box names it, and its `/mcp` link opens the list. Switching one off removes its tools, prompts and resources from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-mcp.md`. Opening the `/` or `@` menu starts the servers this conversation uses, as its next message would, so that their prompts and resources are listed.
 
 Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
 

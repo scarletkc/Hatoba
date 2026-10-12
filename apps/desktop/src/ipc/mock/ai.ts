@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, splitPermissionNote, type Note } from "@/features/ai/attachments";
+import { blockTitle, fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, splitPermissionNote, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -1950,15 +1950,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 function titleOf(text: string): string {
   const { attachments, typed } = parseMessage(text);
   const block = attachments[0];
-  const fallback = !block
-    ? ""
-    : block.kind === "diagnostics"
-      ? "Connection diagnostics"
-      : block.kind === "selection"
-        ? "Terminal selection"
-        : block.kind === "paste"
-          ? "Pasted text"
-          : block.name;
+  const fallback = block ? blockTitle(block) : "";
   const line = typed.split(/\r?\n/).find((l) => l.trim())?.trim() ?? fallback;
   return [...line].slice(0, 60).join("");
 }

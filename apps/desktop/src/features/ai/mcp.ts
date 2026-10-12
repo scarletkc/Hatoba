@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { formatCommandLine } from "@/features/settings/mcpLogic";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpTransportView } from "@/ipc/types";
+import type { PromptCommand, ResourceItem } from "./commands";
 
-/** The MCP servers the panel's tools menu shows (AI-30), with their live state (AI-32). */
+/** The MCP servers that `/mcp` shows (AI-30), with their live state (AI-32), prompts and resources (AI-50, AI-51). */
 interface McpState {
   /** null until the list has been read. */
   servers: McpServerView[] | null;
@@ -50,7 +51,7 @@ export function resetMcp() {
   useMcp.setState({ servers: null, status: {}, failed: false });
 }
 
-/** One server in the tools menu. */
+/** One server in `/mcp`. */
 export interface ToolsMenuRow {
   server: McpServerView;
   state: McpServerState;
@@ -79,10 +80,30 @@ export function toolsMenuRows(servers: McpServerView[], status: Record<string, M
     });
 }
 
-/** The + button and its **MCP Tools** item: how many servers the conversation uses, and whether one of them failed. */
-export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number; failed: boolean } {
+/** How many servers the conversation uses, and those of them that failed, which the input area names (AI-32). */
+export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number; failed: ToolsMenuRow[] } {
   const used = rows.filter((r) => r.on);
-  return { on: used.length, total: rows.length, failed: used.some((r) => r.state === "failed") };
+  return { on: used.length, total: rows.length, failed: used.filter((r) => r.state === "failed") };
+}
+
+/**
+ * AI-50, AI-51: the prompts the `/` menu and the resources the `@` menu offer, of the running servers enabled on this
+ * device that the conversation has not switched off, servers by name.
+ */
+export function menuSources(
+  servers: readonly McpServerView[],
+  status: Record<string, McpServerStatus>,
+  off: readonly string[],
+): { prompts: PromptCommand[]; resources: ResourceItem[] } {
+  const prompts: PromptCommand[] = [];
+  const resources: ResourceItem[] = [];
+  for (const row of toolsMenuRows([...servers], status, off)) {
+    const st = status[row.server.id];
+    if (!row.on || row.state !== "running" || !st) continue;
+    for (const prompt of st.prompts) prompts.push({ serverId: row.server.id, server: row.server.name, prompt });
+    for (const resource of st.resources) resources.push({ serverId: row.server.id, server: row.server.name, resource });
+  }
+  return { prompts, resources };
 }
 
 /** The transport in one line: the command line of a `stdio` server, as Settings → AI shows it, or the URL of an `http` one. */

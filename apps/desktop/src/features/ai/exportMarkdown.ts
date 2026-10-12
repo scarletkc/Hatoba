@@ -1,7 +1,7 @@
 import { formatTarget } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
-import { parseMessage, splitPermissionNote, type Attachment } from "./attachments";
+import { parseMessage, pathName, splitPermissionNote, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "./notes";
 import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "./tools";
@@ -49,6 +49,18 @@ function attachmentLabel(t: Tr, a: Attachment): string {
       return `**${t("ai.paste", { n: a.lines })}**`;
     case "file":
       return `**${t("ai.file", { name: a.name, n: a.lines })}**`;
+    case "host_file":
+      return `**${t("ai.file", { name: pathName(a.path), n: a.lines })}** · \`${a.host}\` · \`${a.path}\``;
+    case "host_directory":
+      return [`**${t("ai.mention.folderChip", { name: pathName(a.path), n: a.entries })}**`, `\`${a.host}\``, `\`${a.path}\``, a.truncated && t("ai.selection.truncated")]
+        .filter(Boolean)
+        .join(" · ");
+    case "mcp_resource":
+      return `**${t("ai.file", { name: pathName(a.uri), n: a.lines })}** · \`${a.server}\` · \`${a.uri}\``;
+    case "skill":
+      return `**${t("ai.cmd.skillChip", { name: a.name })}**`;
+    case "mcp_prompt":
+      return `**${t("ai.cmd.promptChip", { name: a.name })}** · \`${a.server}\``;
   }
 }
 

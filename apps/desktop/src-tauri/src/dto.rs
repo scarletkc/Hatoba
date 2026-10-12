@@ -1980,6 +1980,85 @@ pub enum DroppedFile {
     },
 }
 
+/// One entry of a directory on the tab's host, for the panel's `@` menu (AI-51).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiHostEntry {
+    pub name: String,
+    /// A directory, or a symbolic link to one.
+    pub dir: bool,
+}
+
+/// Why a path on the tab's host cannot be listed or attached (AI-51).
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiHostRefusal {
+    /// The tab is not connected.
+    Disconnected,
+    NotFound,
+    /// Read: a directory. List: not a directory.
+    WrongKind,
+    /// A device, FIFO, socket or a symbolic link to nothing.
+    NotRegular,
+    PermissionDenied,
+    /// Over 256 KB.
+    TooLarge,
+    /// NUL bytes or invalid UTF-8.
+    Binary,
+    /// The command failed or did not finish within 30 seconds.
+    Failed,
+}
+
+/// A directory on the tab's host (AI-51): its entries, or why it cannot be listed.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AiHostListing {
+    Ok {
+        /// The path as the host resolved it: absolute, with `~/` and a relative path taken from
+        /// the home directory.
+        path: String,
+        /// Sorted by name.
+        entries: Vec<AiHostEntry>,
+        /// Entries were left out: the listing passed its size limit.
+        cut: bool,
+    },
+    Refused {
+        reason: AiHostRefusal,
+    },
+}
+
+/// A text file on the tab's host for an `@` mention (AI-51), or why it cannot be attached.
+#[derive(Clone, Serialize, Type, PartialEq, Eq)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AiHostFile {
+    Ok {
+        /// The path as the host resolved it.
+        path: String,
+        text: String,
+    },
+    Refused {
+        reason: AiHostRefusal,
+    },
+}
+
+impl fmt::Debug for AiHostFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ok { text, .. } => f
+                .debug_struct("Ok")
+                .field("text", &format_args!("<{} bytes>", text.len()))
+                .finish_non_exhaustive(),
+            Self::Refused { reason } => f.debug_struct("Refused").field("reason", reason).finish(),
+        }
+    }
+}
+
+/// An enabled skill the panel's `/` menu offers as a command (AI-50), the built-in one included.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiSkillCommand {
+    pub name: String,
+    pub description: String,
+}
+
 /// What an import would save, shown before saving (AI-27). Importable when `issues` is empty.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct SkillImportPreview {
@@ -2122,6 +2201,10 @@ pub struct McpServerStatus {
     pub stderr: Vec<String>,
     /// The tools from the last successful listing.
     pub tools: Vec<McpToolView>,
+    /// The prompts from the last successful listing, which the panel's `/` menu offers (AI-50).
+    pub prompts: Vec<McpPromptView>,
+    /// The resources from the last successful listing, which the panel's `@` menu offers (AI-51).
+    pub resources: Vec<McpResourceView>,
 }
 
 impl fmt::Debug for McpServerStatus {
@@ -2132,6 +2215,57 @@ impl fmt::Debug for McpServerStatus {
             .field("error", &self.error.is_some())
             .field("stderr", &format_args!("<{} lines>", self.stderr.len()))
             .field("tools", &self.tools.len())
+            .field("prompts", &self.prompts.len())
+            .field("resources", &self.resources.len())
+            .finish()
+    }
+}
+
+/// A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpPromptView {
+    /// The command's name after `/`, `mcp__<server>__<prompt>` cleaned as tool names are
+    /// (AI-30).
+    pub command: String,
+    /// The prompt's name on its server.
+    pub name: String,
+    pub title: Option<String>,
+    pub description: String,
+    pub arguments: Vec<McpPromptArgumentView>,
+}
+
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpPromptArgumentView {
+    pub name: String,
+    pub description: String,
+    pub required: bool,
+}
+
+/// A server's resource (AI-51), which the `@` menu offers.
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct McpResourceView {
+    pub uri: String,
+    pub name: String,
+    pub title: Option<String>,
+    pub description: String,
+    pub mime_type: Option<String>,
+}
+
+/// A value for one argument of an MCP prompt (AI-50).
+#[derive(Clone, Deserialize, Type)]
+pub struct McpPromptArgumentInput {
+    pub name: String,
+    pub value: String,
+}
+
+impl fmt::Debug for McpPromptArgumentInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("McpPromptArgumentInput")
+            .field("name", &self.name)
+            .field(
+                "value",
+                &format_args!("<{} chars>", self.value.chars().count()),
+            )
             .finish()
     }
 }

@@ -46,7 +46,7 @@ export interface Slot {
   extras: PendingAttachment[];
   /** §13.1: what Enter sent while a turn ran, to go when the turn ends. Kept only in memory. */
   queued: QueuedMessage | null;
-  /** AI-30: MCP servers switched off for this conversation in the tools menu. */
+  /** AI-30: MCP servers switched off for this conversation in `/mcp`. */
   mcpOff: string[];
   /** AI-46: whether messages show the terminal's screen, set in the + menu; null follows Settings → AI. */
   screen: boolean | null;
@@ -60,6 +60,8 @@ export interface Slot {
 export interface PendingAttachment {
   id: string;
   attachment: Attachment;
+  /** The `/` command that attached it (AI-50), whose next run replaces it. */
+  command?: string;
 }
 
 /** The tab's diagnostics or selection: a message takes at most one of each (AI-10). */

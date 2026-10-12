@@ -1,5 +1,6 @@
 //! Reading, writing and deleting a file on the host over an exec channel (spec §13.4, "File
-//! tools", and AI-41's revert; the SFTP panel's editor, SFTP-05, is meant to use it too).
+//! tools", and AI-41's revert; the SFTP panel's editor, SFTP-05, is meant to use it too), and
+//! listing a directory for the AI panel's `@` menu (AI-51).
 //!
 //! Each operation runs a fixed `sh -c` script. The path, and for a write the expected state and
 //! the content, travel on stdin, so nothing the caller passes goes through the quoting of the
@@ -82,6 +83,19 @@ const DELETE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9;
      [ \"$1 $2\" = \"$g\" ] || exit 7; d=$(dirname -- \"$f\"); [ -w \"$d\" ] || exit 4; \
      echo hatoba-file; printf %s \"$f\"; echo; rm -f -- \"$f\" || exit 1";
 
+/// Lists the directory named on stdin, resolved as the read script resolves it: prints the
+/// marker, the path as resolved, then one line per entry but `.` and `..`, `d` and the name for a
+/// directory (a symbolic link to one too) and `f` and the name for anything else, at most `$1`
+/// bytes of them. Exit statuses: 2 missing, 4 not readable, 6 not a directory, 8 a symbolic link
+/// to nothing, 9 no path. A name with a line break shows as two lines.
+const LIST_SCRIPT: &str = "IFS= read -r f || exit 9; \
+     case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
+     [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; [ -e \"$f\" ] || exit 2; \
+     [ -d \"$f\" ] || exit 6; [ -r \"$f\" ] && [ -x \"$f\" ] || exit 4; cd \"$f\" || exit 4; \
+     echo hatoba-file; printf %s \"$f\"; echo; for e in * .*; do case $e in .|..) continue;; esac; \
+     if [ -d \"$e\" ]; then printf d%s \"$e\"; echo; \
+     elif [ -e \"$e\" ] || [ -L \"$e\" ]; then printf f%s \"$e\"; echo; fi; done | head -c $1";
+
 /// What a write checks right before it writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Expect<'a> {
@@ -104,6 +118,8 @@ pub enum RemoteFileError {
     NoDirectory,
     /// The path is a directory.
     IsDirectory,
+    /// List: the path is not a directory.
+    NotDirectory,
     /// The path is a device, FIFO, socket or another file that is not a regular file.
     NotRegular,
     /// The path is a symbolic link whose target does not exist.
@@ -134,6 +150,7 @@ impl fmt::Display for RemoteFileError {
             Self::NotFound => f.write_str("no such file"),
             Self::NoDirectory => f.write_str("no such directory"),
             Self::IsDirectory => f.write_str("is a directory"),
+            Self::NotDirectory => f.write_str("not a directory"),
             Self::NotRegular => f.write_str("not a regular file"),
             Self::DanglingLink => f.write_str("a symbolic link to a file that does not exist"),
             Self::SymbolicLink => f.write_str("a symbolic link is in its place"),
@@ -182,6 +199,40 @@ pub struct RemoteLines {
     pub bytes: Vec<u8>,
     /// More of the file followed: `bytes` stopped at the number asked for.
     pub cut: bool,
+}
+
+/// A directory listed on the host.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteDir {
+    /// The path as the script resolved it, as for [`RemoteFile::path`].
+    pub path: String,
+    /// Its entries but `.` and `..`, in the order the shell's glob gave them (its collation), each
+    /// with whether it is a directory or a symbolic link to one.
+    pub entries: Vec<RemoteEntry>,
+    /// The listing stopped at the number of bytes asked for, so entries were left out.
+    pub cut: bool,
+}
+
+/// One entry of a [`RemoteDir`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemoteEntry {
+    pub name: String,
+    /// A directory, or a symbolic link to one.
+    pub dir: bool,
+}
+
+/// Lists the directory at `path`, at most `max` bytes of entries.
+pub async fn list_dir(
+    session: &SshSession,
+    path: &str,
+    max: u64,
+) -> Result<RemoteDir, RemoteFileError> {
+    let (command, stdin) = list_request(path, max)?;
+    let out = session
+        .exec_output(&command, Some(stdin))
+        .await
+        .map_err(RemoteFileError::Ssh)?;
+    parse_list(&out, max)
 }
 
 /// Reads at most `max` bytes of the file at `path`, from the start of line `from` (1-based) on,
@@ -284,6 +335,16 @@ fn lines_request(path: &str, from: u64, max: u64) -> Result<(String, Vec<u8>), R
             LINES_SCRIPT,
             Some(&format!("{} {}", from.max(1), max.saturating_add(1))),
         ),
+        format!("{path}\n").into_bytes(),
+    ))
+}
+
+/// The command and stdin of a listing. One byte more than `max` is asked for, which tells whether
+/// more followed.
+fn list_request(path: &str, max: u64) -> Result<(String, Vec<u8>), RemoteFileError> {
+    check_path(path)?;
+    Ok((
+        command(LIST_SCRIPT, Some(&max.saturating_add(1).to_string())),
         format!("{path}\n").into_bytes(),
     ))
 }
@@ -436,6 +497,47 @@ fn parse_lines(out: &ExecOutput, max: u64) -> Result<RemoteLines, RemoteFileErro
     }
 }
 
+fn parse_list(out: &ExecOutput, max: u64) -> Result<RemoteDir, RemoteFileError> {
+    match out.exit_status {
+        Some(0) => {
+            let (path, rest) = after_marker(&out.stdout).ok_or_else(|| failed(out))?;
+            let cut = rest.len() as u64 > max;
+            let mut rest = &rest[..rest.len().min(usize::try_from(max).unwrap_or(usize::MAX))];
+            // A line the limit cut short is left out.
+            if cut {
+                rest = rest
+                    .iter()
+                    .rposition(|&b| b == b'\n')
+                    .map_or(&[][..], |end| &rest[..=end]);
+            }
+            let entries = rest
+                .split(|&b| b == b'\n')
+                .filter_map(|line| {
+                    let (&kind, name) = line.split_first()?;
+                    if name.is_empty() {
+                        return None;
+                    }
+                    let dir = match kind {
+                        b'd' => true,
+                        b'f' => false,
+                        _ => return None,
+                    };
+                    Some(RemoteEntry {
+                        name: String::from_utf8_lossy(name).into_owned(),
+                        dir,
+                    })
+                })
+                .collect();
+            Ok(RemoteDir { path, entries, cut })
+        }
+        Some(2) => Err(RemoteFileError::NotFound),
+        Some(4) => Err(RemoteFileError::PermissionDenied),
+        Some(6) => Err(RemoteFileError::NotDirectory),
+        Some(8) => Err(RemoteFileError::DanglingLink),
+        _ => Err(failed(out)),
+    }
+}
+
 /// The resolved path of a write that succeeded. Status 0 without the marker is a failure: a login
 /// shell whose startup files exit with 0 never ran the script.
 fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
@@ -509,7 +611,13 @@ mod tests {
 
     #[test]
     fn scripts_survive_any_login_shell() {
-        for script in [READ_SCRIPT, LINES_SCRIPT, WRITE_SCRIPT, DELETE_SCRIPT] {
+        for script in [
+            READ_SCRIPT,
+            LINES_SCRIPT,
+            WRITE_SCRIPT,
+            DELETE_SCRIPT,
+            LIST_SCRIPT,
+        ] {
             // `!` too: csh expands it even inside single quotes when its history is on.
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
@@ -710,6 +818,82 @@ mod tests {
 
         fn mode_of(path: &Path) -> u32 {
             std::fs::metadata(path).unwrap().mode() & 0o7777
+        }
+
+        fn list(home: &Path, path: &str, max: u64) -> Result<RemoteDir, RemoteFileError> {
+            let (command, stdin) = list_request(path, max)?;
+            parse_list(&run(home, &command, &stdin), max)
+        }
+
+        #[test]
+        fn lists_directories_and_classifies_failures() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            std::fs::create_dir(home.join("etc")).unwrap();
+            std::fs::create_dir(home.join("etc/nginx")).unwrap();
+            std::fs::write(home.join("etc/hosts"), b"x").unwrap();
+            std::fs::write(home.join("etc/.hidden"), b"x").unwrap();
+            // A name the login shell would mangle if it were quoted into the command.
+            std::fs::write(home.join("etc/-x $(id) 'q' *"), b"x").unwrap();
+            std::os::unix::fs::symlink(home.join("etc/nginx"), home.join("etc/conf")).unwrap();
+            std::os::unix::fs::symlink(home.join("gone"), home.join("etc/dangling")).unwrap();
+
+            let listed = list(home, "etc", 4096).unwrap();
+            assert_eq!(listed.path, home.join("etc").to_str().unwrap());
+            assert!(!listed.cut);
+            let mut entries: Vec<(&str, bool)> = listed
+                .entries
+                .iter()
+                .map(|e| (e.name.as_str(), e.dir))
+                .collect();
+            entries.sort_unstable();
+            assert_eq!(
+                entries,
+                [
+                    ("-x $(id) 'q' *", false),
+                    (".hidden", false),
+                    ("conf", true),
+                    ("dangling", false),
+                    ("hosts", false),
+                    ("nginx", true),
+                ]
+            );
+            // `~/`, relative and absolute paths resolve to the same directory.
+            let resolved = home.join("etc").to_str().unwrap().to_owned();
+            for path in ["~/etc", "etc/", resolved.as_str(), "etc/conf/.."] {
+                assert!(list(home, path, 4096).is_ok(), "{path}");
+            }
+            assert_eq!(list(home, "~", 4096).unwrap().path, home.to_str().unwrap());
+            std::fs::create_dir(home.join("empty")).unwrap();
+            assert_eq!(list(home, "empty", 4096).unwrap().entries, []);
+
+            // A cut listing keeps only whole lines.
+            let cut = list(home, "etc", 12).unwrap();
+            assert!(cut.cut);
+            assert!(cut.entries.len() < 6, "{:?}", cut.entries);
+
+            assert!(matches!(
+                list(home, "missing", 100),
+                Err(RemoteFileError::NotFound)
+            ));
+            assert!(matches!(
+                list(home, "etc/hosts", 100),
+                Err(RemoteFileError::NotDirectory)
+            ));
+            assert!(matches!(
+                list(home, "etc/dangling", 100),
+                Err(RemoteFileError::DanglingLink)
+            ));
+            if !is_root() {
+                let locked = home.join("locked");
+                std::fs::create_dir(&locked).unwrap();
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+                assert!(matches!(
+                    list(home, "locked", 100),
+                    Err(RemoteFileError::PermissionDenied)
+                ));
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
+            }
         }
 
         fn delete_file(home: &Path, path: &str, expect: &[u8]) -> Result<String, RemoteFileError> {

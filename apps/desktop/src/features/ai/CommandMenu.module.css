@@ -1,0 +1,107 @@
+/* AI-50, AI-51: the `/` and `@` menu above the input box, as wide as the box. */
+
+.menu {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-popover);
+  color: var(--fg);
+  font-size: var(--text-md);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.active {
+  background: var(--fill);
+}
+
+.info {
+  color: var(--fg2);
+}
+
+.icon {
+  flex: none;
+  color: var(--fg2);
+}
+
+.active .icon {
+  color: var(--fg);
+}
+
+/* The name, and what follows it, never wrap; what follows the name gives way first, then the
+ * description takes what room is left. */
+.main {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 75%;
+  min-width: 0;
+}
+
+.label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+/* Rows that name no command or path, such as a resource's title, read as text. */
+.plain .label {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.info .label {
+  font-family: inherit;
+  font-size: inherit;
+  white-space: normal;
+}
+
+.args {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  max-width: 30%;
+  overflow: hidden;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -647,7 +647,7 @@ async fn a_compaction_lists_the_tools_again_and_keeps_the_prefix() {
     let (_files, _big, _mock) = servers(&f).await;
     let (conv, _) = f.exchange(None, "hello", f.context()).await;
     f.manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &f.context())
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
         .await
         .unwrap();
     let (side, _) = f.side(&conv, "what did I ask?", None).await;

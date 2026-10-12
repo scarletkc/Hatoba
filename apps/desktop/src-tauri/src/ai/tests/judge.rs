@@ -772,7 +772,7 @@ async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
     // The model sees nothing before a summary, so the summary keeps the mode.
     let summary = f
         .manager
-        .compact(&f.vault, f.env.as_ref(), &conv, &auto(&f))
+        .compact(&f.vault, f.env.as_ref(), &conv, &auto(&f), None)
         .await
         .unwrap();
     let AiEntryView::Summary { text, .. } = &summary else {

@@ -33,7 +33,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 30,000 characters at a time. Addresses on loopback, private or link-local networks are refused | Asks, unless allowed |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
 | MCP tools (`mcp__<server>__<tool>`) | Tools from the MCP servers the user added (shown as server · tool) | Ask, unless set to Always allow |
-| **Search MCP tools** (`search_tools`) | With many MCP tools (see the MCP tools menu in `references/ai-panel.md`), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
+| **Search MCP tools** (`search_tools`) | With many MCP tools (see `/mcp` in `references/ai-panel.md`), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
 | `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
 
 Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (MCP tools: 50,000). Every call and result is a collapsible block in the conversation, in every mode. Tool results are data to the assistant: when one asks for something, it tells you instead.

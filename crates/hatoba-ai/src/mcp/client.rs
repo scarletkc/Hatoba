@@ -10,9 +10,11 @@ use std::time::Duration;
 use reqwest::header::{HeaderName, HeaderValue};
 use rmcp::model::{
     CallToolRequest, CallToolRequestParams, CancelledNotificationParam, ClientCapabilities,
-    ClientConfig, ClientRequest, CustomResult, ErrorData, Implementation, InitializeRequestParams,
-    JsonRpcMessage, JsonRpcNotification, ListToolsRequest, PaginatedRequestParams, ProtocolVersion,
-    ServerNotification, ServerResult, Tool,
+    ClientConfig, ClientRequest, CustomResult, ErrorData, GetPromptRequest, GetPromptRequestParams,
+    Implementation, InitializeRequestParams, JsonRpcMessage, JsonRpcNotification,
+    ListPromptsRequest, ListResourcesRequest, ListToolsRequest, PaginatedRequestParams,
+    ProtocolVersion, ReadResourceRequest, ReadResourceRequestParams, ServerNotification,
+    ServerResult, Tool,
 };
 use rmcp::service::{
     ClientInitializeError, PeerRequestOptions, RunningService, RxJsonRpcMessage, TxJsonRpcMessage,
@@ -28,7 +30,10 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use super::stdio::{self, ChildGuard, StderrTail};
-use super::{McpError, McpTool, McpToolResult, McpTransportConfig, ToolAnnotations};
+use super::{
+    McpError, McpPrompt, McpPromptArgument, McpResource, McpTool, McpToolResult,
+    McpTransportConfig, ToolAnnotations,
+};
 use crate::error::AiError;
 use crate::net::{clean_message, network_error};
 
@@ -39,7 +44,8 @@ const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 const EXIT_STATUS_WAIT: Duration = Duration::from_millis(500);
 /// How long sending `notifications/cancelled` may take before a cancelled call returns anyway.
 const CANCEL_NOTICE_WAIT: Duration = Duration::from_secs(1);
-/// Most `tools/list` pages read; a server that pages forever is refused.
+/// Most `tools/list`, `prompts/list` or `resources/list` pages read; a server that pages forever
+/// is refused.
 const MAX_TOOL_PAGES: usize = 100;
 /// Headers the Streamable HTTP transport or the HTTP stack sets itself.
 const RESERVED_HEADERS: [&str; 9] = [
@@ -70,13 +76,22 @@ impl ClientHandler for Handler {
     }
 }
 
-/// A transport that records `tools/list_changed` as the message is read. The SDK runs
-/// notification handlers in tasks of their own, so one could set the flag only after the
-/// answer that followed the notification was returned, and the next request would miss the
-/// change (AI-30). Messages are read in order, so here the flag is set before that answer is.
+/// The `list_changed` notifications a session has had since it last listed each kind.
+#[derive(Default)]
+struct ListChanges {
+    tools: AtomicBool,
+    prompts: AtomicBool,
+    resources: AtomicBool,
+}
+
+/// A transport that records `tools/list_changed`, `prompts/list_changed` and
+/// `resources/list_changed` as the message is read. The SDK runs notification handlers in tasks
+/// of their own, so one could set the flag only after the answer that followed the notification
+/// was returned, and the next request would miss the change (AI-30). Messages are read in order,
+/// so here the flag is set before that answer is.
 struct Watched<T> {
     inner: T,
-    tools_changed: Arc<AtomicBool>,
+    changes: Arc<ListChanges>,
 }
 
 impl<T: Transport<RoleClient>> Transport<RoleClient> for Watched<T> {
@@ -95,12 +110,20 @@ impl<T: Transport<RoleClient>> Transport<RoleClient> for Watched<T> {
 
     async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
         let message = self.inner.receive().await;
-        if let Some(JsonRpcMessage::Notification(JsonRpcNotification {
-            notification: ServerNotification::ToolListChangedNotification(_),
-            ..
-        })) = &message
+        if let Some(JsonRpcMessage::Notification(JsonRpcNotification { notification, .. })) =
+            &message
         {
-            self.tools_changed.store(true, Ordering::SeqCst);
+            let flag = match notification {
+                ServerNotification::ToolListChangedNotification(_) => Some(&self.changes.tools),
+                ServerNotification::PromptListChangedNotification(_) => Some(&self.changes.prompts),
+                ServerNotification::ResourceListChangedNotification(_) => {
+                    Some(&self.changes.resources)
+                }
+                _ => None,
+            };
+            if let Some(flag) = flag {
+                flag.store(true, Ordering::SeqCst);
+            }
         }
         message
     }
@@ -127,7 +150,7 @@ struct Inner {
     service: tokio::sync::Mutex<Option<RunningService<RoleClient, Handler>>>,
     /// The stdio child's process tree, killed by `shutdown` or when this is dropped.
     child: tokio::sync::Mutex<Option<ChildGuard>>,
-    tools_changed: Arc<AtomicBool>,
+    changes: Arc<ListChanges>,
     stderr: StderrTail,
     closed: AtomicBool,
     /// Per-page timeout of `list_tools`: the timeout given to `connect`.
@@ -198,7 +221,7 @@ impl McpConnection {
         kind: Kind,
         service: RunningService<RoleClient, Handler>,
         child: Option<ChildGuard>,
-        tools_changed: Arc<AtomicBool>,
+        changes: Arc<ListChanges>,
         stderr: StderrTail,
         list_timeout: Duration,
     ) -> Self {
@@ -208,7 +231,7 @@ impl McpConnection {
                 peer: service.peer().clone(),
                 service: tokio::sync::Mutex::new(Some(service)),
                 child: tokio::sync::Mutex::new(child),
-                tools_changed,
+                changes,
                 stderr,
                 closed: AtomicBool::new(false),
                 list_timeout,
@@ -219,10 +242,10 @@ impl McpConnection {
     /// Every tool of the server, reading all `tools/list` pages. Clears [`Self::tools_changed`]
     /// (it stays set when the listing fails).
     pub async fn list_tools(&self) -> Result<Vec<McpTool>, McpError> {
-        let was_changed = self.inner.tools_changed.swap(false, Ordering::SeqCst);
+        let was_changed = self.inner.changes.tools.swap(false, Ordering::SeqCst);
         let result = self.list_all_tools().await;
         if result.is_err() && was_changed {
-            self.inner.tools_changed.store(true, Ordering::SeqCst);
+            self.inner.changes.tools.store(true, Ordering::SeqCst);
         }
         result
     }
@@ -320,6 +343,135 @@ impl McpConnection {
         }
     }
 
+    /// Whether the server offers prompts (its `prompts` capability).
+    #[must_use]
+    pub fn offers_prompts(&self) -> bool {
+        self.inner
+            .peer
+            .peer_info()
+            .is_some_and(|info| info.capabilities.prompts.is_some())
+    }
+
+    /// Whether the server offers resources (its `resources` capability).
+    #[must_use]
+    pub fn offers_resources(&self) -> bool {
+        self.inner
+            .peer
+            .peer_info()
+            .is_some_and(|info| info.capabilities.resources.is_some())
+    }
+
+    /// Every prompt of the server (AI-50), reading all `prompts/list` pages; none when the server
+    /// does not offer prompts. Clears [`Self::prompts_changed`] (it stays set when the listing
+    /// fails).
+    pub async fn list_prompts(&self) -> Result<Vec<McpPrompt>, McpError> {
+        let was_changed = self.inner.changes.prompts.swap(false, Ordering::SeqCst);
+        if !self.offers_prompts() {
+            return Ok(Vec::new());
+        }
+        let result = self
+            .list_pages("prompts/list", "prompts", |params| {
+                ClientRequest::ListPromptsRequest(ListPromptsRequest::with_param(params))
+            })
+            .await
+            .map(|items| items.iter().filter_map(prompt_from_value).collect());
+        if result.is_err() && was_changed {
+            self.inner.changes.prompts.store(true, Ordering::SeqCst);
+        }
+        result
+    }
+
+    /// Every resource of the server (AI-51), reading all `resources/list` pages; none when the
+    /// server does not offer resources. Resource templates are not listed. Clears
+    /// [`Self::resources_changed`] (it stays set when the listing fails).
+    pub async fn list_resources(&self) -> Result<Vec<McpResource>, McpError> {
+        let was_changed = self.inner.changes.resources.swap(false, Ordering::SeqCst);
+        if !self.offers_resources() {
+            return Ok(Vec::new());
+        }
+        let result = self
+            .list_pages("resources/list", "resources", |params| {
+                ClientRequest::ListResourcesRequest(ListResourcesRequest::with_param(params))
+            })
+            .await
+            .map(|items| items.iter().filter_map(resource_from_value).collect());
+        if result.is_err() && was_changed {
+            self.inner.changes.resources.store(true, Ordering::SeqCst);
+        }
+        result
+    }
+
+    /// The items under `key` of every page of a list request, read as JSON so that items this SDK
+    /// cannot parse are not lost with their page.
+    async fn list_pages(
+        &self,
+        method: &str,
+        key: &str,
+        request: impl Fn(PaginatedRequestParams) -> ClientRequest,
+    ) -> Result<Vec<Value>, McpError> {
+        self.check_open()?;
+        let mut items = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut seen = HashSet::new();
+        for _ in 0..MAX_TOOL_PAGES {
+            let params = PaginatedRequestParams::default().with_cursor(cursor.take());
+            let page = result_value(
+                self.request(request(params), self.inner.list_timeout, None)
+                    .await?,
+            );
+            let Some(listed) = page.get(key).and_then(Value::as_array) else {
+                return Err(McpError::Protocol(format!(
+                    "the answer to {method} is not a list"
+                )));
+            };
+            items.extend(listed.iter().cloned());
+            match page.get("nextCursor").and_then(Value::as_str) {
+                Some(next) if !next.is_empty() => {
+                    if !seen.insert(next.to_owned()) {
+                        return Err(McpError::Protocol(format!(
+                            "the server repeated a {method} cursor"
+                        )));
+                    }
+                    cursor = Some(next.to_owned());
+                }
+                _ => return Ok(items),
+            }
+        }
+        Err(McpError::Protocol(format!(
+            "the answer to {method} has more than {MAX_TOOL_PAGES} pages"
+        )))
+    }
+
+    /// Gets the prompt `name` (its name on the server) with `arguments` (AI-50), and returns its
+    /// messages as text ([`prompt_text`]).
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Map<String, Value>,
+        timeout: Duration,
+    ) -> Result<String, McpError> {
+        self.check_open()?;
+        let mut params = GetPromptRequestParams::new(name);
+        if !arguments.is_empty() {
+            params = params.with_arguments(arguments);
+        }
+        let request = ClientRequest::GetPromptRequest(GetPromptRequest::new(params));
+        let answer = result_value(self.request(request, timeout, None).await?);
+        prompt_text(&answer)
+            .ok_or_else(|| McpError::Protocol("the answer to prompts/get has no messages".into()))
+    }
+
+    /// Reads the resource at `uri` (AI-51), and returns its contents as text
+    /// ([`resource_text`]).
+    pub async fn read_resource(&self, uri: &str, timeout: Duration) -> Result<String, McpError> {
+        self.check_open()?;
+        let request = ClientRequest::ReadResourceRequest(ReadResourceRequest::new(
+            ReadResourceRequestParams::new(uri),
+        ));
+        let answer = result_value(self.request(request, timeout, None).await?);
+        resource_text(&answer)
+    }
+
     /// Sends one request with a timeout and, when given, a cancellation token.
     async fn request(
         &self,
@@ -388,7 +540,21 @@ impl McpConnection {
     /// (AI-30: refresh the list before the next request).
     #[must_use]
     pub fn tools_changed(&self) -> bool {
-        self.inner.tools_changed.load(Ordering::SeqCst)
+        self.inner.changes.tools.load(Ordering::SeqCst)
+    }
+
+    /// Whether a `notifications/prompts/list_changed` arrived since the last
+    /// [`Self::list_prompts`].
+    #[must_use]
+    pub fn prompts_changed(&self) -> bool {
+        self.inner.changes.prompts.load(Ordering::SeqCst)
+    }
+
+    /// Whether a `notifications/resources/list_changed` arrived since the last
+    /// [`Self::list_resources`].
+    #[must_use]
+    pub fn resources_changed(&self) -> bool {
+        self.inner.changes.resources.load(Ordering::SeqCst)
     }
 
     /// The last lines of a stdio server's stderr, oldest first (empty for HTTP). They stay in
@@ -439,10 +605,10 @@ async fn connect_stdio(
     if let Some(pipe) = child_stderr {
         stdio::capture_stderr(pipe, stderr.clone());
     }
-    let tools_changed = Arc::new(AtomicBool::new(false));
+    let changes = Arc::new(ListChanges::default());
     let transport = Watched {
         inner: AsyncRwTransport::new_client(stdout, stdin),
-        tools_changed: tools_changed.clone(),
+        changes: changes.clone(),
     };
     let started = tokio::time::timeout(timeout, rmcp::serve_client(Handler, transport)).await;
     match started {
@@ -450,7 +616,7 @@ async fn connect_stdio(
             Kind::Stdio,
             service,
             Some(child),
-            tools_changed,
+            changes,
             stderr,
             timeout,
         )),
@@ -518,17 +684,17 @@ async fn connect_http(
     let config =
         StreamableHttpClientTransportConfig::with_uri(url.as_str()).custom_headers(headers);
     let transport = StreamableHttpClientTransport::with_client(http.clone(), config);
-    let tools_changed = Arc::new(AtomicBool::new(false));
+    let changes = Arc::new(ListChanges::default());
     let transport = Watched {
         inner: transport,
-        tools_changed: tools_changed.clone(),
+        changes: changes.clone(),
     };
     match tokio::time::timeout(timeout, rmcp::serve_client(Handler, transport)).await {
         Ok(Ok(service)) => Ok(McpConnection::new(
             Kind::Http { token },
             service,
             None,
-            tools_changed,
+            changes,
             StderrTail::new(),
             timeout,
         )),
@@ -709,6 +875,122 @@ fn tool_from_value(tool: &Value) -> Option<McpTool> {
             open_world_hint: hint("openWorldHint"),
         },
     })
+}
+
+/// A result as JSON: what the SDK parsed, written back, or what it could not parse.
+fn result_value(result: ServerResult) -> Value {
+    match result {
+        ServerResult::CustomResult(CustomResult(value)) => value,
+        other => serde_json::to_value(&other).unwrap_or(Value::Null),
+    }
+}
+
+/// A string field of a listed item, or `None` when it is missing or empty.
+fn text_field(item: &Value, key: &str) -> Option<String> {
+    item.get(key)
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+}
+
+/// A prompt from `prompts/list`; the name is required.
+fn prompt_from_value(prompt: &Value) -> Option<McpPrompt> {
+    let arguments = prompt
+        .get("arguments")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter_map(|a| {
+                    Some(McpPromptArgument {
+                        name: text_field(a, "name")?,
+                        description: text_field(a, "description").unwrap_or_default(),
+                        required: a.get("required").and_then(Value::as_bool).unwrap_or(false),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(McpPrompt {
+        name: text_field(prompt, "name")?,
+        title: text_field(prompt, "title"),
+        description: text_field(prompt, "description").unwrap_or_default(),
+        arguments,
+    })
+}
+
+/// A resource from `resources/list`; the URI is required, and the name is the URI when missing.
+fn resource_from_value(resource: &Value) -> Option<McpResource> {
+    let uri = text_field(resource, "uri")?;
+    Some(McpResource {
+        name: text_field(resource, "name").unwrap_or_else(|| uri.clone()),
+        title: text_field(resource, "title"),
+        description: text_field(resource, "description").unwrap_or_default(),
+        mime_type: text_field(resource, "mimeType"),
+        uri,
+    })
+}
+
+/// The messages of a `prompts/get` result as one text (AI-50): each message's content as a tool
+/// result's would be ([`tool_result`]), a blank line apart. When any message is not the user's,
+/// each starts with a line naming its role, such as `[assistant]`. `None` without messages.
+#[must_use]
+pub fn prompt_text(result: &Value) -> Option<String> {
+    let messages = result.get("messages").and_then(Value::as_array)?;
+    if messages.is_empty() {
+        return None;
+    }
+    let role = |m: &Value| {
+        m.get("role")
+            .and_then(Value::as_str)
+            .unwrap_or("user")
+            .to_owned()
+    };
+    let roles = messages.iter().any(|m| role(m) != "user");
+    let parts: Vec<String> = messages
+        .iter()
+        .map(|m| {
+            let content = m.get("content").map(block_text).unwrap_or_default();
+            if roles {
+                let name: String = role(m)
+                    .chars()
+                    .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .take(20)
+                    .collect();
+                format!("[{name}]\n{content}")
+            } else {
+                content
+            }
+        })
+        .collect();
+    Some(parts.join("\n\n"))
+}
+
+/// The contents of a `resources/read` result as one text (AI-51): each text content, a line
+/// apart, and a line naming every binary one, such as `[binary content omitted]`. A resource
+/// with no text content at all is an error, since there is nothing to attach.
+pub fn resource_text(result: &Value) -> Result<String, McpError> {
+    let contents = result
+        .get("contents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| McpError::Protocol("the answer to resources/read has no contents".into()))?;
+    let mut text = false;
+    let parts: Vec<&str> = contents
+        .iter()
+        .map(|c| match c.get("text").and_then(Value::as_str) {
+            Some(t) => {
+                text = true;
+                t
+            }
+            None => "[binary content omitted]",
+        })
+        .collect();
+    if !text {
+        return Err(McpError::Protocol(
+            "the resource has no text content, only binary content, which Hatoba does not attach"
+                .into(),
+        ));
+    }
+    Ok(parts.join("\n"))
 }
 
 /// Reduces a `CallToolResult` (as JSON, so content types unknown to the SDK work too) to text.

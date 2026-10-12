@@ -1,10 +1,13 @@
-//! MCP client (spec §13.9): tools only, over stdio child processes and Streamable HTTP.
+//! MCP client (spec §13.9): tools, prompts and resources, over stdio child processes and
+//! Streamable HTTP.
 //!
-//! Hatoba is an MCP client for tools only: it declares no client capability (no sampling,
-//! elicitation or roots) and uses no server prompts or resources.
+//! Hatoba declares no client capability (no sampling, elicitation or roots). It uses a server's
+//! tools for the model, and its prompts and resources only when the user picks one in the panel's
+//! `/` or `@` menu (AI-50, AI-51).
 //!
 //! - [`McpConnection`]: one session with one server: start the child or open the HTTP session,
-//!   list and call its tools, and shut it down (AI-32).
+//!   list and call its tools, list and get its prompts, list and read its resources, and shut it
+//!   down (AI-32).
 //! - [`tool_names`] and [`clean_schema`]: what a request offers the model (AI-30).
 //! - [`deferred`]: `search_tools`, `call_mcp_tool` and the `mcp_tools` note of a conversation
 //!   whose MCP tools are deferred (AI-45).
@@ -28,7 +31,7 @@ mod stdio;
 #[cfg(test)]
 mod tests;
 
-pub use client::McpConnection;
+pub use client::{McpConnection, prompt_text, resource_text};
 pub use names::{MAX_TOOL_NAME_LEN, tool_names};
 pub use schema::clean_schema;
 pub use stdio::{STDERR_LINES, StderrTail};
@@ -147,6 +150,41 @@ pub struct McpToolResult {
     /// block is one line naming its type, such as `[image content omitted]`. When the result has
     /// no content blocks, its `structuredContent` as JSON.
     pub content: String,
+}
+
+/// A prompt as `prompts/list` returned it: the panel's `/` menu offers it as a command (AI-50).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpPrompt {
+    /// The prompt's name on its server.
+    pub name: String,
+    /// The server's display title, if it gave one.
+    pub title: Option<String>,
+    /// The server's description, empty when it gave none.
+    pub description: String,
+    /// The arguments it takes, in the server's order.
+    pub arguments: Vec<McpPromptArgument>,
+}
+
+/// One argument of a prompt.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpPromptArgument {
+    pub name: String,
+    /// The server's description, empty when it gave none.
+    pub description: String,
+    pub required: bool,
+}
+
+/// A resource as `resources/list` returned it: the panel's `@` menu offers it (AI-51).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpResource {
+    pub uri: String,
+    /// The server's name for it.
+    pub name: String,
+    /// The server's display title, if it gave one.
+    pub title: Option<String>,
+    /// The server's description, empty when it gave none.
+    pub description: String,
+    pub mime_type: Option<String>,
 }
 
 /// Everything that can go wrong with an MCP server. Messages never contain an environment or

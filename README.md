@@ -61,7 +61,9 @@ account.
   choose approves the safe ones in Auto mode, or bypass mode skips approval. It
   uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
   servers, and takes terminal selections, connection errors, long pastes, and
-  text files as attachments. Conversations sync with the rest of the vault.
+  text files as attachments. Type `/` for commands, skills, and MCP prompts, and
+  `@` to attach files and folders on the host or MCP resources. Conversations
+  sync with the rest of the vault.
 
 ## Download
 

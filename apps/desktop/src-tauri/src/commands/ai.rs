@@ -26,11 +26,11 @@ use crate::ai::{
 };
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiConversationDetail, AiConversationView, AiEntryView,
-    AiFileChange, AiFilePreview, AiFileRevert, AiJudgeSampleOutcome, AiModel, AiModelRef,
-    AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
-    AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure,
-    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile,
-    SearchKind, SearchProviderInput, SearchProviderView,
+    AiFileChange, AiFilePreview, AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome,
+    AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
+    AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput,
+    AiSkillCommand, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext,
+    AiTurnEvent, Clearable, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -1041,6 +1041,7 @@ pub async fn ai_stop(
 }
 
 /// AI-21: summarizes the context with the given model and moves `context_start` to the summary.
+/// `instructions`: what `/compact <instructions>` asks of the summary (AI-50).
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_compact(
@@ -1048,11 +1049,67 @@ pub async fn ai_compact(
     state: State<'_, AppState>,
     conversation_id: String,
     context: AiTurnContext,
+    instructions: Option<String>,
 ) -> AppResult<AiEntryView> {
     state
         .ai
-        .compact(&state.vault, &AppEnv(app), &conversation_id, &context)
+        .compact(
+            &state.vault,
+            &AppEnv(app),
+            &conversation_id,
+            &context,
+            instructions.as_deref(),
+        )
         .await
+}
+
+/// AI-50: the skills the panel's `/` menu offers as commands.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_skill_commands(state: State<'_, AppState>) -> AppResult<Vec<AiSkillCommand>> {
+    state.with_unlocked(|v| Ok(crate::ai::skill_commands(v)))
+}
+
+/// AI-50: the `SKILL.md` of the enabled skill `name`, which a `/<skill>` command attaches.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_skill_text(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> AppResult<String> {
+    let version = AppEnv(app).app_version();
+    state.with_unlocked(|v| crate::ai::skill_text(v, &name, &version))
+}
+
+/// AI-51: the entries of the directory `path` on the host of the tab's session `session_id`, for
+/// the `@` menu: to complete a path, and to attach a folder.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_host_list(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> AppResult<AiHostListing> {
+    state.with_unlocked(|_| Ok(()))?;
+    let session = AppEnv(app).session(&session_id);
+    Ok(crate::ai::mentions::list(session, &path).await)
+}
+
+/// AI-51: the text file `path` on the host of the tab's session `session_id`, which an `@`
+/// mention attaches.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_host_read(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> AppResult<AiHostFile> {
+    state.with_unlocked(|_| Ok(()))?;
+    let session = AppEnv(app).session(&session_id);
+    Ok(crate::ai::mentions::read(session, &path).await)
 }
 
 /// AI-42: asks a side question about the conversation without stopping its turn. The answer

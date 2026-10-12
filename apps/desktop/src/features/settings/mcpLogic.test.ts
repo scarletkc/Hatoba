@@ -304,7 +304,7 @@ describe("servers, state, and Always allow", () => {
 
   it("treats a server without a status as stopped", () => {
     expect(serverState(undefined)).toBe("stopped");
-    expect(serverState({ server_id: "m1", state: "failed", error: "x", stderr: [], tools: [] })).toBe("failed");
+    expect(serverState({ server_id: "m1", state: "failed", error: "x", stderr: [], tools: [], prompts: [], resources: [] })).toBe("failed");
   });
 
   it("allows a tool on its own or with the whole server", () => {

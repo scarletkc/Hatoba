@@ -77,6 +77,8 @@ fn serve() -> ! {
     // the call runs.
     let mut held: Option<(Value, Value)> = None;
     let mut released = false;
+    // `notify_lists` adds a prompt and a resource and says so (AI-50, AI-51).
+    let mut lists_changed = false;
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
@@ -91,11 +93,45 @@ fn serve() -> ! {
                 &id,
                 json!({
                     "protocolVersion": "2025-06-18",
-                    "capabilities": {"tools": {"listChanged": true}},
+                    "capabilities": {
+                        "tools": {"listChanged": true},
+                        "prompts": {"listChanged": true},
+                        "resources": {"listChanged": true}
+                    },
                     "serverInfo": {"name": "mock", "version": "1.0.0"}
                 }),
             ),
             "ping" => reply(&id, json!({})),
+            "prompts/list" => {
+                let mut prompts = vec![json!({"name": "review", "description": "Reviews",
+                    "arguments": [{"name": "pr", "required": true}]})];
+                if lists_changed {
+                    prompts.push(json!({"name": "later"}));
+                }
+                reply(&id, json!({"prompts": prompts}));
+            }
+            "prompts/get" => {
+                let pr = message["params"]["arguments"]["pr"].as_str().unwrap_or("-");
+                reply(
+                    &id,
+                    json!({"messages": [{"role": "user",
+                        "content": {"type": "text", "text": format!("Review {pr}")}}]}),
+                );
+            }
+            "resources/list" => {
+                let mut resources = vec![json!({"uri": "mem://notes", "name": "notes"})];
+                if lists_changed {
+                    resources.push(json!({"uri": "mem://later", "name": "later"}));
+                }
+                reply(&id, json!({"resources": resources}));
+            }
+            "resources/read" => {
+                let uri = message["params"]["uri"].clone();
+                reply(
+                    &id,
+                    json!({"contents": [{"uri": uri, "text": "the notes"}]}),
+                );
+            }
             "tools/list" => {
                 let mut tools = vec![
                     json!({"name": "echo", "description": "Echoes text", "inputSchema": schema(),
@@ -135,6 +171,16 @@ fn serve() -> ! {
                 "notify" => {
                     notified = true;
                     send(&json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}));
+                    reply(&id, text("notified"));
+                }
+                "notify_lists" => {
+                    lists_changed = true;
+                    for method in [
+                        "notifications/prompts/list_changed",
+                        "notifications/resources/list_changed",
+                    ] {
+                        send(&json!({"jsonrpc": "2.0", "method": method}));
+                    }
                     reply(&id, text("notified"));
                 }
                 "pid" => reply(&id, text(std::process::id().to_string())),
@@ -984,4 +1030,75 @@ fn a_stdio_server_gets_the_default_path_unless_it_sets_one() {
         headers: Vec::new(),
     };
     assert_eq!(with_default_path(remote.clone(), Some(default)), remote);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_menus_start_servers_and_fetch_their_prompts_and_resources() {
+    let vault = vault();
+    let (mcp, _events) = manager();
+    let files = put_server(&vault, stdio_server("files"));
+    let off = put_server(&vault, stdio_server("off here"));
+    let skipped = put_server(&vault, stdio_server("skipped"));
+    set_enabled(&vault, &files, true);
+    set_enabled(&vault, &skipped, true);
+    let device = || DeviceState::load(&vault.lock().unwrap());
+
+    // AI-50, AI-51: opening a menu starts the servers the conversation uses, and only those.
+    mcp.warm(&vault, vec![skipped.clone()]);
+    eventually("the server to run", || {
+        mcp.status(&device(), &files).state == McpServerState::Running
+    })
+    .await;
+    assert_eq!(
+        mcp.status(&device(), &skipped).state,
+        McpServerState::Stopped
+    );
+    assert_eq!(mcp.status(&device(), &off).state, McpServerState::Stopped);
+
+    let status = mcp.status(&device(), &files);
+    let commands: Vec<&str> = status.prompts.iter().map(|p| p.command.as_str()).collect();
+    assert_eq!(commands, ["mcp__files__review"]);
+    assert_eq!(status.prompts[0].arguments[0].name, "pr");
+    assert!(status.prompts[0].arguments[0].required);
+    assert_eq!(status.resources[0].uri, "mem://notes");
+
+    let mut arguments = Map::new();
+    arguments.insert("pr".into(), json!("42"));
+    assert_eq!(
+        mcp.get_prompt(&vault, &files, "review", arguments).await,
+        Ok("Review 42".to_owned())
+    );
+    assert_eq!(
+        mcp.read_resource(&vault, &files, "mem://notes").await,
+        Ok("the notes".to_owned())
+    );
+    // A server off on this device fetches nothing, and does not start.
+    let refused = mcp.read_resource(&vault, &off, "mem://notes").await;
+    assert!(refused.is_err_and(|e| e.contains("off on this device")));
+    assert_eq!(mcp.status(&device(), &off).state, McpServerState::Stopped);
+
+    // After list_changed, the next opening lists them again.
+    let cancel = CancellationToken::new();
+    // A tool the server does not list, which the mock answers all the same.
+    let notify = OfferedTool {
+        name: "mcp__files__notify_lists".into(),
+        server_id: files.clone(),
+        server_name: "files".into(),
+        tool: hatoba_ai::mcp::McpTool {
+            name: "notify_lists".into(),
+            description: String::new(),
+            input_schema: json!({"type": "object"}),
+            annotations: hatoba_ai::mcp::ToolAnnotations::default(),
+        },
+    };
+    let (status, _) = mcp.call(&vault, &notify, args(json!({})), &cancel).await;
+    assert_eq!(status, ToolStatus::Ok);
+    mcp.warm(&vault, Vec::new());
+    eventually("the lists to be relisted", || {
+        mcp.status(&device(), &files).prompts.len() == 2
+    })
+    .await;
+    assert_eq!(mcp.status(&device(), &files).resources.len(), 2);
+
+    mcp.shutdown().await;
 }

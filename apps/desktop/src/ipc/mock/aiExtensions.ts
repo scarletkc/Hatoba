@@ -1,6 +1,10 @@
 import type { HatobaApi } from "../api";
 import { builtinSkill } from "./builtinSkill";
 import type {
+  AiHostEntry,
+  AiHostFile,
+  AiHostListing,
+  AiSkillCommand,
   AppError,
   EventMap,
   McpImportPreview,
@@ -11,6 +15,8 @@ import type {
   McpToolAnnotations,
   McpToolInfo,
   McpProxyInfo,
+  McpPromptView,
+  McpResourceView,
   McpToolView,
   McpTransportView,
   SkillDetail,
@@ -44,6 +50,13 @@ type AiExtensionsApi = Pick<
   | "mcp_import_preview"
   | "mcp_import"
   | "mcp_export"
+  | "mcp_warm"
+  | "mcp_prompt_get"
+  | "mcp_resource_read"
+  | "ai_skill_commands"
+  | "ai_skill_text"
+  | "ai_host_list"
+  | "ai_host_read"
 >;
 
 type Emit = <K extends keyof EventMap>(event: K, payload: EventMap[K]) => void;
@@ -215,6 +228,109 @@ const toolsFor = (name: string): ToolDef[] => {
   return GENERIC_TOOLS;
 };
 
+/** A prompt the demo servers offer (AI-50), with the text `prompts/get` returns for its arguments. */
+interface PromptDef {
+  name: string;
+  description: string;
+  arguments: { name: string; description: string; required: boolean }[];
+  text: (args: Record<string, string>) => string;
+}
+
+const GITHUB_PROMPTS: PromptDef[] = [
+  {
+    name: "review_pr",
+    description: "Review a pull request: its diff, the checks, and the comments so far.",
+    arguments: [
+      { name: "pr_number", description: "The pull request's number", required: true },
+      { name: "focus", description: "What to look at first", required: false },
+    ],
+    text: (a) =>
+      `Review pull request #${a.pr_number ?? "?"} of the current repository. Read its diff, its checks and the comments so far.${a.focus ? ` Look at ${a.focus} first.` : ""} List the problems you find, most severe first.`,
+  },
+  {
+    name: "triage_issues",
+    description: "Sort the open issues by how urgent they are.",
+    arguments: [],
+    text: () => "List the open issues of the current repository and sort them by urgency, with one line on why for each.",
+  },
+];
+
+const GITHUB_RESOURCES: McpResourceView[] = [
+  { uri: "repo://scarletkc/hatoba/README.md", name: "README.md", title: null, description: "The repository's README", mime_type: "text/markdown" },
+  { uri: "repo://scarletkc/hatoba/CONTRIBUTING.md", name: "CONTRIBUTING.md", title: null, description: "How to contribute", mime_type: "text/markdown" },
+];
+
+const FILESYSTEM_RESOURCES: McpResourceView[] = [
+  { uri: "file:///C:/Users/kc/Documents/runbook.md", name: "runbook.md", title: "Runbook", description: "On-call runbook", mime_type: "text/markdown" },
+  { uri: "file:///C:/Users/kc/Documents/logo.png", name: "logo.png", title: null, description: "", mime_type: "image/png" },
+];
+
+const promptsFor = (name: string): PromptDef[] => (name.toLowerCase().includes("github") ? GITHUB_PROMPTS : []);
+
+const resourcesFor = (name: string): McpResourceView[] => {
+  const n = name.toLowerCase();
+  if (n.includes("github")) return GITHUB_RESOURCES;
+  if (n.includes("filesystem") || n === "files") return FILESYSTEM_RESOURCES;
+  return [];
+};
+
+/** The text of a demo resource, or null for one with only binary content. */
+const resourceText = (uri: string): string | null => {
+  if (uri.endsWith(".png")) return null;
+  if (uri.endsWith("runbook.md"))
+    return "# Runbook\n\n1. Check `systemctl status nginx` and the error log.\n2. Roll back the last deploy if the error started with it.\n3. Page the database owner for anything under /var/lib/postgresql.\n";
+  if (uri.endsWith("CONTRIBUTING.md")) return "# Contributing to Hatoba\n\nOpen or find an issue before writing code.\n";
+  return "# Hatoba\n\nOpen-source desktop SSH client with an AI assistant and end-to-end encrypted sync.\n";
+};
+
+/** A small home directory on the demo host for the `@` menu (AI-51): directories map names to their entries, files to their text. */
+type HostNode = string | { [name: string]: HostNode };
+
+const HOST_TREE: { [name: string]: HostNode } = {
+  home: {
+    deploy: {
+      ".bashrc": "export EDITOR=vim\n",
+      ".ssh": { authorized_keys: "ssh-ed25519 AAAA… deploy@laptop\n" },
+      app: {
+        "docker-compose.yml": 'services:\n  api:\n    image: registry.example.com/api:1.8.2\n    ports:\n      - "127.0.0.1:8080:8080"\n',
+        ".env.example": "DATABASE_URL=postgres://app@db/app\n",
+        "README.md": "# api\n\nRun `docker compose up -d`.\n",
+      },
+      "backup.sh": "#!/bin/sh\npg_dump -Fc app > /var/backups/app.dump\n",
+    },
+  },
+  etc: {
+    hosts: "127.0.0.1 localhost\n10.0.0.12 db\n",
+    nginx: {
+      "nginx.conf": "user www-data;\nworker_processes auto;\n\nhttp {\n    include /etc/nginx/conf.d/*.conf;\n    include /etc/nginx/sites-enabled/*;\n}\n",
+      "sites-enabled": {
+        "api.conf": "server {\n    listen 443 ssl;\n    server_name api.example.com;\n\n    location / {\n        proxy_pass http://127.0.0.1:8080;\n    }\n}\n",
+      },
+      "conf.d": {},
+    },
+    shadow: "",
+  },
+  var: { log: { nginx: { "error.log": "2026/10/12 09:14:03 [error] 812#812: *41 connect() failed (111: Connection refused) while connecting to upstream\n" } } },
+};
+
+/** The demo host's node at an absolute path, or undefined. */
+const hostNode = (path: string): HostNode | undefined => {
+  let node: HostNode = HOST_TREE;
+  for (const part of path.split("/").filter(Boolean)) {
+    if (typeof node === "string" || !(part in node)) return undefined;
+    node = node[part];
+  }
+  return node;
+};
+
+/** A path as the host's scripts resolve it: relative paths and `~/` from the home directory `/home/deploy`. */
+const resolveHostPath = (path: string): string => {
+  const home = "/home/deploy";
+  if (path === "~") return home;
+  if (path.startsWith("~/")) return `${home}/${path.slice(2)}`;
+  return path.startsWith("/") ? path : `${home}/${path}`;
+};
+
 /** `mcp__<server>__<tool>`, cleaned to letters, digits, `_` and `-`, and cut to 64 characters (AI-30). */
 const toolName = (server: string, tool: string): string => {
   const clean = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -383,12 +499,21 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     },
     always_allow: e.view.always_allow || e.view.always_allow_tools.includes(def.tool),
   });
+  const promptView = (e: Entry, p: PromptDef): McpPromptView => ({
+    command: toolName(e.view.name, p.name),
+    name: p.name,
+    title: null,
+    description: p.description,
+    arguments: p.arguments.map((a) => ({ ...a })),
+  });
   const statusOf = (e: Entry): McpServerStatus => ({
     server_id: e.view.id,
     state: e.state,
     error: e.error,
     stderr: [...e.stderr],
     tools: e.tools.map((d) => toolView(e, d)),
+    prompts: e.state === "running" ? promptsFor(e.view.name).map((p) => promptView(e, p)) : [],
+    resources: e.state === "running" ? structuredClone(resourcesFor(e.view.name)) : [],
   });
   const publish = (e: Entry) => emit("ai://mcp-status", statusOf(e));
   const settle = (e: Entry) => {
@@ -569,6 +694,14 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
 
   const placeholder = (key: string) => `<${key.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}>`;
 
+  /** A running server's connection for a prompt or resource, as `fetch_connection` checks it. */
+  const runningEntry = (sid: string): Entry => {
+    const e = entry(sid);
+    if (!e.view.enabled) fail("ai", `the MCP server "${e.view.name}" is off on this device`);
+    if (e.state !== "running") fail("ai", `the MCP server "${e.view.name}" is not running`);
+    return e;
+  };
+
   return {
     skills_list: async () => [...skills.values()].map(skillView),
     skill_get: async (sid) => structuredClone(skills.get(sid) ?? fail("not_found", "no such skill")),
@@ -624,6 +757,72 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     skill_export: async (sid) => {
       await wait(300);
       if (!skills.has(sid)) fail("not_found", "no such skill");
+    },
+
+    mcp_warm: async (disabled) => {
+      for (const e of entries) {
+        if (!e.view.enabled || disabled.includes(e.view.id) || e.state !== "stopped") continue;
+        const run = ++e.run;
+        e.state = "starting";
+        publish(e);
+        setTimeout(() => {
+          if (e.run !== run || e.state !== "starting") return;
+          settle(e);
+          publish(e);
+        }, 800);
+      }
+    },
+    mcp_prompt_get: async (sid, name, args) => {
+      await wait(300);
+      const e = runningEntry(sid);
+      const prompt = promptsFor(e.view.name).find((p) => p.name === name) ?? fail("ai", `the MCP server "${e.view.name}" could not get the prompt: Unknown prompt (code -32602)`);
+      const missing = prompt.arguments.find((a) => a.required && !args.some((x) => x.name === a.name && x.value));
+      if (missing) fail("ai", `the MCP server "${e.view.name}" could not get the prompt: missing required argument ${missing.name} (code -32602)`);
+      return prompt.text(Object.fromEntries(args.map((a) => [a.name, a.value])));
+    },
+    mcp_resource_read: async (sid, uri) => {
+      await wait(300);
+      const e = runningEntry(sid);
+      const text = resourceText(uri);
+      if (text === null)
+        fail("ai", `the MCP server "${e.view.name}" could not read the resource: unexpected answer from the server: the resource has no text content, only binary content, which Hatoba does not attach`);
+      return text;
+    },
+    ai_skill_commands: async () => {
+      const list: AiSkillCommand[] = [...skills.values()]
+        .filter((d) => d.skill.enabled && d.skill.name !== RESERVED)
+        .map((d) => ({ name: d.skill.name, description: d.skill.description }));
+      if (await deps.builtinEnabled()) {
+        const builtin = await builtinSkill(deps.version, true);
+        list.push({ name: builtin.name, description: builtin.description });
+      }
+      return list.sort((a, b) => a.name.localeCompare(b.name));
+    },
+    ai_skill_text: async (name) => {
+      if (name === RESERVED && (await deps.builtinEnabled())) return (await builtinSkill(deps.version, true)).body;
+      const d = [...skills.values()].find((x) => x.skill.enabled && x.skill.name === name && name !== RESERVED);
+      return d?.body ?? fail("not_found", "skill not found");
+    },
+    ai_host_list: async (_sessionId, path): Promise<AiHostListing> => {
+      await wait(120);
+      const resolved = resolveHostPath(path);
+      const node = hostNode(resolved);
+      if (node === undefined) return { status: "refused", reason: "not_found" };
+      if (typeof node === "string") return { status: "refused", reason: "wrong_kind" };
+      if (resolved === "/root") return { status: "refused", reason: "permission_denied" };
+      const entries: AiHostEntry[] = Object.entries(node)
+        .map(([name, child]) => ({ name, dir: typeof child !== "string" }))
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      return { status: "ok", path: resolved, entries, cut: false };
+    },
+    ai_host_read: async (_sessionId, path): Promise<AiHostFile> => {
+      await wait(150);
+      const resolved = resolveHostPath(path);
+      const node = hostNode(resolved);
+      if (node === undefined) return { status: "refused", reason: "not_found" };
+      if (typeof node !== "string") return { status: "refused", reason: "wrong_kind" };
+      if (resolved === "/etc/shadow") return { status: "refused", reason: "permission_denied" };
+      return { status: "ok", path: resolved, text: node };
     },
 
     mcp_servers_list: async () => entries.map((e) => cloneView(e.view)),

@@ -1,6 +1,6 @@
 /**
- * AI-10, AI-35: what goes with a message. Each attachment is stored in the user's entry as a
- * leading attachment block, so neither the entry format nor the IPC contract changes:
+ * AI-10, AI-35, AI-50, AI-51: what goes with a message. Each attachment is stored in the user's
+ * entry as a leading attachment block, so neither the entry format nor the IPC contract changes:
  *
  *   <terminal_selection host="prod-api" lines="3">
  *   …the selected text…
@@ -76,7 +76,64 @@ export interface FileAttachment {
   text: string;
 }
 
-export type Attachment = DiagnosticsAttachment | SelectionAttachment | PasteAttachment | FileAttachment;
+/** A text file on the tab's host, picked in the `@` menu (AI-51). */
+export interface HostFileAttachment {
+  kind: "host_file";
+  /** The tab host's display name. */
+  host: string;
+  /** The path as the host resolved it. */
+  path: string;
+  lines: number;
+  text: string;
+}
+
+/** A directory's entries on the tab's host, picked in the `@` menu (AI-51): one per line, a `/` after each directory. */
+export interface HostDirectoryAttachment {
+  kind: "host_directory";
+  host: string;
+  path: string;
+  entries: number;
+  /** Entries were left out: the listing passed its size limit. */
+  truncated: boolean;
+  text: string;
+}
+
+/** A resource of an MCP server, picked in the `@` menu (AI-51). */
+export interface McpResourceAttachment {
+  kind: "mcp_resource";
+  /** The server's name. */
+  server: string;
+  uri: string;
+  lines: number;
+  text: string;
+}
+
+/** The `SKILL.md` of a skill the user ran with `/<name>` (AI-50). */
+export interface SkillAttachment {
+  kind: "skill";
+  name: string;
+  text: string;
+}
+
+/** A prompt of an MCP server the user ran with `/mcp__<server>__<prompt>` (AI-50): its messages as text. */
+export interface McpPromptAttachment {
+  kind: "mcp_prompt";
+  server: string;
+  /** The prompt's name on its server. */
+  name: string;
+  text: string;
+}
+
+export type Attachment =
+  | DiagnosticsAttachment
+  | SelectionAttachment
+  | PasteAttachment
+  | FileAttachment
+  | HostFileAttachment
+  | HostDirectoryAttachment
+  | McpResourceAttachment
+  | SkillAttachment
+  | McpPromptAttachment;
 
 // ───────────── making attachments ─────────────
 
@@ -201,6 +258,35 @@ export function attachmentTokens(a: Attachment): number {
   return estimateTokens(a.text);
 }
 
+/** The last part of a path: what follows its last `/`, ignoring a trailing one. */
+export function pathName(path: string): string {
+  return path.replace(/\/+$/, "").split("/").pop() || path;
+}
+
+/** A conversation's title when its first message has nothing typed and starts with `a`, as Rust's `title_of` makes it (AI-23). */
+export function blockTitle(a: Attachment): string {
+  switch (a.kind) {
+    case "diagnostics":
+      return "Connection diagnostics";
+    case "selection":
+      return "Terminal selection";
+    case "paste":
+      return "Pasted text";
+    case "file":
+      return a.name;
+    case "host_file":
+      return pathName(a.path);
+    case "host_directory":
+      return a.path;
+    case "mcp_resource":
+      return a.uri;
+    case "skill":
+      return `/${a.name}`;
+    case "mcp_prompt":
+      return a.name;
+  }
+}
+
 // ───────────── the stored blocks ─────────────
 
 /**
@@ -255,6 +341,11 @@ const TAGS = {
   selection: "terminal_selection",
   paste: "pasted_text",
   file: "file",
+  host_file: "host_file",
+  host_directory: "host_directory",
+  mcp_resource: "mcp_resource",
+  skill: "skill",
+  mcp_prompt: "mcp_prompt",
 } as const satisfies Record<Attachment["kind"], string>;
 
 /** One line of a name inside a note: control characters as spaces, trimmed, as Rust writes it. */
@@ -265,16 +356,32 @@ function writeBlock(tag: string, attrs: [string, string][], body: string): strin
   return `<${tag}${list}>\n${escapeBody(body, tag)}\n</${tag}>`;
 }
 
+/** An attachment's attributes, in the order its block writes them. */
+function attributes(a: Attachment): [string, string][] {
+  switch (a.kind) {
+    case "diagnostics":
+      return [["host", a.host]];
+    case "selection":
+      return [["host", a.host], ["lines", String(a.lines)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+    case "paste":
+      return [["lines", String(a.lines)]];
+    case "file":
+      return [["name", a.name], ["lines", String(a.lines)]];
+    case "host_file":
+      return [["host", a.host], ["path", a.path], ["lines", String(a.lines)]];
+    case "host_directory":
+      return [["host", a.host], ["path", a.path], ["entries", String(a.entries)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])];
+    case "mcp_resource":
+      return [["server", a.server], ["uri", a.uri], ["lines", String(a.lines)]];
+    case "skill":
+      return [["name", a.name]];
+    case "mcp_prompt":
+      return [["server", a.server], ["name", a.name]];
+  }
+}
+
 function block(a: Attachment): string {
-  const attrs: [string, string][] =
-    a.kind === "diagnostics"
-      ? [["host", a.host]]
-      : a.kind === "selection"
-        ? [["host", a.host], ["lines", String(a.lines)], ...(a.truncated ? [["truncated", "true"] as [string, string]] : [])]
-        : a.kind === "paste"
-          ? [["lines", String(a.lines)]]
-          : [["name", a.name], ["lines", String(a.lines)]];
-  return writeBlock(TAGS[a.kind], attrs, a.text);
+  return writeBlock(TAGS[a.kind], attributes(a), a.text);
 }
 
 const TERMINAL_BODY = {
@@ -355,13 +462,13 @@ export function fileRevertNote(path: string, toolCallId: string, tool: string, c
 
 /**
  * The order attachments are stored in: the connection diagnostics, then the terminal selection (at
- * most one of each, the reason for asking first), then pasted text and files in the order the user
- * added them.
+ * most one of each, the reason for asking first), then the others (pasted text, files, what the `/`
+ * and `@` menus attached) in the order they were added.
  */
 export function orderAttachments(list: readonly Attachment[]): Attachment[] {
   const diagnostics = list.find((a) => a.kind === "diagnostics");
   const selection = list.find((a) => a.kind === "selection");
-  const rest = list.filter((a) => a.kind === "paste" || a.kind === "file");
+  const rest = list.filter((a) => a.kind !== "diagnostics" && a.kind !== "selection");
   return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...rest];
 }
 
@@ -379,7 +486,7 @@ export interface MessageParts {
 }
 
 const OPEN =
-  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|file_revert|terminal_state|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+  /^<(interrupted|host_change|terminal_change|model_change|permission_mode|file_revert|terminal_state|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file|host_file|host_directory|mcp_resource|skill|mcp_prompt)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -423,6 +530,22 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
       return names === "lines" && DIGITS.test(value(0)) ? attachment({ kind: "paste", lines: Number(value(0)), text: body }) : null;
     case TAGS.file:
       return names === "name,lines" && DIGITS.test(value(1)) ? attachment({ kind: "file", name: value(0), lines: Number(value(1)), text: body }) : null;
+    case TAGS.host_file:
+      return names === "host,path,lines" && DIGITS.test(value(2))
+        ? attachment({ kind: "host_file", host: value(0), path: value(1), lines: Number(value(2)), text: body })
+        : null;
+    case TAGS.host_directory:
+      if ((names === "host,path,entries" || (names === "host,path,entries,truncated" && value(3) === "true")) && DIGITS.test(value(2)))
+        return attachment({ kind: "host_directory", host: value(0), path: value(1), entries: Number(value(2)), truncated: attrs.length === 4, text: body });
+      return null;
+    case TAGS.mcp_resource:
+      return names === "server,uri,lines" && DIGITS.test(value(2))
+        ? attachment({ kind: "mcp_resource", server: value(0), uri: value(1), lines: Number(value(2)), text: body })
+        : null;
+    case TAGS.skill:
+      return names === "name" ? attachment({ kind: "skill", name: value(0), text: body }) : null;
+    case TAGS.mcp_prompt:
+      return names === "server,name" ? attachment({ kind: "mcp_prompt", server: value(0), name: value(1), text: body }) : null;
     default:
       return null;
   }

@@ -863,7 +863,17 @@ const ATTACHMENTS: &str = "<attachments>\n\
      truncated=\"true\" means its middle was left out.\n\
      - <connection_diagnostics host=\"…\">: the report of a connection that failed.\n\
      - <pasted_text lines=\"…\">: a long text the user pasted.\n\
-     - <file name=\"…\" lines=\"…\">: a text file the user attached.\n\
+     - <file name=\"…\" lines=\"…\">: a text file from the user's computer.\n\
+     - <host_file host=\"…\" path=\"…\" lines=\"…\">: a text file on the host as it was \
+     when the user sent this message. Read it with read_file before you change it.\n\
+     - <host_directory host=\"…\" path=\"…\" entries=\"…\">: the entries of a directory on \
+     the host when the user sent this message, one per line, with a / after each directory. \
+     truncated=\"true\" means some were left out.\n\
+     - <mcp_resource server=\"…\" uri=\"…\" lines=\"…\">: a resource of an MCP server.\n\
+     - <skill name=\"…\">: the SKILL.md of the skill the user ran with /name: follow it for \
+     this message, and read its other files with read_skill when it refers to them.\n\
+     - <mcp_prompt server=\"…\" name=\"…\">: a prompt of an MCP server that the user ran \
+     with a / command: follow it for this message.\n\
      They are the user's own content, like the typed text that follows them.\n\
      </attachments>\n";
 
@@ -2015,7 +2025,12 @@ Then come the blocks the user attached:
 - <terminal_selection host="…" lines="…">: text selected in the terminal. truncated="true" means its middle was left out.
 - <connection_diagnostics host="…">: the report of a connection that failed.
 - <pasted_text lines="…">: a long text the user pasted.
-- <file name="…" lines="…">: a text file the user attached.
+- <file name="…" lines="…">: a text file from the user's computer.
+- <host_file host="…" path="…" lines="…">: a text file on the host as it was when the user sent this message. Read it with read_file before you change it.
+- <host_directory host="…" path="…" entries="…">: the entries of a directory on the host when the user sent this message, one per line, with a / after each directory. truncated="true" means some were left out.
+- <mcp_resource server="…" uri="…" lines="…">: a resource of an MCP server.
+- <skill name="…">: the SKILL.md of the skill the user ran with /name: follow it for this message, and read its other files with read_skill when it refers to them.
+- <mcp_prompt server="…" name="…">: a prompt of an MCP server that the user ran with a / command: follow it for this message.
 They are the user's own content, like the typed text that follows them.
 </attachments>
 

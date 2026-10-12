@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { McpServerStatus, McpServerView } from "@/ipc/types";
-import { toolsMenuRows, toolsSummary, transportLabel } from "./mcp";
+import { menuSources, toolsMenuRows, toolsSummary, transportLabel } from "./mcp";
 
 const server = (id: string, name: string, enabled = true): McpServerView => ({
   id,
@@ -25,9 +25,11 @@ const status = (server_id: string, state: McpServerStatus["state"], tools = 0): 
     annotations: { title: null, read_only_hint: null, destructive_hint: null, idempotent_hint: null, open_world_hint: null },
     always_allow: false,
   })),
+  prompts: [],
+  resources: [],
 });
 
-describe("tools menu (AI-30)", () => {
+describe("/mcp (AI-30)", () => {
   const servers = [server("b", "github"), server("a", "filesystem"), server("c", "local", false)];
 
   it("lists the servers enabled on this device by name, with their state and tools", () => {
@@ -45,11 +47,26 @@ describe("tools menu (AI-30)", () => {
     ]);
   });
 
-  it("counts the servers the conversation uses and flags a failed one among them", () => {
+  it("counts the servers the conversation uses and names the failed ones among them", () => {
     const st = { a: status("a", "failed"), b: status("b", "running", 1) };
-    expect(toolsSummary(toolsMenuRows(servers, st, []))).toEqual({ on: 2, total: 2, failed: true });
-    expect(toolsSummary(toolsMenuRows(servers, st, ["a"]))).toEqual({ on: 1, total: 2, failed: false });
-    expect(toolsSummary([])).toEqual({ on: 0, total: 0, failed: false });
+    const all = toolsSummary(toolsMenuRows(servers, st, []));
+    expect([all.on, all.total, all.failed.map((r) => r.server.name)]).toEqual([2, 2, ["filesystem"]]);
+    const off = toolsSummary(toolsMenuRows(servers, st, ["a"]));
+    expect([off.on, off.total, off.failed]).toEqual([1, 2, []]);
+    expect(toolsSummary([])).toEqual({ on: 0, total: 0, failed: [] });
+  });
+
+  it("offers the prompts and resources of the running servers the conversation uses (AI-50, AI-51)", () => {
+    const prompt = { command: "mcp__github__review", name: "review", title: null, description: "", arguments: [] };
+    const resource = { uri: "repo://x/README.md", name: "README.md", title: null, description: "", mime_type: null };
+    const running = { ...status("b", "running"), prompts: [prompt], resources: [resource] };
+    const failed = { ...status("a", "failed"), prompts: [{ ...prompt, command: "mcp__filesystem__x" }] };
+    const st = { a: failed, b: running, c: { ...running, server_id: "c" } };
+    expect(menuSources(servers, st, [])).toEqual({
+      prompts: [{ serverId: "b", server: "github", prompt }],
+      resources: [{ serverId: "b", server: "github", resource }],
+    });
+    expect(menuSources(servers, st, ["b"])).toEqual({ prompts: [], resources: [] });
   });
 
   it("shows the full command line or the URL", () => {

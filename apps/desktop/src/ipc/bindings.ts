@@ -333,8 +333,11 @@ export const commands = {
 	aiSessionServer: (sessionId: string | null) => __TAURI_INVOKE<string | null>("ai_session_server", { sessionId }),
 	/**  Stops the turn: aborts the request and running tools, cancels calls without a result. */
 	aiStop: (conversationId: string) => __TAURI_INVOKE<null>("ai_stop", { conversationId }),
-	/**  AI-21: summarizes the context with the given model and moves `context_start` to the summary. */
-	aiCompact: (conversationId: string, context: AiTurnContext) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context }),
+	/**
+	 *  AI-21: summarizes the context with the given model and moves `context_start` to the summary.
+	 *  `instructions`: what `/compact <instructions>` asks of the summary (AI-50).
+	 */
+	aiCompact: (conversationId: string, context: AiTurnContext, instructions: string | null) => __TAURI_INVOKE<AiEntryView>("ai_compact", { conversationId, context, instructions }),
 	/**
 	 *  AI-42: asks a side question about the conversation without stopping its turn. The answer
 	 *  streams on `channel` and comes back whole; nothing is stored.
@@ -359,6 +362,20 @@ export const commands = {
 	 *  naming the file by its base name. The per-message total stays the panel's to check.
 	 */
 	aiReadDroppedFiles: (paths: string[]) => __TAURI_INVOKE<DroppedFile[]>("ai_read_dropped_files", { paths }),
+	/**  AI-50: the skills the panel's `/` menu offers as commands. */
+	aiSkillCommands: () => __TAURI_INVOKE<AiSkillCommand[]>("ai_skill_commands"),
+	/**  AI-50: the `SKILL.md` of the enabled skill `name`, which a `/<skill>` command attaches. */
+	aiSkillText: (name: string) => __TAURI_INVOKE<string>("ai_skill_text", { name }),
+	/**
+	 *  AI-51: the entries of the directory `path` on the host of the tab's session `session_id`, for
+	 *  the `@` menu: to complete a path, and to attach a folder.
+	 */
+	aiHostList: (sessionId: string, path: string) => __TAURI_INVOKE<AiHostListing>("ai_host_list", { sessionId, path }),
+	/**
+	 *  AI-51: the text file `path` on the host of the tab's session `session_id`, which an `@`
+	 *  mention attaches.
+	 */
+	aiHostRead: (sessionId: string, path: string) => __TAURI_INVOKE<AiHostFile>("ai_host_read", { sessionId, path }),
 	/**  The AI approvals saved on this device, oldest first. */
 	aiAllowancesList: () => __TAURI_INVOKE<AiAllowance[]>("ai_allowances_list"),
 	/**  Saves an approval on this device and returns them all. */
@@ -410,6 +427,22 @@ export const commands = {
 } | null>("mcp_tool_info", { conversationId, name }),
 	/**  The MCP tool a `call_mcp_tool` call names (AI-45), for its approval card. */
 	mcpProxyInfo: (conversationId: string, callArguments: string) => __TAURI_INVOKE<McpProxyInfo>("mcp_proxy_info", { conversationId, callArguments }),
+	/**
+	 *  AI-50, AI-51: the panel's `/` or `@` menu opened. Starts the servers a conversation with
+	 *  `disabled_mcp_servers` switched off uses, as its next message would, and lists their prompts
+	 *  and resources again after a `list_changed`; `ai://mcp-status` brings them. Returns at once.
+	 */
+	mcpWarm: (disabledMcpServers: string[]) => __TAURI_INVOKE<null>("mcp_warm", { disabledMcpServers }),
+	/**
+	 *  AI-50: gets the prompt `name` (its name on the server) of a server with `arguments`, for a
+	 *  `/` command, as the text the message attaches. Fails with `ai` and the reason.
+	 */
+	mcpPromptGet: (serverId: string, name: string, promptArguments: McpPromptArgumentInput[]) => __TAURI_INVOKE<string>("mcp_prompt_get", { serverId, name, promptArguments }),
+	/**
+	 *  AI-51: reads the resource at `uri` of a server, for an `@` mention, as the text the message
+	 *  attaches. Fails with `ai` and the reason, such as a resource with only binary content.
+	 */
+	mcpResourceRead: (serverId: string, uri: string) => __TAURI_INVOKE<string>("mcp_resource_read", { serverId, uri }),
 	/**  AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add. */
 	mcpImportPreview: (json: string) => __TAURI_INVOKE<McpImportPreview>("mcp_import_preview", { json }),
 	/**  Adds every importable server; env and header values move into the vault. */
@@ -611,6 +644,45 @@ before: string | null;
 later: boolean } | { status: "failed"; reason: AiRevertFailure; detail: string | null };
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
+
+/**  One entry of a directory on the tab's host, for the panel's `@` menu (AI-51). */
+export type AiHostEntry = {
+	name: string,
+	/**  A directory, or a symbolic link to one. */
+	dir: boolean,
+};
+
+/**  A text file on the tab's host for an `@` mention (AI-51), or why it cannot be attached. */
+export type AiHostFile = { status: "ok"; 
+/**  The path as the host resolved it. */
+path: string; text: string } | { status: "refused"; reason: AiHostRefusal };
+
+/**  A directory on the tab's host (AI-51): its entries, or why it cannot be listed. */
+export type AiHostListing = { status: "ok"; 
+/**
+ *  The path as the host resolved it: absolute, with `~/` and a relative path taken from
+ *  the home directory.
+ */
+path: string; 
+/**  Sorted by name. */
+entries: AiHostEntry[]; 
+/**  Entries were left out: the listing passed its size limit. */
+cut: boolean } | { status: "refused"; reason: AiHostRefusal };
+
+/**  Why a path on the tab's host cannot be listed or attached (AI-51). */
+export type AiHostRefusal = 
+/**  The tab is not connected. */
+"disconnected" | "not_found" | 
+/**  Read: a directory. List: not a directory. */
+"wrong_kind" | 
+/**  A device, FIFO, socket or a symbolic link to nothing. */
+"not_regular" | "permission_denied" | 
+/**  Over 256 KB. */
+"too_large" | 
+/**  NUL bytes or invalid UTF-8. */
+"binary" | 
+/**  The command failed or did not finish within 30 seconds. */
+"failed";
 
 /**  The judge's answer to one of its questions about a call (AI-47). */
 export type AiJudgeAnswer = {
@@ -826,6 +898,12 @@ export type AiSideQuestionInput = {
 	context: AiTurnContext,
 	/**  The call whose approval card waits (AI-17), so its result in the request says so. */
 	approval_call_id: string | null,
+};
+
+/**  An enabled skill the panel's `/` menu offers as a command (AI-50), the built-in one included. */
+export type AiSkillCommand = {
+	name: string,
+	description: string,
 };
 
 /**  AI-04 Test Connection, also used for the search provider test. */
@@ -1404,6 +1482,32 @@ export type McpImportSkipped = {
 	reason: string,
 };
 
+/**  A value for one argument of an MCP prompt (AI-50). */
+export type McpPromptArgumentInput = {
+	name: string,
+	value: string,
+};
+
+export type McpPromptArgumentView = {
+	name: string,
+	description: string,
+	required: boolean,
+};
+
+/**  A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`. */
+export type McpPromptView = {
+	/**
+	 *  The command's name after `/`, `mcp__<server>__<prompt>` cleaned as tool names are
+	 *  (AI-30).
+	 */
+	command: string,
+	/**  The prompt's name on its server. */
+	name: string,
+	title: string | null,
+	description: string,
+	arguments: McpPromptArgumentView[],
+};
+
 /**  What the approval card of a `call_mcp_tool` call needs (AI-45). */
 export type McpProxyInfo = {
 	/**
@@ -1413,6 +1517,15 @@ export type McpProxyInfo = {
 	tool: McpToolInfo | null,
 	/**  False when the call cannot run: it then gets its error result without asking. */
 	runs: boolean,
+};
+
+/**  A server's resource (AI-51), which the `@` menu offers. */
+export type McpResourceView = {
+	uri: string,
+	name: string,
+	title: string | null,
+	description: string,
+	mime_type: string | null,
 };
 
 export type McpSecretInput = {
@@ -1443,6 +1556,10 @@ export type McpServerStatus = {
 	stderr: string[],
 	/**  The tools from the last successful listing. */
 	tools: McpToolView[],
+	/**  The prompts from the last successful listing, which the panel's `/` menu offers (AI-50). */
+	prompts: McpPromptView[],
+	/**  The resources from the last successful listing, which the panel's `@` menu offers (AI-51). */
+	resources: McpResourceView[],
 };
 
 export type McpServerView = {

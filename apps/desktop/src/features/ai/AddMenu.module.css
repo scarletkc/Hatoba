@@ -1,5 +1,5 @@
-/* The input area's + menu, and the tools menu (AI-30) it opens in its place, with a switch per server.
- * Both views have the same width and rows, so they read as one menu. */
+/* The input area's + menu, and `/mcp` (AI-50), which lists the MCP servers (AI-30) with a switch per
+ * server. Both have the same rows, so they read as menus of one kind. */
 
 .button {
   position: relative;
@@ -21,17 +21,6 @@
   color: var(--fg);
 }
 
-.failedDot {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 0 1.5px var(--field);
-}
-
 .popover {
   position: fixed;
   z-index: 1000;
@@ -45,6 +34,11 @@
   box-shadow: var(--shadow-popover);
   color: var(--fg);
   font-size: var(--text-md);
+}
+
+/* `/mcp`, whose rows hold a command line and the stderr of a server that failed. */
+.popoverWide {
+  width: 340px;
 }
 
 /* Focus moves into the menu when it opens; the menu itself needs no outline. */
@@ -108,29 +102,15 @@
   color: var(--fg2);
 }
 
-.itemHint {
-  flex: none;
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--fg2);
-}
-
-.itemDot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--red);
-}
-
-/* The tools menu's first row, which goes back: the name of the menu. */
+/* `/mcp`'s first row: the name of the menu, which is no button. */
 .itemTitle {
   font-weight: 600;
 }
 
-.itemCaret {
-  flex: none;
-  color: var(--fg2);
+.itemStatic,
+.itemStatic:hover {
+  background: transparent;
+  cursor: default;
 }
 
 .itemSwitch {

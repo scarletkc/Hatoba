@@ -1,7 +1,8 @@
 //! MCP server commands (spec §13.9): the servers of Settings → AI (AI-29), their state on this
 //! device (enabled, Always allow, AI-31), their live status (AI-32), the tool behind a name the
-//! model called, directly or through `call_mcp_tool` (AI-45), and import and export in the
-//! `mcpServers` format (AI-33). The connections run in
+//! model called, directly or through `call_mcp_tool` (AI-45), the prompts and resources the
+//! panel's `/` and `@` menus attach (AI-50, AI-51), and import and export in the `mcpServers`
+//! format (AI-33). The connections run in
 //! [`crate::mcp::McpManager`].
 //!
 //! Environment and header values go one way, WebView → Rust, like API keys: views carry only
@@ -22,10 +23,10 @@ use tauri_specta::Event;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    McpImportPreview, McpImportServer, McpImportSkipped, McpProxyInfo, McpSecretInput,
-    McpServerInput, McpServerStatus, McpServerView, McpToolInfo, McpTransportInput,
+    McpImportPreview, McpImportServer, McpImportSkipped, McpPromptArgumentInput, McpProxyInfo,
+    McpSecretInput, McpServerInput, McpServerStatus, McpServerView, McpToolInfo, McpTransportInput,
 };
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{
     DeviceState, McpEvents, McpManager, config_view, core_transport, tool_view, transport_config,
     transport_view,
@@ -617,6 +618,58 @@ pub async fn mcp_proxy_info(
     call_arguments: String,
 ) -> AppResult<McpProxyInfo> {
     state.with_unlocked(|v| Ok(proxy_info(v, &state.mcp, &conversation_id, &call_arguments)))
+}
+
+/// AI-50, AI-51: the panel's `/` or `@` menu opened. Starts the servers a conversation with
+/// `disabled_mcp_servers` switched off uses, as its next message would, and lists their prompts
+/// and resources again after a `list_changed`; `ai://mcp-status` brings them. Returns at once.
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_warm(
+    state: State<'_, AppState>,
+    disabled_mcp_servers: Vec<String>,
+) -> AppResult<()> {
+    state.with_unlocked(|_| Ok(()))?;
+    state.mcp.warm(&state.vault, disabled_mcp_servers);
+    Ok(())
+}
+
+/// AI-50: gets the prompt `name` (its name on the server) of a server with `arguments`, for a
+/// `/` command, as the text the message attaches. Fails with `ai` and the reason.
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_prompt_get(
+    state: State<'_, AppState>,
+    server_id: String,
+    name: String,
+    // Not `arguments`, which the generated TypeScript binding could not name a parameter.
+    prompt_arguments: Vec<McpPromptArgumentInput>,
+) -> AppResult<String> {
+    let arguments = prompt_arguments
+        .into_iter()
+        .map(|a| (a.name, serde_json::Value::String(a.value)))
+        .collect();
+    state
+        .mcp
+        .get_prompt(&state.vault, &server_id, &name, arguments)
+        .await
+        .map_err(|message| AppError::new(ErrorCode::Ai, message))
+}
+
+/// AI-51: reads the resource at `uri` of a server, for an `@` mention, as the text the message
+/// attaches. Fails with `ai` and the reason, such as a resource with only binary content.
+#[tauri::command]
+#[specta::specta]
+pub async fn mcp_resource_read(
+    state: State<'_, AppState>,
+    server_id: String,
+    uri: String,
+) -> AppResult<String> {
+    state
+        .mcp
+        .read_resource(&state.vault, &server_id, &uri)
+        .await
+        .map_err(|message| AppError::new(ErrorCode::Ai, message))
 }
 
 /// AI-33: what pasted `mcpServers` / VS Code `servers` JSON would add.

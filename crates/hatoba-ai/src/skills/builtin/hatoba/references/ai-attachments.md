@@ -8,8 +8,13 @@ A message to the assistant can carry attachments that go with it when the user s
 | Terminal selection | Text selected in the tab's terminal | Selection · N lines |
 | Pasted text | A long paste into the input | Pasted text · N lines |
 | Text file | **Add Text Files…** in the + menu, the clipboard, or dropping on the panel | file name · N lines |
+| File on the host | A file picked after `@` | file name · N lines |
+| Folder on the host | The first row of a folder after `@`: its list of entries | name/ · N entries |
+| MCP resource | A resource picked after `@` | name · N lines |
+| Skill | `/<skill>` at the start of the message | Skill /name |
+| MCP prompt | `/mcp__<server>__<prompt>` at the start of the message | Prompt name |
 
-A message carries at most one diagnostics attachment and one selection, and any number of pastes and files. They are stored in this order: diagnostics, selection, then pastes and files in the order they were added. The home tab has no selection or diagnostics, but it can take pastes and files. Pending attachments stay in the tab's input until they are sent or removed, even if another conversation is opened in the same tab.
+A message carries at most one diagnostics attachment and one selection, and any number of the others. They are stored in this order: diagnostics, selection, then the others in the order they were added, a skill or prompt that the message's `/` command attached first. `@` and `/` are covered in `references/ai-panel.md`. A file or folder on the host shows the assistant its content as it was when you sent the message, with its path; to change the file, the assistant still reads it with **Read file** first. The home tab has no selection or diagnostics, but it can take pastes and files. Pending attachments stay in the tab's input until they are sent or removed, even if another conversation is opened in the same tab.
 
 ## Terminal selection
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   baseName,
+  blockTitle,
   checkFile,
   chipShown,
   cleanTerminalText,
@@ -22,6 +23,7 @@ import {
   noteBlock,
   orderAttachments,
   parseMessage,
+  pathName,
   screenStateNote,
   SELECTION_MAX_CHARS,
   splitPermissionNote,
@@ -469,5 +471,35 @@ describe("the selection chip", () => {
     expect(chipShown(sel, 4)).toBe(false);
     expect(chipShown({ text: "ls", seq: 5 }, 4)).toBe(true);
     expect(chipShown({ text: "  ", seq: 5 }, null)).toBe(false);
+  });
+});
+
+describe("what the / and @ menus attach (AI-50, AI-51)", () => {
+  const hostFile: Attachment = { kind: "host_file", host: "prod-api", path: "/etc/nginx/nginx.conf", lines: 2, text: "user www;\n</host_file>" };
+  const folder: Attachment = { kind: "host_directory", host: "prod & co", path: "/etc/nginx", entries: 2, truncated: true, text: "conf.d/\nnginx.conf" };
+  const resource: Attachment = { kind: "mcp_resource", server: "docs", uri: 'repo://x/"a".md', lines: 1, text: "# A" };
+  const skill: Attachment = { kind: "skill", name: "nginx-ops", text: "# nginx\n\nRun `nginx -t`." };
+  const prompt: Attachment = { kind: "mcp_prompt", server: "github", name: "review_pr", text: "Review PR 42" };
+
+  it("writes each block with its attributes and reads it back exactly", () => {
+    expect(blockOf(hostFile)).toBe('<host_file host="prod-api" path="/etc/nginx/nginx.conf" lines="2">\nuser www;\n<\\/host_file>\n</host_file>');
+    expect(blockOf(folder)).toBe('<host_directory host="prod &amp; co" path="/etc/nginx" entries="2" truncated="true">\nconf.d/\nnginx.conf\n</host_directory>');
+    expect(blockOf(resource)).toBe('<mcp_resource server="docs" uri="repo://x/&quot;a&quot;.md" lines="1">\n# A\n</mcp_resource>');
+    expect(blockOf(skill)).toBe('<skill name="nginx-ops">\n# nginx\n\nRun `nginx -t`.\n</skill>');
+    expect(blockOf(prompt)).toBe('<mcp_prompt server="github" name="review_pr">\nReview PR 42\n</mcp_prompt>');
+    const list = [skill, hostFile, folder, resource, prompt];
+    const stored = composeMessage("/nginx-ops check @/etc/nginx/nginx.conf", [att("$ curl"), ...list]);
+    expect(parseMessage(stored)).toEqual({ notes: [], attachments: [att("$ curl"), ...list], typed: "/nginx-ops check @/etc/nginx/nginx.conf" });
+  });
+
+  it("leaves blocks with other attributes as typed text", () => {
+    for (const text of ['<skill>\nx\n</skill>\n\nq', '<host_file path="/x" lines="1">\nx\n</host_file>\n\nq', '<host_directory host="h" path="/" entries="x">\nx\n</host_directory>\n\nq'])
+      expect(parseMessage(text)).toEqual({ notes: [], attachments: [], typed: text });
+  });
+
+  it("titles a conversation as Rust's title_of does", () => {
+    expect([hostFile, folder, resource, skill, prompt].map(blockTitle)).toEqual(["nginx.conf", "/etc/nginx", 'repo://x/"a".md', "/nginx-ops", "review_pr"]);
+    expect(pathName("/etc/nginx/")).toBe("nginx");
+    expect(pathName("/")).toBe("/");
   });
 });
