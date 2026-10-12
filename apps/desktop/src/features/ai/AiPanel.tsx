@@ -3,10 +3,9 @@ import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
-import { confirm, Menu, useMenu } from "@/components/overlay";
 import { reconnectSession } from "@/features/terminal/connect";
 import { useT } from "@/i18n";
-import type { AiPermissionMode, HostView } from "@/ipc/types";
+import type { HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import {
@@ -17,7 +16,6 @@ import {
   focusInput,
   newConversation,
   reloadSlot,
-  setSlotMode,
   stopSideQuestion,
   stopTurn,
   toggleAiPanel,
@@ -155,7 +153,6 @@ export function AiPanel({ slotId }: { slotId: string }) {
             {hostLabel}
           </span>
         </div>
-        <ModeButton slotId={slotId} mode={slot.mode} />
         <IconButton
           icon="clock-counter-clockwise"
           label={t("ai.history")}
@@ -208,62 +205,6 @@ export function AiPanel({ slotId }: { slotId: string }) {
         </>
       )}
     </aside>
-  );
-}
-
-/** AI-16: the conversation's permission mode. The first switch to bypass on a device asks first. */
-function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }) {
-  const t = useT();
-  const menu = useMenu();
-  const ref = useRef<HTMLButtonElement>(null);
-
-  const choose = async (next: AiPermissionMode) => {
-    if (next === mode) return;
-    if (next === "bypass" && !useApp.getState().prefs.ai_bypass_confirmed) {
-      const ok = await confirm({
-        title: t("ai.bypass.title"),
-        body: t("ai.bypass.body"),
-        confirmLabel: t("ai.bypass.confirm"),
-        danger: true,
-        icon: "lightning",
-        iconColor: "var(--orange)",
-      });
-      if (!ok) return;
-      const app = useApp.getState();
-      void app.setPrefs({ ...app.prefs, ai_bypass_confirmed: true }).catch(() => {});
-    }
-    setSlotMode(slotId, next);
-  };
-
-  const label = mode === "bypass" ? t("ai.mode.bypass") : t("ai.mode.manual");
-  return (
-    <>
-      <button
-        ref={ref}
-        type="button"
-        className={cx(s.mode, mode === "bypass" && s.modeBypass)}
-        aria-haspopup="menu"
-        aria-expanded={!!menu.anchor}
-        aria-label={`${t("ai.mode")}: ${label}`}
-        title={`${t("ai.mode")}: ${label}`}
-        onClick={() => ref.current && menu.openBelow(ref.current, true)}
-      >
-        <Icon name={mode === "bypass" ? "lightning" : "shield-check"} size={14} />
-        {mode === "bypass" && <span>{t("ai.mode.bypassShort")}</span>}
-      </button>
-      {menu.anchor && (
-        <Menu
-          anchor={menu.anchor}
-          onClose={menu.close}
-          minWidth={230}
-          entries={[
-            { kind: "header", label: t("ai.mode.menuTitle") },
-            { label: t("ai.mode.manual"), icon: "shield-check", checked: mode === "manual", onSelect: () => void choose("manual") },
-            { label: t("ai.mode.bypass"), icon: "lightning", checked: mode === "bypass", onSelect: () => void choose("bypass") },
-          ]}
-        />
-      )}
-    </>
   );
 }
 

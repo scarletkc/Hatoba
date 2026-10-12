@@ -101,8 +101,10 @@
   white-space: nowrap;
 }
 
+/* A narrow panel keeps the model's name: bypass is still the orange lightning. */
 @container (max-width: 330px) {
-  .modelEffort {
+  .modelEffort,
+  .mode span {
     display: none;
   }
 }
@@ -188,6 +190,44 @@
 
 .stop:hover:not(:disabled) {
   background: color-mix(in srgb, var(--fg) 85%, var(--win) 15%);
+}
+
+/* AI-16: the permission mode, beside the model selector. */
+.mode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg2);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.mode:hover {
+  background: var(--fill);
+}
+
+/* Its menu is open. */
+.mode[aria-expanded="true"] {
+  background: var(--fill);
+  color: var(--fg);
+}
+
+.modeBypass,
+.modeBypass:hover {
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
+  color: var(--orange);
+}
+
+.modeBypass[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--orange) 24%, transparent);
+  color: var(--orange);
 }
 
 /* AI-42: Ask a Side Question, beside Send / Stop. */

@@ -36,7 +36,7 @@ Results longer than 30,000 characters keep the first 7,500 and the last 22,500 (
 
 ## Permission mode
 
-The shield or lightning button in the panel header; the menu is titled "Permission mode for this conversation".
+The shield or lightning button right of the **Model** picker in the input area (the lightning also shows "Bypass" unless the panel is narrow); the menu is titled "Permission mode for this conversation".
 
 | en | zh-CN | ja |
 |---|---|---|

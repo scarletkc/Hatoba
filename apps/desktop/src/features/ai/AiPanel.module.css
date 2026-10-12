@@ -88,44 +88,6 @@
   color: var(--fg2);
 }
 
-.mode {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  min-width: 26px;
-  padding: 0 6px;
-  margin-right: 2px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--fg2);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.mode:hover {
-  background: var(--fill);
-}
-
-/* Its menu is open. */
-.mode[aria-expanded="true"] {
-  background: var(--fill);
-  color: var(--fg);
-}
-
-.modeBypass,
-.modeBypass:hover {
-  background: color-mix(in srgb, var(--orange) 15%, transparent);
-  color: var(--orange);
-}
-
-.modeBypass[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--orange) 24%, transparent);
-  color: var(--orange);
-}
-
 .notices {
   flex: none;
   display: flex;

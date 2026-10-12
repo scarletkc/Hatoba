@@ -1,15 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useApp } from "@/app/store";
 import { Icon, LinkButton } from "@/components/controls";
-import { Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
+import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { readClipboard } from "@/features/terminal/clipboard";
 import { useT } from "@/i18n";
-import type { AiEffort, AiModelRef } from "@/ipc/types";
+import type { AiEffort, AiModelRef, AiPermissionMode } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { shortcutLabel } from "@/lib/platform";
 import { AddButton } from "./AddMenu";
-import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
+import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotMode, setSlotModel, stopTurn } from "./actions";
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
@@ -38,7 +38,7 @@ function isSideQuestionKey(e: KeyboardEvent): boolean {
 
 /**
  * The input area (§9): the attachment chips, a multi-line box, the + menu, the model selector, the
- * context meter, Ask a Side Question (AI-42) and Send / Stop.
+ * permission mode (AI-16), the context meter, Ask a Side Question (AI-42) and Send / Stop.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
@@ -178,6 +178,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         <div className={s.bar}>
           <AddButton slotId={slotId} slot={slot} onAddFiles={() => fileRef.current?.click()} />
           <ModelPicker slotId={slotId} slot={slot} value={model} />
+          <ModeButton slotId={slotId} mode={slot.mode} />
           <input
             ref={fileRef}
             type="file"
@@ -289,6 +290,65 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
         <Icon name="caret-up-down" size={11} className={s.modelIcon} />
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={220} />}
+    </>
+  );
+}
+
+/**
+ * AI-16: the conversation's permission mode, beside the model selector. Manual approval shows only
+ * its shield; bypass also its name. The first switch to bypass on a device asks first.
+ */
+function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }) {
+  const t = useT();
+  const menu = useMenu();
+  const ref = useRef<HTMLButtonElement>(null);
+
+  const choose = async (next: AiPermissionMode) => {
+    if (next === mode) return;
+    if (next === "bypass" && !useApp.getState().prefs.ai_bypass_confirmed) {
+      const ok = await confirm({
+        title: t("ai.bypass.title"),
+        body: t("ai.bypass.body"),
+        confirmLabel: t("ai.bypass.confirm"),
+        danger: true,
+        icon: "lightning",
+        iconColor: "var(--orange)",
+      });
+      if (!ok) return;
+      const app = useApp.getState();
+      void app.setPrefs({ ...app.prefs, ai_bypass_confirmed: true }).catch(() => {});
+    }
+    setSlotMode(slotId, next);
+  };
+
+  const label = mode === "bypass" ? t("ai.mode.bypass") : t("ai.mode.manual");
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        className={cx(s.mode, mode === "bypass" && s.modeBypass)}
+        aria-haspopup="menu"
+        aria-expanded={!!menu.anchor}
+        aria-label={`${t("ai.mode")}: ${label}`}
+        title={`${t("ai.mode")}: ${label}`}
+        onClick={() => ref.current && menu.openBelow(ref.current)}
+      >
+        <Icon name={mode === "bypass" ? "lightning" : "shield-check"} size={14} />
+        {mode === "bypass" && <span>{t("ai.mode.bypassShort")}</span>}
+      </button>
+      {menu.anchor && (
+        <Menu
+          anchor={menu.anchor}
+          onClose={menu.close}
+          minWidth={230}
+          entries={[
+            { kind: "header", label: t("ai.mode.menuTitle") },
+            { label: t("ai.mode.manual"), icon: "shield-check", checked: mode === "manual", onSelect: () => void choose("manual") },
+            { label: t("ai.mode.bypass"), icon: "lightning", checked: mode === "bypass", onSelect: () => void choose("bypass") },
+          ]}
+        />
+      )}
     </>
   );
 }
