@@ -128,6 +128,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     return null;
   }, [entries]);
   const replies = useMemo(() => findReplies(entries), [entries]);
+  const firstUser = entries.find((e) => e.role === "user")?.entry_id;
   // AI-41: the changes of file tool calls this device keeps, by response and call.
   const changes = useMemo(() => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])), [slot.fileChanges]);
 
@@ -215,6 +216,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
                 text={entry.text}
                 at={entry.created_at}
                 pending={pending}
+                first={entry.entry_id === firstUser}
                 onResend={canEdit && !pending ? (text) => editAndResend(slotId, entry.entry_id, text) : undefined}
                 onFork={fork(entry.entry_id)}
                 untracked={() => editedFiles(entries, slot.fileChanges, entry.entry_id).untracked}
@@ -315,13 +317,15 @@ function ForkButton({ onFork }: { onFork: () => void }) {
  * replaces it and sends it again (AI-26), and with `onFork`, Fork from Here copies the conversation up
  * to it into a new one (AI-43). The notes Hatoba stored before it (AI-05, AI-09) are dividers above
  * it, not part of the bubble; an edit shows them while it is sent, and Rust works them out again for
- * the new message. `untracked` counts the file changes of the calls an edit deletes that this device
- * cannot revert (AI-41).
+ * the new message. The conversation's `first` message shows no permission mode divider: its note
+ * only tells the model the mode the conversation started in, which is no switch (AI-16).
+ * `untracked` counts the file changes of the calls an edit deletes that this device cannot revert (AI-41).
  */
 function UserMessage({
   text,
   at,
   pending,
+  first,
   onResend,
   onFork,
   untracked,
@@ -329,6 +333,7 @@ function UserMessage({
   text: string;
   at: number;
   pending: boolean;
+  first: boolean;
   onResend?: (text: string) => Promise<boolean>;
   onFork?: () => void;
   untracked: () => number;
@@ -337,7 +342,9 @@ function UserMessage({
   const [editing, setEditing] = useState(false);
   // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
   const parts = useMemo(() => parseMessage(text), [text]);
-  const notes = parts.notes.filter((note) => note.kind !== "terminal_state").map((note, i) => <NoteDivider key={i} note={note} />);
+  const notes = parts.notes
+    .filter((note) => note.kind !== "terminal_state" && !(first && note.kind === "permission_mode"))
+    .map((note, i) => <NoteDivider key={i} note={note} />);
   // AI-46: the screen the message showed is a collapsed block above its attachments.
   const screen = parts.notes.find((note) => note.kind === "terminal_state");
   if (editing && onResend)

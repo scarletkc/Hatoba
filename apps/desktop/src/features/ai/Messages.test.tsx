@@ -11,6 +11,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 const { MessageList } = await import("./Messages");
 const { blankSlot } = await import("./store");
 const { newTurn } = await import("./turn");
+const { noteBlock } = await import("./attachments");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -64,6 +65,29 @@ describe("a reply without an answer (§13.1)", () => {
     const text = render(slot([user, reply("tool_calls")], { reason: "empty" }));
     expect(text).toContain("The model ended its reply without an answer.");
     expect(text).not.toContain("The model gave no answer.");
+  });
+});
+
+describe("permission mode dividers (AI-16)", () => {
+  const sent = (id: string, mode: "manual" | "auto" | "bypass" | null, text: string): AiEntryView => ({
+    role: "user",
+    entry_id: id,
+    created_at: 0,
+    text: mode ? `${noteBlock({ kind: "permission_mode", mode })}
+
+${text}` : text,
+  });
+  const answer = (id: string): AiEntryView => ({ ...(reply("stop") as Extract<AiEntryView, { role: "assistant" }>), entry_id: id, text: "Done." });
+
+  it("shows none above the first message, whose note only names the mode it started in", () => {
+    const text = render(slot([sent("u1", "bypass", "first"), answer("a1")]));
+    expect(text).toContain("first");
+    expect(text).not.toContain("Permission mode");
+  });
+
+  it("shows a switch on a later message", () => {
+    expect(render(slot([sent("u1", "bypass", "first"), answer("a1"), sent("u2", "manual", "second")]))).toContain("Permission mode: Manual approval");
+    expect(render(slot([sent("u1", null, "first"), answer("a1"), sent("u2", "auto", "second")]))).toContain("Permission mode: Auto");
   });
 });
 
