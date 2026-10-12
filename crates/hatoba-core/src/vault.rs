@@ -270,6 +270,20 @@ pub(crate) fn seal_item(key: &[u8; 32], id: &str, item: &Item) -> Result<crypto:
     seal(key, item_aad(id).as_bytes(), &plain)
 }
 
+/// Whether `remote` is a live settings item that `vault_key` opens.
+fn opens_as_settings(vault_key: &[u8; 32], remote: &RemoteItem) -> bool {
+    remote
+        .envelope
+        .as_deref()
+        .filter(|_| !remote.deleted)
+        .is_some_and(|env| {
+            matches!(
+                decode_envelope(vault_key, SETTINGS_ID, env),
+                Ok(Item::Settings(_))
+            )
+        })
+}
+
 /// This device's settings for a cloud vault that has none yet (flow C), dated at the epoch:
 /// older than the settings of any of the cloud vault's own devices, which therefore win over them
 /// whenever they arrive (§6.4).
@@ -1335,9 +1349,9 @@ impl Vault {
     /// again so the next round reconciles both sides. Otherwise each live item is sealed under
     /// the remote vault key and queued as new, except the settings: `cloud_settings`, the
     /// remote's settings item as read just before, replaces the local one. When the remote has
-    /// none, the local one is queued dated at the epoch, older than any settings of the remote's
-    /// own devices, which therefore replace it whenever they arrive (an edit made here after the
-    /// join is dated as usual). Tombstones, items that cannot be decrypted, and the conflict log
+    /// none that its key opens (none yet, or a damaged one), the local one is queued dated at the
+    /// epoch, older than any settings of the remote's own devices, which therefore replace it
+    /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones, items that cannot be decrypted, and the conflict log
     /// are dropped, and every [`SealedLocal`] is sealed again. Returns whether the vault key
     /// changed, so the caller can drop what still holds the old one (biometric unlock).
     ///
@@ -1368,7 +1382,9 @@ impl Vault {
                 local.push((which.meta_key(), resealed));
             }
         }
-        let settings = match cloud_settings {
+        // A cloud settings item the cloud key cannot open (a damaged one) could not win a conflict
+        // either, so it counts as none.
+        let settings = match cloud_settings.filter(|remote| opens_as_settings(&vault_key, remote)) {
             Some(remote) if rekey => Some(remote_row(remote)),
             None if rekey => self
                 .get(SETTINGS_ID)

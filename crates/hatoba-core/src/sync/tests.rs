@@ -627,6 +627,37 @@ async fn join_uploads_the_local_settings_when_the_cloud_has_none() {
 }
 
 #[tokio::test]
+async fn join_replaces_a_damaged_cloud_settings_item_with_the_local_one() {
+    let (server, clock, a, _b) = world();
+    enable(&a).await;
+    // The cloud's settings item opens under no key the vault has.
+    let damaged = seal(
+        &random_key().unwrap(),
+        crate::crypto::item_aad(SETTINGS_ID).as_bytes(),
+        br#"{"type":"settings"}"#,
+    )
+    .unwrap()
+    .to_json();
+    server.inject_item(SETTINGS_ID, Some(&damaged), false, T0);
+
+    let c = own_vault_device(&server, &clock);
+    c.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.font_size = 7;
+        }
+    });
+    join(&c).await;
+    assert_eq!(c.v().settings().terminal.font_size, 7);
+    assert_eq!(c.pending(), 0);
+    a.sync().await;
+    assert_eq!(
+        a.v().settings().terminal.font_size,
+        7,
+        "the cloud copy is readable again"
+    );
+}
+
+#[tokio::test]
 async fn the_cloud_vaults_own_settings_win_over_a_joined_device_whenever_they_arrive() {
     // The first device's upload lands before the joined device's first round, or after it.
     for arrives_first in [true, false] {
