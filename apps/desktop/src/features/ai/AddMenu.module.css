@@ -269,8 +269,10 @@
   color: var(--fg2);
 }
 
+/* 8px in all, line included: the tools menu has one more separator than the + menu, and half a
+ * pixel more would move the menu's top edge when switching between them. */
 .separator {
   height: 0.5px;
   background: var(--line2);
-  margin: 4px 8px;
+  margin: 3.75px 8px;
 }
