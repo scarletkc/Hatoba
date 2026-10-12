@@ -79,6 +79,12 @@ input[list]::-webkit-calendar-picker-indicator {
   display: none !important;
 }
 
+/* WebView2's own Show Password button, on Windows only: it shows after typing into an empty field
+ * and is gone once the field loses focus. Password fields have their own on every platform. */
+input::-ms-reveal {
+  display: none;
+}
+
 .mono {
   font-family: var(--font-mono);
 }

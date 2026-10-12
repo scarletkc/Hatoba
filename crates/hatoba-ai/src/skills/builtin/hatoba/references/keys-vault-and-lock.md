@@ -40,7 +40,7 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 
 - Auto-Lock offers 1, 5, 15 (the default), 30 minutes, 1, 4 or 8 hours, or Never. Auto-Lock, **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** and **Clear Clipboard** are kept on each device and do not sync.
 - Open SSH sessions stay connected behind the lock screen ("N sessions stay connected in the background"), unless **Disconnect all sessions when locked** is on. The AI assistant stops working and MCP servers stop when the vault locks.
-- The lock screen asks for the master password (**Unlock**). After wrong attempts the field is disabled for a growing delay, with a countdown such as "Too many attempts. Try again in 30 s."
+- The lock screen asks for the master password (**Unlock**). The eye button in the field shows what was typed, until the window loses focus. After wrong attempts the field is disabled for a growing delay, with a countdown such as "Too many attempts. Try again in 30 s."
 - **Forgot it? Use your recovery code** opens **Reset with Recovery Code**: enter the recovery code (case and dashes do not matter) and a new master password, then **Reset and Unlock**. It works offline and loses no data.
 - **Unlock with Windows Hello** is a switch in Settings → Security. It appears only on Windows PCs where Windows Hello is set up, and asks for the master password once to turn on. The lock screen then shows a Windows Hello button. Touch ID is not available yet.
 

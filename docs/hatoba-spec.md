@@ -915,7 +915,7 @@ The design defines the visuals. This section only specifies the behavior and sta
 
 | Page | Key behavior | Required states |
 |---|---|---|
-| Unlock | Enter the master password, Windows Hello (P1), and a forgotten-password link into the recovery code flow | Wrong password, throttled |
+| Unlock | Enter the master password, with a button that shows it until the window loses focus, Windows Hello (P1), and a forgotten-password link into the recovery code flow | Wrong password, throttled |
 | First launch | Choose between **Create a New Vault** and **Restore from Cloud** | None |
 | Host list | The sidebar has All, Favorites, groups, and tags. List rows show the name, `user@host:port`, tags, online status, and last connection time. A search box and a new-host button sit at the top. The search box also takes an SSH target to connect to without saving it (HOST-12) | Empty (suggesting a new host or an ssh config import), no search results, a typed target (a **Connect** row in place of no results), an ssh command quick connect cannot run (the row disabled with the reason), a typed target with `-A`, `-X`, or `-Y` (a note that it connects without forwarding), recent targets under the focused, empty search box |
 | Host edit | Fields as in §5.1, password field rules as in HOST-08 | Field validation errors |

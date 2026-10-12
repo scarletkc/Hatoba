@@ -89,6 +89,25 @@
   opacity: 0.5;
 }
 
+/* The spacing is for the dots; shown, the password reads as plain text. */
+.fieldRevealed input {
+  letter-spacing: normal;
+}
+
+.reveal {
+  flex: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--fg2);
+  font-size: 14px;
+  display: inline-flex;
+}
+
+.reveal:disabled {
+  color: var(--fg3);
+}
+
 .go {
   width: 24px;
   height: 24px;

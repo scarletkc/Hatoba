@@ -25,7 +25,16 @@ export function UnlockScreen() {
   const [retryAt, setRetryAt] = useState<number | null>(vault?.retry_at ?? null);
   const [now, setNow] = useState(() => Date.now());
   const [recovering, setRecovering] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+
+  // The password shown goes back to dots when the window loses focus, so it is not left on screen
+  // for whoever comes to the computer next.
+  useEffect(() => {
+    const hide = () => setRevealed(false);
+    window.addEventListener("blur", hide);
+    return () => window.removeEventListener("blur", hide);
+  }, []);
 
   // SEC-06: while throttled the field is disabled and a live countdown replaces the error text.
   const throttled = retryAt !== null && now < retryAt;
@@ -113,17 +122,19 @@ export function UnlockScreen() {
 
         <form className={s.form} onSubmit={(e) => void submit(e)}>
           <div
-            className={cx(s.field, message && s.fieldError, shake && s.shake)}
+            className={cx(s.field, message && s.fieldError, shake && s.shake, revealed && s.fieldRevealed)}
             onAnimationEnd={() => setShake(false)}
           >
             <input
               ref={input}
-              type="password"
+              type={revealed ? "text" : "password"}
               autoFocus
               autoComplete="current-password"
               aria-label={t("vault.unlock.field")}
               aria-invalid={!!error || undefined}
               spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               disabled={throttled}
               readOnly={busy}
               value={password}
@@ -132,6 +143,18 @@ export function UnlockScreen() {
                 if (error) setError(null);
               }}
             />
+            {/* Keeps the focus in the field, so typing and Enter go on from where they were. */}
+            <button
+              type="button"
+              className={s.reveal}
+              aria-label={revealed ? t("field.hide") : t("field.show")}
+              title={revealed ? t("field.hide") : t("field.show")}
+              disabled={throttled}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setRevealed((v) => !v)}
+            >
+              <Icon name={revealed ? "eye-slash" : "eye"} />
+            </button>
             <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
               {busy ? <Spinner size={13} /> : <Icon name="arrow-right" />}
             </button>
