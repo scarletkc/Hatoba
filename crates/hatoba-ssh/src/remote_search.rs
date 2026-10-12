@@ -363,11 +363,17 @@ mod tests {
         use super::super::*;
 
         fn run(home: &Path, command: &str, stdin: &[u8]) -> ExecOutput {
+            run_with(home, command, stdin, &[])
+        }
+
+        /// [`run`] with these variables set as well.
+        fn run_with(home: &Path, command: &str, stdin: &[u8], vars: &[(&str, &str)]) -> ExecOutput {
             let mut child = Command::new("sh")
                 .arg("-c")
                 .arg(command)
                 .current_dir("/")
                 .env("HOME", home)
+                .envs(vars.iter().copied())
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -586,6 +592,36 @@ mod tests {
             assert!(matches!(
                 grep(home, "nowhere", "x", GrepMode::Files, &[]),
                 Err(RemoteSearchError::NotFound)
+            ));
+        }
+
+        #[test]
+        fn scripts_run_where_lc_all_is_set() {
+            // The scripts move LC_ALL aside so that LC_MESSAGES=C applies, and search as before.
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            tree(home);
+            let vars = [("LC_ALL", "C")];
+            let names = ["*.conf".to_owned()];
+            let (command, stdin) = glob_request("etc", Some(1), &names, 1 << 20).unwrap();
+            let found = parse(&run_with(home, &command, &stdin, &vars), 1 << 20).unwrap();
+            assert_eq!(listed(&found), ["/binary.conf", "/nginx.conf"]);
+            let mut query = GrepQuery {
+                path: "etc",
+                max_depth: None,
+                names: &names,
+                pattern: "listen[[:space:]]+8080",
+                ignore_case: false,
+                mode: GrepMode::Files,
+            };
+            let (command, stdin) = grep_request(&query, 1 << 20).unwrap();
+            let found = parse(&run_with(home, &command, &stdin, &vars), 1 << 20).unwrap();
+            assert_eq!(listed(&found), ["/conf.d/it's $HOME.conf"]);
+            query.pattern = "(";
+            let (command, stdin) = grep_request(&query, 1 << 20).unwrap();
+            assert!(matches!(
+                parse(&run_with(home, &command, &stdin, &vars), 1 << 20),
+                Err(RemoteSearchError::BadPattern(_))
             ));
         }
     }

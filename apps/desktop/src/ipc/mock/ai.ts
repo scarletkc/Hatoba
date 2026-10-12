@@ -1092,11 +1092,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * AI-48, AI-49: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results. The
-   * glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a JS RegExp.
+   * glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a JS RegExp. A file
+   * given as grep's path is searched whatever its glob, as with rg.
    */
-  function search(name: string, args: Record<string, unknown>): string {
+  function search(name: string, args: Record<string, unknown>): { status: AiToolStatus; content: string } {
     const root = filePath(String(args.path || "~")).replace(/\/$/, "") || "/";
-    const glob = String((name === "glob" ? args.pattern : args.glob) ?? "");
+    const glob = String((name === "glob" ? args.pattern : args.glob) ?? "").trim();
+    if (name === "glob" && !glob) return { status: "error", content: "The pattern is empty, so nothing was searched. Give one such as *.conf or **/*.conf." };
     const source = glob
       .replace(/[.+^$()|\\]/g, "\\$&")
       .replace(/\*\*\//g, "\u0000")
@@ -1104,32 +1106,35 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       .replace(/\?/g, "[^/]")
       .replace(/\u0000/g, "(?:.*/)?");
     const globRe = new RegExp(glob.includes("/") ? `^${source}$` : `(?:^|/)${source}$`);
-    const paths = [...remoteFiles.keys()]
-      .filter((p) => p.startsWith(`${root}/`) && (!glob || globRe.test(p.slice(root.length + 1))))
-      .sort();
+    const file = name === "grep" && remoteFiles.has(root);
+    const paths = file
+      ? [root]
+      : [...remoteFiles.keys()].filter((p) => p.startsWith(`${root}/`) && (!glob || globRe.test(p.slice(root.length + 1)))).sort();
+    const place = file ? `in ${root}` : `under ${root}`;
     const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
+    const ok = (content: string) => ({ status: "ok" as const, content });
     if (name === "glob")
-      return paths.length ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n` : `No files under ${root} match ${glob}.\n`;
+      return ok(paths.length ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n` : `No files under ${root} match ${glob}.\n`);
     let re: RegExp;
     try {
       re = new RegExp(String(args.pattern ?? ""), args.ignore_case ? "i" : "");
     } catch (e) {
-      return `grep -E on the host refused the pattern, so nothing was searched: ${String(e)}.`;
+      return { status: "error", content: `grep -E on the host refused the pattern, so nothing was searched: ${String(e)}.` };
     }
     const hits = paths.map((p) => ({ p, lines: fileLines(remoteFiles.get(p) ?? "") })).filter((f) => f.lines.some((l) => re.test(l)));
     const matching = hits.reduce((n, f) => n + f.lines.filter((l) => re.test(l)).length, 0);
-    if (!hits.length) return `No lines match the pattern under ${root}.\n`;
+    if (!hits.length) return ok(`No lines match the pattern ${place}.\n`);
     if (args.output_mode === "content") {
       const context = Number(args.context ?? 0) || 0;
       const out = hits.flatMap(({ p, lines }) => {
         const shown = new Set(lines.flatMap((l, i) => (re.test(l) ? Array.from({ length: 2 * context + 1 }, (_, k) => i - context + k) : [])));
         return lines.flatMap((l, i) => (shown.has(i) ? [`${p}${re.test(l) ? ":" : "-"}${i + 1}${re.test(l) ? ":" : "-"}${l}`] : []));
       });
-      return `${matching} matching lines in ${files(hits.length)} under ${root}, sorted by path:\n${out.join("\n")}\n`;
+      return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${out.join("\n")}\n`);
     }
     if (args.output_mode === "count")
-      return `${matching} matching lines in ${files(hits.length)} under ${root}, sorted by path:\n${hits.map(({ p, lines }) => `${p}:${lines.filter((l) => re.test(l)).length}`).join("\n")}\n`;
-    return `${files(hits.length)} with a matching line under ${root}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`;
+      return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${hits.map(({ p, lines }) => `${p}:${lines.filter((l) => re.test(l)).length}`).join("\n")}\n`);
+    return ok(`${files(hits.length)} with a matching line ${place}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`);
   }
 
   /** The file after an edit or a write, or the error the model gets, as `hatoba_ai::files` computes them. */
@@ -1203,7 +1208,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       case "grep": {
         if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };
         await wait(500);
-        return { status: "ok", content: search(x.name, args) };
+        return search(x.name, args);
       }
       case "read_file": {
         if (!sessionId) return { status: "error", content: FILE_DISCONNECTED };
