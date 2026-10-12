@@ -1,4 +1,4 @@
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { PopupSelect, toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
@@ -747,6 +747,7 @@ function ToolBlock({
   const summary = callSummary(shown.name, shown.arguments);
   const revertible = change?.state === "written" || change?.state === "unfinished";
   const revert = useRevert(slotId, change);
+  const statusId = useId();
   useEffect(() => {
     if (flash) setOpen(true);
   }, [flash]);
@@ -756,19 +757,10 @@ function ToolBlock({
   return (
     <div className={cx(s.tool, flash && s.flash)} data-reveal={reveal}>
       <div className={s.toolHeadRow}>
-        <button type="button" className={s.toolHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <button type="button" className={s.toolHead} aria-expanded={open} aria-describedby={statusId} onClick={() => setOpen((v) => !v)}>
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
           <span className={s.toolName}>{toolLabel(t, shown.name)}</span>
           <span className={s.toolSummary}>{summary}</span>
-          {change?.state === "reverted" ? (
-            <span className={s.chip}>
-              <Icon name="arrow-counter-clockwise" size={11} />
-              {t("ai.revert.reverted")}
-            </span>
-          ) : (
-            <StatusChip view={view} name={call.name} />
-          )}
-          <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
         </button>
         {revertible && (
           <IconButton
@@ -784,6 +776,17 @@ function ToolBlock({
             }}
           />
         )}
+        <span id={statusId} className={s.toolStatus}>
+          {change?.state === "reverted" ? (
+            <span className={s.chip}>
+              <Icon name="arrow-counter-clockwise" size={11} />
+              {t("ai.revert.reverted")}
+            </span>
+          ) : (
+            <StatusChip view={view} name={call.name} />
+          )}
+        </span>
+        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
       </div>
       {open && (
         <div className={s.toolBody}>

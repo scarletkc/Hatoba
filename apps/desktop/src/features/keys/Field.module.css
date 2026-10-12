@@ -30,7 +30,3 @@
   color: var(--red);
   text-wrap: pretty;
 }
-
-.field > [role="radiogroup"] {
-  align-self: flex-start;
-}
