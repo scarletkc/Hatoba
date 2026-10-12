@@ -8,6 +8,7 @@ import type {
   AiPermissionMode,
   AiProviderView,
   AiSendInput,
+  AiSettingsView,
   AiSendStarted,
   AiToolCall,
   AiToolResultInput,
@@ -22,6 +23,7 @@ const ipc = vi.hoisted(() => ({
   run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   allowances: vi.fn<() => Promise<AiAllowance[]>>(),
+  settings: vi.fn<() => Promise<AiSettingsView>>(),
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -32,6 +34,8 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_tool_run: ipc.run,
     ai_tool_result: ipc.result,
     ai_allowances_list: ipc.allowances,
+    ai_settings_get: ipc.settings,
+    ai_providers_list: () => Promise.resolve([provider]),
   },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
@@ -84,9 +88,22 @@ const provider: AiProviderView = {
   base_url: "http://127.0.0.1/v1",
   has_api_key: false,
   auth_header: "x-api-key",
-  models: [{ id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null }],
+  models: [
+    { id: "m1", name: "Model 1", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+    { id: "judge", name: "Judge", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
+  ],
   updated_at: 0,
 };
+/** Settings → AI with the judge of {@link verdict}, or with `judge`. */
+const settings = (judge: AiSettingsView["judge_model"] = { provider_id: "p1", model_id: "judge" }): AiSettingsView => ({
+  default_model: null,
+  default_effort: null,
+  search_provider_id: null,
+  builtin_skill_enabled: true,
+  custom_instructions: "",
+  send_terminal_screen: true,
+  judge_model: judge,
+});
 
 const call = (id: string, name: string, args: Record<string, unknown>): AiToolCall => ({ id, name, arguments: JSON.stringify(args) });
 const verdict = (decision: AiAutoVerdict["decision"], concerns: string[] = []): AiAutoVerdict => ({
@@ -149,6 +166,7 @@ beforeEach(() => {
   ipc.run.mockReset().mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.allowances.mockReset().mockResolvedValue([]);
+  ipc.settings.mockReset().mockResolvedValue(settings());
   screen.rows = ["$ "];
   useTabs.setState({ tabs: [tab] });
   useAi.setState({
@@ -277,6 +295,38 @@ describe("a turn in Auto mode (AI-47)", () => {
       ["call_1", true],
       ["call_2", false],
     ]);
+  });
+
+  it("judges a call again when its judge was replaced after it was judged ahead", async () => {
+    const unavailable: AiAutoVerdict = { ...verdict("ask"), answers: [], failure: "unavailable" };
+    let replaced = false;
+    ipc.judge.mockImplementation(async (_conv, callId) =>
+      replaced ? unavailable : callId === "call_1" ? verdict("ask", ["destroys_data"]) : verdict("run"),
+    );
+    await respond("auto", [
+      call("call_1", "run_command", { command: "sudo systemctl restart nginx" }),
+      call("call_2", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" }),
+    ]);
+    // call_2's verdict came ahead while call_1's card waits; then the user replaces the judge.
+    await until(() => current()?.id === "call_1" && current()?.state === "approval");
+    expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1", "call_2"]);
+    replaced = true;
+    ipc.settings.mockResolvedValue(settings({ provider_id: "p1", model_id: "m1" }));
+    decideCall(TAB, { kind: "run", edited: null });
+
+    // The old judge's "run" does not count: the judge chosen now decides, and asks.
+    await until(() => current()?.id === "call_2" && current()?.state === "approval");
+    expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1", "call_2", "call_2"]);
+    expect(current()?.auto).toMatchObject({ verdict: { failure: "unavailable" } });
+    expect(ipc.run.mock.calls.map((c) => c[1])).toEqual(["call_1"]);
+  });
+
+  it("runs a call judged ahead when its judge is still the one chosen", async () => {
+    ipc.judge.mockResolvedValue(verdict("run"));
+    await respond("auto", [call("call_1", "write_file", { path: "/srv/app/maintenance.html", content: "<h1>Back soon</h1>" })]);
+    await until(() => ipc.run.mock.calls.length === 1);
+    expect(ipc.judge).toHaveBeenCalledTimes(1);
+    expect(ipc.run).toHaveBeenCalledWith("conv-1", "call_1", "s1", null, true);
   });
 
   it("shows the card as manual approval does after a switch to it while the judge answers", async () => {

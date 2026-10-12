@@ -56,7 +56,7 @@ import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
-import { conversationModel } from "./models";
+import { conversationModel, judgeChosen, sameModel } from "./models";
 import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
@@ -224,6 +224,16 @@ interface AutoOutcome {
 
 /** AI-47: the calls whose verdict is asked for as soon as their response arrives (`prefetch`). */
 const PREFETCHED: readonly ToolKind[] = ["run_command", "edit_file", "write_file", "fetch_url"];
+
+/** AI-47: whether `verdict`'s judge is still the one chosen in Settings → AI, and still listed by its provider. */
+async function judgeStillChosen(verdict: AiAutoVerdict): Promise<boolean> {
+  try {
+    const [providers, settings] = await Promise.all([api.ai_providers_list(), api.ai_settings_get()]);
+    return sameModel(settings.judge_model, verdict) && judgeChosen(providers, settings);
+  } catch {
+    return false;
+  }
+}
 
 /** AI-47: the verdict standing in for a judge that could not be asked: the card asks, saying so. */
 function failedVerdict(): AiAutoVerdict {
@@ -490,8 +500,16 @@ class TurnRunner {
     const rule = hardRule({ kind, args: parseArgs(call.arguments) ?? {}, mcp, screen });
     if (rule) return { run: false, ask: { rule }, judged: false };
     this.setCall({ id: call.id, state: "judging", mcp });
-    const verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
+    let verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
     if (!this.acting) return null;
+    // A verdict asked for ahead may come from a judge the user has cleared or replaced since, while an earlier call
+    // waited: the call is judged again, by the judge chosen now, which asks when there is none.
+    if (prefetched && verdict.decision === "run") {
+      const current = await judgeStillChosen(verdict);
+      if (!this.acting) return null;
+      if (!current) verdict = await this.askJudge(convId, call.id, screen);
+      if (!this.acting) return null;
+    }
     if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return { run: false, ask: null, judged: false };
     return verdict.decision === "run" ? { run: true, ask: null, judged: true } : { run: false, ask: { verdict }, judged: true };
   }

@@ -437,7 +437,9 @@ fn read_system_one(
 
 /// A System One answer to `question` when it has the question's type, its values are in range,
 /// and its distribution sums to 1 ([`system_one_distribution`]). A distribution may leave out
-/// options or levels it gives no probability; they get 0.
+/// options or levels it gives no probability; they get 0. A Choice's choice and a Score's score,
+/// and their confidence, are computed from the distribution, as for a chat model, so they never
+/// contradict it.
 fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
     let answer: Answer = serde_json::from_value(raw.clone()).ok()?;
     let in_range = |p: f64| p.is_finite() && (-ROUNDING..=1.0 + ROUNDING).contains(&p);
@@ -454,12 +456,9 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
             },
         ) => {
             let fits = criteria.contains_key(&choice) && in_range(confidence);
-            let probabilities = system_one_distribution(criteria.keys(), &probabilities)?;
-            fits.then(|| Answer::Choice {
-                choice,
-                probabilities,
-                confidence: confidence.clamp(0.0, 1.0),
-            })
+            let options: Vec<String> = criteria.keys().cloned().collect();
+            let p = system_one_distribution(&options, &probabilities)?;
+            fits.then(|| choice_answer(options, p))
         }
         (
             Question::Score { criteria, .. },
@@ -476,47 +475,62 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
             let fits = score.is_finite()
                 && (-ROUNDING..=top + ROUNDING).contains(&score)
                 && in_range(confidence);
-            let probabilities = system_one_distribution(levels.iter(), &probabilities)?;
-            fits.then(|| Answer::Score {
-                score: score.clamp(0.0, top),
-                legend: if legend.is_empty() {
-                    levels
-                        .iter()
-                        .cloned()
-                        .zip(criteria.iter().cloned())
-                        .collect()
-                } else {
-                    legend
-                },
-                probabilities,
-                confidence: confidence.clamp(0.0, 1.0),
-            })
+            let p = system_one_distribution(&levels, &probabilities)?;
+            let legend = if legend.is_empty() {
+                levels
+                    .iter()
+                    .cloned()
+                    .zip(criteria.iter().cloned())
+                    .collect()
+            } else {
+                legend
+            };
+            fits.then(|| score_answer(levels, p, legend))
         }
         _ => None,
     }
 }
 
-/// A System One distribution over `keys`, with the keys it leaves out at 0 and divided by its
-/// sum: `None` when it names another key, a probability is out of range, or the sum is not 1
-/// within [`SUM_ROUNDING`].
-fn system_one_distribution<'a>(
-    keys: impl Iterator<Item = &'a String>,
+/// A Choice answer whose choice and confidence follow from `p`, the probabilities of `options`,
+/// which sum to 1.
+fn choice_answer(options: Vec<String>, p: Vec<f64>) -> Answer {
+    let best = argmax(&p);
+    Answer::Choice {
+        choice: options[best].clone(),
+        confidence: choice_confidence(options.len(), p[best]),
+        probabilities: options.into_iter().zip(p).collect(),
+    }
+}
+
+/// A Score answer whose score and confidence follow from `p`, the probabilities of `levels`,
+/// lowest first, which sum to 1.
+fn score_answer(levels: Vec<String>, p: Vec<f64>, legend: BTreeMap<String, Value>) -> Answer {
+    Answer::Score {
+        score: p.iter().enumerate().map(|(i, pi)| i as f64 * pi).sum(),
+        confidence: score_confidence(&p),
+        legend,
+        probabilities: levels.into_iter().zip(p).collect(),
+    }
+}
+
+/// A System One distribution as the probabilities of `keys`, in their order, with the keys it
+/// leaves out at 0 and divided by its sum: `None` when it names another key, a probability is
+/// out of range, or the sum is not 1 within [`SUM_ROUNDING`].
+fn system_one_distribution(
+    keys: &[String],
     probabilities: &BTreeMap<String, f64>,
-) -> Option<BTreeMap<String, f64>> {
-    let all: BTreeMap<String, f64> = keys
-        .map(|k| (k.clone(), probabilities.get(k).copied().unwrap_or(0.0)))
-        .collect();
+) -> Option<Vec<f64>> {
     let in_range = |p: f64| p.is_finite() && (-ROUNDING..=1.0 + ROUNDING).contains(&p);
-    let known = probabilities.keys().all(|k| all.contains_key(k));
-    if !known || !all.values().all(|p| in_range(*p)) {
+    let known = probabilities.keys().all(|k| keys.contains(k));
+    if !known || !probabilities.values().all(|p| in_range(*p)) {
         return None;
     }
-    let sum: f64 = all.values().map(|p| p.clamp(0.0, 1.0)).sum();
-    ((sum - 1.0).abs() <= SUM_ROUNDING).then(|| {
-        all.into_iter()
-            .map(|(k, p)| (k, p.clamp(0.0, 1.0) / sum))
-            .collect()
-    })
+    let p: Vec<f64> = keys
+        .iter()
+        .map(|k| probabilities.get(k).map_or(0.0, |p| p.clamp(0.0, 1.0)))
+        .collect();
+    let sum: f64 = p.iter().sum();
+    ((sum - 1.0).abs() <= SUM_ROUNDING).then(|| p.iter().map(|pi| pi / sum).collect())
 }
 
 /// Posts a JSON body and reads the JSON response, or the provider's error.
@@ -949,26 +963,17 @@ fn derive_answers(
             Question::Choice { criteria, .. } => {
                 let options: Vec<String> = criteria.keys().cloned().collect();
                 let p = distribution_of(value, &options).ok_or_else(invalid)?;
-                let best = argmax(&p);
-                Answer::Choice {
-                    choice: options[best].clone(),
-                    confidence: choice_confidence(options.len(), p[best]),
-                    probabilities: options.into_iter().zip(p).collect(),
-                }
+                choice_answer(options, p)
             }
             Question::Score { criteria, .. } => {
                 let levels: Vec<String> = (0..criteria.len()).map(|i| i.to_string()).collect();
                 let p = distribution_of(value, &levels).ok_or_else(invalid)?;
-                Answer::Score {
-                    score: p.iter().enumerate().map(|(i, pi)| i as f64 * pi).sum(),
-                    confidence: score_confidence(&p),
-                    legend: levels
-                        .iter()
-                        .cloned()
-                        .zip(criteria.iter().cloned())
-                        .collect(),
-                    probabilities: levels.into_iter().zip(p).collect(),
-                }
+                let legend = levels
+                    .iter()
+                    .cloned()
+                    .zip(criteria.iter().cloned())
+                    .collect();
+                score_answer(levels, p, legend)
             }
         };
         answers.insert(id.clone(), answer);

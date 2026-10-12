@@ -181,11 +181,12 @@ async fn system_one_posts_state_and_questions_and_reads_the_answers() {
     };
     assert_eq!(choice, "billing");
     assert_eq!(probabilities["sales"], 0.0);
-    assert_eq!(*confidence, 0.81);
+    // Computed from the distribution, as System One defines it.
+    assert!((confidence - 0.82).abs() < 1e-9);
     let Answer::Score { score, legend, .. } = &evaluation.answers["mood"] else {
         panic!("a score answer");
     };
-    assert_eq!(*score, 1.05);
+    assert!((score - 1.05).abs() < 1e-9);
     assert_eq!(legend["2"], json!("Very angry"));
     assert_eq!(
         evaluation.usage,
@@ -336,6 +337,28 @@ async fn system_one_answers_that_are_missing_mistyped_out_of_range_or_unnormaliz
     };
     assert_eq!(legend["0"], json!("Calm"));
     assert_eq!(probabilities["0"], 0.0);
+
+    // The choice, the score and their confidence follow from the distribution, whatever the
+    // response said.
+    let mut contradicting = system_one_answers();
+    contradicting["topic"]["probabilities"] = json!({"billing": 0.0, "technical": 1.0});
+    contradicting["mood"]["score"] = json!(0.0);
+    contradicting["mood"]["probabilities"] = json!({"2": 1.0});
+    let evaluation = read_system_one(&json!({"answers": contradicting}), &questions()).unwrap();
+    let Answer::Choice {
+        choice, confidence, ..
+    } = &evaluation.answers["topic"]
+    else {
+        panic!("a choice answer");
+    };
+    assert_eq!((choice.as_str(), *confidence), ("technical", 1.0));
+    let Answer::Score {
+        score, confidence, ..
+    } = &evaluation.answers["mood"]
+    else {
+        panic!("a score answer");
+    };
+    assert_eq!((*score, *confidence), (2.0, 1.0));
 
     // A sum that rounding keeps near 1 counts, divided by it.
     let mut rounded = system_one_answers();
