@@ -43,6 +43,15 @@ describe("notes as dividers (AI-05, AI-09)", () => {
     expect(noteLabel(tr("ja"), detached)).toBe("ターミナルを使えなくなりました");
   });
 
+  it("name the permission mode the message was sent in (AI-16, AI-47)", () => {
+    const auto = { kind: "permission_mode", mode: "auto" } as const;
+    expect(noteLabel(tr("en"), auto)).toBe("Permission mode: Auto");
+    expect(noteLabel(tr("zh-CN"), auto)).toBe("权限模式：自动批准");
+    expect(noteLabel(tr("ja"), auto)).toBe("権限モード：自動承認");
+    expect(noteLabel(tr("en"), { ...auto, mode: "bypass" })).toBe("Permission mode: Bypass");
+    expect(noteLabel(tr("en"), { ...auto, mode: "manual" })).toBe("Permission mode: Manual approval");
+  });
+
   it("name the file whose change the user reverted (AI-41)", () => {
     const note = fileRevertNote("/etc/nginx/nginx.conf", "toolu_01", "edit_file", false);
     expect(noteLabel(tr("en"), note)).toBe("Reverted the change to /etc/nginx/nginx.conf");

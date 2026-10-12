@@ -3,7 +3,7 @@ import type { AiEntryView, AiUsage } from "@/ipc/types";
 import { contextUsage, estimateTokens, formatTokens, messageFit } from "./meter";
 
 const user = (id: string, text: string): AiEntryView => ({ role: "user", entry_id: id, created_at: 0, text });
-const tool = (id: string, content: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: "c", status: "ok", content });
+const tool = (id: string, content: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: "c", status: "ok", content, auto: null });
 const summary = (id: string, text: string): AiEntryView => ({ role: "summary", entry_id: id, created_at: 0, text });
 const assistant = (id: string, usage: AiUsage | null, model = "m1"): AiEntryView => ({
   role: "assistant",

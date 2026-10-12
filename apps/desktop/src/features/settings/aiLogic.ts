@@ -1,4 +1,5 @@
 import { EFFORTS, sortEfforts } from "@/features/ai/effort";
+import { chats } from "@/features/ai/models";
 import type {
   AiEffort,
   AiModel,
@@ -35,8 +36,9 @@ export function normalizeBaseUrl(text: string): string {
 
 /**
  * AI-01: the protocol the form preselects while the user has not chosen one. `anthropic` for
- * `api.anthropic.com` and for base URLs whose path ends in `/anthropic`, `chat_completions` otherwise.
- * Text that is not a URL yet (the user is still typing) gets the default.
+ * `api.anthropic.com` and for base URLs whose path ends in `/anthropic`; `system_one` (AI-47) for
+ * `api.typesafe.ai`, a path that ends in `/systemone`, and a Workers AI path with `/ai/run`;
+ * `chat_completions` otherwise. Text that is not a URL yet (the user is still typing) gets the default.
  */
 export function suggestProtocol(baseUrl: string): AiProtocol {
   const value = baseUrl.trim();
@@ -47,8 +49,11 @@ export function suggestProtocol(baseUrl: string): AiProtocol {
   } catch {
     return "chat_completions";
   }
+  const host = url.hostname.toLowerCase();
   const path = url.pathname.replace(/\/+$/, "").toLowerCase();
-  return url.hostname.toLowerCase() === "api.anthropic.com" || path.endsWith("/anthropic") ? "anthropic" : "chat_completions";
+  if (host === "api.anthropic.com" || path.endsWith("/anthropic")) return "anthropic";
+  if (host === "api.typesafe.ai" || path.endsWith("/systemone") || /\/ai\/run(\/|$)/.test(path)) return "system_one";
+  return "chat_completions";
 }
 
 // ───────────────────────── Saved secrets (AI-01, HOST-08) ─────────────────────────
@@ -247,6 +252,14 @@ export function formatEfforts(levels: readonly AiEffort[], label: (e: AiEffort) 
   return runs.map((r) => (r.length === 1 ? label(r[0]) : `${label(r[0])}–${label(r[r.length - 1])}`)).join(" · ");
 }
 
+/**
+ * AI-47: the rows as a System One provider keeps them. Its models only answer the judge's questions, so they have no
+ * token limits or thinking levels, which the form hides and does not check.
+ */
+export function decisionDrafts(drafts: readonly ModelDraft[]): ModelDraft[] {
+  return drafts.map((d) => ({ ...d, context: "", output: "", efforts: null, adaptive: null }));
+}
+
 export function removeModel(drafts: readonly ModelDraft[], id: string): ModelDraft[] {
   return drafts.filter((d) => d.id.trim() !== id);
 }
@@ -272,25 +285,38 @@ export interface ModelChoice {
   model: AiModel;
 }
 
-/** Every provider's models, in provider order, for the default model selector. */
-export function modelChoices(providers: readonly AiProviderView[]): ModelChoice[] {
+function choicesOf(providers: readonly AiProviderView[]): ModelChoice[] {
   return providers.flatMap((p) =>
     p.models.map((model) => ({ ref: { provider_id: p.id, model_id: model.id }, providerName: p.name, model })),
   );
+}
+
+/** The models of every provider that chats, in provider order, for the default model selector (System One ones cannot, AI-47). */
+export function modelChoices(providers: readonly AiProviderView[]): ModelChoice[] {
+  return choicesOf(providers.filter(chats));
+}
+
+/** AI-47: every provider's models, System One ones included, for the judge of Auto mode. */
+export function judgeChoices(providers: readonly AiProviderView[]): ModelChoice[] {
+  return choicesOf(providers);
 }
 
 export function sameRef(a: AiModelRef | null, b: AiModelRef | null): boolean {
   return a === b || (!!a && !!b && a.provider_id === b.provider_id && a.model_id === b.model_id);
 }
 
-/** Drops a default model or search provider whose provider or model is gone. */
+/**
+ * Drops a default model, judge (AI-47) or search provider whose provider or model is gone, and a default model on a
+ * provider that cannot chat.
+ */
 export function sanitizeSettings(
   settings: AiSettingsView,
   providers: readonly AiProviderView[],
   searchProviders: readonly SearchProviderView[],
 ): AiSettingsView {
-  const known = modelChoices(providers);
-  const defaultModel = settings.default_model && known.some((c) => sameRef(c.ref, settings.default_model)) ? settings.default_model : null;
+  const listed = (choices: ModelChoice[], ref: AiModelRef | null) => (ref && choices.some((c) => sameRef(c.ref, ref)) ? ref : null);
+  const defaultModel = listed(modelChoices(providers), settings.default_model);
+  const judgeModel = listed(judgeChoices(providers), settings.judge_model);
   const searchId = settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id) ? settings.search_provider_id : null;
   return {
     default_model: defaultModel,
@@ -299,17 +325,18 @@ export function sanitizeSettings(
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
+    judge_model: judgeModel,
   };
 }
 
-/** The first model of the first provider, as the default when none is chosen yet. */
+/** The first model of the first provider that chats, as the default when none is chosen yet. */
 export function firstModelRef(providers: readonly AiProviderView[]): AiModelRef | null {
   return modelChoices(providers)[0]?.ref ?? null;
 }
 
 /**
- * The settings to store after the providers changed: a default model or search provider that is
- * gone is dropped, and a missing default becomes the first model there is.
+ * The settings to store after the providers changed: a default model, judge or search provider that
+ * is gone is dropped, and a missing default becomes the first model there is that chats.
  */
 export function resolveSettings(
   settings: AiSettingsView,
@@ -329,6 +356,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
+  if (!sameRef(prev.judge_model, next.judge_model)) patch.judge_model = next.judge_model;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

@@ -1,18 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
-import { Button, Icon, IconButton, Segmented, Spinner, Switch, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, Segmented, Spinner, StatusDot, Switch, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
+import { answersText, verdictText } from "@/features/ai/autoText";
 import { InstructionsField } from "@/features/ai/InstructionsField";
+import { judgeChosen } from "@/features/ai/models";
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
-import { useT } from "@/i18n";
+import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { AiAllowance, AiEffort, AiModelRef, AiPermissionMode, AiProviderView, AiSettingsPatch, AiSettingsView, SearchProviderView } from "@/ipc/types";
+import type {
+  AiAllowance,
+  AiEffort,
+  AiJudgeDecision,
+  AiJudgeSampleOutcome,
+  AiModelRef,
+  AiPermissionMode,
+  AiProviderView,
+  AiSettingsPatch,
+  AiSettingsView,
+  SearchProviderView,
+} from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { changedSettings, modelChoices, parseBaseUrl, resolveSettings, sameRef, sanitizeSettings } from "./aiLogic";
+import {
+  changedSettings,
+  judgeChoices,
+  modelChoices,
+  parseBaseUrl,
+  resolveSettings,
+  sameRef,
+  sanitizeSettings,
+  type ModelChoice,
+} from "./aiLogic";
 import { aiErrorMessage } from "./aiShared";
 import { useFreshReads } from "./freshReads";
 import { McpSection } from "./McpSection";
@@ -37,7 +59,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
  * web search (AI-14), custom instructions (AI-36), whether messages send the terminal screen by
- * default (AI-46), and the permission mode and saved approvals of this device (AI-16, AI-19).
+ * default (AI-46), the judge of Auto mode (AI-47), and the permission mode and saved approvals of this
+ * device (AI-16, AI-19).
  */
 export function AiPane() {
   const t = useT();
@@ -178,8 +201,10 @@ export function AiPane() {
                 hint={modelChoices(providers).length === 0 ? t("aiSettings.default.empty") : undefined}
               >
                 <ModelSelect
-                  providers={providers}
+                  choices={modelChoices(providers)}
                   value={data.settings.default_model}
+                  label={t("aiSettings.default.row")}
+                  placeholder={t("aiSettings.default.placeholder")}
                   onChange={(default_model) => void saveSettings({ default_model })}
                 />
               </SettingRow>
@@ -248,7 +273,14 @@ export function AiPane() {
         }
       />
       <McpSection />
-      <DeviceSection />
+      {data && (
+        <JudgeSection
+          providers={providers}
+          value={data.settings.judge_model}
+          onChange={(judge_model) => void saveSettings({ judge_model })}
+        />
+      )}
+      <DeviceSection judge={data && judgeChosen(data.providers, data.settings)} />
 
       {dialog && (
         <ProviderDialog
@@ -289,43 +321,47 @@ function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderVi
   );
 }
 
-/** The default model (AI-05): every provider's models, grouped by provider. */
+/**
+ * A model picker with `choices` grouped by provider, for the default model (AI-05) and the judge of Auto mode
+ * (AI-47). With `noneLabel`, a first entry chooses no model.
+ */
 function ModelSelect({
-  providers,
+  choices,
   value,
+  label,
+  placeholder,
+  noneLabel,
   onChange,
 }: {
-  providers: AiProviderView[];
+  choices: ModelChoice[];
   value: AiModelRef | null;
-  onChange: (ref: AiModelRef) => void;
+  /** Names the button. */
+  label: string;
+  /** Shows while no model is chosen. */
+  placeholder: string;
+  noneLabel?: string;
+  onChange: (ref: AiModelRef | null) => void;
 }) {
-  const t = useT();
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
-  const choices = modelChoices(providers);
   const selected = choices.find((c) => sameRef(c.ref, value));
 
-  const entries: MenuEntry[] = providers.flatMap((p): MenuEntry[] =>
-    p.models.length === 0
-      ? []
-      : [
-          { kind: "header", label: p.name },
-          ...p.models.map(
-            (m): MenuEntry => ({
-              label: m.name || m.id,
-              checked: sameRef({ provider_id: p.id, model_id: m.id }, value),
-              onSelect: () => onChange({ provider_id: p.id, model_id: m.id }),
-            }),
-          ),
-        ],
-  );
+  const entries: MenuEntry[] = [];
+  if (noneLabel) {
+    entries.push({ label: noneLabel, checked: !selected, onSelect: () => onChange(null) });
+    if (choices.length > 0) entries.push({ kind: "separator" });
+  }
+  choices.forEach((c, i) => {
+    if (c.ref.provider_id !== choices[i - 1]?.ref.provider_id) entries.push({ kind: "header", label: c.providerName });
+    entries.push({ label: c.model.name || c.model.id, checked: sameRef(c.ref, value), onSelect: () => onChange(c.ref) });
+  });
 
   return (
     <>
       <button
         ref={ref}
         type="button"
-        aria-label={t("aiSettings.default.row")}
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={!!menu.anchor}
         disabled={choices.length === 0}
@@ -334,13 +370,166 @@ function ModelSelect({
         onClick={() => ref.current && menu.openBelow(ref.current)}
       >
         <span className={controlStyles.popupLabel} style={selected ? undefined : { color: "var(--fg2)" }}>
-          {selected ? selected.model.name || selected.model.id : t("aiSettings.default.placeholder")}
+          {selected ? selected.model.name || selected.model.id : placeholder}
         </span>
         {selected && <span className={controlStyles.popupHint}>{selected.providerName}</span>}
         <Icon name="caret-up-down" className={controlStyles.popupCaret} />
       </button>
       {menu.anchor && <Menu anchor={menu.anchor} entries={entries} onClose={menu.close} minWidth={ref.current?.offsetWidth} />}
     </>
+  );
+}
+
+/** What **Test** beside the judge shows (AI-47), for the judge it ran with. */
+type JudgeTest = { judge: AiModelRef } & (
+  | { state: "running" }
+  | { state: "done"; outcomes: AiJudgeSampleOutcome[] }
+  | { state: "error"; message: string }
+);
+
+/** The short labels of the sample calls, by the names Rust gives them; a sample a newer version added shows its name. */
+const SAMPLE_LABEL: Record<string, MessageKey> = {
+  disk_space: "aiSettings.judge.sample.disk_space",
+  restart_requested: "aiSettings.judge.sample.restart_requested",
+  delete_unrequested: "aiSettings.judge.sample.delete_unrequested",
+  key_sent_out: "aiSettings.judge.sample.key_sent_out",
+  restart_forbidden: "aiSettings.judge.sample.restart_forbidden",
+  pipe_to_shell: "aiSettings.judge.sample.pipe_to_shell",
+  key_via_shell: "aiSettings.judge.sample.key_via_shell",
+  restart_requested_zh: "aiSettings.judge.sample.restart_requested_zh",
+  delete_unrequested_ja: "aiSettings.judge.sample.delete_unrequested_ja",
+  docs_page: "aiSettings.judge.sample.docs_page",
+  token_in_url: "aiSettings.judge.sample.token_in_url",
+};
+
+const DECISION_LABEL: Record<AiJudgeDecision, MessageKey> = {
+  run: "aiSettings.judge.decision.run",
+  ask: "aiSettings.judge.decision.ask",
+};
+
+/** A sample the judge answered with the decision expected; a failure, which asks, does not count. */
+const asExpected = (o: AiJudgeSampleOutcome) => o.verdict.failure === null && o.verdict.decision === o.expected;
+
+/**
+ * AI-47: the judge of Auto mode, which syncs: a model of any provider, System One ones included, or none, which
+ * leaves Auto unavailable. **Test** runs sample calls with the judge the picker shows and lists each decision
+ * against the one expected, since probabilities differ between backends.
+ */
+function JudgeSection({
+  providers,
+  value,
+  onChange,
+}: {
+  providers: AiProviderView[];
+  value: AiModelRef | null;
+  onChange: (ref: AiModelRef | null) => void;
+}) {
+  const t = useT();
+  const [test, setTest] = useState<JudgeTest | null>(null);
+  /** Bumped by each test, so that only the last one's answer shows. */
+  const generation = useRef(0);
+  const choices = judgeChoices(providers);
+  // A test shows only while its judge is the one chosen.
+  const shown = test && sameRef(test.judge, value) ? test : null;
+
+  const run = async () => {
+    if (!value) return;
+    const judge = value;
+    const mine = ++generation.current;
+    setTest({ judge, state: "running" });
+    try {
+      const outcomes = await api.ai_judge_test(judge);
+      if (mine === generation.current) setTest({ judge, state: "done", outcomes });
+    } catch (e) {
+      if (mine === generation.current) setTest({ judge, state: "error", message: aiErrorMessage(t, e) });
+    }
+  };
+
+  return (
+    <section className={layoutStyles.section}>
+      <div className={layoutStyles.sectionTitle}>{t("aiSettings.judge")}</div>
+      <Group>
+        <SettingRow label={t("aiSettings.judge.row")} hint={t(choices.length === 0 ? "aiSettings.default.empty" : "aiSettings.judge.rowHint")}>
+          <ModelSelect
+            choices={choices}
+            value={value}
+            label={t("aiSettings.judge.row")}
+            placeholder={t("aiSettings.judge.placeholder")}
+            noneLabel={t("aiSettings.judge.none")}
+            onChange={onChange}
+          />
+          <Button icon="flask" busy={shown?.state === "running"} disabled={!value || choices.length === 0} onClick={() => void run()}>
+            {t("aiSettings.judge.test")}
+          </Button>
+        </SettingRow>
+        {shown && <JudgeTestResult test={shown} />}
+      </Group>
+      <div className={s.sectionHint}>{t("aiSettings.judge.hint")}</div>
+    </section>
+  );
+}
+
+/**
+ * The outcome of **Test** beside the judge (AI-47): how many samples came out as expected, then each sample with the
+ * decision expected, the judge's, and its answers or why it gave none. A sample that ran when it should have asked
+ * is red, one that asked when it could have run orange (it only costs a click).
+ */
+function JudgeTestResult({ test }: { test: JudgeTest }) {
+  const t = useT();
+  if (test.state === "running") {
+    return (
+      <div className={s.judgeStatus} role="status">
+        <Spinner size={12} />
+        {t("aiSettings.judge.test.running")}
+      </div>
+    );
+  }
+  if (test.state === "error") {
+    return (
+      <div className={s.judgeStatus} role="status">
+        <StatusDot color="var(--red)" />
+        <span className={s.judgeFail}>{test.message}</span>
+      </div>
+    );
+  }
+  const { outcomes } = test;
+  const matched = outcomes.filter(asExpected).length;
+  const ranWrongly = outcomes.some((o) => !asExpected(o) && o.verdict.decision === "run");
+  const summary = matched === outcomes.length ? "var(--green)" : ranWrongly ? "var(--red)" : "var(--orange)";
+  return (
+    <div className={s.judgeResult}>
+      <div className={s.judgeStatus} role="status">
+        <StatusDot color={summary} />
+        {t("aiSettings.judge.test.summary", { n: matched, total: outcomes.length })}
+      </div>
+      <ul className={s.samples}>
+        {outcomes.map((o) => {
+          const failed = o.verdict.failure !== null;
+          const ok = asExpected(o);
+          const mark = ok
+            ? { icon: "check-circle", color: "var(--green)", label: t("aiSettings.judge.test.match") }
+            : failed
+              ? { icon: "warning-circle", color: "var(--orange)", label: t("aiSettings.judge.test.unanswered") }
+              : { icon: "x-circle", color: o.verdict.decision === "run" ? "var(--red)" : "var(--orange)", label: t("aiSettings.judge.test.mismatch") };
+          return (
+            <li key={o.name} className={s.sample}>
+              <span className={s.sampleMark} role="img" aria-label={mark.label} title={mark.label}>
+                <Icon name={mark.icon} fill color={mark.color} />
+              </span>
+              <span className={s.sampleText}>
+                <span className={s.sampleName}>{SAMPLE_LABEL[o.name] ? t(SAMPLE_LABEL[o.name]) : o.name}</span>
+                <span className={s.sampleMeta}>
+                  {t("aiSettings.judge.test.expected", { decision: t(DECISION_LABEL[o.expected]) })}
+                  <span className={s.dot}>·</span>
+                  <span className={ok ? undefined : s.sampleOff}>{t("aiSettings.judge.test.judged", { decision: t(DECISION_LABEL[o.verdict.decision]) })}</span>
+                </span>
+                <span className={cx(s.sampleDetail, "selectable")}>{failed ? verdictText(t, o.verdict) : answersText(t, o.verdict.answers)}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -430,13 +619,16 @@ function SavedApprovals() {
   );
 }
 
-/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals (AI-19). */
-function DeviceSection() {
+/**
+ * Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals
+ * (AI-19). Auto (AI-47) is offered once a judge is chosen (`judge`; null until the AI settings are read).
+ */
+function DeviceSection({ judge }: { judge: boolean | null }) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
 
   const chooseMode = async (mode: AiPermissionMode) => {
-    if (mode === prefs.ai_permission_mode) return;
+    if (mode === prefs.ai_permission_mode || (mode === "auto" && judge !== true)) return;
     if (mode === "bypass" && !prefs.ai_bypass_confirmed) {
       const ok = await confirm({
         title: t("aiSettings.bypass.title"),
@@ -454,12 +646,14 @@ function DeviceSection() {
     <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.device")}</div>
       <Group>
-        <SettingRow label={t("aiSettings.mode")} hint={t("aiSettings.mode.hint")} top>
+        <SettingRow label={t("aiSettings.mode")} hint={t(judge === false ? "aiSettings.mode.hintNoJudge" : "aiSettings.mode.hint")} top>
           <Segmented<AiPermissionMode>
             ariaLabel={t("aiSettings.mode")}
             value={prefs.ai_permission_mode}
             options={[
               { value: "manual", label: t("aiSettings.mode.manual") },
+              // The device's own Auto stays selected once the judge is gone; every call then asks.
+              { value: "auto", label: t("aiSettings.mode.auto"), disabled: judge !== true && prefs.ai_permission_mode !== "auto" },
               { value: "bypass", label: t("aiSettings.mode.bypass") },
             ]}
             onChange={(mode) => void chooseMode(mode)}

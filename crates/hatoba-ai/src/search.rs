@@ -1,4 +1,4 @@
-//! The text side of the search tools (spec §13.4, AI-47, AI-48): the glob that `glob` matches and
+//! The text side of the search tools (spec §13.4, AI-48, AI-49): the glob that `glob` matches and
 //! `grep` picks files by, the regular expression `grep` hands to the host's `grep -E`, and the
 //! results, built from what `find` and `grep` printed. Running them on the host is the desktop
 //! shell's part, with the scripts in `hatoba_ssh::remote_search`.
@@ -361,7 +361,7 @@ fn in_class(class: &str, c: char) -> bool {
     }
 }
 
-/// AI-47: `pattern` as every host's `grep -E` reads it: `\d`, `\s` and `\w`, which only some
+/// AI-48: `pattern` as every host's `grep -E` reads it: `\d`, `\s` and `\w`, which only some
 /// greps know, and their negations become POSIX classes, and `\t` a tab, also inside a bracket
 /// expression. An empty pattern, or one with a line break, which grep would take for several, is
 /// refused with the message for the model.
@@ -607,7 +607,7 @@ fn count(n: usize, one: &str, many: &str) -> String {
     }
 }
 
-/// AI-48: the `glob` result: the matching paths, sorted, at most [`MAX_GLOB_PATHS`] and the size
+/// AI-49: the `glob` result: the matching paths, sorted, at most [`MAX_GLOB_PATHS`] and the size
 /// of a result. `pattern` is the glob as the model gave it.
 #[must_use]
 pub fn glob_result(pattern: &str, search: &Search, found: &Found<'_>) -> String {
@@ -797,7 +797,7 @@ fn page(entries: &[Entry], offset: usize, limit: usize, budget: usize) -> (Strin
     (body, shown)
 }
 
-/// AI-47: the `grep` result for `args` from what `find` and `grep` printed: the files, the counts
+/// AI-48: the `grep` result for `args` from what `find` and `grep` printed: the files, the counts
 /// or the lines, sorted by path, a page of them as `limit` and `offset` ask, with how to read on.
 #[must_use]
 pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> String {

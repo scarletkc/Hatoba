@@ -1,12 +1,15 @@
 import type {
   AiAllowance,
+  AiAutoVerdict,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
   AiFileChange,
   AiFilePreview,
   AiFileRevert,
+  AiJudgeSampleOutcome,
   AiModel,
+  AiModelRef,
   AiProviderInput,
   AiProviderView,
   AiSendInput,
@@ -291,9 +294,23 @@ export interface HatobaApi {
   ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
   /**
    * Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...)
-   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41).
+   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41). `judged`: Auto mode
+   * decided the call (AI-47), so the result is stored with the verdict Rust remembers for it.
    */
-  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiToolRun>;
+  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null, judged: boolean): Promise<AiToolRun>;
+  /**
+   * AI-47: asks the judge of Auto mode whether the open call `tool_call_id` can run without the approval card, and
+   * remembers the verdict for the call's result. `screen_tail`: for `send_input`, the last lines of the tab's screen.
+   * Never fails for the judge's own errors: those come back as an `ask` verdict with a `failure`.
+   */
+  ai_judge(conversation_id: string, tool_call_id: string, screen_tail: string | null): Promise<AiAutoVerdict>;
+  /**
+   * AI-47: **Test** beside the judge in Settings → AI: the judge's verdict on each sample call, in order, with the
+   * decision expected. `judge` is the model the pane shows, saved or not; null tests the saved judge. Rejects with
+   * `invalid_input` (`judge_model`) when the judge names no listed model; the judge's own failures come back as
+   * verdicts.
+   */
+  ai_judge_test(judge: AiModelRef | null): Promise<AiJudgeSampleOutcome[]>;
   /**
    * AI-39, AI-40: the change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
    * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file

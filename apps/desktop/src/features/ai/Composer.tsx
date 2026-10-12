@@ -3,7 +3,7 @@ import { useApp } from "@/app/store";
 import { Icon, LinkButton } from "@/components/controls";
 import { confirm, Menu, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { readClipboard } from "@/features/terminal/clipboard";
-import { useT } from "@/i18n";
+import { useT, type MessageKey } from "@/i18n";
 import type { AiEffort, AiModelRef, AiPermissionMode } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
@@ -29,10 +29,11 @@ import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTermi
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
-import { findModel, sameModel } from "./models";
+import { chats, findModel, judgeChosen, sameModel } from "./models";
 import { messageAttachments, messageText, takenBeside } from "./queue";
 import { canAskSide } from "./side";
 import { getSlot, patchSlot, useAi, type QueuedMessage, type Slot } from "./store";
+import { MODE_ICON } from "./tools";
 import s from "./Composer.module.css";
 
 /** Ctrl+Shift+V, or ⌘⇧V on macOS: always pastes plain text into the box (AI-35). */
@@ -311,8 +312,9 @@ function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage 
 }
 
 /**
- * AI-05: every provider's models, grouped by provider, and under the current model the thinking
- * levels it offers. The selector shows the level the next message is sent at.
+ * AI-05: the models of every provider that chats (not System One ones, AI-47), grouped by provider, and
+ * under the current model the thinking levels it offers. The selector shows the level the next message is
+ * sent at.
  */
 function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; value: AiModelRef | null }) {
   const t = useT();
@@ -329,7 +331,7 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
   const entries = useMemo(() => {
     const list: MenuEntry[] = [];
     for (const p of providers) {
-      if (p.models.length === 0) continue;
+      if (!chats(p) || p.models.length === 0) continue;
       if (list.length > 0) list.push({ kind: "separator" });
       list.push({ kind: "header", label: p.name });
       for (const m of p.models) {
@@ -387,15 +389,18 @@ function ModelPicker({ slotId, slot, value }: { slotId: string; slot: Slot; valu
 
 /**
  * AI-16: the conversation's permission mode, beside the + menu. Manual approval shows only its
- * shield; bypass also its name. The first switch to bypass on a device asks first.
+ * shield; Auto (AI-47) and bypass also their name, which a narrow panel leaves out. The first switch to
+ * bypass on a device asks first; Auto needs no confirmation, but a judge chosen in Settings → AI.
  */
 function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }) {
   const t = useT();
   const menu = useMenu();
   const ref = useRef<HTMLButtonElement>(null);
+  const judge = useAi((st) => judgeChosen(st.catalog.providers, st.catalog.settings));
 
   const choose = async (next: AiPermissionMode) => {
     if (next === mode) return;
+    if (next === "auto" && !judge) return;
     if (next === "bypass" && !useApp.getState().prefs.ai_bypass_confirmed) {
       const ok = await confirm({
         title: t("ai.bypass.title"),
@@ -412,37 +417,48 @@ function ModeButton({ slotId, mode }: { slotId: string; mode: AiPermissionMode }
     setSlotMode(slotId, next);
   };
 
-  const label = mode === "bypass" ? t("ai.mode.bypass") : t("ai.mode.manual");
+  const label = t(MODE_LABEL[mode]);
+  const short = mode === "manual" ? null : t(mode === "auto" ? "ai.mode.autoShort" : "ai.mode.bypassShort");
+  const entries: MenuEntry[] = [
+    { kind: "header", label: t("ai.mode.menuTitle") },
+    ...(["manual", "auto", "bypass"] as const).map(
+      (m): MenuEntry => ({
+        label: t(MODE_LABEL[m]),
+        icon: MODE_ICON[m],
+        checked: mode === m,
+        // AI-47: Auto needs a judge; the conversation's own Auto stays checked once the judge is gone.
+        disabled: m === "auto" && !judge && mode !== "auto",
+        hint: m === "auto" && !judge ? t("ai.mode.autoNeedsJudge") : undefined,
+        onSelect: () => void choose(m),
+      }),
+    ),
+  ];
+  if (!judge)
+    entries.push(
+      { kind: "separator" },
+      { label: t("ai.mode.chooseJudge"), icon: "gear-six", onSelect: () => useApp.getState().openSettings(true, "ai") },
+    );
   return (
     <>
       <button
         ref={ref}
         type="button"
-        className={cx(s.mode, mode === "bypass" && s.modeBypass)}
+        className={cx(s.mode, mode === "auto" && s.modeAuto, mode === "bypass" && s.modeBypass)}
         aria-haspopup="menu"
         aria-expanded={!!menu.anchor}
         aria-label={`${t("ai.mode")}: ${label}`}
         title={`${t("ai.mode")}: ${label}`}
         onClick={() => ref.current && menu.openBelow(ref.current)}
       >
-        <Icon name={mode === "bypass" ? "lightning" : "shield-check"} size={14} />
-        {mode === "bypass" && <span>{t("ai.mode.bypassShort")}</span>}
+        <Icon name={MODE_ICON[mode]} size={14} />
+        {short && <span>{short}</span>}
       </button>
-      {menu.anchor && (
-        <Menu
-          anchor={menu.anchor}
-          onClose={menu.close}
-          minWidth={230}
-          entries={[
-            { kind: "header", label: t("ai.mode.menuTitle") },
-            { label: t("ai.mode.manual"), icon: "shield-check", checked: mode === "manual", onSelect: () => void choose("manual") },
-            { label: t("ai.mode.bypass"), icon: "lightning", checked: mode === "bypass", onSelect: () => void choose("bypass") },
-          ]}
-        />
-      )}
+      {menu.anchor && <Menu anchor={menu.anchor} onClose={menu.close} minWidth={230} entries={entries} />}
     </>
   );
 }
+
+const MODE_LABEL: Record<AiPermissionMode, MessageKey> = { manual: "ai.mode.manual", auto: "ai.mode.auto", bypass: "ai.mode.bypass" };
 
 /** What the model button shows: everything, the name without the thinking level, or its icon alone. */
 type ModelFit = "full" | "name" | "icon";

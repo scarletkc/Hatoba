@@ -1,4 +1,4 @@
-//! The search tools on the tab's host (AI-47, AI-48): `glob` and `grep` over an exec channel of
+//! The search tools on the tab's host (AI-48, AI-49): `glob` and `grep` over an exec channel of
 //! the tab's connection. The patterns and the results are in `hatoba_ai::search`, the scripts in
 //! `hatoba_ssh::remote_search`.
 

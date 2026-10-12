@@ -146,4 +146,63 @@ describe("AiPane", () => {
     expect(stored.find((p) => p.id === first.id)?.base_url).toBe("http://127.0.0.1:8003");
     expect(stored.find((p) => p.id === second.id)?.base_url).toBe("http://127.0.0.1:8002");
   });
+
+  it("offers Auto as the default mode once a judge is chosen (AI-47)", async () => {
+    await act(() => api.ai_settings_save({ judge_model: null }));
+    render();
+    const auto = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")].find((b) => b.textContent === t("aiSettings.mode.auto"));
+    await until(() => document.body.textContent?.includes(t("aiSettings.mode.hintNoJudge")));
+    expect(auto()?.disabled).toBe(true);
+
+    // A judge chosen on another device arrives with a sync.
+    await act(() => api.ai_settings_save({ judge_model: { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } }));
+    act(() => useApp.getState().refreshSynced());
+    await until(() => auto()?.disabled === false);
+    expect(document.body.textContent).not.toContain(t("aiSettings.mode.hintNoJudge"));
+    act(() => auto()?.click());
+    await until(() => useApp.getState().prefs.ai_permission_mode === "auto");
+  });
+
+  it("picks the judge among every provider's models, tests it, and clears it (AI-47)", async () => {
+    await act(() => api.ai_settings_save({ judge_model: null }));
+    render();
+    const judge = await until(() => byLabel<HTMLButtonElement>(t("aiSettings.judge.row")));
+    expect(judge.textContent).toBe(t("aiSettings.judge.placeholder"));
+    const test = () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("aiSettings.judge.test"));
+    expect(test()?.disabled).toBe(true);
+
+    // The mock's System One provider, TypeSafe, may judge but not chat.
+    const defaults = byLabel<HTMLButtonElement>(t("aiSettings.default.row"))!;
+    act(() => defaults.click());
+    expect(document.querySelector("[role=menu]")?.textContent).not.toContain("TypeSafe");
+    act(() => defaults.click());
+    act(() => judge.click());
+    expect(document.querySelector("[role=menu]")?.textContent).toContain("TypeSafe");
+    act(() => judge.click());
+    pick(judge, "Jev");
+    await until(async () => (await api.ai_settings_get()).judge_model?.provider_id === "p-typesafe");
+    expect(judge.textContent).toBe("JevTypeSafe");
+
+    act(() => test()?.click());
+    await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.running")));
+    await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.summary", { n: 10, total: 11 })));
+    const marks = (label: string) => document.querySelectorAll(`[role=img][aria-label="${label}"]`).length;
+    expect(marks(t("aiSettings.judge.test.match"))).toBe(10);
+    expect(marks(t("aiSettings.judge.test.mismatch"))).toBe(1);
+    const text = document.body.textContent ?? "";
+    for (const name of ["disk_space", "restart_requested_zh", "pipe_to_shell", "key_via_shell", "token_in_url"] as const) {
+      expect(text).toContain(t(`aiSettings.judge.sample.${name}`));
+    }
+    // The mismatch: a restart asked for in Chinese, which the judge asked about.
+    expect(text).toContain(t("aiSettings.judge.test.expected", { decision: t("aiSettings.judge.decision.run") }));
+    expect(text).toContain(`${t("ai.auto.q.requested")} 62%`);
+
+    // None leaves Auto without a judge, and the result of the judge that was tested goes.
+    pick(judge, t("aiSettings.judge.none"));
+    await until(async () => (await api.ai_settings_get()).judge_model === null);
+    expect(judge.textContent).toBe(t("aiSettings.judge.placeholder"));
+    expect(document.body.textContent).not.toContain(t("aiSettings.judge.test.summary", { n: 10, total: 11 }));
+    expect(document.body.textContent).toContain(t("aiSettings.mode.hintNoJudge"));
+    expect(test()?.disabled).toBe(true);
+  });
 });

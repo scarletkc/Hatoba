@@ -205,6 +205,79 @@
   gap: 14px;
 }
 
+/* Test beside the judge of Auto mode (AI-47) */
+.judgeStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.judgeFail {
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+
+.judgeResult > .judgeStatus {
+  padding-bottom: 6px;
+}
+
+.samples {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0 14px 12px;
+  list-style: none;
+}
+
+.sample {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sampleMark {
+  flex: none;
+  display: flex;
+  padding-top: 1px;
+  font-size: 14px;
+}
+
+.sampleText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sampleName {
+  font-weight: 500;
+}
+
+.sampleMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 5px;
+  font-size: 11.5px;
+  color: var(--fg2);
+}
+
+/* The judge's decision where it is not the one expected. */
+.sampleOff {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.sampleDetail {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--fg2);
+  overflow-wrap: anywhere;
+}
+
 /* Saved approvals (AI-19) */
 .allowance {
   display: flex;

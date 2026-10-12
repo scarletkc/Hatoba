@@ -1,5 +1,6 @@
 //! Model listing (AI-03) and Test Connection (AI-04).
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use reqwest::header::{CONTENT_TYPE, HeaderValue};
@@ -7,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+use crate::decision::{self, Question};
 use crate::error::AiError;
 use crate::net;
-use crate::provider::{Effort, Protocol, ProviderConfig, validate_base_url};
+use crate::provider::{Effort, ModelSpec, Protocol, ProviderConfig, validate_base_url};
 
 /// A model from the provider's list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,6 +123,30 @@ fn chat_completions_model(item: &Value) -> Option<ModelInfo> {
     })
 }
 
+/// One entry of a System One endpoint's `/models` list (AI-47): TypeSafe's `models[]` names a
+/// model by `name`, an OpenAI-style `data[]` by `id`. A decision model has no thinking levels.
+fn system_one_model(item: &Value) -> Option<ModelInfo> {
+    let id = ["id", "name"]
+        .iter()
+        .find_map(|k| item.get(*k).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|id| !id.is_empty())?;
+    let name = ["display_name", "name"]
+        .iter()
+        .find_map(|k| item.get(*k).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(id);
+    Some(ModelInfo {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        context_window: first_u64(item, CONTEXT_KEYS),
+        max_output_tokens: None,
+        efforts: Some(Vec::new()),
+        adaptive_thinking: None,
+    })
+}
+
 /// One entry of Anthropic's `/v1/models` list, with the thinking levels and adaptive thinking
 /// from its `capabilities` when it has them (Anthropic-compatible vendors often do not).
 fn anthropic_model(item: &Value) -> Option<ModelInfo> {
@@ -141,9 +167,11 @@ fn anthropic_model(item: &Value) -> Option<ModelInfo> {
     })
 }
 
-/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions, or
-/// `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`.
-/// Duplicate ids are dropped; the provider's order is kept.
+/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions,
+/// `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`,
+/// or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System One, next to
+/// the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped; the
+/// provider's order is kept.
 ///
 /// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
 /// is dropped, so a lock does not leave the key in use).
@@ -218,6 +246,23 @@ async fn list_models_inner(
                     }
                     _ => break,
                 }
+            }
+        }
+        Protocol::SystemOne => {
+            let url = net::endpoint(&decision::system_one_base(&base), "/models");
+            let response = net::send(http.get(url).headers(headers), cancel).await?;
+            if !response.status().is_success() {
+                return Err(net::http_error(response, cancel).await);
+            }
+            let body = net::read_json(response, cancel).await?;
+            let items = body
+                .get("models")
+                .or_else(|| body.get("data"))
+                .unwrap_or(&body)
+                .as_array()
+                .ok_or_else(|| AiError::Protocol("the model list has no `models` array".into()))?;
+            for model in items.iter().filter_map(system_one_model) {
+                push(model, &mut models);
             }
         }
     }
@@ -327,7 +372,8 @@ pub(crate) fn classify(err: &AiError, with_model: bool) -> TestOutcome {
 }
 
 /// Test Connection (AI-04): with a model id, a minimal non-streaming request to that model
-/// (a few tokens at most where the protocol allows a limit); without one, the model list.
+/// (a few tokens at most where the protocol allows a limit; for System One, a short state and
+/// one yes-or-no question); without one, the model list.
 /// Gives up after 60 s, and as soon as `cancel` fires with a failed outcome whose message is
 /// `cancelled` (the connection is dropped, so a lock does not leave the key in use).
 pub async fn test_connection(
@@ -371,6 +417,7 @@ async fn probe_model(
             net::endpoint(&base, "/v1/messages"),
             json!({"model": model, "max_tokens": 16, "messages": messages}),
         ),
+        Protocol::SystemOne => return probe_decision(http, provider, model, cancel).await,
     };
     let request = http
         .post(url)
@@ -383,6 +430,29 @@ async fn probe_model(
     } else {
         Err(net::http_error(response, cancel).await)
     }
+}
+
+/// Test Connection of a System One provider (AI-47): one decision with a short state and one
+/// yes-or-no question, which must come back answered.
+async fn probe_decision(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    model: &str,
+    cancel: &CancellationToken,
+) -> Result<(), AiError> {
+    let questions = BTreeMap::from([(
+        "blue".to_owned(),
+        Question::noul(
+            "Does `state` say that the sky is blue?",
+            "It says so.",
+            "It does not.",
+        ),
+    )]);
+    let state = json!("The sky is blue.");
+    let model = ModelSpec::new(model);
+    decision::evaluate(http, provider, &model, &state, None, &questions, cancel)
+        .await
+        .map(drop)
 }
 
 #[cfg(test)]

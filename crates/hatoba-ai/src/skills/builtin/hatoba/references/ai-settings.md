@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Skills, MCP Servers and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -13,6 +13,7 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 | Terminal Screen | 终端屏幕 | ターミナル画面 |
 | Skills | 技能 | スキル |
 | MCP Servers | MCP 服务器 | MCP サーバー |
+| Auto Mode | 自动批准模式 | 自動承認モード |
 | This Device | 此设备 | このデバイス |
 
 ## Providers
@@ -26,6 +27,7 @@ The assistant calls the providers added here directly from the device, with the 
 | Protocol | 协议 | プロトコル |
 | OpenAI Chat Completions | OpenAI Chat Completions | OpenAI Chat Completions |
 | Anthropic Messages | Anthropic Messages | Anthropic Messages |
+| System One | System One | System One |
 | Base URL | 基础 URL | ベース URL |
 | API Key | API 密钥 | API キー |
 | Auth Header | 认证头 | 認証ヘッダー |
@@ -46,8 +48,8 @@ The assistant calls the providers added here directly from the device, with the 
 | Add | 添加 | 追加 |
 
 - **Add Provider** (shown at the top once a provider exists, or in the empty state) opens the form; click a provider's row to edit it, and the bin icon deletes it. Deleting removes its API key and model list from the vault and from the other devices; existing conversations stay but need another model to continue.
-- **Protocol**: **OpenAI Chat Completions** (OpenAI, Gemini through its OpenAI-compatible endpoint, local servers, most other services) or **Anthropic Messages** (Claude and vendors with an Anthropic-compatible endpoint). The form picks Anthropic for `api.anthropic.com` and for base URLs ending in `/anthropic`.
-- **Base URL**: for Chat Completions include the API version, such as `https://api.openai.com/v1`. For Anthropic use the address the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com`. Plain HTTP works too.
+- **Protocol**: **OpenAI Chat Completions** (OpenAI, Gemini through its OpenAI-compatible endpoint, local servers, most other services) or **Anthropic Messages** (Claude and vendors with an Anthropic-compatible endpoint). The form picks Anthropic for `api.anthropic.com` and for base URLs ending in `/anthropic`. **System One** is only for the judge of Auto mode (below): its models answer the judge's questions and are never offered for conversations. The form picks it for `api.typesafe.ai`, base URLs ending in `/systemone` and Workers AI addresses with `/ai/run`, and hides Context, Max Output, Thinking and Auth Header for it.
+- **Base URL**: for Chat Completions include the API version, such as `https://api.openai.com/v1`. For Anthropic use the address the vendor documents for Anthropic SDKs, such as `https://api.anthropic.com`. For System One: TypeSafe `https://api.typesafe.ai/v1` (model `jev-latest`), OpenRouter `https://openrouter.ai/api/v1`, or Cloudflare Workers AI `https://api.cloudflare.com/client/v4/accounts/<account ID>/ai/run` (`@cf/cloudflare/clef` or `@cf/cloudflare/clef-flash`). Plain HTTP works too.
 - **API Key**: stored encrypted in the vault and synced to the other devices. After saving it shows **Saved** and can be replaced or cleared but never viewed. It may stay empty for a server that needs none.
 - **Auth Header** (Anthropic protocol only): `x-api-key` (most services) or `Authorization: Bearer` (a few).
 - **Models**: type a model ID and press Enter (or **Add**), or use **Fetch Models** to list the provider's models and pick from them. Each model has a display name, an optional **Context** window and **Max Output** in tokens (enter 200000 or 200K). The context window drives the usage meter and compaction. **Thinking** lists the thinking levels the model accepts (Low, Medium, High, Extra High, Max). Its button opens a menu titled "Levels this model accepts" where each level is ticked or not; **None** means the model offers only Default. A model typed in by hand, or one whose list gave no levels, shows Low, Medium and High. **Fetch Models** fills the levels in from the provider's list when it gives them (Anthropic's does), also for models already in the form that have none yet. The output limit becomes `max_tokens` for Anthropic requests (16,000 when unknown).
@@ -66,7 +68,7 @@ The assistant calls the providers added here directly from the device, with the 
 | Instance URL | 实例地址 | インスタンスの URL |
 | Remove Configuration | 移除配置 | 設定を削除 |
 
-- **Model for new conversations** is the model a new conversation starts with. It needs at least one provider with a model, and it syncs. Each conversation then keeps the model it used last.
+- **Model for new conversations** is the model a new conversation starts with. It lists the models of every provider but System One ones, and it syncs. Each conversation then keeps the model it used last.
 - **Thinking level for new conversations** is the level a new conversation starts at: Default, Low, Medium, High, Extra High or Max (see `references/ai-models.md`). It syncs. A model that does not offer that level uses the highest lower level it has. Each conversation then keeps the level it used last. What is sent: for OpenAI Chat Completions a `reasoning_effort` of low, medium or high (xhigh or max only for a model whose levels include them); for Anthropic Messages an `output_config` effort, with adaptive thinking switched on for models that support it. Default sends none of these.
 - **Search provider** is the backend of the assistant's web search. Choose **Brave Search API** or **Tavily** (enter the **API Key**) or **SearXNG** (enter the **Instance URL** of your own instance, which must have the JSON format enabled), then **Test Connection** and **Save**. **None** (the default) means the assistant has no web search tool. Search terms go to the chosen service. **Remove Configuration** deletes the saved settings and key.
 
@@ -117,49 +119,27 @@ A skill is a set of instructions for the assistant in the Agent Skills format: a
 
 ## MCP Servers
 
-MCP (Model Context Protocol) servers add tools to the assistant. Hatoba uses tools only (no prompts or resources). Two kinds: **Command** (stdio: a program started on this device with the user's privileges, which Hatoba talks to over standard input and output) and **HTTP** (a Streamable HTTP URL). A stdio server runs arbitrary code, so add only servers you trust. Tool descriptions reach the model as instructions.
+Adding a Command or HTTP server, templates, **Always ask**, import and export, and each server's state and tools are in `references/ai-mcp.md`.
+
+## Auto Mode
+
+The judge of Auto mode (`references/ai-tools.md`). It syncs.
 
 | en | zh-CN | ja |
 |---|---|---|
-| Add Server | 添加服务器 | サーバーを追加 |
-| Add from Template | 从模板添加 | テンプレートから追加 |
-| Export | 导出 | エクスポート |
-| Add MCP Server | 添加 MCP 服务器 | MCP サーバーを追加 |
-| Type | 类型 | 種類 |
-| Command | 命令 | コマンド |
-| HTTP | HTTP | HTTP |
-| Arguments | 参数 | 引数 |
-| Split Into Arguments | 拆成参数 | 引数に分割 |
-| Environment | 环境变量 | 環境変数 |
-| URL | URL | URL |
-| Headers | 请求头 | ヘッダー |
-| Always ask | 始终询问 | 常に確認 |
-| Import MCP Servers | 导入 MCP 服务器 | MCP サーバーをインポート |
-| Preview | 预览 | プレビュー |
+| Auto Mode | 自动批准模式 | 自動承認モード |
+| Judge model | 判定模型 | 判定モデル |
+| Choose a judge | 选择判定模型 | 判定モデルを選択 |
+| Test | 测试 | テスト |
+| Run without asking | 直接运行 | 確認せずに実行 |
+| Ask | 询问 | 確認する |
+| As expected | 符合预期 | 期待どおり |
+| Not as expected | 不符合预期 | 期待と異なる |
+| No answer | 没有回答 | 回答なし |
 
-- **Add Server**: give it a **Name** and choose the **Type**. For **Command**: the program (looked up on `PATH` like a shell does, so `npx` finds `npx.cmd` on Windows), the **Arguments** (one per row; if a whole command line is pasted into the command, **Split Into Arguments** separates them) and **Environment** variables. For **HTTP**: the **URL** (HTTPS or HTTP) and **Headers** such as `Authorization`. Environment and header values are stored encrypted, can't be viewed after saving, and only the program or the server receives them.
-- **Add from Template** fills in **Add MCP Server** for GitHub, Linear, Context7 or Cloudflare (HTTP servers that take a token, built into the app): the name, the URL and the `Authorization` header, with a link under it to where the token is created. Paste only the token: an `Authorization` value without a space is saved with `Bearer ` in front of it (for any HTTP server, also when it replaces a saved value). **Always ask** starts off. The saved server is an ordinary one.
-- **Always ask** makes this server's tools ask before every call, even in Bypass mode. It syncs with the server.
-- **Import** reads pasted JSON or a JSON file in the `mcpServers` format of Claude Desktop, Claude Code and Cursor (or VS Code's `servers` key), shows a **Preview**, and imports; values move into the vault. **Export** writes the same format with placeholders instead of the secret values.
-- The server list syncs. Whether a server is on, and any **Always allow**, stay on each device. A server added on another device arrives on if it is HTTP and off if it is a Command. Editing a server, here or on another device, keeps whether it is on and its **Always allow**, except that an HTTP server changed into a Command on another device turns off here, as a new Command server arrives.
-- A Command server starts when a conversation first needs its tools and stops when the app quits or the vault locks. Click a row to see its state, start, restart or stop it, read the error with the last lines of stderr, and see its tools with their hints (Read-only, Destructive, Idempotent, Open-world). Hints never change whether a call asks.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Stopped | 已停止 | 停止中 |
-| Starting… | 正在启动… | 起動中… |
-| Running | 运行中 | 実行中 |
-| Failed | 失败 | 失敗 |
-| Off on this device | 此设备上已关闭 | このデバイスではオフ |
-| Start | 启动 | 起動 |
-| Restart | 重新启动 | 再起動 |
-| Stop | 停止 | 停止 |
-| Always allow all tools | 始终允许所有工具 | すべてのツールを常に許可 |
-| Always allow | 始终允许 | 常に許可 |
-| Tools | 工具 | ツール |
-| Last lines of stderr | stderr 的最后几行 | stderr の最後の行 |
-
-- In manual mode every MCP tool asks for approval. **Always allow all tools** (per server) or **Always allow** (per tool) lets calls run without asking on this device. OAuth sign-in for MCP servers is not supported.
+- **Judge model** lists the models of every provider, System One ones included, and **None**. Auto can't be chosen until a judge is. It can be a System One model (TypeSafe's Jev, Cloudflare's Clef) or a chat model.
+- **Test** asks the judge about eleven sample calls, such as checking disk space, deleting logs nobody asked to delete or fetching a URL that carries a token, and runs none of them. It shows how many came out as expected, then each one's expected decision, the judge's and its answers. A sample that ran when it should have asked is red; one the judge did not answer shows **No answer** and why.
+- What the judge receives is listed in `references/ai-tools.md`; a judge on another service than the conversation's model receives it too.
 
 ## This Device
 
@@ -169,10 +149,11 @@ These settings stay on this device and are not synced.
 |---|---|---|
 | Default Permission Mode | 默认权限模式 | 既定の権限モード |
 | Manual approval | 手动批准 | 手動承認 |
+| Auto | 自动批准 | 自動承認 |
 | Bypass | 绕过批准 | 承認をバイパス |
 | Turn On Bypass | 开启绕过模式 | バイパスをオンにする |
 | Saved Approvals | 已保存的批准 | 保存済みの許可 |
 | Remove | 移除 | 削除 |
 
-- **Default Permission Mode**: **Manual approval** (default) or **Bypass**. New conversations start in it. Choosing Bypass the first time asks for confirmation.
-- **Saved Approvals**: what **Always Allow** on an approval card saved (`references/ai-tools.md`): commands starting with a prefix and the typing, edit and write tools, each for a host or quick connection, and page domains for every tab (a page that redirects to another domain is not followed; fetching that domain needs its own approval). They are sealed in the vault and kept until **Remove** (×) deletes one. A command's prefix is its name, plus the subcommand for tools like `git` or `systemctl` ("git pull"); a command line runs without asking when each of its commands is allowed or only reads, and `sudo`, `sh -c`, redirection, `$` or backticks always ask. Interpreters (`python3` …), `rm`, `dd`, `chmod`, `kill`, `curl`, `scp` and the like, also as `/bin/rm` or `python3.12`, get Allow for This Conversation only. Allow for This Conversation covers the same, until the app quits. An MCP tool's **Always allow** is its server's setting (above).
+- **Default Permission Mode**: **Manual approval** (default), **Auto** or **Bypass**. New conversations start in it. Auto can't be chosen until a judge is (above); choosing Bypass the first time asks for confirmation.
+- **Saved Approvals**: what **Always Allow** on an approval card saved (`references/ai-tools.md`): commands starting with a prefix and the typing, edit and write tools, each for a host or quick connection, and page domains for every tab (a page that redirects to another domain is not followed; fetching that domain needs its own approval). They are sealed in the vault and kept until **Remove** (×) deletes one. A command's prefix is its name, plus the subcommand for tools like `git` or `systemctl` ("git pull"); a command line runs without asking when each of its commands is allowed or only reads, and `sudo`, `sh -c`, redirection, `$` or backticks always ask. Interpreters (`python3` …), `rm`, `dd`, `chmod`, `kill`, `curl`, `scp` and the like, also as `/bin/rm` or `python3.12`, get Allow for This Conversation only. Allow for This Conversation covers the same, until the app quits. An MCP tool's **Always allow** is its server's setting (`references/ai-mcp.md`).

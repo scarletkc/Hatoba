@@ -39,8 +39,8 @@ const entries: AiEntryView[] = [
     finish: "tool_calls",
     usage: null,
   },
-  { role: "tool", entry_id: "t1", created_at: 3, tool_call_id: "c1", status: "ok", content: "exit status: 0\n```\n48% used" },
-  { role: "tool", entry_id: "t2", created_at: 3, tool_call_id: "c2", status: "rejected", content: "not now" },
+  { role: "tool", entry_id: "t1", created_at: 3, tool_call_id: "c1", status: "ok", content: "exit status: 0\n```\n48% used", auto: null },
+  { role: "tool", entry_id: "t2", created_at: 3, tool_call_id: "c2", status: "rejected", content: "not now", auto: null },
   { role: "summary", entry_id: "s1", created_at: 4, text: "The disk is 48% full." },
   { role: "user", entry_id: "u2", created_at: 5, text: "Thanks" },
 ];

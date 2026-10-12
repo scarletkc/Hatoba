@@ -761,7 +761,7 @@ async fn remote_files_are_read_and_written_in_place() {
     assert!(!new.exists());
 }
 
-/// The search tools' find and grep (AI-47, AI-48) through sshd and the user's login shell.
+/// The search tools' find and grep (AI-48, AI-49) through sshd and the user's login shell.
 #[tokio::test]
 async fn remote_searches_find_files_and_lines() {
     use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError};

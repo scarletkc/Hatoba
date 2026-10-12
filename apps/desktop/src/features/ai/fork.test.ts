@@ -17,7 +17,7 @@ const assistant = (id: string, calls: string[] = [], model = "m1"): AiEntryView 
   finish: calls.length > 0 ? "tool_calls" : "stop",
   usage: null,
 });
-const tool = (id: string, call: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: call, status: "ok", content: "output" });
+const tool = (id: string, call: string): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: call, status: "ok", content: "output", auto: null });
 const summary = (id: string): AiEntryView => ({ role: "summary", entry_id: id, created_at: 0, text: "Summary." });
 
 describe("forkCopies", () => {

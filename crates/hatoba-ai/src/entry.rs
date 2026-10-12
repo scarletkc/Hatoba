@@ -5,9 +5,9 @@
 //! conversation on another device sends the same context. Every struct tolerates missing fields
 //! so devices on different app versions can read each other's entries.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// One stored entry: `{ "created_at": …, "role": …, … }`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -50,6 +50,16 @@ pub enum EntryBody {
         /// wording that tells the model the call was rejected or cancelled.
         #[serde(default)]
         content: String,
+        /// What the judge of Auto mode decided about the call (AI-47), for display: the panel
+        /// shows why the call ran without a card, or what concerned the judge. Requests never
+        /// send it. `None` (absent) when no judge saw the call, and in entries from before Auto
+        /// mode; a verdict this version cannot read is `None` too.
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "lenient_auto"
+        )]
+        auto: Option<AutoVerdict>,
     },
     /// A summary written by Compact (AI-21); the context starts here afterwards.
     Summary {
@@ -57,6 +67,51 @@ pub enum EntryBody {
         #[serde(default)]
         text: String,
     },
+}
+
+/// What the judge of Auto mode decided about a call (AI-47), stored with the call's result and
+/// synced with it, so history shows why a call ran without a card. Display only: it never reaches
+/// the model.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AutoVerdict {
+    /// The provider item id of the judge.
+    pub provider_id: String,
+    /// The judge's model id.
+    pub model_id: String,
+    /// Whether the call ran without a card or the card asked.
+    pub decision: AutoDecision,
+    /// The judge's answers by question id: the probability of yes (see
+    /// [`judge`](crate::judge)). Empty when the judge failed.
+    pub answers: BTreeMap<String, f64>,
+    /// The ids of the questions whose answers kept the call from running, in the order the
+    /// judge asks them. Empty when it ran or the judge failed.
+    pub concerns: Vec<String>,
+    /// Why the judge gave no usable answer, such as `timeout` or `malformed`
+    /// ([`JudgeFailure`](crate::judge::JudgeFailure)); a kind a newer version added stays as
+    /// written. `None` (absent) when it answered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure: Option<String>,
+}
+
+/// The decision of the judge of Auto mode (AI-47). It never rejects a call: it runs it without
+/// the approval card, or the card asks as in manual approval.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoDecision {
+    /// The call ran without the approval card.
+    Run,
+    /// The approval card asked. Also what a missing or unknown value reads as.
+    #[default]
+    #[serde(other)]
+    Ask,
+}
+
+/// Reads a `tool` entry's `auto`; a value this version cannot read is `None` rather than an
+/// unreadable entry.
+fn lenient_auto<'de, D: Deserializer<'de>>(d: D) -> Result<Option<AutoVerdict>, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(d)?;
+    Ok(value.and_then(|v| serde_json::from_value(v).ok()))
 }
 
 /// The host or quick-connect target a conversation was on when one of its user messages was
@@ -242,8 +297,19 @@ impl AiEntry {
                 tool_call_id: tool_call_id.into(),
                 status,
                 content: content.into(),
+                auto: None,
             },
         }
+    }
+
+    /// This entry with the verdict of the judge of Auto mode (AI-47) when it is a `tool` entry;
+    /// any other entry is returned as it is.
+    #[must_use]
+    pub fn with_auto(mut self, verdict: AutoVerdict) -> Self {
+        if let EntryBody::Tool { auto, .. } = &mut self.body {
+            *auto = Some(verdict);
+        }
+        self
     }
 
     /// A `summary` entry.
@@ -463,6 +529,85 @@ mod tests {
                 .unwrap();
         assert_eq!(tool, AiEntry::tool(1, "x", ToolStatus::Ok, ""));
         assert!(serde_json::from_value::<AiEntry>(json!({"role": "system"})).is_err());
+    }
+
+    #[test]
+    fn a_tool_result_keeps_the_verdict_of_auto_mode_and_older_results_read_without_one() {
+        let verdict = AutoVerdict {
+            provider_id: "p1".into(),
+            model_id: "jev-latest".into(),
+            decision: AutoDecision::Run,
+            answers: BTreeMap::from([
+                ("requested".to_owned(), 0.96),
+                ("forbidden".to_owned(), 0.0),
+            ]),
+            concerns: vec![],
+            failure: None,
+        };
+        let entry = AiEntry::tool(4, "c1", ToolStatus::Ok, "active").with_auto(verdict.clone());
+        let value = serde_json::to_value(&entry).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "created_at": 4, "role": "tool", "tool_call_id": "c1", "status": "ok",
+                "content": "active",
+                "auto": {"provider_id": "p1", "model_id": "jev-latest", "decision": "run",
+                         "answers": {"forbidden": 0.0, "requested": 0.96}, "concerns": []}
+            })
+        );
+        assert_eq!(serde_json::from_value::<AiEntry>(value).unwrap(), entry);
+
+        // A judge that failed records why; a kind a newer version added stays as written.
+        let failed: AiEntry = serde_json::from_value(json!({
+            "role": "tool", "tool_call_id": "c2", "status": "ok", "content": "",
+            "auto": {"decision": "ask", "failure": "overloaded_v2"}
+        }))
+        .unwrap();
+        let EntryBody::Tool {
+            auto: Some(auto), ..
+        } = &failed.body
+        else {
+            panic!("a tool entry with a verdict");
+        };
+        assert_eq!(auto.decision, AutoDecision::Ask);
+        assert_eq!(auto.failure.as_deref(), Some("overloaded_v2"));
+        assert!(auto.answers.is_empty() && auto.provider_id.is_empty());
+
+        // An unknown decision reads as ask, and a verdict this version cannot read as none,
+        // never as an unreadable entry.
+        let newer: AiEntry = serde_json::from_value(json!({
+            "role": "tool", "tool_call_id": "c3", "auto": {"decision": "defer"}
+        }))
+        .unwrap();
+        assert!(matches!(
+            &newer.body,
+            EntryBody::Tool {
+                auto: Some(AutoVerdict {
+                    decision: AutoDecision::Ask,
+                    ..
+                }),
+                ..
+            }
+        ));
+        for odd in [
+            json!("run"),
+            json!({"answers": {"requested": "high"}}),
+            json!(null),
+        ] {
+            let entry: AiEntry = serde_json::from_value(json!({
+                "role": "tool", "tool_call_id": "c4", "content": "x", "auto": odd
+            }))
+            .unwrap();
+            assert_eq!(entry, AiEntry::tool(0, "c4", ToolStatus::Ok, "x"), "{odd}");
+        }
+
+        // Results without a verdict are stored without the field, and only tool entries take one.
+        let plain = serde_json::to_value(AiEntry::tool(1, "c5", ToolStatus::Ok, "")).unwrap();
+        assert!(plain.get("auto").is_none());
+        assert_eq!(
+            AiEntry::user(1, "hi").with_auto(verdict),
+            AiEntry::user(1, "hi")
+        );
     }
 
     #[test]

@@ -193,7 +193,7 @@
   white-space: nowrap;
 }
 
-/* A narrow panel shows bypass as its orange lightning alone. */
+/* A narrow panel shows Auto and bypass by their tinted icons alone. */
 @container (max-width: 330px) {
   .mode span {
     display: none;
@@ -328,6 +328,18 @@
 .modeBypass[aria-expanded="true"] {
   background: color-mix(in srgb, var(--orange) 24%, transparent);
   color: var(--orange);
+}
+
+/* AI-47: Auto, tinted apart from bypass's orange. */
+.modeAuto,
+.modeAuto:hover {
+  background: var(--accenttint);
+  color: var(--accent);
+}
+
+.modeAuto[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
 
 /* AI-42: Ask a Side Question, beside Send / Stop. */

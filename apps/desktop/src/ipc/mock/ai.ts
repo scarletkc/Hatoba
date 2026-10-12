@@ -3,10 +3,12 @@ import { fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNo
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
+import { shownCall } from "@/features/ai/tools";
 import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
+  AiAutoVerdict,
   AiConversationView,
   AiEffort,
   AiEntryView,
@@ -39,6 +41,7 @@ type AiApi = Pick<
   | "ai_retry"
   | "ai_tool_result"
   | "ai_tool_run"
+  | "ai_judge"
   | "ai_file_preview"
   | "ai_file_changes"
   | "ai_file_change_diff"
@@ -138,7 +141,7 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
  *   "motd"            write_file over an existing file   (AI-38…40: the cards show diffs; the files are
  *                     shared by every tab, and a run changes them for the next card)
  *   "cutshort"        write_file whose write fails halfway, leaving the file cut short
- *   "grep"            grep of the proxy lines under /etc   "glob"     glob of the nginx sites (AI-47, AI-48)
+ *   "grep"            grep of the proxy lines under /etc   "glob"     glob of the nginx sites (AI-48, AI-49)
  *   "rmfile"          run_command `rm /etc/motd`     "symlink"  run_command that puts a link in the place
  *                     of the file "write" creates, so reverting "motd" offers to create the file again and
  *                     reverting "write" stops at the link (AI-41)
@@ -165,6 +168,11 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
  *   showcase   in a connected tab, any message gets the scripted nginx 502 fix that the README
  *              screenshots and demo video show: two commands, a fix, `curl` typed into the shell, a summary
  *   noprovider (Settings → AI mock) no provider is configured
+ *   nojudge    (Settings → AI mock) no judge is chosen, so Auto mode is unavailable (AI-47)
+ *   judgeslow  the judge of Auto mode takes 4 seconds, to show a call being checked
+ *   judgefail  the judge of Auto mode times out, so every card says it could not judge
+ * In Auto mode (AI-47) the mock judge runs commands of reading words, and asks about `rm`, `restart`,
+ * `install`, `curl`, redirection and the like unless the message names what the call works on.
  * A side question (AI-42) gets a short scripted answer, streamed slowly enough to stop: about the call whose
  * approval card waits, or else about the conversation. It stores nothing, and the turn goes on.
  * History search (AI-24) matches titles and the text of user, assistant and summary entries.
@@ -190,6 +198,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const interrupted = new Set<string>();
   /** AI-42: the side question on its way in each conversation, by the panel's number, and what stops it. */
   const sides = new Map<string, { question: number; stop: () => void }>();
+  /** AI-47: by call id, the verdict `ai_judge` gave, which a result stored as `judged` keeps, as Rust does. */
+  const verdicts = new Map<string, AiAutoVerdict>();
   let errorShown = false;
   let lastMs = 0;
   let seq = 0;
@@ -230,7 +240,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   /** §13.1 step 5: every call without a result gets a cancelled one. Returns the results it stored. */
   function cancelOpenCalls(c: Conv): AiEntryView[] {
     return unanswered(c).map((call) => {
-      const entry: AiEntryView = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran." };
+      const entry: AiEntryView = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: call.id, status: "cancelled", content: "The call was cancelled before it ran.", auto: null };
+      verdicts.delete(call.id);
       store(c, entry);
       return entry;
     });
@@ -642,9 +653,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return compactNow(c, turn);
   }
 
-  /** Like Rust's `store_summary` (AI-16): a summary of a conversation in bypass starts with its note. */
+  /** Like Rust's `store_summary` (AI-16): a summary of a conversation in Auto (AI-47) or bypass starts with its note. */
   function summaryText(c: Conv, summary: string): string {
-    return notedPermission(c.entries) === "bypass" ? `${noteBlock({ kind: "permission_mode", mode: "bypass" })}\n\n${summary}` : summary;
+    const mode = notedPermission(c.entries);
+    return mode === "manual" ? summary : `${noteBlock({ kind: "permission_mode", mode })}\n\n${summary}`;
   }
 
   async function compactNow(c: Conv, turn: Turn): Promise<boolean> {
@@ -906,12 +918,63 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return x;
   }
 
-  function storeResult(c: Conv, callId: string, status: AiToolStatus, content: string, edited: string | null): ToolEntry {
+  /** `judged`: Auto mode decided the call (AI-47), so the result keeps the judge's verdict; otherwise it is dropped. */
+  function storeResult(c: Conv, callId: string, status: AiToolStatus, content: string, edited: string | null, judged: boolean): ToolEntry {
     const text = edited && (status === "ok" || status === "error") ? `The user edited the arguments before the call ran; it ran with ${edited}\n\n${content}` : content;
-    const entry: ToolEntry = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: callId, status, content: text };
+    const auto = judged ? (verdicts.get(callId) ?? null) : null;
+    verdicts.delete(callId);
+    const entry: ToolEntry = { role: "tool", entry_id: newId(), created_at: Date.now(), tool_call_id: callId, status, content: text, auto };
     store(c, entry);
     maybeContinue(c);
     return entry;
+  }
+
+  // ───────────── the judge of Auto mode (AI-47) ─────────────
+
+  /** Like Rust's `question_ids`: the questions a call of `tool` gets, in the judge's order. */
+  function judgeQuestions(tool: string): string[] {
+    if (tool === "edit_file" || tool === "write_file") return ["requested", "forbidden", "touches_secrets", "sensitive_file"];
+    if (tool === "fetch_url") return ["forbidden", "url_carries_data"];
+    return ["requested", "forbidden", "changes_anything", "destroys_data", "touches_secrets", "sends_data_out", "security_change", "runs_unseen_code"];
+  }
+
+  /**
+   * The mock judge's answers, from a few words, so that the browser preview shows both verdicts: a command of
+   * reading words runs, while `rm`, `restart`, `install`, `curl`, a redirection and the like ask, unless the
+   * user's last message names what the call works on, which counts as asking for it.
+   */
+  function mockAnswers(c: Conv, tool: string, args: Record<string, unknown>): Record<string, number> {
+    const text = [args.command, args.text, args.path, args.url, args.content].filter((v): v is string => typeof v === "string").join("\n");
+    const asked = parseMessage(lastUser(c).text).typed.toLowerCase();
+    const named = text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}_.-]+/u)
+      .some((w) => w.length > 2 && !["sudo", "systemctl"].includes(w) && asked.includes(w));
+    const yes = (re: RegExp, p: number) => (re.test(text) ? p : 0.03);
+    return {
+      requested: named || tool.startsWith("mcp__") ? 0.92 : 0.35,
+      forbidden: 0.02,
+      changes_anything: yes(/\b(restart|reload|stop|start|enable|disable|install|remove|purge|apt|apt-get|yum|dnf|chmod|chown|useradd|usermod)\b|sed\s+-i|>/, 0.78),
+      destroys_data: yes(/\b(rm|truncate|prune|vacuum|drop|delete)\b|(^|[^>])>(?!>)/, 0.66),
+      touches_secrets: yes(/\.ssh|id_rsa|id_ed25519|shadow|passw|token|secret|\.env\b/i, 0.72),
+      sends_data_out: yes(/\b(curl|wget|scp|rsync|nc|ssh)\b/, 0.58),
+      security_change: yes(/\b(chmod|chown|useradd|usermod|passwd|visudo|crontab|ufw|iptables|setenforce)\b|authorized_keys|sudoers|systemctl\s+enable/, 0.74),
+      runs_unseen_code: yes(/\|\s*(sudo\s+)?(ba|z)?sh\b|base64\s+(-d|--decode)|\b(ba|z)?sh\s+\S+\.sh\b/, 0.83),
+      sensitive_file: yes(/authorized_keys|sudoers|cron|systemd|\.bashrc|\.profile|\.zshrc|rc\.local|\/etc\/pam/, 0.81),
+      url_carries_data: yes(/[?&][^=&]*(token|key|secret|password)=/i, 0.7),
+    };
+  }
+
+  /** Like Rust's `judge::decide` with a System One endpoint's thresholds: the decision and what kept the call from running. */
+  function mockDecide(tool: string, answers: Record<string, number>): Pick<AiAutoVerdict, "decision" | "concerns"> {
+    const kind = tool === "edit_file" || tool === "write_file" ? "file" : tool === "fetch_url" ? "fetch" : "command";
+    const hazard = (id: string) => (answers[id] ?? 1) >= 0.1;
+    const unrequested = (answers.requested ?? 0) < 0.85;
+    const unrequestedChange = kind === "command" && hazard("changes_anything") && unrequested;
+    const concerns = judgeQuestions(tool).filter((id) =>
+      id === "requested" ? (kind === "command" ? unrequestedChange : unrequested) : id === "changes_anything" ? unrequestedChange : hazard(id),
+    );
+    return { decision: concerns.length === 0 ? "run" : "ask", concerns };
   }
 
   // ───────────── tools that run in "Rust" ─────────────
@@ -1028,7 +1091,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const FILE_DISCONNECTED = "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
 
   /**
-   * AI-47, AI-48: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results. The
+   * AI-48, AI-49: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results. The
    * glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a JS RegExp.
    */
   function search(name: string, args: Record<string, unknown>): string {
@@ -1303,7 +1366,24 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       replyTerminal.set(entry.entry_id, true);
       return entry;
     };
-    const result = (ms: number, callId: string, status: AiToolStatus, content: string): AiEntryView => ({ role: "tool", entry_id: newId(ms), created_at: ms, tool_call_id: callId, status, content });
+    const result = (ms: number, callId: string, status: AiToolStatus, content: string, auto: AiAutoVerdict | null = null): AiEntryView => ({
+      role: "tool",
+      entry_id: newId(ms),
+      created_at: ms,
+      tool_call_id: callId,
+      status,
+      content,
+      auto,
+    });
+    // AI-47: verdicts of the judge of Auto mode, as Rust stores them with the results of calls Auto decided.
+    const judged = (decision: AiAutoVerdict["decision"], answers: [string, number][], concerns: string[] = []): AiAutoVerdict => ({
+      provider_id: "p-anthropic",
+      model_id: "claude-haiku-5-5",
+      decision,
+      answers: answers.map(([question, probability]) => ({ question, probability })),
+      concerns,
+      failure: null,
+    });
     const SONNET: [string, string] = ["p-anthropic", "claude-sonnet-5-5"];
     const QWEN: [string, string] = ["p-ollama", "qwen3:8b"];
     const OSS: [string, string] = ["p-ollama", "gpt-oss:20b"];
@@ -1318,7 +1398,23 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           tool_calls: [logs, screen],
           finish: "tool_calls",
         }),
-        result(at(2 * MIN), logs.id, "ok", "exit status: 0\n--- stdout ---\nOct 06 09:12:01 prod-api-tokyo nginx[812]: upstream prematurely closed connection while reading response header from upstream, client: 10.0.0.4, upstream: \"http://127.0.0.1:8080/v1/hosts\"\n--- stderr ---\n"),
+        result(
+          at(2 * MIN),
+          logs.id,
+          "ok",
+          "exit status: 0\n--- stdout ---\nOct 06 09:12:01 prod-api-tokyo nginx[812]: upstream prematurely closed connection while reading response header from upstream, client: 10.0.0.4, upstream: \"http://127.0.0.1:8080/v1/hosts\"\n--- stderr ---\n",
+          // Manual approval asks about `sudo`; Auto's judge found that it only reads.
+          judged("run", [
+            ["requested", 0.93],
+            ["forbidden", 0.02],
+            ["changes_anything", 0.04],
+            ["destroys_data", 0.01],
+            ["touches_secrets", 0.06],
+            ["sends_data_out", 0.01],
+            ["security_change", 0.02],
+            ["runs_unseen_code", 0.01],
+          ]),
+        ),
         result(at(2 * MIN + 1000), screen.id, "ok", "Alternate screen: no. This is the visible screen with 12 line(s) of scrollback above it.\n\ndeploy@prod-api-tokyo:/srv/api$"),
         reply(at(3 * MIN), SONNET, zh
           ? "上游 `api.service`（127.0.0.1:8080）在返回响应头之前关闭了连接。\n\n| 检查项 | 结果 |\n|---|---|\n| nginx | 正常运行 |\n| 上游 | **提前关闭连接** |\n\n建议先看 `journalctl -u api -n 100`，确认服务是否崩溃重启。"
@@ -1367,7 +1463,27 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           usage: null,
         }),
         result(at(2 * MIN), rm.id, "rejected", "don't delete the journal by hand"),
-        result(at(3 * MIN), vacuumLogs.id, "ok", "The user edited the arguments before the call ran; it ran with {\"command\":\"sudo journalctl --vacuum-size=500M\"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n"),
+        result(
+          at(3 * MIN),
+          vacuumLogs.id,
+          "ok",
+          "The user edited the arguments before the call ran; it ran with {\"command\":\"sudo journalctl --vacuum-size=500M\"}\n\nexit status: 0\n--- stdout ---\nVacuuming done, freed 1.2G of archived journals from /var/log/journal.\n--- stderr ---\n",
+          // The card showed what concerned Auto's judge, and the user edited the call and ran it.
+          judged(
+            "ask",
+            [
+              ["requested", 0.4],
+              ["forbidden", 0.03],
+              ["changes_anything", 0.22],
+              ["destroys_data", 0.64],
+              ["touches_secrets", 0.02],
+              ["sends_data_out", 0.01],
+              ["security_change", 0.02],
+              ["runs_unseen_code", 0.01],
+            ],
+            ["destroys_data"],
+          ),
+        ),
         result(at(4 * MIN), type.id, "error", "The terminal tab disconnected while waiting. Output before that:\n\ndocker system prune -af\nDeleted Containers:"),
         result(at(5 * MIN), fetch.id, "cancelled", "The call was cancelled before it ran."),
         result(at(5 * MIN), mcp.id, "error", "No running MCP server offers the tool mcp__github__create_issue."),
@@ -1557,16 +1673,58 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       // Like Rust: a rejection stores the user's reason; the adapter tells the model the call was rejected.
       const content = result.status === "rejected" ? result.content.trim() : result.content;
       fileBases.delete(callId);
-      return storeResult(c, callId, result.status, content, result.edited_arguments);
+      return storeResult(c, callId, result.status, content, result.edited_arguments, result.judged);
     },
-    ai_tool_run: async (id, callId, sessionId, edited) => {
+    ai_tool_run: async (id, callId, sessionId, edited, judged) => {
       const c = need(id);
       const x = openCall(c, callId);
       const r = await runTool(c, x, sessionId, edited);
       // A stop stored a cancelled result while the tool ran.
       const dropped = droppedBy.delete(callId);
       if (answered(c).has(callId)) fail("cancelled", "the tool call was stopped");
-      return { entry: storeResult(c, callId, r.status, r.content, edited), dropped_file_changes: dropped };
+      return { entry: storeResult(c, callId, r.status, r.content, edited, judged), dropped_file_changes: dropped };
+    },
+    // AI-47: the mock judge (`mockAnswers`). `?ai=judgeslow` takes 4 seconds, and `?ai=judgefail` times out.
+    ai_judge: async (id, callId) => {
+      const c = need(id);
+      const x = openCall(c, callId);
+      const judge = (await deps.settings()).judge_model;
+      const failed = (failure: string): AiAutoVerdict => ({
+        provider_id: judge?.provider_id ?? "",
+        model_id: judge?.model_id ?? "",
+        decision: "ask",
+        answers: [],
+        concerns: [],
+        failure,
+      });
+      let verdict: AiAutoVerdict;
+      if (!judge) verdict = failed("unavailable");
+      else {
+        await delay(flags.has("judgeslow") ? 4000 : 700);
+        // A stop stored a cancelled result while the judge answered.
+        if (answered(c).has(callId)) verdict = failed("cancelled");
+        else if (flags.has("judgefail")) verdict = failed("timeout");
+        else {
+          // AI-45: a `call_mcp_tool` call is judged as the tool it names.
+          const shown = shownCall(x);
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(shown.arguments) as Record<string, unknown>;
+          } catch {
+            // cut-off arguments name nothing
+          }
+          const answers = mockAnswers(c, shown.name, args);
+          verdict = {
+            provider_id: judge.provider_id,
+            model_id: judge.model_id,
+            answers: judgeQuestions(shown.name).map((question) => ({ question, probability: answers[question] })),
+            failure: null,
+            ...mockDecide(shown.name, answers),
+          };
+        }
+      }
+      verdicts.set(callId, verdict);
+      return structuredClone(verdict);
     },
     ai_file_preview: async (id, callId, sessionId, edited) => {
       const c = need(id);

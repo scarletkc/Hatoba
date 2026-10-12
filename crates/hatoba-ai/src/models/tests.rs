@@ -559,3 +559,124 @@ async fn an_http_base_url_with_a_host_name_goes_through_the_guarded_client() {
     let outcome = test_connection(&http, &provider, Some("m1"), &CancellationToken::new()).await;
     assert!(outcome.ok, "{outcome:?}");
 }
+
+fn system_one(base_url: String) -> ProviderConfig {
+    provider(base_url, Protocol::SystemOne)
+}
+
+#[tokio::test]
+async fn system_one_lists_typesafe_and_openai_shaped_models() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "models": [
+                {"name": "jev-latest", "description": "The latest Jev", "release_date": "2026-09-01"},
+                {"name": "jev-1.13.0"},
+                {"name": "jev-latest"},
+                {"description": "no name"}
+            ]
+        })))
+        .mount(&server)
+        .await;
+    // A base URL that names the endpoint lists the models next to it.
+    for base in [
+        format!("{}/v1", server.uri()),
+        format!("{}/v1/systemone", server.uri()),
+    ] {
+        let models = list_models(&http_client(), &system_one(base), &CancellationToken::new())
+            .await
+            .unwrap();
+        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["jev-latest", "jev-1.13.0"]);
+        assert_eq!(models[0].name, "jev-latest");
+        assert_eq!(
+            models[0].efforts,
+            Some(vec![]),
+            "a decision model does not think"
+        );
+    }
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [{"id": "typesafe/jev-latest", "name": "TypeSafe: Jev", "context_length": 64000}]
+        })))
+        .mount(&server)
+        .await;
+    let models = list_models(
+        &http_client(),
+        &system_one(format!("{}/api/v1", server.uri())),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].id, "typesafe/jev-latest");
+    assert_eq!(models[0].name, "TypeSafe: Jev");
+    assert_eq!(models[0].context_window, Some(64_000));
+}
+
+#[tokio::test]
+async fn system_one_test_connection_sends_one_decision() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/systemone"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "model": "jev-1.13.0",
+            "answers": {"blue": {"type": "noul", "noul": 0.99}},
+            "usage": {"input_tokens": 40, "output_tokens": 1}
+        })))
+        .mount(&server)
+        .await;
+    let p = system_one(format!("{}/v1", server.uri()));
+    let outcome = test_connection(
+        &http_client(),
+        &p,
+        Some("jev-latest"),
+        &CancellationToken::new(),
+    )
+    .await;
+    assert!(outcome.ok, "{outcome:?}");
+    let requests = server.received_requests().await.unwrap();
+    let body: Value = serde_json::from_slice(&requests[0].body).unwrap();
+    assert_eq!(body["model"], "jev-latest");
+    assert!(body["state"].is_string());
+    assert_eq!(body["questions"]["blue"]["type"], "noul");
+
+    // Failures are told apart as for the other protocols.
+    let outcome_of = |status: u16, body: Value| async move {
+        let server = MockServer::start().await;
+        Mock::given(wiremock::matchers::any())
+            .respond_with(ResponseTemplate::new(status).set_body_json(body))
+            .mount(&server)
+            .await;
+        test_connection(
+            &http_client(),
+            &system_one(server.uri()),
+            Some("jev-nope"),
+            &CancellationToken::new(),
+        )
+        .await
+    };
+    let auth = outcome_of(401, json!({"error": {"message": "Invalid API key"}})).await;
+    assert_eq!(auth.failure, Some(TestFailure::Auth));
+    let unknown = outcome_of(422, json!({"detail": "Unknown model: jev-nope"})).await;
+    assert_eq!(unknown.failure, Some(TestFailure::UnknownModel));
+    let missing = outcome_of(404, json!({"error": "model not found"})).await;
+    assert_eq!(missing.failure, Some(TestFailure::UnknownModel));
+    let malformed = outcome_of(200, json!({"answers": {}})).await;
+    assert_eq!(malformed.failure, Some(TestFailure::Other));
+    assert!(malformed.message.unwrap().contains("malformed"));
+    let closed = test_connection(
+        &http_client(),
+        &system_one("http://127.0.0.1:9".into()),
+        Some("jev"),
+        &CancellationToken::new(),
+    )
+    .await;
+    assert_eq!(closed.failure, Some(TestFailure::Network));
+}

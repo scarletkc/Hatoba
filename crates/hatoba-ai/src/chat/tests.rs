@@ -44,7 +44,7 @@ fn provider(server: &MockServer, protocol: Protocol) -> ProviderConfig {
         protocol,
         base_url: match protocol {
             Protocol::ChatCompletions => format!("{}/v1", server.uri()),
-            Protocol::Anthropic => server.uri(),
+            Protocol::Anthropic | Protocol::SystemOne => server.uri(),
         },
         api_key: Zeroizing::new(KEY.into()),
         auth_header: AuthHeader::XApiKey,
@@ -1295,6 +1295,66 @@ fn request_bodies_are_deterministic() {
 }
 
 #[test]
+fn the_verdict_of_auto_mode_never_reaches_the_model() {
+    use crate::entry::{AutoDecision, AutoVerdict};
+    let verdict = AutoVerdict {
+        provider_id: "judge".into(),
+        model_id: "jev-latest".into(),
+        decision: AutoDecision::Run,
+        answers: [("requested".to_owned(), 0.97)].into(),
+        concerns: vec![],
+        failure: None,
+    };
+    let entries = |auto: bool| {
+        let result = AiEntry::tool(3, "toolu_01AbCdEf", ToolStatus::Ok, "42%");
+        vec![
+            AiEntry::user(0, "a"),
+            AiEntry::assistant(2, thinking_entry()),
+            if auto {
+                result.with_auto(verdict.clone())
+            } else {
+                result
+            },
+        ]
+    };
+    let (plain, judged) = (entries(false), entries(true));
+    let model = ModelSpec::new("claude-opus-4-8");
+    let tools = terminal_tools();
+    for offered in [&tools[..], &[]] {
+        let (a, b) = (
+            request(&model, &plain, offered),
+            request(&model, &judged, offered),
+        );
+        let anthropic =
+            |r: &ChatRequest<'_>| serde_json::to_string(&request::anthropic(r, true, true).body);
+        let chat = |r: &ChatRequest<'_>| {
+            serde_json::to_string(&request::chat_completions(r, true, true).body)
+        };
+        assert_eq!(anthropic(&a).unwrap(), anthropic(&b).unwrap());
+        assert_eq!(chat(&a).unwrap(), chat(&b).unwrap());
+        assert!(!anthropic(&b).unwrap().contains("jev-latest"));
+    }
+}
+
+#[tokio::test]
+async fn a_system_one_provider_cannot_chat() {
+    let server = MockServer::start().await;
+    let entries = vec![AiEntry::user(0, "hi")];
+    let model = ModelSpec::new("jev-latest");
+    let (result, events) = run(
+        &provider(&server, Protocol::SystemOne),
+        &request(&model, &entries, &[]),
+    )
+    .await;
+    let Err(AiError::Config(message)) = result else {
+        panic!("a configuration error, got {result:?}");
+    };
+    assert!(message.contains("cannot chat"), "{message}");
+    assert!(events.is_empty());
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[test]
 fn request_debug_shows_no_conversation_content() {
     let entries = vec![AiEntry::user(0, "my password is hunter2")];
     let model = ModelSpec::new("m");
@@ -1311,16 +1371,18 @@ fn request_debug_shows_no_conversation_content() {
 #[test]
 fn a_summary_starts_with_the_permission_mode_stored_before_it() {
     use crate::tools::{PermissionMode, permission_mode_block};
-    let note = permission_mode_block(PermissionMode::Bypass);
-    let text = request::summary_text(&format!("{note}We cleaned /tmp."));
-    assert!(
-        text.starts_with(&format!("{note}This conversation continues")),
-        "{text}"
-    );
-    assert!(
-        text.contains("<summary>\nWe cleaned /tmp.\n</summary>"),
-        "{text}"
-    );
+    for mode in [PermissionMode::Bypass, PermissionMode::Auto] {
+        let note = permission_mode_block(mode);
+        let text = request::summary_text(&format!("{note}We cleaned /tmp."));
+        assert!(
+            text.starts_with(&format!("{note}This conversation continues")),
+            "{text}"
+        );
+        assert!(
+            text.contains("<summary>\nWe cleaned /tmp.\n</summary>"),
+            "{text}"
+        );
+    }
     // Without one, the message is as it was.
     assert!(request::summary_text("We cleaned /tmp.").starts_with("This conversation continues"));
 }
@@ -1377,6 +1439,7 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
                 match protocol {
                     Protocol::Anthropic => request::anthropic(&req, true, true),
                     Protocol::ChatCompletions => request::chat_completions(&req, true, true),
+                    Protocol::SystemOne => unreachable!("System One does not chat"),
                 }
             };
             let (normal, forked) = (render(next), render(&compact));
@@ -1402,6 +1465,7 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
             let expected = match protocol {
                 Protocol::Anthropic => json!({"type": "text", "text": INSTRUCTION}),
                 Protocol::ChatCompletions => json!({"role": "user", "content": INSTRUCTION}),
+                Protocol::SystemOne => unreachable!("System One does not chat"),
             };
             assert_eq!(added, [&expected], "{protocol:?}");
         }
@@ -1501,6 +1565,7 @@ fn tool_history(protocol: Protocol, model: &str) -> Vec<AiEntry> {
                        "reasoning_content": "Done thinking."}),
             )
         }
+        Protocol::SystemOne => unreachable!("System One does not chat"),
     };
     let mut c = assistant_entry(model, "We checked the disk.", vec![], raw_c);
     if let EntryBody::Assistant(a) = &mut c.body {

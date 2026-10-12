@@ -449,6 +449,7 @@ impl Fixture {
                 status,
                 content: content.into(),
                 edited_arguments: edited_arguments.map(str::to_owned),
+                judged: false,
             },
         )
     }
@@ -468,6 +469,7 @@ impl Fixture {
                 tool_call_id,
                 session_id,
                 edited_arguments,
+                false,
             )
             .await
             .map(|run| run.entry)
@@ -538,6 +540,7 @@ fn tool_entry(entry: &AiEntry) -> (&str, ToolStatus, &str) {
             tool_call_id,
             status,
             content,
+            ..
         } => (tool_call_id, *status, content),
         other => panic!("expected a tool entry, got {other:?}"),
     }
@@ -1958,6 +1961,7 @@ async fn a_stop_while_a_file_tool_runs_says_the_file_may_have_changed() {
                 tool_call_id,
                 status,
                 content,
+                ..
             } => Some((tool_call_id, status, content)),
             _ => None,
         })
@@ -3699,6 +3703,24 @@ async fn a_summary_carries_the_permission_mode_past_a_compaction() {
         carried[0].starts_with(&format!("{note}This conversation continues")),
         "{carried:?}"
     );
+}
+
+#[test]
+fn the_mode_last_noted_reads_back_auto_too() {
+    use hatoba_ai::tools::{PermissionMode, permission_mode_block};
+
+    for mode in PermissionMode::ALL {
+        let note = permission_mode_block(mode);
+        let noted = vec![
+            AiEntry::user(0, "first"),
+            AiEntry::user(1, format!("{note}second")),
+        ];
+        assert_eq!(super::noted_permission(&noted), mode);
+        // AI-47: a summary of a conversation in Auto carries the mode like one in bypass.
+        let summarized = vec![AiEntry::summary(2, format!("{note}SUMMARY"))];
+        assert_eq!(super::noted_permission(&summarized), mode);
+    }
+    assert_eq!(super::noted_permission(&[]), PermissionMode::Manual);
 }
 
 #[tokio::test]
@@ -6356,3 +6378,4 @@ fn a_note_names_a_target_or_a_single_host() {
 }
 
 mod deferred;
+mod judge;

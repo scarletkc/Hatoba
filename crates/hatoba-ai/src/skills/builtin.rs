@@ -33,6 +33,10 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/ai-instructions.md"),
     ),
     (
+        "references/ai-mcp.md",
+        include_str!("builtin/hatoba/references/ai-mcp.md"),
+    ),
+    (
         "references/ai-models.md",
         include_str!("builtin/hatoba/references/ai-models.md"),
     ),

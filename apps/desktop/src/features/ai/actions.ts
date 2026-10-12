@@ -8,6 +8,7 @@ import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import type {
+  AiAutoVerdict,
   AiConversationView,
   AiEffort,
   AiEntryView,
@@ -47,13 +48,15 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
-import { addAllowances, hostRefOf, resetAllowances, savedAllowances } from "./allowances";
+import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowances } from "./allowances";
+import { hardRule, type HardRule } from "./autoRules";
+import { JUDGE_ERROR } from "./autoText";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
-import { conversationModel } from "./models";
+import { conversationModel, judgeChosen, sameModel } from "./models";
 import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
@@ -75,7 +78,7 @@ import {
   type Slot,
   type TabSelection,
 } from "./store";
-import { screenNote } from "./terminalText";
+import { screenNote, screenTail } from "./terminalText";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import {
   allowanceOf,
@@ -90,6 +93,7 @@ import {
   needsSession,
   parseArgs,
   savedFor,
+  shownCall,
   toolKind,
   type HostRef,
   type Scope,
@@ -106,6 +110,7 @@ import {
   reduceTurnEvent,
   unansweredCalls,
   upsertEntry,
+  type AutoAsk,
   type CallInfo,
   type CallState,
 } from "./turn";
@@ -207,6 +212,35 @@ function allowInConversation(convId: string, grants: string[]) {
   });
 }
 
+/**
+ * AI-47: what Auto mode does with a call manual approval would ask about: run it without the card, or show the
+ * card, with what it says about why (null: as in manual approval). `judged`: Auto decided the call, so its
+ * result is stored with the judge's verdict.
+ */
+interface AutoOutcome {
+  run: boolean;
+  ask: AutoAsk | null;
+  judged: boolean;
+}
+
+/** AI-47: the calls whose verdict is asked for as soon as their response arrives (`prefetch`). */
+const PREFETCHED: readonly ToolKind[] = ["run_command", "edit_file", "write_file", "fetch_url"];
+
+/** AI-47: whether `verdict`'s judge is still the one chosen in Settings → AI, and still listed by its provider. */
+async function judgeStillChosen(verdict: AiAutoVerdict): Promise<boolean> {
+  try {
+    const [providers, settings] = await Promise.all([api.ai_providers_list(), api.ai_settings_get()]);
+    return sameModel(settings.judge_model, verdict) && judgeChosen(providers, settings);
+  } catch {
+    return false;
+  }
+}
+
+/** AI-47: the verdict standing in for a judge that could not be asked: the card asks, saying so. */
+function failedVerdict(): AiAutoVerdict {
+  return { provider_id: "", model_id: "", decision: "ask", answers: [], concerns: [], failure: JUDGE_ERROR };
+}
+
 const runners = new Map<string, TurnRunner>();
 
 /**
@@ -227,6 +261,10 @@ class TurnRunner {
   private stopping = false;
   private processing = false;
   private waiter: ((d: Decision) => void) | null = null;
+  /** AI-47: the judge's verdicts asked for ahead (`prefetch`), by call id, until their call takes them. */
+  private readonly verdicts = new Map<string, Promise<AiAutoVerdict>>();
+  /** AI-47: the user rejected a call of the response being handled, so Auto asks about the rest of its calls without the judge. */
+  private rejected = false;
   private readonly abort = new AbortController();
   private readonly ready: Promise<string | null>;
   private resolveReady!: (id: string | null) => void;
@@ -351,9 +389,9 @@ class TurnRunner {
     patchSlot(this.slotId, (s) => (s.turn ? { turn: { ...s.turn, call } } : {}));
   }
 
-  private wait(callId: string, state: CallState, mcp?: McpToolInfo | null): Promise<Decision> {
+  private wait(callId: string, state: CallState, mcp?: McpToolInfo | null, auto?: AutoAsk | null): Promise<Decision> {
     if (!this.acting) return Promise.resolve({ kind: "stop" });
-    this.setCall({ id: callId, state, mcp });
+    this.setCall({ id: callId, state, mcp, auto });
     return new Promise((resolve) => (this.waiter = resolve));
   }
 
@@ -367,7 +405,14 @@ class TurnRunner {
     try {
       const convId = await this.ready;
       if (!convId) return;
-      for (const call of unansweredCalls(getSlot(this.slotId).entries)) {
+      const calls = unansweredCalls(getSlot(this.slotId).entries);
+      // AI-47: a call a saved approval covers never reaches the judge, so they are read (once after each
+      // unlock) before any call is judged ahead.
+      if (callMode(this.mode, getSlot(this.slotId).mode) === "auto") await savedAllowances().catch(() => []);
+      if (!this.active || this.stopping) return;
+      this.rejected = false;
+      this.prefetch(convId, calls);
+      for (const call of calls) {
         if (!this.active || this.stopping) return;
         await this.handleCall(convId, call);
       }
@@ -392,7 +437,7 @@ class TurnRunner {
         // not have, a deleted server): Rust answers it with that error, without asking.
         if (proxy && !proxy.runs) {
           this.setCall({ id: call.id, state: "running" });
-          await this.execute(convId, call, kind, null);
+          await this.execute(convId, call, kind, null, false);
           return;
         }
         mcp = proxy?.tool ?? null;
@@ -412,36 +457,112 @@ class TurnRunner {
     if (!this.acting) return;
     const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host);
     let edited: string | null = null;
+    let judged = false;
     if (mustAsk({ kind, mode, allowed, mcp })) {
-      const d = await this.wait(call.id, "approval", mcp);
-      if (!this.acting || d.kind === "stop") return;
-      if (d.kind === "reject") {
-        this.setCall({ id: call.id, state: "running" });
-        await this.report(convId, call.id, { status: "rejected", content: d.reason, edited_arguments: null });
-        return;
-      }
-      edited = d.edited;
-      const allow = allowanceOf(d);
-      // What the card offered, for the input that runs: an edited command names its own prefixes.
-      const scope = allow ? allowanceScope(kind, parseArgs(edited ?? call.arguments) ?? {}, mcp) : null;
-      if (allow === "conversation" && scope) allowInConversation(convId, grantKeys(scope));
-      else if (allow === "always" && scope) await this.alwaysAllow(scope, host, mcp);
-      if (d.refusal !== undefined) {
-        if (!this.acting) return;
-        this.setCall({ id: call.id, state: "running" });
-        await this.report(convId, call.id, { status: "error", content: d.refusal, edited_arguments: edited });
-        return;
+      // AI-47: in Auto, the judge decides first whether the card shows, unless a hard rule shows it.
+      const auto: AutoOutcome | null = mode === "auto" ? await this.judge(convId, call, kind, mcp) : { run: false, ask: null, judged: false };
+      if (!auto || !this.acting) return;
+      judged = auto.judged;
+      if (!auto.run) {
+        const d = await this.wait(call.id, "approval", mcp, auto.ask);
+        if (!this.acting || d.kind === "stop") return;
+        if (d.kind === "reject") {
+          // AI-47: Auto asks about the response's later calls; their verdicts asked for ahead are dropped, so
+          // that no result stores one.
+          this.rejected = true;
+          this.verdicts.clear();
+          this.setCall({ id: call.id, state: "running" });
+          await this.report(convId, call.id, { status: "rejected", content: d.reason, edited_arguments: null, judged });
+          return;
+        }
+        edited = d.edited;
+        const allow = allowanceOf(d);
+        // What the card offered, for the input that runs: an edited command names its own prefixes.
+        const scope = allow ? allowanceScope(kind, parseArgs(edited ?? call.arguments) ?? {}, mcp) : null;
+        if (allow === "conversation" && scope) allowInConversation(convId, grantKeys(scope));
+        else if (allow === "always" && scope) await this.alwaysAllow(scope, host, mcp);
+        if (d.refusal !== undefined) {
+          if (!this.acting) return;
+          this.setCall({ id: call.id, state: "running" });
+          await this.report(convId, call.id, { status: "error", content: d.refusal, edited_arguments: edited, judged });
+          return;
+        }
       }
     }
     if (!this.acting) return;
     this.setCall({ id: call.id, state: "running" });
-    await this.execute(convId, call, kind, edited);
+    await this.execute(convId, call, kind, edited, judged);
+  }
+
+  /**
+   * AI-47: what Auto mode does with a call manual approval would ask about. A hard rule, or a call the user
+   * rejected earlier in the response, shows the card at once, without the judge; otherwise the call waits for
+   * the judge's verdict (`judging`), asked for here or ahead (`prefetch`), runs on `run`, and shows the card with
+   * the verdict on `ask`. A switch to manual approval meanwhile applies to the call (§13.5): its card shows as in
+   * manual approval, and its result goes without the verdict. Null when the turn stopped meanwhile.
+   */
+  private async judge(convId: string, call: AiToolCall, kind: ToolKind, mcp: McpToolInfo | null): Promise<AutoOutcome | null> {
+    const prefetched = this.verdicts.get(call.id);
+    this.verdicts.delete(call.id);
+    const screen = kind === "send_input" ? this.screenLines() : null;
+    // A `call_mcp_tool` call's rules read the arguments of the tool it names (AI-45).
+    const args = parseArgs(shownCall(call).arguments) ?? {};
+    const rule: HardRule | null = hardRule({ kind, args, mcp, screen }) ?? (this.rejected ? { kind: "after_reject" } : null);
+    if (rule) return { run: false, ask: { rule }, judged: false };
+    this.setCall({ id: call.id, state: "judging", mcp });
+    let verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
+    if (!this.acting) return null;
+    // A verdict asked for ahead may come from a judge the user has cleared or replaced since, while an earlier call
+    // waited: the call is judged again, by the judge chosen now, which asks when there is none.
+    if (prefetched) {
+      const current = await judgeStillChosen(verdict);
+      if (!this.acting) return null;
+      if (!current) verdict = await this.askJudge(convId, call.id, screen);
+      if (!this.acting) return null;
+    }
+    if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return { run: false, ask: null, judged: false };
+    return verdict.decision === "run" ? { run: true, ask: null, judged: true } : { run: false, ask: { verdict }, judged: true };
+  }
+
+  /** AI-47: asks the judge about a call; an error asking is a verdict that asks, saying so. */
+  private askJudge(convId: string, callId: string, screen: string | null): Promise<AiAutoVerdict> {
+    return api.ai_judge(convId, callId, screen).catch(failedVerdict);
+  }
+
+  /**
+   * AI-47: in Auto, asks the judge about a response's calls as soon as it arrives, so that their answers
+   * mostly overlap (the judge reads no results, so none waits for an earlier call): each `run_command`,
+   * `edit_file`, `write_file` and `fetch_url` call that, as far as can be told now, will reach it (it asks, no
+   * approval covers it, and no hard rule sends it to the card). Not `send_input`, whose judge and hard rules read
+   * the screen as it is when the call's turn comes, nor MCP calls, whose tool is resolved first. A call that ends up not
+   * taking its verdict stores its result without it.
+   */
+  private prefetch(convId: string, calls: readonly AiToolCall[]) {
+    if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return;
+    const target = this.target();
+    const host = target ? hostRefOf(target.tab) : null;
+    const grants = useAi.getState().allowed[convId] ?? [];
+    const saved = useAllowances.getState().list ?? [];
+    for (const call of calls) {
+      const kind = toolKind(call.name);
+      if (!PREFETCHED.includes(kind) || this.verdicts.has(call.id) || (needsSession(kind) && !target)) continue;
+      const args = parseArgs(call.arguments) ?? {};
+      const allowed = callAllowed(kind, args, null, grants, saved, host);
+      if (!mustAsk({ kind, mode: "auto", allowed }) || hardRule({ kind, args })) continue;
+      this.verdicts.set(call.id, this.askJudge(convId, call.id, null));
+    }
+  }
+
+  /** AI-47: the last lines of the turn's terminal, which a `send_input` call's judge and hard rules read. */
+  private screenLines(): string | null {
+    const term = this.target()?.session?.term;
+    return term ? screenTail(term.buffer.active, term.rows) : null;
   }
 
   /** Answers a call with an error result, without asking or running it. */
   private async answer(convId: string, callId: string, content: string) {
     this.setCall({ id: callId, state: "running" });
-    await this.report(convId, callId, { status: "error", content, edited_arguments: null });
+    await this.report(convId, callId, { status: "error", content, edited_arguments: null, judged: false });
   }
 
   /** Always allow on the card (AI-19, AI-31): stored on this device, then the call runs. */
@@ -455,9 +576,10 @@ class TurnRunner {
     }
   }
 
-  private async execute(convId: string, call: AiToolCall, kind: ToolKind, edited: string | null) {
+  /** Runs a call; `judged`: Auto decided it (AI-47), so its result goes with the judge's verdict. */
+  private async execute(convId: string, call: AiToolCall, kind: ToolKind, edited: string | null, judged: boolean) {
     const args = edited ?? call.arguments;
-    const error = (content: string): AiToolResultInput => ({ status: "error", content, edited_arguments: edited });
+    const error = (content: string): AiToolResultInput => ({ status: "error", content, edited_arguments: edited, judged });
     if (kind === "unknown") return this.report(convId, call.id, error(`There is no tool named "${call.name}".`));
 
     const target = this.target();
@@ -466,15 +588,15 @@ class TurnRunner {
       if (!target.session || target.session.status !== "connected" || !target.tab.sessionId) return this.report(convId, call.id, error(DISCONNECTED));
     }
     try {
-      if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited });
+      if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited, judged });
       if (kind === "send_input") {
         const result = await sendInput(target!.session!, args, this.abort.signal);
         if (!result || !this.active) return;
-        return this.report(convId, call.id, { ...result, edited_arguments: edited });
+        return this.report(convId, call.id, { ...result, edited_arguments: edited, judged });
       }
       // AI-08: tools use the tab's current session, so they follow a reconnect.
       const sessionId = target?.tab.status === "connected" ? target.tab.sessionId : null;
-      const { entry, dropped_file_changes } = await api.ai_tool_run(convId, call.id, sessionId, edited);
+      const { entry, dropped_file_changes } = await api.ai_tool_run(convId, call.id, sessionId, edited, judged);
       this.addEntry(entry);
       // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
       // partway. Keeping it may have dropped older ones over the size limit, of any conversation.

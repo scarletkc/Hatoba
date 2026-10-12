@@ -191,6 +191,8 @@ export interface SegmentOption<V extends string> {
   value: V;
   label: string;
   icon?: string;
+  /** Not offered now; the selected option stays selected. */
+  disabled?: boolean;
 }
 
 export function Segmented<V extends string>({
@@ -212,6 +214,7 @@ export function Segmented<V extends string>({
           type="button"
           role="radio"
           aria-checked={o.value === value}
+          disabled={o.disabled}
           className={cx(s.segment, o.value === value && s.segmentOn)}
           onClick={() => onChange(o.value)}
         >

@@ -7,10 +7,14 @@
 //! - [`entry`]: the stored conversation entry JSON (§13.7).
 //! - [`provider`]: provider configuration, base URL validation (AI-02) and the shared HTTP client.
 //! - [`chat`]: the two protocol adapters (Chat Completions and Anthropic Messages).
+//! - [`decision`]: decision questions in TypeSafe's System One format, answered by a System One
+//!   endpoint or by a chat model in its place (AI-47).
+//! - [`judge`]: the judge of Auto mode, which decides whether a call runs without the approval
+//!   card (AI-47).
 //! - [`models`]: model listing (AI-03) and Test Connection (AI-04).
 //! - [`tools`]: built-in tool definitions, the system prompt and tool result helpers (§13.4).
 //! - [`files`]: the text side of `read_file`, `edit_file` and `write_file` (AI-38…40).
-//! - [`search`]: the text side of `grep` and `glob` (AI-47, AI-48).
+//! - [`search`]: the text side of `grep` and `glob` (AI-48, AI-49).
 //! - [`web`]: `web_search` (AI-14) and `fetch_url` (AI-15).
 //! - [`skills`]: `SKILL.md`, folder and `.zip` import, `.zip` export (§13.8).
 //! - [`mcp`]: the MCP client for stdio and Streamable HTTP servers, tool names and schemas, and
@@ -22,9 +26,11 @@
 #![forbid(unsafe_code)]
 
 pub mod chat;
+pub mod decision;
 pub mod entry;
 pub mod error;
 pub mod files;
+pub mod judge;
 pub mod mcp;
 pub mod models;
 mod net;

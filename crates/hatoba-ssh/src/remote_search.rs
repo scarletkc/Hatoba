@@ -1,5 +1,5 @@
 //! Searching the host's files over an exec channel (spec §13.4, "Search tools"): the `find` and
-//! `grep` that the AI assistant's `glob` and `grep` run (AI-47, AI-48).
+//! `grep` that the AI assistant's `glob` and `grep` run (AI-48, AI-49).
 //!
 //! Like the file tools' scripts ([`crate::remote_file`]), each is a fixed `sh -c` script whose
 //! arguments travel on stdin, one per line, so none goes through the quoting of the user's login

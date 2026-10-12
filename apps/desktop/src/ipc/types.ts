@@ -781,7 +781,8 @@ export type UpdateProgress =
 
 // ───────────────────────── AI assistant (§13) ─────────────────────────
 
-export type AiProtocol = "chat_completions" | "anthropic";
+/** `system_one` answers decision questions for the judge of Auto mode (AI-47) and cannot chat. */
+export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
 export type AiAuthHeader = "x-api-key" | "authorization";
 
 /** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
@@ -872,12 +873,56 @@ export interface AiSettingsView {
   custom_instructions: string;
   /** Messages go with the attached terminal's screen unless the panel's + menu turns it off for the conversation (AI-46). */
   send_terminal_screen: boolean;
+  /** The judge of Auto mode (AI-47); Auto is unavailable while it is null. */
+  judge_model: AiModelRef | null;
 }
 
 /** What `ai_settings_save` changes, like {@link SettingsPatch}; null clears a field that can be empty. */
 export type AiSettingsPatch = Partial<AiSettingsView>;
 
-export type AiPermissionMode = "manual" | "bypass";
+/** §13.5, from the least strict: manual approval, Auto (AI-47), bypass. */
+export type AiPermissionMode = "manual" | "auto" | "bypass";
+
+/** What the judge of Auto mode decided (AI-47). It never rejects: a call runs without the card, or the card asks. */
+export type AiJudgeDecision = "run" | "ask";
+
+/**
+ * One of the judge's answers (AI-47): `probability` is that of yes. The questions are `requested`, `forbidden`,
+ * `changes_anything`, `destroys_data`, `touches_secrets`, `sends_data_out`, `security_change`, `runs_unseen_code`,
+ * `sensitive_file` and `url_carries_data`, in that order; a call gets those of its tool.
+ */
+export interface AiJudgeAnswer {
+  question: string;
+  probability: number;
+}
+
+/**
+ * The verdict of Auto mode's judge on a call (AI-47), stored with the call's result when Auto decided it. Display
+ * only: it never reaches the model. `concerns`: the questions whose answers kept the call from running. `failure`:
+ * why the judge gave no usable answer (`unavailable`, `too_long`, `timeout`, `unreachable`, `refused`, `malformed`,
+ * `cancelled`, or a kind a newer version added); then the decision is `ask` and there are no answers.
+ */
+export interface AiAutoVerdict {
+  provider_id: string;
+  model_id: string;
+  decision: AiJudgeDecision;
+  answers: AiJudgeAnswer[];
+  concerns: string[];
+  failure: string | null;
+}
+
+/**
+ * AI-47: the judge's verdict on one sample call of **Test** beside the judge in Settings → AI. `name` is the sample's
+ * stable name (`disk_space`, `restart_requested`, `delete_unrequested`, `key_sent_out`, `restart_forbidden`,
+ * `pipe_to_shell`, `key_via_shell`, `restart_requested_zh`, `delete_unrequested_ja`, `docs_page`, `token_in_url`, or
+ * one a newer version added);
+ * `expected` is what a good judge decides.
+ */
+export interface AiJudgeSampleOutcome {
+  name: string;
+  expected: AiJudgeDecision;
+  verdict: AiAutoVerdict;
+}
 
 /**
  * An AI approval saved on this device (AI-19), never synced: `run_command` calls that start with the
@@ -943,7 +988,8 @@ export type AiEntryView =
       finish: AiFinish;
       usage: AiUsage | null;
     }
-  | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string }
+  /** `auto`: what the judge decided when Auto mode decided the call (AI-47). */
+  | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string; auto: AiAutoVerdict | null }
   | { role: "summary"; entry_id: string; created_at: number; text: string };
 
 export interface AiConversationDetail {
@@ -1062,6 +1108,11 @@ export interface AiToolResultInput {
   content: string;
   /** AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
   edited_arguments: string | null;
+  /**
+   * AI-47: Auto mode decided the call: it ran on the judge's `run`, or its card showed the judge's verdict. Rust
+   * then stores the verdict it remembers with the result.
+   */
+  judged: boolean;
 }
 
 /**

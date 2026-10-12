@@ -285,6 +285,7 @@ const TERMINAL_BODY = {
 
 const PERMISSION_BODY = {
   manual: "From this message on, the permission mode is manual approval.",
+  auto: "From this message on, the permission mode is auto.",
   bypass: "From this message on, the permission mode is bypass.",
 } as const satisfies Record<AiPermissionMode, string>;
 
@@ -400,7 +401,7 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     }
     case "permission_mode": {
       const mode = names === "mode" ? value(0) : "";
-      return mode === "manual" || mode === "bypass" ? { kind: "note", note: { kind: tag, mode } } : null;
+      return mode === "manual" || mode === "auto" || mode === "bypass" ? { kind: "note", note: { kind: tag, mode } } : null;
     }
     case "file_revert":
       return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;
@@ -478,10 +479,10 @@ export function parseMessage(text: string): MessageParts {
 
 /**
  * A summary's text (AI-21) split into the `permission_mode` note Rust stores before the summary of a
- * conversation in bypass, which carries the mode past the compaction, and the summary itself.
+ * conversation in Auto (AI-47) or bypass, which carries the mode past the compaction, and the summary itself.
  */
 export function splitPermissionNote(text: string): { mode: AiPermissionMode | null; summary: string } {
-  for (const mode of ["manual", "bypass"] as const) {
+  for (const mode of ["manual", "auto", "bypass"] as const) {
     const note = `${noteBlock({ kind: "permission_mode", mode })}\n\n`;
     if (text.startsWith(note)) return { mode, summary: text.slice(note.length) };
   }

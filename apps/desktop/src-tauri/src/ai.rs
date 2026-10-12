@@ -33,7 +33,7 @@
 //! results, provider messages or keys.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -42,9 +42,10 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
 use hatoba_ai::entry::{
-    AiEntry, AssistantEntry, EntryBody, EntryPlace, EntryTarget, Finish, ToolCall, ToolStatus,
-    Usage, fix_up_missing_results, pair_results,
+    AiEntry, AssistantEntry, AutoDecision, AutoVerdict, EntryBody, EntryPlace, EntryTarget, Finish,
+    ToolCall, ToolStatus, Usage, fix_up_missing_results, pair_results,
 };
+use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeState, Verdict};
 use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
@@ -54,9 +55,9 @@ use hatoba_ai::tools::{
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
-    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiProtocol as CoreProtocol, AiProvider,
-    AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES,
-    SearchKind as CoreSearchKind, SearchProvider,
+    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModelRef as CoreModelRef,
+    AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    MAX_HOST_AI_NOTES_BYTES, SearchKind as CoreSearchKind, SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{SnapshotKey, SnapshotState, Vault};
@@ -67,11 +68,11 @@ use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use crate::dto::{
-    AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
-    AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiPermissionMode, AiSearchHit,
-    AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall,
-    AiToolResultInput, AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
-    AiUsage, QuickTarget,
+    AiAutoVerdict, AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
+    AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiJudgeAnswer, AiJudgeDecision,
+    AiJudgeSampleOutcome, AiModelRef, AiPermissionMode, AiSearchHit, AiSendInput, AiSendStarted,
+    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiToolCall, AiToolResultInput, AiToolRun,
+    AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -210,6 +211,13 @@ struct Inner {
     /// the call waits: until it has a result, or its conversation stops, sends its next request,
     /// compacts or is deleted, or the vault locks.
     file_bases: Mutex<HashMap<(String, String), files::Base>>,
+    /// The verdicts of the judge of Auto mode (AI-47) by conversation and call id, kept from
+    /// `ai_judge` until the call's result is stored, which carries the verdict when Auto decided
+    /// the call. Only while the call waits: dropped with its result, or when its conversation
+    /// stops, sends its next request, compacts or is deleted, or the vault locks.
+    pending_verdicts: Mutex<HashMap<(String, String), AutoVerdict>>,
+    /// Room for the judge's requests (AI-47), shared by every conversation.
+    judge_slots: JudgeSlots,
     /// What the diff of a revert showed the file holding, by conversation, response and call:
     /// Restore anyway writes only over that (AI-41).
     restore_bases: Mutex<HashMap<(String, String, String), files::Found>>,
@@ -222,6 +230,19 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+}
+
+/// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
+/// several conversations make together do not send the judge's provider a burst it refuses.
+const JUDGE_REQUESTS: usize = 4;
+
+/// Room for [`JUDGE_REQUESTS`] requests to the judge at once.
+struct JudgeSlots(tokio::sync::Semaphore);
+
+impl Default for JudgeSlots {
+    fn default() -> Self {
+        Self(tokio::sync::Semaphore::new(JUDGE_REQUESTS))
+    }
 }
 
 struct Op {
@@ -637,6 +658,8 @@ impl AiManager {
             .and_then(|turn| guard(&turn.streamed).take().map(|s| (s, turn.context.tab)));
         let turn = self.cancel(conversation_id);
         self.forget_file_bases(conversation_id);
+        // The calls get cancelled results, which keep no verdict (AI-47).
+        self.forget_verdicts(conversation_id);
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
             if let Some(response) =
@@ -713,9 +736,10 @@ impl AiManager {
         for op in guard(&self.0.ops).values() {
             op.cancel.cancel();
         }
-        // File content stays in memory only while the vault is unlocked.
+        // File content stays in memory only while the vault is unlocked, and so do verdicts.
         guard(&self.0.file_bases).clear();
         guard(&self.0.restore_bases).clear();
+        guard(&self.0.pending_verdicts).clear();
     }
 
     // ---- conversations ----
@@ -794,6 +818,7 @@ impl AiManager {
             v.ai_delete_conversation(conversation_id)?;
             self.0.seen.forget(conversation_id);
             self.forget_file_bases(conversation_id);
+            self.forget_verdicts(conversation_id);
         }
         tracing::info!(conversation_id, "AI conversation deleted");
         env.changed();
@@ -1435,8 +1460,9 @@ impl AiManager {
                 Ok(request) => request,
                 Err(halt) => return halted(turn, conversation_id, halt),
             };
-            // Every call so far has a result now, so no approval card waits on a read.
+            // Every call so far has a result now, so no approval card waits on a read or a verdict.
             self.forget_file_bases(conversation_id);
+            self.forget_verdicts(conversation_id);
             if compaction_due(&request) {
                 let compact = {
                     let v = lock(vault);
@@ -1548,7 +1574,7 @@ impl AiManager {
 
     /// `ai_tool_result`: stores a result the frontend produced (`read_terminal`, `send_input`, a
     /// rejection). The call must belong to the conversation's newest response, have no result,
-    /// and not be running in Rust.
+    /// and not be running in Rust. With `judged`, the result keeps the judge's verdict (AI-47).
     pub fn tool_result(
         &self,
         vault: &SharedVault,
@@ -1577,7 +1603,14 @@ impl AiManager {
                     "the tool call is already running",
                 ));
             }
-            self.store_result(&mut v, conversation_id, tool_call_id, status, content)?
+            self.store_result(
+                &mut v,
+                conversation_id,
+                tool_call_id,
+                status,
+                content,
+                input.judged,
+            )?
         };
         env.changed();
         Ok(view)
@@ -1585,7 +1618,12 @@ impl AiManager {
 
     /// `ai_tool_run`: runs a tool that runs in Rust and stores its result. Every failure of the
     /// tool itself is an `error` result; only a precondition (locked, unknown conversation or
-    /// call, a call that already has a result or is running) rejects.
+    /// call, a call that already has a result or is running) rejects. With `judged`, the result
+    /// keeps the judge's verdict (AI-47).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the arguments of `ai_tool_run`, with the shared vault and the app"
+    )]
     pub async fn tool_run(
         &self,
         vault: &SharedVault,
@@ -1594,6 +1632,7 @@ impl AiManager {
         tool_call_id: &str,
         session_id: Option<&str>,
         edited_arguments: Option<&str>,
+        judged: bool,
     ) -> AppResult<AiToolRun> {
         let (job, op, place, _writing, keeps) = {
             let v = unlocked(vault)?;
@@ -1680,7 +1719,14 @@ impl AiManager {
                     e
                 });
             }
-            let view = self.store_result(&mut v, conversation_id, tool_call_id, status, content)?;
+            let view = self.store_result(
+                &mut v,
+                conversation_id,
+                tool_call_id,
+                status,
+                content,
+                judged,
+            )?;
             // The model sees the file now that the result is stored (AI-38…40), under the guard
             // that a stop or the lock would have taken first.
             if let Some(shown) = shown {
@@ -1809,6 +1855,153 @@ impl AiManager {
             keep: None,
         };
         Ok(files::preview_of(&job, &base, seen))
+    }
+
+    // ---- the judge of Auto mode (AI-47) ----
+
+    /// `ai_judge` (AI-47): asks the judge of Auto mode about the open call `tool_call_id`, one
+    /// that manual approval would ask about, and returns its verdict: run the call without the
+    /// approval card, or ask. The judge reads what the user said and what the calls do
+    /// ([`judge_state`]); `screen_tail` is the screen's last lines, which a `send_input` call
+    /// shows it. Without a judge in `Settings.ai`, or with one whose provider or model is gone,
+    /// the verdict asks as `unavailable` and nothing is sent; so does one cleared, replaced or
+    /// gone while it was asked, whose verdict no longer counts. The request is an op of the
+    /// conversation, so a stop or the lock ends it, and the verdict asks as `cancelled`. At most
+    /// [`JUDGE_REQUESTS`] requests run at once across conversations; a call waits for room, and a
+    /// stop or the lock ends the wait the same way.
+    ///
+    /// The verdict is kept, in place of an earlier one, until the call's result is stored, which
+    /// carries it when Auto decided the call ([`Self::store_result`]). A call that got its result
+    /// while the judge was asked keeps none.
+    pub async fn judge(
+        &self,
+        vault: &SharedVault,
+        conversation_id: &str,
+        tool_call_id: &str,
+        screen_tail: Option<&str>,
+    ) -> AppResult<AiAutoVerdict> {
+        let (chosen, asked) = {
+            let v = unlocked(vault)?;
+            let conversation = find_conversation(&v, conversation_id)?;
+            let entries = Entries::load(&v, conversation_id)?;
+            let (at, index) = open_call_at(&entries, tool_call_id)?;
+            let chosen = v.settings().ai.judge_model;
+            let asked = chosen
+                .as_ref()
+                .and_then(|m| resolve_model(&v, &m.provider_id, &m.model_id).ok())
+                .map(|(provider, model)| {
+                    let state = judge_state(
+                        &v,
+                        &self.0.mcp,
+                        conversation_id,
+                        &conversation,
+                        &entries.list,
+                        (at, index),
+                        screen_tail,
+                    );
+                    (provider, model, state, self.start_op(conversation_id))
+                });
+            // No judge names no provider or model.
+            (chosen.unwrap_or_default(), asked)
+        };
+        let (verdict, op) = match asked {
+            None => (Verdict::failed(JudgeFailure::Unavailable), None),
+            Some((provider, model, state, op)) => {
+                let room = tokio::select! {
+                    biased;
+                    () = op.token().cancelled() => None,
+                    room = self.0.judge_slots.0.acquire() => room.ok(),
+                };
+                let verdict = match room {
+                    Some(_room) => {
+                        judge::judge(&self.http(), &provider, &model, state, op.token()).await
+                    }
+                    // Stopped while it waited; the slots are never closed.
+                    None => Verdict::failed(JudgeFailure::Cancelled),
+                };
+                (verdict, Some(op))
+            }
+        };
+        let (verdict, auto) = {
+            let v = unlocked(vault)?;
+            find_conversation(&v, conversation_id)?;
+            // The judge the user chose now, which may have changed while it was asked.
+            let current =
+                v.settings().ai.judge_model.filter(|m| {
+                    *m == chosen && resolve_model(&v, &m.provider_id, &m.model_id).is_ok()
+                });
+            let verdict = if current.is_some() {
+                verdict
+            } else {
+                Verdict::failed(JudgeFailure::Unavailable)
+            };
+            let auto = verdict.to_auto(&chosen.provider_id, &chosen.model_id);
+            // Kept only while the call waits: not after its result, a stop or the lock.
+            if open_call_at(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok() {
+                guard(&self.0.pending_verdicts).insert(
+                    (conversation_id.to_owned(), tool_call_id.to_owned()),
+                    auto.clone(),
+                );
+            }
+            (verdict, auto)
+        };
+        drop(op);
+        tracing::info!(
+            conversation_id,
+            decision = ?verdict.decision,
+            failure = verdict.failure.map(JudgeFailure::as_str),
+            "AI call judged"
+        );
+        Ok(auto_view(&auto))
+    }
+
+    /// `ai_judge_test` (AI-47): **Test** beside the judge in Settings → AI. Judges the sample
+    /// calls of [`judge::samples`] with `judge`, the model the pane shows before it is saved, or
+    /// with the saved judge when that is `None`. The model must be listed by its provider, of any
+    /// protocol. The requests are a background op, so the lock ends them and the outcomes ask as
+    /// `cancelled`. Only how many came out as expected and the kinds of failure are logged.
+    pub async fn judge_test(
+        &self,
+        vault: &SharedVault,
+        judge: Option<AiModelRef>,
+    ) -> AppResult<Vec<AiJudgeSampleOutcome>> {
+        let (chosen, provider, model, op) = {
+            let v = unlocked(vault)?;
+            let chosen = judge
+                .map(|m| CoreModelRef {
+                    provider_id: m.provider_id,
+                    model_id: m.model_id,
+                })
+                .or_else(|| v.settings().ai.judge_model)
+                .ok_or_else(|| AppError::invalid("judge_model", "no judge model is chosen"))?;
+            let (provider, model) = resolve_model(&v, &chosen.provider_id, &chosen.model_id)
+                .map_err(|e| AppError::invalid("judge_model", e))?;
+            (chosen, provider, model, self.background_op())
+        };
+        let outcomes = judge::test_judge(&self.http(), &provider, &model, op.token()).await;
+        drop(op);
+        let as_expected = outcomes
+            .iter()
+            .filter(|o| o.verdict.failure.is_none() && o.verdict.decision == o.expected)
+            .count();
+        let failures: BTreeSet<&str> = outcomes
+            .iter()
+            .filter_map(|o| o.verdict.failure.map(JudgeFailure::as_str))
+            .collect();
+        tracing::info!(
+            samples = outcomes.len(),
+            as_expected,
+            ?failures,
+            "AI judge tested"
+        );
+        Ok(outcomes
+            .into_iter()
+            .map(|o| AiJudgeSampleOutcome {
+                name: o.name,
+                expected: decision_view(o.expected),
+                verdict: auto_view(&o.verdict.to_auto(&chosen.provider_id, &chosen.model_id)),
+            })
+            .collect())
     }
 
     /// Returns once no `edit_file` or `write_file` call runs on the SSH session: a write that has
@@ -1950,7 +2143,14 @@ impl AiManager {
         guard(&self.0.file_bases).retain(|(id, _), _| id != conversation_id);
     }
 
-    /// Stores a tool result, sends it on the running turn's channel and wakes the turn.
+    /// Drops the judge's verdicts on the conversation's calls (AI-47): none of them waits any more.
+    fn forget_verdicts(&self, conversation_id: &str) {
+        guard(&self.0.pending_verdicts).retain(|(id, _), _| id != conversation_id);
+    }
+
+    /// Stores a tool result, sends it on the running turn's channel and wakes the turn. The
+    /// judge's verdict on the call (AI-47) goes with the result when Auto decided the call
+    /// (`judged`), and is dropped otherwise.
     fn store_result(
         &self,
         v: &mut Vault,
@@ -1958,10 +2158,16 @@ impl AiManager {
         tool_call_id: &str,
         status: ToolStatus,
         content: String,
+        judged: bool,
     ) -> AppResult<AiEntryView> {
-        let entry = AiEntry::tool(now_ms(), tool_call_id, status, content);
+        let key = (conversation_id.to_owned(), tool_call_id.to_owned());
+        let mut entry = AiEntry::tool(now_ms(), tool_call_id, status, content);
+        if judged && let Some(verdict) = guard(&self.0.pending_verdicts).get(&key).cloned() {
+            entry = entry.with_auto(verdict);
+        }
         let entry_id = append(v, conversation_id, &entry)?;
-        guard(&self.0.file_bases).remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
+        guard(&self.0.pending_verdicts).remove(&key);
+        guard(&self.0.file_bases).remove(&key);
         let view = entry_view(&entry_id, &entry);
         if let Some(turn) = self.running(conversation_id) {
             turn.emit(AiTurnEvent::Entry {
@@ -2072,6 +2278,7 @@ impl AiManager {
             *stored = true;
         }
         self.forget_file_bases(conversation_id);
+        self.forget_verdicts(conversation_id);
         if !compactable(&context_entries(&v, conversation_id)?) {
             return Err(AppError::invalid("conversation_id", "nothing to compact"));
         }
@@ -2683,15 +2890,18 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
 }
 
 /// Stores a summary entry and moves `context_start` to it (AI-21). The model sees nothing before
-/// a summary, so a summary of a conversation in bypass starts with its `permission_mode` note
-/// (AI-16), which the request puts before the summary's block: the mode stays the one the model
-/// was told of, also for the rest of a turn compacted between tool calls (AI-22).
+/// a summary, so a summary of a conversation in bypass or Auto (AI-47) starts with its
+/// `permission_mode` note (AI-16), which the request puts before the summary's block: the mode
+/// stays the one the model was told of, also for the rest of a turn compacted between tool calls
+/// (AI-22).
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
     let mode = noted_permission(&Entries::load(v, conversation_id)?.list);
     let text = match mode {
         PermissionMode::Manual => summary.to_owned(),
-        PermissionMode::Bypass => format!("{}{summary}", tools::permission_mode_block(mode)),
+        PermissionMode::Auto | PermissionMode::Bypass => {
+            format!("{}{summary}", tools::permission_mode_block(mode))
+        }
     };
     let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
@@ -2998,18 +3208,31 @@ fn file_place(conversation: &AiConversation, entries: &Entries) -> files::Place 
 }
 
 fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
+    let (at, index) = open_call_at(entries, tool_call_id)?;
+    let call = &calls_of(&entries.list[at])[index];
+    Ok(AiToolCall {
+        id: call.id.clone(),
+        name: call.name.clone(),
+        arguments: call.arguments.clone(),
+    })
+}
+
+/// Where the open call `tool_call_id` is: the index of the conversation's newest response in
+/// `entries`, and the call's index in it. The call must belong to that response and have no
+/// result; of calls that share its id (stored by an older build), the first without one.
+fn open_call_at(entries: &Entries, tool_call_id: &str) -> AppResult<(usize, usize)> {
     let newest = entries
         .list
         .iter()
         .rposition(|e| matches!(e.body, EntryBody::Assistant(_)));
-    let calls: Vec<&ToolCall> = match newest.map(|i| &entries.list[i].body) {
-        Some(EntryBody::Assistant(a)) => a
-            .tool_calls
+    let calls: Vec<usize> = newest.map_or_else(Vec::new, |i| {
+        calls_of(&entries.list[i])
             .iter()
-            .filter(|c| c.id == tool_call_id)
-            .collect(),
-        _ => Vec::new(),
-    };
+            .enumerate()
+            .filter(|(_, c)| c.id == tool_call_id)
+            .map(|(index, _)| index)
+            .collect()
+    });
     let (Some(from), false) = (newest, calls.is_empty()) else {
         return Err(AppError::not_found("tool call"));
     };
@@ -3017,17 +3240,263 @@ fn open_call(entries: &Entries, tool_call_id: &str) -> AppResult<AiToolCall> {
         .iter()
         .filter(|id| *id == tool_call_id)
         .count();
-    let Some(call) = calls.len().checked_sub(open).and_then(|i| calls.get(i)) else {
+    let Some(&index) = calls.len().checked_sub(open).and_then(|i| calls.get(i)) else {
         return Err(AppError::invalid(
             "tool_call_id",
             "the tool call already has a result",
         ));
     };
-    Ok(AiToolCall {
-        id: call.id.clone(),
-        name: call.name.clone(),
-        arguments: call.arguments.clone(),
-    })
+    Ok((from, index))
+}
+
+/// The tool calls of an entry: an assistant entry's, none for any other.
+fn calls_of(entry: &AiEntry) -> &[ToolCall] {
+    match &entry.body {
+        EntryBody::Assistant(a) => &a.tool_calls,
+        _ => &[],
+    }
+}
+
+// ---- what the judge of Auto mode reads (AI-47) ----
+
+/// Most lines of the screen that a `send_input` call shows the judge (AI-47). The panel sends
+/// the screen's last lines (`SCREEN_TAIL_LINES` in `features/ai/terminalText.ts`); this only
+/// bounds what it sends, so a larger screen from the WebView never reaches the judge.
+const MAX_SCREEN_TAIL_LINES: usize = 10;
+/// Most characters of them.
+const MAX_SCREEN_TAIL_CHARS: usize = 2_000;
+
+/// AI-47: what the judge reads about the call `index` of the response `at` in `entries`, every
+/// entry of the conversation, as spec §13.5 lists it, never what the model wrote or a tool
+/// returned:
+///
+/// - `host`: the conversation's host, as the system prompt names it (§13.1): its display name,
+///   or its quick-connect target (HOST-12).
+/// - `user_messages`: every message the user sent, those before a compaction included, as
+///   [`typed_text`] gives it; messages left empty are left out. Summaries are the model's.
+/// - `user_rules`: the custom instructions (AI-36) and the host's AI notes (AI-37), each cut to
+///   its limit as the system prompt cuts it, under a line that says which they are.
+/// - `earlier_calls`: the calls before it, oldest first, those of its own response included, as
+///   [`shown_call`] gives them. A call the user rejected adds the reason they typed
+///   (`rejection`): the user's own words, which no user message carries.
+/// - `call`: the call itself. An MCP tool, called directly or through `call_mcp_tool` (AI-45),
+///   adds its server's name and the tool's description and annotations; `send_input` adds
+///   `screen_tail` ([`screen_tail`]).
+fn judge_state(
+    v: &Vault,
+    mcp: &McpManager,
+    conversation_id: &str,
+    conversation: &AiConversation,
+    entries: &[AiEntry],
+    (at, index): (usize, usize),
+    screen: Option<&str>,
+) -> JudgeState {
+    let host = conversation
+        .host_id
+        .as_deref()
+        .and_then(|id| host_name(v, id))
+        .or_else(|| conversation.quick_target.as_ref().map(target_name));
+    let user_messages = entries[..at]
+        .iter()
+        .filter_map(|e| match &e.body {
+            EntryBody::User { text, .. } => Some(typed_text(text)),
+            _ => None,
+        })
+        .filter(|text| !text.is_empty())
+        .collect();
+    let results = pair_results(entries);
+    let rejection = |response: usize, call: usize| match results
+        .get(&(response, call))
+        .map(|&result| &entries[result].body)
+    {
+        Some(EntryBody::Tool {
+            status: ToolStatus::Rejected,
+            content,
+            ..
+        }) => Some(content.clone()),
+        _ => None,
+    };
+    let calls = calls_of(&entries[at]);
+    let earlier_calls = (0..at)
+        .flat_map(|response| (0..calls_of(&entries[response]).len()).map(move |c| (response, c)))
+        .chain((0..index).map(|c| (at, c)))
+        .map(|(response, c)| {
+            let call = &calls_of(&entries[response])[c];
+            JudgeCall {
+                rejection: rejection(response, c),
+                ..shown_call(&call.name, &call.arguments)
+            }
+        })
+        .collect();
+    let call = &calls[index];
+    let mut judged = shown_call(&call.name, &call.arguments);
+    let offered = if call.name.starts_with(MCP_PREFIX) {
+        mcp.offered(conversation_id, &call.name)
+    } else if call.name == tools::CALL_MCP_TOOL {
+        proxy_call(v, mcp, conversation_id, &call.arguments)
+            .ok()
+            .map(|(tool, arguments)| {
+                judged = JudgeCall::new(tool.name.clone(), Value::Object(arguments));
+                tool
+            })
+    } else {
+        None
+    };
+    if let Some(tool) = offered {
+        judged.server = Some(tool.server_name);
+        judged.description = Some(tool.tool.description).filter(|d| !d.trim().is_empty());
+        judged.annotations = annotations_of(&tool.tool.annotations);
+    }
+    if call.name == tools::SEND_INPUT {
+        judged.screen_tail = screen.and_then(screen_tail);
+    }
+    JudgeState {
+        host,
+        user_rules: judge_rules(v, conversation),
+        user_messages,
+        earlier_calls,
+        call: judged,
+    }
+}
+
+/// AI-47: a user message as the judge reads it: the text the user typed, without the notes
+/// Hatoba adds (spec §13.3), and each attachment as a placeholder that names its kind and size,
+/// such as `[file app.log, 40 lines]`, on a line of its own before the text. Empty when the
+/// message has neither, as one of notes alone.
+fn typed_text(text: &str) -> String {
+    let (blocks, typed) = leading_blocks(text);
+    let placeholders: Vec<String> = blocks
+        .iter()
+        .filter(|b| !b.kind.note)
+        .map(|b| (b.kind.placeholder)(&b.attrs))
+        .collect();
+    let typed = typed.trim();
+    match (placeholders.is_empty(), typed.is_empty()) {
+        (true, _) => typed.to_owned(),
+        (false, true) => placeholders.join("\n"),
+        (false, false) => format!("{}\n\n{typed}", placeholders.join("\n")),
+    }
+}
+
+/// AI-47: a call as the judge reads it, its arguments parsed (or kept as text when they are not
+/// JSON). A `call_mcp_tool` call (AI-45) is the MCP tool it names with that tool's arguments, as
+/// the panel shows it; one that names no MCP tool is shown as it is.
+fn shown_call(name: &str, arguments: &str) -> JudgeCall {
+    if name == tools::CALL_MCP_TOOL
+        && let Ok(proxy) = deferred::parse_call(arguments)
+        && proxy.tool.starts_with(MCP_PREFIX)
+    {
+        return JudgeCall::new(proxy.tool, Value::Object(proxy.arguments));
+    }
+    JudgeCall::parse(name, arguments)
+}
+
+/// An MCP tool's annotations as its server named them (AI-30), for the judge; `None` without
+/// any.
+fn annotations_of(a: &hatoba_ai::mcp::ToolAnnotations) -> Option<Value> {
+    let mut hints = Map::new();
+    if let Some(title) = &a.title {
+        hints.insert("title".into(), Value::from(title.as_str()));
+    }
+    for (name, hint) in [
+        ("readOnlyHint", a.read_only_hint),
+        ("destructiveHint", a.destructive_hint),
+        ("idempotentHint", a.idempotent_hint),
+        ("openWorldHint", a.open_world_hint),
+    ] {
+        if let Some(hint) = hint {
+            hints.insert(name.into(), Value::Bool(hint));
+        }
+    }
+    (!hints.is_empty()).then_some(Value::Object(hints))
+}
+
+/// AI-47: the screen's last lines as a `send_input` call shows them to the judge: control
+/// characters removed, the blank lines at the end left out, then at most the last
+/// [`MAX_SCREEN_TAIL_LINES`] lines and [`MAX_SCREEN_TAIL_CHARS`] characters. `None` when nothing
+/// is left.
+fn screen_tail(screen: &str) -> Option<String> {
+    let cleaned: String = screen
+        .chars()
+        .filter(|c| *c == '\n' || !c.is_control())
+        .collect();
+    let lines: Vec<&str> = cleaned.lines().map(str::trim_end).collect();
+    let end = lines.iter().rposition(|l| !l.is_empty())? + 1;
+    let tail = lines[end.saturating_sub(MAX_SCREEN_TAIL_LINES)..end].join("\n");
+    let surplus = tail.chars().count().saturating_sub(MAX_SCREEN_TAIL_CHARS);
+    Some(tail.chars().skip(surplus).collect())
+}
+
+/// AI-47: the custom instructions (AI-36) and the AI notes of the conversation's host (AI-37) as
+/// the judge reads them, each cut to its limit as the system prompt cuts it and under a line that
+/// says which they are. Empty when both are.
+fn judge_rules(v: &Vault, conversation: &AiConversation) -> String {
+    let settings = v.settings();
+    let instructions = bytes_prefix(
+        &settings.ai.custom_instructions,
+        MAX_CUSTOM_INSTRUCTIONS_BYTES,
+    );
+    let host = conversation
+        .host_id
+        .as_deref()
+        .and_then(|id| v.get(id))
+        .and_then(Item::as_host);
+    let notes = host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES));
+    [
+        ("Custom instructions:", instructions),
+        ("Notes for this host:", notes),
+    ]
+    .into_iter()
+    .filter(|(_, text)| !text.trim().is_empty())
+    .map(|(label, text)| format!("{label}\n{}", text.trim()))
+    .collect::<Vec<_>>()
+    .join("\n\n")
+}
+
+/// AI-47: a stored verdict of the judge for the panel, its answers in the order the judge asks
+/// its questions ([`question_order`]), then any others by id.
+fn auto_view(verdict: &AutoVerdict) -> AiAutoVerdict {
+    let order = question_order();
+    let mut answers: Vec<(&String, &f64)> = verdict.answers.iter().collect();
+    // Stable, so answers to questions this version does not ask stay in id order.
+    answers.sort_by_key(|(id, _)| order.iter().position(|q| q == id).unwrap_or(order.len()));
+    AiAutoVerdict {
+        provider_id: verdict.provider_id.clone(),
+        model_id: verdict.model_id.clone(),
+        decision: decision_view(verdict.decision),
+        answers: answers
+            .into_iter()
+            .map(|(question, probability)| AiJudgeAnswer {
+                question: question.clone(),
+                probability: *probability,
+            })
+            .collect(),
+        concerns: verdict.concerns.clone(),
+        failure: verdict.failure.clone(),
+    }
+}
+
+/// A decision of the judge, for the panel (AI-47).
+fn decision_view(decision: AutoDecision) -> AiJudgeDecision {
+    match decision {
+        AutoDecision::Run => AiJudgeDecision::Run,
+        AutoDecision::Ask => AiJudgeDecision::Ask,
+    }
+}
+
+/// The ids of the judge's questions in the order of its table (spec §13.5). Every tool's questions
+/// ([`judge::question_ids`]) keep this order, so the answers of a stored verdict, which does not
+/// name its call's tool, show in the order they were asked.
+fn question_order() -> Vec<&'static str> {
+    let mut order: Vec<&'static str> = Vec::new();
+    for tool in [tools::RUN_COMMAND, tools::EDIT_FILE, tools::FETCH_URL] {
+        for id in judge::question_ids(tool) {
+            if !order.contains(&id) {
+                order.push(id);
+            }
+        }
+    }
+    order
 }
 
 /// AI-43: the entries a fork copies, by index, in order: every entry up to `at`, `at` included,
@@ -3235,6 +3704,7 @@ pub fn protocol(p: CoreProtocol) -> Protocol {
     match p {
         CoreProtocol::ChatCompletions => Protocol::ChatCompletions,
         CoreProtocol::Anthropic => Protocol::Anthropic,
+        CoreProtocol::SystemOne => Protocol::SystemOne,
     }
 }
 
@@ -3768,7 +4238,8 @@ const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
 /// The tag of the note Hatoba puts before a message sent in another permission mode than the
-/// model was last told of (AI-16), and before a summary of a conversation in bypass.
+/// model was last told of (AI-16), and before a summary of a conversation in bypass or Auto
+/// (AI-47).
 const PERMISSION_MODE: &str = "permission_mode";
 /// The tag of the note Hatoba puts before the first message after the user reverted a change of
 /// a file tool call (AI-41), one for each call.
@@ -3787,6 +4258,9 @@ struct AttachmentKind {
     note: bool,
     /// The title of a conversation whose first message has only this block, from its attributes.
     title: fn(&[(&str, &str)]) -> String,
+    /// What the judge of Auto mode reads in place of the block (AI-47), from its attributes: its
+    /// kind and size. Empty for a note, which the judge does not read.
+    placeholder: fn(&[(&str, &str)]) -> String,
     /// Whether the opening tag's attributes, in order, are the ones this kind writes.
     attributes: fn(&[(&str, &str)]) -> bool,
 }
@@ -3794,6 +4268,15 @@ struct AttachmentKind {
 /// A `lines` attribute: a decimal count.
 fn is_count(value: &str) -> bool {
     !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The size an attachment's `lines` attribute gives, such as `40 lines`, for a placeholder.
+fn lines_of(attrs: &[(&str, &str)]) -> String {
+    match attrs.iter().find(|(name, _)| *name == "lines") {
+        Some((_, "1")) => "1 line".to_owned(),
+        Some((_, count)) => format!("{count} lines"),
+        None => "no lines".to_owned(),
+    }
 }
 
 /// An attribute value as written, with `&amp;`, `&quot;`, `&lt;` and `&gt;` read back.
@@ -3812,42 +4295,49 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         tag: INTERRUPTED,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| attrs.is_empty(),
     },
     AttachmentKind {
         tag: HOST_CHANGE,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
     },
     AttachmentKind {
         tag: TERMINAL_CHANGE,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("to", "attached" | "detached")]),
     },
     AttachmentKind {
         tag: MODEL_CHANGE,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
     },
     AttachmentKind {
         tag: PERMISSION_MODE,
         note: true,
         title: |_| String::new(),
-        attributes: |attrs| matches!(attrs, [("mode", "manual" | "bypass")]),
+        placeholder: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("mode", "manual" | "auto" | "bypass")]),
     },
     AttachmentKind {
         tag: FILE_REVERT,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("path", _), ("tool_call_id", _)]),
     },
     AttachmentKind {
         tag: TERMINAL_STATE,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| {
             matches!(attrs, [("host", _), ("alternate_screen", "true" | "false"), ("lines", lines)]
                 if is_count(lines))
@@ -3857,6 +4347,7 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         tag: MCP_TOOLS,
         note: true,
         title: |_| String::new(),
+        placeholder: |_| String::new(),
         attributes: |attrs| {
             matches!(attrs, [("servers", servers), ("tools", tools)]
                 if is_count(servers) && is_count(tools))
@@ -3866,6 +4357,7 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         tag: "terminal_selection",
         note: false,
         title: |_| "Terminal selection".to_owned(),
+        placeholder: |attrs| format!("[terminal selection, {}]", lines_of(attrs)),
         attributes: |attrs| match attrs {
             [("host", _), ("lines", lines)]
             | [("host", _), ("lines", lines), ("truncated", "true")] => is_count(lines),
@@ -3876,12 +4368,14 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         tag: "connection_diagnostics",
         note: false,
         title: |_| "Connection diagnostics".to_owned(),
+        placeholder: |_| "[connection diagnostics]".to_owned(),
         attributes: |attrs| matches!(attrs, [("host", _)]),
     },
     AttachmentKind {
         tag: "pasted_text",
         note: false,
         title: |_| "Pasted text".to_owned(),
+        placeholder: |attrs| format!("[pasted text, {}]", lines_of(attrs)),
         attributes: |attrs| matches!(attrs, [("lines", lines)] if is_count(lines)),
     },
     AttachmentKind {
@@ -3892,6 +4386,10 @@ const ATTACHMENTS: &[AttachmentKind] = &[
                 .first()
                 .map(|(_, name)| attribute_text(name))
                 .unwrap_or_default()
+        },
+        placeholder: |attrs| {
+            let name = attrs.first().map(|(_, name)| attribute_text(name));
+            format!("[file {}, {}]", name.unwrap_or_default(), lines_of(attrs))
         },
         attributes: |attrs| matches!(attrs, [("name", _), ("lines", lines)] if is_count(lines)),
     },
@@ -4422,9 +4920,12 @@ fn notes_before(
 }
 
 /// A conversation's permission mode on this device (AI-16) as a `permission_mode` note names it.
+/// A message in any mode but manual approval, Auto (AI-47) as much as bypass, needs a note from
+/// the conversation's first message on, since the system prompt starts in manual approval.
 fn permission_mode(mode: AiPermissionMode) -> PermissionMode {
     match mode {
         AiPermissionMode::Manual => PermissionMode::Manual,
+        AiPermissionMode::Auto => PermissionMode::Auto,
         AiPermissionMode::Bypass => PermissionMode::Bypass,
     }
 }
@@ -4439,6 +4940,7 @@ fn noted_permission(entries: &[AiEntry]) -> PermissionMode {
             EntryBody::User { text, .. } => {
                 match note_attr(text, PERMISSION_MODE, "mode").as_deref() {
                     Some("bypass") => return PermissionMode::Bypass,
+                    Some("auto") => return PermissionMode::Auto,
                     Some(_) => return PermissionMode::Manual,
                     None => {}
                 }
@@ -4881,12 +5383,14 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
             tool_call_id,
             status,
             content,
+            auto,
         } => AiEntryView::Tool {
             entry_id,
             created_at,
             tool_call_id: tool_call_id.clone(),
             status: status_view(*status),
             content: content.clone(),
+            auto: auto.as_ref().map(auto_view),
         },
         EntryBody::Summary { text } => AiEntryView::Summary {
             entry_id,

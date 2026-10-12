@@ -528,6 +528,11 @@ pub struct Snippet {
 pub enum AiProtocol {
     /// Anthropic Messages (`/v1/messages`).
     Anthropic,
+    /// TypeSafe's System One decision format, which the judge of Auto mode can use (AI-47). Such
+    /// a provider answers decision questions and cannot chat: `base_url` is the endpoint's base,
+    /// such as `https://api.typesafe.ai/v1`, and `models` are its model ids, such as `jev-latest`
+    /// or `@cf/cloudflare/clef-flash`.
+    SystemOne,
     /// OpenAI-style Chat Completions. Also what a missing or unknown future value decodes to
     /// (`serde(other)` must be last).
     #[default]
@@ -541,6 +546,7 @@ impl AiProtocol {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Anthropic => "anthropic",
+            Self::SystemOne => "system_one",
             Self::ChatCompletions => "chat_completions",
         }
     }
@@ -1184,6 +1190,10 @@ pub struct AiSettings {
     /// Messages go with the attached terminal's screen unless the panel's + menu turns it off for
     /// the conversation (AI-46). On by default, also for settings written before it existed.
     pub send_terminal_screen: bool,
+    /// The judge of Auto mode (AI-47): a model of a System One provider, or of a provider that
+    /// chats. `None` (absent) until the user chooses one, and Auto is unavailable until then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_model: Option<AiModelRef>,
 }
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
@@ -1200,6 +1210,7 @@ impl Default for AiSettings {
             builtin_skill_enabled: true,
             custom_instructions: String::new(),
             send_terminal_screen: true,
+            judge_model: None,
         }
     }
 }
@@ -2097,6 +2108,10 @@ mod tests {
         settings.ai.search_provider_id = Some("sp1".into());
         settings.ai.default_effort = Some(AiEffort::Medium);
         settings.ai.custom_instructions = "Answer in English.".into();
+        settings.ai.judge_model = Some(AiModelRef {
+            provider_id: "p2".into(),
+            model_id: "jev-latest".into(),
+        });
         let value = serde_json::to_value(Item::Settings(settings)).unwrap();
         assert_eq!(
             value["ai"],
@@ -2106,7 +2121,8 @@ mod tests {
                 "search_provider_id": "sp1",
                 "builtin_skill_enabled": true,
                 "custom_instructions": "Answer in English.",
-                "send_terminal_screen": true
+                "send_terminal_screen": true,
+                "judge_model": {"provider_id": "p2", "model_id": "jev-latest"}
             })
         );
         assert_eq!(
@@ -2196,6 +2212,26 @@ mod tests {
             (models[2].efforts.clone(), models[2].adaptive_thinking),
             (None, None)
         );
+
+        // AI-47: settings from before Auto mode have no judge.
+        assert_eq!(ai.judge_model, None);
+        let judged = read(json!({
+            "type": "settings",
+            "ai": {"judge_model": {"provider_id": "p", "model_id": "clef-flash"}}
+        }));
+        assert_eq!(
+            judged.as_settings().unwrap().ai.judge_model,
+            Some(AiModelRef {
+                provider_id: "p".into(),
+                model_id: "clef-flash".into(),
+            })
+        );
+        let system_one = read(json!({"type": "ai_provider", "protocol": "system_one"}));
+        assert_eq!(
+            system_one.as_ai_provider().unwrap().protocol,
+            AiProtocol::SystemOne
+        );
+        assert_eq!(AiProtocol::SystemOne.as_str(), "system_one");
 
         // A missing or unknown protocol / auth header reads as the default.
         let provider = read(json!({

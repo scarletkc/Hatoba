@@ -419,6 +419,35 @@
   background: color-mix(in srgb, var(--orange) 13%, transparent);
 }
 
+/* AI-47: Auto ran the call without asking; the tint of the Auto mode switch. */
+.chipAuto {
+  color: var(--accent);
+  background: var(--accenttint);
+}
+
+/* AI-47: what the judge decided, at the top of the block of a call Auto decided. */
+.autoVerdict {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* AI-47: why the approval card of a call in Auto mode asks. */
+.autoReason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--fg2);
+}
+
+.autoReason > i {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
 .toolBody {
   display: flex;
   flex-direction: column;

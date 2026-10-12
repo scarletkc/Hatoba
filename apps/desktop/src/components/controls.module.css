@@ -266,6 +266,10 @@
   box-shadow: var(--shadow-seg);
 }
 
+.segment:disabled {
+  color: var(--fg3);
+}
+
 /* Switch */
 .switch {
   position: relative;

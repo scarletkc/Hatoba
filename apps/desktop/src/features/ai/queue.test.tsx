@@ -365,7 +365,7 @@ describe("Ctrl+Enter during a turn (§13.1)", () => {
     sent[0].emit({ kind: "turn_ended", reason: "stopped" });
     await flush();
     expect(getSlot(HOME_SLOT).turn).not.toBeNull();
-    const cancelled: AiEntryView = { role: "tool", entry_id: "c9", created_at: 0, tool_call_id: "call_1", status: "cancelled", content: "cancelled" };
+    const cancelled: AiEntryView = { role: "tool", entry_id: "c9", created_at: 0, tool_call_id: "call_1", status: "cancelled", content: "cancelled", auto: null };
     sent[1].emit({ kind: "entry", entry: cancelled });
     const ids = getSlot(HOME_SLOT).entries.map((e) => e.entry_id);
     expect(ids.indexOf("c9")).toBeLessThan(ids.indexOf("u2"));

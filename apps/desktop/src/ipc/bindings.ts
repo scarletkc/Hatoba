@@ -268,9 +268,27 @@ export const commands = {
 	/**
 	 *  Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
 	 *  `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
-	 *  keeping the snapshot of a file change dropped older ones (AI-41).
+	 *  keeping the snapshot of a file change dropped older ones (AI-41). `judged`: Auto decided the
+	 *  call (it runs on the judge's verdict, or its approval card showed one), so the result keeps the
+	 *  verdict (AI-47).
 	 */
-	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null) => __TAURI_INVOKE<AiToolRun>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments }),
+	aiToolRun: (conversationId: string, toolCallId: string, sessionId: string | null, editedArguments: string | null, judged: boolean) => __TAURI_INVOKE<AiToolRun>("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments, judged }),
+	/**
+	 *  AI-47: asks the judge of Auto mode about an open call that manual approval would ask about,
+	 *  and returns its verdict: run the call without the approval card, or ask. `screen_tail` is the
+	 *  screen's last lines, which a `send_input` call shows the judge. Never fails because the judge
+	 *  does: without a judge, or when it fails, the verdict asks and says why.
+	 */
+	aiJudge: (conversationId: string, toolCallId: string, screenTail: string | null) => __TAURI_INVOKE<AiAutoVerdict>("ai_judge", { conversationId, toolCallId, screenTail }),
+	/**
+	 *  AI-47: **Test** beside the judge in Settings → AI. Judges sample calls with `judge`, which
+	 *  need not be saved yet, or with the saved judge when it is `None`, and returns each verdict
+	 *  with the decision expected. Fails only when the judge does not name a listed model.
+	 */
+	aiJudgeTest: (judge: {
+	provider_id: string,
+	model_id: string,
+} | null) => __TAURI_INVOKE<AiJudgeSampleOutcome[]>("ai_judge_test", { judge }),
 	/**
 	 *  The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
 	 *  host, for its approval card (AI-39, AI-40), with the arguments as the user edited them on the
@@ -439,6 +457,32 @@ export type AiAllowanceKind =
 
 export type AiAuthHeader = "x-api-key" | "authorization";
 
+/**
+ *  The verdict of the judge of Auto mode on a call (AI-47): from `ai_judge`, and stored with the
+ *  result of a call Auto decided, so history shows why it ran without the card or what concerned
+ *  the judge. It never reaches the model.
+ */
+export type AiAutoVerdict = {
+	/**  The provider item id of the judge; empty when no judge was chosen. */
+	provider_id: string,
+	/**  The judge's model id; empty when no judge was chosen. */
+	model_id: string,
+	decision: AiJudgeDecision,
+	/**
+	 *  The answers in the order the judge asks its questions, then any others by id; empty when
+	 *  the judge failed.
+	 */
+	answers: AiJudgeAnswer[],
+	/**  The ids of the questions whose answers kept the call from running, in the same order. */
+	concerns: string[],
+	/**
+	 *  Why the judge gave no usable answer: `unavailable` (no judge, or its provider or model is
+	 *  gone), `too_long`, `timeout`, `unreachable`, `refused`, `malformed` or `cancelled`, or a
+	 *  kind a newer version added. Then the decision is to ask.
+	 */
+	failure: string | null,
+};
+
 export type AiConversationDetail = {
 	conversation: AiConversationView,
 	entries: AiEntryView[],
@@ -481,7 +525,9 @@ export type AiConversationView = {
 export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
 /**  A stored conversation entry (§13.7), without the provider's raw message. */
-export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string } | { role: "summary"; entry_id: string; created_at: number; text: string };
+export type AiEntryView = { role: "user"; entry_id: string; created_at: number; text: string } | { role: "assistant"; entry_id: string; created_at: number; provider_id: string; model_id: string; text: string; reasoning: string | null; tool_calls: AiToolCall[]; finish: AiFinish; usage: AiUsage | null } | { role: "tool"; entry_id: string; created_at: number; tool_call_id: string; status: AiToolStatus; content: string; 
+/**  What the judge of Auto mode decided about the call (AI-47), when Auto decided it. */
+auto: AiAutoVerdict | null } | { role: "summary"; entry_id: string; created_at: number; text: string };
 
 /**
  *  A change an `edit_file` or `write_file` call made, kept on this device so the user can revert
@@ -566,6 +612,37 @@ later: boolean } | { status: "failed"; reason: AiRevertFailure; detail: string |
 
 export type AiFinish = "stop" | "tool_calls" | "length" | "refused";
 
+/**  The judge's answer to one of its questions about a call (AI-47). */
+export type AiJudgeAnswer = {
+	/**  The question's id, such as `requested` or `destroys_data`. */
+	question: string,
+	/**
+	 *  The probability of yes, from 0 to 1. Always finite, so never `null` in JSON, which the
+	 *  generated type of a float would allow.
+	 */
+	probability: number,
+};
+
+/**  What the judge of Auto mode decided about a call (AI-47). It never rejects a call. */
+export type AiJudgeDecision = 
+/**  The call runs without the approval card. */
+"run" | 
+/**  The approval card asks, as in manual approval. */
+"ask";
+
+/**
+ *  The judge's verdict on one sample call of **Test** beside the judge in Settings → AI
+ *  (`ai_judge_test`, AI-47).
+ */
+export type AiJudgeSampleOutcome = {
+	/**  The sample's stable name, such as `restart_requested`; a newer version may add others. */
+	name: string,
+	/**  The decision a good judge gives the sample. */
+	expected: AiJudgeDecision,
+	/**  What the judge decided, with its answers in the order it asks its questions. */
+	verdict: AiAutoVerdict,
+};
+
 /**  A model of a provider (AI-03). Token limits are `None` when unknown. */
 export type AiModel = {
 	id: string,
@@ -586,9 +663,19 @@ export type AiModelRef = {
 	model_id: string,
 };
 
-export type AiPermissionMode = "manual" | "bypass";
+/**  A conversation's permission mode on this device (AI-16, spec §13.5), the strictest first. */
+export type AiPermissionMode = "manual" | 
+/**
+ *  AI-47: a call that manual approval would ask about goes to the judge first
+ *  (`ai_judge`), which runs it without the approval card or lets the card ask.
+ */
+"auto" | "bypass";
 
-export type AiProtocol = "chat_completions" | "anthropic";
+/**
+ *  A provider's protocol (spec §13.2). A `system_one` provider answers decision questions for
+ *  the judge of Auto mode (AI-47) and cannot chat.
+ */
+export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
 
 export type AiProviderInput = {
 	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */
@@ -676,8 +763,8 @@ export type AiSendStarted = {
 
 /**
  *  What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
- *  its stored value. `null` clears the default model and search provider, and sets the default
- *  thinking level to Default.
+ *  its stored value. `null` clears the default model, the search provider and the judge, and sets
+ *  the default thinking level to Default.
  */
 export type AiSettingsPatch = {
 	default_model?: AiModelRef | null,
@@ -686,6 +773,7 @@ export type AiSettingsPatch = {
 	builtin_skill_enabled?: boolean | null,
 	custom_instructions?: string | null,
 	send_terminal_screen?: boolean | null,
+	judge_model?: AiModelRef | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -703,6 +791,11 @@ export type AiSettingsView = {
 	 *  the conversation (AI-46).
 	 */
 	send_terminal_screen: boolean,
+	/**
+	 *  The judge of Auto mode (AI-47): a model of a System One provider or of a provider that
+	 *  chats. Auto is unavailable until one is chosen.
+	 */
+	judge_model: AiModelRef | null,
 };
 
 /**  The answer to a side question (AI-42), which nothing stores. */
@@ -759,6 +852,11 @@ export type AiToolResultInput = {
 	content: string,
 	/**  AI-17 Edit: the arguments the user changed the call to, so the result tells the model. */
 	edited_arguments: string | null,
+	/**
+	 *  AI-47: Auto decided the call (it ran on the judge's verdict, or its approval card showed
+	 *  one), so the result keeps the verdict.
+	 */
+	judged?: boolean,
 };
 
 /**  What `ai_tool_run` stored: the call's result entry. */

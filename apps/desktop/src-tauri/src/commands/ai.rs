@@ -25,12 +25,12 @@ use crate::ai::{
     core_effort, effort_view, find_conversation, listed_effort, protocol, search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiConversationDetail, AiConversationView, AiEntryView, AiFileChange,
-    AiFilePreview, AiFileRevert, AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView,
-    AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer,
-    AiSideEvent, AiSideQuestionInput, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun,
-    AiTurnContext, AiTurnEvent, Clearable, DroppedFile, SearchKind, SearchProviderInput,
-    SearchProviderView,
+    AiAuthHeader, AiAutoVerdict, AiConversationDetail, AiConversationView, AiEntryView,
+    AiFileChange, AiFilePreview, AiFileRevert, AiJudgeSampleOutcome, AiModel, AiModelRef,
+    AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted,
+    AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiTestFailure,
+    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile,
+    SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -66,6 +66,7 @@ fn core_protocol(p: AiProtocol) -> CoreProtocol {
     match p {
         AiProtocol::ChatCompletions => CoreProtocol::ChatCompletions,
         AiProtocol::Anthropic => CoreProtocol::Anthropic,
+        AiProtocol::SystemOne => CoreProtocol::SystemOne,
     }
 }
 
@@ -91,6 +92,7 @@ pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
         protocol: match p.protocol {
             CoreProtocol::ChatCompletions => AiProtocol::ChatCompletions,
             CoreProtocol::Anthropic => AiProtocol::Anthropic,
+            CoreProtocol::SystemOne => AiProtocol::SystemOne,
         },
         base_url: p.base_url.clone(),
         has_api_key: !p.api_key.is_empty(),
@@ -131,17 +133,22 @@ pub(crate) fn search_provider_view(id: &str, p: &SearchProvider) -> SearchProvid
     }
 }
 
+fn model_ref_view(m: &CoreRef) -> AiModelRef {
+    AiModelRef {
+        provider_id: m.provider_id.clone(),
+        model_id: m.model_id.clone(),
+    }
+}
+
 fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
     AiSettingsView {
-        default_model: s.default_model.as_ref().map(|m| AiModelRef {
-            provider_id: m.provider_id.clone(),
-            model_id: m.model_id.clone(),
-        }),
+        default_model: s.default_model.as_ref().map(model_ref_view),
         default_effort: s.default_effort.map(effort_view),
         search_provider_id: s.search_provider_id.clone(),
         builtin_skill_enabled: s.builtin_skill_enabled,
         custom_instructions: s.custom_instructions.clone(),
         send_terminal_screen: s.send_terminal_screen,
+        judge_model: s.judge_model.as_ref().map(model_ref_view),
     }
 }
 
@@ -296,18 +303,20 @@ pub(crate) fn provider_config_for(v: &Vault, input: &AiProviderInput) -> AppResu
     })
 }
 
-/// Deletes a provider and the default model that pointed at it.
+/// Deletes a provider, and the default model and the judge of Auto mode (AI-47) that pointed at
+/// it.
 pub(crate) fn delete_provider(v: &mut Vault, id: &str) -> AppResult<()> {
     find_provider(v, id)?;
     v.delete(id)?;
     let mut settings = v.settings();
-    if settings
-        .ai
-        .default_model
-        .as_ref()
-        .is_some_and(|m| m.provider_id == id)
-    {
-        settings.ai.default_model = None;
+    let mut changed = false;
+    for chosen in [&mut settings.ai.default_model, &mut settings.ai.judge_model] {
+        if chosen.as_ref().is_some_and(|m| m.provider_id == id) {
+            *chosen = None;
+            changed = true;
+        }
+    }
+    if changed {
         v.put(Some(SETTINGS_ID), Item::Settings(settings))?;
     }
     Ok(())
@@ -550,39 +559,65 @@ pub async fn search_provider_test(
 
 // ───────────────────────── synced settings ─────────────────────────
 
+/// The model reference the settings field `field` holds after `patch`, from `current`: one the
+/// user changed must name an existing provider that lists the model, and with `chats` a provider
+/// that chats, not a System One one (AI-47); an unchanged one is kept as it is, even when it
+/// dangles.
+fn patched_model(
+    v: &Vault,
+    field: &str,
+    current: Option<&CoreRef>,
+    patch: &Clearable<AiModelRef>,
+    chats: bool,
+) -> AppResult<Option<CoreRef>> {
+    let m = match patch {
+        Clearable::Keep => return Ok(current.cloned()),
+        Clearable::Clear => return Ok(None),
+        Clearable::Set(m) => m,
+    };
+    let unchanged =
+        current.is_some_and(|c| c.provider_id == m.provider_id && c.model_id == m.model_id);
+    if !unchanged {
+        let provider = v
+            .get(&m.provider_id)
+            .and_then(Item::as_ai_provider)
+            .ok_or_else(|| AppError::invalid(field, "provider not found"))?;
+        if !provider.models.iter().any(|x| x.id == m.model_id) {
+            return Err(AppError::invalid(field, "the provider has no such model"));
+        }
+        if chats && provider.protocol == CoreProtocol::SystemOne {
+            return Err(AppError::invalid(field, "a System One model cannot chat"));
+        }
+    }
+    Ok(Some(CoreRef {
+        provider_id: m.provider_id.clone(),
+        model_id: m.model_id.clone(),
+    }))
+}
+
 /// Writes the fields `patch` sets over the stored `Settings.ai`, as `settings_save` does for the
 /// terminal, and returns whether that changed them. A reference the user changed must point at an
 /// existing provider and model or search provider; an unchanged one is kept as it is, even when it
-/// dangles (e.g. the item it names has not synced to this device yet).
+/// dangles (e.g. the item it names has not synced to this device yet). The default model must be
+/// one that chats; the judge of Auto mode (AI-47) may be a model of any provider, a System One one
+/// included.
 pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppResult<bool> {
     let mut settings = v.settings();
     let current = &settings.ai;
-    let default_model = match &patch.default_model {
-        Clearable::Keep => current.default_model.clone(),
-        Clearable::Clear => None,
-        Clearable::Set(m) => {
-            let unchanged = current
-                .default_model
-                .as_ref()
-                .is_some_and(|c| c.provider_id == m.provider_id && c.model_id == m.model_id);
-            if !unchanged {
-                let provider = v
-                    .get(&m.provider_id)
-                    .and_then(Item::as_ai_provider)
-                    .ok_or_else(|| AppError::invalid("default_model", "provider not found"))?;
-                if !provider.models.iter().any(|x| x.id == m.model_id) {
-                    return Err(AppError::invalid(
-                        "default_model",
-                        "the provider has no such model",
-                    ));
-                }
-            }
-            Some(CoreRef {
-                provider_id: m.provider_id.clone(),
-                model_id: m.model_id.clone(),
-            })
-        }
-    };
+    let default_model = patched_model(
+        v,
+        "default_model",
+        current.default_model.as_ref(),
+        &patch.default_model,
+        true,
+    )?;
+    let judge_model = patched_model(
+        v,
+        "judge_model",
+        current.judge_model.as_ref(),
+        &patch.judge_model,
+        false,
+    )?;
     let search_provider_id = match &patch.search_provider_id {
         Clearable::Keep => current.search_provider_id.clone(),
         Clearable::Clear => None,
@@ -623,6 +658,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
         send_terminal_screen: patch
             .send_terminal_screen
             .unwrap_or(current.send_terminal_screen),
+        judge_model,
     };
     if ai == settings.ai {
         return Ok(false);
@@ -929,7 +965,9 @@ pub async fn ai_file_revert(
 
 /// Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`,
 /// `web_search`, `fetch_url`, `read_skill`, MCP tools) and stores its result. It also says whether
-/// keeping the snapshot of a file change dropped older ones (AI-41).
+/// keeping the snapshot of a file change dropped older ones (AI-41). `judged`: Auto decided the
+/// call (it runs on the judge's verdict, or its approval card showed one), so the result keeps the
+/// verdict (AI-47).
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_tool_run(
@@ -939,6 +977,7 @@ pub async fn ai_tool_run(
     tool_call_id: String,
     session_id: Option<String>,
     edited_arguments: Option<String>,
+    judged: bool,
 ) -> AppResult<AiToolRun> {
     state
         .ai
@@ -949,8 +988,44 @@ pub async fn ai_tool_run(
             &tool_call_id,
             session_id.as_deref(),
             edited_arguments.as_deref(),
+            judged,
         )
         .await
+}
+
+/// AI-47: asks the judge of Auto mode about an open call that manual approval would ask about,
+/// and returns its verdict: run the call without the approval card, or ask. `screen_tail` is the
+/// screen's last lines, which a `send_input` call shows the judge. Never fails because the judge
+/// does: without a judge, or when it fails, the verdict asks and says why.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_judge(
+    state: State<'_, AppState>,
+    conversation_id: String,
+    tool_call_id: String,
+    screen_tail: Option<String>,
+) -> AppResult<AiAutoVerdict> {
+    state
+        .ai
+        .judge(
+            &state.vault,
+            &conversation_id,
+            &tool_call_id,
+            screen_tail.as_deref(),
+        )
+        .await
+}
+
+/// AI-47: **Test** beside the judge in Settings → AI. Judges sample calls with `judge`, which
+/// need not be saved yet, or with the saved judge when it is `None`, and returns each verdict
+/// with the decision expected. Fails only when the judge does not name a listed model.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_judge_test(
+    state: State<'_, AppState>,
+    judge: Option<AiModelRef>,
+) -> AppResult<Vec<AiJudgeSampleOutcome>> {
+    state.ai.judge_test(&state.vault, judge).await
 }
 
 /// Stops the turn: aborts the request and running tools, cancels calls without a result.
@@ -1382,6 +1457,11 @@ mod tests {
         pulled.ai.custom_instructions = "Answer in Japanese.".into();
         pulled.ai.builtin_skill_enabled = false;
         pulled.ai.send_terminal_screen = false;
+        // AI-47: a judge chosen on another device, which the pane's patch leaves out.
+        pulled.ai.judge_model = Some(CoreRef {
+            provider_id: "elsewhere".into(),
+            model_id: "jev-latest".into(),
+        });
         v.put(Some(SETTINGS_ID), Item::Settings(pulled)).unwrap();
 
         // The user picks a thinking level in that pane.
@@ -1394,6 +1474,10 @@ mod tests {
         assert_eq!(ai.custom_instructions, "Answer in Japanese.");
         assert!(!ai.builtin_skill_enabled && !ai.send_terminal_screen);
         assert_eq!(ai.default_model.map(|m| m.model_id), Some("m1".into()));
+        assert_eq!(
+            ai.judge_model.map(|m| m.model_id),
+            Some("jev-latest".into())
+        );
     }
 
     #[test]
@@ -1424,23 +1508,95 @@ mod tests {
         assert_eq!(empty.default_effort, Clearable::Keep);
         assert_eq!(empty.search_provider_id, Clearable::Keep);
         assert!(empty.builtin_skill_enabled.is_none() && empty.custom_instructions.is_none());
+        assert_eq!(empty.judge_model, Clearable::Keep);
         let cleared = read(serde_json::json!({
             "default_model": null,
             "default_effort": null,
             "search_provider_id": null,
+            "judge_model": null,
         }));
         assert_eq!(cleared.default_model, Clearable::Clear);
         assert_eq!(cleared.default_effort, Clearable::Clear);
         assert_eq!(cleared.search_provider_id, Clearable::Clear);
+        assert_eq!(cleared.judge_model, Clearable::Clear);
         let set = read(serde_json::json!({
             "default_model": {"provider_id": "p", "model_id": "m"},
             "default_effort": "high",
             "builtin_skill_enabled": false,
+            "judge_model": {"provider_id": "j", "model_id": "jev-latest"},
         }));
         assert_eq!(set.default_model, Clearable::Set(model("p", "m")));
         assert_eq!(set.default_effort, Clearable::Set(AiEffort::High));
         assert_eq!(set.builtin_skill_enabled, Some(false));
         assert_eq!(set.search_provider_id, Clearable::Keep);
+        assert_eq!(set.judge_model, Clearable::Set(model("j", "jev-latest")));
+    }
+
+    #[test]
+    fn the_judge_must_name_a_listed_model_and_goes_with_its_provider() {
+        let mut v = vault();
+        let input = provider_input(None, Some(KEY));
+        let chat = save_provider(&mut v, &input, input.base_url.clone()).unwrap();
+        let mut jev = provider_input(None, Some(KEY));
+        jev.name = "Jev".into();
+        jev.protocol = AiProtocol::SystemOne;
+        jev.base_url = "https://api.typesafe.ai/v1".into();
+        jev.models = vec![AiModel {
+            id: "jev-latest".into(),
+            name: String::new(),
+            context_window: None,
+            max_output_tokens: None,
+            efforts: None,
+            adaptive_thinking: None,
+        }];
+        let jev = save_provider(&mut v, &jev, jev.base_url.clone()).unwrap();
+
+        // AI-47: a judge the user picks must exist, and its provider must list it.
+        for (provider_id, model_id) in [("nope", "jev-latest"), (jev.id.as_str(), "jev-9")] {
+            let missing = patch(|p| p.judge_model = Clearable::Set(model(provider_id, model_id)));
+            let err = save_ai_settings(&mut v, &missing).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("judge_model"));
+        }
+        assert_eq!(v.settings().ai.judge_model, None);
+        // A System One model cannot chat, so it is no default model.
+        let default = patch(|p| p.default_model = Clearable::Set(model(&jev.id, "jev-latest")));
+        let err = save_ai_settings(&mut v, &default).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("default_model"));
+        assert_eq!(v.settings().ai.default_model, None);
+        // A System One model, or any provider's.
+        for (provider_id, model_id) in [(jev.id.as_str(), "jev-latest"), (chat.id.as_str(), "m1")] {
+            let chosen = patch(|p| p.judge_model = Clearable::Set(model(provider_id, model_id)));
+            assert!(save_ai_settings(&mut v, &chosen).unwrap());
+            assert_eq!(
+                ai_settings_view(&v.settings().ai).judge_model,
+                Some(model(provider_id, model_id))
+            );
+        }
+        // A patch without it keeps it; `null` clears it.
+        let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::Low));
+        assert!(save_ai_settings(&mut v, &level).unwrap());
+        assert!(v.settings().ai.judge_model.is_some());
+        assert!(save_ai_settings(&mut v, &patch(|p| p.judge_model = Clearable::Clear)).unwrap());
+        assert_eq!(v.settings().ai.judge_model, None);
+
+        // Deleting a provider clears the judge that named it, and only that.
+        let both = patch(|p| {
+            p.default_model = Clearable::Set(model(&chat.id, "m1"));
+            p.judge_model = Clearable::Set(model(&jev.id, "jev-latest"));
+        });
+        assert!(save_ai_settings(&mut v, &both).unwrap());
+        delete_provider(&mut v, &jev.id).unwrap();
+        let ai = v.settings().ai;
+        assert_eq!(ai.judge_model, None);
+        assert_eq!(
+            ai.default_model.map(|m| m.provider_id),
+            Some(chat.id.clone())
+        );
+        let same = patch(|p| p.judge_model = Clearable::Set(model(&chat.id, "m1")));
+        assert!(save_ai_settings(&mut v, &same).unwrap());
+        delete_provider(&mut v, &chat.id).unwrap();
+        let ai = v.settings().ai;
+        assert_eq!((ai.default_model, ai.judge_model), (None, None));
     }
 
     #[test]

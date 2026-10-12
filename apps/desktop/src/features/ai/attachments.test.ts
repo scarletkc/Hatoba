@@ -408,12 +408,14 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
 describe("the permission mode notes (AI-16)", () => {
   const bypass = `<permission_mode mode="bypass">\nFrom this message on, the permission mode is bypass.\n</permission_mode>`;
   const manual = `<permission_mode mode="manual">\nFrom this message on, the permission mode is manual approval.\n</permission_mode>`;
+  const auto = `<permission_mode mode="auto">\nFrom this message on, the permission mode is auto.\n</permission_mode>`;
   const user = (text: string) => ({ role: "user" as const, entry_id: "u", created_at: 0, text });
   const summary = (text: string) => ({ role: "summary" as const, entry_id: "s", created_at: 0, text });
 
   it("writes and reads them as Rust does, after a model switch and before a revert", () => {
     expect(noteBlock({ kind: "permission_mode", mode: "bypass" })).toBe(bypass);
     expect(noteBlock({ kind: "permission_mode", mode: "manual" })).toBe(manual);
+    expect(noteBlock({ kind: "permission_mode", mode: "auto" })).toBe(auto);
     const text = composeMessage("go on", [], [
       fileRevertNote("/etc/a.conf", "call_1", "edit_file", false),
       { kind: "permission_mode", mode: "bypass" },
@@ -421,7 +423,16 @@ describe("the permission mode notes (AI-16)", () => {
     ]);
     const notes = parseMessage(text).notes.map((n) => n.kind);
     expect(notes).toEqual(["model_change", "permission_mode", "file_revert"]);
-    expect(parseMessage(`<permission_mode mode="auto">\nx\n</permission_mode>\n\nhi`).notes).toEqual([]);
+    expect(parseMessage(`<permission_mode mode="strict">\nx\n</permission_mode>\n\nhi`).notes).toEqual([]);
+  });
+
+  it("round-trips the Auto note (AI-47), also before a summary", () => {
+    const text = composeMessage("restart nginx", [], [{ kind: "permission_mode", mode: "auto" }]);
+    expect(text).toBe(`${auto}\n\nrestart nginx`);
+    expect(parseMessage(text)).toMatchObject({ notes: [{ kind: "permission_mode", mode: "auto" }], typed: "restart nginx" });
+    expect(notedPermission([user(text), user("second")])).toBe("auto");
+    expect(splitPermissionNote(`${auto}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    expect(notedPermission([user(`${bypass}\n\nfirst`), summary(`${auto}\n\nWe restarted nginx.`)])).toBe("auto");
   });
 
   it("tells the mode the model was last told of, which a summary carries and manual approval is before any", () => {

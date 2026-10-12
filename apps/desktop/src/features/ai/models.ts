@@ -4,6 +4,11 @@ export function sameModel(a: AiModelRef | null | undefined, b: AiModelRef | null
   return !!a && !!b && a.provider_id === b.provider_id && a.model_id === b.model_id;
 }
 
+/** Whether a provider's models can hold a conversation: a System One provider only answers the judge's questions (AI-47). */
+export function chats(provider: AiProviderView): boolean {
+  return provider.protocol !== "system_one";
+}
+
 export function findModel(providers: AiProviderView[], ref: AiModelRef | null | undefined): { provider: AiProviderView; model: AiModel } | null {
   if (!ref) return null;
   const provider = providers.find((p) => p.id === ref.provider_id);
@@ -11,9 +16,17 @@ export function findModel(providers: AiProviderView[], ref: AiModelRef | null | 
   return provider && model ? { provider, model } : null;
 }
 
-/** Some provider has at least one model, so the panel can send. */
+/**
+ * AI-47: whether Auto mode can be chosen: Settings → AI names a judge, and its provider and model still exist
+ * (Rust answers every call of a judge that is gone with `unavailable`, so the card always asks).
+ */
+export function judgeChosen(providers: AiProviderView[], settings: AiSettingsView | null): boolean {
+  return !!findModel(providers, settings?.judge_model);
+}
+
+/** Some provider that chats has at least one model, so the panel can send. */
 export function hasModels(providers: AiProviderView[]): boolean {
-  return providers.some((p) => p.models.length > 0);
+  return providers.some((p) => chats(p) && p.models.length > 0);
 }
 
 /** The model of the newest assistant entry. */
@@ -27,8 +40,8 @@ export function lastModel(entries: AiEntryView[]): AiModelRef | null {
 
 /**
  * AI-05: the model for the next request. A conversation keeps the model it used last; a new one uses
- * the default from Settings → AI. A model that no longer exists falls back to the default, and
- * without a usable default to the first model of the first provider that has one.
+ * the default from Settings → AI. A model that no longer exists, or whose provider cannot chat (AI-47), falls back to
+ * the default, and without a usable default to the first model of the first provider that chats and has one.
  */
 export function conversationModel(
   entries: AiEntryView[],
@@ -37,9 +50,10 @@ export function conversationModel(
   chosen: AiModelRef | null = null,
 ): AiModelRef | null {
   for (const ref of [chosen, lastModel(entries), settings?.default_model ?? null]) {
-    if (findModel(providers, ref)) return ref;
+    const found = findModel(providers, ref);
+    if (found && chats(found.provider)) return ref;
   }
-  const first = providers.find((p) => p.models.length > 0);
+  const first = providers.find((p) => chats(p) && p.models.length > 0);
   return first ? { provider_id: first.id, model_id: first.models[0].id } : null;
 }
 

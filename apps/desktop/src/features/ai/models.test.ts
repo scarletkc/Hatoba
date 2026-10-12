@@ -28,7 +28,7 @@ const reply = (provider_id: string, model_id: string): AiEntryView => ({
 
 describe("conversationModel (AI-05)", () => {
   const providers = [provider("a", []), provider("b", ["b1", "b2"]), provider("c", ["c1"])];
-  const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true };
+  const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: null };
 
   it("uses the default model for a new conversation", () => {
     expect(conversationModel([], providers, settings)).toEqual({ provider_id: "c", model_id: "c1" });
@@ -48,6 +48,16 @@ describe("conversationModel (AI-05)", () => {
   it("knows whether any model exists", () => {
     expect(hasModels(providers)).toBe(true);
     expect(hasModels([provider("a", [])])).toBe(false);
+  });
+
+  it("never picks a model of a System One provider, which cannot chat (AI-47)", () => {
+    const jev: AiProviderView = { ...provider("j", ["jev-latest"]), protocol: "system_one" };
+    const onJev = { provider_id: "j", model_id: "jev-latest" };
+    const all = [jev, ...providers];
+    // The user's pick, the model a conversation used last, and the default all fall through.
+    expect(conversationModel([reply("j", "jev-latest")], all, { ...settings, default_model: onJev }, onJev)).toEqual({ provider_id: "b", model_id: "b1" });
+    expect(conversationModel([], [jev], null)).toBeNull();
+    expect(hasModels([jev])).toBe(false);
   });
 });
 

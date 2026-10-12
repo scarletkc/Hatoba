@@ -86,7 +86,7 @@ describe("tool kinds", () => {
     expect(isFileTool("run_command")).toBe(false);
   });
 
-  it("runs the search tools in Rust on the tab's session, without asking (AI-47, AI-48)", () => {
+  it("runs the search tools in Rust on the tab's session, without asking (AI-48, AI-49)", () => {
     for (const name of ["grep", "glob"]) {
       const kind = toolKind(name);
       expect(kind).toBe(name);
@@ -118,6 +118,14 @@ describe("permission modes (§13.5)", () => {
   it("runs everything in bypass mode", () => {
     for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "mcp"] as const) {
       expect(needsApproval(kind, "bypass")).toBe(false);
+    }
+  });
+
+  it("asks in Auto about what manual approval asks about, for its judge to decide (AI-47)", () => {
+    for (const kind of ["read_terminal", "run_command", "send_input", "read_file", "edit_file", "write_file", "grep", "glob", "web_search", "fetch_url", "read_skill", "search_tools", "mcp", "unknown"] as const) {
+      expect(needsApproval(kind, "auto")).toBe(needsApproval(kind, "manual"));
+      expect(mustAsk({ kind, mode: "auto", allowed: false })).toBe(mustAsk({ kind, mode: "manual", allowed: false }));
+      expect(mustAsk({ kind, mode: "auto", allowed: true })).toBe(false);
     }
   });
 });
@@ -195,11 +203,21 @@ describe("display helpers", () => {
 });
 
 describe("the mode a call runs in (§13.5)", () => {
-  it("keeps a turn that started in manual approval asking, and asks at once after a switch to it", () => {
-    expect(callMode("manual", "bypass")).toBe("manual");
-    expect(callMode("bypass", "manual")).toBe("manual");
-    expect(callMode("manual", "manual")).toBe("manual");
-    expect(callMode("bypass", "bypass")).toBe("bypass");
+  it("is the stricter of the mode the turn started in and the one chosen since (AI-47)", () => {
+    // [started, now, the call's mode]: a switch to a stricter mode applies to the turn's next call, and one to a
+    // less strict mode waits for the next message.
+    const table = [
+      ["manual", "manual", "manual"],
+      ["manual", "auto", "manual"],
+      ["manual", "bypass", "manual"],
+      ["auto", "manual", "manual"],
+      ["auto", "auto", "auto"],
+      ["auto", "bypass", "auto"],
+      ["bypass", "manual", "manual"],
+      ["bypass", "auto", "auto"],
+      ["bypass", "bypass", "bypass"],
+    ] as const;
+    for (const [started, now, mode] of table) expect(callMode(started, now), `${started} → ${now}`).toBe(mode);
   });
 });
 
@@ -228,9 +246,16 @@ describe("asking with MCP tools and Allow for this conversation (AI-19, AI-31)",
     expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: false, mcp: info(true, true) })).toBe(true);
   });
 
-  it("asks in both modes for an MCP call whose tool cannot be named", () => {
+  it("asks in every mode for an MCP call whose tool cannot be named", () => {
     expect(mustAsk({ kind: "mcp", mode: "manual", allowed: false, mcp: null })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "auto", allowed: false, mcp: null })).toBe(true);
     expect(mustAsk({ kind: "mcp", mode: "bypass", allowed: false, mcp: null })).toBe(true);
+  });
+
+  it("asks for MCP tools in Auto as in manual mode, for the judge or a hard rule to decide (AI-47)", () => {
+    expect(mustAsk({ kind: "mcp", mode: "auto", allowed: false, mcp: info(false, false) })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "auto", allowed: false, mcp: info(false, true) })).toBe(true);
+    expect(mustAsk({ kind: "mcp", mode: "auto", allowed: false, mcp: info(true, false) })).toBe(false);
   });
 
   it("remembers Allow for this conversation per MCP server and tool, not per called name", () => {

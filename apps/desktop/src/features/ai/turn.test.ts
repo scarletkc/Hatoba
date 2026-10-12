@@ -158,7 +158,7 @@ describe("edit and resend (AI-26)", () => {
   const entries: AiEntryView[] = [
     { role: "user", entry_id: "u1", created_at: 0, text: "first" },
     assistant,
-    { role: "tool", entry_id: "t1", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok" },
+    { role: "tool", entry_id: "t1", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok", auto: null },
     { role: "user", entry_id: "u2", created_at: 0, text: "second" },
   ];
 
@@ -180,7 +180,7 @@ describe("the file changes an edit deletes (AI-26, AI-41)", () => {
     entry_id: id,
     tool_calls: calls.map(([callId, name]) => ({ id: callId, name, arguments: "{}" })),
   });
-  const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: callId, status, content: "" });
+  const result = (id: string, callId: string, status: "ok" | "error" = "ok"): AiEntryView => ({ role: "tool", entry_id: id, created_at: 0, tool_call_id: callId, status, content: "", auto: null });
   const change = (responseId: string, callId: string, state: AiFileChange["state"] = "written"): AiFileChange => ({
     response_id: responseId,
     tool_call_id: callId,
@@ -250,7 +250,7 @@ describe("entries", () => {
   });
 
   it("lists the newest response's calls without a result, in order", () => {
-    const result: AiEntryView = { role: "tool", entry_id: "e3", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok" };
+    const result: AiEntryView = { role: "tool", entry_id: "e3", created_at: 0, tool_call_id: "c1", status: "ok", content: "ok", auto: null };
     expect(unansweredCalls([assistant]).map((c) => c.id)).toEqual(["c1", "c2"]);
     expect(unansweredCalls([assistant, result]).map((c) => c.id)).toEqual(["c2"]);
     expect(unansweredCalls([])).toEqual([]);
@@ -264,7 +264,7 @@ describe("entries", () => {
         { id: "dup", name: "read_skill", arguments: '{"name":"b"}' },
       ],
     };
-    const result = (n: number): AiEntryView => ({ role: "tool", entry_id: `e3${n}`, created_at: 0, tool_call_id: "dup", status: "ok", content: "ok" });
+    const result = (n: number): AiEntryView => ({ role: "tool", entry_id: `e3${n}`, created_at: 0, tool_call_id: "dup", status: "ok", content: "ok", auto: null });
     expect(unansweredCalls([shared]).map((c) => c.arguments)).toEqual(['{"name":"a"}', '{"name":"b"}']);
     expect(unansweredCalls([shared, result(1)]).map((c) => c.arguments)).toEqual(['{"name":"b"}']);
     expect(unansweredCalls([shared, result(1), result(2)])).toEqual([]);
@@ -285,8 +285,8 @@ describe("a message sent after an automatic compaction (AI-22)", () => {
   const before: AiEntryView[] = [
     { role: "user", entry_id: id(1), created_at: 0, text: "first" },
     { ...assistant, entry_id: id(2) },
-    { role: "tool", entry_id: id(3), created_at: 0, tool_call_id: "c1", status: "ok", content: "ok" },
-    { role: "tool", entry_id: id(4), created_at: 0, tool_call_id: "c2", status: "ok", content: "ok" },
+    { role: "tool", entry_id: id(3), created_at: 0, tool_call_id: "c1", status: "ok", content: "ok", auto: null },
+    { role: "tool", entry_id: id(4), created_at: 0, tool_call_id: "c2", status: "ok", content: "ok", auto: null },
   ];
   const summary: AiEntryView = { role: "summary", entry_id: id(5), created_at: 0, text: "Summary" };
   const stored: AiEntryView = { role: "user", entry_id: id(6), created_at: 0, text: "second" };

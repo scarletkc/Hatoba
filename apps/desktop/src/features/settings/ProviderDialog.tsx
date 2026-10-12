@@ -10,6 +10,7 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import {
   addModels,
+  decisionDrafts,
   formatEfforts,
   formatTokenCount,
   keyForInput,
@@ -55,6 +56,7 @@ const PICKER_LIMIT = 100;
 const PLACEHOLDER_URL: Record<AiProtocol, string> = {
   chat_completions: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
+  system_one: "https://api.typesafe.ai/v1",
 };
 
 function initialForm(p: AiProviderView | null): Form {
@@ -91,7 +93,11 @@ export function ProviderDialog({
   const generation = useRef(0);
 
   const hasSavedKey = !!provider?.has_api_key;
-  const problems = validateModels(form.models);
+  /** AI-47: a System One provider's models answer the judge's questions and never chat. */
+  const decision = form.protocol === "system_one";
+  /** The rows as the provider keeps them: without what a decision model does not have. */
+  const kept = (rows: ModelDraft[]) => (decision ? decisionDrafts(rows) : rows);
+  const problems = validateModels(kept(form.models));
   const modelProblem = problems.findIndex(Boolean);
 
   const patch = (p: Partial<Form>, field?: keyof Errors) => {
@@ -130,7 +136,7 @@ export function ProviderDialog({
     base_url: normalizeBaseUrl(form.baseUrl),
     api_key: keyForInput(form.key, hasSavedKey),
     auth_header: form.authHeader,
-    models: toModels(rows),
+    models: toModels(kept(rows)),
   });
 
   const urlError = (): string | undefined => {
@@ -152,7 +158,7 @@ export function ProviderDialog({
     const url = urlError();
     if (url) e.baseUrl = url;
     if (Object.keys(e).length) return showErrors(e);
-    if (validateModels(rows).some(Boolean)) return;
+    if (validateModels(kept(rows)).some(Boolean)) return;
     setSaving(true);
     try {
       const saved = await api.ai_provider_save(toInput(rows));
@@ -226,6 +232,7 @@ export function ProviderDialog({
   const protocolOptions = [
     { value: "chat_completions" as const, label: t("aiSettings.protocol.chat_completions") },
     { value: "anthropic" as const, label: t("aiSettings.protocol.anthropic") },
+    { value: "system_one" as const, label: t("aiSettings.protocol.system_one") },
   ];
 
   const modelMessage = (): string | null => {
@@ -273,13 +280,16 @@ export function ProviderDialog({
               onChange={(e) => patch({ name: e.target.value }, "name")}
             />
           </FormRow>
-          <FormRow label={t("aiSettings.f.protocol")}>
-            <Segmented<AiProtocol>
-              ariaLabel={t("aiSettings.f.protocol")}
-              value={form.protocol}
-              options={protocolOptions}
-              onChange={(protocol) => patchConnection({ protocol, protocolChosen: true })}
-            />
+          <FormRow label={t("aiSettings.f.protocol")} top={decision}>
+            <div className={s.protocol}>
+              <Segmented<AiProtocol>
+                ariaLabel={t("aiSettings.f.protocol")}
+                value={form.protocol}
+                options={protocolOptions}
+                onChange={(protocol) => patchConnection({ protocol, protocolChosen: true })}
+              />
+              {decision && <span className={s.hint}>{t("aiSettings.f.protocol.system_one")}</span>}
+            </div>
           </FormRow>
           <FormRow label={t("aiSettings.f.baseUrl")} htmlFor={ids.url} top error={errors.baseUrl}>
             <div className={s.stack}>
@@ -355,16 +365,20 @@ export function ProviderDialog({
               <div className={s.noModels}>{t("aiSettings.models.empty")}</div>
             ) : (
               <div className={s.table}>
-                <div className={cx(s.row, s.head)}>
+                <div className={cx(s.row, decision && s.rowDecision, s.head)}>
                   <span>{t("aiSettings.models.col.id")}</span>
                   <span>{t("aiSettings.models.col.name")}</span>
-                  <span>{t("aiSettings.models.col.context")}</span>
-                  <span>{t("aiSettings.models.col.output")}</span>
-                  <span>{t("aiSettings.models.col.effort")}</span>
+                  {!decision && (
+                    <>
+                      <span>{t("aiSettings.models.col.context")}</span>
+                      <span>{t("aiSettings.models.col.output")}</span>
+                      <span>{t("aiSettings.models.col.effort")}</span>
+                    </>
+                  )}
                   <span />
                 </div>
                 {form.models.map((d, i) => (
-                  <div className={s.row} key={i}>
+                  <div className={cx(s.row, decision && s.rowDecision)} key={i}>
                     <TextField
                       mono
                       aria-label={t("aiSettings.models.col.id")}
@@ -377,23 +391,27 @@ export function ProviderDialog({
                       value={d.name}
                       onChange={(e) => setRow(i, { name: e.target.value })}
                     />
-                    <TextField
-                      mono
-                      aria-label={t("aiSettings.models.col.context")}
-                      value={d.context}
-                      invalid={!!problems[i]?.context}
-                      placeholder={t("aiSettings.models.unknown")}
-                      onChange={(e) => setRow(i, { context: e.target.value })}
-                    />
-                    <TextField
-                      mono
-                      aria-label={t("aiSettings.models.col.output")}
-                      value={d.output}
-                      invalid={!!problems[i]?.output}
-                      placeholder={t("aiSettings.models.unknown")}
-                      onChange={(e) => setRow(i, { output: e.target.value })}
-                    />
-                    <EffortCell id={d.id.trim() || d.name} efforts={d.efforts} onChange={(efforts) => setRow(i, { efforts })} />
+                    {!decision && (
+                      <>
+                        <TextField
+                          mono
+                          aria-label={t("aiSettings.models.col.context")}
+                          value={d.context}
+                          invalid={!!problems[i]?.context}
+                          placeholder={t("aiSettings.models.unknown")}
+                          onChange={(e) => setRow(i, { context: e.target.value })}
+                        />
+                        <TextField
+                          mono
+                          aria-label={t("aiSettings.models.col.output")}
+                          value={d.output}
+                          invalid={!!problems[i]?.output}
+                          placeholder={t("aiSettings.models.unknown")}
+                          onChange={(e) => setRow(i, { output: e.target.value })}
+                        />
+                        <EffortCell id={d.id.trim() || d.name} efforts={d.efforts} onChange={(efforts) => setRow(i, { efforts })} />
+                      </>
+                    )}
                     <IconButton
                       icon="x"
                       size={13}
