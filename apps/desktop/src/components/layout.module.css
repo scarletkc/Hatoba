@@ -7,6 +7,7 @@
   gap: 8px;
   padding: 18px 24px 14px;
   flex: none;
+  container-type: inline-size;
 }
 
 .pageTitle {
@@ -34,12 +35,33 @@
   gap: 8px;
 }
 
+.pageButtons {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Under the title in the narrowest page, the search takes a row of its own when the buttons leave it
+ * less than its minimum width. */
+@container (max-width: 360px) {
+  .pageActions {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* The search field, or the box a page puts around it. */
+  .pageActions > :not(.pageButtons) {
+    flex: 1 1 80px;
+  }
+}
+
 .search {
   display: flex;
   align-items: center;
   gap: 6px;
   /* A basis, not a width, so it shrinks before the page header moves the actions to a new row. */
-  flex: 0 1 250px;
+  flex: 0 1 var(--search-width, 250px);
   min-width: 80px;
   height: var(--control-height);
   padding: 0 9px;
@@ -104,6 +126,7 @@
   border-radius: var(--radius-panel);
   background: var(--group);
   box-shadow: inset 0 0 0 0.5px var(--line);
+  container-type: inline-size;
 }
 
 .group > * + * {
@@ -112,11 +135,18 @@
 
 .formRow {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: var(--form-columns, 104px minmax(0, 1fr));
   align-items: center;
   gap: 12px;
   min-height: 40px;
   padding: 6px 14px;
+  /* A popup button's minimum width (PopupSelect) gives way to the width of its cell. */
+  --popup-min-cap: 100%;
+}
+
+/* A wrapped segmented control (controls.module.css) fills each of its rows. */
+.formRow > [role="radiogroup"] > [role="radio"] {
+  flex-grow: 1;
 }
 
 .formRowTop {
@@ -130,6 +160,23 @@
 
 .formLabel {
   white-space: nowrap;
+}
+
+/* A narrow group, as beside the AI panel in a small window, puts each label above its control. */
+@container (max-width: 420px) {
+  .formRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 9px 14px 10px;
+  }
+
+  .formRowTop > .formLabel {
+    padding-top: 0;
+  }
+
+  .formLabel:empty {
+    display: none;
+  }
 }
 
 .formError {
@@ -156,9 +203,10 @@
   min-height: 44px;
 }
 
+/* Keeps its words whole; a long value gives up its room instead. */
 .rowLabel {
   flex: 1;
-  min-width: 0;
+  min-width: min-content;
 }
 
 .rowValue {
@@ -208,6 +256,8 @@
 
 .emptyActions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   margin-top: 20px;
 }

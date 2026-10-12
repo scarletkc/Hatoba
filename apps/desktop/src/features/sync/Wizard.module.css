@@ -21,6 +21,7 @@
   font-size: var(--text-md);
   line-height: 1.4;
   overflow: hidden;
+  container-type: inline-size;
 }
 
 .body {
@@ -36,6 +37,23 @@
   gap: 8px;
   padding: 12px 16px 12px 28px;
   border-top: 0.5px solid var(--line);
+}
+
+/* A narrow card, as beside the AI panel in a small window, has less padding, and only the current
+ * step keeps its name in the progress header (the others still have it for screen readers). */
+@container (max-width: 400px) {
+  .body {
+    padding: 20px 20px 22px;
+  }
+
+  .footer {
+    padding-left: 20px;
+  }
+
+  .step:not(.stepCurrent) {
+    gap: 0;
+    font-size: 0;
+  }
 }
 
 .footerSpacer {
@@ -190,8 +208,9 @@
 
 .optionTitle {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   font-weight: 600;
 }
 
@@ -221,11 +240,12 @@
   color: var(--accent);
 }
 
-/* Step 2a: one-click + wrangler */
+/* Step 2a: one-click + wrangler. The button moves under text that would be narrower than 140px. */
 .oneClick {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 12px 14px;
   border-radius: var(--radius-panel);
   background: var(--group);
@@ -238,8 +258,12 @@
 }
 
 .oneClickText {
-  flex: 1;
+  flex: 1 1 140px;
   min-width: 0;
+}
+
+.oneClick > button {
+  margin-left: auto;
 }
 
 .oneClickTitle {

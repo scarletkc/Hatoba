@@ -13,6 +13,15 @@
   padding: 12px 24px;
   border-bottom: 0.5px solid var(--line);
   flex: none;
+  container-type: inline-size;
+}
+
+/* A narrow page leaves the host's name and drops its group. */
+@container (max-width: 420px) {
+  .crumbGroup,
+  .crumbSep {
+    display: none;
+  }
 }
 
 .back {
@@ -152,15 +161,17 @@
   color: var(--orange);
 }
 
-/* Key picker + "Manage Keys" link */
+/* Key picker + "Manage Keys" link, which moves under a picker that would be narrower than 200px. */
 .keyRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 6px 12px;
 }
 
 .fill {
-  flex: 0 1 340px;
+  flex: 1 1 200px;
+  max-width: 340px;
   min-width: 0;
   display: flex;
 }
@@ -174,6 +185,10 @@
   flex-direction: column;
   gap: 5px;
   align-items: flex-start;
+}
+
+.jump > .keyRow {
+  align-self: stretch;
 }
 
 .jumpHint {

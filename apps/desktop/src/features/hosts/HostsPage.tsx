@@ -484,8 +484,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   if (hosts.length === 0 && !query.trim()) {
     return (
       <div className={s.page} onKeyDown={onKeyDown}>
-        <PageHeader title={title}>
-          {searchField}
+        <PageHeader title={title} search={searchField}>
           {newButton}
         </PageHeader>
         <EmptyState
@@ -538,8 +537,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
 
   return (
     <div className={s.page} onKeyDown={onKeyDown}>
-      <PageHeader title={title} count={t("hosts.count", { n: visible.length })}>
-        {searchField}
+      <PageHeader title={title} count={t("hosts.count", { n: visible.length })} search={searchField}>
         <Button
           ref={sortButton}
           trailingIcon="caret-down"

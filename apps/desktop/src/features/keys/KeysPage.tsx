@@ -150,8 +150,11 @@ export function KeysPage() {
 
   return (
     <div className={s.page}>
-      <PageHeader title={t("sidebar.keys")} count={t("keys.count", { n: keys.length })}>
-        <SearchField value={query} onChange={setQuery} placeholder={t("keys.search")} width={200} />
+      <PageHeader
+        title={t("sidebar.keys")}
+        count={t("keys.count", { n: keys.length })}
+        search={<SearchField value={query} onChange={setQuery} placeholder={t("keys.search")} width={200} />}
+      >
         {importButton}
         {generateButton}
       </PageHeader>

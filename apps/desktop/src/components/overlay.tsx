@@ -294,7 +294,8 @@ export function PopupSelect<V>({
         aria-expanded={!!menu.anchor}
         disabled={disabled}
         className={controlStyles.popup}
-        style={{ minWidth }}
+        // In a form row, no wider than its cell (--popup-min-cap, layout.module.css).
+        style={minWidth ? { minWidth: `min(${minWidth}px, var(--popup-min-cap, ${minWidth}px))` } : undefined}
         onClick={() => ref.current && menu.openBelow(ref.current)}
       >
         {(selected?.icon ?? icon) && <Icon name={selected?.icon ?? icon!} className={controlStyles.popupIcon} />}

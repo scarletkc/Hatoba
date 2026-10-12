@@ -195,6 +195,12 @@
   }
 }
 
+@container (max-width: 440px) {
+  .panel {
+    width: 200px;
+  }
+}
+
 .panelScroll {
   flex: 1;
   min-height: 0;

@@ -11,17 +11,26 @@ export { l as layoutStyles };
 export function PageHeader({
   title,
   count,
+  search,
   children,
 }: {
   title: ReactNode;
   count?: ReactNode;
+  /** A SearchField before the buttons. */
+  search?: ReactNode;
+  /** The buttons, which stay together in one row. */
   children?: ReactNode;
 }) {
   return (
     <div className={l.pageHeader}>
       <div className={l.pageTitle}>{title}</div>
       {count !== undefined && <div className={l.pageCount}>{count}</div>}
-      {children && <div className={l.pageActions}>{children}</div>}
+      {(search || children) && (
+        <div className={l.pageActions}>
+          {search}
+          {children && <div className={l.pageButtons}>{children}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -41,7 +50,7 @@ export const SearchField = forwardRef<
   }
 >(function SearchField({ value, onChange, placeholder, shortcut, width, onFocus, onBlur, popup }, ref) {
   return (
-    <label className={l.search} style={{ flexBasis: width }}>
+    <label className={l.search} style={width ? ({ "--search-width": `${width}px` } as CSSProperties) : undefined}>
       <Icon name="magnifying-glass" />
       <input
         ref={ref}
@@ -86,7 +95,7 @@ export function Group({ children, style }: { children: ReactNode; style?: CSSPro
   );
 }
 
-/** 104px label column + control, the design's form row. */
+/** 104px label column + control, the design's form row. In a narrow Group the label goes above the control. */
 export function FormRow({
   label,
   children,
@@ -97,14 +106,14 @@ export function FormRow({
 }: {
   label: ReactNode;
   children: ReactNode;
-  /** Override grid columns, e.g. "104px minmax(0,1fr) auto 72px" for address + port. */
+  /** Override the grid columns of a wide row, e.g. "120px minmax(0,1fr)" for a longer label. */
   columns?: string;
   top?: boolean;
   error?: string | null;
   htmlFor?: string;
 }) {
   return (
-    <div className={cx(l.formRow, top && l.formRowTop)} style={columns ? { gridTemplateColumns: columns } : undefined}>
+    <div className={cx(l.formRow, top && l.formRowTop)} style={columns ? ({ "--form-columns": columns } as CSSProperties) : undefined}>
       <label className={l.formLabel} htmlFor={htmlFor}>
         {label}
       </label>

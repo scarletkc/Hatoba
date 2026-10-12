@@ -1,16 +1,18 @@
 /* Port forwarding rows of the host editor: mono rule · auto-start switch · edit / delete. */
 
+/* A narrow row puts the switch and the buttons under a rule that would be narrower than 160px. */
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   min-height: 40px;
   padding: 6px 8px 6px 14px;
   min-width: 0;
 }
 
 .rule {
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -29,6 +31,7 @@
   align-items: center;
   gap: 8px;
   flex: none;
+  margin-left: auto;
   font-size: var(--text-sm);
   color: var(--fg2);
 }

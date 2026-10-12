@@ -234,6 +234,9 @@
   border-radius: var(--radius-control);
   background: var(--fill);
   justify-self: start;
+  /* Too narrow for its segments, it wraps them onto more rows rather than overflowing. */
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .segment {
@@ -241,12 +244,14 @@
   padding: 0 14px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   font-size: 12.5px;
   color: var(--fg2);
+  white-space: nowrap;
 }
 
 .segment i {
@@ -338,6 +343,7 @@
   background: var(--btn);
   box-shadow: var(--shadow-btn);
   min-width: 0;
+  max-width: 100%;
   text-align: left;
 }
 
@@ -351,7 +357,7 @@
 }
 
 .popupLabel {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -368,11 +374,16 @@
   color: var(--fg2);
 }
 
+/* In a narrow button, it gives up its room before the label does. */
 .popupHint {
+  flex: 0 4 auto;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--fg2);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Status dot */
