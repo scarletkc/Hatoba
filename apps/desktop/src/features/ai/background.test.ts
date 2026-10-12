@@ -22,6 +22,7 @@ const ipc = vi.hoisted(() => ({
   run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   sideStop: vi.fn<(conversationId: string, questionId: number) => Promise<void>>(),
+  remove: vi.fn<(conversationId: string) => Promise<void>>(),
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -32,6 +33,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_tool_run: ipc.run,
     ai_tool_result: ipc.result,
     ai_side_stop: ipc.sideStop,
+    ai_conversation_delete: ipc.remove,
     ai_allowances_list: () => Promise.resolve([]),
   },
 }));
@@ -50,7 +52,8 @@ vi.mock("./terminalTools", async (importActual) => ({
   sendInput: (_session: unknown, args: string) => new Promise<ToolOutcome>((done) => typing.calls.push({ args, done })),
 }));
 
-const { decideCall, detachSlot, newConversation, openConversation, queueMessage, resetForLock, sendMessage } = await import("./actions");
+const { decideCall, deleteConversation, detachSlot, newConversation, noteSelection, openConversation, queueMessage, resetForLock, selectionAttachment, sendMessage, stopTurn, tabSelection } =
+  await import("./actions");
 const { blankSlot, conversationActivity, getSlot, patchSlot, slotOf, tabActivity, useAi } = await import("./store");
 const { newSideQuestion } = await import("./side");
 const { useTabs } = await import("@/app/tabs");
@@ -130,6 +133,7 @@ beforeEach(() => {
   ipc.run.mockReset().mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.sideStop.mockReset().mockResolvedValue(undefined);
+  ipc.remove.mockReset().mockResolvedValue(undefined);
   typing.calls = [];
   useTabs.setState({ tabs: [tab(TAB), tab(OTHER)], active: TAB });
   useAi.setState({
@@ -248,6 +252,90 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     expect(await sending).toBe(false);
     expect(useAi.getState().background).toEqual({});
     expect(getSlot(TAB)).toMatchObject({ conversationId: null, turn: null, queued: null, draft: "first question\n\nand a follow-up\n\ntyped since" });
+  });
+
+  it("keeps the chips of a queued message that goes back in the background with its conversation", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "check the logs");
+    sent[0].emit({ kind: "request_started" });
+    noteSelection(TAB, "502 Bad Gateway");
+    queueMessage(TAB, "why?");
+    newConversation(TAB);
+    sent[0].emit({ kind: "turn_ended", reason: "refused" });
+    await flush();
+    // The tab's other conversation does not get the selection the message took.
+    expect(selectionAttachment(TAB)).toBeNull();
+    expect(tabSelection(TAB).hidden).not.toBeNull();
+    expect(nginxSlot()).toMatchObject({ draft: "why?", extras: [{ attachment: { kind: "selection", text: "502 Bad Gateway" } }] });
+
+    await openConversation(TAB, nginx.id);
+    await sendMessage(TAB, getSlot(TAB).draft);
+    expect(sent[1].text).toMatch(/^<terminal_selection [^]*502 Bad Gateway[^]*why\?$/);
+  });
+
+  it("gives the queued message of a background conversation that is deleted back to its tab", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "check the logs");
+    sent[0].emit({ kind: "request_started" });
+    queueMessage(TAB, "then restart it");
+    newConversation(TAB);
+    patchSlot(TAB, { draft: "typed since" });
+
+    await deleteConversation(nginx.id);
+    expect(ipc.stop).toHaveBeenCalledWith(nginx.id);
+    expect(useAi.getState().background).toEqual({});
+    expect(getSlot(TAB)).toMatchObject({ conversationId: null, draft: "then restart it\n\ntyped since" });
+  });
+
+  it("gives a new conversation's messages back to the tab when the vault locks before the first one is stored", async () => {
+    for (const settle of ["reject", "resolve"] as const) {
+      useAi.setState({ slots: { [TAB]: blankSlot("manual") }, background: {} });
+      ipc.send.mockReset();
+      let done!: { resolve: (v: AiSendStarted) => void; reject: (e: unknown) => void };
+      ipc.send.mockImplementationOnce(() => new Promise((resolve, reject) => (done = { resolve, reject })));
+      const sending = sendMessage(TAB, "first question");
+      queueMessage(TAB, "and a follow-up");
+      newConversation(TAB);
+
+      resetForLock();
+      if (settle === "reject") done.reject({ code: "cancelled", detail: "locked" });
+      else done.resolve({ conversation: disk, user_entry: { role: "user", entry_id: "u1", created_at: 0, text: "first question" } });
+      await sending;
+      expect(useAi.getState().background).toEqual({});
+      expect(getSlot(TAB).draft).toBe(settle === "reject" ? "first question\n\nand a follow-up" : "and a follow-up");
+    }
+  });
+
+  it("sends the queued message once Stop has stopped a turn an earlier page started, also when the conversation was left meanwhile", async () => {
+    const sent = turns();
+    patchSlot(TAB, { remoteRunning: true });
+    queueMessage(TAB, "after the remote turn");
+    let stopped!: () => void;
+    ipc.stop.mockImplementationOnce(() => new Promise<void>((resolve) => (stopped = resolve)));
+    const stopping = stopTurn(TAB);
+    newConversation(TAB);
+    expect(nginxSlot()).toMatchObject({ remoteRunning: true });
+
+    stopped();
+    await stopping;
+    expect(sent.map((x) => x.text)).toEqual(["after the remote turn"]);
+    expect(nginxSlot().queued).toBeNull();
+    expect(getSlot(TAB)).toMatchObject({ conversationId: null, turn: null });
+  });
+
+  it("puts an entry stored after the turn ended in the slot that holds the conversation by then", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "check the logs");
+    sent[0].emit({ kind: "request_started" });
+    sent[0].emit({ kind: "turn_ended", reason: "completed" });
+    await flush();
+    useTabs.setState({ active: OTHER });
+    await openConversation(OTHER, nginx.id);
+
+    const late: AiEntryView = { role: "tool", entry_id: "t-late", created_at: 0, tool_call_id: "call_9", status: "cancelled", content: "cancelled", auto: null };
+    sent[0].emit({ kind: "entry", entry: late });
+    expect(getSlot(OTHER).entries).toContainEqual(late);
+    expect(getSlot(TAB).entries).toEqual([]);
   });
 
   it("stops the side question, but not the turn", async () => {

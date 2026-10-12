@@ -247,6 +247,17 @@ function failedVerdict(): AiAutoVerdict {
 const runners = new Map<string, TurnRunner>();
 
 /**
+ * AI-43: when a turn or a compaction last started in each slot, by a sequence number, so that a fork can tell the
+ * slot moved on while it was made, also when what started has ended since.
+ */
+const lastStart = new Map<string, number>();
+let startSeq = 0;
+
+function noteStart(slotId: string) {
+  lastStart.set(slotId, ++startSeq);
+}
+
+/**
  * AI-07: the turn that holds each tab's terminal for `send_input`, by tab. A tab's conversations share its one
  * interactive shell, so the first turn that types into it holds it until that turn ends, and another turn's input
  * never lands in the middle of its work. Reading the screen, `run_command` (its own exec channel) and the file
@@ -286,6 +297,7 @@ class TurnRunner {
   constructor(slotId: string, convId: string | null, mode: AiPermissionMode) {
     this.slotId = slotId;
     this.tab = tabOf(slotId);
+    noteStart(slotId);
     this.convId = convId;
     this.mode = mode;
     this.ready = new Promise((resolve) => (this.resolveReady = resolve));
@@ -421,7 +433,11 @@ class TurnRunner {
   }
 
   private addEntry(entry: AiEntryView) {
-    if (!this.disposed) applyEvent(this.slotId, { kind: "entry", entry });
+    if (this.disposed) return;
+    // Once the turn ended, the runner no longer moves with its conversation (AI-07): later entries go to the slot
+    // that holds the conversation then.
+    const target = !this.ended ? this.slotId : this.convId ? slotOf(this.convId) : undefined;
+    if (target) applyEvent(target, { kind: "entry", entry });
   }
 
   private async handleTools() {
@@ -725,7 +741,9 @@ function takeInput(slotId: string, typed: string, beside: QueuedMessage | null =
  * their places, or, where another chip of their kind took that place meanwhile, with its pastes and files.
  */
 function putBack(slotId: string, message: QueuedMessage) {
-  const stray = message.restore(message.chips).map((attachment) => ({ id: `x${++extraSeq}`, attachment }));
+  // A conversation in the background (AI-07) keeps its chips in its own input area: their places are its tab's.
+  const chips = inBackground(slotId) ? message.chips : message.restore(message.chips);
+  const stray = chips.map((attachment) => ({ id: `x${++extraSeq}`, attachment }));
   patchSlot(slotId, (s) => messageBack(s, { ...message, extras: [...stray, ...message.extras] }));
 }
 
@@ -762,11 +780,9 @@ async function sendQueued(slotId: string) {
  * input area of its tab, and the background slot goes.
  */
 function giveBackUnstored(slotId: string, message: QueuedMessage) {
-  const { queued } = getSlot(slotId);
-  const tab = tabOf(slotId);
-  dropBackground(slotId);
-  if (queued) putBack(tab, queued);
-  putBack(tab, message);
+  giveBackQueued(slotId);
+  putBack(slotId, message);
+  clearBackground(slotId);
 }
 
 /** The slot's queued message goes back into its input area, unsent, before what that holds (§13.1). */
@@ -841,7 +857,13 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     const conv = started.conversation;
     runner.started(conv.id);
     if (useAi.getState().history) void loadHistory();
-    if (runner.gone) return true; // the slot moved on (or the vault locked) meanwhile
+    if (runner.gone) {
+      // The vault locked, or the tab closed, meanwhile. A new conversation left in the background has no slot to open
+      // again, so what went back into its input area goes to its tab (AI-07).
+      const target = runner.slotId;
+      if (target in useAi.getState().slots && inBackground(target) && !getSlot(target).conversationId) clearBackground(target);
+      return true;
+    }
     const target = runner.slotId;
     rememberChoices(target, conv.id);
     patchSlot(target, (s) => ({ conversationId: conv.id, conversation: withContext(s, conv), entries: placeUserEntry(s.entries, started.user_entry) }));
@@ -1111,7 +1133,7 @@ function restoreDraft(slotId: string, text: string) {
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
 }
 
-/** The slots whose turn an earlier page started the user is stopping: its end sends the queued message (§13.1). */
+/** The conversations whose turn an earlier page started the user is stopping: its end sends the queued message (§13.1). */
 const remoteStops = new Set<string>();
 
 /** Stop, or Esc in the panel (AI-18); the queued message goes once the turn has stopped (§13.1). */
@@ -1119,16 +1141,22 @@ export async function stopTurn(slotId: string) {
   const runner = runners.get(slotId);
   if (runner) return runner.stop();
   const slot = getSlot(slotId);
-  if (slot.remoteRunning && slot.conversationId) {
-    remoteStops.add(slotId);
+  const id = slot.conversationId;
+  if (slot.remoteRunning && id) {
+    remoteStops.add(id);
     try {
-      await api.ai_stop(slot.conversationId).catch(() => {});
-      patchSlot(slotId, { remoteRunning: false });
-      await reloadSlot(slotId);
+      await api.ai_stop(id).catch(() => {});
+      // The conversation may have gone into the background meanwhile (AI-07), with its queued message.
+      const target = slotOf(id);
+      if (target) {
+        patchSlot(target, { remoteRunning: false });
+        await reloadSlot(target);
+      }
     } finally {
-      remoteStops.delete(slotId);
+      remoteStops.delete(id);
     }
-    await sendQueued(slotId);
+    const target = slotOf(id);
+    if (target) await sendQueued(target);
   }
 }
 
@@ -1297,8 +1325,26 @@ function toBackground(slotId: string) {
   }
 }
 
+/** Two input areas' unsent text and attachments as one, `first`'s before `then`'s. */
+function joinInput(first: Pick<Slot, "draft" | "extras">, then: Pick<Slot, "draft" | "extras">): Pick<Slot, "draft" | "extras"> {
+  const draft = !first.draft.trim() ? then.draft : then.draft.trim() ? `${first.draft}\n\n${then.draft}` : first.draft;
+  return { draft, extras: [...first.extras, ...then.extras] };
+}
+
+/**
+ * AI-07: a background slot whose conversation is gone (deleted), or was never stored, goes; what its input area
+ * holds, a message that went back into it (§13.1), goes back into its tab's, before what that holds.
+ */
+function clearBackground(id: string) {
+  const left = getSlot(id);
+  const tab = tabOf(id);
+  dropBackground(id);
+  patchSlot(tab, (s) => joinInput(left, s));
+}
+
 /** A background slot goes: its conversation is shown again, deleted, or its tab closed (AI-07). */
 function dropBackground(id: string) {
+  lastStart.delete(id);
   useAi.setState((st) => {
     const slots = { ...st.slots };
     const background = { ...st.background };
@@ -1318,9 +1364,9 @@ function stopSlot(slotId: string) {
   giveBackQueued(slotId);
 }
 
-/** The slot's conversation is gone (deleted): a tab's slot gets a new conversation, keeping its input area, and a background slot goes. */
+/** The slot's conversation is gone (deleted): a tab's slot gets a new conversation, keeping its input area, and a background slot goes (`clearBackground`). */
 function clearSlot(slotId: string) {
-  if (inBackground(slotId)) dropBackground(slotId);
+  if (inBackground(slotId)) clearBackground(slotId);
   else setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
 }
 
@@ -1340,7 +1386,7 @@ export async function reloadSlot(slotId: string) {
     if (getSlot(slotId).conversationId !== id) return;
     // §13.1: a turn an earlier page started ended on its own, and nothing tells how, so its queued message goes
     // back. A poll that sees the end of one the user is stopping leaves it to the stop, which sends it.
-    const remoteEnded = getSlot(slotId).remoteRunning && !detail.running && !remoteStops.has(slotId);
+    const remoteEnded = getSlot(slotId).remoteRunning && !detail.running && !remoteStops.has(id);
     patchSlot(slotId, (s) => ({
       conversation: detail.conversation,
       entries: s.turn ? s.entries : detail.entries,
@@ -1390,8 +1436,7 @@ function moveSlot(from: string, to: string) {
   if (inBackground(from)) {
     // Back from the background (AI-07): the tab's input area keeps what it holds, after what went back into the
     // conversation's own (a queued message that was not sent, §13.1).
-    const draft = !source.draft.trim() ? target.draft : target.draft.trim() ? `${source.draft}\n\n${target.draft}` : source.draft;
-    setSlot(to, { ...source, draft, extras: [...source.extras, ...target.extras] });
+    setSlot(to, { ...source, ...joinInput(source, target) });
     dropBackground(from);
   } else {
     // The input area of the slot the conversation moves to wins when it holds something, a tab's selection or
@@ -1478,6 +1523,7 @@ export function continueHomeConversation(tabId: string): boolean {
 export function detachSlot(slotId: string) {
   stopSlot(slotId);
   setSlot(slotId, null);
+  lastStart.delete(slotId);
   for (const [id, tab] of Object.entries(useAi.getState().background)) {
     if (tab !== slotId) continue;
     stopSlot(id);
@@ -1738,6 +1784,7 @@ export async function compactConversation(slotId: string) {
     return;
   }
   patchSlot(slotId, { compacting: true });
+  noteStart(slotId);
   try {
     const entry = await api.ai_compact(id, context);
     // The slot that shows the conversation now: it may have moved meanwhile (Connect to host).
@@ -1810,7 +1857,7 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
   const model = entryId && source ? forkModel(source.entries, entryId) : null;
   // The stored slot itself: one never used is not stored, and getSlot makes a new blank one each time.
   const before = useAi.getState().slots[slotId];
-  const runner = runners.get(slotId);
+  const startedBefore = lastStart.get(slotId);
   const working = slotWorking(slotId);
   try {
     // The number in the title skips those History has (AI-43).
@@ -1818,15 +1865,13 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
     const taken = (useAi.getState().history ?? []).map((c) => c.title);
     const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? "", taken));
     updateConversation(fork);
-    // Every message, stored entry and reload gives the slot a new entries array, so in an idle slot the same array
-    // means nothing happened in it meanwhile, however it ended. A turn or compaction under way when Fork was chosen
-    // changes it too, but that is not the user moving on: only a turn or compaction started since is.
+    // A turn or compaction started since, even one that has ended, is the slot moving on; what one under way when
+    // Fork was chosen does meanwhile is not. Every message, stored entry and reload gives the slot a new entries
+    // array, so in an idle slot the same array also means nothing else happened in it.
     const now = useAi.getState().slots[slotId];
-    const started = runners.get(slotId);
     const movedOn =
       now?.conversationId !== before?.conversationId ||
-      (!!started && started !== runner) ||
-      (!!now?.compacting && !before?.compacting) ||
+      lastStart.get(slotId) !== startedBefore ||
       (!working && (now?.entries !== before?.entries || !!now?.turn));
     if (movedOn || before?.reverting || now?.reverting) {
       toast(t("ai.fork.inHistory"), "success");
