@@ -18,7 +18,8 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 | Delete… | 删除… | 削除… |
 | More | 更多操作 | その他の操作 |
 
-- **Open** attaches the conversation to the active tab. On a tab of another host, the next message moves the whole conversation there (`references/ai-panel.md`). To keep it where it is, use **Fork** instead.
+- **Open** attaches the conversation to the active tab. On a tab of another host, the next message moves the whole conversation there (`references/ai-panel.md`). To keep it where it is, use **Fork** instead. A conversation the tab showed that is still working goes on in the tab's background.
+- A sparkle beside a title marks a conversation that is working, in a tab or in a tab's background, and a hand one that waits for your approval. Opening one that works in another tab brings that tab to the front and shows it there.
 - **Delete…** removes the conversation on every synced device for good, after a confirmation.
 - **Export as Markdown…** saves the conversation as a Markdown file, with each divider as a line.
 
