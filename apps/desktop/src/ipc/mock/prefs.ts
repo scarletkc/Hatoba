@@ -25,12 +25,13 @@ function fits(key: keyof LocalPrefs, value: unknown): boolean {
  * The prefs the mock stored, read as Rust's `LocalPrefs::from_stored` reads them: a value that is
  * missing, unknown or broken falls back to the default. Dev servers on the same port share their
  * localStorage, so a build of another branch may have stored a value this one does not know, such
- * as a permission mode it lacks, which new conversations would then start in.
+ * as a permission mode it lacks, which new conversations would then start in. `read` returns the
+ * stored JSON; a browser that denies storage throws from it.
  */
-export function readStoredPrefs(json: string | null): LocalPrefs {
+export function readStoredPrefs(read: () => string | null): LocalPrefs {
   let stored: unknown = null;
   try {
-    stored = JSON.parse(json ?? "null");
+    stored = JSON.parse(read() ?? "null");
   } catch {
     // Unreadable prefs are all defaults.
   }

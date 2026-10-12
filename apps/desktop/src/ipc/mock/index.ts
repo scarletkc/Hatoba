@@ -89,7 +89,7 @@ export function createMockApi(): HatobaApi {
   let settings = structuredClone(D.SETTINGS);
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
-  let prefs: LocalPrefs = readStoredPrefs(localStorage.getItem("hatoba.mock.prefs"));
+  let prefs: LocalPrefs = readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
   const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];

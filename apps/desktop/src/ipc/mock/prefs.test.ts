@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PREFS } from "./data";
-import { readStoredPrefs } from "./prefs";
+import { readStoredPrefs as readPrefs } from "./prefs";
 
 // The slot test reads no command; this keeps the real IPC layer out of it.
 vi.mock("@/ipc/api", async (importActual) => ({ ...(await importActual<typeof import("@/ipc/api")>()), api: {} }));
@@ -10,10 +10,18 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 const { useApp } = await import("@/app/store");
 const { blankSlot } = await import("@/features/ai/store");
 
+const readStoredPrefs = (json: string | null) => readPrefs(() => json);
+
 describe("readStoredPrefs", () => {
   it("reads stored values as Rust's LocalPrefs::from_stored does", () => {
     expect(readStoredPrefs(null)).toEqual(PREFS);
     expect(readStoredPrefs("{not json")).toEqual(PREFS);
+    // A browser that denies storage.
+    expect(
+      readPrefs(() => {
+        throw new DOMException("denied", "SecurityError");
+      }),
+    ).toEqual(PREFS);
 
     const prefs = readStoredPrefs(JSON.stringify({ language: "ja", ai_permission_mode: "auto", ai_panel_width: 520, default_proxy_id: "px1", host_probe: false }));
     expect(prefs).toEqual({ ...PREFS, language: "ja", ai_permission_mode: "auto", ai_panel_width: 520, default_proxy_id: "px1", host_probe: false });
