@@ -331,7 +331,8 @@ fn joinable(v: &Vault) -> Result<()> {
 /// the new password's metadata is adopted locally, so the local password changes too.
 ///
 /// # Errors
-/// [`Error::WrongPassword`], [`Error::VaultMismatch`], [`Error::VaultNotInitialized`], transport errors.
+/// [`Error::WrongPassword`], [`Error::VaultMismatch`], [`Error::VaultNotInitialized`], transport
+/// errors.
 pub async fn sign_in(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -386,8 +387,8 @@ fn meta_update(change: &PasswordChange) -> VaultMetaUpdate {
 /// sessions are revoked by the server and must sign in again with the new password.
 ///
 /// # Errors
-/// [`Error::WrongPassword`], [`Error::Throttled`], [`Error::EmptyPassword`], [`Error::Unauthorized`],
-/// transport errors.
+/// [`Error::WrongPassword`], [`Error::Throttled`], [`Error::EmptyPassword`],
+/// [`Error::Unauthorized`], transport errors.
 pub async fn change_password_remote(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -466,7 +467,8 @@ pub async fn recover_remote(
         })
     })?;
 
-    // The vault key is unknown until the recovery blob is unwrapped, so seal the name provisionally.
+    // The vault key is unknown until the recovery blob is unwrapped, so seal the name
+    // provisionally.
     let provisional = device_login(&recovery_key, &device_id, &device)?;
     let recovered = backend.recover(&recovery_auth, &provisional).await?;
 
