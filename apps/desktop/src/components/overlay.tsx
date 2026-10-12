@@ -101,7 +101,9 @@ export function Menu({
   whileLocked?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: anchor.x, top: anchor.y });
+  // Measured first at the window's left edge, before any paint: at an anchor near the right edge the
+  // menu would be squeezed, wrap and measure taller than it ends up, and sit that much too high.
+  const [pos, setPos] = useState({ left: 0, top: anchor.y });
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
