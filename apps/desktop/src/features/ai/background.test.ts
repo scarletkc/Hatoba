@@ -45,11 +45,15 @@ vi.mock("@/features/terminal/session", async (importActual) => {
   const session = { status: "connected", term: { rows: 1, buffer: { active } } };
   return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId.startsWith("tab-") ? session : undefined) };
 });
-/** `send_input` typing into a tab's terminal: each call waits until the test answers it. */
+/** `send_input` typing into a tab's terminal: each call that types waits until the test answers it; one without text types nothing. */
 const typing = vi.hoisted(() => ({ calls: [] as { args: string; done: (outcome: ToolOutcome) => void }[] }));
 vi.mock("./terminalTools", async (importActual) => ({
   ...(await importActual<typeof import("./terminalTools")>()),
-  sendInput: (_session: unknown, args: string) => new Promise<ToolOutcome>((done) => typing.calls.push({ args, done })),
+  sendInput: (_session: unknown, args: string, _signal: AbortSignal, onType: () => void) => {
+    if (typeof (JSON.parse(args) as { text?: unknown }).text !== "string") return Promise.resolve<ToolOutcome>({ status: "error", content: "Invalid arguments: text is required" });
+    onType();
+    return new Promise<ToolOutcome>((done) => typing.calls.push({ args, done }));
+  },
 }));
 
 const { decideCall, deleteConversation, detachSlot, newConversation, noteSelection, openConversation, queueMessage, resetForLock, selectionAttachment, sendMessage, stopTurn, tabSelection } =
@@ -394,6 +398,22 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
 });
 
 describe("a tab's terminal shared by its conversations (AI-07)", () => {
+  it("is not held by a send_input call that typed nothing", async () => {
+    const sent = turns();
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "tail the log");
+    answer(sent[0].emit, "a1", [call("call_1", "send_input", { key: "enter" })]);
+    await until(() => ipc.result.mock.calls.length === 1);
+    expect(ipc.result).toHaveBeenCalledWith(nginx.id, "call_1", expect.objectContaining({ status: "error" }));
+
+    newConversation(TAB);
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "how full is the disk?");
+    answer(sent[1].emit, "b1", [call("call_2", "send_input", { text: "df -h", key: "enter" })]);
+    await until(() => typing.calls.length === 1);
+    expect(typing.calls[0].args).toContain("df -h");
+  });
+
   it("serves one turn's send_input at a time, while other tools run alongside", async () => {
     const sent = turns();
     patchSlot(TAB, { mode: "bypass" });

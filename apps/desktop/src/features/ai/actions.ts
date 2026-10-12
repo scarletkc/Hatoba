@@ -634,11 +634,11 @@ class TurnRunner {
     try {
       if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited, judged });
       if (kind === "send_input") {
-        // Another turn may have taken the terminal while this call waited for approval.
+        // Another turn may have taken the terminal while this call waited for approval. This turn takes it once it
+        // types, so a call with invalid arguments, which types nothing, leaves it free.
         const taken = this.terminalTaken();
         if (taken) return this.report(convId, call.id, error(taken));
-        terminalHolders.set(this.tab, this);
-        const result = await sendInput(target!.session!, args, this.abort.signal);
+        const result = await sendInput(target!.session!, args, this.abort.signal, () => terminalHolders.set(this.tab, this));
         if (!result || !this.active) return;
         return this.report(convId, call.id, { ...result, edited_arguments: edited, judged });
       }
