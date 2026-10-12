@@ -104,10 +104,12 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     [slot.entries, slot.conversation?.context_start, model, ctxWindow, live],
   );
   const pending = usePendingAttachments(slotId);
-  // The queued message goes with what the box holds, which leaves a chip of a kind it has (§13.1).
+  // The queued message goes with what the box holds, which leaves a chip of a kind it has, or alone while
+  // the box is empty, which leaves every attachment for a later message (§13.1).
   const fit = useMemo(() => {
     const taken = takenBeside(pending, queued);
-    const typed = taken.length > 0 ? estimateTokens(composeMessage(slot.draft.trim(), taken)) : estimateTokens(slot.draft);
+    const typed =
+      queued && !slot.draft.trim() ? 0 : taken.length > 0 ? estimateTokens(composeMessage(slot.draft.trim(), taken)) : estimateTokens(slot.draft);
     return messageFit(meter, typed + (queued ? estimateTokens(messageText(queued)) : 0));
   }, [meter, pending, slot.draft, queued]);
   const blocked = fit.level === "over";
