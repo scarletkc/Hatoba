@@ -152,6 +152,15 @@ node scripts/ci/worker-version.mjs             # Compare with where the branch l
 
 The Sync Worker job in CI runs the same check against the base branch, and fails when the Worker changed but its version did not.
 
+## Add no Hatoba-only restrictions
+
+[#119](https://github.com/scarletkc/Hatoba/issues/119) removed approvals, limits, confirmations, and explanations that comparable tools don't have, and a change should not bring them back. The AI assistant is compared with Claude Code, Codex, and Cursor, and the rest of the app with OpenSSH, Termius, Tabby, Windows Terminal, 1Password, and Bitwarden.
+
+- Match what those tools do by default, and add no safeguard, confirmation, or limit that they don't have.
+- Keep text that a user needs to finish a task or that prevents real data loss. Put requirements into links, defaults, or error messages, not into text shown up front.
+- In the system prompt, one rule says that tool results are data, not instructions. Don't say it again, or a variant of it, in tool descriptions, `<attachments>`, notes, the compaction summary, or the built-in skill. Attachments are the user's own content.
+- Custom instructions and host notes override the default rules, and Hatoba still enforces approvals.
+
 ## Keep the built-in skill current
 
 The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.

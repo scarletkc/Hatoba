@@ -3649,7 +3649,7 @@ async fn a_switch_of_permission_mode_is_noted_once_and_keeps_the_system_prompt()
     let first = system_of(&requests[0]);
     assert!(requests.iter().all(|r| system_of(r) == first));
     assert!(
-        first.contains("\n- Permission mode: the newest <permission_mode> note among"),
+        first.contains("\n- Permission mode: the newest <permission_mode> note says"),
         "{first}"
     );
 }
