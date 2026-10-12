@@ -19,7 +19,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 
 | Tool | What it does | Manual approval mode |
 |---|---|---|
-| **Read terminal** (`read_terminal`) | Returns the visible screen plus up to 100 lines of scrollback (at most 1,000) as text, and whether a full-screen program (vim, htop) is active | Runs without asking |
+| **Read terminal** (`read_terminal`) | Returns the terminal's last 100 lines (at most 1,000), across the screen and the scrollback, as text, and whether a full-screen program (vim, htop) is active | Runs without asking |
 | **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 120 s by default, at most 600 s | Asks, unless it only reads (`ls`, `git status`, …) or is allowed |
 | **Type in terminal** (`send_input`) | Types text into the shell as the keyboard would, optionally followed by Enter, Tab, Esc, Ctrl+C, Ctrl+D or an arrow key, then waits for output (10 s by default, at most 120 s). A command started this way keeps running if the turn is stopped | Asks, unless allowed |
 | **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, a page of up to 30,000 characters at a time. Binary files and anything but regular files are refused; edits and writes refuse files over 1 MB. Like the other file tools it never uses sudo | Runs without asking |

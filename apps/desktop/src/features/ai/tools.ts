@@ -357,7 +357,7 @@ export const READ_TERMINAL_DEFAULT_LINES = 100;
 export const READ_TERMINAL_MAX_LINES = 1000;
 
 export interface ReadTerminalArgs {
-  /** Scrollback lines above the visible screen. */
+  /** Lines to read, counted back from the last line with text. */
   lines: number;
 }
 
@@ -365,7 +365,7 @@ export interface ReadTerminalArgs {
 export function parseReadTerminal(json: string): Parsed<ReadTerminalArgs> {
   const args = parseArgs(json);
   if (!args) return { ok: false, error: "The arguments are not a JSON object." };
-  const lines = intArg(args.lines, READ_TERMINAL_DEFAULT_LINES, 0, READ_TERMINAL_MAX_LINES);
+  const lines = intArg(args.lines, READ_TERMINAL_DEFAULT_LINES, 1, READ_TERMINAL_MAX_LINES);
   if (lines === null) return { ok: false, error: '"lines" must be an integer.' };
   return { ok: true, value: { lines } };
 }

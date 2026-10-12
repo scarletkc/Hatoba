@@ -21,33 +21,43 @@ export interface ScreenText {
   text: string;
   /** A full-screen program (vim, htop, …) is using the alternate screen. */
   alternate: boolean;
-  /** Scrollback rows included above the screen. */
-  scrollback: number;
+  /** Lines above the text were left out. */
+  more: boolean;
+}
+
+/** The line that ends on row `last`, with its soft-wrapped rows joined and trailing spaces trimmed, and the row it starts on. */
+function lineEndingAt(buf: BufferLike, last: number): { first: number; text: string } {
+  let first = last;
+  while (first > 0 && buf.getLine(first)?.isWrapped) first--;
+  let text = "";
+  // Keep the spaces at a wrap point: they are part of the joined line.
+  for (let y = first; y <= last; y++) text += buf.getLine(y)?.translateToString(y === last) ?? "";
+  return { first, text: text.trimEnd() };
 }
 
 /**
- * The screen plus up to `lines` scrollback rows above it, with soft-wrapped rows joined into one
- * line, trailing spaces trimmed and trailing blank lines dropped. A scrollback window that starts in
- * the middle of a wrapped line is widened to the line's start.
+ * Up to `max` lines counted back from the last line with text at the bottom of the screen, reading
+ * no line that ends above row `from`. A line that starts above `from` and wraps onto it is read whole.
+ */
+function readLines(buf: BufferLike, rows: number, max: number, from: number): ScreenText {
+  const end = Math.min(buf.length, Math.max(0, buf.baseY) + rows);
+  const out: string[] = [];
+  let y = end - 1;
+  while (y >= from && out.length < max) {
+    const line = lineEndingAt(buf, y);
+    // Blank lines below the last one with text are dropped.
+    if (out.length > 0 || line.text !== "") out.push(line.text);
+    y = line.first - 1;
+  }
+  return { text: out.reverse().join("\n"), alternate: buf.type === "alternate", more: y >= 0 };
+}
+
+/**
+ * AI-11: the terminal's last `lines` lines, counted back from the last line with text across the
+ * screen and the scrollback, with soft-wrapped rows joined into one line.
  */
 export function readBuffer(buf: BufferLike, rows: number, lines: number): ScreenText {
-  const screenStart = Math.max(0, buf.baseY);
-  const end = Math.min(buf.length, screenStart + rows);
-  let start = Math.max(0, screenStart - Math.max(0, lines));
-  while (start > 0 && buf.getLine(start)?.isWrapped) start--;
-
-  const out: string[] = [];
-  for (let y = start; y < end; y++) {
-    const line = buf.getLine(y);
-    if (!line) continue;
-    const continues = y + 1 < end && !!buf.getLine(y + 1)?.isWrapped;
-    // Keep the spaces at a wrap point: they are part of the joined line.
-    const text = line.translateToString(!continues);
-    if (line.isWrapped && out.length > 0) out[out.length - 1] += text;
-    else out.push(text);
-  }
-  while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
-  return { text: out.map((l) => l.trimEnd()).join("\n"), alternate: buf.type === "alternate", scrollback: screenStart - start };
+  return readLines(buf, rows, Math.max(1, lines), 0);
 }
 
 /** Lines of the screen a message's `terminal_state` note shows, unless a full-screen program runs (AI-46). */
@@ -59,8 +69,9 @@ export const SCREEN_NOTE_LINES = 20;
  * screen. Scrollback is left out.
  */
 export function screenNote(buf: BufferLike, rows: number): { text: string; alternate: boolean } {
-  const { text, alternate } = readBuffer(buf, rows, 0);
-  return { text: alternate ? text : text.split("\n").slice(-SCREEN_NOTE_LINES).join("\n"), alternate };
+  const alternate = buf.type === "alternate";
+  const { text } = readLines(buf, rows, alternate ? Infinity : SCREEN_NOTE_LINES, Math.max(0, buf.baseY));
+  return { text, alternate };
 }
 
 /** Lines of the screen a `send_input` call's judge reads, and its hard rules check (AI-47). */
@@ -71,7 +82,7 @@ export const SCREEN_TAIL_LINES = 10;
  * cursor waits at a prompt, so the judge can tell what a `send_input` call answers.
  */
 export function screenTail(buf: BufferLike, rows: number): string {
-  return readBuffer(buf, rows, 0).text.split("\n").slice(-SCREEN_TAIL_LINES).join("\n");
+  return readLines(buf, rows, SCREEN_TAIL_LINES, Math.max(0, buf.baseY)).text;
 }
 
 /**

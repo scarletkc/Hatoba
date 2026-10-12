@@ -24,13 +24,14 @@ function screenText(session: LiveSession, lines: number): ScreenText {
 }
 
 function describeScreen(s: ScreenText): string {
+  const n = s.text ? s.text.split("\n").length : 0;
   const head = s.alternate
-    ? "Alternate screen: yes. A full-screen program (such as vim or htop) is running; this is its current screen."
-    : `Alternate screen: no. This is the visible screen with ${s.scrollback} line(s) of scrollback above it.`;
-  return `${head}\n\n${s.text || "(the screen is empty)"}`;
+    ? `Alternate screen: yes. A full-screen program (such as vim or htop) is running; ${s.more ? `these are the last ${n} line(s) of its screen` : "this is its whole screen"}.`
+    : `Alternate screen: no. ${s.more ? `These are the terminal's last ${n} line(s); earlier output is above them` : `This is everything in the terminal, ${n} line(s)`}.`;
+  return `${head}\n\n${s.text || "(the terminal is empty)"}`;
 }
 
-/** AI-11: the screen and up to `lines` scrollback lines as plain text. */
+/** AI-11: the terminal's last `lines` lines as plain text. */
 export function readTerminal(session: LiveSession, json: string): ToolOutcome {
   const args = parseReadTerminal(json);
   if (!args.ok) return { status: "error", content: `Invalid arguments: ${args.error}` };

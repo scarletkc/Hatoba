@@ -73,18 +73,19 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     if set.terminal {
         tools.push(tool(
             READ_TERMINAL,
-            "Read the terminal tab's screen: the visible screen plus up to `lines` lines of \
-             scrollback above it, as plain text with soft-wrapped lines joined, and whether the \
-             alternate screen (vim, htop, less and so on) is active. Use it to see the prompt, \
-             earlier output or a full-screen program. It runs without asking."
+            "Read the terminal tab's last `lines` lines, counted back from the last line with \
+             text across the visible screen and the scrollback, as plain text with soft-wrapped \
+             lines joined, and whether the alternate screen (vim, htop, less and so on) is active. \
+             Use it to see the prompt, earlier output or a full-screen program. It runs without \
+             asking."
                 .to_owned(),
             json!({
                 "type": "object",
                 "properties": {
                     "lines": {
                         "type": "integer",
-                        "description": "Lines of scrollback above the visible screen to include \
-                                        (default 100, at most 1000)."
+                        "description": "How many lines to return, counted back from the last \
+                                        line with text (default 100, at most 1000)."
                     }
                 }
             }),
