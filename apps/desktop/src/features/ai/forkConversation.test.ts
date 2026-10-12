@@ -25,7 +25,7 @@ vi.mock("@/components/overlay", async (importActual) => ({ ...(await importActua
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 
-const { compactConversation, forkConversation, sendMessage } = await import("./actions");
+const { compactConversation, forkConversation, newConversation, openConversation, sendMessage } = await import("./actions");
 const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotOf, useAi } = await import("./store");
 
 const conversation = (id: string, title: string): AiConversationView => ({
@@ -180,6 +180,20 @@ describe("forkConversation (AI-43)", () => {
     finish(copy);
     await pending;
     expect(getSlot(HOME_SLOT)).toMatchObject({ conversationId: other.id, turn: null });
+    expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
+  });
+
+  it("leaves a slot that showed another conversation while Rust copied, and then the one under way again", async () => {
+    const other = conversation("c3", "Restart nginx");
+    useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: newTurn() } } });
+    const finish = held();
+    const pending = forkConversation(HOME_SLOT, original.id, null);
+    newConversation(HOME_SLOT);
+    await openConversation(HOME_SLOT, other.id);
+    finish(copy);
+    await pending;
+    expect(getSlot(HOME_SLOT)).toMatchObject({ conversationId: other.id, turn: { phase: "starting" } });
+    expect(useAi.getState().background).toEqual({});
     expect(toast).toHaveBeenCalledWith("Forked. The new conversation is in History.", "success");
   });
 

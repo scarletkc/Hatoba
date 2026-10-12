@@ -247,14 +247,15 @@ function failedVerdict(): AiAutoVerdict {
 const runners = new Map<string, TurnRunner>();
 
 /**
- * AI-43: when a turn or a compaction last started in each slot, by a sequence number, so that a fork can tell the
- * slot moved on while it was made, also when what started has ended since.
+ * AI-43: when each slot last changed by the user's doing, by a sequence number: a turn or a compaction started in
+ * it, or another conversation shown. A fork can tell from it that the slot moved on while it was made, also when
+ * what started has ended since, or the slot went back to the conversation it showed.
  */
-const lastStart = new Map<string, number>();
-let startSeq = 0;
+const lastChange = new Map<string, number>();
+let changeSeq = 0;
 
-function noteStart(slotId: string) {
-  lastStart.set(slotId, ++startSeq);
+function noteChange(slotId: string) {
+  lastChange.set(slotId, ++changeSeq);
 }
 
 /**
@@ -297,7 +298,7 @@ class TurnRunner {
   constructor(slotId: string, convId: string | null, mode: AiPermissionMode) {
     this.slotId = slotId;
     this.tab = tabOf(slotId);
-    noteStart(slotId);
+    noteChange(slotId);
     this.convId = convId;
     this.mode = mode;
     this.ready = new Promise((resolve) => (this.resolveReady = resolve));
@@ -1309,6 +1310,7 @@ let backgroundSeq = 0;
  * message (§13.1), which is sent when the turn ends; an idle one's queued message goes back into the input area.
  */
 function release(slotId: string) {
+  noteChange(slotId);
   stopSideQuestion(slotId);
   if (slotWorking(slotId)) toBackground(slotId);
   else giveBackQueued(slotId);
@@ -1353,7 +1355,7 @@ function clearBackground(id: string) {
 
 /** A background slot goes: its conversation is shown again, deleted, or its tab closed (AI-07). */
 function dropBackground(id: string) {
-  lastStart.delete(id);
+  lastChange.delete(id);
   useAi.setState((st) => {
     const slots = { ...st.slots };
     const background = { ...st.background };
@@ -1439,6 +1441,8 @@ export function conversationBusy(id: string): boolean {
  * of a tab it moved to: its runner stays pinned to the tab it started on (AI-08).
  */
 function moveSlot(from: string, to: string) {
+  noteChange(from);
+  noteChange(to);
   const source = getSlot(from);
   const runner = runners.get(from);
   const target = getSlot(to);
@@ -1532,7 +1536,7 @@ export function continueHomeConversation(tabId: string): boolean {
 export function detachSlot(slotId: string) {
   stopSlot(slotId);
   setSlot(slotId, null);
-  lastStart.delete(slotId);
+  lastChange.delete(slotId);
   for (const [id, tab] of Object.entries(useAi.getState().background)) {
     if (tab !== slotId) continue;
     stopSlot(id);
@@ -1793,7 +1797,7 @@ export async function compactConversation(slotId: string) {
     return;
   }
   patchSlot(slotId, { compacting: true });
-  noteStart(slotId);
+  noteChange(slotId);
   try {
     const entry = await api.ai_compact(id, context);
     // The slot that shows the conversation now: it may have moved meanwhile (Connect to host).
@@ -1866,7 +1870,7 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
   const model = entryId && source ? forkModel(source.entries, entryId) : null;
   // The stored slot itself: one never used is not stored, and getSlot makes a new blank one each time.
   const before = useAi.getState().slots[slotId];
-  const startedBefore = lastStart.get(slotId);
+  const changedBefore = lastChange.get(slotId);
   const working = slotWorking(slotId);
   try {
     // The number in the title skips those History has (AI-43).
@@ -1874,13 +1878,14 @@ export async function forkConversation(slotId: string, id: string, entryId: stri
     const taken = (useAi.getState().history ?? []).map((c) => c.title);
     const fork = await api.ai_conversation_fork(id, entryId, forkTitle(t, original?.title ?? "", taken));
     updateConversation(fork);
-    // A turn or compaction started since, even one that has ended, is the slot moving on; what one under way when
-    // Fork was chosen does meanwhile is not. Every message, stored entry and reload gives the slot a new entries
-    // array, so in an idle slot the same array also means nothing else happened in it.
+    // Another conversation shown, or a turn or compaction started since, even one that has ended or a conversation
+    // shown again, is the slot moving on; what one under way when Fork was chosen does meanwhile is not. Every
+    // message, stored entry and reload gives the slot a new entries array, so in an idle slot the same array also
+    // means nothing else happened in it.
     const now = useAi.getState().slots[slotId];
     const movedOn =
       now?.conversationId !== before?.conversationId ||
-      lastStart.get(slotId) !== startedBefore ||
+      lastChange.get(slotId) !== changedBefore ||
       (!working && (now?.entries !== before?.entries || !!now?.turn));
     if (movedOn || before?.reverting || now?.reverting) {
       toast(t("ai.fork.inHistory"), "success");
