@@ -1,4 +1,5 @@
-//! Synced settings item (spec §5.1 `Settings`), device-local preferences, and the star prompt state.
+//! Synced settings item (spec §5.1 `Settings`), device-local preferences, and the star prompt
+//! state.
 
 use hatoba_core::Vault;
 use hatoba_core::model::{

@@ -283,7 +283,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    /// Regenerates `src/ipc/bindings.ts` from the Rust types (`cargo test -p hatoba-desktop export_bindings`).
+    /// Regenerates `src/ipc/bindings.ts` from the Rust types
+    /// (`cargo test -p hatoba-desktop export_bindings`).
     #[test]
     fn export_bindings() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/ipc/bindings.ts");

@@ -192,7 +192,8 @@ pub struct AiManager(Arc<Inner>);
 
 #[derive(Default)]
 struct Inner {
-    /// The client for provider and search requests, built once (`hatoba_ai::provider::http_client`).
+    /// The client for provider and search requests, built once
+    /// (`hatoba_ai::provider::http_client`).
     http: OnceLock<reqwest::Client>,
     /// The MCP servers whose tools requests offer (§13.9).
     mcp: McpManager,
@@ -2797,9 +2798,9 @@ fn prepare_locked(
 
 /// The conversation's next request (§13.1) for its context `entries`: the system prompt that
 /// offers tools, the built-in tools, then the MCP tools of `offer`, or `search_tools` and
-/// `call_mcp_tool` when the conversation's MCP tools are `deferred` (AI-45). Every request of a turn,
-/// every Compact request (AI-21) and every side question's (AI-42) is built here, so the last two
-/// have their turn's prefix. The error is a sentence for the panel.
+/// `call_mcp_tool` when the conversation's MCP tools are `deferred` (AI-45). Every request of a
+/// turn, every Compact request (AI-21) and every side question's (AI-42) is built here, so the last
+/// two have their turn's prefix. The error is a sentence for the panel.
 fn next_request(
     v: &Vault,
     context: &AiTurnContext,

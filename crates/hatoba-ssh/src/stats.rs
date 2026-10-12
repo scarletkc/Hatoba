@@ -46,7 +46,8 @@ pub struct ServerStats {
     pub swap_total: Option<u64>,
     /// Swap in use.
     pub swap_used: Option<u64>,
-    /// Receive rate since the previous reading, summed over [`net_interfaces`](Self::net_interfaces).
+    /// Receive rate since the previous reading, summed over
+    /// [`net_interfaces`](Self::net_interfaces).
     pub net_rx_rate: Option<u64>,
     /// Send rate since the previous reading.
     pub net_tx_rate: Option<u64>,

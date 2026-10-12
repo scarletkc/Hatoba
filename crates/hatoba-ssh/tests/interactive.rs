@@ -33,7 +33,8 @@ enum Script {
     InfoThenPassword(&'static str),
     /// Endless informational rounds.
     Endless,
-    /// Public key (the given one) first, then a code round (AuthenticationMethods publickey,keyboard-interactive).
+    /// Public key (the given one) first, then a code round (AuthenticationMethods
+    /// publickey,keyboard-interactive).
     PublicKeyThenOtp(PublicKey, &'static str),
 }
 

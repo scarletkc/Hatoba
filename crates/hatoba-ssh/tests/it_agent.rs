@@ -88,7 +88,8 @@ async fn agent_authentication() {
     };
     let dir = tempfile::tempdir().unwrap();
     let agent = Agent::start(dir.path());
-    // SAFETY: this is the only test in the binary, so nothing else touches the environment concurrently.
+    // SAFETY: this is the only test in the binary, so nothing else touches the environment
+    // concurrently.
     unsafe { std::env::set_var("SSH_AUTH_SOCK", &agent.sock) };
 
     let login = |label: &str| {

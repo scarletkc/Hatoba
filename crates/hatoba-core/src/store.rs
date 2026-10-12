@@ -755,7 +755,8 @@ pub struct Store {
     conn: Connection,
 }
 
-/// A transaction handle; commit happens when the closure given to [`Store::transaction`] returns `Ok`.
+/// A transaction handle; commit happens when the closure given to [`Store::transaction`] returns
+/// `Ok`.
 pub struct StoreTx<'a> {
     tx: Transaction<'a>,
 }

@@ -151,7 +151,8 @@ impl Transfer {
     }
 }
 
-/// Starts a transfer in the background and returns its id; progress arrives as `transfer://progress`.
+/// Starts a transfer in the background and returns its id; progress arrives as
+/// `transfer://progress`.
 fn spawn_transfer(
     app: AppHandle,
     session_id: String,

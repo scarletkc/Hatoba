@@ -421,7 +421,8 @@ pub fn generate_key(
     let pem = stored
         .to_openssh(LineEnding::LF)
         .map_err(|e| KeyError::Invalid(e.to_string()))?;
-    // Metadata comes from the plaintext key: an encrypted key does not carry its comment in the clear.
+    // Metadata comes from the plaintext key: an encrypted key does not carry its comment in the
+    // clear.
     build_parsed(&key, pem, passphrase.is_some())
 }
 

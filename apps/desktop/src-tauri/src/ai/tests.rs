@@ -3440,7 +3440,7 @@ fn the_lock_cancels_provider_requests_outside_a_conversation() {
     assert!(super::guard(&manager.0.ops).is_empty());
 }
 
-// ───────────────────────── the prompt's context, notes, instructions (§13.1, §13.3) ─────────────────────────
+// ────────────────── the prompt's context, notes, instructions (§13.1, §13.3) ──────────────────
 
 impl Fixture {
     /// Stores a host with AI notes (AI-37) and returns its id.

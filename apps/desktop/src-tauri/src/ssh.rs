@@ -126,7 +126,8 @@ impl SshManager {
             .ok_or_else(|| AppError::not_found("session"))
     }
 
-    /// Removes the session only if it is still the given instance (a reconnect may have replaced it).
+    /// Removes the session only if it is still the given instance (a reconnect may have replaced
+    /// it).
     pub fn remove_if_same(&self, id: &str, live: &Arc<LiveSession>) {
         let mut sessions = lock(&self.sessions);
         if sessions.get(id).is_some_and(|s| Arc::ptr_eq(s, live)) {

@@ -603,7 +603,8 @@ fn apply_push_results(
                     )?;
                 }
                 PushResult::Error { id, error } if error == "not_found" => {
-                    // The server has no such row (for example its database was reset): resend as new.
+                    // The server has no such row (for example its database was reset): resend as
+                    // new.
                     tx.set_row_revision(id, 0)?;
                 }
                 PushResult::Error { id, error } => {
