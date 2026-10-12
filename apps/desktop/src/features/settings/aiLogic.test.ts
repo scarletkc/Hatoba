@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AiModel, AiProviderView, SearchProviderView } from "@/ipc/types";
 import {
   addModels,
+  changedSettings,
   firstModelRef,
   formatEfforts,
   formatTokenCount,
@@ -13,8 +14,8 @@ import {
   parseModelIds,
   parseTokenCount,
   removeModel,
+  resolveSettings,
   sanitizeSettings,
-  sameSettings,
   searchProviderFor,
   suggestProtocol,
   toDraft,
@@ -268,14 +269,22 @@ describe("default model", () => {
 
   it("tells a changed default thinking level apart (AI-05)", () => {
     const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "" };
-    expect(sameSettings(base, { ...base })).toBe(true);
-    expect(sameSettings(base, { ...base, default_effort: "high" })).toBe(false);
+    expect(changedSettings(base, { ...base })).toBeNull();
+    expect(changedSettings(base, { ...base, default_effort: "high" })).toEqual({ default_effort: "high" });
+    expect(changedSettings({ ...base, default_effort: "high" }, base)).toEqual({ default_effort: null });
   });
 
   it("keeps and compares the custom instructions (AI-36)", () => {
     const base = { default_model: null, default_effort: null, search_provider_id: "gone", builtin_skill_enabled: true, custom_instructions: "Answer in English." };
     expect(sanitizeSettings(base, providers, search).custom_instructions).toBe("Answer in English.");
-    expect(sameSettings(base, { ...base, custom_instructions: "Answer in English. " })).toBe(false);
+    expect(changedSettings(base, { ...base, custom_instructions: "Answer in English. " })).toEqual({ custom_instructions: "Answer in English. " });
+  });
+
+  it("saves only the defaults that change when the providers do", () => {
+    const base = { default_model: { provider_id: "z", model_id: "z1" }, default_effort: "low" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "Be brief." };
+    expect(changedSettings(base, resolveSettings(base, providers, search))).toEqual({ default_model: { provider_id: "a", model_id: "a1" } });
+    expect(changedSettings(base, sanitizeSettings(base, providers, []))).toEqual({ default_model: null, search_provider_id: null });
+    expect(changedSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, resolveSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, providers, search))).toBeNull();
   });
 });
 

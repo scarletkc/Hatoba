@@ -6,10 +6,10 @@ import { useT } from "@/i18n";
 import type { LocalPrefs, SettingsView, TerminalSettings } from "@/ipc/types";
 import s from "./shared.module.css";
 
-/** What every settings pane gets: the synced settings (null while loading) and ways to change them. */
+/** What every settings pane gets: the synced settings (null while loading) and a way to change them. */
 export interface PaneProps {
   settings: SettingsView | null;
-  update(patch: Partial<SettingsView>): void;
+  /** Saves the terminal fields in `patch`, and only those. */
   updateTerminal(patch: Partial<TerminalSettings>): void;
 }
 

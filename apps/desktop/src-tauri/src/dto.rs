@@ -785,7 +785,7 @@ pub enum RightClick {
     Menu,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct TerminalSettings {
     pub font_family: String,
     pub font_size: u32,
@@ -796,9 +796,30 @@ pub struct TerminalSettings {
     pub confirm_multiline_paste: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct SettingsView {
     pub terminal: TerminalSettings,
+}
+
+/// The terminal fields a [`SettingsPatch`] changes; a field left out keeps its stored value.
+#[derive(Debug, Clone, Default, Deserialize, Type)]
+#[serde(default)]
+pub struct TerminalSettingsPatch {
+    pub font_family: Option<String>,
+    pub font_size: Option<u32>,
+    pub theme: Option<ThemeChoice>,
+    pub cursor_style: Option<CursorChoice>,
+    pub scrollback: Option<u32>,
+    pub right_click: Option<RightClick>,
+    pub confirm_multiline_paste: Option<bool>,
+}
+
+/// What `settings_save` changes. Only these fields are written, over the stored settings, so a
+/// window that read the settings before a sync pull keeps what other devices changed (§6.4).
+#[derive(Debug, Clone, Default, Deserialize, Type)]
+#[serde(default)]
+pub struct SettingsPatch {
+    pub terminal: TerminalSettingsPatch,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1202,7 +1223,7 @@ pub struct AiModelRef {
 }
 
 /// The synced `Settings.ai` (§5.1).
-#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct AiSettingsView {
     pub default_model: Option<AiModelRef>,
     /// The thinking level new conversations start with (AI-05); `None` is Default.
@@ -1212,6 +1233,38 @@ pub struct AiSettingsView {
     pub builtin_skill_enabled: bool,
     /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
     pub custom_instructions: String,
+}
+
+/// What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
+/// its stored value. `null` clears the default model and search provider, and sets the default
+/// thinking level to Default.
+#[derive(Debug, Clone, Default, Deserialize, Type)]
+#[serde(default)]
+pub struct AiSettingsPatch {
+    #[specta(type = Option<AiModelRef>)]
+    pub default_model: Clearable<AiModelRef>,
+    #[specta(type = Option<AiEffort>)]
+    pub default_effort: Clearable<AiEffort>,
+    #[specta(type = Option<String>)]
+    pub search_provider_id: Clearable<String>,
+    pub builtin_skill_enabled: Option<bool>,
+    pub custom_instructions: Option<String>,
+}
+
+/// A patch field that `null` clears.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Clearable<T> {
+    /// Left out: the stored value stays.
+    #[default]
+    Keep,
+    Clear,
+    Set(T),
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Clearable<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Option::<T>::deserialize(deserializer)?.map_or(Self::Clear, Self::Set))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]

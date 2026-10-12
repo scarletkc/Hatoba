@@ -10,7 +10,8 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, State};
 
 use crate::dto::{
-    CursorChoice, LocalPrefs, RightClick, SettingsView, StarPrompt, TerminalSettings, ThemeChoice,
+    CursorChoice, LocalPrefs, RightClick, SettingsPatch, SettingsView, StarPrompt,
+    TerminalSettings, TerminalSettingsPatch, ThemeChoice,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, now_ms};
@@ -58,57 +59,77 @@ pub fn settings_get(state: State<'_, AppState>) -> AppResult<SettingsView> {
 pub fn settings_save(
     app: AppHandle,
     state: State<'_, AppState>,
-    settings: SettingsView,
+    patch: SettingsPatch,
 ) -> AppResult<()> {
-    let t = &settings.terminal;
-    if t.font_family.trim().is_empty() || t.font_family.len() > 200 {
-        return Err(AppError::invalid("font_family", "invalid font family"));
+    if state.with_unlocked(|v| save_settings(v, &patch))? {
+        sync::local_change(&app);
     }
-    if !(6..=48).contains(&t.font_size) {
-        return Err(AppError::invalid(
-            "font_size",
-            "font size must be between 6 and 48",
-        ));
+    Ok(())
+}
+
+/// Writes the fields `patch` sets over the stored settings and returns whether that changed them.
+/// The other fields keep their stored values, which may be newer than what the window that sent
+/// `patch` shows. Nothing is written when a field is invalid.
+fn save_settings(v: &mut Vault, patch: &SettingsPatch) -> AppResult<bool> {
+    let stored = v.settings();
+    let mut settings = stored.clone();
+    patch_terminal(&mut settings.terminal, &patch.terminal)?;
+    if settings == stored {
+        return Ok(false);
     }
-    if !(100..=200_000).contains(&t.scrollback) {
-        return Err(AppError::invalid(
-            "scrollback",
-            "scrollback must be between 100 and 200000 lines",
-        ));
+    v.put(Some(SETTINGS_ID), Item::Settings(settings))?;
+    Ok(true)
+}
+
+fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppResult<()> {
+    if let Some(font_family) = &patch.font_family {
+        if font_family.trim().is_empty() || font_family.len() > 200 {
+            return Err(AppError::invalid("font_family", "invalid font family"));
+        }
+        font_family.trim().clone_into(&mut t.font_family);
     }
-    state.with_unlocked(|v| {
-        // The behaviour fields start from the stored ones, so a field the user never changed
-        // stays unset (`TerminalSettings::set_right_click`).
-        let mut terminal = CoreTerminal {
-            font_family: t.font_family.trim().to_owned(),
-            font_size: t.font_size as u16,
-            theme: match t.theme {
-                ThemeChoice::Light => ThemeMode::Light,
-                ThemeChoice::Dark => ThemeMode::Dark,
-                ThemeChoice::System => ThemeMode::System,
-            },
-            cursor_style: match t.cursor_style {
-                CursorChoice::Bar => CursorStyle::Bar,
-                CursorChoice::Underline => CursorStyle::Underline,
-                CursorChoice::Block => CursorStyle::Block,
-            },
-            scrollback: t.scrollback,
-            ..v.settings().terminal
+    if let Some(font_size) = patch.font_size {
+        if !(6..=48).contains(&font_size) {
+            return Err(AppError::invalid(
+                "font_size",
+                "font size must be between 6 and 48",
+            ));
+        }
+        t.font_size = font_size as u16;
+    }
+    if let Some(theme) = patch.theme {
+        t.theme = match theme {
+            ThemeChoice::Light => ThemeMode::Light,
+            ThemeChoice::Dark => ThemeMode::Dark,
+            ThemeChoice::System => ThemeMode::System,
         };
-        terminal.set_right_click(match t.right_click {
+    }
+    if let Some(cursor_style) = patch.cursor_style {
+        t.cursor_style = match cursor_style {
+            CursorChoice::Bar => CursorStyle::Bar,
+            CursorChoice::Underline => CursorStyle::Underline,
+            CursorChoice::Block => CursorStyle::Block,
+        };
+    }
+    if let Some(scrollback) = patch.scrollback {
+        if !(100..=200_000).contains(&scrollback) {
+            return Err(AppError::invalid(
+                "scrollback",
+                "scrollback must be between 100 and 200000 lines",
+            ));
+        }
+        t.scrollback = scrollback;
+    }
+    // A behaviour field the user never changed stays unset (`TerminalSettings::set_right_click`).
+    if let Some(right_click) = patch.right_click {
+        t.set_right_click(match right_click {
             RightClick::Menu => CoreRightClick::Menu,
             RightClick::CopyPaste => CoreRightClick::CopyPaste,
         });
-        terminal.set_confirm_multiline_paste(t.confirm_multiline_paste);
-        let model = Settings {
-            terminal,
-            updated_at: 0,
-            ..v.settings()
-        };
-        v.put(Some(SETTINGS_ID), Item::Settings(model))?;
-        Ok(())
-    })?;
-    sync::local_change(&app);
+    }
+    if let Some(confirm) = patch.confirm_multiline_paste {
+        t.set_confirm_multiline_paste(confirm);
+    }
     Ok(())
 }
 
@@ -234,8 +255,11 @@ mod tests {
     use hatoba_core::{KdfParams, Vault};
     use serde_json::{Value, json};
 
-    use super::{adopt_legacy_prefs, adopt_legacy_prefs_after_unlock, merge_prefs};
-    use crate::dto::{Language, LocalPrefs};
+    use super::{
+        adopt_legacy_prefs, adopt_legacy_prefs_after_unlock, merge_prefs, save_settings,
+        settings_view,
+    };
+    use crate::dto::{Language, LocalPrefs, SettingsPatch, TerminalSettingsPatch};
 
     const PW: &str = "correct horse battery staple";
 
@@ -417,6 +441,101 @@ mod tests {
         vault.set_sync_config(None).unwrap();
         assert!(adopt_legacy_prefs_after_unlock(&mut vault).unwrap());
         assert_eq!(vault.settings().terminal.right_click, Some(custom()));
+    }
+
+    fn terminal(patch: TerminalSettingsPatch) -> SettingsPatch {
+        SettingsPatch { terminal: patch }
+    }
+
+    #[test]
+    fn a_save_from_a_stale_window_keeps_the_fields_it_leaves_out() {
+        let mut vault = vault();
+        // Settings → Terminal reads the settings, then a sync round pulls another device's changes.
+        let shown = settings_view(&vault.settings()).terminal;
+        let mut pulled = vault.settings();
+        pulled.terminal.scrollback = 50_000;
+        pulled.terminal.set_right_click(custom());
+        vault
+            .put(Some(SETTINGS_ID), Item::Settings(pulled))
+            .unwrap();
+
+        // The user changes the font size in that window, which sends only that field.
+        let bigger: SettingsPatch =
+            serde_json::from_value(json!({"terminal": {"font_size": shown.font_size + 1}}))
+                .unwrap();
+        assert!(save_settings(&mut vault, &bigger).unwrap());
+
+        let t = vault.settings().terminal;
+        assert_eq!(u32::from(t.font_size), shown.font_size + 1);
+        assert_eq!(t.scrollback, 50_000);
+        assert_eq!(t.right_click, Some(custom()));
+        assert_eq!(t.font_family, shown.font_family);
+    }
+
+    #[test]
+    fn a_patch_checks_only_the_fields_it_sets() {
+        let mut vault = vault();
+        // Another device stored a size this one would refuse to save.
+        put_older_settings(&mut vault, json!({"font_size": 60}));
+        let scrollback = terminal(TerminalSettingsPatch {
+            scrollback: Some(5_000),
+            ..TerminalSettingsPatch::default()
+        });
+        assert!(save_settings(&mut vault, &scrollback).unwrap());
+        let t = vault.settings().terminal;
+        assert_eq!((t.font_size, t.scrollback), (60, 5_000));
+
+        // An invalid field is refused, and the valid ones sent with it are not written either.
+        let before = vault.settings();
+        let font = || Some("Fira Code".to_owned());
+        for (patch, field) in [
+            (
+                TerminalSettingsPatch {
+                    font_family: font(),
+                    font_size: Some(5),
+                    ..TerminalSettingsPatch::default()
+                },
+                "font_size",
+            ),
+            (
+                TerminalSettingsPatch {
+                    font_family: font(),
+                    scrollback: Some(99),
+                    ..TerminalSettingsPatch::default()
+                },
+                "scrollback",
+            ),
+            (
+                TerminalSettingsPatch {
+                    font_family: Some("  ".into()),
+                    ..TerminalSettingsPatch::default()
+                },
+                "font_family",
+            ),
+        ] {
+            let err = save_settings(&mut vault, &terminal(patch)).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some(field));
+        }
+        assert_eq!(vault.settings(), before);
+    }
+
+    #[test]
+    fn a_patch_that_changes_nothing_writes_nothing() {
+        let mut vault = vault();
+        let before = vault.settings();
+        // The window sends back what it shows, the defaults of the unset behaviour fields included.
+        let shown = settings_view(&before).terminal;
+        let same = terminal(TerminalSettingsPatch {
+            font_family: Some(shown.font_family.clone()),
+            font_size: Some(shown.font_size),
+            right_click: Some(shown.right_click),
+            confirm_multiline_paste: Some(shown.confirm_multiline_paste),
+            ..TerminalSettingsPatch::default()
+        });
+        assert!(!save_settings(&mut vault, &same).unwrap());
+        assert!(!save_settings(&mut vault, &SettingsPatch::default()).unwrap());
+        assert_eq!(vault.settings(), before);
+        assert_eq!(vault.settings().terminal.right_click, None);
     }
 
     #[test]

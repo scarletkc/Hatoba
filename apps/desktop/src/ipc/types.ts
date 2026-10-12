@@ -698,6 +698,14 @@ export interface SettingsView {
   terminal: TerminalSettings;
 }
 
+/**
+ * What `settings_save` changes. Only these fields are written, over the stored settings, so a window
+ * that read the settings before a sync pull keeps what other devices changed.
+ */
+export interface SettingsPatch {
+  terminal?: Partial<TerminalSettings>;
+}
+
 export type Language = "system" | "zh-CN" | "en" | "ja";
 
 /** Device-local preferences: readable while locked (the unlock screen needs the language). */
@@ -863,6 +871,9 @@ export interface AiSettingsView {
   /** Sent with every request, at most 32 KB of UTF-8 (AI-36). */
   custom_instructions: string;
 }
+
+/** What `ai_settings_save` changes, like {@link SettingsPatch}; null clears a field that can be empty. */
+export type AiSettingsPatch = Partial<AiSettingsView>;
 
 export type AiPermissionMode = "manual" | "bypass";
 

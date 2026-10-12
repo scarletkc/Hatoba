@@ -11,6 +11,7 @@ import type {
   AiProviderView,
   AiSendInput,
   AiSendStarted,
+  AiSettingsPatch,
   AiSettingsView,
   AiSideAnswer,
   AiSideEvent,
@@ -58,6 +59,7 @@ import type {
   QuickTarget,
   SearchProviderInput,
   SearchProviderView,
+  SettingsPatch,
   SettingsView,
   SkillDetail,
   SkillImportPreview,
@@ -246,7 +248,8 @@ export interface HatobaApi {
 
   // settings
   settings_get(): Promise<SettingsView>;
-  settings_save(settings: SettingsView): Promise<void>;
+  /** Writes the fields `patch` sets over the stored settings; the others keep their stored values. */
+  settings_save(patch: SettingsPatch): Promise<void>;
   prefs_get(): Promise<LocalPrefs>;
   prefs_save(prefs: LocalPrefs): Promise<void>;
   /** The sidebar's star prompt (spec §9). The first call records when this device started waiting. */
@@ -270,7 +273,8 @@ export interface HatobaApi {
   search_provider_test(input: SearchProviderInput): Promise<AiTestResult>;
   /** The synced default model and search provider. */
   ai_settings_get(): Promise<AiSettingsView>;
-  ai_settings_save(settings: AiSettingsView): Promise<void>;
+  /** Writes the fields `patch` sets, like `settings_save`. */
+  ai_settings_save(patch: AiSettingsPatch): Promise<void>;
   /** AI-23: every conversation, unsorted. */
   ai_conversations_list(): Promise<AiConversationView[]>;
   ai_conversation_get(id: string): Promise<AiConversationDetail>;

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, LinkButton, TextField } from "@/components/controls";
 import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { PopupSelect, confirm, toast } from "@/components/overlay";
@@ -32,7 +32,12 @@ export function SearchSection({
 }) {
   const t = useT();
   const [kind, setKind] = useState<SearchKind | null>(() => providers.find((p) => p.id === chosenId)?.kind ?? null);
-  const saved = kind ? searchProviderFor(providers, kind, chosenId) : null;
+  /** The saved provider that a typed address or key is for, null for a new one; undefined while nothing is typed. */
+  const draftFor = useRef<string | null | undefined>(undefined);
+  const current = kind ? searchProviderFor(providers, kind, chosenId) : null;
+  // A typed edit stays with the provider it was typed for when a sync chooses another one of the kind,
+  // and one deleted meanwhile is saved as a new provider.
+  const saved = draftFor.current === undefined ? current : (providers.find((p) => p.id === draftFor.current) ?? null);
   const [baseUrl, setBaseUrl] = useState(saved?.base_url ?? "");
   const [key, setKey] = useState<KeyDraft>(KEEP);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +57,21 @@ export function SearchSection({
     setError(null);
     setTest(IDLE);
     generation.current++;
+    draftFor.current = undefined;
   };
+
+  // A choice or address changed on another device shows, unless the form holds an edit of the user's:
+  // an address or key typed, or a kind picked that is not saved yet.
+  const chosenKind = providers.find((p) => p.id === chosenId)?.kind ?? null;
+  const savedUrl = saved?.base_url ?? null;
+  const synced = useRef({ chosenKind, savedUrl });
+  useEffect(() => {
+    const before = synced.current;
+    if (before.chosenKind === chosenKind && before.savedUrl === savedUrl) return;
+    synced.current = { chosenKind, savedUrl };
+    if (draftFor.current === undefined && !saving && kind === before.chosenKind) reset(chosenKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the synced values change, not on edits
+  }, [chosenKind, savedUrl]);
 
   const choose = (next: SearchKind | null) => {
     if (next === kind) return;
@@ -68,6 +87,7 @@ export function SearchSection({
     setError(null);
     setTest(IDLE);
     generation.current++;
+    if (draftFor.current === undefined) draftFor.current = saved?.id ?? null;
   };
 
   const toInput = (): SearchProviderInput | null => {
@@ -124,6 +144,7 @@ export function SearchSection({
       setKey(KEEP);
       setBaseUrl(view.base_url ?? "");
       setTest(IDLE);
+      draftFor.current = undefined;
     } catch (err) {
       setError(aiErrorMessage(t, err));
     } finally {

@@ -16,6 +16,7 @@ import { closeSessionTab } from "@/features/terminal/connect";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
+import type { SyncState } from "@/ipc/types";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
@@ -197,6 +198,8 @@ function homeTab(page: Page, t: (k: MessageKey) => string, groupName: (id: strin
 /** Backend → UI events (§10.2) that affect the whole app. */
 function useGlobalEvents() {
   useEffect(() => {
+    // The state of the last sync status, to tell when a round ends.
+    let lastSync: SyncState | null = null;
     const subs = [
       api.listen("vault://locked", () => {
         useApp.getState().setPhase("locked");
@@ -205,8 +208,14 @@ function useGlobalEvents() {
       }),
       api.listen("sync://status", (status) => {
         useApp.getState().setSync(status);
-        // Pulls may have changed hosts/keys; refresh what the UI shows.
-        if (status.state === "idle" && useApp.getState().phase === "unlocked") void useVaultData.getState().reload();
+        // Pulls may have changed hosts, keys and settings; refresh what the UI shows. A round that
+        // fails after pulling has changed them too.
+        const roundEnded = lastSync === "syncing" && status.state !== "syncing";
+        lastSync = status.state;
+        if ((status.state === "idle" || roundEnded) && useApp.getState().phase === "unlocked") {
+          void useVaultData.getState().reload();
+          useApp.getState().refreshSynced();
+        }
       }),
       api
         .listen("window://chrome", ({ floating }) => useApp.setState({ floating }))

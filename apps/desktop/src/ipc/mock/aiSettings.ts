@@ -1,5 +1,6 @@
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import type { HatobaApi } from "../api";
+import { applyPatch } from "./patch";
 import type {
   AiAllowance,
   AiEffort,
@@ -261,11 +262,11 @@ export function createAiSettingsMock(): AiSettingsApi {
       return { ok: true, failure: null, status: 200, message: null };
     },
     ai_settings_get: async () => structuredClone(settings),
-    ai_settings_save: async (next) => {
+    ai_settings_save: async (patch) => {
       // Like Rust (AI-36).
-      if (byteCount(next.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
+      if (patch.custom_instructions !== undefined && byteCount(patch.custom_instructions) > INSTRUCTIONS_MAX_BYTES)
         throw { code: "invalid_input", detail: "custom instructions are limited to 32 KB", field: "custom_instructions" } satisfies AppError;
-      settings = structuredClone(next);
+      settings = applyPatch(settings, structuredClone(patch));
     },
     // AI-19: the approvals saved on this device, kept until the page reloads.
     ai_allowances_list: async () => allowances.map((a) => ({ ...a })),

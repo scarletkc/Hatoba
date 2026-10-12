@@ -25,6 +25,7 @@ import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiSettingsMock } from "./aiSettings";
 import * as D from "./data";
 import { mockStats } from "./data";
+import { applyPatch } from "./patch";
 import { FakeShell } from "./shell";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
@@ -963,8 +964,10 @@ export function createMockApi(): HatobaApi {
     },
 
     settings_get: async () => structuredClone(settings),
-    settings_save: async (next) => {
-      settings = structuredClone(next);
+    settings_save: async (patch) => {
+      const terminal = applyPatch(settings.terminal, patch.terminal);
+      if (JSON.stringify(terminal) === JSON.stringify(settings.terminal)) return;
+      settings = { ...settings, terminal };
       touch();
     },
     prefs_get: async () => prefs,

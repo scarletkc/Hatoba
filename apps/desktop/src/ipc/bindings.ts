@@ -223,7 +223,7 @@ export const commands = {
 	 */
 	deployUpgrade: (handle: string, target: UpgradeTarget, progress: Channel<DeployProgress>) => __TAURI_INVOKE<DeployOutcome>("deploy_upgrade", { handle, target, progress }),
 	settingsGet: () => __TAURI_INVOKE<SettingsView>("settings_get"),
-	settingsSave: (settings: SettingsView) => __TAURI_INVOKE<null>("settings_save", { settings }),
+	settingsSave: (patch: SettingsPatch) => __TAURI_INVOKE<null>("settings_save", { patch }),
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
@@ -244,7 +244,7 @@ export const commands = {
 	/**  A real query through a saved or unsaved search provider. */
 	searchProviderTest: (input: SearchProviderInput) => __TAURI_INVOKE<AiTestResult>("search_provider_test", { input }),
 	aiSettingsGet: () => __TAURI_INVOKE<AiSettingsView>("ai_settings_get"),
-	aiSettingsSave: (settings: AiSettingsView) => __TAURI_INVOKE<null>("ai_settings_save", { settings }),
+	aiSettingsSave: (patch: AiSettingsPatch) => __TAURI_INVOKE<null>("ai_settings_save", { patch }),
 	/**  Every conversation, unsorted; the panel sorts by `last_activity`, pinned first. */
 	aiConversationsList: () => __TAURI_INVOKE<AiConversationView[]>("ai_conversations_list"),
 	aiConversationGet: (id: string) => __TAURI_INVOKE<AiConversationDetail>("ai_conversation_get", { id }),
@@ -661,6 +661,19 @@ export type AiSendInput = {
 export type AiSendStarted = {
 	conversation: AiConversationView,
 	user_entry: AiEntryView,
+};
+
+/**
+ *  What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
+ *  its stored value. `null` clears the default model and search provider, and sets the default
+ *  thinking level to Default.
+ */
+export type AiSettingsPatch = {
+	default_model?: AiModelRef | null,
+	default_effort?: AiEffort | null,
+	search_provider_id?: string | null,
+	builtin_skill_enabled?: boolean | null,
+	custom_instructions?: string | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -1469,6 +1482,14 @@ export type SessionStateEvent = {
 	exit_status: number | null,
 };
 
+/**
+ *  What `settings_save` changes. Only these fields are written, over the stored settings, so a
+ *  window that read the settings before a sync pull keeps what other devices changed (§6.4).
+ */
+export type SettingsPatch = {
+	terminal?: TerminalSettingsPatch,
+};
+
 export type SettingsView = {
 	terminal: TerminalSettings,
 };
@@ -1644,6 +1665,17 @@ export type TerminalSettings = {
 	scrollback: number,
 	right_click: RightClick,
 	confirm_multiline_paste: boolean,
+};
+
+/**  The terminal fields a [`SettingsPatch`] changes; a field left out keeps its stored value. */
+export type TerminalSettingsPatch = {
+	font_family?: string | null,
+	font_size?: number | null,
+	theme?: ThemeChoice | null,
+	cursor_style?: CursorChoice | null,
+	scrollback?: number | null,
+	right_click?: RightClick | null,
+	confirm_multiline_paste?: boolean | null,
 };
 
 export type TestResult = {

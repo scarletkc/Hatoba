@@ -138,7 +138,7 @@ export function createTauriApi(): HatobaApi {
     },
 
     settings_get: () => call("settings_get"),
-    settings_save: (settings) => call("settings_save", { settings }),
+    settings_save: (patch) => call("settings_save", { patch }),
     prefs_get: () => call("prefs_get"),
     prefs_save: (prefs) => call("prefs_save", { prefs }),
     star_prompt_get: () => call("star_prompt_get"),
@@ -154,7 +154,7 @@ export function createTauriApi(): HatobaApi {
     search_provider_delete: (id) => call("search_provider_delete", { id }),
     search_provider_test: (input) => call("search_provider_test", { input }),
     ai_settings_get: () => call("ai_settings_get"),
-    ai_settings_save: (settings) => call("ai_settings_save", { settings }),
+    ai_settings_save: (patch) => call("ai_settings_save", { patch }),
     ai_conversations_list: () => call("ai_conversations_list"),
     ai_conversation_get: (id) => call("ai_conversation_get", { id }),
     ai_conversation_rename: (id, title) => call("ai_conversation_rename", { id, title }),
