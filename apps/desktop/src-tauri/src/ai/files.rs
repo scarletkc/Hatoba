@@ -1171,7 +1171,8 @@ mod tests {
 
     const SERVER: &str = "ops@db.example.net:22";
 
-    /// What the card read for `path`, resolved as the scripts resolve it with `$HOME` at `/home/ops`.
+    /// What the card read for `path`, resolved as the scripts resolve it with `$HOME` at
+    /// `/home/ops`.
     fn base(path: &str, bytes: Option<&[u8]>) -> Base {
         let resolved = match path.strip_prefix("~/") {
             Some(rest) => format!("/home/ops/{rest}"),
@@ -1330,8 +1331,9 @@ mod tests {
         assert!(error.contains("changed since you last read it"), "{error}");
         assert!(preview_of(&overwrite, &changed, by).error.is_some());
 
-        // Its own write is what it saw last, so it can edit again; the old content no longer passes.
-        // A call only notes what its result shows: it counts once `tool_run` stores the result.
+        // Its own write is what it saw last, so it can edit again; the old content no longer
+        // passes. A call only notes what its result shows: it counts once `tool_run` stores the
+        // result.
         let shown = Mutex::default();
         let wrote = SeenBy {
             shown: &shown,

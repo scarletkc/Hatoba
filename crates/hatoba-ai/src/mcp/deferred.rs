@@ -1,7 +1,8 @@
 //! Deferred MCP tools (AI-45): once a conversation's MCP tool definitions come to a tenth of the
-//! model's context window, or its requests would offer more than 128 tools, its requests offer [`SEARCH_TOOLS`](crate::tools::SEARCH_TOOLS) and
-//! [`CALL_MCP_TOOL`](crate::tools::CALL_MCP_TOOL) in their place, so the tool definitions and the
-//! system prompt never change with the servers and the provider's prompt cache keeps serving them.
+//! model's context window, or its requests would offer more than 128 tools, its requests offer
+//! [`SEARCH_TOOLS`](crate::tools::SEARCH_TOOLS) and [`CALL_MCP_TOOL`](crate::tools::CALL_MCP_TOOL)
+//! in their place, so the tool definitions and the system prompt never change with the servers and
+//! the provider's prompt cache keeps serving them.
 //!
 //! - [`defer_due`]: whether a message's MCP tools are deferred.
 //! - [`list_block`]: the `mcp_tools` note that lists the deferred tools (spec §13.3).

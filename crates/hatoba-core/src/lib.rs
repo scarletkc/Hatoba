@@ -13,8 +13,8 @@
 //! | [`model`] | plaintext item structures (spec §5.1) |
 //! | [`store`] | local SQLite: ciphertext only (spec §5.2) |
 //! | [`vault`] | lock state, password and recovery operations, the decrypted item map |
-//! | `vault_ai` | AI assistant items on [`Vault`]: providers, skills, MCP servers, conversation entries split across `ai_message` items (spec §13.7) |
-//! | `vault_snapshots` | device-local, sealed snapshots of what the AI file tools changed, for Revert (spec AI-41) |
+//! | `vault_ai` | AI items on [`Vault`]: providers, skills, MCP servers, conversations (§13.7) |
+//! | `vault_snapshots` | device-local, sealed snapshots of AI file edits, for Revert (spec AI-41) |
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
 //! | [`backup`] | encrypted backup export / import (VAULT-07) |
 //! | [`platform`] | injected capabilities (`SecretStore`, `DeviceInfo`) |

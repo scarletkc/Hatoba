@@ -1688,7 +1688,8 @@ mod tests {
 
     #[test]
     fn host_env_is_written_only_when_set_and_read_back() {
-        // SSH-14: a host without variables keeps the old shape, so older versions read it as before.
+        // SSH-14: a host without variables keeps the old shape, so older versions read it as
+        // before.
         let value = serde_json::to_value(Item::Host(sample_host())).unwrap();
         assert!(value.get("env").is_none());
 

@@ -82,7 +82,8 @@ fn store_parsed(
         let key = SshKey {
             name,
             algorithm: core_algorithm(parsed.algorithm),
-            // OpenSSH text as imported (possibly passphrase-encrypted); the vault encrypts it again.
+            // OpenSSH text as imported (possibly passphrase-encrypted); the vault encrypts it
+            // again.
             private_key: parsed.openssh_private.clone(),
             passphrase: if parsed.encrypted {
                 passphrase.map(Zeroizing::new)

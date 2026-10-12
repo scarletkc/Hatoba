@@ -761,7 +761,7 @@ async fn remote_files_are_read_and_written_in_place() {
     assert!(!new.exists());
 }
 
-// --------------------------------------------------------------------------- probe & errors on a live server
+// ----------------------------------------------------------------- probe & errors on a live server
 
 #[tokio::test]
 async fn tcp_probe_against_live_and_dead_ports() {
@@ -796,7 +796,7 @@ async fn wrong_port_is_refused_not_auth_failed() {
     assert_eq!(err.kind, SshErrorKind::Refused, "{err}");
 }
 
-// --------------------------------------------------------------------------- throughput & backpressure
+// ----------------------------------------------------------------------- throughput & backpressure
 
 /// §11: a 50 MB `cat` must not freeze anything, and nothing may be lost.
 #[tokio::test]

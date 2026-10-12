@@ -423,7 +423,8 @@ pub async fn hosts_probe(
 ) -> AppResult<Vec<ProbeResult>> {
     let targets = state.with_unlocked(|v| Ok(probe_targets(v, &ids)))?;
     let probes = targets.into_iter().map(|(id, target)| async move {
-        // Hosts behind a jump host are usually unreachable directly; report them as unknown/offline.
+        // Hosts behind a jump host are usually unreachable directly; report them as
+        // unknown/offline.
         let latency = match target {
             Some((host, port, proxy)) => {
                 hatoba_ssh::tcp_probe_via(proxy.as_ref(), &host, port, Duration::from_secs(3)).await
