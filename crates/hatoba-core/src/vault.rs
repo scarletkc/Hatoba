@@ -36,18 +36,18 @@ use crate::sync::engine::remote_row;
 const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
 
 /// Device-local values kept in the meta table, sealed under the vault key and never synced. They
-/// are read and written only through [`Vault::local_secret`] and [`Vault::set_local_secret`],
-/// and a join that changes the vault key seals each one in [`LocalSecret::ALL`] again, so a new
+/// are read and written only through [`Vault::sealed_local`] and [`Vault::set_sealed_local`],
+/// and a join that changes the vault key seals each one in [`SealedLocal::ALL`] again, so a new
 /// value needs nothing more than a variant here, listed in `ALL`.
 #[derive(Clone, Copy, Debug)]
-enum LocalSecret {
+enum SealedLocal {
     /// The shell's list of recent quick-connect targets (HOST-12), which names hosts.
     RecentTargets,
     /// The shell's AI approvals saved on this device (AI-19), which name hosts.
     AiAllowances,
 }
 
-impl LocalSecret {
+impl SealedLocal {
     const ALL: [Self; 2] = [Self::RecentTargets, Self::AiAllowances];
 
     const fn meta_key(self) -> &'static str {
@@ -1078,7 +1078,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn recent_targets(&self) -> Result<Option<String>> {
-        self.local_secret(LocalSecret::RecentTargets)
+        self.sealed_local(SealedLocal::RecentTargets)
     }
 
     /// Stores the recent quick-connect targets, sealed under the vault key.
@@ -1086,7 +1086,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_recent_targets(&mut self, json: &str) -> Result<()> {
-        self.set_local_secret(LocalSecret::RecentTargets, json)
+        self.set_sealed_local(SealedLocal::RecentTargets, json)
     }
 
     /// The AI approvals saved on this device (opaque JSON owned by the shell, AI-19). Never
@@ -1096,7 +1096,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn ai_allowances(&self) -> Result<Option<String>> {
-        self.local_secret(LocalSecret::AiAllowances)
+        self.sealed_local(SealedLocal::AiAllowances)
     }
 
     /// Stores the AI approvals saved on this device, sealed under the vault key.
@@ -1104,11 +1104,11 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_ai_allowances(&mut self, json: &str) -> Result<()> {
-        self.set_local_secret(LocalSecret::AiAllowances, json)
+        self.set_sealed_local(SealedLocal::AiAllowances, json)
     }
 
-    /// A [`LocalSecret`]; a value this vault key cannot open reads as `None`.
-    fn local_secret(&self, which: LocalSecret) -> Result<Option<String>> {
+    /// A [`SealedLocal`] value; one this vault key cannot open reads as `None`.
+    fn sealed_local(&self, which: SealedLocal) -> Result<Option<String>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
         let Some(sealed) = self.store.get_meta(which.meta_key())? else {
             return Ok(None);
@@ -1118,8 +1118,8 @@ impl Vault {
             .and_then(|plain| String::from_utf8(plain.to_vec()).ok()))
     }
 
-    /// Stores a [`LocalSecret`], sealed under the vault key.
-    fn set_local_secret(&mut self, which: LocalSecret, json: &str) -> Result<()> {
+    /// Stores a [`SealedLocal`] value, sealed under the vault key.
+    fn set_sealed_local(&mut self, which: SealedLocal, json: &str) -> Result<()> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
         let sealed = seal(&unlocked.vault_key, which.aad(), json.as_bytes())?;
         self.store.set_meta(which.meta_key(), &sealed.to_json())
@@ -1338,7 +1338,7 @@ impl Vault {
     /// none, the local one is queued dated at the epoch, older than any settings of the remote's
     /// own devices, which therefore replace it whenever they arrive (an edit made here after the
     /// join is dated as usual). Tombstones, items that cannot be decrypted, and the conflict log
-    /// are dropped, and every [`LocalSecret`] is sealed again. Returns whether the vault key
+    /// are dropped, and every [`SealedLocal`] is sealed again. Returns whether the vault key
     /// changed, so the caller can drop what still holds the old one (biometric unlock).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
@@ -1356,7 +1356,7 @@ impl Vault {
         // Device-local values sealed under the vault key, sealed again (`None`: dropped).
         let mut local = Vec::new();
         if rekey {
-            for which in LocalSecret::ALL {
+            for which in SealedLocal::ALL {
                 let resealed = match self.store.get_meta(which.meta_key())? {
                     Some(sealed) => crypto::open_json(&old, which.aad(), &sealed)
                         .ok()
