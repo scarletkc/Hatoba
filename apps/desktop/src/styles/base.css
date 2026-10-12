@@ -128,13 +128,15 @@ input[list]::-webkit-calendar-picker-indicator {
 }
 
 /* One run, or a looping animation would repeat every 0.01ms and flicker. Spinners opt back in where
- * they are defined: a still one reads as stuck. */
+ * they are defined: a still one reads as stuck. Transitions get none at all: any duration above
+ * zero would give every element one, since `transition-property` defaults to `all`, and a menu
+ * placed by script would show for a frame where it was first measured. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
