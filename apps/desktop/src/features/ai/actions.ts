@@ -1366,11 +1366,14 @@ function dropBackground(id: string) {
 }
 
 /**
- * The conversation stops being held where it is (its tab closes, or it is deleted): its turn and its side
- * question (AI-42) stop, and its queued message goes back into the input area (§13.1).
+ * The conversation stops being held where it is (its tab closes, or it is deleted): its turn, also one an earlier
+ * page started, and its side question (AI-42) stop, and its queued message goes back into the input area (§13.1).
  */
 function stopSlot(slotId: string) {
-  runners.get(slotId)?.abandon();
+  const runner = runners.get(slotId);
+  const { remoteRunning, conversationId } = getSlot(slotId);
+  if (runner) runner.abandon();
+  else if (remoteRunning && conversationId) void api.ai_stop(conversationId).catch(() => {});
   stopSideQuestion(slotId);
   giveBackQueued(slotId);
 }

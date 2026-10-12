@@ -390,6 +390,17 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     expect(ipc.send).toHaveBeenCalledTimes(1);
   });
 
+  it("stops a turn an earlier page started when its tab closes, also from the background", async () => {
+    patchSlot(TAB, { remoteRunning: true });
+    newConversation(TAB);
+    expect(nginxSlot()).toMatchObject({ remoteRunning: true });
+    expect(ipc.stop).not.toHaveBeenCalled();
+
+    detachSlot(TAB);
+    expect(ipc.stop).toHaveBeenCalledWith(nginx.id);
+    expect(held()).toBeUndefined();
+  });
+
   it("drops the turns in the background when the vault locks, and gives their queued messages back", async () => {
     const sent = turns();
     await sendMessage(TAB, "restart nginx");
