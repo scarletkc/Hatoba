@@ -24,9 +24,9 @@ use crate::dto::{AiFilePreview, AiFileRevert, AiRevertFailure};
 /// How long a read or a write may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A file tool's result while the tab has no live session (AI-08).
-const DISCONNECTED: &str = "The terminal tab is disconnected, so the tool did not run. Ask the \
-     user to reconnect the tab.";
+/// A file or search tool's result while the tab has no live session (AI-08).
+pub(super) const DISCONNECTED: &str = "The terminal tab is disconnected, so the tool did not \
+     run. Ask the user to reconnect the tab.";
 
 /// The cancelled result of an `edit_file` or `write_file` call that ran when the turn stopped:
 /// its write, if it had begun, was not cut off.
@@ -830,19 +830,25 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
              Read it again with read_file before you change it."
         ),
         RemoteFileError::Failed { status, stderr } => {
-            let mut message = format!("Could not {verb} {path}: ");
-            match status {
-                Some(code) => message.push_str(&format!("the command exited with status {code}")),
-                None => message.push_str("the command ended without an exit status"),
-            }
-            if !stderr.is_empty() {
-                message.push_str(&format!(" ({stderr})"));
-            }
-            message.push('.');
-            message
+            command_failed(&format!("{verb} {path}"), status, &stderr)
         }
         RemoteFileError::Ssh(e) => format!("Could not {verb} {path}: {}.", e.message),
     }
+}
+
+/// The message for the model when the command of a file or search tool failed: `what` is what it
+/// could not do, such as `read /etc/hosts`.
+pub(super) fn command_failed(what: &str, status: Option<u32>, stderr: &str) -> String {
+    let mut message = format!("Could not {what}: ");
+    match status {
+        Some(code) => message.push_str(&format!("the command exited with status {code}")),
+        None => message.push_str("the command ended without an exit status"),
+    }
+    if !stderr.is_empty() {
+        message.push_str(&format!(" ({stderr})"));
+    }
+    message.push('.');
+    message
 }
 
 // ---- revert (AI-41) ----

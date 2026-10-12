@@ -319,7 +319,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
              such as /etc/nginx/**/*.conf. * and ? match within a name, ** any number of \
              directories, [abc] one of the characters and {a,b} either alternative. `path` is the \
              directory to search; a relative path or `~/` starts at the user's home directory. \
-             Returns the paths of the files and symbolic links that match, sorted by path, at \
+             Returns the paths of the files and links to files that match, sorted by path, at \
              most 1,000. .git directories are skipped, and so are /proc, /sys, /dev and /run \
              when it searches /. It runs without asking, and without sudo. A search stops after \
              30 seconds."

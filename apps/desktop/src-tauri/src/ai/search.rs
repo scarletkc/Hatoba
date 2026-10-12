@@ -12,14 +12,11 @@ use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError, SearchOutput};
 use tokio_util::sync::CancellationToken;
 
+use super::files::{DISCONNECTED, command_failed};
 use super::parse;
 
 /// How long a search may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
-
-/// A search tool's result while the tab has no live session (AI-08).
-const DISCONNECTED: &str = "The terminal tab is disconnected, so the tool did not run. Ask the \
-     user to reconnect the tab.";
 
 /// A call of a search tool, with its arguments.
 pub(super) enum SearchJob {
@@ -63,7 +60,7 @@ pub(super) async fn run(
 async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> {
     match job {
         SearchJob::Glob(args) => {
-            let target = Search::new(args.path.as_deref(), Some(&args.pattern))?;
+            let target = Search::glob(args.path.as_deref(), &args.pattern)?;
             let out = within(
                 &target.path,
                 tools::GLOB,
@@ -163,16 +160,7 @@ fn describe(path: &str, tool: &str, error: RemoteSearchError) -> String {
              and \\ with a backslash to match them as they are."
         ),
         RemoteSearchError::Failed { status, stderr } => {
-            let mut message = format!("Could not search {path}: ");
-            match status {
-                Some(code) => message.push_str(&format!("the command exited with status {code}")),
-                None => message.push_str("the command ended without an exit status"),
-            }
-            if !stderr.is_empty() {
-                message.push_str(&format!(" ({stderr})"));
-            }
-            message.push('.');
-            message
+            command_failed(&format!("search {path}"), status, &stderr)
         }
         RemoteSearchError::Ssh(e) => format!("Could not search {path}: {}.", e.message),
     }

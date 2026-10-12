@@ -6,29 +6,37 @@
 //! shell. They use POSIX `find` and `grep -E` with `-maxdepth` and `head -c`, which GNU, BSD and
 //! BusyBox share, and `grep -I` where the host's grep has it. A directory is searched from
 //! `dir/.`, so a symbolic link to one is searched too, and every path printed starts with that.
-//! `.git` directories are skipped, and so are `/proc`, `/sys`, `/dev` and `/run` when the search
-//! starts at `/`. Messages are in English (`LC_MESSAGES=C`), so the caller can count the files
-//! that could not be read.
+//! Below it, only files and symbolic links to files are listed and searched, checked with GNU
+//! `find -xtype f`, or `test -f` where `find` lacks it: links to directories are not followed, and
+//! a FIFO, which grep would wait on, is left out. `.git` directories are skipped, and so are
+//! `/proc`, `/sys`, `/dev` and `/run` when the search starts at `/`. Messages are in English
+//! (`LC_MESSAGES=C`, with an `LC_ALL` moved to the character and collation categories, where it
+//! would override that), so the caller can count the files that could not be read.
 
 use crate::error::SshError;
 use crate::remote_file::{after_marker, command, last_line};
 use crate::session::{ExecOutput, SshSession};
 
-/// Lists the files and symbolic links below the directory named on stdin's first line, resolved as
-/// the file tools resolve a path, at most `$2` levels down unless stdin's second line is `-`, whose
-/// names match one of the `find -name` patterns on the lines after (any name without one). Prints
-/// the marker, the directory with `/.` after it, and at most `$1` bytes of `find`'s output. Exit
-/// statuses: 2 missing, 4 not readable, 6 not a directory, 8 a symbolic link to nothing, 9 no path.
+/// Lists the files, and the symbolic links to files, below the directory named on stdin's first
+/// line, resolved as the file tools resolve a path, at most `$2` levels down unless stdin's second
+/// line is `-`, whose names match one of the `find -name` patterns on the lines after (any name
+/// without one). Prints the marker, the directory with `/.` after it, and at most `$1` bytes of
+/// `find`'s output. Exit statuses: 2 missing, 4 not readable, 6 not a directory, 8 a symbolic link
+/// to nothing, 9 no path.
 const GLOB_SCRIPT: &str = "c=$1; IFS= read -r f || exit 9; IFS= read -r d || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; [ -e \"$f\" ] || exit 2; \
      [ -d \"$f\" ] || exit 6; [ -r \"$f\" ] && [ -x \"$f\" ] || exit 4; \
      case $f in */) r=$f.;; *) r=$f/.;; esac; set --; while IFS= read -r n; do \
      if [ $# -eq 0 ]; then set -- -name \"$n\"; else set -- \"$@\" -o -name \"$n\"; fi; done; \
-     [ $# -eq 0 ] || set -- \"(\" \"$@\" \")\"; set -- \"(\" -type f -o -type l \")\" \"$@\" -print; \
-     [ \"$r\" = /. ] && set -- \"(\" -path /./proc -o -path /./sys -o -path /./dev \
-     -o -path /./run \")\" -prune -o \"$@\"; set -- -name .git -prune -o \"$@\"; \
-     [ \"$d\" = - ] || set -- -maxdepth \"$d\" \"$@\"; LC_MESSAGES=C; export LC_MESSAGES; \
+     [ $# -eq 0 ] || set -- \"(\" \"$@\" \")\"; \
+     if find \"$r\" -maxdepth 0 -xtype f > /dev/null 2>&1; then set -- \"$@\" -xtype f; \
+     else set -- \"$@\" \"(\" -type f -o -type l -exec test -f {} \";\" \")\"; fi; \
+     set -- \"$@\" -print; [ \"$r\" = /. ] && set -- \"(\" -path /./proc -o -path /./sys \
+     -o -path /./dev -o -path /./run \")\" -prune -o \"$@\"; set -- -name .git -prune -o \"$@\"; \
+     [ \"$d\" = - ] || set -- -maxdepth \"$d\" \"$@\"; [ -z \"$LC_ALL\" ] || { \
+     LC_CTYPE=$LC_ALL; LC_COLLATE=$LC_ALL; export LC_CTYPE LC_COLLATE; unset LC_ALL; }; \
+     LC_MESSAGES=C; export LC_MESSAGES; \
      echo hatoba-file; printf %s \"$r\"; echo; find \"$r\" \"$@\" | head -c \"$c\"";
 
 /// Searches the file, or the files below the directory, named on stdin's first line, as the glob
@@ -44,7 +52,8 @@ const GREP_SCRIPT: &str = "c=$1; IFS= read -r f || exit 9; IFS= read -r d || exi
      IFS= read -r p || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; [ -e \"$f\" ] || exit 2; \
-     [ -r \"$f\" ] || exit 4; LC_MESSAGES=C; export LC_MESSAGES; \
+     [ -r \"$f\" ] || exit 4; [ -z \"$LC_ALL\" ] || { LC_CTYPE=$LC_ALL; LC_COLLATE=$LC_ALL; \
+     export LC_CTYPE LC_COLLATE; unset LC_ALL; }; LC_MESSAGES=C; export LC_MESSAGES; \
      : | grep -E -e \"$p\" > /dev/null; [ $? -lt 2 ] || exit 10; o=-EH; \
      [ \"$i\" = i ] && o=\"$o -i\"; case $m in l) o=\"$o -l\";; c) o=\"$o -c\";; \
      *) o=\"$o -n\"; [ \"$x\" = 0 ] || o=\"$o -C $x\";; esac; \
@@ -52,11 +61,12 @@ const GREP_SCRIPT: &str = "c=$1; IFS= read -r f || exit 9; IFS= read -r d || exi
      if [ -d \"$f\" ]; then [ -x \"$f\" ] || exit 4; case $f in */) r=$f.;; *) r=$f/.;; esac; \
      while IFS= read -r n; do \
      if [ $# -eq 0 ]; then set -- -name \"$n\"; else set -- \"$@\" -o -name \"$n\"; fi; done; \
-     [ $# -eq 0 ] || set -- \"(\" \"$@\" \")\"; set -- \"(\" -type f -o -type l \")\" \"$@\"; \
-     [ \"$r\" = /. ] && set -- \"(\" -path /./proc -o -path /./sys -o -path /./dev \
-     -o -path /./run \")\" -prune -o \"$@\"; set -- -name .git -prune -o \"$@\"; \
-     [ \"$d\" = - ] || set -- -maxdepth \"$d\" \"$@\"; \
-     else set -- \"(\" -type f -o -type l \")\"; fi; \
+     [ $# -eq 0 ] || set -- \"(\" \"$@\" \")\"; fi; \
+     if find \"$r\" -maxdepth 0 -xtype f > /dev/null 2>&1; then set -- \"$@\" -xtype f; \
+     else set -- \"$@\" \"(\" -type f -o -type l -exec test -f {} \";\" \")\"; fi; \
+     if [ -d \"$f\" ]; then [ \"$r\" = /. ] && set -- \"(\" -path /./proc -o -path /./sys \
+     -o -path /./dev -o -path /./run \")\" -prune -o \"$@\"; set -- -name .git -prune -o \"$@\"; \
+     [ \"$d\" = - ] || set -- -maxdepth \"$d\" \"$@\"; fi; \
      echo hatoba-file; printf %s \"$r\"; echo; case $m in \
      c) find \"$r\" \"$@\" -exec grep $o -e \"$p\" {} + | grep -v -e \":0$\" | head -c \"$c\";; \
      *) find \"$r\" \"$@\" -exec grep $o -e \"$p\" {} + | head -c \"$c\";; esac";
@@ -126,9 +136,9 @@ pub struct SearchOutput {
     pub stderr: Vec<u8>,
 }
 
-/// Lists the files and symbolic links below the directory `path` whose names match one of `names`
-/// (any name when empty), at most `max_depth` levels down, and reads at most `max` bytes of the
-/// list.
+/// Lists the files, and the symbolic links to files, below the directory `path` whose names match
+/// one of `names` (any name when empty), at most `max_depth` levels down, and reads at most `max`
+/// bytes of the list.
 pub async fn glob(
     session: &SshSession,
     path: &str,
@@ -462,11 +472,17 @@ mod tests {
                 listed(&glob(home, "etc", Some(1), &["*.conf", "*api*"]).unwrap()),
                 ["/binary.conf", "/nginx.conf"]
             );
-            // Through a link to a directory.
+            // Through a link to a directory; links to directories and to nothing are not files.
             std::os::unix::fs::symlink(home.join("etc"), home.join("etc-link")).unwrap();
             assert_eq!(
                 listed(&glob(home, "etc-link", Some(1), &["n*"]).unwrap()),
                 ["/nginx.conf"]
+            );
+            std::os::unix::fs::symlink("conf.d", home.join("etc/conf.link")).unwrap();
+            std::os::unix::fs::symlink("gone", home.join("etc/gone.conf")).unwrap();
+            assert_eq!(
+                listed(&glob(home, "etc", Some(1), &[]).unwrap()),
+                ["/binary.conf", "/nginx.conf"]
             );
 
             assert!(matches!(
@@ -504,7 +520,17 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let home = dir.path();
             tree(home);
-            // Binary files and .git are skipped; a link is followed.
+            // Binary files and .git are skipped; a link is followed, but not one to a FIFO, which
+            // grep would wait on.
+            let fifo = home.join("etc/fifo");
+            assert!(
+                Command::new("mkfifo")
+                    .arg(&fifo)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            std::os::unix::fs::symlink(&fifo, home.join("etc/fifo.conf")).unwrap();
             let files = grep(home, "etc", "listen[[:space:]]+80", GrepMode::Files, &[]).unwrap();
             assert_eq!(
                 listed(&files),

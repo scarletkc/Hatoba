@@ -145,6 +145,19 @@ impl Search {
         })
     }
 
+    /// The search of the `glob` tool: as [`Search::new`], but an empty `pattern` is refused
+    /// rather than matching every file.
+    pub fn glob(path: Option<&str>, pattern: &str) -> Result<Self, String> {
+        if pattern.trim().is_empty() {
+            return Err(
+                "The pattern is empty, so nothing was searched. Give one such as *.conf or \
+                 **/*.conf."
+                    .to_owned(),
+            );
+        }
+        Self::new(path, Some(pattern))
+    }
+
     /// Whether the glob matches a file at `relative`, its path below [`Search::path`]; every file
     /// matches without a glob.
     #[must_use]
@@ -571,8 +584,8 @@ fn problems(stderr: &[u8]) -> Problems {
     problems
 }
 
-/// Errors about links to directories and to nothing, and about files gone while the search ran,
-/// which a result leaves out.
+/// Errors about files gone, or replaced by directories, while the search ran, which a result
+/// leaves out.
 fn passed_over(line: &str) -> bool {
     line.ends_with("Is a directory") || line.ends_with("No such file or directory")
 }
@@ -696,11 +709,8 @@ fn row_of(line: &str, printed: &str) -> Option<Row> {
 /// comes before the first `:N:`, so a name with `:N:` in it is read wrong; `grep` has no way to
 /// mark where a name ends that every host knows.
 fn matching_line<'a>(line: &'a str, root: &Root) -> Option<(&'a str, Row)> {
-    let from = match &root.prefix {
-        Some(prefix) if line.starts_with(prefix.as_str()) => prefix.len(),
-        Some(_) => return None,
-        None => root.shown.len(),
-    };
+    let start = root.prefix.as_deref().unwrap_or(&root.shown);
+    let from = line.starts_with(start).then_some(start.len())?;
     line[from..].match_indices(':').find_map(|(at, _)| {
         let printed = &line[..from + at];
         match row_of(line, printed) {
@@ -1048,7 +1058,14 @@ mod tests {
 
         assert!(Search::new(None, Some("a\nb")).is_err());
         assert!(Search::new(None, Some("/")).is_err());
+        // grep without a glob searches every file; glob needs a pattern.
         assert_eq!(Search::new(Some(""), Some("  ")).unwrap().path, "~");
+        assert!(
+            Search::glob(None, " ")
+                .unwrap_err()
+                .starts_with("The pattern is empty")
+        );
+        assert_eq!(Search::glob(Some("/etc"), "*.conf").unwrap().path, "/etc");
     }
 
     #[test]
@@ -1229,5 +1246,19 @@ mod tests {
             &found("/s/.", "/s/./a:1:x\n/s/./a:3:x\n/s/./b:2:x\n", ""),
         );
         assert!(out.ends_with(":\n/s/a:1:x\n/s/a:3:x\n/s/b:2:x\n"), "{out}");
+        // A file searched on its own, with lines that do not start with its path.
+        let out = grep_result(
+            &grep(r#"{"pattern":"x","output_mode":"content"}"#),
+            &Search::new(Some("/etc/hosts"), None).unwrap(),
+            &found(
+                "/etc/hosts",
+                "x\nBinary file /etc/hosts matches\n/etc/hosts:3:x\n",
+                "",
+            ),
+        );
+        assert_eq!(
+            out,
+            "1 matching line in 1 file in /etc/hosts, sorted by path:\n/etc/hosts:3:x\n"
+        );
     }
 }
