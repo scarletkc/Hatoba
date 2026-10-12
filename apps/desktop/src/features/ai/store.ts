@@ -200,7 +200,7 @@ export function slotOf(conversationId: string): string | undefined {
 
 export type Activity = "idle" | "running" | "waiting";
 
-/** What the tab bar shows for a slot (AI-07): a turn running, or one waiting for the user. */
+/** What the tab bar shows for a slot (AI-07): a turn running, or one waiting for the user; a call Auto's judge checks runs (AI-47). */
 export function slotActivity(slot: Slot | undefined): Activity {
   if (!slot) return "idle";
   const call = slot.turn?.call;

@@ -63,6 +63,17 @@ export function screenNote(buf: BufferLike, rows: number): { text: string; alter
   return { text: alternate ? text : text.split("\n").slice(-SCREEN_NOTE_LINES).join("\n"), alternate };
 }
 
+/** Lines of the screen a `send_input` call's judge reads, and its hard rules check (AI-47). */
+export const SCREEN_TAIL_LINES = 10;
+
+/**
+ * AI-47: the screen's last {@link SCREEN_TAIL_LINES} lines up to the last one with text, which is where the
+ * cursor waits at a prompt, so the judge can tell what a `send_input` call answers.
+ */
+export function screenTail(buf: BufferLike, rows: number): string {
+  return readBuffer(buf, rows, 0).text.split("\n").slice(-SCREEN_TAIL_LINES).join("\n");
+}
+
 /**
  * Escape sequences: CSI (7- and 8-bit), OSC (ended by BEL or ST), DCS / SOS / PM / APC strings, and
  * two-character ESC sequences such as `ESC =` or charset selection `ESC ( B`.

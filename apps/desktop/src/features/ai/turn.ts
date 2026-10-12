@@ -1,4 +1,5 @@
-import type { AiEntryView, AiFileChange, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
+import type { AiAutoVerdict, AiEntryView, AiFileChange, AiToolCall, AiTurnEvent, AiUsage, McpToolInfo } from "@/ipc/types";
+import type { HardRule } from "./autoRules";
 
 /** A response while it streams, before Rust stores it as an entry (§13.1 step 2). */
 export interface LiveResponse {
@@ -8,8 +9,11 @@ export interface LiveResponse {
   usage: AiUsage | null;
 }
 
-/** What the current tool call is waiting for. */
-export type CallState = "approval" | "running";
+/** What the current tool call is waiting for. `judging`: Auto mode asks its judge whether it can run without the card (AI-47). */
+export type CallState = "approval" | "judging" | "running";
+
+/** AI-47: why the approval card of a call in Auto mode shows: a hard rule, or the judge's verdict. */
+export type AutoAsk = { rule: HardRule } | { verdict: AiAutoVerdict };
 
 /** The tool call being handled. */
 export interface CallInfo {
@@ -17,6 +21,8 @@ export interface CallInfo {
   state: CallState;
   /** An MCP call's tool, for its approval card (AI-31); null when no running server offers it. */
   mcp?: McpToolInfo | null;
+  /** In Auto mode, what its approval card says about why it asks (AI-47). */
+  auto?: AutoAsk | null;
 }
 
 export interface TurnState {

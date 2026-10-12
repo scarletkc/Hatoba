@@ -90,20 +90,28 @@ export function needsSession(kind: ToolKind): boolean {
 
 /**
  * §13.5: in manual approval mode `read_terminal`, `read_file`, `web_search`, `read_skill` and `search_tools`
- * (AI-45) run without asking and everything else waits for the user; bypass runs everything. Unknown tools
- * never run, so never ask.
+ * (AI-45) run without asking and everything else waits for the user; bypass runs everything. Auto asks about
+ * the same calls as manual approval, and its judge decides which of them can skip the card (AI-47). Unknown
+ * tools never run, so never ask.
  */
 export function needsApproval(kind: ToolKind, mode: AiPermissionMode): boolean {
   if (mode === "bypass") return false;
   return kind === "run_command" || kind === "send_input" || kind === "edit_file" || kind === "write_file" || kind === "fetch_url" || kind === "mcp";
 }
 
+/** The permission modes' icons (AI-16, AI-47): on the mode switch, in its menu, and on their notes' dividers. */
+export const MODE_ICON: Record<AiPermissionMode, string> = { manual: "shield-check", auto: "robot", bypass: "lightning" };
+
+/** §13.5, AI-47: the modes from the strictest: manual approval, Auto, bypass. */
+const STRICTNESS: readonly AiPermissionMode[] = ["manual", "auto", "bypass"];
+
 /**
- * §13.5: the mode a call of a turn runs in. The turn's requests named the mode it `started` in, so a
- * switch to bypass waits for the next turn, while a switch to manual approval applies at once.
+ * §13.5: the mode a call of a turn runs in, the stricter of the two. The turn's requests named the mode it
+ * `started` in, so a switch to a less strict mode waits for the next message, while a switch to a stricter
+ * one applies to the turn's next call.
  */
 export function callMode(started: AiPermissionMode, now: AiPermissionMode): AiPermissionMode {
-  return started === "manual" || now === "manual" ? "manual" : "bypass";
+  return STRICTNESS[Math.min(STRICTNESS.indexOf(started), STRICTNESS.indexOf(now))] ?? "manual";
 }
 
 /** What decides whether a call waits for the user. */
@@ -118,9 +126,11 @@ export interface AskInput {
 
 /**
  * §13.5 with AI-19 and AI-31. An approval the user chose wins, also over an MCP server's Always ask,
- * since the user chose it on a card of this very tool. An MCP tool asks in manual mode unless it is set
- * to Always allow on this device, and in bypass mode only when its server is set to Always ask. An MCP
- * call whose tool `mcp_tool_info` cannot name asks in both modes: nothing says which server it would reach.
+ * since the user chose it on a card of this very tool. An MCP tool asks in manual mode and in Auto unless
+ * it is set to Always allow on this device, and in bypass mode only when its server is set to Always ask.
+ * An MCP call whose tool `mcp_tool_info` cannot name asks in every mode: nothing says which server it would
+ * reach. In Auto, a call this asks about goes to the judge first, unless a hard rule sends it straight to
+ * the card (AI-47, `hardRule`).
  */
 export function mustAsk({ kind, mode, allowed, mcp }: AskInput): boolean {
   if (allowed) return false;

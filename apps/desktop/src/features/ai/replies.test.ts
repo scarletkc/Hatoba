@@ -16,7 +16,7 @@ const assistant = (id: string, text: string, calls: number | string[] = 0, at = 
   finish: calls === 0 || (Array.isArray(calls) && calls.length === 0) ? "stop" : "tool_calls",
   usage: null,
 });
-const tool = (id: string, call: string, at = 0): AiEntryView => ({ role: "tool", entry_id: id, created_at: at, tool_call_id: call, status: "ok", content: "output" });
+const tool = (id: string, call: string, at = 0): AiEntryView => ({ role: "tool", entry_id: id, created_at: at, tool_call_id: call, status: "ok", content: "output", auto: null });
 const summary = (id: string, at: number): AiEntryView => ({ role: "summary", entry_id: id, created_at: at, text: "Summary." });
 
 describe("replies", () => {

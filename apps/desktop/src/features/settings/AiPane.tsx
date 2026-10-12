@@ -6,6 +6,7 @@ import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/co
 import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { InstructionsField } from "@/features/ai/InstructionsField";
+import { judgeChosen } from "@/features/ai/models";
 import { byteCount, INSTRUCTIONS_MAX_BYTES } from "@/features/ai/instructions";
 import { toolLabel } from "@/features/ai/tools";
 import { useT } from "@/i18n";
@@ -248,7 +249,7 @@ export function AiPane() {
         }
       />
       <McpSection />
-      <DeviceSection />
+      <DeviceSection judge={data && judgeChosen(data.providers, data.settings)} />
 
       {dialog && (
         <ProviderDialog
@@ -430,13 +431,16 @@ function SavedApprovals() {
   );
 }
 
-/** Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals (AI-19). */
-function DeviceSection() {
+/**
+ * Settings that stay on this device and are not synced: the permission mode (AI-16) and the saved approvals
+ * (AI-19). Auto (AI-47) is offered once a judge is chosen (`judge`; null until the AI settings are read).
+ */
+function DeviceSection({ judge }: { judge: boolean | null }) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
 
   const chooseMode = async (mode: AiPermissionMode) => {
-    if (mode === prefs.ai_permission_mode) return;
+    if (mode === prefs.ai_permission_mode || (mode === "auto" && judge !== true)) return;
     if (mode === "bypass" && !prefs.ai_bypass_confirmed) {
       const ok = await confirm({
         title: t("aiSettings.bypass.title"),
@@ -454,12 +458,14 @@ function DeviceSection() {
     <section className={layoutStyles.section}>
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.device")}</div>
       <Group>
-        <SettingRow label={t("aiSettings.mode")} hint={t("aiSettings.mode.hint")} top>
+        <SettingRow label={t("aiSettings.mode")} hint={t(judge === false ? "aiSettings.mode.hintNoJudge" : "aiSettings.mode.hint")} top>
           <Segmented<AiPermissionMode>
             ariaLabel={t("aiSettings.mode")}
             value={prefs.ai_permission_mode}
             options={[
               { value: "manual", label: t("aiSettings.mode.manual") },
+              // The device's own Auto stays selected once the judge is gone; every call then asks.
+              { value: "auto", label: t("aiSettings.mode.auto"), disabled: judge !== true && prefs.ai_permission_mode !== "auto" },
               { value: "bypass", label: t("aiSettings.mode.bypass") },
             ]}
             onChange={(mode) => void chooseMode(mode)}

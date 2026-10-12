@@ -146,4 +146,20 @@ describe("AiPane", () => {
     expect(stored.find((p) => p.id === first.id)?.base_url).toBe("http://127.0.0.1:8003");
     expect(stored.find((p) => p.id === second.id)?.base_url).toBe("http://127.0.0.1:8002");
   });
+
+  it("offers Auto as the default mode once a judge is chosen (AI-47)", async () => {
+    await act(() => api.ai_settings_save({ judge_model: null }));
+    render();
+    const auto = () => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")].find((b) => b.textContent === t("aiSettings.mode.auto"));
+    await until(() => document.body.textContent?.includes(t("aiSettings.mode.hintNoJudge")));
+    expect(auto()?.disabled).toBe(true);
+
+    // A judge chosen on another device arrives with a sync.
+    await act(() => api.ai_settings_save({ judge_model: { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } }));
+    act(() => useApp.getState().refreshSynced());
+    await until(() => auto()?.disabled === false);
+    expect(document.body.textContent).not.toContain(t("aiSettings.mode.hintNoJudge"));
+    act(() => auto()?.click());
+    await until(() => useApp.getState().prefs.ai_permission_mode === "auto");
+  });
 });

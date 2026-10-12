@@ -1,5 +1,6 @@
 import type {
   AiAllowance,
+  AiAutoVerdict,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
@@ -291,9 +292,16 @@ export interface HatobaApi {
   ai_tool_result(conversation_id: string, tool_call_id: string, result: AiToolResultInput): Promise<AiEntryView>;
   /**
    * Runs a tool that runs in Rust (`run_command` and the file tools on `session_id`, `web_search`, `fetch_url`, ...)
-   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41).
+   * and stores its result; says whether keeping a file snapshot dropped older ones (AI-41). `judged`: Auto mode
+   * decided the call (AI-47), so the result is stored with the verdict Rust remembers for it.
    */
-  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null): Promise<AiToolRun>;
+  ai_tool_run(conversation_id: string, tool_call_id: string, session_id: string | null, edited_arguments: string | null, judged: boolean): Promise<AiToolRun>;
+  /**
+   * AI-47: asks the judge of Auto mode whether the open call `tool_call_id` can run without the approval card, and
+   * remembers the verdict for the call's result. `screen_tail`: for `send_input`, the last lines of the tab's screen.
+   * Never fails for the judge's own errors: those come back as an `ask` verdict with a `failure`.
+   */
+  ai_judge(conversation_id: string, tool_call_id: string, screen_tail: string | null): Promise<AiAutoVerdict>;
   /**
    * AI-39, AI-40: the change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
    * host, for its approval card, with the arguments as the user edited them on the card. Rust reads the file

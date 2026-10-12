@@ -23,7 +23,7 @@ export function noteLabel(t: Tr, note: Note): string {
     case "model_change":
       return t("ai.note.modelChange", { to: modelName(note.to), from: modelName(note.from) });
     case "permission_mode":
-      return t(note.mode === "bypass" ? "ai.note.permissionBypass" : "ai.note.permissionManual");
+      return t(note.mode === "bypass" ? "ai.note.permissionBypass" : note.mode === "auto" ? "ai.note.permissionAuto" : "ai.note.permissionManual");
     case "file_revert":
       return t("ai.note.fileRevert", { path: note.path });
     case "terminal_state":

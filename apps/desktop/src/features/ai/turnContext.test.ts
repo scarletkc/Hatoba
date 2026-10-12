@@ -53,6 +53,7 @@ const settings = (send_terminal_screen: boolean): AiSettingsView => ({
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen,
+  judge_model: null,
 });
 
 beforeEach(() => {

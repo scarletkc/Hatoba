@@ -247,13 +247,13 @@ describe("default model", () => {
   const search: SearchProviderView[] = [{ id: "s1", kind: "brave", base_url: null, has_api_key: true, updated_at: 5 }];
 
   it("keeps a default that still exists", () => {
-    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "", send_terminal_screen: true };
+    const settings = { default_model: { provider_id: "c", model_id: "c1" }, default_effort: "max" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "", send_terminal_screen: true, judge_model: null };
     expect(sanitizeSettings(settings, providers, search)).toEqual(settings);
   });
 
   it("drops a default whose provider, model or search provider is gone", () => {
     expect(
-      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true }, providers, search),
+      sanitizeSettings({ default_model: { provider_id: "z", model_id: "a1" }, default_effort: "low", search_provider_id: "s9", builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: null }, providers, search),
     ).toEqual({
       default_model: null,
       default_effort: "low",
@@ -261,34 +261,44 @@ describe("default model", () => {
       builtin_skill_enabled: true,
       custom_instructions: "",
       send_terminal_screen: true,
+      judge_model: null,
     });
     expect(
-      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true }, providers, search)
+      sanitizeSettings({ default_model: { provider_id: "a", model_id: "gone" }, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: null }, providers, search)
         .default_model,
     ).toBeNull();
   });
 
   it("tells a changed default thinking level apart (AI-05)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true };
+    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: null };
     expect(changedSettings(base, { ...base })).toBeNull();
     expect(changedSettings(base, { ...base, default_effort: "high" })).toEqual({ default_effort: "high" });
     expect(changedSettings({ ...base, default_effort: "high" }, base)).toEqual({ default_effort: null });
   });
 
   it("keeps and compares the custom instructions (AI-36)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: "gone", builtin_skill_enabled: true, custom_instructions: "Answer in English.", send_terminal_screen: true };
+    const base = { default_model: null, default_effort: null, search_provider_id: "gone", builtin_skill_enabled: true, custom_instructions: "Answer in English.", send_terminal_screen: true, judge_model: null };
     expect(sanitizeSettings(base, providers, search).custom_instructions).toBe("Answer in English.");
     expect(changedSettings(base, { ...base, custom_instructions: "Answer in English. " })).toEqual({ custom_instructions: "Answer in English. " });
   });
 
   it("keeps and compares the screen switch (AI-46)", () => {
-    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: false };
+    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: false, judge_model: null };
     expect(sanitizeSettings(base, providers, search).send_terminal_screen).toBe(false);
     expect(changedSettings(base, { ...base, send_terminal_screen: true })).toEqual({ send_terminal_screen: true });
   });
 
+  it("keeps a judge that exists, drops one that is gone, and compares it (AI-47)", () => {
+    const judge = { provider_id: "a", model_id: "a2" };
+    const base = { default_model: null, default_effort: null, search_provider_id: null, builtin_skill_enabled: true, custom_instructions: "", send_terminal_screen: true, judge_model: judge };
+    expect(sanitizeSettings(base, providers, search).judge_model).toEqual(judge);
+    expect(sanitizeSettings({ ...base, judge_model: { provider_id: "a", model_id: "gone" } }, providers, search).judge_model).toBeNull();
+    expect(changedSettings(base, sanitizeSettings(base, [provider("c", [model("c1")])], search))).toEqual({ judge_model: null });
+    expect(changedSettings(base, { ...base, judge_model: { ...judge } })).toBeNull();
+  });
+
   it("saves only the defaults that change when the providers do", () => {
-    const base = { default_model: { provider_id: "z", model_id: "z1" }, default_effort: "low" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "Be brief.", send_terminal_screen: true };
+    const base = { default_model: { provider_id: "z", model_id: "z1" }, default_effort: "low" as const, search_provider_id: "s1", builtin_skill_enabled: false, custom_instructions: "Be brief.", send_terminal_screen: true, judge_model: null };
     expect(changedSettings(base, resolveSettings(base, providers, search))).toEqual({ default_model: { provider_id: "a", model_id: "a1" } });
     expect(changedSettings(base, sanitizeSettings(base, providers, []))).toEqual({ default_model: null, search_provider_id: null });
     expect(changedSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, resolveSettings({ ...base, default_model: { provider_id: "c", model_id: "c1" } }, providers, search))).toBeNull();

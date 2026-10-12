@@ -449,6 +449,7 @@ impl Fixture {
                 status,
                 content: content.into(),
                 edited_arguments: edited_arguments.map(str::to_owned),
+                judged: false,
             },
         )
     }
@@ -468,6 +469,7 @@ impl Fixture {
                 tool_call_id,
                 session_id,
                 edited_arguments,
+                false,
             )
             .await
             .map(|run| run.entry)
@@ -6367,3 +6369,4 @@ fn a_note_names_a_target_or_a_single_host() {
 }
 
 mod deferred;
+mod judge;

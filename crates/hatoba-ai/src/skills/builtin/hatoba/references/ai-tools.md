@@ -42,10 +42,13 @@ The shield or lightning button next to the + button in the input area (the light
 |---|---|---|
 | Permission mode | 权限模式 | 権限モード |
 | Manual approval | 手动批准 | 手動承認 |
+| Auto | 自动批准 | 自動承認 |
+| Auto | 自动 | 自動 |
 | Bypass | 绕过批准 | 承認をバイパス |
 | Bypass | 绕过 | バイパス |
 | Turn On Bypass | 绕过批准 | 承認をバイパス |
 | Permission mode: Bypass | 权限模式：绕过批准 | 権限モード：承認をバイパス |
+| Permission mode: Auto | 权限模式：自动批准 | 権限モード：自動承認 |
 | Permission mode: Manual approval | 权限模式：手动批准 | 権限モード：手動承認 |
 
 - **Manual approval** (the default): tools marked "Asks" wait for you.

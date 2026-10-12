@@ -18,7 +18,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 
 const { askAiAboutConnection, askSideQuestion, dismissSideQuestion, noteSelection, retrySideQuestion, sendMessage, stopSideQuestion, tabSelection } = await import("./actions");
 const { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning } = await import("./side");
-const { blankSlot, getSlot, HOME_SLOT, patchSlot, useAi } = await import("./store");
+const { blankSlot, getSlot, HOME_SLOT, patchSlot, slotActivity, useAi } = await import("./store");
 type Slot = import("./store").Slot;
 
 const view: AiConversationView = {
@@ -117,6 +117,13 @@ describe("the side question's state (AI-42)", () => {
     expect(approvalCall(slot({ turn: { ...newTurn(), call: { id: "c9", state: "approval" } } }))).toBe("c9");
     expect(approvalCall(slot({ turn: { ...newTurn(), call: { id: "c9", state: "running" } } }))).toBeNull();
     expect(approvalCall(slot())).toBeNull();
+  });
+
+  it("counts a call Auto's judge is checking as running, not waiting for the user (AI-47)", () => {
+    const judging = slot({ turn: { ...newTurn(), call: { id: "c9", state: "judging" } } });
+    expect(approvalCall(judging)).toBeNull();
+    expect(slotActivity(judging)).toBe("running");
+    expect(slotActivity(slot({ turn: { ...newTurn(), call: { id: "c9", state: "approval" } } }))).toBe("waiting");
   });
 });
 

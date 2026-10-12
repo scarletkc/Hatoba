@@ -169,6 +169,7 @@ These settings stay on this device and are not synced.
 |---|---|---|
 | Default Permission Mode | 默认权限模式 | 既定の権限モード |
 | Manual approval | 手动批准 | 手動承認 |
+| Auto | 自动批准 | 自動承認 |
 | Bypass | 绕过批准 | 承認をバイパス |
 | Turn On Bypass | 开启绕过模式 | バイパスをオンにする |
 | Saved Approvals | 已保存的批准 | 保存済みの許可 |

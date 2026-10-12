@@ -283,7 +283,7 @@ export function sameRef(a: AiModelRef | null, b: AiModelRef | null): boolean {
   return a === b || (!!a && !!b && a.provider_id === b.provider_id && a.model_id === b.model_id);
 }
 
-/** Drops a default model or search provider whose provider or model is gone. */
+/** Drops a default model, judge (AI-47) or search provider whose provider or model is gone. */
 export function sanitizeSettings(
   settings: AiSettingsView,
   providers: readonly AiProviderView[],
@@ -291,6 +291,7 @@ export function sanitizeSettings(
 ): AiSettingsView {
   const known = modelChoices(providers);
   const defaultModel = settings.default_model && known.some((c) => sameRef(c.ref, settings.default_model)) ? settings.default_model : null;
+  const judgeModel = settings.judge_model && known.some((c) => sameRef(c.ref, settings.judge_model)) ? settings.judge_model : null;
   const searchId = settings.search_provider_id && searchProviders.some((p) => p.id === settings.search_provider_id) ? settings.search_provider_id : null;
   return {
     default_model: defaultModel,
@@ -299,6 +300,7 @@ export function sanitizeSettings(
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
+    judge_model: judgeModel,
   };
 }
 
@@ -329,6 +331,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
+  if (!sameRef(prev.judge_model, next.judge_model)) patch.judge_model = next.judge_model;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

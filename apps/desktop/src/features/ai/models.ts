@@ -11,6 +11,14 @@ export function findModel(providers: AiProviderView[], ref: AiModelRef | null | 
   return provider && model ? { provider, model } : null;
 }
 
+/**
+ * AI-47: whether Auto mode can be chosen: Settings → AI names a judge, and its provider and model still exist
+ * (Rust answers every call of a judge that is gone with `unavailable`, so the card always asks).
+ */
+export function judgeChosen(providers: AiProviderView[], settings: AiSettingsView | null): boolean {
+  return !!findModel(providers, settings?.judge_model);
+}
+
 /** Some provider has at least one model, so the panel can send. */
 export function hasModels(providers: AiProviderView[]): boolean {
   return providers.some((p) => p.models.length > 0);

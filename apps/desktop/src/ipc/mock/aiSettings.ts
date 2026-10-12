@@ -47,6 +47,7 @@ type AiSettingsApi = Pick<
  *   ?ai=modelsfail   Fetch Models fails with an `ai` error (404)
  *   ?ai=search       a Brave Search provider is saved and chosen for web search
  *   ?ai=instructions custom instructions are saved (AI-36)
+ *   ?ai=nojudge      no judge is chosen, so Auto mode is unavailable (AI-47)
  * Without parameters there are two providers (Anthropic, and Ollama on localhost), so the default
  * model selector shows two groups. Inside the editor a few inputs trigger the other states:
  *   a base URL on a `.invalid` host        Test Connection fails with a network error
@@ -101,6 +102,8 @@ export function createAiSettingsMock(): AiSettingsApi {
     builtin_skill_enabled: true,
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
     send_terminal_screen: true,
+    // AI-47: Auto mode's judge, a fast model of a configured provider.
+    judge_model: providers.length && !flags.has("nojudge") ? { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } : null,
   };
 
   let allowances: AiAllowance[] = [];
@@ -210,6 +213,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     ai_provider_delete: async (pid) => {
       providers = providers.filter((p) => p.id !== pid);
       if (settings.default_model?.provider_id === pid) settings = { ...settings, default_model: null };
+      if (settings.judge_model?.provider_id === pid) settings = { ...settings, judge_model: null };
     },
     ai_provider_models: async (input) => {
       await wait(500);
