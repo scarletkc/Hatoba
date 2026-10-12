@@ -38,6 +38,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::time::Duration;
 
 use hatoba_ai::AiError;
 use hatoba_ai::chat::{ChatRequest, StreamEvent, ToolDef, complete, stream_chat};
@@ -50,8 +51,8 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools, ReadSkillArgs,
-    RunCommandArgs, ToolSet, WebSearchArgs, escape_closing_tag,
+    self, CommandStop, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools,
+    ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolSet, WebSearchArgs, escape_closing_tag,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
@@ -61,6 +62,7 @@ use hatoba_core::model::{
 };
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{SnapshotKey, SnapshotState, Vault};
+use hatoba_ssh::remote_command;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use tokio::sync::Notify;
@@ -85,6 +87,12 @@ const EDIT_NOTE: &str = "The user edited the arguments before the call ran; it r
 
 /// What every MCP tool name starts with (AI-30).
 const MCP_PREFIX: &str = "mcp__";
+
+/// How long a stop waits for the commands of `run_command` calls to end and their calls to store
+/// results that say so (AI-18): the time `remote_command::run` takes at most after a stop, and a
+/// moment to store the result.
+const COMMAND_STOP_WAIT: Duration =
+    remote_command::STOP_WAIT.saturating_add(Duration::from_secs(1));
 
 /// The `run_command` result while the tab has no live session (AI-08).
 const DISCONNECTED: &str = "The terminal tab is disconnected, so the command did not run. Ask \
@@ -252,6 +260,8 @@ struct Op {
     tool_call_id: Option<String>,
     kind: OpKind,
     cancel: CancellationToken,
+    /// Cancelled when the op ends.
+    ended: CancellationToken,
 }
 
 /// What an op does, where something else depends on it.
@@ -259,6 +269,8 @@ struct Op {
 enum OpKind {
     /// A tool, the file read of an approval card, or a provider request outside a conversation.
     Other,
+    /// A `run_command` call, whose command a stop waits for (AI-18).
+    Command,
     /// A compaction of the op's conversation (AI-21, AI-22), which refuses a side question
     /// meanwhile (AI-42).
     Compact,
@@ -289,6 +301,7 @@ pub struct OpGuard<'a> {
     inner: &'a Inner,
     id: u64,
     cancel: CancellationToken,
+    ended: CancellationToken,
 }
 
 impl OpGuard<'_> {
@@ -301,6 +314,7 @@ impl OpGuard<'_> {
 impl Drop for OpGuard<'_> {
     fn drop(&mut self) {
         guard(&self.inner.ops).remove(&self.id);
+        self.ended.cancel();
     }
 }
 
@@ -319,6 +333,13 @@ struct Turn {
     /// What the response being streamed has sent so far, from its request until it is stored or
     /// fails. A stop takes it under the vault guard and stores what the user saw (§13.1).
     streamed: Mutex<Option<Streamed>>,
+}
+
+/// What the first part of a stop took ([`AiManager::halt`]), for the rest of it.
+struct Halted {
+    turn: Option<Arc<Turn>>,
+    /// What the response being streamed had shown, with the turn's tab.
+    streamed: Option<(Streamed, bool)>,
 }
 
 /// The part of a response that has streamed so far, kept for a stop.
@@ -536,8 +557,14 @@ impl AiManager {
 
     /// Registers the run of a tool call, like [`Self::start_op`]. Refused while the call runs
     /// already, so that a call with side effects (`run_command`, an MCP tool) runs once: called
-    /// under the vault guard that checked the call, as is [`Self::call_running`].
-    fn start_call(&self, conversation_id: &str, tool_call_id: &str) -> AppResult<OpGuard<'_>> {
+    /// under the vault guard that checked the call, as is [`Self::call_running`]. `kind` is
+    /// [`OpKind::Command`] for a `run_command` call.
+    fn start_call(
+        &self,
+        conversation_id: &str,
+        tool_call_id: &str,
+        kind: OpKind,
+    ) -> AppResult<OpGuard<'_>> {
         if self.call_running(conversation_id, tool_call_id) {
             return Err(AppError::invalid(
                 "tool_call_id",
@@ -545,12 +572,7 @@ impl AiManager {
             ));
         }
         let cancel = self.turn_token(conversation_id);
-        Ok(self.register_op(
-            Some(conversation_id),
-            Some(tool_call_id),
-            OpKind::Other,
-            cancel,
-        ))
+        Ok(self.register_op(Some(conversation_id), Some(tool_call_id), kind, cancel))
     }
 
     /// An `ai_tool_run` of the call has not finished.
@@ -630,6 +652,7 @@ impl AiManager {
         cancel: CancellationToken,
     ) -> OpGuard<'_> {
         let id = self.0.next_op.fetch_add(1, Ordering::Relaxed);
+        let ended = CancellationToken::new();
         ops.insert(
             id,
             Op {
@@ -637,12 +660,14 @@ impl AiManager {
                 tool_call_id: tool_call_id.map(str::to_owned),
                 kind,
                 cancel: cancel.clone(),
+                ended: ended.clone(),
             },
         );
         OpGuard {
             inner: &self.0,
             id,
             cancel,
+            ended,
         }
     }
 
@@ -651,6 +676,13 @@ impl AiManager {
     /// cancelled result for every call without one, and sends those entries and
     /// `turn_ended { stopped }` on the turn's channel. Returns the entries it stored.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
+        let halted = self.halt(conversation_id);
+        self.settle(v, conversation_id, halted, &[])
+    }
+
+    /// The first part of a stop, with the vault guard held: cancels the conversation's turn and
+    /// running tools, and takes what the response being streamed has shown.
+    fn halt(&self, conversation_id: &str) -> Halted {
         // Taken before the cancel wakes the turn's task, which drops what streamed when its
         // request ends.
         let streamed = self
@@ -660,8 +692,27 @@ impl AiManager {
         self.forget_file_bases(conversation_id);
         // The calls get cancelled results, which keep no verdict (AI-47).
         self.forget_verdicts(conversation_id);
+        Halted { turn, streamed }
+    }
+
+    /// The rest of a stop, with the vault guard held: stores the `interrupted` entry and the
+    /// cancelled results, and sends them and `turn_ended { stopped }` on the turn's channel.
+    /// `waited`: the `run_command` calls whose commands the stop waited for, which stored their
+    /// own results meanwhile, sent too ([`Self::stop_commands`]). Returns the entries it sent.
+    fn settle(
+        &self,
+        v: &mut Vault,
+        conversation_id: &str,
+        Halted { turn, streamed }: Halted,
+        waited: &[String],
+    ) -> Vec<AiEntryView> {
         let mut stored = Vec::new();
         if v.is_unlocked() && find_conversation(v, conversation_id).is_ok() {
+            if !waited.is_empty()
+                && let Ok(entries) = Entries::load(v, conversation_id)
+            {
+                stored.extend(entries.newest_results(waited));
+            }
             if let Some(response) =
                 streamed.and_then(|(streamed, terminal)| streamed.into_entry(terminal))
             {
@@ -676,8 +727,9 @@ impl AiManager {
                 }
             }
             let cancelled = Entries::load(v, conversation_id).and_then(|entries| {
-                let writing = self.running_writes(conversation_id, &entries);
-                cancel_open_calls(v, conversation_id, &entries, &writing)
+                let mut running = self.running_writes(conversation_id, &entries);
+                running.extend(self.running_commands(conversation_id));
+                cancel_open_calls(v, conversation_id, &entries, &running)
             });
             match cancelled {
                 Ok(views) => stored.extend(views),
@@ -700,9 +752,14 @@ impl AiManager {
         stored
     }
 
-    /// The `edit_file` and `write_file` calls of the conversation's newest response that run now:
-    /// a stop does not cut off a write that has begun (§13.4, "File tools").
-    fn running_writes(&self, conversation_id: &str, entries: &Entries) -> Vec<String> {
+    /// The `edit_file` and `write_file` calls of the conversation's newest response that run now,
+    /// with the content of their cancelled results: a stop does not cut off a write that has
+    /// begun (§13.4, "File tools").
+    fn running_writes(
+        &self,
+        conversation_id: &str,
+        entries: &Entries,
+    ) -> Vec<(String, &'static str)> {
         let newest = entries.list.iter().rev().find_map(|e| match &e.body {
             EntryBody::Assistant(a) => Some(a),
             _ => None,
@@ -712,14 +769,79 @@ impl AiManager {
                 .iter()
                 .filter(|c| matches!(c.name.as_str(), tools::EDIT_FILE | tools::WRITE_FILE))
                 .filter(|c| self.call_running(conversation_id, &c.id))
-                .map(|c| c.id.clone())
+                .map(|c| (c.id.clone(), files::WRITE_STOPPED))
                 .collect()
         })
     }
 
+    /// The conversation's `run_command` calls whose commands run now, with the content of their
+    /// cancelled results: a stop that does not wait for a command cannot tell whether it ended
+    /// (AI-18).
+    fn running_commands(&self, conversation_id: &str) -> Vec<(String, &'static str)> {
+        guard(&self.0.ops)
+            .values()
+            .filter(|op| {
+                op.kind == OpKind::Command && op.conversation_id.as_deref() == Some(conversation_id)
+            })
+            .filter_map(|op| op.tool_call_id.clone())
+            .map(|id| (id, tools::COMMAND_STOP_UNCONFIRMED))
+            .collect()
+    }
+
+    /// AI-18: stops the conversation when its turn runs commands (`run_command`), after waiting
+    /// for them: the stop ends them, and waits up to [`COMMAND_STOP_WAIT`] for their calls to
+    /// store results that say whether they ended. Without a command, does nothing and returns
+    /// `None`, and the caller stops the conversation, if it should, as before. `check` runs
+    /// first, under the vault guard, and refuses the stop. Returns the entries the stop stored.
+    async fn stop_commands(
+        &self,
+        vault: &SharedVault,
+        conversation_id: &str,
+        check: impl FnOnce(&Vault) -> AppResult<()>,
+    ) -> AppResult<Option<Vec<AiEntryView>>> {
+        let (halted, commands) = {
+            let v = lock(vault);
+            let commands: Vec<(String, CancellationToken)> = guard(&self.0.ops)
+                .values()
+                .filter(|op| {
+                    op.kind == OpKind::Command
+                        && op.conversation_id.as_deref() == Some(conversation_id)
+                })
+                .filter_map(|op| op.tool_call_id.clone().map(|id| (id, op.ended.clone())))
+                .collect();
+            if commands.is_empty() || !self.is_running(conversation_id) {
+                return Ok(None);
+            }
+            check(&v)?;
+            (self.halt(conversation_id), commands)
+        };
+        let ended = async {
+            for (_, ended) in &commands {
+                ended.cancelled().await;
+            }
+        };
+        if tokio::time::timeout(COMMAND_STOP_WAIT, ended)
+            .await
+            .is_err()
+        {
+            tracing::warn!(conversation_id, "a stopped command did not report in time");
+        }
+        let waited: Vec<String> = commands.into_iter().map(|(id, _)| id).collect();
+        Ok(Some(self.settle(
+            &mut lock(vault),
+            conversation_id,
+            halted,
+            &waited,
+        )))
+    }
+
     /// `ai_stop`: stops the conversation's turn and tools, if any, and cancels its open calls.
-    pub fn stop(&self, vault: &SharedVault, env: &dyn AiEnv, conversation_id: &str) {
-        let stored = self.stop_locked(&mut lock(vault), conversation_id);
+    /// A command that runs is ended first, so its result says whether it did (AI-18).
+    pub async fn stop(&self, vault: &SharedVault, env: &dyn AiEnv, conversation_id: &str) {
+        let stored = match self.stop_commands(vault, conversation_id, |_| Ok(())).await {
+            Ok(Some(stored)) => stored,
+            _ => self.stop_locked(&mut lock(vault), conversation_id),
+        };
         if !stored.is_empty() {
             env.changed();
         }
@@ -1016,7 +1138,20 @@ impl AiManager {
             return Err(AppError::invalid("text", "The message is empty."));
         }
         let server_id = turn_server_id(env.as_ref(), &context);
-        let mut stored = false;
+        // AI-18: a command the running turn runs ends first, so its result says whether it did.
+        // An edit deletes that result with the entries after the edited message.
+        let mut stopped = Vec::new();
+        if let (Some(id), None) = (&conversation_id, replace)
+            && let Some(entries) = self
+                .stop_commands(vault, id, |v| {
+                    find_conversation(v, id)?;
+                    self.not_reverting(id)
+                })
+                .await?
+        {
+            stopped = entries;
+        }
+        let mut stored = !stopped.is_empty();
         let registered = self.open_turn(
             vault,
             conversation_id,
@@ -1024,6 +1159,7 @@ impl AiManager {
             &text,
             (context, server_id),
             sink,
+            stopped,
             &mut stored,
         );
         if stored {
@@ -1196,6 +1332,8 @@ impl AiManager {
     /// context is compacted stores no message, where the entries before the message came from,
     /// which the message records (AI-43), and a new conversation, which is created with its
     /// message under the id registered here, so such a stop leaves no empty conversation.
+    /// `stopped`: the entries [`Self::stop_commands`] stored first, which the new turn's channel
+    /// sends with those of this stop.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -1208,10 +1346,11 @@ impl AiManager {
         text: &str,
         (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
+        stopped: Vec<AiEntryView>,
         stored: &mut bool,
     ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
-        let mut cancelled = Vec::new();
+        let mut cancelled = stopped;
         let (id, notes, moved_to, recorded, created, edit) = match conversation_id {
             Some(id) => {
                 let conversation = find_conversation(&v, &id)?;
@@ -1221,7 +1360,7 @@ impl AiManager {
                     Some(entry_id) => Some(edited_entry(&v, &id, entry_id)?),
                     None => None,
                 };
-                cancelled = self.stop_locked(&mut v, &id);
+                cancelled.extend(self.stop_locked(&mut v, &id));
                 *stored |= !cancelled.is_empty();
                 // The entries before the new message, and the host the context came from before
                 // the entries an edit deletes, as their earliest host_change note names it.
@@ -1639,7 +1778,6 @@ impl AiManager {
             let conversation = find_conversation(&v, conversation_id)?;
             let entries = Entries::load(&v, conversation_id)?;
             let call = open_call(&entries, tool_call_id)?;
-            let op = self.start_call(conversation_id, tool_call_id)?;
             let arguments = edited_arguments.unwrap_or(&call.arguments);
             let mut job = if call.name.starts_with(MCP_PREFIX) {
                 Job::mcp(
@@ -1656,6 +1794,12 @@ impl AiManager {
             } else {
                 Job::new(&v, &call.name, arguments, &env.app_version())
             };
+            let kind = if matches!(job, Job::RunCommand(_)) {
+                OpKind::Command
+            } else {
+                OpKind::Other
+            };
+            let op = self.start_call(conversation_id, tool_call_id, kind)?;
             let mut place = files::Place::default();
             // AI-41: snapshots are kept by call id, so a call whose id another call of its
             // response shares (stored by an older build) keeps none: neither block could tell
@@ -3985,7 +4129,9 @@ pub fn session_server(env: &dyn AiEnv, session_id: Option<&str>) -> Option<Strin
     live_session(env, session_id).map(|s| files::server(&s))
 }
 
-/// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout.
+/// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout. A
+/// stop or the timeout ends the command and the processes it started, and the result says
+/// whether they ended (AI-18).
 async fn run_command(
     env: &dyn AiEnv,
     session_id: Option<&str>,
@@ -3996,29 +4142,44 @@ async fn run_command(
         return (ToolStatus::Error, DISCONNECTED.to_owned());
     };
     let limit = args.timeout();
-    tokio::select! {
-        biased;
-        () = cancel.cancelled() => (ToolStatus::Cancelled, String::new()),
-        result = tokio::time::timeout(limit, session.exec_output(&args.command, None)) => match result {
-            Ok(Ok(out)) => (
-                ToolStatus::Ok,
-                tools::truncate_result(&tools::format_exec_result(
-                    out.exit_status,
-                    &String::from_utf8_lossy(&out.stdout),
-                    &String::from_utf8_lossy(&out.stderr),
-                )),
-            ),
-            Ok(Err(_)) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
-            Ok(Err(e)) => (ToolStatus::Error, format!("The command could not run: {}", e.message)),
-            Err(_) => (
-                ToolStatus::Error,
-                format!(
-                    "The command did not finish within {} seconds. Hatoba closed its channel; \
-                     the command may still be running on the host.",
-                    limit.as_secs()
-                ),
-            ),
+    let stop = async {
+        tokio::select! {
+            () = cancel.cancelled() => {}
+            () = tokio::time::sleep(limit) => {}
         }
+    };
+    match remote_command::run(&session, &args.command, stop).await {
+        Ok(run) => {
+            let stdout = String::from_utf8_lossy(&run.output.stdout);
+            let stderr = String::from_utf8_lossy(&run.output.stderr);
+            let Some(stopped) = run.stopped else {
+                return (
+                    ToolStatus::Ok,
+                    tools::truncate_result(&tools::format_exec_result(
+                        run.output.exit_status,
+                        &stdout,
+                        &stderr,
+                    )),
+                );
+            };
+            let state = match stopped {
+                remote_command::Stopped::NotStarted => StoppedCommand::NotStarted,
+                remote_command::Stopped::Ended => StoppedCommand::Ended,
+                remote_command::Stopped::MayRun => StoppedCommand::MayRun,
+            };
+            let (status, stop) = if cancel.is_cancelled() {
+                (ToolStatus::Cancelled, CommandStop::User)
+            } else {
+                (ToolStatus::Error, CommandStop::Timeout(limit.as_secs()))
+            };
+            let content = tools::stopped_command_result(stop, state, &stdout, &stderr);
+            (status, tools::truncate_result(&content))
+        }
+        Err(_) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
+        Err(e) => (
+            ToolStatus::Error,
+            format!("The command could not run: {}", e.message),
+        ),
     }
 }
 
@@ -4157,30 +4318,44 @@ impl Entries {
             .map(|(id, entry)| entry_view(id, entry))
             .collect()
     }
+
+    /// The results stored after the newest response for its calls `call_ids`, oldest first.
+    fn newest_results(&self, call_ids: &[String]) -> Vec<AiEntryView> {
+        let after = self
+            .list
+            .iter()
+            .rposition(|e| matches!(e.body, EntryBody::Assistant(_)))
+            .map_or(0, |i| i + 1);
+        self.ids[after..]
+            .iter()
+            .zip(&self.list[after..])
+            .filter(|(_, e)| {
+                matches!(&e.body, EntryBody::Tool { tool_call_id, .. } if call_ids.contains(tool_call_id))
+            })
+            .map(|(id, entry)| entry_view(id, entry))
+            .collect()
+    }
 }
 
 /// Stores a cancelled result for every stored call that has none (§13.1) and returns them.
-/// `writing`: file tool calls that may be writing now, whose result says the file may have
-/// changed.
+/// `running`: calls that ran when the turn stopped, with the content of their results, which
+/// says what they may have done: a write that may have changed the file, or a command that may
+/// still run.
 fn cancel_open_calls(
     v: &mut Vault,
     conversation_id: &str,
     entries: &Entries,
-    writing: &[String],
+    running: &[(String, &str)],
 ) -> AppResult<Vec<AiEntryView>> {
     let now = now_ms();
     fix_up_missing_results(&entries.list)
         .into_iter()
         .map(|call_id| {
-            let entry = if writing.contains(&call_id) {
-                AiEntry::tool(
-                    now,
-                    call_id,
-                    ToolStatus::Cancelled,
-                    files::WRITE_STOPPED.to_owned(),
-                )
-            } else {
-                AiEntry::cancelled_result(now, call_id)
+            let entry = match running.iter().find(|(id, _)| *id == call_id) {
+                Some((_, content)) => {
+                    AiEntry::tool(now, call_id, ToolStatus::Cancelled, (*content).to_owned())
+                }
+                None => AiEntry::cancelled_result(now, call_id),
             };
             let entry_id = append(v, conversation_id, &entry)?;
             Ok(entry_view(&entry_id, &entry))

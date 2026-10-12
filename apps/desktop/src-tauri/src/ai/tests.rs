@@ -31,7 +31,9 @@ use super::{
     AiEnv, AiManager, COMPACT_INSTRUCTION, COMPACT_MID_TURN_INSTRUCTION, DISCONNECTED, EDIT_NOTE,
     Entries, EventSink, SIDE_AWAITING_APPROVAL, SIDE_PENDING, SIDE_QUESTION_INSTRUCTION,
 };
-use super::{Halt, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results};
+use super::{
+    Halt, OpGuard, OpKind, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results,
+};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
     AiPermissionMode, AiRevertFailure, AiScreen, AiSendInput, AiSendStarted, AiSideAnswer,
@@ -784,7 +786,7 @@ async fn stopping_mid_stream_keeps_the_text_that_streamed() {
     streamed(&sink, "Hel").await;
 
     let at = Instant::now();
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     assert!(at.elapsed() < Duration::from_secs(5));
     assert!(!f.manager.is_running(&conv));
@@ -905,7 +907,10 @@ async fn a_stop_keeps_the_text_when_the_task_acts_first() {
     let stop = {
         let (manager, vault, env) = (f.manager.clone(), f.vault.clone(), f.env.clone());
         let conv = conv.clone();
-        tokio::task::spawn_blocking(move || manager.stop(&vault, env.as_ref(), &conv))
+        let runtime = tokio::runtime::Handle::current();
+        tokio::task::spawn_blocking(move || {
+            runtime.block_on(manager.stop(&vault, env.as_ref(), &conv));
+        })
     };
     tokio::time::timeout(Duration::from_secs(10), task)
         .await
@@ -938,7 +943,7 @@ async fn stopping_before_any_text_stores_nothing() {
     })
     .await;
 
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     f.idle(&conv).await;
     let entries = f.entries(&conv);
@@ -956,7 +961,7 @@ async fn the_message_after_a_stopped_reply_says_it_was_interrupted() {
     let (started, sink) = f.send(None, "df?").await;
     let conv = started.conversation.id;
     streamed(&sink, "The disk is 4").await;
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     f.idle(&conv).await;
 
@@ -1087,7 +1092,7 @@ async fn stopping_while_a_tool_waits_cancels_the_calls_without_a_result() {
     f.result(&conv, "call_1", AiToolStatus::Ok, "screen", None)
         .unwrap();
 
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 
     let entries = f.entries(&conv);
@@ -1866,7 +1871,7 @@ async fn compaction_is_refused_while_a_turn_runs() {
         .await
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidInput);
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 }
 
@@ -1957,9 +1962,9 @@ async fn a_stop_while_a_file_tool_runs_says_the_file_may_have_changed() {
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
     // w1 and r1 run; w2 has not started.
-    let _write = f.manager.start_call(&conv, "w1").unwrap();
-    let _read = f.manager.start_call(&conv, "r1").unwrap();
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    let _write = f.manager.start_call(&conv, "w1", OpKind::Other).unwrap();
+    let _read = f.manager.start_call(&conv, "r1", OpKind::Other).unwrap();
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
 
     let results: Vec<(String, ToolStatus, String)> = f
@@ -1986,6 +1991,132 @@ async fn a_stop_while_a_file_tool_runs_says_the_file_may_have_changed() {
             ("r1".into(), ToolStatus::Cancelled, String::new()),
             ("w2".into(), ToolStatus::Cancelled, String::new()),
         ]
+    );
+}
+
+/// What `tool_run` does for a `run_command` call that a stop cancels: the command takes a moment
+/// to end, then the call stores the result that says so, and lets go of its op.
+async fn command_ends(f: &Fixture, conv: &str, op: OpGuard<'_>, content: &str) {
+    op.token().cancelled().await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    f.manager
+        .store_result(
+            &mut lock(&f.vault),
+            conv,
+            "c1",
+            ToolStatus::Cancelled,
+            content.into(),
+            false,
+        )
+        .unwrap();
+    drop(op);
+}
+
+/// The calls of the results a turn's channel sent, in order.
+fn sent_results(sink: &Sink) -> Vec<String> {
+    sink.entries()
+        .iter()
+        .filter(|e| matches!(e, AiEntryView::Tool { .. }))
+        .map(|e| view_content(e).0.to_owned())
+        .collect()
+}
+
+fn tool_results(entries: &[AiEntry]) -> Vec<(&str, ToolStatus, &str)> {
+    entries
+        .iter()
+        .filter(|e| matches!(e.body, EntryBody::Tool { .. }))
+        .map(tool_entry)
+        .collect()
+}
+
+/// AI-18: a stop waits for a running command to end, so the call keeps the result that says how
+/// it ended, and the stop sends it with the cancelled results of the other calls.
+#[tokio::test]
+async fn a_stop_waits_for_a_running_command_and_keeps_its_result() {
+    let f = Fixture::new(vec![calls(&[
+        ("c1", "run_command", json!({"command": "sleep 300"})),
+        ("c2", "run_command", json!({"command": "ls"})),
+    ])])
+    .await;
+    let (started, sink) = f.send(None, "run it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
+
+    tokio::join!(
+        f.manager.stop(&f.vault, f.env.as_ref(), &conv),
+        command_ends(&f, &conv, op, "ended"),
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(
+        tool_results(&f.entries(&conv)),
+        [
+            ("c1", ToolStatus::Cancelled, "ended"),
+            ("c2", ToolStatus::Cancelled, ""),
+        ]
+    );
+    assert_eq!(sent_results(&sink), ["c1", "c2"]);
+}
+
+/// AI-18: a message sent while a command runs stops the turn the same way, and the new turn's
+/// channel sends what the stop stored, before the message.
+#[tokio::test]
+async fn a_message_sent_while_a_command_runs_waits_for_it() {
+    let f = Fixture::new(vec![
+        calls(&[("c1", "run_command", json!({"command": "sleep 300"}))]),
+        answer("Stopped it."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "run it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
+
+    let ((_, next), ()) = tokio::join!(
+        f.send(Some(&conv), "never mind"),
+        command_ends(&f, &conv, op, "ended"),
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(next.ended().await, AiTurnEndReason::Completed);
+    let entries = f.entries(&conv);
+    assert_eq!(
+        tool_results(&entries),
+        [("c1", ToolStatus::Cancelled, "ended")]
+    );
+    let result = entries
+        .iter()
+        .position(|e| matches!(e.body, EntryBody::Tool { .. }))
+        .unwrap();
+    assert!(
+        matches!(&entries[result + 1].body, EntryBody::User { text, .. } if text.ends_with("never mind"))
+    );
+    assert_eq!(sent_results(&next), ["c1"]);
+}
+
+/// AI-18: locking the vault stops the turn without waiting for a running command, so its result
+/// says the command may still run.
+#[tokio::test]
+async fn a_lock_while_a_command_runs_says_it_may_still_run() {
+    let f = Fixture::new(vec![calls(&[(
+        "c1",
+        "run_command",
+        json!({"command": "sleep 300"}),
+    )])])
+    .await;
+    let (started, sink) = f.send(None, "run it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
+    f.manager.stop_all(&mut lock(&f.vault));
+    assert!(op.token().is_cancelled());
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(
+        tool_results(&f.entries(&conv)),
+        [(
+            "c1",
+            ToolStatus::Cancelled,
+            hatoba_ai::tools::COMMAND_STOP_UNCONFIRMED
+        )]
     );
 }
 
@@ -3167,7 +3298,7 @@ async fn a_message_stopped_while_the_context_is_compacted_is_not_stored() {
     let (send, sink) = spawn_send(&f, &conv, &"disk ".repeat(720));
     // The Compact request is on its way when the user stops.
     f.wait_for_requests(2).await;
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     let err = send.await.unwrap().unwrap_err();
     assert_eq!(err.code, ErrorCode::Cancelled);
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
@@ -3201,7 +3332,7 @@ async fn a_move_stopped_while_the_context_is_compacted_is_not_stored() {
     };
     let (send, sink) = spawn_send_with(&f, &conv, &"disk ".repeat(720), elsewhere);
     f.wait_for_requests(2).await;
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(send.await.unwrap().unwrap_err().code, ErrorCode::Cancelled);
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     let first = "root@10.0.0.9:22";
@@ -5149,7 +5280,7 @@ async fn a_side_question_stops_on_its_own() {
     still_running(&second).await;
 
     // Stopping the turn leaves it running; the lock stops it.
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     still_running(&second).await;
     f.manager.stop_all(&mut lock(&f.vault));
@@ -6112,7 +6243,7 @@ async fn a_conversation_is_not_forked_while_it_is_busy() {
     sink.done_with(AiFinish::ToolCalls).await;
     let err = f.fork(&conv, Some(&user), "fork").err().unwrap();
     assert_eq!(err.field.as_deref(), Some("conversation_id"));
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     f.idle(&conv).await;
     // A compaction counts too.

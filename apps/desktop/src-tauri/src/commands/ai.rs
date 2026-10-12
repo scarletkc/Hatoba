@@ -1036,7 +1036,10 @@ pub async fn ai_stop(
     state: State<'_, AppState>,
     conversation_id: String,
 ) -> AppResult<()> {
-    state.ai.stop(&state.vault, &AppEnv(app), &conversation_id);
+    state
+        .ai
+        .stop(&state.vault, &AppEnv(app), &conversation_id)
+        .await;
     Ok(())
 }
 

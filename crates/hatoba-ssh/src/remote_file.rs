@@ -46,6 +46,11 @@ const LINES_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// `cksum` output (`crc size`). Its third line is the mode, in octal, of a file the write
 /// creates, or `none` for the umask's: such a file is created readable by its owner only and then
 /// given that mode, so it is never open to others in between. An existing file keeps its mode.
+/// Its fourth line is the content's `cksum` output: the script reads the whole content first,
+/// and leaves the file alone unless the content arrived whole (exit status 11), so a channel
+/// closed or a connection lost while the content travels never cuts the file short. Once the
+/// file is opened the script writes nothing more to the channel, so a closed channel does not
+/// stop it either. The content is held in a shell variable, which cannot hold a NUL byte.
 /// Prints the marker and the resolved path. Exit statuses: 2 no such directory, 3 directory,
 /// 4 not writable, 6 not a regular file, 7 not in the expected state, 8 a symbolic link to
 /// nothing (writing would create its target, wherever that is), 9 no path. A file that passed the
@@ -53,11 +58,12 @@ const LINES_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// disk) is status 1, with the message on stderr: dash would exit with 2 for the failed
 /// redirection, which reads as a missing directory.
 ///
-/// The check and the write run in one command, so a change made since the caller read the file
-/// is caught. A write by another process in the moment between the check and `cat` is not: an
-/// in-place rewrite has no lock that every writer honors.
+/// The check and the write run in one command, after the content arrived, so a change made since
+/// the caller read the file is caught. A write by another process in the moment between the
+/// check and the write is not: an in-place rewrite has no lock that every writer honors.
 const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
-     IFS= read -r m || exit 9; \
+     IFS= read -r m || exit 9; IFS= read -r k || exit 9; t=$(cat; echo x); t=${t%x}; \
+     c=$(printf %s \"$t\" | cksum); set -- $c; [ \"$1 $2\" = \"$k\" ] || exit 11; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -f \"$f\" ] || exit 6; [ \"$g\" = missing ] && exit 7; \
@@ -65,7 +71,7 @@ const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; 
      [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; m=none; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; [ \"$m\" = none ] || umask 077; fi; \
-     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1; \
+     echo hatoba-file; printf %s \"$f\"; echo; printf %s \"$t\" > \"$f\" || exit 1; \
      [ \"$m\" = none ] || chmod $m \"$f\" || exit 1";
 
 /// Deletes the file named on stdin's first line, resolved as the read script resolves it, if it
@@ -116,6 +122,10 @@ pub enum RemoteFileError {
     TooLarge(u64),
     /// Write: the file is not in the state [`Expect`] named, so nothing was written.
     Changed,
+    /// Write: the content did not reach the host whole, so nothing was written.
+    Incomplete,
+    /// Write: the content has a NUL byte, which the write cannot carry, so nothing was written.
+    NulByte,
     /// The command failed otherwise: its exit status and the last line of its stderr.
     Failed {
         /// `None` when the command ended without one (a signal).
@@ -140,6 +150,8 @@ impl fmt::Display for RemoteFileError {
             Self::PermissionDenied => f.write_str("permission denied"),
             Self::TooLarge(size) => write!(f, "the file is too large ({size} bytes)"),
             Self::Changed => f.write_str("the file changed"),
+            Self::Incomplete => f.write_str("the content did not arrive whole"),
+            Self::NulByte => f.write_str("the content has a NUL byte"),
             Self::Failed { status, stderr } => {
                 match status {
                     Some(code) => write!(f, "the command exited with status {code}")?,
@@ -217,7 +229,9 @@ pub async fn read(
 /// Writes `content` to the file at `path` in place, if the file is in the state `expect` names,
 /// and returns the path as resolved. `mode`: the permission bits a file the write creates gets,
 /// readable by its owner only until then; `None` leaves them to the login's umask. An existing
-/// file keeps its own.
+/// file keeps its own. The file is opened only once the whole content has reached the host, so
+/// a write dropped or cut off on its way leaves the file as it was. `content` cannot have a NUL
+/// byte ([`RemoteFileError::NulByte`]).
 pub async fn write(
     session: &SshSession,
     path: &str,
@@ -304,8 +318,12 @@ fn write_request(
             format!("{crc} {size}")
         }
     };
+    if content.contains(&0) {
+        return Err(RemoteFileError::NulByte);
+    }
     let mode = mode.map_or_else(|| "none".to_owned(), |m| format!("{:o}", m & 0o777));
-    let mut stdin = format!("{path}\n{state}\n{mode}\n").into_bytes();
+    let (crc, size) = cksum(content);
+    let mut stdin = format!("{path}\n{state}\n{mode}\n{crc} {size}\n").into_bytes();
     stdin.extend_from_slice(content);
     Ok((command(WRITE_SCRIPT, None), stdin))
 }
@@ -449,6 +467,7 @@ fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
         Some(6) => Err(RemoteFileError::NotRegular),
         Some(7) => Err(RemoteFileError::Changed),
         Some(8) => Err(RemoteFileError::DanglingLink),
+        Some(11) => Err(RemoteFileError::Incomplete),
         _ => Err(failed(out)),
     }
 }
@@ -523,10 +542,11 @@ mod tests {
         ));
         let (_, stdin) =
             write_request("/tmp/x", b"body", Expect::Content(b"123456789"), None).unwrap();
-        assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\nbody");
+        // The content's own `cksum` output follows the state and the mode.
+        assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\n3328554182 4\nbody");
         // Permission bits only, in octal.
         let (_, stdin) = write_request("/tmp/x", b"", Expect::Missing, Some(0o4640)).unwrap();
-        assert_eq!(stdin, b"/tmp/x\nmissing\n640\n");
+        assert_eq!(stdin, b"/tmp/x\nmissing\n640\n4294967295 0\n");
         assert!(matches!(
             delete_request("a\rb", b""),
             Err(RemoteFileError::InvalidPath)
@@ -832,6 +852,42 @@ mod tests {
             ));
         }
 
+        /// A write whose content stops on its way (the channel closed, the connection went)
+        /// leaves the file as it was, and so does content with a NUL byte, which `sh` cannot
+        /// hold. Trailing line breaks and a last line without one arrive as they are.
+        #[test]
+        fn a_write_cut_short_on_its_way_leaves_the_file_alone() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            let path = home.join("app.conf");
+            std::fs::write(&path, b"old\n").unwrap();
+            let content = b"line one\nline two\n\n\n";
+            let (command, stdin) =
+                write_request("app.conf", content, Expect::Content(b"old\n"), None).unwrap();
+            for cut in [1, 10, content.len() - 1] {
+                let sent = &stdin[..stdin.len() - cut];
+                let out = run(home, &command, sent);
+                assert!(matches!(
+                    parse_write(&out),
+                    Err(RemoteFileError::Incomplete)
+                ));
+                assert_eq!(std::fs::read(&path).unwrap(), b"old\n");
+            }
+            assert!(matches!(
+                write(home, "app.conf", b"a\0b", Expect::Any),
+                Err(RemoteFileError::NulByte)
+            ));
+            for content in [
+                &content[..],
+                b"no line break",
+                b"",
+                "ünï\r\ncode\r\n".as_bytes(),
+            ] {
+                write(home, "app.conf", content, Expect::Any).unwrap();
+                assert_eq!(std::fs::read(&path).unwrap(), content);
+            }
+        }
+
         #[test]
         fn writes_in_place_after_checking_the_file() {
             let dir = tempfile::tempdir().unwrap();
@@ -855,9 +911,9 @@ mod tests {
             assert_eq!(std::fs::read(&path).unwrap(), b"old\n");
 
             // Through the link, in place: same inode and mode, the link stays a link.
-            write(home, "link.conf", b"new\r\n\x00", Expect::Content(b"old\n")).unwrap();
+            write(home, "link.conf", b"new\r\n\x01", Expect::Content(b"old\n")).unwrap();
             let after = std::fs::metadata(&path).unwrap();
-            assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n\x00");
+            assert_eq!(std::fs::read(&path).unwrap(), b"new\r\n\x01");
             assert_eq!(after.ino(), before.ino());
             assert_eq!(after.mode() & 0o777, 0o640);
             assert!(
