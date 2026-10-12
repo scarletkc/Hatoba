@@ -588,7 +588,11 @@ export type AiModelRef = {
 
 export type AiPermissionMode = "manual" | "bypass";
 
-export type AiProtocol = "chat_completions" | "anthropic";
+/**
+ *  A provider's protocol (spec §13.2). A `system_one` provider answers decision questions for
+ *  the judge of Auto mode (AI-47) and cannot chat.
+ */
+export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
 
 export type AiProviderInput = {
 	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */

@@ -2682,15 +2682,18 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
 }
 
 /// Stores a summary entry and moves `context_start` to it (AI-21). The model sees nothing before
-/// a summary, so a summary of a conversation in bypass starts with its `permission_mode` note
-/// (AI-16), which the request puts before the summary's block: the mode stays the one the model
-/// was told of, also for the rest of a turn compacted between tool calls (AI-22).
+/// a summary, so a summary of a conversation in bypass or Auto (AI-47) starts with its
+/// `permission_mode` note (AI-16), which the request puts before the summary's block: the mode
+/// stays the one the model was told of, also for the rest of a turn compacted between tool calls
+/// (AI-22).
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
     let mode = noted_permission(&Entries::load(v, conversation_id)?.list);
     let text = match mode {
         PermissionMode::Manual => summary.to_owned(),
-        PermissionMode::Bypass => format!("{}{summary}", tools::permission_mode_block(mode)),
+        PermissionMode::Auto | PermissionMode::Bypass => {
+            format!("{}{summary}", tools::permission_mode_block(mode))
+        }
     };
     let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
@@ -3234,6 +3237,7 @@ pub fn protocol(p: CoreProtocol) -> Protocol {
     match p {
         CoreProtocol::ChatCompletions => Protocol::ChatCompletions,
         CoreProtocol::Anthropic => Protocol::Anthropic,
+        CoreProtocol::SystemOne => Protocol::SystemOne,
     }
 }
 
@@ -3758,7 +3762,8 @@ const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
 /// The tag of the note Hatoba puts before a message sent in another permission mode than the
-/// model was last told of (AI-16), and before a summary of a conversation in bypass.
+/// model was last told of (AI-16), and before a summary of a conversation in bypass or Auto
+/// (AI-47).
 const PERMISSION_MODE: &str = "permission_mode";
 /// The tag of the note Hatoba puts before the first message after the user reverted a change of
 /// a file tool call (AI-41), one for each call.
@@ -3826,7 +3831,7 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         tag: PERMISSION_MODE,
         note: true,
         title: |_| String::new(),
-        attributes: |attrs| matches!(attrs, [("mode", "manual" | "bypass")]),
+        attributes: |attrs| matches!(attrs, [("mode", "manual" | "auto" | "bypass")]),
     },
     AttachmentKind {
         tag: FILE_REVERT,
@@ -4429,6 +4434,7 @@ fn noted_permission(entries: &[AiEntry]) -> PermissionMode {
             EntryBody::User { text, .. } => {
                 match note_attr(text, PERMISSION_MODE, "mode").as_deref() {
                     Some("bypass") => return PermissionMode::Bypass,
+                    Some("auto") => return PermissionMode::Auto,
                     Some(_) => return PermissionMode::Manual,
                     None => {}
                 }
@@ -4871,6 +4877,7 @@ pub fn entry_view(entry_id: &str, entry: &AiEntry) -> AiEntryView {
             tool_call_id,
             status,
             content,
+            ..
         } => AiEntryView::Tool {
             entry_id,
             created_at,

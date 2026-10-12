@@ -55,6 +55,7 @@ const PICKER_LIMIT = 100;
 const PLACEHOLDER_URL: Record<AiProtocol, string> = {
   chat_completions: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
+  system_one: "https://api.typesafe.ai/v1",
 };
 
 function initialForm(p: AiProviderView | null): Form {

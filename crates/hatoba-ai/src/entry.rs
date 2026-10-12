@@ -532,6 +532,85 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_result_keeps_the_verdict_of_auto_mode_and_older_results_read_without_one() {
+        let verdict = AutoVerdict {
+            provider_id: "p1".into(),
+            model_id: "jev-latest".into(),
+            decision: AutoDecision::Run,
+            answers: BTreeMap::from([
+                ("requested".to_owned(), 0.96),
+                ("forbidden".to_owned(), 0.0),
+            ]),
+            concerns: vec![],
+            failure: None,
+        };
+        let entry = AiEntry::tool(4, "c1", ToolStatus::Ok, "active").with_auto(verdict.clone());
+        let value = serde_json::to_value(&entry).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "created_at": 4, "role": "tool", "tool_call_id": "c1", "status": "ok",
+                "content": "active",
+                "auto": {"provider_id": "p1", "model_id": "jev-latest", "decision": "run",
+                         "answers": {"forbidden": 0.0, "requested": 0.96}, "concerns": []}
+            })
+        );
+        assert_eq!(serde_json::from_value::<AiEntry>(value).unwrap(), entry);
+
+        // A judge that failed records why; a kind a newer version added stays as written.
+        let failed: AiEntry = serde_json::from_value(json!({
+            "role": "tool", "tool_call_id": "c2", "status": "ok", "content": "",
+            "auto": {"decision": "ask", "failure": "overloaded_v2"}
+        }))
+        .unwrap();
+        let EntryBody::Tool {
+            auto: Some(auto), ..
+        } = &failed.body
+        else {
+            panic!("a tool entry with a verdict");
+        };
+        assert_eq!(auto.decision, AutoDecision::Ask);
+        assert_eq!(auto.failure.as_deref(), Some("overloaded_v2"));
+        assert!(auto.answers.is_empty() && auto.provider_id.is_empty());
+
+        // An unknown decision reads as ask, and a verdict this version cannot read as none,
+        // never as an unreadable entry.
+        let newer: AiEntry = serde_json::from_value(json!({
+            "role": "tool", "tool_call_id": "c3", "auto": {"decision": "defer"}
+        }))
+        .unwrap();
+        assert!(matches!(
+            &newer.body,
+            EntryBody::Tool {
+                auto: Some(AutoVerdict {
+                    decision: AutoDecision::Ask,
+                    ..
+                }),
+                ..
+            }
+        ));
+        for odd in [
+            json!("run"),
+            json!({"answers": {"requested": "high"}}),
+            json!(null),
+        ] {
+            let entry: AiEntry = serde_json::from_value(json!({
+                "role": "tool", "tool_call_id": "c4", "content": "x", "auto": odd
+            }))
+            .unwrap();
+            assert_eq!(entry, AiEntry::tool(0, "c4", ToolStatus::Ok, "x"), "{odd}");
+        }
+
+        // Results without a verdict are stored without the field, and only tool entries take one.
+        let plain = serde_json::to_value(AiEntry::tool(1, "c5", ToolStatus::Ok, "")).unwrap();
+        assert!(plain.get("auto").is_none());
+        assert_eq!(
+            AiEntry::user(1, "hi").with_auto(verdict),
+            AiEntry::user(1, "hi")
+        );
+    }
+
+    #[test]
     fn calls_without_results_are_listed_in_order() {
         let call = |id: &str| ToolCall {
             id: id.into(),

@@ -66,6 +66,7 @@ fn core_protocol(p: AiProtocol) -> CoreProtocol {
     match p {
         AiProtocol::ChatCompletions => CoreProtocol::ChatCompletions,
         AiProtocol::Anthropic => CoreProtocol::Anthropic,
+        AiProtocol::SystemOne => CoreProtocol::SystemOne,
     }
 }
 
@@ -91,6 +92,7 @@ pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
         protocol: match p.protocol {
             CoreProtocol::ChatCompletions => AiProtocol::ChatCompletions,
             CoreProtocol::Anthropic => AiProtocol::Anthropic,
+            CoreProtocol::SystemOne => AiProtocol::SystemOne,
         },
         base_url: p.base_url.clone(),
         has_api_key: !p.api_key.is_empty(),
@@ -623,6 +625,8 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
         send_terminal_screen: patch
             .send_terminal_screen
             .unwrap_or(current.send_terminal_screen),
+        // AI-47: not in the patch yet, so a save keeps the judge as it is.
+        judge_model: current.judge_model.clone(),
     };
     if ai == settings.ai {
         return Ok(false);
@@ -1382,6 +1386,11 @@ mod tests {
         pulled.ai.custom_instructions = "Answer in Japanese.".into();
         pulled.ai.builtin_skill_enabled = false;
         pulled.ai.send_terminal_screen = false;
+        // AI-47: a judge chosen on another device; the pane cannot change it yet.
+        pulled.ai.judge_model = Some(CoreRef {
+            provider_id: "elsewhere".into(),
+            model_id: "jev-latest".into(),
+        });
         v.put(Some(SETTINGS_ID), Item::Settings(pulled)).unwrap();
 
         // The user picks a thinking level in that pane.
@@ -1394,6 +1403,10 @@ mod tests {
         assert_eq!(ai.custom_instructions, "Answer in Japanese.");
         assert!(!ai.builtin_skill_enabled && !ai.send_terminal_screen);
         assert_eq!(ai.default_model.map(|m| m.model_id), Some("m1".into()));
+        assert_eq!(
+            ai.judge_model.map(|m| m.model_id),
+            Some("jev-latest".into())
+        );
     }
 
     #[test]

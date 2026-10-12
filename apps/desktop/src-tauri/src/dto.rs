@@ -1055,11 +1055,14 @@ pub struct ForwardStatusEvent {
 // carry a key print it redacted and wipe it when dropped. Conversation content (messages, tool
 // inputs and results) is never logged (SEC-04), so the inputs that carry it print only lengths.
 
+/// A provider's protocol (spec §13.2). A `system_one` provider answers decision questions for
+/// the judge of Auto mode (AI-47) and cannot chat.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AiProtocol {
     ChatCompletions,
     Anthropic,
+    SystemOne,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]

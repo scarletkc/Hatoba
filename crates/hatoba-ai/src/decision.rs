@@ -123,14 +123,6 @@ impl Question {
         }
     }
 
-    fn kind(&self) -> &'static str {
-        match self {
-            Self::Noul { .. } => "noul",
-            Self::Choice { .. } => "choice",
-            Self::Score { .. } => "score",
-        }
-    }
-
     fn instructions(&self) -> &Value {
         match self {
             Self::Noul { instructions, .. }
@@ -295,7 +287,9 @@ pub async fn evaluate(
 
 fn check_questions(questions: &BTreeMap<String, Question>) -> Result<(), AiError> {
     if questions.is_empty() {
-        return Err(AiError::Config("a decision needs at least one question".into()));
+        return Err(AiError::Config(
+            "a decision needs at least one question".into(),
+        ));
     }
     for (id, question) in questions {
         if id.is_empty() || id == RESERVED_ID {
@@ -430,11 +424,9 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
     let answer: Answer = serde_json::from_value(raw.clone()).ok()?;
     let in_range = |p: f64| p.is_finite() && (-ROUNDING..=1.0 + ROUNDING).contains(&p);
     match (question, answer) {
-        (Question::Noul { .. }, Answer::Noul { noul }) => {
-            in_range(noul).then(|| Answer::Noul {
-                noul: noul.clamp(0.0, 1.0),
-            })
-        }
+        (Question::Noul { .. }, Answer::Noul { noul }) => in_range(noul).then(|| Answer::Noul {
+            noul: noul.clamp(0.0, 1.0),
+        }),
         (
             Question::Choice { criteria, .. },
             Answer::Choice {
@@ -452,7 +444,12 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
                 choice,
                 probabilities: criteria
                     .keys()
-                    .map(|o| (o.clone(), probabilities.get(o).map_or(0.0, |p| p.clamp(0.0, 1.0))))
+                    .map(|o| {
+                        (
+                            o.clone(),
+                            probabilities.get(o).map_or(0.0, |p| p.clamp(0.0, 1.0)),
+                        )
+                    })
                     .collect(),
                 confidence: confidence.clamp(0.0, 1.0),
             })
@@ -478,13 +475,22 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
             fits.then(|| Answer::Score {
                 score: score.clamp(0.0, top),
                 legend: if legend.is_empty() {
-                    levels.iter().cloned().zip(criteria.iter().cloned()).collect()
+                    levels
+                        .iter()
+                        .cloned()
+                        .zip(criteria.iter().cloned())
+                        .collect()
                 } else {
                     legend
                 },
                 probabilities: levels
                     .iter()
-                    .map(|l| (l.clone(), probabilities.get(l).map_or(0.0, |p| p.clamp(0.0, 1.0))))
+                    .map(|l| {
+                        (
+                            l.clone(),
+                            probabilities.get(l).map_or(0.0, |p| p.clamp(0.0, 1.0)),
+                        )
+                    })
                     .collect(),
                 confidence: confidence.clamp(0.0, 1.0),
             })
@@ -574,7 +580,12 @@ fn plain(value: Value) -> Ordered {
 fn distribution(keys: &[String], description: &str) -> Value {
     let properties: Map<String, Value> = keys
         .iter()
-        .map(|k| (k.clone(), json!({"type": "number", "minimum": 0, "maximum": 1})))
+        .map(|k| {
+            (
+                k.clone(),
+                json!({"type": "number", "minimum": 0, "maximum": 1}),
+            )
+        })
         .collect();
     json!({
         "type": "object",
@@ -609,7 +620,9 @@ fn answer_schema(questions: &BTreeMap<String, Question>) -> Ordered {
                 "The probability of each option, from 0 to 1, summing to 1.",
             ),
             Question::Score { criteria, .. } => distribution(
-                &(0..criteria.len()).map(|i| i.to_string()).collect::<Vec<_>>(),
+                &(0..criteria.len())
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>(),
                 "The probability of each level, \"0\" being the lowest, from 0 to 1, summing \
                  to 1.",
             ),
@@ -749,7 +762,9 @@ impl Emulation<'_> {
                     .model
                     .max_output_tokens
                     .filter(|limit| *limit > 0)
-                    .map_or(ANTHROPIC_MAX_TOKENS, |limit| limit.min(ANTHROPIC_MAX_TOKENS));
+                    .map_or(ANTHROPIC_MAX_TOKENS, |limit| {
+                        limit.min(ANTHROPIC_MAX_TOKENS)
+                    });
                 let tool_choice = if forced {
                     json!({"type": "tool", "name": TOOL_NAME})
                 } else {
@@ -877,14 +892,12 @@ impl Emulation<'_> {
             .iter()
             .find(|(name, _)| *name == Some(TOOL_NAME))
             .or_else(|| calls.first());
-        if let Some((_, input)) = call {
-            return match input {
-                Value::Object(map) => Some(map.clone()),
-                Value::String(s) => first_json_object(s),
-                _ => None,
-            };
-        }
-        first_json_object(&text)
+        let input = call.and_then(|(_, input)| match input {
+            Value::Object(map) => Some(map.clone()),
+            Value::String(s) => first_json_object(s),
+            _ => None,
+        });
+        input.or_else(|| first_json_object(&text))
     }
 }
 
@@ -929,7 +942,11 @@ fn derive_answers(
                 Answer::Score {
                     score: p.iter().enumerate().map(|(i, pi)| i as f64 * pi).sum(),
                     confidence: score_confidence(&p),
-                    legend: levels.iter().cloned().zip(criteria.iter().cloned()).collect(),
+                    legend: levels
+                        .iter()
+                        .cloned()
+                        .zip(criteria.iter().cloned())
+                        .collect(),
                     probabilities: levels.into_iter().zip(p).collect(),
                 }
             }

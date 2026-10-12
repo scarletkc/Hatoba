@@ -5,6 +5,7 @@ import type {
   AiAllowance,
   AiEffort,
   AiModel,
+  AiProtocol,
   AiProviderInput,
   AiProviderView,
   AiSettingsView,
@@ -174,7 +175,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     return plain(["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "gpt-4.1-mini", "o3", "o4-mini"]);
   };
 
-  const authFail = (protocol: "anthropic" | "chat_completions"): AiTestResult => ({
+  const authFail = (protocol: AiProtocol): AiTestResult => ({
     ok: false,
     failure: "auth",
     status: 401,

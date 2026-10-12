@@ -21,6 +21,7 @@ export default defineMessages({
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
+    "aiSettings.protocol.system_one": "System One",
 
     "aiSettings.dlg.addTitle": "添加服务商",
     "aiSettings.dlg.editTitle": "编辑服务商",
@@ -375,6 +376,7 @@ export default defineMessages({
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
+    "aiSettings.protocol.system_one": "System One",
 
     "aiSettings.dlg.addTitle": "Add Provider",
     "aiSettings.dlg.editTitle": "Edit Provider",
@@ -733,6 +735,7 @@ export default defineMessages({
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
+    "aiSettings.protocol.system_one": "System One",
 
     "aiSettings.dlg.addTitle": "プロバイダーを追加",
     "aiSettings.dlg.editTitle": "プロバイダーを編集",
