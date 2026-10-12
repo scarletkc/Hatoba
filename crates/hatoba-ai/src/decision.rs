@@ -11,13 +11,13 @@
 //!   (`https://openrouter.ai/api/v1`), or Cloudflare's Clef and Clef-flash. The request is
 //!   `POST {base_url}/systemone` with `Authorization: Bearer` (none when the key is empty) and
 //!   `{"model", "state", "questions"}`; a base URL that already ends in `/systemone` is the
-//!   endpoint itself. A base URL whose path ends in `/ai/run` is Workers AI
-//!   (`https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run`): the request goes to
-//!   `{base_url}/{model id}`, the body's `model` is the id's last `/` segment
-//!   (`@cf/cloudflare/clef-flash` sends `clef-flash`), and the response wraps the answers in
-//!   `result`, which is read wherever it appears. Every question must get an answer of its type
-//!   whose probabilities are between 0 and 1, and whose distribution sums to 1, or the response
-//!   is malformed ([`AiError::Protocol`]).
+//!   endpoint itself. A base URL whose path holds `/ai/run` is Workers AI
+//!   (`https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run`, anything after it
+//!   left out): the request goes to `{base_url}/{model id}`, the body's `model` is the id's last
+//!   `/` segment (`@cf/cloudflare/clef-flash` sends `clef-flash`), and the response wraps the
+//!   answers in `result`, which is read wherever it appears. Every question must get an answer
+//!   of its type whose probabilities are between 0 and 1, and whose distribution sums to 1, or
+//!   the response is malformed ([`AiError::Protocol`]).
 //! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`]) emulates it with
 //!   one non-streaming request that forces a single tool, `answer`. Its input schema has a short
 //!   `notes` string first, written before the answers, then one property per question: a number
@@ -358,15 +358,29 @@ pub(crate) fn system_one_base(base: &Url) -> Url {
 fn system_one_target(base: &Url, model_id: &str) -> (Url, String) {
     let model_id = model_id.trim();
     let path = base.path().trim_end_matches('/');
-    if path.ends_with("/ai/run") {
+    if let Some(run) = workers_ai_run(base) {
         let id = model_id.trim_start_matches('/');
         let name = id.rsplit('/').next().unwrap_or(id);
-        (net::endpoint(base, &format!("/{id}")), name.to_owned())
+        (net::endpoint(&run, &format!("/{id}")), name.to_owned())
     } else if path.ends_with("/systemone") {
         (net::endpoint(base, ""), model_id.to_owned())
     } else {
         (net::endpoint(base, "/systemone"), model_id.to_owned())
     }
+}
+
+/// A Workers AI base URL cut after its `/ai/run`, so that one pasted with a model after it
+/// (`…/ai/run/@cf/cloudflare/clef-flash`) runs the provider's model; `None` for other URLs.
+fn workers_ai_run(base: &Url) -> Option<Url> {
+    const RUN: &str = "/ai/run";
+    let path = base.path();
+    let end = path
+        .match_indices(RUN)
+        .map(|(i, _)| i + RUN.len())
+        .find(|&end| matches!(path.as_bytes().get(end), None | Some(b'/')))?;
+    let mut run = base.clone();
+    run.set_path(&path[..end]);
+    Some(run)
 }
 
 async fn system_one(

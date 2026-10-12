@@ -254,6 +254,20 @@ async fn workers_ai_takes_the_model_in_the_url_and_wraps_the_answers_in_result()
         "https://api.cloudflare.com/client/v4/accounts/a/ai/run/@cf/cloudflare/clef"
     );
     assert_eq!(model, "clef");
+    // A base URL pasted with a model after `/ai/run` runs the provider's model.
+    let pasted = Url::parse(
+        "https://api.cloudflare.com/client/v4/accounts/a/ai/run/@cf/cloudflare/clef-flash",
+    )
+    .unwrap();
+    let (url, model) = system_one_target(&pasted, "@cf/cloudflare/clef");
+    assert_eq!(
+        url.as_str(),
+        "https://api.cloudflare.com/client/v4/accounts/a/ai/run/@cf/cloudflare/clef"
+    );
+    assert_eq!(model, "clef");
+    // `/ai/running` is no Workers AI path.
+    let (url, _) = system_one_target(&Url::parse("http://x.local/ai/running").unwrap(), "jev");
+    assert_eq!(url.as_str(), "http://x.local/ai/running/systemone");
     let (url, model) = system_one_target(&Url::parse("http://jev.local:8080").unwrap(), "jev");
     assert_eq!(url.as_str(), "http://jev.local:8080/systemone");
     assert_eq!(model, "jev");
