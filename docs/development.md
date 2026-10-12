@@ -18,6 +18,8 @@ pnpm tauri dev            # Start the desktop app
 pnpm dev                  # Start only the frontend, with a mock backend in the browser
 ```
 
+A release build runs one Hatoba at a time and hands the arguments of a second launch to it ([HOST-13](hatoba-spec.md#82-hosts)). A development build skips this, so it can run beside the installed app, unless `HATOBA_SINGLE_INSTANCE` is set.
+
 In the browser, `pnpm dev` uses the mock backend in `apps/desktop/src/ipc/mock` with the design's sample data. URL parameters switch demo states, such as `?state=locked` and `?sync=conflict`. The comment on `createMockApi` in `apps/desktop/src/ipc/mock/index.ts` lists every parameter.
 
 ## Testing

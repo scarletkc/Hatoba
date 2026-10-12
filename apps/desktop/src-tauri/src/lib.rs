@@ -259,7 +259,7 @@ pub fn run() {
                 .mcp
                 .set_events(std::sync::Arc::new(mcp_cmd::AppMcpEvents(handle.clone())));
 
-            launch::QUEUE.push(std::env::args());
+            launch::queue_startup(&data_dir);
             cli::restore(&app.state::<state::AppState>());
 
             lock::spawn_watchers(handle.clone());

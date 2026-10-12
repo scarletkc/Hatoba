@@ -109,7 +109,10 @@ mod tests {
         assert!(!enabled(&vault).unwrap());
 
         set_enabled(&mut vault, true).unwrap();
-        let json = merge_prefs(vault.local_prefs().unwrap().as_deref(), &LocalPrefs::default());
+        let json = merge_prefs(
+            vault.local_prefs().unwrap().as_deref(),
+            &LocalPrefs::default(),
+        );
         vault.set_local_prefs(&json.unwrap()).unwrap();
         assert!(enabled(&vault).unwrap());
 

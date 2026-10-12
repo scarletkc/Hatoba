@@ -49,6 +49,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | HOST-01…10 | Host management, search, online probing | ✅ | |
 | HOST-11 | Server OS icon | ✅ | |
 | HOST-12 | Quick connect | 🟡 | Covered by tests against an in-process SSH server; needs a try in the app against a real server |
+| HOST-13 | Open from the command line | 🟡 | Needs a try with the installer on Windows (the `PATH` and the uninstaller), the deb package and the AppImage on Linux, and the app bundle on macOS |
 | KEY-01…06 | Import, generation, list, public key deployment | ✅ | |
 | KEY-07 | View private key | ⬜ | P2 |
 

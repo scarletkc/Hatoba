@@ -18,7 +18,8 @@ pub use imp::{install, location, on_path, uninstall};
 #[cfg_attr(windows, allow(dead_code))]
 const MARKER: &str = "Hatoba command line launcher";
 /// The comment itself. No `>`, which a batch file could read as a redirection.
-const COMMENT: &str = "Hatoba command line launcher. Turn it off in Hatoba's settings, under General.";
+const COMMENT: &str =
+    "Hatoba command line launcher. Turn it off in Hatoba's settings, under General.";
 
 /// Writes `contents` unless the file holds them already.
 fn write_if_changed(path: &Path, contents: &str) -> std::io::Result<()> {
@@ -35,6 +36,7 @@ fn path_has(path: &str, dir: &str) -> bool {
     path.split(';').any(|entry| same_dir(entry, dir))
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn same_dir(a: &str, b: &str) -> bool {
     let norm = |s: &str| {
         s.trim()
@@ -114,15 +116,11 @@ mod imp {
         // `start` returns at once; the batch file would otherwise wait for Hatoba to quit.
         write_if_changed(
             &bin.join("hatoba.cmd"),
-            &format!(
-                "@echo off\r\nrem {COMMENT}\r\nstart \"\" \"%~dp0..\\{exe}\" %*\r\n"
-            ),
+            &format!("@echo off\r\nrem {COMMENT}\r\nstart \"\" \"%~dp0..\\{exe}\" %*\r\n"),
         )?;
         write_if_changed(
             &bin.join("hatoba"),
-            &format!(
-                "#!/bin/sh\n# {COMMENT}\n\"$(dirname \"$0\")/../{exe}\" \"$@\" &\n"
-            ),
+            &format!("#!/bin/sh\n# {COMMENT}\n\"$(dirname \"$0\")/../{exe}\" \"$@\" &\n"),
         )?;
         edit_path(|path| path_with(path, &bin.to_string_lossy()))
     }
@@ -152,38 +150,49 @@ mod imp {
             .ok_or_else(|| AppError::internal("the executable has no name"))
     }
 
-    /// Applies `edit` to the user's `PATH`, keeping its type (`REG_EXPAND_SZ` unless it was a
-    /// plain `REG_SZ`), and tells running programs the environment changed. `edit` returns
-    /// `None` to leave it as it is.
+    /// Applies `edit` to the user's `PATH` and tells running programs when it changed.
     fn edit_path(edit: impl FnOnce(&str) -> Option<String>) -> AppResult<()> {
-        let env = RegKey::predef(HKEY_CURRENT_USER)
-            .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)?;
-        let (path, plain) = match env.get_raw_value("Path") {
+        if edit_value("Environment", "Path", edit)? {
+            announce();
+        }
+        Ok(())
+    }
+
+    /// Applies `edit` to a string value of a key under `HKEY_CURRENT_USER`, keeping its type
+    /// (`REG_EXPAND_SZ` unless it was a plain `REG_SZ`) and deleting it when `edit` empties it.
+    /// `edit` returns `None` to leave it as it is. Returns whether the value changed.
+    fn edit_value(
+        key: &str,
+        name: &str,
+        edit: impl FnOnce(&str) -> Option<String>,
+    ) -> std::io::Result<bool> {
+        let key =
+            RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(key, KEY_READ | KEY_WRITE)?;
+        let (value, plain) = match key.get_raw_value(name) {
             Ok(value) => (decode(&value.bytes), value.vtype == REG_SZ),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         };
-        let Some(next) = edit(&path) else {
-            return Ok(());
+        let Some(next) = edit(&value) else {
+            return Ok(false);
         };
         if next.is_empty() {
-            env.delete_value("Path")?;
+            key.delete_value(name)?;
         } else {
             let bytes = next
                 .encode_utf16()
                 .chain([0])
                 .flat_map(u16::to_le_bytes)
                 .collect::<Vec<u8>>();
-            env.set_raw_value(
-                "Path",
+            key.set_raw_value(
+                name,
                 &RegValue {
                     bytes: bytes.into(),
                     vtype: if plain { REG_SZ } else { REG_EXPAND_SZ },
                 },
             )?;
         }
-        announce();
-        Ok(())
+        Ok(true)
     }
 
     /// A registry string: UTF-16LE, up to its first NUL.
@@ -221,7 +230,11 @@ mod imp {
 
     #[cfg(test)]
     mod tests {
-        use super::decode;
+        use winreg::RegKey;
+        use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ};
+
+        use super::{decode, edit_value};
+        use crate::platform::cli::{path_with, path_without};
 
         #[test]
         fn decodes_registry_strings_up_to_the_nul() {
@@ -229,8 +242,38 @@ mod imp {
                 .encode_utf16()
                 .flat_map(u16::to_le_bytes)
                 .collect();
-            assert_eq!(decode(&bytes), "C:\\a;D:\\b");
+            assert_eq!(decode(&bytes), r"C:\a;D:\b");
             assert_eq!(decode(&[]), "");
+        }
+
+        /// Runs against a throwaway key, never the user's `PATH`.
+        #[test]
+        fn edits_a_registry_value_in_place() {
+            let name = format!(r"Software\Hatoba-test-{}", std::process::id());
+            let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+            let (key, _) = hkcu.create_subkey(&name).unwrap();
+            let dir = r"C:\Hatoba\bin";
+            let edit = |f: &dyn Fn(&str) -> Option<String>| edit_value(&name, "Path", f).unwrap();
+
+            // A missing value is created as REG_EXPAND_SZ, so `%VAR%` entries keep working.
+            assert!(edit(&|p| path_with(p, dir)));
+            let value = key.get_raw_value("Path").unwrap();
+            assert_eq!(value.vtype, REG_EXPAND_SZ);
+            assert_eq!(decode(&value.bytes), dir);
+            assert!(!edit(&|p| path_with(p, dir)));
+
+            // Removing the only entry removes the value.
+            assert!(edit(&|p| path_without(p, dir)));
+            assert!(key.get_raw_value("Path").is_err());
+
+            // A plain REG_SZ stays one.
+            key.set_value("Path", &r"C:\tools").unwrap();
+            assert!(edit(&|p| path_with(p, dir)));
+            let value = key.get_raw_value("Path").unwrap();
+            assert_eq!(value.vtype, REG_SZ);
+            assert_eq!(decode(&value.bytes), r"C:\tools;C:\Hatoba\bin");
+
+            hkcu.delete_subkey_all(&name).unwrap();
         }
     }
 }
