@@ -8,6 +8,7 @@ import type { AiEffort, AiModelRef } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { shortcutLabel } from "@/lib/platform";
+import { AddButton } from "./AddMenu";
 import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotModel, stopTurn } from "./actions";
 import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
@@ -16,7 +17,6 @@ import { contextUsage, estimateTokens, formatTokens, messageFit, type MeterState
 import { findModel, sameModel } from "./models";
 import { canAskSide } from "./side";
 import { getSlot, patchSlot, useAi, type Slot } from "./store";
-import { ToolsButton } from "./ToolsMenu";
 import s from "./Composer.module.css";
 
 /** Ctrl+Shift+V, or ⌘⇧V on macOS: always pastes plain text into the box (AI-35). */
@@ -37,8 +37,8 @@ function isSideQuestionKey(e: KeyboardEvent): boolean {
 }
 
 /**
- * The input area (§9): the attachment chips, a multi-line box, the model selector, the tools menu,
- * the paperclip, the context meter, Ask a Side Question (AI-42) and Send / Stop.
+ * The input area (§9): the attachment chips, a multi-line box, the + menu, the model selector, the
+ * context meter, Ask a Side Question (AI-42) and Send / Stop.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
@@ -176,17 +176,8 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           onPaste={onPaste}
         />
         <div className={s.bar}>
+          <AddButton slotId={slotId} slot={slot} onAddFiles={() => fileRef.current?.click()} />
           <ModelPicker slotId={slotId} slot={slot} value={model} />
-          <ToolsButton slotId={slotId} off={slot.mcpOff} />
-          <button
-            type="button"
-            className={s.attach}
-            title={t("ai.attach")}
-            aria-label={t("ai.attach")}
-            onClick={() => fileRef.current?.click()}
-          >
-            <Icon name="paperclip" size={14} />
-          </button>
           <input
             ref={fileRef}
             type="file"

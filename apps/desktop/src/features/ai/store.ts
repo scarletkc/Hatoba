@@ -43,6 +43,8 @@ export interface Slot {
   extras: PendingAttachment[];
   /** AI-30: MCP servers switched off for this conversation in the tools menu. */
   mcpOff: string[];
+  /** AI-46: whether messages show the terminal's screen, set in the + menu; null follows Settings → AI. */
+  screen: boolean | null;
   /** AI-24: an entry to scroll to and highlight once it is shown (a history search hit). */
   reveal: string | null;
   /** AI-42: the side question shown at the end of the conversation, which nothing stores. */
@@ -75,6 +77,8 @@ interface AiState {
   modes: Record<string, AiPermissionMode>;
   /** AI-30: per conversation, the MCP servers switched off in the tools menu, kept until the app quits. */
   mcpOff: Record<string, string[]>;
+  /** AI-46: per conversation, the + menu's Send Terminal Screen, kept until the app quits. */
+  screens: Record<string, boolean>;
   /** AI-19: per conversation, the tools chosen with Allow for this conversation, kept until the app quits. */
   allowed: Record<string, string[]>;
   /** AI-10: per terminal tab, its selection as the panel last saw it and the chip it shows. */
@@ -97,6 +101,7 @@ export const useAi = create<AiState>(() => ({
   catalog: { providers: [], settings: null, loaded: false },
   modes: {},
   mcpOff: {},
+  screens: {},
   allowed: {},
   selections: {},
   diagnostics: {},
@@ -133,9 +138,15 @@ export function blankSlot(mode: AiPermissionMode = defaultMode(), draft = "", ex
     draft,
     extras,
     mcpOff: [],
+    screen: null,
     reveal: null,
     side: null,
   };
+}
+
+/** AI-46: whether the slot's messages show the terminal's screen: its own choice, else the Settings default. */
+export function sendsScreen(slot: Slot, settings: AiSettingsView | null): boolean {
+  return slot.screen ?? settings?.send_terminal_screen ?? true;
 }
 
 export function getSlot(id: string): Slot {

@@ -698,7 +698,10 @@ export type AiSettingsView = {
 	builtin_skill_enabled: boolean,
 	/**  Sent with every request, at most 32 KB of UTF-8 (AI-36). */
 	custom_instructions: string,
-	/**  Each message goes with the attached terminal's screen (AI-46). */
+	/**
+	 *  Messages go with the attached terminal's screen unless the panel's + menu turns it off for
+	 *  the conversation (AI-46).
+	 */
 	send_terminal_screen: boolean,
 };
 
@@ -804,8 +807,8 @@ export type AiTurnContext = {
 	permission_mode: AiPermissionMode,
 	/**
 	 *  The attached terminal's screen as the panel read it for this message (AI-46), while the
-	 *  tab is connected and **Send with Each Message** is on. Only a stored message (and an idle
-	 *  side question) shows it, in a `terminal_state` note.
+	 *  tab is connected and **Send Terminal Screen** is on for the conversation. Only a stored
+	 *  message (and an idle side question) shows it, in a `terminal_state` note.
 	 */
 	screen: AiScreen | null,
 };

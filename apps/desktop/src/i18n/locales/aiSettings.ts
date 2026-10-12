@@ -97,8 +97,8 @@ export default defineMessages({
     "aiSettings.instructions.hint": "随每次请求发送：回答用的语言、语气、你使用的系统。",
     "aiSettings.instructions.placeholder": "例如：用中文回答。我用 Debian 和 zsh，服务用 systemctl 管理。",
     "aiSettings.screen": "终端屏幕",
-    "aiSettings.screen.row": "随每条消息发送",
-    "aiSettings.screen.hint": "AI 助手会看到发送消息时所连终端的最后 20 行；vim 等全屏程序运行时，则是整个屏幕。",
+    "aiSettings.screen.row": "默认随每条消息发送",
+    "aiSettings.screen.hint": "AI 助手会看到发送消息时所连终端的最后 20 行；vim 等全屏程序运行时，则是整个屏幕。输入框的 + 菜单可为单个对话开启或关闭。",
 
     "aiSettings.search": "网页搜索",
     "aiSettings.search.row": "搜索服务",
@@ -451,8 +451,8 @@ export default defineMessages({
     "aiSettings.instructions.hint": "Sent with every request: answer language, tone, the systems you use.",
     "aiSettings.instructions.placeholder": "For example: Answer in English. I use Debian and zsh, and manage services with systemctl.",
     "aiSettings.screen": "Terminal Screen",
-    "aiSettings.screen.row": "Send with Each Message",
-    "aiSettings.screen.hint": "The assistant sees the last 20 lines of the attached terminal as they were when you sent the message, or the whole screen while a full-screen program such as vim runs.",
+    "aiSettings.screen.row": "Send with Each Message by Default",
+    "aiSettings.screen.hint": "The assistant sees the last 20 lines of the attached terminal as they were when you sent the message, or the whole screen while a full-screen program such as vim runs. The + menu in the input area turns it on or off for one conversation.",
 
     "aiSettings.search": "Web Search",
     "aiSettings.search.row": "Search provider",
@@ -809,8 +809,8 @@ export default defineMessages({
     "aiSettings.instructions.hint": "リクエストのたびに送信されます：回答の言語、口調、使っているシステムなど。",
     "aiSettings.instructions.placeholder": "例：日本語で回答してください。Debian と zsh を使っていて、サービスは systemctl で管理しています。",
     "aiSettings.screen": "ターミナル画面",
-    "aiSettings.screen.row": "メッセージごとに送信",
-    "aiSettings.screen.hint": "送信した時点の、接続中のターミナルの最後の 20 行がアシスタントに送られます。vim などの全画面プログラムの実行中は画面全体です。",
+    "aiSettings.screen.row": "既定でメッセージごとに送信",
+    "aiSettings.screen.hint": "送信した時点の、接続中のターミナルの最後の 20 行がアシスタントに送られます。vim などの全画面プログラムの実行中は画面全体です。入力欄の + メニューで会話ごとにオン・オフできます。",
 
     "aiSettings.search": "Web 検索",
     "aiSettings.search.row": "検索プロバイダー",

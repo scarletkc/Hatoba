@@ -26,7 +26,7 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 The panel shows the conversation of the active tab, and switching tabs switches the panel. Every terminal tab has its own conversation, and the home tab (host list, Keys, Cloud Sync) has a chat-only one. A tab shows a small sparkle while its assistant is working and a hand while it waits for your approval.
 
 - Header: the conversation title, the tab's host, the permission mode button, **History**, **New Conversation**, and close.
-- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the **Model** picker, the **MCP tools** button, the paperclip, the context meter, **Ask a Side Question**, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting (during its compaction, say).
+- Input area: attachment chips, a text box (Enter sends, Shift+Enter adds a line; nothing is sent while an input method is composing), the + button (**Add Files and More**, a menu with **Add Text Files…**, **Send Terminal Screen** and **MCP Tools**), the **Model** picker, the context meter, **Ask a Side Question**, and **Send (Enter)** (replaced by **Stop** while a turn runs). A second message cannot be sent while the first is still starting (during its compaction, say).
 - Messages: each of yours shows the time you sent it, and each reply, once it is finished, the time it ended (hover for the full date and time). **Copy** next to one of your messages copies what you typed, without the attachments; **Copy** under a reply copies its Markdown, without the reasoning and tool calls, and a reply that used tools is copied whole, with its text from before and after the calls. **Fork from Here** beside them copies the conversation up to that point into a new one (`references/ai-history.md`).
 - A conversation acts only on its own tab, never on another, in either permission mode. While the tab is disconnected or still connecting, the terminal tools are unavailable (the panel says so and offers **Reconnect**). Closing a tab detaches its conversation; it stays in History.
 - Opening a conversation from History attaches it to the active tab. If that tab's host differs, the panel says so, and the next message moves the conversation to the tab's host. That message gets a divider above it, "Moved to <new host> (was on <old host>)", and the assistant is told that the screens and command output before it came from the old host. A conversation that is running a turn, waiting for approval or compacting in another tab is not moved: that tab is brought to the front instead, because its turn acts on that tab's terminal. To continue on another host and leave the original where it is, fork it instead.
@@ -44,7 +44,8 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Compact | 压缩 | 圧縮 |
 | Send (Enter) | 发送（Enter） | 送信（Enter） |
 | Stop | 停止 | 停止 |
-| MCP tools | MCP 工具 | MCP ツール |
+| Add Files and More | 添加文件等 | ファイルなどを追加 |
+| MCP Tools | MCP 工具 | MCP ツール |
 | The assistant is working | AI 助手正在工作 | アシスタントが作業中です |
 | The assistant is waiting for you | AI 助手在等你确认 | アシスタントが確認を待っています |
 | Reconnect | 重新连接 | 再接続 |
@@ -56,7 +57,7 @@ The tools (read the terminal, run commands, type into the shell, read, edit and 
 
 ## Attachments
 
-What goes with a message is covered in `references/ai-attachments.md`: the terminal's screen, the terminal selection, **Ask AI** about a failed connection (diagnostics), long pastes (Ctrl+Shift+V pastes as text), and text files attached with the paperclip, the clipboard or a drop on the panel.
+What goes with a message is covered in `references/ai-attachments.md`: the terminal's screen, the terminal selection, **Ask AI** about a failed connection (diagnostics), long pastes (Ctrl+Shift+V pastes as text), and text files attached from the + menu, the clipboard or a drop on the panel.
 
 ## Model, thinking level, context and compaction
 
@@ -68,7 +69,7 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 ## MCP tools menu
 
-The plug button in the input area (**MCP tools**) lists the MCP servers that are on for this device, with their state, and a switch for each. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
+**MCP Tools** in the input area's + menu shows, in place of the menu, the MCP servers that are on for this device, with their state, and a switch for each; the back arrow (or ←) returns to the menu. The item shows how many of them this conversation uses, such as 2/3, and a red dot marks it and the + button while a server has an error. Switching one off removes its tools from this conversation until the app quits, and stops its calls in a running turn too: they return an error result. **Manage in Settings → AI** opens the settings. Adding, editing and enabling servers is in `references/ai-settings.md`.
 
 Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
 

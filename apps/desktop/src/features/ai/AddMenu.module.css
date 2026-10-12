@@ -1,30 +1,23 @@
-/* The input area's tools menu (AI-30): the menu's look, with a switch per server. */
+/* The input area's + menu, and the tools menu (AI-30) it opens in its place, with a switch per server. */
 
 .button {
   position: relative;
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 26px;
   height: 24px;
-  min-width: 26px;
-  padding: 0 6px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--fg2);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
 }
 
 .button:hover,
 .buttonOpen {
   background: var(--fill);
   color: var(--fg);
-}
-
-.count {
-  line-height: 1;
 }
 
 .failedDot {
@@ -58,8 +51,118 @@
   outline: none;
 }
 
+.popoverMain {
+  width: 260px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 8px 3px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--fill);
+  outline: none;
+}
+
+.itemDisabled,
+.itemDisabled:hover {
+  background: transparent;
+}
+
+.itemDisabled .itemLabel,
+.itemDisabled .itemIcon {
+  color: var(--fg3);
+}
+
+.itemIcon {
+  flex: none;
+  font-size: 15px;
+  color: var(--fg2);
+}
+
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.itemNote {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--fg2);
+}
+
+.itemHint {
+  flex: none;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg2);
+}
+
+.itemDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.itemCaret {
+  flex: none;
+  color: var(--fg2);
+}
+
+.itemSwitch {
+  flex: none;
+  display: inline-flex;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 0 2px;
+}
+
+.back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg2);
+}
+
+.back:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+
 .header {
-  padding: 4px 8px 4px 10px;
+  padding: 4px 8px 4px 2px;
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--fg2);

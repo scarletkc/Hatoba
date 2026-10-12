@@ -14,7 +14,7 @@ vi.mock("@/features/terminal/session", async (importActual) => {
   return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId === "tab-1" ? { term } : undefined) };
 });
 
-const { turnContext } = await import("./actions");
+const { setSlotScreen, turnContext } = await import("./actions");
 const { blankSlot, HOME_SLOT, useAi } = await import("./store");
 const { useTabs } = await import("@/app/tabs");
 
@@ -88,12 +88,19 @@ describe("turnContext (AI-09)", () => {
     expect(turnContext(HOME_SLOT)?.permission_mode).toBe("manual");
   });
 
-  it("reads the connected tab's screen while Send with Each Message is on (AI-46)", () => {
+  it("reads the connected tab's screen while Send Terminal Screen is on (AI-46)", () => {
     attach(quickTab.id, view(null, null));
     expect(turnContext(quickTab.id)?.screen).toEqual({ text: "$ make\nerror: no rule\n$", alternate: false });
+    // Settings → AI gives the default, which the + menu changes for the conversation until the app quits.
     useAi.setState({ catalog: { providers: [provider], settings: settings(false), loaded: true } });
     expect(turnContext(quickTab.id)?.screen).toBeNull();
+    setSlotScreen(quickTab.id, true);
+    expect(turnContext(quickTab.id)?.screen).not.toBeNull();
+    expect(useAi.getState().screens).toEqual({ c1: true });
     useAi.setState({ catalog: { providers: [provider], settings: settings(true), loaded: true } });
+    setSlotScreen(quickTab.id, false);
+    expect(turnContext(quickTab.id)?.screen).toBeNull();
+    attach(quickTab.id, view(null, null));
     expect(turnContext(quickTab.id)?.screen).not.toBeNull();
     // Not while the tab is disconnected, nor on the home tab, which has no terminal.
     useTabs.setState({ tabs: [{ ...quickTab, status: "disconnected" }] });

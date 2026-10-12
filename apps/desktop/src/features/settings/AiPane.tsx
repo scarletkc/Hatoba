@@ -36,8 +36,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), custom instructions (AI-36), the terminal screen each message sends (AI-46), and
- * the permission mode and saved approvals of this device (AI-16, AI-19).
+ * web search (AI-14), custom instructions (AI-36), whether messages send the terminal screen by
+ * default (AI-46), and the permission mode and saved approvals of this device (AI-16, AI-19).
  */
 export function AiPane() {
   const t = useT();

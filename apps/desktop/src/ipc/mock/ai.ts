@@ -814,10 +814,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
   /**
    * Like Rust's `screen_note` (AI-46): the `terminal_state` note of a message the panel sent with the screen
-   * of a connected tab, while **Send with Each Message** is on, on the host the conversation is on with `move`.
+   * of a connected tab, while **Send Terminal Screen** is on, on the host the conversation is on with `move`.
    */
   async function screenNote(c: Conv, move: Move | null, context: AiTurnContext): Promise<string> {
-    if (!context.tab || !context.screen || !(await deps.settings()).send_terminal_screen) return "";
+    if (!context.tab || !context.screen) return "";
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? c.view;
     const host = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quick_target ? formatTarget(place.quick_target) : "");

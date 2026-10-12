@@ -4336,7 +4336,7 @@ fn notes_before(
     // A message with nothing before it has no earlier screens or replies to tell apart, but it can
     // show the screen now.
     if earlier.is_empty() {
-        return screen_note(v, context, host_now);
+        return screen_note(context, host_now);
     }
     for entry in earlier.iter().rev() {
         match &entry.body {
@@ -4385,16 +4385,17 @@ fn notes_before(
             meta.created,
         ));
     }
-    notes.push_str(&screen_note(v, context, host_now));
+    notes.push_str(&screen_note(context, host_now));
     notes
 }
 
 /// AI-46: the `terminal_state` note of a message whose `context` has the screen of a connected
-/// tab, on the host `host` (its display name or quick-connect target), while
-/// **Send with Each Message** is on. Empty otherwise, and for a blank screen.
-fn screen_note(v: &Vault, context: &AiTurnContext, host: Option<&str>) -> String {
+/// tab, on the host `host` (its display name or quick-connect target). The panel sends the screen
+/// while **Send Terminal Screen** is on for the conversation. Empty otherwise, and for a blank
+/// screen.
+fn screen_note(context: &AiTurnContext, host: Option<&str>) -> String {
     match &context.screen {
-        Some(screen) if context.tab && v.settings().ai.send_terminal_screen => {
+        Some(screen) if context.tab => {
             tools::terminal_state_block(host.unwrap_or_default(), screen.alternate, &screen.text)
         }
         _ => String::new(),

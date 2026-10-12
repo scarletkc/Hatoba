@@ -3495,14 +3495,6 @@ impl Fixture {
         v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
     }
 
-    /// AI-46: Settings → AI → **Send with Each Message**.
-    fn set_send_screen(&self, on: bool) {
-        let mut v = lock(&self.vault);
-        let mut settings = v.settings();
-        settings.ai.send_terminal_screen = on;
-        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
-    }
-
     /// The text of every stored user entry, oldest first.
     fn user_texts(&self, conversation_id: &str) -> Vec<String> {
         self.entries(conversation_id)
@@ -3672,11 +3664,12 @@ async fn each_message_shows_the_screen_it_was_sent_with() {
         ..on_prod("$ stale", false)
     };
     f.exchange(Some(&conv), "fourth", detached).await;
-    // Nor anything while the setting is off.
-    f.set_send_screen(false);
-    f.exchange(Some(&conv), "fifth", on_prod("$ quiet", false))
-        .await;
-    f.set_send_screen(true);
+    // Nor a message the panel sends without one, as while **Send Terminal Screen** is off.
+    let quiet = AiTurnContext {
+        screen: None,
+        ..on_prod("", false)
+    };
+    f.exchange(Some(&conv), "fifth", quiet).await;
     // The screen is the last note, after the others.
     f.exchange(Some(&conv), "sixth", on_prod("$ back", false))
         .await;

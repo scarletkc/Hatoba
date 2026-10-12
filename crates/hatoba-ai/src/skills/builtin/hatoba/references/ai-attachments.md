@@ -7,7 +7,7 @@ A message to the assistant can carry attachments that go with it when the user s
 | Connection diagnostics | **Ask AI** on a failed connection's card | Connection diagnostics · host |
 | Terminal selection | Text selected in the tab's terminal | Selection · N lines |
 | Pasted text | A long paste into the input | Pasted text · N lines |
-| Text file | The paperclip, the clipboard, or dropping on the panel | file name · N lines |
+| Text file | **Add Text Files…** in the + menu, the clipboard, or dropping on the panel | file name · N lines |
 
 A message carries at most one diagnostics attachment and one selection, and any number of pastes and files. They are stored in this order: diagnostics, selection, then pastes and files in the order they were added. The home tab has no selection or diagnostics, but it can take pastes and files. Pending attachments stay in the tab's input until they are sent or removed, even if another conversation is opened in the same tab.
 
@@ -58,7 +58,7 @@ A paste of at least 2,000 characters or 30 lines into the input box (or into the
 
 ## Text files
 
-The paperclip button in the input area (**Attach Text Files**) opens a file picker for one or more files. Files can also be attached by copying them in a file manager and pasting into the input box, or by dropping them on the panel (a "Drop text files to attach them" overlay shows while dragging; it works in the desktop app too, which reads the dropped paths itself). Dropping needs a provider with a model to be set up. Each file becomes a chip "name · N lines" with a preview and ×.
+**Add Text Files…** in the input area's + menu (the + button, **Add Files and More**) opens a file picker for one or more files. Files can also be attached by copying them in a file manager and pasting into the input box, or by dropping them on the panel (a "Drop text files to attach them" overlay shows while dragging; it works in the desktop app too, which reads the dropped paths itself). Dropping needs a provider with a model to be set up. Each file becomes a chip "name · N lines" with a preview and ×.
 
 - Only UTF-8 text files are accepted: source code, configs, logs, Markdown, JSON. A file with NUL bytes or invalid UTF-8 is refused as not a text file. Images (PNG, JPEG, GIF, WebP, SVG and so on) are not supported yet. Documents such as PDF or Word files are binary and are refused too.
 - A file over 256 KB is refused. All attachments of one message together (diagnostics, selection, pastes and files) may not pass 512 KB; the one that would pass it is refused. Each refusal shows a message naming the file, for example "<name> is larger than 256 KB, so it can’t be attached." or "A message’s attachments can’t exceed 512 KB in total."
@@ -66,19 +66,22 @@ The paperclip button in the input area (**Attach Text Files**) opens a file pick
 
 | en | zh-CN | ja |
 |---|---|---|
-| Attach Text Files | 附加文本文件 | テキストファイルを添付 |
+| Add Files and More | 添加文件等 | ファイルなどを追加 |
+| Add Text Files… | 添加文本文件… | テキストファイルを追加… |
 | Drop text files to attach them | 松开以附加文本文件 | ドロップしてテキストファイルを添付 |
 | Preview the file | 预览文件内容 | ファイルの内容をプレビュー |
 
 ## The terminal's screen
 
-Each message sent while a connected terminal tab is attached also shows the assistant that tab's screen as it is at that moment: the last 20 lines, or the whole screen while a full-screen program such as vim, less or htop runs, never the scrollback. Hatoba adds it when it stores the message, so no chip shows in the input. The sent message shows it as a collapsed block, "Terminal screen · N lines" with the host, marked "full-screen program" when one was running. Like attachments, it is stored and synced with the conversation and appears in an export, but History search skips it. The assistant reads the screen again before it types when the screen may have changed. To stop sending it, turn off **Send with Each Message** under Settings → AI → **Terminal Screen** (synced, on by default).
+Each message sent while a connected terminal tab is attached also shows the assistant that tab's screen as it is at that moment: the last 20 lines, or the whole screen while a full-screen program such as vim, less or htop runs, never the scrollback. Hatoba adds it when it stores the message, so no chip shows in the input. The sent message shows it as a collapsed block, "Terminal screen · N lines" with the host, marked "full-screen program" when one was running. Like attachments, it is stored and synced with the conversation and appears in an export, but History search skips it. The assistant reads the screen again before it types when the screen may have changed. To stop sending it in a conversation, turn off **Send Terminal Screen** in the input area's + menu; that holds for the conversation on this device until the app quits. Without a connected terminal the switch is off and says "Needs a connected terminal". A conversation where it was not changed follows **Send with Each Message by Default** under Settings → AI → **Terminal Screen** (synced, on by default).
 
 | en | zh-CN | ja |
 |---|---|---|
 | full-screen program | 全屏程序 | 全画面プログラム |
 | Terminal Screen | 终端屏幕 | ターミナル画面 |
-| Send with Each Message | 随每条消息发送 | メッセージごとに送信 |
+| Send Terminal Screen | 发送终端屏幕 | ターミナル画面を送信 |
+| Needs a connected terminal | 需要已连接的终端 | 接続中のターミナルが必要です |
+| Send with Each Message by Default | 默认随每条消息发送 | 既定でメッセージごとに送信 |
 
 ## Does it fit the model?
 

@@ -1233,7 +1233,8 @@ pub struct AiSettingsView {
     pub builtin_skill_enabled: bool,
     /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
     pub custom_instructions: String,
-    /// Each message goes with the attached terminal's screen (AI-46).
+    /// Messages go with the attached terminal's screen unless the panel's + menu turns it off for
+    /// the conversation (AI-46).
     pub send_terminal_screen: bool,
 }
 
@@ -1551,8 +1552,8 @@ pub struct AiTurnContext {
     /// turn.
     pub permission_mode: AiPermissionMode,
     /// The attached terminal's screen as the panel read it for this message (AI-46), while the
-    /// tab is connected and **Send with Each Message** is on. Only a stored message (and an idle
-    /// side question) shows it, in a `terminal_state` note.
+    /// tab is connected and **Send Terminal Screen** is on for the conversation. Only a stored
+    /// message (and an idle side question) shows it, in a `terminal_state` note.
     pub screen: Option<AiScreen>,
 }
 

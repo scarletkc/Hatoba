@@ -1181,8 +1181,8 @@ pub struct AiSettings {
     /// [`MAX_CUSTOM_INSTRUCTIONS_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub custom_instructions: String,
-    /// Each message goes with the attached terminal's screen (AI-46). On by default, also for
-    /// settings written before it existed.
+    /// Messages go with the attached terminal's screen unless the panel's + menu turns it off for
+    /// the conversation (AI-46). On by default, also for settings written before it existed.
     pub send_terminal_screen: bool,
 }
 

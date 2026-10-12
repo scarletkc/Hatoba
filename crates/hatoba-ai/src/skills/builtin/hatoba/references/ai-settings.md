@@ -72,11 +72,11 @@ The assistant calls the providers added here directly from the device, with the 
 
 ## Terminal Screen
 
-**Send with Each Message** (on by default, synced) shows the assistant the attached terminal's screen with every message; see `references/ai-attachments.md`.
+**Send with Each Message by Default** (on by default, synced) shows the assistant the attached terminal's screen with every message, in each conversation where **Send Terminal Screen** in the input area's + menu was not changed; see `references/ai-attachments.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
-| Send with Each Message | 随每条消息发送 | メッセージごとに送信 |
+| Send with Each Message by Default | 默认随每条消息发送 | 既定でメッセージごとに送信 |
 
 ## Skills
 
