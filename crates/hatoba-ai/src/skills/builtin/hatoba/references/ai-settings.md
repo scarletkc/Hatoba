@@ -139,7 +139,7 @@ The judge of Auto mode (`references/ai-tools.md`). It syncs.
 
 - **Judge model** lists the models of every provider, System One ones included, and **None**. Auto can't be chosen until a judge is. It can be a System One model (TypeSafe's Jev, Cloudflare's Clef) or a chat model.
 - **Test** asks the judge about nine sample calls, such as checking disk space, deleting logs nobody asked to delete or fetching a URL that carries a token, and runs none of them. It shows how many came out as expected, then each one's expected decision, the judge's and its answers. A sample that ran when it should have asked is red; one the judge did not answer shows **No answer** and why.
-- The hint under the section says what the judge receives (as in `references/ai-tools.md`): a judge on another service than the conversation's model receives it too.
+- What the judge receives is listed in `references/ai-tools.md`; a judge on another service than the conversation's model receives it too.
 
 ## This Device
 
