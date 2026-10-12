@@ -950,8 +950,8 @@ export async function retryTurn(slotId: string) {
   }
   discardSideQuestion(slotId);
   // A retry stores no message, so no note tells the model of a switch since (§13.5): it works in the
-  // mode its messages named.
-  const runner = new TurnRunner(slotId, id, notedPermission(slot.entries));
+  // mode its messages named, or in manual approval when they named none.
+  const runner = new TurnRunner(slotId, id, notedPermission(slot.entries) ?? "manual");
   runners.set(slotId, runner);
   patchSlot(slotId, { turn: newTurn(), outcome: null, effortIgnored: false });
   try {

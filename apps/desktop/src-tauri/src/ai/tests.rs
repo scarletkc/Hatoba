@@ -50,6 +50,13 @@ const KEY: &str = "sk-test-turns-NEVER-SHOWN";
 const LIVE_SESSION: &str = "live";
 const SERVER_ID: &str = "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5";
 
+/// `text` after the note of manual approval, the mode of [`Fixture::context`], as a conversation's
+/// first message and a summary start with it (AI-16).
+fn manual(text: &str) -> String {
+    use hatoba_ai::tools::{PermissionMode, permission_mode_block};
+    format!("{}{text}", permission_mode_block(PermissionMode::Manual))
+}
+
 /// Collects a turn's events.
 #[derive(Debug, Default)]
 struct Sink(Mutex<Vec<AiTurnEvent>>);
@@ -569,7 +576,7 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
     let conv = started.conversation.id.clone();
     assert_eq!(started.conversation.title, "check the disk");
     assert!(
-        matches!(&started.user_entry, AiEntryView::User { text, .. } if text == "  check the disk\nplease")
+        matches!(&started.user_entry, AiEntryView::User { text, .. } if *text == manual("  check the disk\nplease"))
     );
 
     sink.done_with(AiFinish::ToolCalls).await;
@@ -963,7 +970,7 @@ async fn the_message_after_a_stopped_reply_says_it_was_interrupted() {
     let noted = format!("{}never mind", interrupted_block());
     assert_eq!(
         f.user_texts(&conv),
-        ["df?".to_owned(), noted.clone(), "thanks".to_owned()]
+        [manual("df?"), noted.clone(), "thanks".to_owned()]
     );
 
     // The model gets the part it wrote, rebuilt, then the note with the message.
@@ -1053,11 +1060,12 @@ async fn a_stop_noted_on_a_message_without_a_reply_is_not_noted_again() {
     );
     f.idle(&conv).await;
     f.exchange(Some(&conv), "three", f.context()).await;
+    // "one" named no mode, as in a conversation from before every first message did, so "two" names it.
     assert_eq!(
         f.user_texts(&conv),
         [
             "one".to_owned(),
-            format!("{}two", interrupted_block()),
+            format!("{}{}", interrupted_block(), manual("two")),
             "three".to_owned()
         ]
     );
@@ -1238,7 +1246,7 @@ async fn sending_while_a_turn_runs_stops_it_first() {
 
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 3);
-    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "one"));
+    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if *text == manual("one")));
     assert!(matches!(&entries[1].body, EntryBody::User { text, .. } if text == "two"));
     assert!(matches!(&entries[2].body, EntryBody::Assistant(a) if a.text == "fast"));
     assert!(
@@ -1508,7 +1516,7 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     let AiEntryView::Summary { entry_id, text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
-    assert_eq!(text, "SUMMARY: the user checked the disk.");
+    assert_eq!(text, &manual("SUMMARY: the user checked the disk."));
     let detail = f.detail(&conv);
     assert_eq!(detail.conversation.context_start.as_ref(), Some(entry_id));
     assert_eq!(detail.entries.len(), 3);
@@ -1795,7 +1803,7 @@ async fn a_compact_answer_without_a_summary_is_asked_again_without_tools() {
     let AiEntryView::Summary { text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
-    assert_eq!(text, "SUMMARY from the request without tools.");
+    assert_eq!(text, &manual("SUMMARY from the request without tools."));
     let requests = f.requests().await;
     assert_eq!(requests.len(), 5);
     for (with_tools, plain) in [(&requests[1], &requests[2]), (&requests[3], &requests[4])] {
@@ -2612,6 +2620,7 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
             EntryBody::Tool { content, .. } => content.clone(),
         })
         .collect();
+    // The stored summaries name no mode, as before every summary did, so the edit names it.
     assert_eq!(
         texts,
         [
@@ -2621,7 +2630,7 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
             "beta",
             "answer beta",
             "SUMMARY TWO",
-            "gamma-edited",
+            manual("gamma-edited").as_str(),
             "Answer to gamma-edited."
         ]
     );
@@ -2647,7 +2656,9 @@ async fn editing_a_message_deletes_it_and_what_followed_and_repairs_the_context_
     f.idle(&conv).await;
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 2);
-    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "alpha-edited"));
+    assert!(
+        matches!(&entries[0].body, EntryBody::User { text, .. } if *text == manual("alpha-edited"))
+    );
     let request = f.requests().await[2].to_string();
     assert!(!request.contains("SUMMARY ONE"));
 }
@@ -2670,7 +2681,7 @@ async fn editing_while_a_turn_runs_stops_it_first() {
     // The open call and its cancelled result went with the edited message.
     let entries = f.entries(&conv);
     assert_eq!(entries.len(), 2);
-    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if text == "edited"));
+    assert!(matches!(&entries[0].body, EntryBody::User { text, .. } if *text == manual("edited")));
     assert!(
         !second
             .entries()
@@ -2813,7 +2824,7 @@ async fn a_message_with_a_selection_keeps_the_block_and_is_titled_after_the_type
         .iter()
         .find(|m| m["role"] == "user")
         .unwrap();
-    assert_eq!(user["content"], text);
+    assert_eq!(user["content"], manual(text));
 }
 
 #[tokio::test]
@@ -2841,14 +2852,14 @@ async fn a_message_with_attachments_as_large_as_the_panel_allows_is_stored_whole
             _ => None,
         })
         .unwrap();
-    assert_eq!(stored, text);
+    assert_eq!(stored, manual(&text));
     // The model receives the message as stored.
     let requests = f.requests().await;
     let user = messages(&requests[0])
         .iter()
         .find(|m| m["role"] == "user")
         .unwrap();
-    assert_eq!(user["content"], text.as_str());
+    assert_eq!(user["content"], stored);
 }
 
 #[test]
@@ -3192,7 +3203,7 @@ async fn a_move_stopped_while_the_context_is_compacted_is_not_stored() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "first question".to_owned(),
+            manual("first question"),
             format!("{}short", host_change_block(first, "root@10.0.0.10:22"))
         ]
     );
@@ -3628,13 +3639,21 @@ async fn the_prompt_names_the_model_and_the_server_and_carries_instructions_and_
 async fn a_switch_of_permission_mode_is_noted_once_and_keeps_the_system_prompt() {
     use hatoba_ai::tools::{PermissionMode, permission_mode_block};
 
-    let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let f = Fixture::new((0..5).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     let bypass = || AiTurnContext {
         permission_mode: AiPermissionMode::Bypass,
         ..f.context()
     };
-    // §13.5: a first message in bypass names it, and only a switch adds another note; manual
-    // approval, which the system prompt starts in, needed none before.
+    // §13.5: the first message names its mode, manual approval too, since the default is the
+    // user's setting, and only a switch adds another note.
+    let (manual, _) = f.exchange(None, "hello", f.context()).await;
+    assert_eq!(
+        f.user_texts(&manual),
+        [format!(
+            "{}hello",
+            permission_mode_block(PermissionMode::Manual)
+        )]
+    );
     let (conv, _) = f.exchange(None, "first", bypass()).await;
     f.exchange(Some(&conv), "second", bypass()).await;
     f.exchange(Some(&conv), "third", f.context()).await;
@@ -3653,7 +3672,9 @@ async fn a_switch_of_permission_mode_is_noted_once_and_keeps_the_system_prompt()
     let first = system_of(&requests[0]);
     assert!(requests.iter().all(|r| system_of(r) == first));
     assert!(
-        first.contains("\n- Permission mode: the newest <permission_mode> note says"),
+        first.contains(
+            "\n- Permission mode: the newest <permission_mode> note says which mode applies.\n"
+        ),
         "{first}"
     );
 }
@@ -3706,12 +3727,16 @@ fn the_mode_last_noted_reads_back_auto_too() {
             AiEntry::user(0, "first"),
             AiEntry::user(1, format!("{note}second")),
         ];
-        assert_eq!(super::noted_permission(&noted), mode);
-        // AI-47: a summary of a conversation in Auto carries the mode like one in bypass.
+        assert_eq!(super::noted_permission(&noted), Some(mode));
+        // AI-47: a summary carries the mode, whichever it is.
         let summarized = vec![AiEntry::summary(2, format!("{note}SUMMARY"))];
-        assert_eq!(super::noted_permission(&summarized), mode);
+        assert_eq!(super::noted_permission(&summarized), Some(mode));
     }
-    assert_eq!(super::noted_permission(&[]), PermissionMode::Manual);
+    // None before any note, and after a summary without one, as in a conversation from before
+    // every first message named its mode: its next message names it.
+    assert_eq!(super::noted_permission(&[]), None);
+    let old = vec![AiEntry::user(0, "first"), AiEntry::summary(1, "SUMMARY")];
+    assert_eq!(super::noted_permission(&old), None);
 }
 
 #[tokio::test]
@@ -3762,10 +3787,10 @@ async fn each_message_shows_the_screen_it_was_sent_with() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            format!(
+            manual(&format!(
                 "{}first",
                 terminal_state_block("prod-db", false, "$ make\nerror")
-            ),
+            )),
             format!(
                 "{}second",
                 terminal_state_block("prod-db", true, "~\n\"a.conf\" 3L")
@@ -3819,7 +3844,7 @@ async fn a_move_to_another_host_and_a_switch_of_model_are_noted_once() {
         model_change_block("Model 2 (m2)", "Model 1 (m1)")
     );
     let expected = [
-        "first".to_owned(),
+        manual("first"),
         format!("{moved}second"),
         format!("{switched}third"),
         "fourth".to_owned(),
@@ -3857,7 +3882,7 @@ async fn a_quick_connection_takes_the_conversation_off_its_host() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "first".to_owned(),
+            manual("first"),
             format!("{}second", host_change_block("prod-db", "root@10.0.0.9:22"))
         ]
     );
@@ -3941,7 +3966,7 @@ async fn a_move_off_a_quick_connection_is_noted_from_its_target() {
     assert_eq!(f.recorded_place(&conv), (Some(prod), None));
 
     let expected = [
-        "one".to_owned(),
+        manual("one"),
         "two".to_owned(),
         format!("{}three", terminal_change_block(false)),
         format!(
@@ -3979,7 +4004,7 @@ async fn the_home_tab_names_the_target_its_conversation_is_on() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "one".to_owned(),
+            manual("one"),
             format!("{}two", terminal_change_block(false))
         ]
     );
@@ -4008,7 +4033,10 @@ async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
     assert_eq!(f.recorded_place(&conv), (Some(saved.clone()), None));
     // Back on a tab that has not reconnected as the saved host yet.
     f.exchange(Some(&conv), "three", f.quick("10.0.0.9")).await;
-    assert_eq!(f.user_texts(&conv), ["one", "two", "three"]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual("one").as_str(), "two", "three"]
+    );
 
     // A conversation on a target from before targets were recorded came from no known place.
     {
@@ -4023,7 +4051,10 @@ async fn a_quick_connection_and_the_host_saved_from_it_are_one_server() {
         ..f.context()
     };
     f.exchange(Some(&conv), "four", on_prod).await;
-    assert_eq!(f.user_texts(&conv), ["one", "two", "three", "four"]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual("one").as_str(), "two", "three", "four"]
+    );
 }
 
 #[tokio::test]
@@ -4044,7 +4075,10 @@ async fn a_target_in_another_letter_case_is_the_same_server() {
         ..f.context()
     };
     f.exchange(Some(&conv), "three", on_saved).await;
-    assert_eq!(f.user_texts(&conv), ["one", "two", "three"]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual("one").as_str(), "two", "three"]
+    );
 }
 
 #[tokio::test]
@@ -4073,7 +4107,10 @@ async fn an_edit_drops_the_note_of_a_move_from_the_server_it_goes_from() {
     // AI-26: edited from the target in another letter case, the message goes from the server
     // the earlier screens came from.
     edit("two, same target", f.quick("SRV.Example")).await;
-    assert_eq!(f.user_texts(&conv), ["one", "two, same target"]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual("one").as_str(), "two, same target"]
+    );
     // So does one from the host the target was saved as (Save as Host…, HOST-12).
     f.exchange(Some(&conv), "three", on(&prod)).await;
     let srv = f.add_saved_target("srv", "srv.example");
@@ -4081,7 +4118,7 @@ async fn an_edit_drops_the_note_of_a_move_from_the_server_it_goes_from() {
     f.edit_with(&conv, &three, "three, saved", on(&srv)).await;
     assert_eq!(
         f.user_texts(&conv),
-        ["one", "two, same target", "three, saved"]
+        [manual("one").as_str(), "two, same target", "three, saved"]
     );
 
     // And the other way round: a note from the saved host, edited from its target.
@@ -4122,7 +4159,7 @@ async fn a_switch_noted_on_a_message_without_a_reply_is_not_noted_again() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "one".to_owned(),
+            manual("one"),
             format!("{}two", model_change_block("Model 1 (m1)", "Model 2 (m2)")),
             "two again".to_owned()
         ]
@@ -4155,7 +4192,7 @@ async fn editing_a_message_keeps_the_note_of_the_move_it_made() {
     let moved = host_change_block("staging-web", "prod-db");
     assert_eq!(
         f.user_texts(&conv),
-        ["first".to_owned(), format!("{moved}second, edited")]
+        [manual("first"), format!("{moved}second, edited")]
     );
 
     // Edited from a tab on a third host: the earlier screens still came from the first one.
@@ -4169,12 +4206,12 @@ async fn editing_a_message_keeps_the_note_of_the_move_it_made() {
         )
     );
 
-    // The first message has nothing before it, so it gets no note.
+    // The first message has nothing before it, so it gets no note of a move, only its mode.
     let first = lock(&f.vault).ai_entries(&conv).unwrap()[0]
         .entry_id
         .clone();
     f.edit_with(&conv, &first, "first, edited", on(&prod)).await;
-    assert_eq!(f.user_texts(&conv), ["first, edited"]);
+    assert_eq!(f.user_texts(&conv), [manual("first, edited")]);
     assert_eq!(
         f.detail(&conv).conversation.host_id.as_deref(),
         Some(prod.as_str())
@@ -4209,7 +4246,7 @@ async fn editing_a_message_keeps_the_note_of_a_move_off_a_quick_connection() {
     let moved = host_change_block(first, "prod-db");
     assert_eq!(
         f.user_texts(&conv),
-        ["one".to_owned(), format!("{moved}two, edited")]
+        [manual("one"), format!("{moved}two, edited")]
     );
 
     // Edited from another target: the earlier screens still came from the first one.
@@ -4232,13 +4269,13 @@ async fn editing_a_message_keeps_the_note_of_a_move_off_a_quick_connection() {
 
     // From the first target, nothing moved.
     edit("two, back", f.quick("10.0.0.9")).await;
-    assert_eq!(f.user_texts(&conv), ["one", "two, back"]);
+    assert_eq!(f.user_texts(&conv), [manual("one").as_str(), "two, back"]);
     assert_eq!(f.recorded_place(&conv), (None, Some(first.to_owned())));
 
-    // The first message has nothing before it.
+    // The first message has nothing before it, so it only names its mode.
     let one = f.user_ids(&conv)[0].clone();
     f.edit_with(&conv, &one, "one, edited", on_prod).await;
-    assert_eq!(f.user_texts(&conv), ["one, edited"]);
+    assert_eq!(f.user_texts(&conv), [manual("one, edited")]);
     assert_eq!(f.recorded_place(&conv), (Some(prod), None));
 }
 
@@ -4312,7 +4349,7 @@ async fn a_terminal_that_comes_or_goes_between_replies_is_noted() {
     f.exchange(Some(&conv), "back", connected).await;
     let attached = terminal_change_block(true);
     let expected = [
-        "can you run df?".to_owned(),
+        manual("can you run df?"),
         format!("{attached}connected"),
         "and now?".to_owned(),
         format!("{}still there?", terminal_change_block(false)),
@@ -4356,7 +4393,7 @@ async fn the_newest_reply_decides_whatever_device_or_version_wrote_it() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "first".to_owned(),
+            manual("first"),
             detached,
             "still without".to_owned(),
             "from an older version".to_owned(),
@@ -4399,7 +4436,7 @@ async fn notes_of_a_move_a_terminal_and_a_model_come_in_that_order() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "first".to_owned(),
+            manual("first"),
             format!("{}second", terminal_change_block(false)),
             format!(
                 "{}{}{}third",
@@ -4438,7 +4475,7 @@ async fn an_edit_compares_the_terminal_with_the_reply_before_it() {
     assert_eq!(
         f.user_texts(&conv),
         [
-            "first".to_owned(),
+            manual("first"),
             format!("{attached}second"),
             format!("{}third, from home", terminal_change_block(false)),
         ]
@@ -4450,17 +4487,20 @@ async fn an_edit_compares_the_terminal_with_the_reply_before_it() {
         .await;
     assert_eq!(
         f.user_texts(&conv),
-        ["first".to_owned(), format!("{attached}second, edited")]
+        [manual("first"), format!("{attached}second, edited")]
     );
     // Edited from home, nothing changed since the first reply.
     let second = f.user_ids(&conv)[1].clone();
     f.edit_with(&conv, &second, "second, from home", home).await;
-    assert_eq!(f.user_texts(&conv), ["first", "second, from home"]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual("first").as_str(), "second, from home"]
+    );
 
-    // The first message has nothing before it.
+    // The first message has nothing before it, so it only names its mode.
     let first = f.user_ids(&conv)[0].clone();
     f.edit_with(&conv, &first, "first, edited", connected).await;
-    assert_eq!(f.user_texts(&conv), ["first, edited"]);
+    assert_eq!(f.user_texts(&conv), [manual("first, edited")]);
 }
 
 #[tokio::test]
@@ -4504,7 +4544,7 @@ async fn a_change_at_a_retry_is_not_noted_and_the_next_message_compares_with_its
     assert_eq!(
         f.user_texts(&conv),
         [
-            "one".to_owned(),
+            manual("one"),
             detached.clone(),
             "two again".to_owned(),
             "three".to_owned()
@@ -4522,7 +4562,7 @@ async fn a_change_at_a_retry_is_not_noted_and_the_next_message_compares_with_its
         .await;
     assert_eq!(
         f.user_texts(&conv),
-        ["one".to_owned(), detached, "two, edited".to_owned()]
+        [manual("one"), detached, "two, edited".to_owned()]
     );
 }
 
@@ -5524,7 +5564,10 @@ async fn an_edit_before_a_call_deletes_its_snapshot() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     assert!(f.detail(&conv).file_changes.is_empty());
     let requests = f.requests().await;
-    assert_eq!(last_user_message(requests.last().unwrap()), "never mind");
+    assert_eq!(
+        last_user_message(requests.last().unwrap()),
+        manual("never mind")
+    );
 }
 
 /// AI-41: a write keeps its snapshot before it begins. It is written once the write ends (with the
@@ -6087,7 +6130,10 @@ async fn a_fork_sends_the_copied_context_and_goes_on_by_itself() {
     let (_, reason) = f.exchange(Some(&fork.id), "elsewhere", f.context()).await;
     assert_eq!(reason, AiTurnEndReason::Completed);
     let request = f.requests().await.pop().unwrap();
-    assert_eq!(user_messages(&request), ["first", "elsewhere"]);
+    assert_eq!(
+        user_messages(&request),
+        [manual("first").as_str(), "elsewhere"]
+    );
     // The copied reply goes as its raw message (§13.7).
     assert!(request.to_string().contains("RAW-ONLY"));
     assert!(!request.to_string().contains("Two."));
@@ -6137,7 +6183,7 @@ async fn a_fork_is_on_the_host_its_copies_came_from() {
     assert_eq!(
         f.user_texts(&fork.id),
         [
-            "first".to_owned(),
+            manual("first"),
             format!("{}again", host_change_block("staging-old", "prod-db"))
         ]
     );
@@ -6180,14 +6226,14 @@ async fn a_fork_from_before_its_conversation_had_a_host_has_none() {
     let (conv, _) = f.exchange(None, "first", f.context()).await;
     f.exchange(Some(&conv), "second", on(&prod)).await;
     assert_eq!(f.recorded_place(&conv), (Some(prod.clone()), None));
-    assert_eq!(f.user_texts(&conv), ["first", "second"]);
+    assert_eq!(f.user_texts(&conv), [manual("first").as_str(), "second"]);
     let first_reply = entry_id(&f.detail(&conv).entries[1]).to_owned();
 
     // A fork from the home tab reply has no host, and takes the next tab's without a note too.
     let fork = f.fork(&conv, Some(&first_reply), "fork").unwrap();
     assert_eq!(f.recorded_place(&fork.id), (None, None));
     f.exchange(Some(&fork.id), "again", on(&staging)).await;
-    assert_eq!(f.user_texts(&fork.id), ["first", "again"]);
+    assert_eq!(f.user_texts(&fork.id), [manual("first").as_str(), "again"]);
     // A fork from after the move is on prod.
     let whole = f.fork(&conv, None, "whole").unwrap();
     assert_eq!(whole.host_id.as_deref(), Some(prod.as_str()));

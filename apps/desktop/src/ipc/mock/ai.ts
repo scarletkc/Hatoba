@@ -650,10 +650,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return compactNow(c, turn);
   }
 
-  /** Like Rust's `store_summary` (AI-16): a summary of a conversation in Auto (AI-47) or bypass starts with its note. */
+  /** Like Rust's `store_summary` (AI-16): a summary starts with the note of the mode the model was told of. */
   function summaryText(c: Conv, summary: string): string {
     const mode = notedPermission(c.entries);
-    return mode === "manual" ? summary : `${noteBlock({ kind: "permission_mode", mode })}\n\n${summary}`;
+    return mode ? `${noteBlock({ kind: "permission_mode", mode })}\n\n${summary}` : summary;
   }
 
   async function compactNow(c: Conv, turn: Turn): Promise<boolean> {
@@ -802,7 +802,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
     const screen = await screenNote(c, move, context);
-    // Like Rust (AI-16): the mode, when it is not the one the model was last told of.
+    // Like Rust (AI-16): the mode, unless it is the one the model was last told of; the first message always names it.
     const permission: Note[] = notedPermission(earlier) === context.permission_mode ? [] : [{ kind: "permission_mode", mode: context.permission_mode }];
     if (earlier.length === 0) return permission.map((n) => `${noteBlock(n)}\n\n`).join("") + screen;
     for (const e of [...earlier].reverse()) {

@@ -204,7 +204,7 @@ async fn mcp_tools_below_the_threshold_are_offered_directly() {
                 .any(|n| n == "search_tools" || n == "call_mcp_tool")
         );
     }
-    assert_eq!(user_texts(&f, &conv), ["hello", "again"]);
+    assert_eq!(user_texts(&f, &conv), [manual("hello").as_str(), "again"]);
     f.mcp.shutdown().await;
 }
 
@@ -244,10 +244,10 @@ async fn deferred_mcp_tools_are_searched_and_called_through_fixed_tools() {
 
     let (started, sink) = f.send(None, "use the tools").await;
     let conv = started.conversation.id;
-    // The first message lists the tools: `big` first, servers sorted by name.
+    // The first message lists the tools after its mode: `big` first, servers sorted by name.
     let first = user_texts(&f, &conv).remove(0);
     assert!(
-        first.starts_with("<mcp_tools servers=\"2\" tools=\"45\">\n"),
+        first.starts_with(&manual("<mcp_tools servers=\"2\" tools=\"45\">\n")),
         "{first}"
     );
     assert!(first.contains("- big (40 tools): mcp__big__tool_00, mcp__big__tool_01,"));
@@ -436,7 +436,7 @@ async fn a_deferred_conversation_keeps_its_tools_when_servers_go() {
     f.exchange(Some(&conv), "nothing left", without_big).await;
 
     let texts = user_texts(&f, &conv);
-    assert!(texts[0].starts_with("<mcp_tools servers=\"2\" tools=\"45\">"));
+    assert!(texts[0].starts_with(&manual("<mcp_tools servers=\"2\" tools=\"45\">")));
     assert!(
         texts[1].starts_with("<mcp_tools servers=\"1\" tools=\"5\">"),
         "{}",
@@ -606,7 +606,7 @@ async fn more_than_128_tools_defer_them_in_a_large_window() {
     let (conv, _) = f.exchange(None, "hello", f.context()).await;
     let requests = f.requests().await;
     assert_eq!(tool_names(&requests[0]).len(), 128);
-    assert_eq!(user_texts(&f, &conv), ["hello"]);
+    assert_eq!(user_texts(&f, &conv), [manual("hello")]);
 
     let (one_more, _twin) = twin(&f, "a").await;
     f.exchange(Some(&conv), "one more", f.context()).await;
@@ -652,8 +652,11 @@ async fn a_compaction_lists_the_tools_again_and_keeps_the_prefix() {
     side.unwrap();
     f.exchange(Some(&conv), "again", f.context()).await;
 
+    // The summary carries the mode, so only the first message names it.
     let texts = user_texts(&f, &conv);
-    let list = &texts[0][..texts[0].find("hello").unwrap()];
+    let note = manual("");
+    assert!(texts[0].starts_with(&note));
+    let list = &texts[0][note.len()..texts[0].find("hello").unwrap()];
     assert!(list.starts_with("<mcp_tools servers=\"2\" tools=\"45\">"));
     assert_eq!(texts[1], format!("{list}again"));
 
@@ -684,7 +687,7 @@ async fn the_message_that_defers_does_not_compact_for_the_tools_it_drops() {
     f.set_context_window(100_000);
     let (_files, _big, _mock) = servers(&f).await;
     let (conv, _) = f.exchange(None, "hello", f.context()).await;
-    assert_eq!(user_texts(&f, &conv), ["hello"]);
+    assert_eq!(user_texts(&f, &conv), [manual("hello")]);
     f.set_context_window(WINDOW);
     f.exchange(Some(&conv), "again", f.context()).await;
 
@@ -765,7 +768,7 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
     f.manager.stop(&f.vault, f.env.as_ref(), &conv);
     let stopped = send.await.unwrap().unwrap_err();
     assert_eq!(stopped.code, ErrorCode::Cancelled);
-    assert_eq!(user_texts(&f, &conv), ["hello"]);
+    assert_eq!(user_texts(&f, &conv), [manual("hello")]);
 
     // AI-26: an edit stopped meanwhile leaves the message it edits and the reply after it.
     let entries = f.entries(&conv);

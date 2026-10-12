@@ -764,7 +764,7 @@ async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
     ])
     .await;
     let note = permission_mode_block(PermissionMode::Auto);
-    // §13.5: the system prompt starts in manual approval, so a first message in Auto names it.
+    // §13.5: the system prompt names no mode, so the first message names Auto.
     let (conv, _) = f.exchange(None, "first", auto(&f)).await;
     f.exchange(Some(&conv), "second", auto(&f)).await;
     // The model sees nothing before a summary, so the summary keeps the mode.

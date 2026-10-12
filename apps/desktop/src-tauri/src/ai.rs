@@ -2889,19 +2889,17 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
 }
 
 /// Stores a summary entry and moves `context_start` to it (AI-21). The model sees nothing before
-/// a summary, so a summary of a conversation in bypass or Auto (AI-47) starts with its
-/// `permission_mode` note (AI-16), which the request puts before the summary's block: the mode
-/// stays the one the model was told of, also for the rest of a turn compacted between tool calls
-/// (AI-22).
+/// a summary, so the summary starts with the `permission_mode` note (AI-16) of the mode the model
+/// was told of, which the request puts before the summary's block: the mode stays that one, also
+/// for the rest of a turn compacted between tool calls (AI-22). A conversation whose messages never
+/// named one gets no note, and its next message names the mode.
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
-    let mode = noted_permission(&Entries::load(v, conversation_id)?.list);
-    let text = match mode {
-        PermissionMode::Manual => summary.to_owned(),
-        PermissionMode::Auto | PermissionMode::Bypass => {
-            format!("{}{summary}", tools::permission_mode_block(mode))
-        }
-    };
+    let noted = noted_permission(&Entries::load(v, conversation_id)?.list);
+    let text = format!(
+        "{}{summary}",
+        noted.map(tools::permission_mode_block).unwrap_or_default()
+    );
     let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
     conversation.context_start = Some(entry_id.clone());
@@ -4832,8 +4830,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
-/// - `permission_mode` (AI-16) when the conversation's mode on this device is not the one the
-///   model was last told of ([`noted_permission`]), also before a conversation's first message.
+/// - `permission_mode` (AI-16) before a conversation's first message, and when the conversation's
+///   mode on this device is not the one the model was last told of ([`noted_permission`]).
 /// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
 /// - `terminal_state` (AI-46), the screen of the attached terminal ([`screen_note`]), also before
 ///   a conversation's first message.
@@ -4847,7 +4845,7 @@ fn notes_before(
 ) -> String {
     let mut notes = String::new();
     let mode = permission_mode(context.permission_mode);
-    let permission = if noted_permission(earlier) == mode {
+    let permission = if noted_permission(earlier) == Some(mode) {
         String::new()
     } else {
         tools::permission_mode_block(mode)
@@ -4910,8 +4908,8 @@ fn notes_before(
 }
 
 /// A conversation's permission mode on this device (AI-16) as a `permission_mode` note names it.
-/// A message in any mode but manual approval, Auto (AI-47) as much as bypass, needs a note from
-/// the conversation's first message on, since the system prompt starts in manual approval.
+/// The system prompt names no mode of its own, since the default is the user's setting, so the
+/// conversation's first message names it, whichever it is.
 fn permission_mode(mode: AiPermissionMode) -> PermissionMode {
     match mode {
         AiPermissionMode::Manual => PermissionMode::Manual,
@@ -4922,26 +4920,25 @@ fn permission_mode(mode: AiPermissionMode) -> PermissionMode {
 
 /// AI-16: the permission mode the model was last told of in `entries`, a conversation's entries
 /// oldest first: the newest `permission_mode` note, or the one the newest summary starts with.
-/// The model sees nothing before a summary, so one without a note, like a conversation with no
-/// note at all, leaves it in manual approval, as the system prompt says.
-fn noted_permission(entries: &[AiEntry]) -> PermissionMode {
+/// None when the model was told of none: before the first message, or in a conversation from
+/// before every first message named its mode. The model sees nothing before a summary, so one
+/// without a note tells of none either.
+fn noted_permission(entries: &[AiEntry]) -> Option<PermissionMode> {
     for entry in entries.iter().rev() {
         match &entry.body {
             EntryBody::User { text, .. } => {
                 match note_attr(text, PERMISSION_MODE, "mode").as_deref() {
-                    Some("bypass") => return PermissionMode::Bypass,
-                    Some("auto") => return PermissionMode::Auto,
-                    Some(_) => return PermissionMode::Manual,
+                    Some("bypass") => return Some(PermissionMode::Bypass),
+                    Some("auto") => return Some(PermissionMode::Auto),
+                    Some(_) => return Some(PermissionMode::Manual),
                     None => {}
                 }
             }
-            EntryBody::Summary { text } => {
-                return tools::split_permission_note(text).0.unwrap_or_default();
-            }
+            EntryBody::Summary { text } => return tools::split_permission_note(text).0,
             EntryBody::Assistant(_) | EntryBody::Tool { .. } => {}
         }
     }
-    PermissionMode::Manual
+    None
 }
 
 /// AI-46: the `terminal_state` note of a message whose `context` has the screen of a connected
