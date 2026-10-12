@@ -1,6 +1,6 @@
 import type { AiTurnEndReason } from "@/ipc/types";
 import { attachmentBytes, composeMessage, MESSAGE_MAX_BYTES, type Attachment } from "./attachments";
-import type { QueuedMessage, Slot } from "./store";
+import type { InputChip, PendingAttachment, QueuedMessage, Slot } from "./store";
 
 /** What a message attaches, in the order it is stored (AI-10, AI-35). */
 export function messageAttachments(m: QueuedMessage): Attachment[] {
@@ -26,20 +26,46 @@ export function joinMessages(first: QueuedMessage, then: QueuedMessage): QueuedM
     typed: [first.typed, then.typed].filter(Boolean).join("\n\n"),
     chips: [...first.chips, ...then.chips],
     extras: [...first.extras, ...then.extras],
-    restore: (kept) => {
-      first.restore(kept);
-      then.restore(kept);
-    },
+    restore: (kept) => [...first.restore(kept), ...then.restore(kept)],
   };
 }
 
 /**
- * Of the input area's attachments, those a message joining `queued` takes: a message takes at most one
- * selection and one set of diagnostics (AI-10), so a chip of a kind the queued message has stays.
+ * What a message takes of the input area (AI-10, AI-35): at most one set of diagnostics and one selection, a
+ * chip a message gave back (in `extras`, §13.1) before the tab's own (`live`), and none of a kind the message
+ * it joins has already (`beside`); then the pastes and files. `left` stays in the input area.
  */
-export function takenBeside(attachments: Attachment[], queued: QueuedMessage | null): Attachment[] {
-  if (!queued) return attachments;
-  return attachments.filter((a) => (a.kind !== "selection" && a.kind !== "diagnostics") || !queued.chips.some((c) => c.kind === a.kind));
+export function pickInput(
+  live: readonly InputChip[],
+  extras: readonly PendingAttachment[],
+  beside: readonly Attachment[] = [],
+): { chips: InputChip[]; extras: PendingAttachment[]; left: PendingAttachment[] } {
+  const kinds = new Set(beside.map((a) => a.kind));
+  const taken: PendingAttachment[] = [];
+  const left: PendingAttachment[] = [];
+  for (const x of extras) {
+    const kind = x.attachment.kind;
+    if (kind === "selection" || kind === "diagnostics") {
+      if (kinds.has(kind)) {
+        left.push(x);
+        continue;
+      }
+      kinds.add(kind);
+    }
+    taken.push(x);
+  }
+  return { chips: live.filter((c) => !kinds.has(c.kind)), extras: taken, left };
+}
+
+/** Of the attachments the input area shows, those a message joining `queued` takes, as `pickInput` picks them. */
+export function takenBeside(attachments: readonly Attachment[], queued: QueuedMessage | null): Attachment[] {
+  const kinds = new Set(queued ? messageAttachments(queued).map((a) => a.kind) : []);
+  return attachments.filter((a) => {
+    if (a.kind !== "selection" && a.kind !== "diagnostics") return true;
+    if (kinds.has(a.kind)) return false;
+    kinds.add(a.kind);
+    return true;
+  });
 }
 
 /** A message going back into the input area comes before what it holds: its text first, its pastes and files first. */

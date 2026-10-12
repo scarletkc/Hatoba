@@ -54,7 +54,7 @@ import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
 import { conversationModel } from "./models";
-import { joinMessages, messageBack, messageText, sendsQueued, withinCap } from "./queue";
+import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
   blankSlot,
@@ -69,6 +69,7 @@ import {
   slotOf,
   updateConversation,
   useAi,
+  type InputChip,
   type PendingAttachment,
   type QueuedMessage,
   type Slot,
@@ -524,22 +525,33 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason, stoppedByUser:
 
 // ───────────────────────── turns ─────────────────────────
 
+/** The tab's own chips (AI-10): its diagnostics, then its selection while the chip shows. */
+function liveChips(slotId: string): InputChip[] {
+  const diagnostics = slotId === HOME_SLOT ? undefined : useAi.getState().diagnostics[slotId];
+  const selection = selectionAttachment(slotId);
+  return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])];
+}
+
 /**
- * A message of the typed text with what the input area sends with it (AI-10, AI-35): the diagnostics, the
- * selection chip, then the pastes and files. A message takes at most one selection and one set of
- * diagnostics, so a chip whose kind the queued message it joins (`beside`) has already stays for a later
- * one. For a message that was not sent, `restore` brings back those of its chips still in `kept`.
+ * A message of the typed text with what the input area sends with it, as `pickInput` picks it (AI-10, AI-35):
+ * a chip of a kind the queued message it joins (`beside`) has already stays (`left`) for a later one. For a
+ * message that was not sent, `restore` puts its chips still in `kept` back in their places: the selection
+ * while the tab's selection is the same, the diagnostics while the tab has none. It returns the others.
  */
-function inputMessage(slotId: string, typed: string, beside: QueuedMessage | null): QueuedMessage {
-  const has = (kind: "selection" | "diagnostics") => !!beside?.chips.some((c) => c.kind === kind);
-  const selection = has("selection") ? null : selectionAttachment(slotId);
-  const hiddenBefore = tabSelection(slotId).hidden;
-  const diagnostics = slotId === HOME_SLOT || has("diagnostics") ? null : (useAi.getState().diagnostics[slotId] ?? null);
+function inputMessage(slotId: string, typed: string, beside: QueuedMessage | null): { message: QueuedMessage; left: PendingAttachment[] } {
+  const picked = pickInput(liveChips(slotId), getSlot(slotId).extras, beside ? messageAttachments(beside) : []);
+  const { seq, hidden: hiddenBefore } = tabSelection(slotId);
   const restore = (kept: readonly Attachment[]) => {
-    if (selection && kept.includes(selection)) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
-    if (diagnostics && kept.includes(diagnostics)) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: diagnostics } }));
+    const stray: InputChip[] = [];
+    for (const chip of picked.chips) {
+      if (!kept.includes(chip)) continue;
+      if (chip.kind === "selection" && tabSelection(slotId).seq === seq) setTabSelection(slotId, (sel) => ({ ...sel, hidden: hiddenBefore }));
+      else if (chip.kind === "diagnostics" && !useAi.getState().diagnostics[slotId]) useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [slotId]: chip } }));
+      else stray.push(chip);
+    }
+    return stray;
   };
-  return { typed, chips: [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])], extras: getSlot(slotId).extras, restore };
+  return { message: { typed, chips: picked.chips, extras: picked.extras, restore }, left: picked.left };
 }
 
 /**
@@ -547,16 +559,25 @@ function inputMessage(slotId: string, typed: string, beside: QueuedMessage | nul
  * files go back to whichever slot shows the conversation by then.
  */
 function takeInput(slotId: string, typed: string, beside: QueuedMessage | null = null): QueuedMessage {
-  const message = inputMessage(slotId, typed, beside);
+  const { message, left } = inputMessage(slotId, typed, beside);
   if (message.chips.some((c) => c.kind === "selection")) hideSelection(slotId);
   if (message.chips.some((c) => c.kind === "diagnostics")) removeDiagnostics(slotId);
-  patchSlot(slotId, { draft: "", extras: [] });
+  patchSlot(slotId, { draft: "", extras: left });
   return message;
+}
+
+/**
+ * Puts a message that was not sent back into the slot's input area, before what it holds (§13.1): its chips in
+ * their places, or, where another chip of their kind took that place meanwhile, with its pastes and files.
+ */
+function putBack(slotId: string, message: QueuedMessage) {
+  const stray = message.restore(message.chips).map((attachment) => ({ id: `x${++extraSeq}`, attachment }));
+  patchSlot(slotId, (s) => messageBack(s, { ...message, extras: [...stray, ...message.extras] }));
 }
 
 /** Whether the input area's message, joined to the queued one, keeps its attachments within the cap (AI-35). */
 function joinFits(slotId: string, typed: string, queued: QueuedMessage | null): boolean {
-  if (!queued || !typed || withinCap(joinMessages(queued, inputMessage(slotId, typed, queued)))) return true;
+  if (!queued || !typed || withinCap(joinMessages(queued, inputMessage(slotId, typed, queued).message))) return true;
   toast(tooMuchMessage(), "error");
   return false;
 }
@@ -585,8 +606,8 @@ async function sendQueued(slotId: string) {
 function giveBackQueued(slotId: string) {
   const queued = getSlot(slotId).queued;
   if (!queued) return;
-  patchSlot(slotId, (s) => ({ ...messageBack(s, queued), queued: null }));
-  queued.restore(queued.chips);
+  patchSlot(slotId, { queued: null });
+  putBack(slotId, queued);
 }
 
 /** **Edit** on the queued message, or ↑ in the empty input box: it goes back into the box to be changed (§13.1). */
@@ -664,8 +685,8 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     runner.dispose();
     // A message queued meanwhile goes back too, after this one.
     giveBackQueued(target);
-    patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null, ...messageBack(s, message) }));
-    message.restore(message.chips);
+    patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null }));
+    putBack(target, message);
     // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
     // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
@@ -678,7 +699,7 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
 let sideSeq = 0;
 
 /** What each side question asked from the input area took from it (AI-42), until it is answered or replaced. */
-const sideInputs = new Map<number, { raw: string; extras: PendingAttachment[]; restore: () => void }>();
+const sideInputs = new Map<number, { raw: string; message: QueuedMessage }>();
 
 /** Updates the side question `id` in the slot that shows its conversation now: it may have moved meanwhile. */
 function patchSide(convId: string, id: number, update: (q: SideQuestion) => SideQuestion) {
@@ -695,9 +716,10 @@ function giveBackSideInput(convId: string, id: number) {
   const taken = sideInputs.get(id);
   if (!taken) return;
   sideInputs.delete(id);
+  const { message } = taken;
+  const stray = message.restore(message.chips).map((attachment) => ({ id: `x${++extraSeq}`, attachment }));
   const target = slotOf(convId);
-  if (target) patchSlot(target, (s) => ({ draft: s.draft || taken.raw, extras: [...taken.extras, ...s.extras] }));
-  taken.restore();
+  if (target) patchSlot(target, (s) => ({ draft: s.draft || taken.raw, extras: [...stray, ...message.extras, ...s.extras] }));
 }
 
 /**
@@ -723,7 +745,7 @@ export function askSideQuestion(slotId: string, raw: string, fromInput = true): 
   if (fromInput) {
     const taken = takeInput(slotId, typed);
     text = messageText(taken);
-    sideInputs.set(id, { raw, extras: taken.extras, restore: () => taken.restore(taken.chips) });
+    sideInputs.set(id, { raw, message: taken });
   }
   void runSide(slotId, newSideQuestion(id, convId, typed, text), context, approvalCall(slot));
   return true;
@@ -914,7 +936,7 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
 function restoreDraft(slotId: string, text: string) {
   const { attachments, typed } = parseMessage(text);
   const extras: PendingAttachment[] = attachments.flatMap((a) => (a.kind === "paste" || a.kind === "file" ? [{ id: `x${++extraSeq}`, attachment: a }] : []));
-  patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => {} }));
+  patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
 }
 
 /** The slots whose turn an earlier page started the user is stopping: its end sends the queued message (§13.1). */
@@ -1353,9 +1375,8 @@ let extraSeq = 0;
 
 /** Everything that would go with the slot's next message, for the size cap. */
 export function pendingAttachments(slotId: string): Attachment[] {
-  const diagnostics = slotId === HOME_SLOT ? undefined : useAi.getState().diagnostics[slotId];
-  const selection = selectionAttachment(slotId);
-  return [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...getSlot(slotId).extras.map((x) => x.attachment)];
+  const extras = getSlot(slotId).extras;
+  return [...pickInput(liveChips(slotId), extras).chips, ...extras.map((x) => x.attachment)];
 }
 
 const kb = (bytes: number) => `${bytes / 1024} KB`;

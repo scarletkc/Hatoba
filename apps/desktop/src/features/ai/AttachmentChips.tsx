@@ -8,8 +8,9 @@ import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
 import { hideSelection, noteSelection, removeDiagnostics, removeExtra } from "./actions";
-import { attachmentTokens, chipShown, makeAttachment, type Attachment, type Note, type SelectionAttachment } from "./attachments";
+import { attachmentTokens, chipShown, makeAttachment, type Attachment, type DiagnosticsAttachment, type Note, type SelectionAttachment } from "./attachments";
 import { formatTokens } from "./meter";
+import { pickInput } from "./queue";
 import { HOME_SLOT, NO_SELECTION, useAi } from "./store";
 import s from "./AttachmentChips.module.css";
 
@@ -79,11 +80,24 @@ function useSelectionAttachment(slotId: string): SelectionAttachment | null {
   return useMemo(() => (slotId !== HOME_SLOT && chipShown(sel, sel.hidden) ? makeAttachment(host, sel.text) : null), [slotId, sel, host]);
 }
 
-/** Everything that goes with the slot's next message, in the order it is stored (AI-10, AI-35). */
-export function usePendingAttachments(slotId: string): Attachment[] {
+/**
+ * The tab's own chips the input area shows (AI-10): its diagnostics and its selection, unless a message gave
+ * back one of that kind (§13.1), which goes with the next message in its place.
+ */
+function useShownChips(slotId: string): { diagnostics: DiagnosticsAttachment | null; selection: SelectionAttachment | null } {
   const diagnostics = useAi((st) => (slotId === HOME_SLOT ? undefined : st.diagnostics[slotId]));
   const extras = useAi((st) => st.slots[slotId]?.extras);
   const selection = useSelectionAttachment(slotId);
+  return useMemo(() => {
+    const shown = pickInput([...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : [])], extras ?? []).chips;
+    return { diagnostics: shown.find((c) => c.kind === "diagnostics") ?? null, selection: shown.find((c) => c.kind === "selection") ?? null };
+  }, [diagnostics, selection, extras]);
+}
+
+/** Everything that goes with the slot's next message, in the order it is stored (AI-10, AI-35). */
+export function usePendingAttachments(slotId: string): Attachment[] {
+  const { diagnostics, selection } = useShownChips(slotId);
+  const extras = useAi((st) => st.slots[slotId]?.extras);
   return useMemo(
     () => [...(diagnostics ? [diagnostics] : []), ...(selection ? [selection] : []), ...(extras ?? []).map((x) => x.attachment)],
     [diagnostics, selection, extras],
@@ -96,9 +110,8 @@ export function usePendingAttachments(slotId: string): Attachment[] {
  * in the order they were added (AI-35).
  */
 export function ComposerAttachments({ slotId, onPasteAsText }: { slotId: string; onPasteAsText: (id: string, text: string) => void }) {
-  const diagnostics = useAi((st) => (slotId === HOME_SLOT ? undefined : st.diagnostics[slotId]));
+  const { diagnostics, selection } = useShownChips(slotId);
   const extras = useAi((st) => st.slots[slotId]?.extras);
-  const selection = useSelectionAttachment(slotId);
   if (!selection && !diagnostics && !extras?.length) return null;
   return (
     <div className={s.attachments}>

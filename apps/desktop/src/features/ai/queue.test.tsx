@@ -108,7 +108,7 @@ describe("joining queued messages (§13.1)", () => {
     typed,
     chips: [],
     extras: extras.map((id) => ({ id, attachment: paste(id) })),
-    restore: vi.fn(),
+    restore: vi.fn(() => []),
   });
 
   it("makes one message in the order it was written", () => {
@@ -234,6 +234,38 @@ describe("the queued message (§13.1)", () => {
     expect(getSlot(TAB)).toMatchObject({ queued: null, draft: "why?" });
     expect(selectionAttachment(TAB)).toBeNull();
     expect(useAi.getState().diagnostics[TAB]).toBeUndefined();
+  });
+
+  it("keeps its chips when it goes back after the tab's selection or diagnostics changed", async () => {
+    for (const change of [() => noteSelection(TAB, "second error"), () => noteSelection(TAB, "")]) {
+      useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, selections: {}, diagnostics: {} });
+      ipc.send.mockReset();
+      const sent = turns();
+      await running(sent, TAB);
+      noteSelection(TAB, "first error");
+      askAiAboutConnection(TAB, "prod-api", "kind: timeout");
+      queueMessage(TAB, "why?");
+      change();
+      askAiAboutConnection(TAB, "prod-api", "kind: refused");
+      editQueued(TAB);
+
+      // Their places are taken, so they come back beside the pastes and files, and go with the next message.
+      expect(getSlot(TAB).extras.map((x) => x.attachment)).toMatchObject([
+        { kind: "diagnostics", text: expect.stringContaining("timeout") },
+        { kind: "selection", text: "first error" },
+      ]);
+      expect(useAi.getState().diagnostics[TAB]).toMatchObject({ text: expect.stringContaining("refused") });
+      sent[0].emit({ kind: "turn_ended", reason: "completed" });
+      await flush();
+      await sendMessage(TAB, getSlot(TAB).draft);
+      expect(sent[1].text).toMatch(/^<connection_diagnostics [^]*timeout[^]*<terminal_selection [^]*first error[^]*why\?$/);
+      // The tab's own chips stay for a later message.
+      expect(useAi.getState().diagnostics[TAB]).toMatchObject({ text: expect.stringContaining("refused") });
+      expect(getSlot(TAB).extras).toEqual([]);
+    }
+    expect(selectionAttachment(TAB)).toBeNull();
+    noteSelection(TAB, "third error");
+    expect(selectionAttachment(TAB)).toMatchObject({ text: "third error" });
   });
 
   it("is sent once Stop has stopped a turn an earlier page started, and goes back when that turn ends on its own", async () => {
