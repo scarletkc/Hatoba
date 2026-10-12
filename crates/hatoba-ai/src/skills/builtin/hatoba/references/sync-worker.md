@@ -45,6 +45,8 @@ Hatoba creates the Worker and the D1 database in the user's Cloudflare account t
 
 Safety rules: Hatoba never overwrites a Worker that is not a Hatoba sync Worker, nor a Worker that already holds a vault, nor a database that holds other data (it picks a free name such as `hatoba-2`). Existing empty Hatoba pieces from an earlier attempt are reused.
 
+If the Worker name already holds a vault (for example one deployed from another device), the review says so and the main button is **Connect** instead of **Deploy**: nothing is deployed, and the master password step joins this device to that vault (`references/sync.md`, "Join a cloud vault"). To deploy a separate Worker instead, choose another name under **Worker and database names**. If that Worker has no workers.dev URL (the account has no subdomain, or the Worker is reachable only on a custom domain), **Connect** stays off: join it with **Connect a deployed Worker** and its URL instead.
+
 If a step fails, the page shows the error:
 
 | en | zh-CN | ja |
@@ -76,7 +78,7 @@ For a Worker the user deployed with the Deploy to Cloudflare button or with wran
 
 - **Deploy to Cloudflare** (**One-click deploy**) opens Cloudflare in the browser, which creates the Worker and the D1 database. Or open **Deploy manually with wrangler** and run its commands in order in the repository's `workers/sync` folder (`npm install`, `npx wrangler d1 create hatoba`, `npx wrangler d1 migrations apply hatoba --remote`, `npx wrangler secret put SETUP_TOKEN`, `npx wrangler deploy`). **Full deployment guide** opens the guide.
 - Enter the **Worker URL** (for example `https://hatoba-sync.<name>.workers.dev`) and the **Setup Token** you set with `wrangler secret put SETUP_TOKEN`; it is used only for the first setup. **Test Connection** shows **Connected** with the Worker version and latency.
-- **Continue** is enabled only when the Worker has no vault yet. If it already has one, the message is "The cloud already has a vault. On a new device, choose “Restore from Cloud”."
+- A Worker without a vault needs the Setup Token to continue. If it already has a vault, **Test Connection** says "Connected · the cloud already holds a vault", no Setup Token is needed, and **Continue** leads to joining that vault (`references/sync.md`, "Join a cloud vault").
 
 ## Method 3: Use an API Token (direct D1)
 
@@ -91,7 +93,7 @@ Titled **Enter an API Token**. Nothing is deployed; the app calls the D1 HTTP AP
 | Choose a database | 选择数据库 | データベースを選択 |
 | Edit token in Cloudflare | 在 Cloudflare 中编辑 Token | Cloudflare でトークンを編集 |
 
-- Enter the **Account ID** and an **API Token** that has only "Account · D1 · Edit", then **Verify Token**. Pick the **Database** (it must already exist; create one first with `wrangler d1 create hatoba`). **Edit token in Cloudflare** appears when the token lacks the D1 permission.
+- Enter the **Account ID** and an **API Token** that has only "Account · D1 · Edit", then **Verify Token**. Pick the **Database** (it must already exist; create one first with `wrangler d1 create hatoba`). **Edit token in Cloudflare** appears when the token lacks the D1 permission. A database that already holds a vault shows "This database already holds a vault. Continue to join it from this device."
 - Such a token can usually edit every D1 database in the account. It is kept only in this device's credential store. Prefer a Worker unless that is acceptable.
 
 ## Upgrading the Worker

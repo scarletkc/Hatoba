@@ -24,14 +24,14 @@ use crate::crypto::{
     open_json, seal, unwrap_key,
 };
 use crate::error::{Error, Result};
-use crate::model::new_id;
+use crate::model::{SETTINGS_ID, new_id};
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
 use crate::store::{StoreOps, meta};
 use crate::sync::backend::{
     DeviceLogin, RecoveryUpdate, Session, SyncBackend, VaultInit, VaultMeta, VaultMetaUpdate,
 };
-use crate::sync::engine::{SyncOptions, sync_round};
+use crate::sync::engine::{SyncOptions, find_remote_item, sync_round};
 use crate::sync::{SharedVault, SyncConfig, lock_vault};
 use crate::vault::{PasswordChange, Vault};
 
@@ -73,7 +73,7 @@ fn device_login(key: &[u8; 32], device_id: &str, info: &DeviceInfo) -> Result<De
 ///    `setup` runs with this vault's metadata, `auth_key` and sealed-then-unsealed
 ///    `recovery_auth`. A remote that already holds *this* vault (an earlier attempt set it up,
 ///    then failed or lost the response) is adopted instead, and any other vault yields
-///    [`Error::RemoteInitialized`] (the MVP answer to flow C: restore on a new device).
+///    [`Error::RemoteInitialized`] (flow C, [`join_remote_vault`], joins one).
 /// 2. `login`, a check that the remote's wrapped vault keys are this vault's, then a full round.
 ///
 /// A call that fails at any point after `setup` can therefore be retried with the same arguments.
@@ -252,6 +252,78 @@ pub async fn restore_from_cloud(
     Ok(auth.session)
 }
 
+/// The result of [`join_remote_vault`].
+#[derive(Debug)]
+pub struct Joined {
+    /// The session to store in the OS credential store.
+    pub session: Session,
+    /// The remote was another vault, so the local data now uses its vault key. Whatever still
+    /// holds the old key (biometric unlock) no longer works.
+    pub rekeyed: bool,
+}
+
+/// Flow C: connects this device's vault to a remote that already holds a vault.
+///
+/// Signs in with the remote's master password under this device's id, reads the remote's
+/// settings item, then merges locally in one transaction (see `Vault::join_remote_vault`): a
+/// remote that holds this same vault is reconciled item by item, and any other vault receives
+/// every local item as a new one and replaces the local settings with its own. Either way the
+/// local master password becomes the remote's and `config` is recorded. The vault must be
+/// unlocked and have no sync configured, which is checked again in the commit: a setup that
+/// finished meanwhile makes the join fail rather than move a syncing vault to another key.
+///
+/// `keep_credentials` stores the session (and whatever else the backend needs, such as a D1 API
+/// token) after sign-in, under the vault lock and only while the vault is still unlocked, right
+/// before anything local changes. An error there, such as [`Error::Cancelled`] when the caller's
+/// operation ended while signing in (a lock, say), leaves the vault as it was. Nothing is pushed
+/// here: the caller then runs an ordinary sync round, which pulls the remote's items and uploads
+/// the local ones. An interrupted round resumes like any other.
+///
+/// # Errors
+/// [`Error::Locked`], [`Error::SyncAlreadyConfigured`], [`Error::RemoteNotInitialized`],
+/// [`Error::WrongPassword`], [`Error::WeakKdfParams`], transport errors, and whatever
+/// `keep_credentials` returns.
+pub async fn join_remote_vault(
+    vault: &SharedVault,
+    backend: &dyn SyncBackend,
+    password: &str,
+    device: DeviceInfo,
+    config: &SyncConfig,
+    keep_credentials: impl FnOnce(&Session) -> Result<()> + Send,
+) -> Result<Joined> {
+    let device_id = with_vault(vault, |v| {
+        joinable(v)?;
+        Ok(v.device_id())
+    })?;
+    if !backend.health().await?.initialized {
+        return Err(Error::RemoteNotInitialized);
+    }
+    let auth = authenticate(backend, password, &device_id, &device).await?;
+    // Settings are one item, so another vault's cannot be merged with this device's: the join
+    // takes the remote's as they stand now, in the same commit.
+    let settings = find_remote_item(backend, SETTINGS_ID).await?;
+    let rekeyed = with_vault(vault, |v| {
+        joinable(v)?;
+        keep_credentials(&auth.session)?;
+        v.join_remote_vault(&auth.meta, auth.vault_key, config, settings.as_ref())
+    })?;
+    Ok(Joined {
+        session: auth.session,
+        rekeyed,
+    })
+}
+
+/// Flow C's precondition: an unlocked vault with no sync configured.
+fn joinable(v: &Vault) -> Result<()> {
+    if !v.is_unlocked() {
+        Err(Error::Locked)
+    } else if v.sync_config()?.is_some() {
+        Err(Error::SyncAlreadyConfigured)
+    } else {
+        Ok(())
+    }
+}
+
 /// Signs in again after the session expired or was revoked ("authentication expired").
 ///
 /// Works whether the vault is locked or not. The remote must hold *this* vault
@@ -259,7 +331,8 @@ pub async fn restore_from_cloud(
 /// the new password's metadata is adopted locally, so the local password changes too.
 ///
 /// # Errors
-/// [`Error::WrongPassword`], [`Error::VaultMismatch`], [`Error::VaultNotInitialized`], transport errors.
+/// [`Error::WrongPassword`], [`Error::VaultMismatch`], [`Error::VaultNotInitialized`], transport
+/// errors.
 pub async fn sign_in(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -314,8 +387,8 @@ fn meta_update(change: &PasswordChange) -> VaultMetaUpdate {
 /// sessions are revoked by the server and must sign in again with the new password.
 ///
 /// # Errors
-/// [`Error::WrongPassword`], [`Error::Throttled`], [`Error::EmptyPassword`], [`Error::Unauthorized`],
-/// transport errors.
+/// [`Error::WrongPassword`], [`Error::Throttled`], [`Error::EmptyPassword`],
+/// [`Error::Unauthorized`], transport errors.
 pub async fn change_password_remote(
     vault: &SharedVault,
     backend: &dyn SyncBackend,
@@ -394,7 +467,8 @@ pub async fn recover_remote(
         })
     })?;
 
-    // The vault key is unknown until the recovery blob is unwrapped, so seal the name provisionally.
+    // The vault key is unknown until the recovery blob is unwrapped, so seal the name
+    // provisionally.
     let provisional = device_login(&recovery_key, &device_id, &device)?;
     let recovered = backend.recover(&recovery_auth, &provisional).await?;
 

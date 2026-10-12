@@ -56,11 +56,24 @@ With sync off, the page is a three-step wizard (**Method**, **Connect**, **Passw
 | Finish Setup | 完成设置 | 設定を完了 |
 | Cloud Sync is on | 云同步已开启 | クラウド同期をオンにしました |
 
-If the cloud already holds a vault, setup stops with "The cloud already has a vault. On a new device, choose “Restore from Cloud”." Connecting an existing local vault to a cloud vault that has other data is not supported.
+## Join a cloud vault
+
+When the Worker or database chosen in step 2 already holds a vault, step 3 joins it instead of setting it up. This is how a device that already has its own vault (or synced before and was disconnected) gets the cloud vault: it does not need a fresh install.
+
+- Step 3 is **Enter the Cloud Vault’s Master Password**: the master password of the vault in the cloud, not this device's. **Merge and Turn On Sync** signs in and merges.
+- This device's hosts, keys and other items are added to the cloud vault, and the cloud's items arrive on this device. The cloud's settings are kept. If this device synced with that same vault before, matching items are reconciled instead of duplicated, and the newer edit wins.
+- From then on this device unlocks with the cloud vault's master password, and the cloud vault's recovery code replaces this device's, which stops working. When the cloud held another vault, **Unlock with Windows Hello** is turned off; turn it on again in Settings → Security.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Connected · the cloud already holds a vault | 已连接 · 云端已有保险库 | 接続しました · クラウドに保管庫があります |
+| Enter the Cloud Vault’s Master Password | 输入云端保险库的主密码 | クラウドの保管庫のマスターパスワードを入力 |
+| Merge and Turn On Sync | 合并并开启同步 | 統合して同期をオン |
+| Merging… | 正在合并… | 統合しています… |
 
 ## Add another device
 
-On the new device's first launch choose **Restore from Cloud**: pick the method (**Sync Worker** or **Direct D1**), enter the Worker URL (or the account ID, token and database), use **Test Connection**, then enter the master password and **Restore Vault**. Data is downloaded and decrypted on the device. **Restore from Cloud** is offered only on first launch; a device that already has its own vault cannot be merged with a cloud vault in this version.
+On a new device's first launch choose **Restore from Cloud**: pick the method (**Sync Worker** or **Direct D1**), enter the Worker URL (or the account ID, token and database), use **Test Connection**, then enter the master password and **Restore Vault**. Data is downloaded and decrypted on the device. A device that already has its own vault joins from the Cloud Sync page instead (see "Join a cloud vault").
 
 | en | zh-CN | ja |
 |---|---|---|

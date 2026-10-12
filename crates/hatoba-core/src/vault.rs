@@ -29,10 +29,41 @@ use crate::model::{
 use crate::recovery::RecoveryCode;
 use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
 use crate::sync::SyncConfig;
-use crate::sync::backend::VaultMeta;
+use crate::sync::backend::{RemoteItem, VaultMeta};
 use crate::sync::conflict::{ConflictEntry, Resolution};
+use crate::sync::engine::remote_row;
 
 const VAULT_CHECK_PLAINTEXT: &[u8] = b"hatoba vault check v1";
+
+/// Device-local values kept in the meta table, sealed under the vault key and never synced. They
+/// are read and written only through [`Vault::sealed_local`] and [`Vault::set_sealed_local`],
+/// and a join that changes the vault key seals each one in [`SealedLocal::ALL`] again, so a new
+/// value needs nothing more than a variant here, listed in `ALL`.
+#[derive(Clone, Copy, Debug)]
+enum SealedLocal {
+    /// The shell's list of recent quick-connect targets (HOST-12), which names hosts.
+    RecentTargets,
+    /// The shell's AI approvals saved on this device (AI-19), which name hosts.
+    AiAllowances,
+}
+
+impl SealedLocal {
+    const ALL: [Self; 2] = [Self::RecentTargets, Self::AiAllowances];
+
+    const fn meta_key(self) -> &'static str {
+        match self {
+            Self::RecentTargets => meta::RECENT_TARGETS,
+            Self::AiAllowances => meta::AI_ALLOWANCES,
+        }
+    }
+
+    const fn aad(self) -> &'static [u8] {
+        match self {
+            Self::RecentTargets => AAD_RECENT_TARGETS.as_bytes(),
+            Self::AiAllowances => AAD_AI_ALLOWANCES.as_bytes(),
+        }
+    }
+}
 /// Consecutive wrong passwords allowed before delays start (SEC-06).
 pub const FREE_UNLOCK_ATTEMPTS: u32 = 3;
 /// Upper bound of the unlock delay.
@@ -237,6 +268,47 @@ pub(crate) fn decode_envelope(key: &[u8; 32], id: &str, envelope_json: &str) -> 
 pub(crate) fn seal_item(key: &[u8; 32], id: &str, item: &Item) -> Result<crypto::Envelope> {
     let plain = item.to_plaintext()?;
     seal(key, item_aad(id).as_bytes(), &plain)
+}
+
+/// Whether `remote` is a live settings item that `vault_key` opens.
+fn opens_as_settings(vault_key: &[u8; 32], remote: &RemoteItem) -> bool {
+    remote
+        .envelope
+        .as_deref()
+        .filter(|_| !remote.deleted)
+        .is_some_and(|env| {
+            matches!(
+                decode_envelope(vault_key, SETTINGS_ID, env),
+                Ok(Item::Settings(_))
+            )
+        })
+}
+
+/// This device's settings for a cloud vault that has none yet (flow C), dated at the epoch:
+/// older than the settings of any of the cloud vault's own devices, which therefore win over them
+/// whenever they arrive (§6.4).
+fn fallback_settings_row(vault_key: &[u8; 32], settings: &Item) -> Result<ItemRow> {
+    let mut item = settings.clone();
+    item.set_updated_at(0);
+    Ok(ItemRow {
+        id: SETTINGS_ID.to_owned(),
+        envelope: Some(seal_item(vault_key, SETTINGS_ID, &item)?.to_json()),
+        revision: 0,
+        deleted: false,
+        dirty: true,
+        updated_at: 0,
+    })
+}
+
+/// Drops this device's sealed recovery secret unless `recovery_vault_key`, the remote's
+/// recovery wrapper about to be stored, is the one stored now: only the same recovery code keeps
+/// the secret valid. A code rotated elsewhere, or another vault, whose wrapper never matches,
+/// makes it stale.
+fn drop_stale_recovery_auth(tx: &impl StoreOps, recovery_vault_key: &str) -> Result<()> {
+    if tx.get_meta(meta::RECOVERY_VAULT_KEY)?.as_deref() != Some(recovery_vault_key) {
+        tx.delete_meta(meta::RECOVERY_AUTH_SEALED)?;
+    }
+    Ok(())
 }
 
 /// Item ids are what the Worker accepts: `[A-Za-z0-9_-]{1,64}`.
@@ -974,7 +1046,8 @@ impl Vault {
         self.store.host_show_stats(host_id).unwrap_or(false)
     }
 
-    /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while locked.
+    /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while
+    /// locked.
     ///
     /// # Errors
     /// Storage errors.
@@ -1031,15 +1104,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn recent_targets(&self) -> Result<Option<String>> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let Some(sealed) = self.store.get_meta(meta::RECENT_TARGETS)? else {
-            return Ok(None);
-        };
-        Ok(
-            crypto::open_json(&unlocked.vault_key, AAD_RECENT_TARGETS.as_bytes(), &sealed)
-                .ok()
-                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
-        )
+        self.sealed_local(SealedLocal::RecentTargets)
     }
 
     /// Stores the recent quick-connect targets, sealed under the vault key.
@@ -1047,13 +1112,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_recent_targets(&mut self, json: &str) -> Result<()> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let sealed = seal(
-            &unlocked.vault_key,
-            AAD_RECENT_TARGETS.as_bytes(),
-            json.as_bytes(),
-        )?;
-        self.store.set_meta(meta::RECENT_TARGETS, &sealed.to_json())
+        self.set_sealed_local(SealedLocal::RecentTargets, json)
     }
 
     /// The AI approvals saved on this device (opaque JSON owned by the shell, AI-19). Never
@@ -1063,15 +1122,7 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn ai_allowances(&self) -> Result<Option<String>> {
-        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let Some(sealed) = self.store.get_meta(meta::AI_ALLOWANCES)? else {
-            return Ok(None);
-        };
-        Ok(
-            crypto::open_json(&unlocked.vault_key, AAD_AI_ALLOWANCES.as_bytes(), &sealed)
-                .ok()
-                .and_then(|plain| String::from_utf8(plain.to_vec()).ok()),
-        )
+        self.sealed_local(SealedLocal::AiAllowances)
     }
 
     /// Stores the AI approvals saved on this device, sealed under the vault key.
@@ -1079,13 +1130,25 @@ impl Vault {
     /// # Errors
     /// [`Error::Locked`], storage errors.
     pub fn set_ai_allowances(&mut self, json: &str) -> Result<()> {
+        self.set_sealed_local(SealedLocal::AiAllowances, json)
+    }
+
+    /// A [`SealedLocal`] value; one this vault key cannot open reads as `None`.
+    fn sealed_local(&self, which: SealedLocal) -> Result<Option<String>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
-        let sealed = seal(
-            &unlocked.vault_key,
-            AAD_AI_ALLOWANCES.as_bytes(),
-            json.as_bytes(),
-        )?;
-        self.store.set_meta(meta::AI_ALLOWANCES, &sealed.to_json())
+        let Some(sealed) = self.store.get_meta(which.meta_key())? else {
+            return Ok(None);
+        };
+        Ok(crypto::open_json(&unlocked.vault_key, which.aad(), &sealed)
+            .ok()
+            .and_then(|plain| String::from_utf8(plain.to_vec()).ok()))
+    }
+
+    /// Stores a [`SealedLocal`] value, sealed under the vault key.
+    fn set_sealed_local(&mut self, which: SealedLocal, json: &str) -> Result<()> {
+        let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
+        let sealed = seal(&unlocked.vault_key, which.aad(), json.as_bytes())?;
+        self.store.set_meta(which.meta_key(), &sealed.to_json())
     }
 
     // ---- backup ----
@@ -1281,13 +1344,132 @@ impl Vault {
     /// same vault key (the password was changed on another device).
     pub(crate) fn adopt_remote_meta(&mut self, remote: &VaultMeta) -> Result<()> {
         self.store.transaction(|tx| {
+            drop_stale_recovery_auth(tx, &remote.recovery_vault_key)?;
+            tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
+            tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
+            tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
+            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)
+        })
+    }
+
+    /// Flow C: makes this unlocked vault part of an initialised remote vault, whose metadata and
+    /// unwrapped key the caller authenticated for. The local master password becomes the
+    /// remote's, `config` is recorded, and the pull starts over, all in one transaction.
+    ///
+    /// When the remote is this same vault (a device that synced before), every item is queued
+    /// again so the next round reconciles both sides. Otherwise each live item is sealed under
+    /// the remote vault key and queued as new, except the settings: `cloud_settings`, the
+    /// remote's settings item as read just before, replaces the local one. When the remote has
+    /// none that its key opens (none yet, or a damaged one), the local one is queued dated at the
+    /// epoch, older than any settings of the remote's own devices, which therefore replace it
+    /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones,
+    /// items that cannot be decrypted, and the conflict log are dropped, and every
+    /// [`SealedLocal`] is sealed again. Returns whether the vault key changed, so the caller can
+    /// drop what still holds the old one (biometric unlock).
+    ///
+    /// Once the transaction has committed the join has happened: if reloading the items then
+    /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
+    pub(crate) fn join_remote_vault(
+        &mut self,
+        remote: &VaultMeta,
+        vault_key: Key32,
+        config: &SyncConfig,
+        cloud_settings: Option<&RemoteItem>,
+    ) -> Result<bool> {
+        let old = self.vault_key_copy()?;
+        let rekey = !self.verify_vault_key(&vault_key)?;
+        let config = serde_json::to_string(config)?;
+        // Device-local values sealed under the vault key, sealed again (`None`: dropped).
+        let mut local = Vec::new();
+        if rekey {
+            for which in SealedLocal::ALL {
+                let resealed = match self.store.get_meta(which.meta_key())? {
+                    Some(sealed) => crypto::open_json(&old, which.aad(), &sealed)
+                        .ok()
+                        .map(|plain| seal(&vault_key, which.aad(), &plain))
+                        .transpose()?
+                        .map(|env| env.to_json()),
+                    None => None,
+                };
+                local.push((which.meta_key(), resealed));
+            }
+        }
+        // A cloud settings item the cloud key cannot open (a damaged one) could not win a conflict
+        // either, so it counts as none.
+        let settings = match cloud_settings.filter(|remote| opens_as_settings(&vault_key, remote)) {
+            Some(remote) if rekey => Some(remote_row(remote)),
+            None if rekey => self
+                .get(SETTINGS_ID)
+                .map(|item| fallback_settings_row(&vault_key, item))
+                .transpose()?,
+            _ => None,
+        };
+        let check = seal_vault_check(&vault_key)?;
+        self.store.transaction(|tx| {
+            if rekey {
+                for row in tx.item_rows()? {
+                    if row.id == SETTINGS_ID && settings.is_some() {
+                        continue;
+                    }
+                    let plain = row
+                        .envelope
+                        .as_deref()
+                        .filter(|_| !row.deleted)
+                        .and_then(|env| {
+                            crypto::open_json(&old, item_aad(&row.id).as_bytes(), env).ok()
+                        });
+                    let Some(plain) = plain else {
+                        tx.delete_item_row(&row.id)?;
+                        continue;
+                    };
+                    let envelope = seal(&vault_key, item_aad(&row.id).as_bytes(), &plain)?;
+                    tx.upsert_item_row(&ItemRow {
+                        envelope: Some(envelope.to_json()),
+                        revision: 0,
+                        dirty: true,
+                        ..row
+                    })?;
+                }
+                if let Some(row) = &settings {
+                    tx.upsert_item_row(row)?;
+                }
+                tx.clear_conflicts()?;
+                crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
+                for (key, resealed) in &local {
+                    match resealed {
+                        Some(sealed) => tx.set_meta(key, sealed)?,
+                        None => tx.delete_meta(key)?,
+                    }
+                }
+            } else {
+                tx.mark_all_dirty_for_upload()?;
+            }
+            drop_stale_recovery_auth(tx, &remote.recovery_vault_key)?;
+            tx.set_meta(
+                meta::SCHEMA_VERSION,
+                &crate::store::SCHEMA_VERSION
+                    .max(remote.schema_version)
+                    .to_string(),
+            )?;
             tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
             tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
             tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
             tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
-            // The recovery code may have been rotated elsewhere; our sealed copy is then stale.
-            tx.delete_meta(meta::RECOVERY_AUTH_SEALED)
-        })
+            tx.set_meta(meta::VAULT_CHECK, &check)?;
+            tx.delete_meta(meta::UNLOCK_FAILURES)?;
+            tx.delete_meta(meta::UNLOCK_LAST_FAILURE_AT)?;
+            tx.set_meta(meta::SYNC_BACKEND, &config)?;
+            tx.delete_meta(meta::SYNC_CURSOR)?;
+            tx.delete_meta(meta::SYNC_LAST_AT)
+        })?;
+        // The join has committed: the old key and cache must not stay in use, or new edits would
+        // be sealed under a key the vault no longer opens. Unlocking again with the remote's
+        // password reloads them.
+        if let Err(e) = self.finish_unlock(vault_key) {
+            tracing::warn!("could not reload the vault after joining: {e}");
+            self.lock();
+        }
+        Ok(rekey)
     }
 
     // ---- conflict log ----

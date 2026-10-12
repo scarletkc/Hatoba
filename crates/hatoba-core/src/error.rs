@@ -96,8 +96,8 @@ pub enum Error {
     /// The remote has no vault yet (`/v1/prelogin` answered 404).
     #[error("the remote has not been initialised")]
     RemoteNotInitialized,
-    /// The remote already holds a vault (health says so, or setup answered 409). MVP flow C:
-    /// the user should use "restore from cloud" on a new device instead.
+    /// The remote already holds a vault (health says so, or setup answered 409). Joining it is
+    /// flow C (`sync::join_remote_vault`).
     #[error("the remote already holds a vault")]
     RemoteInitialized,
     /// 429 from the Worker.
@@ -109,6 +109,9 @@ pub enum Error {
     /// Sync is not configured on this device.
     #[error("sync is not configured")]
     SyncNotConfigured,
+    /// Sync is already set up on this device, so it cannot join a cloud vault.
+    #[error("sync is already set up on this device")]
+    SyncAlreadyConfigured,
     /// Any other server-side failure; the string is a short code, never user data.
     #[error("sync server error: {0}")]
     Server(String),
@@ -194,6 +197,7 @@ impl Error {
             Self::RemoteInitialized => "remote_initialized",
             Self::RateLimited { .. } => "rate_limited",
             Self::SyncNotConfigured => "sync_not_configured",
+            Self::SyncAlreadyConfigured => "sync_already_configured",
             Self::Server(_) => "server",
             Self::Protocol(_) => "protocol",
             Self::InvalidUrl(_) => "invalid_url",

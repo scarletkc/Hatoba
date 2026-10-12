@@ -669,6 +669,9 @@ pub struct DeployPlan {
     pub worker: DeployWorkerAction,
     pub database: Option<DeployDatabaseAction>,
     pub database_name: Option<String>,
+    /// For `has_vault`: the workers.dev URL to join it on (Flow C), or `None` when no workers.dev
+    /// URL reaches the Worker.
+    pub vault_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]

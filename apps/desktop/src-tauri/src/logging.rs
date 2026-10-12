@@ -1,4 +1,5 @@
-//! Daily-rotated local logs kept for 7 days (spec §11). Never log secrets or terminal content (SEC-04).
+//! Daily-rotated local logs kept for 7 days (spec §11). Never log secrets or terminal content
+//! (SEC-04).
 
 use std::path::Path;
 use tracing_appender::non_blocking::WorkerGuard;

@@ -157,6 +157,7 @@ pub async fn deploy_inspect(
         },
         database,
         database_name,
+        vault_url: plan.vault_url,
     })
 }
 
@@ -232,6 +233,7 @@ pub async fn deploy_setup(
     handle: String,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     let deployment = state.deploy.get(&handle)?;
     let mut deployment = deployment.lock().await;
     let deployed = deployment
@@ -275,6 +277,64 @@ pub async fn deploy_setup(
     state.deploy.end(&handle);
     sync::emit_status(&app);
     sync::trigger(&app, Trigger::Manual);
+    Ok(())
+}
+
+/// The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
+/// against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+///
+/// The sync settings record no deployment: the app did not deploy this Worker, so an update
+/// treats it like one deployed by hand (a Git integration may redeploy it).
+#[tauri::command]
+#[specta::specta]
+pub async fn deploy_join(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    handle: String,
+    target: DeployTarget,
+    password: String,
+) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
+    // As in `sync_join`: a lock or a disconnect while this waits ends it.
+    let generation = state.sync.generation();
+    let target = self::target(target);
+    let url = {
+        let deployment = state.deploy.get(&handle)?;
+        let deployment = deployment.lock().await;
+        deployment
+            .vault_worker_url(&target)
+            .await
+            .map_err(deploy_error)?
+    };
+    let backend = WorkerBackend::new(&url)?;
+    let config = SyncConfig::Worker {
+        url: backend.base_url().to_owned(),
+        deployment: None,
+    };
+    let secrets = state.secrets.as_ref();
+    let joined = flows::join_remote_vault(
+        &state.vault,
+        &backend,
+        &password,
+        device_info(),
+        &config,
+        |session| {
+            if state.sync.generation() != generation {
+                return Err(hatoba_core::Error::Cancelled);
+            }
+            save_session(secrets, session)
+        },
+    )
+    .await?;
+    state.deploy.end(&handle);
+    crate::commands::sync::joined_remote(
+        &app,
+        &state,
+        Arc::new(backend),
+        joined.rekeyed,
+        generation,
+    )
+    .await;
     Ok(())
 }
 

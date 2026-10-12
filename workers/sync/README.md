@@ -112,7 +112,7 @@ A JSON response with `service` set to `"hatoba-sync"` and `initialized` set to `
 2. Enter the **Worker URL** and the **Setup Token**, and select **Test Connection**.
 3. Follow the wizard to set or enter the master password. The first device calls `/v1/setup` to initialize the vault, then signs in and pushes every item.
 
-To add another device, choose **Restore from Cloud** on its first launch. It needs only the Worker URL and the master password, **not** the setup token.
+To add another device, choose **Restore from Cloud** on its first launch. It needs only the Worker URL and the master password, **not** the setup token. A device that already has its own vault connects from **Cloud Sync** in the same way, without the setup token, and its data is merged into the cloud vault.
 
 ## Maintenance
 

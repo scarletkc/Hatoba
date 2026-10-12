@@ -105,6 +105,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sync_cmd::sync_status,
             sync_cmd::sync_test,
             sync_cmd::sync_configure,
+            sync_cmd::sync_join,
             sync_cmd::sync_now,
             sync_cmd::sync_login,
             sync_cmd::sync_check_worker,
@@ -122,6 +123,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             deploy_cmd::deploy_cleanup,
             deploy_cmd::deploy_cancel,
             deploy_cmd::deploy_setup,
+            deploy_cmd::deploy_join,
             deploy_cmd::deploy_upgrade_defaults,
             deploy_cmd::deploy_upgrade_inspect,
             deploy_cmd::deploy_upgrade,
@@ -281,7 +283,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    /// Regenerates `src/ipc/bindings.ts` from the Rust types (`cargo test -p hatoba-desktop export_bindings`).
+    /// Regenerates `src/ipc/bindings.ts` from the Rust types
+    /// (`cargo test -p hatoba-desktop export_bindings`).
     #[test]
     fn export_bindings() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/ipc/bindings.ts");

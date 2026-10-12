@@ -108,6 +108,8 @@ jobs:
       - name: Build frontend (embedded by tauri::generate_context!)
         run: pnpm install --frozen-lockfile && pnpm --filter @hatoba/desktop build
       - run: cargo fmt --all --check
+      # rustfmt leaves comments alone on stable, so this keeps them within its 100 columns.
+      - run: node scripts/ci/comment-width.mjs
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests (incl. OpenSSH integration tests)
         run: cargo test --workspace

@@ -321,6 +321,22 @@ impl Client {
         .map_err(|f| f.into_error(Permission::WorkersScripts))
     }
 
+    /// Whether the Worker answers on its workers.dev URL. A missing Worker counts as off.
+    pub(crate) async fn route_enabled(&self, account_id: &str, name: &str) -> Result<bool> {
+        match self
+            .call::<Value>(
+                Method::GET,
+                &format!("/accounts/{account_id}/workers/scripts/{name}/subdomain"),
+                Body::Empty,
+            )
+            .await
+        {
+            Ok(route) => Ok(route.get("enabled").and_then(Value::as_bool) == Some(true)),
+            Err(f) if f.is_not_found() => Ok(false),
+            Err(f) => Err(f.into_error(Permission::WorkersScripts)),
+        }
+    }
+
     // ---- Workers ----------------------------------------------------------------------------
 
     pub(crate) async fn script_settings(
