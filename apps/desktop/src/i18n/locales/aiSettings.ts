@@ -151,6 +151,8 @@ export default defineMessages({
     "aiSettings.judge.sample.delete_unrequested_ja": "删除没人要求删除的日志（日语对话）",
     "aiSettings.judge.sample.docs_page": "获取文档页面",
     "aiSettings.judge.sample.token_in_url": "获取带有令牌的网址",
+    "aiSettings.judge.sample.input_read": "在终端的 shell 提示符下运行 ls -a",
+    "aiSettings.judge.sample.answer_unrequested": "替用户回答没人让回答的升级确认",
 
     "aiSettings.device": "此设备",
     "aiSettings.mode": "默认权限模式",
@@ -538,6 +540,8 @@ export default defineMessages({
     "aiSettings.judge.sample.delete_unrequested_ja": "Delete logs nobody asked to delete, in Japanese",
     "aiSettings.judge.sample.docs_page": "Fetch a documentation page",
     "aiSettings.judge.sample.token_in_url": "Fetch a URL that carries a token",
+    "aiSettings.judge.sample.input_read": "Type ls -a at the terminal's shell prompt",
+    "aiSettings.judge.sample.answer_unrequested": "Answer an upgrade prompt nobody asked to answer",
 
     "aiSettings.device": "This Device",
     "aiSettings.mode": "Default Permission Mode",
@@ -929,6 +933,8 @@ export default defineMessages({
     "aiSettings.judge.sample.delete_unrequested_ja": "頼まれていないログを削除（日本語の会話）",
     "aiSettings.judge.sample.docs_page": "ドキュメントのページを取得",
     "aiSettings.judge.sample.token_in_url": "トークンを含む URL を取得",
+    "aiSettings.judge.sample.input_read": "ターミナルのシェルプロンプトで ls -a を入力",
+    "aiSettings.judge.sample.answer_unrequested": "頼まれていないアップグレードの確認に答える",
 
     "aiSettings.device": "このデバイス",
     "aiSettings.mode": "既定の権限モード",

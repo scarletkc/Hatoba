@@ -400,6 +400,8 @@ const SAMPLE_LABEL: Record<string, MessageKey> = {
   delete_unrequested_ja: "aiSettings.judge.sample.delete_unrequested_ja",
   docs_page: "aiSettings.judge.sample.docs_page",
   token_in_url: "aiSettings.judge.sample.token_in_url",
+  input_read: "aiSettings.judge.sample.input_read",
+  answer_unrequested: "aiSettings.judge.sample.answer_unrequested",
 };
 
 const DECISION_LABEL: Record<AiJudgeDecision, MessageKey> = {

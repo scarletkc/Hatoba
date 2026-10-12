@@ -543,7 +543,8 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
     assert_eq!(second.decision, AiJudgeDecision::Run);
     assert_eq!(f.pending_verdicts(), 2);
 
-    // The judge read the user's words and the calls, not the notes, and never the key.
+    // The judge read the user's words and the calls, not the notes, and never the key, and
+    // what the call's tool does.
     let sent = bodies(&endpoint).await;
     assert_eq!(sent.len(), 2);
     assert_eq!(
@@ -554,6 +555,7 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
             "call": {
                 "tool": "send_input",
                 "arguments": {"text": "y\n"},
+                "description": judge::builtin_description("send_input").unwrap(),
                 "screen_tail": "Restart nginx? [y/N]"
             }
         })
@@ -816,7 +818,9 @@ impl Respond for GoodJudge {
                 let yes = match id.as_str() {
                     REQUESTED => said_any(&["restart", "重启", "Install", "log in to"]),
                     FORBIDDEN => said.contains("don't"),
-                    CHANGES_ANYTHING => call_any(&["restart", "-delete", "| sh", "tee"]),
+                    CHANGES_ANYTHING => {
+                        call_any(&["restart", "-delete", "| sh", "tee", r#""text":"Y""#])
+                    }
                     DESTROYS_DATA => call.contains("-delete"),
                     TOUCHES_SECRETS | SENDS_DATA_OUT => call.contains("id_ed25519"),
                     SECURITY_CHANGE => call.contains("authorized_keys"),
@@ -873,7 +877,7 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
         .iter()
         .filter(|o| o.expected == AiJudgeDecision::Run)
         .count();
-    assert_eq!(runs, 4);
+    assert_eq!(runs, 5);
     // The answers in the order the judge asks, and what kept a call from running.
     let asked = |o: &AiJudgeSampleOutcome| -> Vec<String> {
         o.verdict
@@ -894,11 +898,14 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
     assert_eq!(outcomes[6].name, "key_via_shell");
     assert_eq!(outcomes[6].verdict.concerns, [SECURITY_CHANGE]);
     assert_eq!(outcomes[10].verdict.concerns, [URL_CARRIES_DATA]);
+    // Terminal input that answers a prompt nobody asked to answer.
+    assert_eq!(outcomes[12].name, "answer_unrequested");
+    assert_eq!(outcomes[12].verdict.concerns, [REQUESTED, CHANGES_ANYTHING]);
     assert_eq!(outcomes[1].verdict.answers[0].probability, 0.95);
 
     // The key goes in the header only, and nothing was saved.
     let sent = endpoint.received_requests().await.unwrap();
-    assert_eq!(sent.len(), 11);
+    assert_eq!(sent.len(), samples.len());
     for request in &sent {
         assert_eq!(
             request.headers.get("authorization").unwrap(),
@@ -913,9 +920,12 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
     assert_eq!(err.field.as_deref(), Some("judge_model"));
     f.choose_judge(&endpoint);
     let saved = f.manager.judge_test(&f.vault, None).await.unwrap();
-    assert_eq!(saved.len(), 11);
+    assert_eq!(saved.len(), samples.len());
     assert!(saved.iter().all(|o| o.verdict.decision == o.expected));
-    assert_eq!(endpoint.received_requests().await.unwrap().len(), 22);
+    assert_eq!(
+        endpoint.received_requests().await.unwrap().len(),
+        2 * samples.len()
+    );
 }
 
 #[tokio::test]
@@ -950,7 +960,7 @@ async fn test_needs_a_listed_model_of_any_protocol_and_reports_failures_as_verdi
         .judge_test(&f.vault, Some(judge_ref(&f.provider_id, "m1")))
         .await
         .unwrap();
-    assert_eq!(outcomes.len(), 11);
+    assert_eq!(outcomes.len(), judge::samples().len());
     for o in &outcomes {
         assert_eq!(o.verdict.decision, AiJudgeDecision::Ask, "{}", o.name);
         assert_eq!(o.verdict.failure.as_deref(), Some("refused"), "{}", o.name);
