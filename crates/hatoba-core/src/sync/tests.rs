@@ -402,6 +402,13 @@ async fn restore_errors() {
         !b.v().status().initialized,
         "a failed restore must leave no local vault"
     );
+    // Reading the cloud's settings fails after signing in.
+    server.fail_next("pull");
+    let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::Offline));
+    assert!(!b.v().status().initialized);
 
     restore(&b).await;
     // Restoring over an existing vault is refused.
@@ -880,6 +887,42 @@ async fn restore_sets_up_sync_before_the_first_pull() {
 }
 
 #[tokio::test]
+async fn settings_edited_before_the_first_pull_build_on_the_clouds() {
+    let (server, clock, a, b) = world();
+    a.edit(SETTINGS_ID, |item| {
+        if let Item::Settings(s) = item {
+            s.terminal.scrollback = 123;
+        }
+    });
+    enable(&a).await;
+    restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
+        .await
+        .unwrap();
+    assert_eq!(b.v().settings().terminal.scrollback, 123);
+
+    // The first round fails, and the settings are edited meanwhile, as the app writes them.
+    server.set_offline(true);
+    assert!(matches!(b.try_sync().await, Err(Error::Offline)));
+    server.set_offline(false);
+    clock.advance(60_000);
+    {
+        let mut v = b.v();
+        let mut settings = v.settings();
+        settings.terminal.font_size = 9;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+    b.sync().await;
+    a.sync().await;
+    let settings = a.v().settings();
+    assert_eq!(settings.terminal.font_size, 9);
+    assert_eq!(
+        settings.terminal.scrollback, 123,
+        "the cloud's other values stay"
+    );
+    assert_eq!(a.snapshot(), b.snapshot());
+}
+
+#[tokio::test]
 async fn interrupted_first_pull_resumes_after_a_restart() {
     let (server, clock, a, _b) = world();
     for i in 0..7 {
@@ -908,7 +951,8 @@ async fn interrupted_first_pull_resumes_after_a_restart() {
         cursor > 0 && cursor < server.current_seq(),
         "cursor {cursor}"
     );
-    let first_page = b.v().items().count();
+    // The restore brought the settings item; the first page brought three hosts.
+    let first_page = b.names().len();
     assert_eq!(first_page, 3);
 
     // The app restarts: the same database, unlocked with the master password, and the session
@@ -929,8 +973,8 @@ async fn interrupted_first_pull_resumes_after_a_restart() {
     let report = b.sync().await;
     assert_eq!(
         report.pulled,
-        u32::try_from(server.item_count() - first_page).unwrap(),
-        "only the items after the saved cursor"
+        u32::try_from(server.item_count() - first_page - 1).unwrap(),
+        "only the hosts after the saved cursor"
     );
     assert_eq!(a.snapshot(), b.snapshot());
     assert_eq!(b.v().sync_cursor(), server.current_seq());
