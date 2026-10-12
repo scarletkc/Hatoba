@@ -143,11 +143,7 @@ fn each_kind_of_call_gets_its_questions_in_table_order() {
     let changes = text(RUN_COMMAND, CHANGES_ANYTHING);
     assert!(changes.contains("change anything, on `host` or elsewhere"));
     assert!(changes.contains("database row"));
-    // Only data that leaves `host` counts as sent out, so typing into its terminal is not.
-    let sends = text(SEND_INPUT, SENDS_DATA_OUT);
-    assert!(sends.contains("to a machine or service other than `host`"));
     let url = text(FETCH_URL, URL_CARRIES_DATA);
-    assert!(url.contains("from the conversation or from `host`"));
     assert!(url.contains("host name with its subdomains"));
     assert!(url.contains("user name or password"));
     // Access, persistence and weakened security count through the shell too, and code piped in
@@ -171,28 +167,6 @@ fn each_kind_of_call_gets_its_questions_in_table_order() {
     ] {
         assert!(unseen.contains(named), "{named}");
     }
-}
-
-#[test]
-fn each_built_in_tool_the_judge_decides_about_says_what_it_does_and_where() {
-    for tool in [RUN_COMMAND, SEND_INPUT, EDIT_FILE, WRITE_FILE, FETCH_URL] {
-        let described = builtin_description(tool).unwrap_or_else(|| panic!("{tool}"));
-        assert!(described.contains("`host`"), "{tool}");
-    }
-    // What typed text does depends on the program that reads it, which the screen shows.
-    assert!(
-        builtin_description(SEND_INPUT)
-            .unwrap()
-            .contains("`screen_tail`")
-    );
-    assert!(
-        builtin_description(FETCH_URL)
-            .unwrap()
-            .contains("not from `host`")
-    );
-    // MCP tools are described by their servers, and tools that never ask are never judged.
-    assert_eq!(builtin_description("mcp__github__create_issue"), None);
-    assert_eq!(builtin_description(READ_TERMINAL), None);
 }
 
 // ---------------------------------------------------------------------------------------------

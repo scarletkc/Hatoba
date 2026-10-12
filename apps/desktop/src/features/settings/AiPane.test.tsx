@@ -187,6 +187,12 @@ describe("AiPane", () => {
     await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.running")));
     await until(() => document.body.textContent?.includes(t("aiSettings.judge.test.summary", { n: 12, total: 13 })));
     const marks = (label: string) => document.querySelectorAll(`[role=img][aria-label="${label}"]`).length;
+    // The count shows; each sample shows under Details.
+    expect(marks(t("aiSettings.judge.test.match"))).toBe(0);
+    const details = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("aiSettings.judge.test.details"))!;
+    expect(details.getAttribute("aria-expanded")).toBe("false");
+    act(() => details.click());
+    expect(details.getAttribute("aria-expanded")).toBe("true");
     expect(marks(t("aiSettings.judge.test.match"))).toBe(12);
     expect(marks(t("aiSettings.judge.test.mismatch"))).toBe(1);
     const text = document.body.textContent ?? "";

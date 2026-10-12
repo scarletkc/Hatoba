@@ -220,7 +220,11 @@
   overflow-wrap: anywhere;
 }
 
-.judgeResult > .judgeStatus {
+.judgeDetails {
+  margin-left: auto;
+}
+
+.judgeStatus:has(+ .samples) {
   padding-bottom: 6px;
 }
 
