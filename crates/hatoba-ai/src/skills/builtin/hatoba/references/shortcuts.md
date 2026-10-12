@@ -43,7 +43,7 @@ In the find bar, Enter goes to the next match, Shift+Enter to the previous one, 
 | Host list | Up / Down select, Enter connects, typing starts a search |
 | Host editor | Ctrl+S (⌘S) saves, Enter in a text field saves, Esc leaves a form that has no changes |
 | SFTP panel | Up / Down select, Enter opens a folder or downloads a file, F2 renames, Delete deletes, Backspace goes to the parent folder |
-| AI panel | Enter sends, Shift+Enter adds a line, Esc stops a running turn |
+| AI panel | Enter sends, or queues the message while a turn runs; Ctrl+Enter (⌘↩) sends at once, stopping a running turn; Alt+Enter (⌥↩) asks a side question; Shift+Enter adds a line; Up in the empty box edits the queued message; Esc stops a running turn, then sends the queued message |
 | Settings | Esc closes the window (a dialog or menu inside it takes Esc first); Left / Right switch tabs when the tab bar has focus |
 | Tab bar | Middle-click a terminal tab to close it |
 
