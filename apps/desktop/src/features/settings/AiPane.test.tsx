@@ -45,6 +45,13 @@ async function until<T>(find: () => T | null | undefined | false | Promise<T | f
 const byLabel = <E extends HTMLElement>(label: string) => document.querySelector<E>(`[aria-label="${label}"]`);
 const instructions = () => document.querySelector<HTMLTextAreaElement>("#ai-custom-instructions");
 
+function type(field: HTMLInputElement | HTMLTextAreaElement, text: string) {
+  act(() => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")?.set?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 /** Opens the menu of a popup button and picks the option labelled `label`. */
 function pick(button: HTMLButtonElement, label: string) {
   act(() => button.click());
@@ -77,10 +84,7 @@ describe("AiPane", () => {
     act(() => useApp.getState().refreshSynced());
     await until(() => box.value === "Be brief.");
 
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(box, "Be thorough.");
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    type(box, "Be thorough.");
     await act(() => api.ai_settings_save({ custom_instructions: "Be very brief.", default_effort: "low" }));
     act(() => useApp.getState().refreshSynced());
     await until(() => byLabel(t("aiSettings.default.effort"))?.textContent === t(effortKey("low")));
@@ -112,5 +116,34 @@ describe("AiPane", () => {
     act(() => useApp.getState().refreshSynced());
     await until(() => instructions()?.value === "Search less.");
     expect(search.textContent).toBe(t("aiSettings.search.brave"));
+  });
+
+  it("saves an address to the search provider it was typed for, after a sync chose another one", async () => {
+    let first!: SearchProviderView;
+    let second!: SearchProviderView;
+    await act(async () => {
+      first = await api.search_provider_save({ id: null, kind: "searxng", base_url: "http://127.0.0.1:8001", api_key: null });
+      second = await api.search_provider_save({ id: null, kind: "searxng", base_url: "http://127.0.0.1:8002", api_key: null });
+      await api.ai_settings_save({ search_provider_id: first.id });
+    });
+    render();
+    const url = await until(() => {
+      const field = document.querySelector<HTMLInputElement>("#ai-search-url");
+      return field?.value === first.base_url && field;
+    });
+
+    type(url, "http://127.0.0.1:8003");
+    await act(() => api.ai_settings_save({ search_provider_id: second.id, custom_instructions: "Use the other instance." }));
+    act(() => useApp.getState().refreshSynced());
+    await until(() => instructions()?.value === "Use the other instance.");
+    expect(url.value).toBe("http://127.0.0.1:8003");
+    const save = [...document.querySelectorAll<HTMLButtonElement>("button")].filter((b) => b.textContent === t("btn.save"));
+    expect(save).toHaveLength(1);
+    act(() => save[0].click());
+
+    await until(async () => (await api.ai_settings_get()).search_provider_id === first.id);
+    const stored = await api.search_providers_list();
+    expect(stored.find((p) => p.id === first.id)?.base_url).toBe("http://127.0.0.1:8003");
+    expect(stored.find((p) => p.id === second.id)?.base_url).toBe("http://127.0.0.1:8002");
   });
 });
