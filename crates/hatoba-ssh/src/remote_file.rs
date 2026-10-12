@@ -638,36 +638,14 @@ mod tests {
     }
 
     /// The scripts against the local `sh`, `wc`, `cksum` and `dirname` (GNU on Linux, BSD on
-    /// macOS), started the way a login shell would start them. They run in `/`, so relative paths
-    /// show that they are taken from `$HOME`.
+    /// macOS), as [`crate::local_sh`] starts them.
     #[cfg(unix)]
     mod local_sh {
-        use std::io::Write;
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         use std::path::Path;
-        use std::process::{Command, Stdio};
 
         use super::super::*;
-
-        fn run(home: &Path, command: &str, stdin: &[u8]) -> ExecOutput {
-            let mut child = Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .current_dir("/")
-                .env("HOME", home)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            child.stdin.take().unwrap().write_all(stdin).unwrap();
-            let out = child.wait_with_output().unwrap();
-            ExecOutput {
-                exit_status: out.status.code().map(|c| c as u32),
-                stdout: out.stdout,
-                stderr: out.stderr,
-            }
-        }
+        use crate::local_sh::{is_root, run};
 
         fn read_file(home: &Path, path: &str, max: u64) -> Result<RemoteFile, RemoteFileError> {
             let (command, stdin) = read_request(path, max)?;
@@ -715,13 +693,6 @@ mod tests {
         fn delete_file(home: &Path, path: &str, expect: &[u8]) -> Result<String, RemoteFileError> {
             let (command, stdin) = delete_request(path, expect)?;
             parse_delete(&run(home, &command, &stdin))
-        }
-
-        fn is_root() -> bool {
-            Command::new("id")
-                .arg("-u")
-                .output()
-                .is_ok_and(|o| o.stdout.starts_with(b"0\n"))
         }
 
         #[test]

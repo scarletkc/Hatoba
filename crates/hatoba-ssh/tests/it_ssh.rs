@@ -761,10 +761,10 @@ async fn remote_files_are_read_and_written_in_place() {
     assert!(!new.exists());
 }
 
-/// The search tools' find and grep (AI-48, AI-49) through sshd and the user's login shell.
+/// The search tools' find, and rg or grep (AI-48, AI-49), through sshd and the user's login shell.
 #[tokio::test]
 async fn remote_searches_find_files_and_lines() {
-    use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError};
+    use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError, Scope};
 
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
@@ -773,9 +773,16 @@ async fn remote_searches_find_files_and_lines() {
     std::fs::write(area.join("conf.d/it's $HOME.conf"), "listen 8080;\n").unwrap();
     std::fs::write(area.join("nginx.conf"), "include conf.d/*.conf;\n").unwrap();
     let root = area.to_str().unwrap();
+    let limit = Duration::from_secs(30);
 
     let names = ["*.conf".to_owned()];
-    let found = remote_search::glob(&session, root, None, &names, 1 << 20)
+    let scope = Scope {
+        path: root,
+        below: "",
+        max_depth: None,
+        names: &names,
+    };
+    let found = remote_search::glob(&session, &scope, 1 << 20, limit)
         .await
         .unwrap();
     assert_eq!(found.start, format!("{root}/."));
@@ -793,27 +800,51 @@ async fn remote_searches_find_files_and_lines() {
     );
 
     let query = GrepQuery {
-        path: root,
-        max_depth: None,
-        names: &[],
-        pattern: "listen[[:space:]]+[0-9]+;",
+        scope: Scope {
+            names: &[],
+            ..scope
+        },
+        pattern: r"listen\s+\d+;",
+        extended: Some("listen[[:space:]]+[0-9]+;"),
         ignore_case: false,
-        mode: GrepMode::Lines { context: 0 },
+        multiline: false,
+        mode: GrepMode::Lines {
+            before: 0,
+            after: 0,
+        },
     };
-    let found = remote_search::grep(&session, &query, 1 << 20)
+    let found = remote_search::grep(&session, &query, 1 << 20, limit)
         .await
         .unwrap();
+    let separator = if found.nul { '\0' } else { ':' };
     assert_eq!(
         String::from_utf8(found.stdout).unwrap(),
-        format!("{root}/./conf.d/it's $HOME.conf:1:listen 8080;\n")
+        format!("{root}/./conf.d/it's $HOME.conf{separator}1:listen 8080;\n")
     );
+    // Below a file, the file itself.
+    let in_file = GrepQuery {
+        scope: Scope {
+            path: &format!("{root}/nginx.conf"),
+            below: "conf.d",
+            ..query.scope
+        },
+        mode: GrepMode::Files,
+        pattern: "include",
+        extended: Some("include"),
+        ..query
+    };
+    let found = remote_search::grep(&session, &in_file, 1 << 20, limit)
+        .await
+        .unwrap();
+    assert_eq!(found.stdout, format!("{root}/nginx.conf\n").into_bytes());
     let bad = GrepQuery {
         pattern: "(",
+        extended: Some("("),
         ..query
     };
     assert!(matches!(
-        remote_search::grep(&session, &bad, 1 << 20).await,
-        Err(RemoteSearchError::BadPattern(_))
+        remote_search::grep(&session, &bad, 1 << 20, limit).await,
+        Err(RemoteSearchError::BadPattern { .. })
     ));
 }
 

@@ -2245,6 +2245,7 @@ dependencies = [
  "futures",
  "htmd",
  "process-wrap",
+ "regex-syntax",
  "reqwest",
  "rmcp",
  "rustls",
