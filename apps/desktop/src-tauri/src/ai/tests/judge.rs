@@ -642,6 +642,48 @@ async fn a_verdict_for_a_call_answered_meanwhile_is_not_kept_and_a_stop_ends_the
 }
 
 #[tokio::test]
+async fn a_verdict_of_a_judge_cleared_or_replaced_while_it_was_asked_asks() {
+    let f = Fixture::new(vec![calls(&[(
+        "c1",
+        "run_command",
+        json!({"command": "systemctl restart nginx"}),
+    )])])
+    .await;
+    let (started, sink) = f.send_with(None, "restart nginx", auto(&f)).await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    for replace in [false, true] {
+        let slow = system_one(&ASKED_FOR, Duration::from_millis(500)).await;
+        let asked = f.choose_judge(&slow);
+        let judging = {
+            let (manager, vault, conv) = (f.manager.clone(), f.vault.clone(), conv.clone());
+            tokio::spawn(async move { manager.judge(&vault, &conv, "c1", None).await })
+        };
+        while bodies(&slow).await.is_empty() {
+            assert!(Instant::now() < deadline, "the judge was not asked");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        // The user changed the judge while it was asked, so its "run" no longer counts.
+        if replace {
+            f.choose_judge(&system_one(&ASKED_FOR, Duration::ZERO).await);
+        } else {
+            let cleared = AiSettingsPatch {
+                judge_model: Clearable::Clear,
+                ..AiSettingsPatch::default()
+            };
+            assert!(save_ai_settings(&mut lock(&f.vault), &cleared).unwrap());
+        }
+        let verdict = judging.await.unwrap().unwrap();
+        assert_eq!(verdict.provider_id, asked);
+        assert_eq!(verdict.decision, AiJudgeDecision::Ask);
+        assert_eq!(verdict.failure.as_deref(), Some("unavailable"));
+        assert!(verdict.answers.is_empty());
+    }
+}
+
+#[tokio::test]
 async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
     let f = Fixture::new(vec![
         answer("One."),

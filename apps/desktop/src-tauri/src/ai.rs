@@ -1848,7 +1848,8 @@ impl AiManager {
     /// approval card, or ask. The judge reads what the user said and what the calls do
     /// ([`judge_state`]); `screen_tail` is the screen's last lines, which a `send_input` call
     /// shows it. Without a judge in `Settings.ai`, or with one whose provider or model is gone,
-    /// the verdict asks as `unavailable` and nothing is sent. The request is an op of the
+    /// the verdict asks as `unavailable` and nothing is sent; so does one cleared, replaced or
+    /// gone while it was asked, whose verdict no longer counts. The request is an op of the
     /// conversation, so a stop or the lock ends it, and the verdict asks as `cancelled`.
     ///
     /// The verdict is kept, in place of an earlier one, until the call's result is stored, which
@@ -1893,10 +1894,20 @@ impl AiManager {
                 (verdict, Some(op))
             }
         };
-        let auto = verdict.to_auto(&chosen.provider_id, &chosen.model_id);
-        {
+        let (verdict, auto) = {
             let v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
+            // The judge the user chose now, which may have changed while it was asked.
+            let current =
+                v.settings().ai.judge_model.filter(|m| {
+                    *m == chosen && resolve_model(&v, &m.provider_id, &m.model_id).is_ok()
+                });
+            let verdict = if current.is_some() {
+                verdict
+            } else {
+                Verdict::failed(JudgeFailure::Unavailable)
+            };
+            let auto = verdict.to_auto(&chosen.provider_id, &chosen.model_id);
             // Kept only while the call waits: not after its result, a stop or the lock.
             if open_call_at(&Entries::load(&v, conversation_id)?, tool_call_id).is_ok() {
                 guard(&self.0.pending_verdicts).insert(
@@ -1904,7 +1915,8 @@ impl AiManager {
                     auto.clone(),
                 );
             }
-        }
+            (verdict, auto)
+        };
         drop(op);
         tracing::info!(
             conversation_id,
