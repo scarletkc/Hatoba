@@ -1886,7 +1886,7 @@ async fn file_tools_need_a_live_session() {
         .unwrap()
         .to_owned();
     assert!(
-        system.contains("not with find, grep, cat, sed or heredocs"),
+        system.contains("over the same work with find, grep, cat, sed or heredocs in the shell"),
         "{system}"
     );
 
