@@ -11,6 +11,7 @@ import { hideSelection, noteSelection, removeDiagnostics, removeExtra } from "./
 import {
   attachmentTokens,
   chipShown,
+  folderName,
   makeAttachment,
   pathName,
   type Attachment,
@@ -370,7 +371,7 @@ export function shownAttachment(
     case "host_directory":
       return {
         icon: "folder-open",
-        title: t("ai.mention.folderChip", { name: pathName(a.path), n: a.entries }),
+        title: t("ai.mention.folderChip", { name: folderName(a.path), n: a.entries }),
         name: pathName(a.path),
         from: t("ai.mention.from", { host: a.host, path: a.path }),
         badge: a.truncated ? t("ai.selection.truncated") : undefined,

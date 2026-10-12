@@ -972,6 +972,7 @@ pub fn resource_text(result: &Value) -> Result<String, McpError> {
     let contents = result
         .get("contents")
         .and_then(Value::as_array)
+        .filter(|contents| !contents.is_empty())
         .ok_or_else(|| McpError::Protocol("the answer to resources/read has no contents".into()))?;
     let mut text = false;
     let parts: Vec<&str> = contents

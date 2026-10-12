@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { McpPromptView } from "@/ipc/types";
 import {
   commandItems,
+  commandNames,
   findBuiltin,
   leadingCommand,
   listingText,
@@ -19,10 +20,11 @@ import {
 } from "./commands";
 
 describe("triggers (AI-50, AI-51)", () => {
-  it("opens the / menu only for the first word of the text", () => {
+  it("opens the / menu only for the first word of the text, on the whole word", () => {
     expect(triggerAt("/", 1)).toEqual({ sign: "/", start: 0, end: 1, query: "", quoted: false });
     expect(triggerAt("/comp", 5)).toMatchObject({ sign: "/", query: "comp" });
-    expect(triggerAt("/comp", 3)).toMatchObject({ sign: "/", query: "co" });
+    // The caret inside the word: Enter must run what the word names, not what precedes the caret.
+    expect(triggerAt("/compact keep it", 2)).toEqual({ sign: "/", start: 0, end: 8, query: "compact", quoted: false });
     expect(triggerAt("/compact now", 12)).toBeNull();
     expect(triggerAt("see /etc", 8)).toBeNull();
     expect(triggerAt(" /x", 3)).toBeNull();
@@ -45,6 +47,9 @@ describe("triggers (AI-50, AI-51)", () => {
     expect(replaceTrigger("@etc/nginx.conf more", at, "")).toEqual({ text: " more", caret: 0 });
     const quoted = triggerAt('@"My D', 6)!;
     expect(replaceTrigger('@"My Docs" x', quoted, '@"My Docs/" ')).toEqual({ text: '@"My Docs/" x', caret: 12 });
+    // A later quote after a space closes some other text, not the mention.
+    const open = triggerAt('check @"my d and tell me "why"', 12)!;
+    expect(replaceTrigger('check @"my d and tell me "why"', open, '@"my dir/')).toEqual({ text: 'check @"my dir/ and tell me "why"', caret: 15 });
     const slash = triggerAt("/co", 3)!;
     expect(replaceTrigger("/co", slash, "/compact ").text).toBe("/compact ");
   });
@@ -92,7 +97,8 @@ describe("the / menu (AI-50)", () => {
   const prompt = (command: string, required = false): PromptCommand => ({
     serverId: "s1",
     server: "github",
-    prompt: { command, name: command.split("__").pop()!, title: null, description: "", arguments: [{ name: "pr", description: "", required }] } satisfies McpPromptView,
+    prompt: { name: command.split("__").pop()!, title: null, description: "", arguments: [{ name: "pr", description: "", required }] } satisfies McpPromptView,
+    command,
   });
   // Sorted by name, as Rust lists them.
   const skills = [
@@ -165,5 +171,23 @@ describe("the @ menu (AI-51)", () => {
     expect(resourceItems(list, "DOCS:mem").map((x) => x.resource.name)).toEqual(["logo"]);
     expect(resourceItems(list, "").length).toBe(2);
     expect(resourceTarget(list[1])).toBe("docs:mem://logo");
+  });
+});
+
+describe("prompt command names (AI-50)", () => {
+  it("names prompts as MCP tools are named, numbering collisions", () => {
+    expect(commandNames([["GitHub Server", ["review pr", "triage"]], ["files", ["read"]]])).toEqual([
+      ["mcp__GitHub_Server__review_pr", "mcp__GitHub_Server__triage"],
+      ["mcp__files__read"],
+    ]);
+    // Two servers of one name: the first keeps the name.
+    expect(commandNames([["docs", ["a"]], ["docs", ["a"]]])).toEqual([["mcp__docs__a"], ["mcp__docs__a_2"]]);
+    // A suffix never takes a name another prompt has without one, and long names keep 64 characters.
+    expect(commandNames([["s", ["x", "x", "x_2"]]])).toEqual([["mcp__s__x", "mcp__s__x_3", "mcp__s__x_2"]]);
+    const long = commandNames([["s", ["p".repeat(80), "p".repeat(80)]]])[0];
+    expect(long.map((n) => n.length)).toEqual([64, 64]);
+    expect(long[1].endsWith("_2")).toBe(true);
+    // One `_` for each character that is not ASCII, as Rust counts characters.
+    expect(commandNames([["é😀", ["p"]]])).toEqual([["mcp______p"]]);
   });
 });

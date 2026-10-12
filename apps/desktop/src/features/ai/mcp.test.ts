@@ -57,15 +57,22 @@ describe("/mcp (AI-30)", () => {
   });
 
   it("offers the prompts and resources of the running servers the conversation uses (AI-50, AI-51)", () => {
-    const prompt = { command: "mcp__github__review", name: "review", title: null, description: "", arguments: [] };
+    const prompt = { name: "review", title: null, description: "", arguments: [] };
     const resource = { uri: "repo://x/README.md", name: "README.md", title: null, description: "", mime_type: null };
     const running = { ...status("b", "running"), prompts: [prompt], resources: [resource] };
-    const failed = { ...status("a", "failed"), prompts: [{ ...prompt, command: "mcp__filesystem__x" }] };
+    const failed = { ...status("a", "failed"), prompts: [{ ...prompt, name: "x" }] };
     const st = { a: failed, b: running, c: { ...running, server_id: "c" } };
     expect(menuSources(servers, st, [])).toEqual({
-      prompts: [{ serverId: "b", server: "github", prompt }],
+      prompts: [{ serverId: "b", server: "github", prompt, command: "mcp__github__review" }],
       resources: [{ serverId: "b", server: "github", resource }],
     });
+    // Two running servers of one name offer two commands, numbered by id.
+    const twins = [server("y", "docs"), server("x", "docs")];
+    const both = { x: { ...running, server_id: "x" }, y: { ...running, server_id: "y" } };
+    expect(menuSources(twins, both, []).prompts.map((p) => [p.serverId, p.command])).toEqual([
+      ["x", "mcp__docs__review"],
+      ["y", "mcp__docs__review_2"],
+    ]);
     expect(menuSources(servers, st, ["b"])).toEqual({ prompts: [], resources: [] });
   });
 

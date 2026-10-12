@@ -4132,7 +4132,7 @@ pub fn skill_commands(v: &Vault) -> Vec<AiSkillCommand> {
 }
 
 /// AI-50: what a `/<skill>` command attaches in its `skill` block: the skill's `SKILL.md` as
-/// `read_skill` returns it, whole.
+/// `read_skill` reads it, but whole, where `read_skill` cuts a result past 30,000 characters.
 pub fn skill_text(v: &Vault, name: &str, version: &str) -> AppResult<String> {
     enabled_skill_files(v, name.trim(), version)
         .and_then(|files| files.into_iter().find(|(p, _)| p == SKILL_MD))

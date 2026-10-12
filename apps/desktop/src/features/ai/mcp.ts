@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { formatCommandLine } from "@/features/settings/mcpLogic";
 import { api } from "@/ipc/api";
 import type { McpServerState, McpServerStatus, McpServerView, McpTransportView } from "@/ipc/types";
-import type { PromptCommand, ResourceItem } from "./commands";
+import { commandNames, type PromptCommand, type ResourceItem } from "./commands";
 
 /** The MCP servers that `/mcp` shows (AI-30), with their live state (AI-32), prompts and resources (AI-50, AI-51). */
 interface McpState {
@@ -66,7 +66,7 @@ export interface ToolsMenuRow {
 export function toolsMenuRows(servers: McpServerView[], status: Record<string, McpServerStatus>, off: readonly string[]): ToolsMenuRow[] {
   return servers
     .filter((s) => s.enabled)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     .map((server) => {
       const st = status[server.id];
       return {
@@ -88,21 +88,23 @@ export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number;
 
 /**
  * AI-50, AI-51: the prompts the `/` menu and the resources the `@` menu offer, of the running servers enabled on this
- * device that the conversation has not switched off, servers by name.
+ * device that the conversation has not switched off, servers by name, then id. The prompts' commands are named across
+ * those servers at once, so two servers of one name never offer the same command.
  */
 export function menuSources(
   servers: readonly McpServerView[],
   status: Record<string, McpServerStatus>,
   off: readonly string[],
 ): { prompts: PromptCommand[]; resources: ResourceItem[] } {
+  const running = toolsMenuRows([...servers], status, off).filter((row) => row.on && row.state === "running" && status[row.server.id]);
+  const names = commandNames(running.map((row) => [row.server.name, status[row.server.id].prompts.map((p) => p.name)] as const));
   const prompts: PromptCommand[] = [];
   const resources: ResourceItem[] = [];
-  for (const row of toolsMenuRows([...servers], status, off)) {
+  running.forEach((row, i) => {
     const st = status[row.server.id];
-    if (!row.on || row.state !== "running" || !st) continue;
-    for (const prompt of st.prompts) prompts.push({ serverId: row.server.id, server: row.server.name, prompt });
+    st.prompts.forEach((prompt, j) => prompts.push({ serverId: row.server.id, server: row.server.name, prompt, command: names[i][j] }));
     for (const resource of st.resources) resources.push({ serverId: row.server.id, server: row.server.name, resource });
-  }
+  });
   return { prompts, resources };
 }
 

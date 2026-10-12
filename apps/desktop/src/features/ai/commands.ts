@@ -52,12 +52,16 @@ export interface Trigger {
 /**
  * The trigger at the caret, if any: `/` at the very start of the text followed by no space before the
  * caret, or `@` at the start of the text or after a space, followed by no space (or, after `@"`, no
- * quote) before the caret. A selection, as a caret that is not collapsed, opens nothing.
+ * quote) before the caret. A selection, as a caret that is not collapsed, opens nothing. A command's
+ * query is its whole word, wherever the caret is in it, so that Enter runs the command the word names.
  */
 export function triggerAt(text: string, caret: number, selectionEnd: number = caret): Trigger | null {
   if (caret !== selectionEnd) return null;
   const before = text.slice(0, caret);
-  if (before.startsWith("/") && !/\s/.test(before)) return { sign: "/", start: 0, end: caret, query: before.slice(1), quoted: false };
+  if (before.startsWith("/") && !/\s/.test(before)) {
+    const word = /^\/\S*/.exec(text)![0];
+    return { sign: "/", start: 0, end: word.length, query: word.slice(1), quoted: false };
+  }
   const quoted = /(?:^|\s)@"([^"]*)$/.exec(before);
   if (quoted) return { sign: "@", start: caret - quoted[1].length - 2, end: caret, query: quoted[1], quoted: true };
   const plain = /(?:^|\s)@([^\s"]*)$/.exec(before);
@@ -103,8 +107,8 @@ export function mentionText(target: string): string {
 /** `text` with the trigger's span (the sign up to the caret, and the rest of its word) replaced by `insert`, and the caret after it. */
 export function replaceTrigger(text: string, trigger: Trigger, insert: string): { text: string; caret: number } {
   const after = text.slice(trigger.end);
-  // A quoted mention runs to its closing quote on the same line, an unclosed one to the next space.
-  const closed = trigger.quoted ? /^[^"\n]*"/.exec(after) : null;
+  // A quoted mention runs to its closing quote when no space comes before it, an unclosed one to the next space.
+  const closed = trigger.quoted ? /^[^"\s]*"/.exec(after) : null;
   const word = closed ? closed[0] : /^\S*/.exec(after)![0];
   let rest = after.slice(word.length);
   if (insert.endsWith(" ") && rest.startsWith(" ")) rest = rest.slice(1);
@@ -118,6 +122,37 @@ export interface PromptCommand {
   serverId: string;
   server: string;
   prompt: McpPromptView;
+  /** Its name after `/`: `mcp__<server>__<prompt>`, named as `commandNames` names it. */
+  command: string;
+}
+
+/** The longest MCP tool name both protocols accept, which prompt commands keep to as well (AI-30). */
+const MAX_NAME = 64;
+
+/** A part of an MCP name with every character but ASCII letters, digits, `_` and `-` as `_`. */
+const cleanName = (part: string) => part.trim().replace(/[^A-Za-z0-9_-]/gu, "_");
+
+/**
+ * The `/` commands of the prompts of `servers`, `[server name, prompt names]` in order (AI-50), named as Rust's
+ * `tool_names` names MCP tools (AI-30): `mcp__<server>__<prompt>` cleaned, cut to 64 characters, and given a
+ * numeric suffix when two collide, the first holder of a name keeping it.
+ */
+export function commandNames(servers: readonly (readonly [string, readonly string[]])[]): string[][] {
+  const bases = servers.map(([server, names]) => names.map((name) => `mcp__${cleanName(server)}__${cleanName(name)}`.slice(0, MAX_NAME)));
+  const unsuffixed = new Set(bases.flat());
+  const taken = new Set<string>();
+  return bases.map((list) =>
+    list.map((base) => {
+      let name = base;
+      for (let n = 2; taken.has(name); n++) {
+        const suffix = `_${n}`;
+        const candidate = base.slice(0, MAX_NAME - suffix.length) + suffix;
+        if (!unsuffixed.has(candidate) && !taken.has(candidate)) name = candidate;
+      }
+      taken.add(name);
+      return name;
+    }),
+  );
 }
 
 export type CommandItem =
@@ -150,8 +185,8 @@ export function commandItems(query: string, skills: readonly AiSkillCommand[], p
     if (r !== null) items.push({ item: { kind: "skill", name: skill.name, skill }, rank: r, group: 1 });
   }
   for (const prompt of prompts) {
-    const r = Math.min(rank(prompt.prompt.command, q) ?? Infinity, rank(prompt.prompt.name, q) ?? Infinity);
-    if (r !== Infinity) items.push({ item: { kind: "prompt", name: prompt.prompt.command, prompt }, rank: r, group: 2 });
+    const r = Math.min(rank(prompt.command, q) ?? Infinity, rank(prompt.prompt.name, q) ?? Infinity);
+    if (r !== Infinity) items.push({ item: { kind: "prompt", name: prompt.command, prompt }, rank: r, group: 2 });
   }
   return items.sort((a, b) => a.rank - b.rank || a.group - b.group).map((x) => x.item);
 }

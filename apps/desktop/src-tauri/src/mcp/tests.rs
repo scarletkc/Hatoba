@@ -1055,9 +1055,14 @@ async fn the_menus_start_servers_and_fetch_their_prompts_and_resources() {
     );
     assert_eq!(mcp.status(&device(), &off).state, McpServerState::Stopped);
 
+    // The prompts and resources follow the tools.
+    eventually("the prompts to be listed", || {
+        !mcp.status(&device(), &files).prompts.is_empty()
+    })
+    .await;
     let status = mcp.status(&device(), &files);
-    let commands: Vec<&str> = status.prompts.iter().map(|p| p.command.as_str()).collect();
-    assert_eq!(commands, ["mcp__files__review"]);
+    let prompts: Vec<&str> = status.prompts.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(prompts, ["review"]);
     assert_eq!(status.prompts[0].arguments[0].name, "pr");
     assert!(status.prompts[0].arguments[0].required);
     assert_eq!(status.resources[0].uri, "mem://notes");

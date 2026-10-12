@@ -86,13 +86,15 @@ const DELETE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9;
 /// Lists the directory named on stdin, resolved as the read script resolves it: prints the
 /// marker, the path as resolved, then one line per entry but `.` and `..`, `d` and the name for a
 /// directory (a symbolic link to one too) and `f` and the name for anything else, at most `$1`
-/// bytes of them. Exit statuses: 2 missing, 4 not readable, 6 not a directory, 8 a symbolic link
-/// to nothing, 9 no path. A name with a line break shows as two lines.
+/// bytes of them. A name with a line break is left out, since it would read as two entries; `n`
+/// is a line break, made without a backslash. Exit statuses: 2 missing, 4 not readable, 6 not a
+/// directory, 8 a symbolic link to nothing, 9 no path.
 const LIST_SCRIPT: &str = "IFS= read -r f || exit 9; \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; [ -e \"$f\" ] || exit 2; \
      [ -d \"$f\" ] || exit 6; [ -r \"$f\" ] && [ -x \"$f\" ] || exit 4; cd \"$f\" || exit 4; \
-     echo hatoba-file; printf %s \"$f\"; echo; for e in * .*; do case $e in .|..) continue;; esac; \
+     n=$(echo; echo x); n=${n%x}; echo hatoba-file; printf %s \"$f\"; echo; \
+     for e in * .*; do case $e in .|..|*\"$n\"*) continue;; esac; \
      if [ -d \"$e\" ]; then printf d%s \"$e\"; echo; \
      elif [ -e \"$e\" ] || [ -L \"$e\" ]; then printf f%s \"$e\"; echo; fi; done | head -c $1";
 
@@ -514,7 +516,9 @@ fn parse_list(out: &ExecOutput, max: u64) -> Result<RemoteDir, RemoteFileError> 
                 .split(|&b| b == b'\n')
                 .filter_map(|line| {
                     let (&kind, name) = line.split_first()?;
-                    if name.is_empty() {
+                    // A name that is not UTF-8 could not be named again to read it.
+                    let name = std::str::from_utf8(name).ok()?;
+                    if name.is_empty() || name.contains('/') {
                         return None;
                     }
                     let dir = match kind {
@@ -523,7 +527,7 @@ fn parse_list(out: &ExecOutput, max: u64) -> Result<RemoteDir, RemoteFileError> 
                         _ => return None,
                     };
                     Some(RemoteEntry {
-                        name: String::from_utf8_lossy(name).into_owned(),
+                        name: name.to_owned(),
                         dir,
                     })
                 })
@@ -837,6 +841,14 @@ mod tests {
             std::fs::write(home.join("etc/-x $(id) 'q' *"), b"x").unwrap();
             std::os::unix::fs::symlink(home.join("etc/nginx"), home.join("etc/conf")).unwrap();
             std::os::unix::fs::symlink(home.join("gone"), home.join("etc/dangling")).unwrap();
+            // Left out: a name with a line break would read as two entries, and one that is
+            // not UTF-8 could not be named again.
+            std::fs::write(home.join("etc/two\nfake"), b"x").unwrap();
+            {
+                use std::os::unix::ffi::OsStrExt;
+                let latin1 = std::ffi::OsStr::from_bytes(b"caf\xe9");
+                std::fs::write(home.join("etc").join(latin1), b"x").unwrap();
+            }
 
             let listed = list(home, "etc", 4096).unwrap();
             assert_eq!(listed.path, home.join("etc").to_str().unwrap());

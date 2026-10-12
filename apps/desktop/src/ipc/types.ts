@@ -1337,10 +1337,8 @@ export interface McpServerStatus {
   resources: McpResourceView[];
 }
 
-/** A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`. */
+/** A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`, named across the conversation's servers (`commandNames`). */
 export interface McpPromptView {
-  /** The command's name after `/`, `mcp__<server>__<prompt>` cleaned as tool names are (AI-30). */
-  command: string;
   /** The prompt's name on its server. */
   name: string;
   title: string | null;

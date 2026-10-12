@@ -499,8 +499,7 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     },
     always_allow: e.view.always_allow || e.view.always_allow_tools.includes(def.tool),
   });
-  const promptView = (e: Entry, p: PromptDef): McpPromptView => ({
-    command: toolName(e.view.name, p.name),
+  const promptView = (p: PromptDef): McpPromptView => ({
     name: p.name,
     title: null,
     description: p.description,
@@ -512,7 +511,7 @@ export function createAiExtensionsMock(emit: Emit, deps: AiExtensionsDeps): AiEx
     error: e.error,
     stderr: [...e.stderr],
     tools: e.tools.map((d) => toolView(e, d)),
-    prompts: e.state === "running" ? promptsFor(e.view.name).map((p) => promptView(e, p)) : [],
+    prompts: e.state === "running" ? promptsFor(e.view.name).map(promptView) : [],
     resources: e.state === "running" ? structuredClone(resourcesFor(e.view.name)) : [],
   });
   const publish = (e: Entry) => emit("ai://mcp-status", statusOf(e));

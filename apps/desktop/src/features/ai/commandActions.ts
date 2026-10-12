@@ -16,7 +16,7 @@ import { getSlot } from "./store";
 /** The prompt a `/` command names among the running servers the slot's conversation uses, if any. */
 export function findPrompt(slotId: string, name: string): PromptCommand | undefined {
   const { servers, status } = useMcp.getState();
-  return menuSources(servers ?? [], status, getSlot(slotId).mcpOff).prompts.find((p) => p.prompt.command === name);
+  return menuSources(servers ?? [], status, getSlot(slotId).mcpOff).prompts.find((p) => p.command === name);
 }
 
 /**

@@ -293,6 +293,10 @@ fn prompt_and_resource_text() {
         Some("a\n\nb")
     );
     assert!(resource_text(&json!({})).is_err());
+    assert!(matches!(
+        resource_text(&json!({"contents": []})),
+        Err(McpError::Protocol(message)) if message.contains("no contents")
+    ));
     assert_eq!(
         resource_text(&json!({"contents": [{"uri": "x", "text": ""}]})).unwrap(),
         ""

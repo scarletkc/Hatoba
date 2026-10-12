@@ -11,6 +11,7 @@ import {
   fileRevertNote,
   FILE_MAX_BYTES,
   fitsMessage,
+  folderName,
   isLongPaste,
   lineCount,
   makeAttachment,
@@ -501,5 +502,7 @@ describe("what the / and @ menus attach (AI-50, AI-51)", () => {
     expect([hostFile, folder, resource, skill, prompt].map(blockTitle)).toEqual(["nginx.conf", "/etc/nginx", 'repo://x/"a".md', "/nginx-ops", "review_pr"]);
     expect(pathName("/etc/nginx/")).toBe("nginx");
     expect(pathName("/")).toBe("/");
+    expect(folderName("/etc/nginx")).toBe("nginx/");
+    expect(folderName("/")).toBe("/");
   });
 });

@@ -1494,13 +1494,11 @@ export type McpPromptArgumentView = {
 	required: boolean,
 };
 
-/**  A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`. */
+/**
+ *  A server's prompt (AI-50): the `/` menu offers it as `/mcp__<server>__<prompt>`, which the
+ *  panel names across the servers a conversation uses, as tool names are (AI-30).
+ */
 export type McpPromptView = {
-	/**
-	 *  The command's name after `/`, `mcp__<server>__<prompt>` cleaned as tool names are
-	 *  (AI-30).
-	 */
-	command: string,
 	/**  The prompt's name on its server. */
 	name: string,
 	title: string | null,

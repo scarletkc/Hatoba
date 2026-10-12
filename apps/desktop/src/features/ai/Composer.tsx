@@ -17,6 +17,7 @@ import {
   discardQueued,
   editQueued,
   newConversation,
+  pendingAttachments,
   queueMessage,
   removeExtra,
   removeQueuedAttachment,
@@ -142,19 +143,23 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   useEffect(() => {
     if (useMcp.getState().servers === null) void loadMcp();
   }, []);
-  useEffect(() => setMcpAnchor(null), [slotId]);
+  useEffect(() => {
+    setMcpAnchor(null);
+    setResolving(false);
+  }, [slotId]);
 
   /** Puts text into the box at the caret, as typing would. */
   const insertText = (text: string) => {
     const el = ref.current;
     const next = insertAtCaret(el, getSlot(slotId).draft, text);
-    setDraft(next.value, next.caret);
+    setDraft(next.value, next.caret, true);
   };
 
-  /** Replaces the box's text and puts the caret at `caret`. */
-  const setDraft = (text: string, caret: number) => {
+  /** Replaces the box's text and, when `focus`, focuses the box with the caret at `caret`. */
+  const setDraft = (text: string, caret: number, focus: boolean) => {
     const el = ref.current;
     patchSlot(slotId, { draft: text });
+    if (!focus) return;
     requestAnimationFrame(() => {
       el?.focus();
       el?.setSelectionRange(caret, caret);
@@ -168,9 +173,13 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     if (r) setMcpAnchor(r);
   };
 
-  /** AI-50: runs a built-in command, which takes the box's text. */
+  /**
+   * AI-50: runs a built-in command, which takes the box's text. One that takes nothing after its name leaves what
+   * follows it in the box.
+   */
   const runBuiltin = (command: BuiltinCommand, args: string, raw: string) => {
     const s = getSlot(slotId);
+    const rest = command.args ? "" : args;
     switch (command.name) {
       case "btw":
         if (!args) return;
@@ -181,7 +190,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         askSideQuestion(slotId, args, true, raw);
         return;
       case "clear":
-        patchSlot(slotId, { draft: "" });
+        patchSlot(slotId, { draft: rest });
         newConversation(slotId);
         return;
       case "compact":
@@ -197,11 +206,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         void compactConversation(slotId, args || null);
         return;
       case "mcp":
-        patchSlot(slotId, { draft: "" });
+        patchSlot(slotId, { draft: rest });
         showMcp();
         return;
       case "model":
-        patchSlot(slotId, { draft: "" });
+        patchSlot(slotId, { draft: rest });
         openModels.current?.();
         return;
     }
@@ -225,6 +234,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         const outcome = await attachCommand(slotId, command.name, command.args).finally(() => setResolving(false));
         // Not when it failed, or when the box changed meanwhile.
         if (outcome === "failed" || getSlot(slotId).draft !== raw) return;
+        // AI-35: what the command attached counts toward whether the message fits.
+        if (outcome === "attached" && messageFit(meter, estimateTokens(composeMessage(raw.trim(), pendingAttachments(slotId)))).level === "over") {
+          toast(t("ai.fit.blocked"), "error");
+          return;
+        }
       }
     }
     const now = getSlot(slotId);

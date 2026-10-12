@@ -165,16 +165,24 @@ function Popover({
     if (locked) onClose(false);
   }, [locked, onClose]);
 
-  // Above the anchor (the input area is at the bottom of the panel), kept inside the window.
+  // Above the anchor (the input area is at the bottom of the panel), kept inside the window, and placed again
+  // whenever its height changes, as when a server's state or stderr arrives.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
-    const b = windowSurface();
-    const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
-    let top = anchor.top - r.height - 6;
-    if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
-    setPos({ left, top: Math.max(b.top + 8, top) });
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      const b = windowSurface();
+      const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
+      let top = anchor.top - r.height - 6;
+      if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
+      setPos({ left, top: Math.max(b.top + 8, top) });
+    };
+    place();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [anchor, layoutKey]);
 
   useEffect(() => {

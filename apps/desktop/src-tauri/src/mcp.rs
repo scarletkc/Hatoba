@@ -417,10 +417,9 @@ pub fn tool_view(device: &DeviceState, tool: &OfferedTool) -> McpToolView {
     }
 }
 
-/// The view of a prompt, offered as the `/` command `command` (AI-50).
-fn prompt_view(prompt: &McpPrompt, command: String) -> McpPromptView {
+/// The view of a prompt (AI-50).
+fn prompt_view(prompt: &McpPrompt) -> McpPromptView {
     McpPromptView {
-        command,
         name: prompt.name.clone(),
         title: prompt.title.clone(),
         description: prompt.description.clone(),
@@ -552,6 +551,8 @@ struct ServerState {
     /// The prompts and resources from the last successful listing (AI-50, AI-51).
     prompts: Vec<McpPrompt>,
     resources: Vec<McpResource>,
+    /// A listing of the prompts or resources runs ([`McpManager::list_menus`]); one at a time.
+    listing: bool,
 }
 
 impl Default for ServerState {
@@ -568,6 +569,7 @@ impl Default for ServerState {
             tools: Vec::new(),
             prompts: Vec::new(),
             resources: Vec::new(),
+            listing: false,
         }
     }
 }
@@ -631,6 +633,7 @@ impl ServerState {
         self.tools.clear();
         self.prompts.clear();
         self.resources.clear();
+        self.listing = false;
     }
 }
 
@@ -711,41 +714,9 @@ impl McpManager {
         Offer::new(&running)
     }
 
-    /// The `/` commands of the prompts of the server `server_id` (AI-50), named across every
-    /// running server as [`Self::current_tools`] names tools: `mcp__<server>__<prompt>`, cleaned
-    /// and given a numeric suffix when two collide.
-    fn prompt_commands(&self, server_id: &str) -> Vec<String> {
-        let servers: Vec<(String, Arc<Server>)> = guard(&self.0.servers)
-            .iter()
-            .map(|(id, s)| (id.clone(), Arc::clone(s)))
-            .collect();
-        let mut running: Vec<(String, String, Vec<String>)> = servers
-            .into_iter()
-            .filter_map(|(id, server)| {
-                let s = guard(&server.state);
-                (s.phase == McpServerState::Running).then(|| {
-                    let names = s.prompts.iter().map(|p| p.name.clone()).collect();
-                    (id, s.name.clone(), names)
-                })
-            })
-            .collect();
-        running.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-        let input: Vec<(&str, Vec<&str>)> = running
-            .iter()
-            .map(|(_, name, prompts)| (name.as_str(), prompts.iter().map(String::as_str).collect()))
-            .collect();
-        running
-            .iter()
-            .zip(mcp::tool_names(&input))
-            .find(|((id, _, _), _)| id == server_id)
-            .map(|(_, names)| names)
-            .unwrap_or_default()
-    }
-
     /// A server's state for the WebView. Never logged: `error` and `stderr` may quote it.
     pub fn status(&self, device: &DeviceState, server_id: &str) -> McpServerStatus {
         let current = self.current_tools();
-        let commands = self.prompt_commands(server_id);
         let Some(server) = self.existing(server_id) else {
             return McpServerStatus {
                 server_id: server_id.to_owned(),
@@ -766,11 +737,7 @@ impl McpManager {
             .collect();
         let running = s.phase == McpServerState::Running;
         let prompts = if running {
-            s.prompts
-                .iter()
-                .zip(commands)
-                .map(|(p, command)| prompt_view(p, command))
-                .collect()
+            s.prompts.iter().map(prompt_view).collect()
         } else {
             Vec::new()
         };
@@ -1020,7 +987,7 @@ impl McpManager {
             ended,
         } = begun;
         spawn(async move {
-            let _ended = ended.drop_guard();
+            let ended = ended.drop_guard();
             let start = async {
                 if let Some(old) = old {
                     old.shutdown().await;
@@ -1041,10 +1008,7 @@ impl McpManager {
                     .await
                 {
                     Ok(conn) => match conn.list_tools().await {
-                        Ok(tools) => {
-                            let lists = list_extras(&id, &conn, true, true).await;
-                            Ok((conn, tools, lists))
-                        }
+                        Ok(tools) => Ok((conn, tools)),
                         Err(e) => {
                             conn.shutdown().await;
                             Err(e)
@@ -1067,25 +1031,17 @@ impl McpManager {
                     s.start = None;
                 }
                 if !current {
-                    (false, started.ok().map(|(conn, _, _)| conn))
+                    (false, started.ok().map(|(conn, _)| conn))
                 } else if !unlocked {
                     s.halt();
-                    (true, started.ok().map(|(conn, _, _)| conn))
+                    (true, started.ok().map(|(conn, _)| conn))
                 } else {
                     match started {
-                        Ok((conn, tools, (prompts, resources))) => {
-                            tracing::info!(
-                                server_id = %id,
-                                tools = tools.len(),
-                                prompts = prompts.as_ref().map_or(0, Vec::len),
-                                resources = resources.as_ref().map_or(0, Vec::len),
-                                "MCP server running"
-                            );
+                        Ok((conn, tools)) => {
+                            tracing::info!(server_id = %id, tools = tools.len(), "MCP server running");
                             s.phase = McpServerState::Running;
                             s.conn = Some(conn);
                             s.tools = tools;
-                            s.prompts = prompts.unwrap_or_default();
-                            s.resources = resources.unwrap_or_default();
                         }
                         Err(e) => {
                             tracing::warn!(server_id = %id, kind = error_kind(&e), "MCP server failed to start");
@@ -1104,6 +1060,12 @@ impl McpManager {
                 manager.emit(&vault, &id);
             }
             server.settled.notify_waiters();
+            drop(ended);
+            // The prompts and resources follow (AI-50, AI-51): the tools, which requests wait
+            // for, do not wait for them.
+            if current {
+                manager.list_menus(&vault, &id, true).await;
+            }
         });
     }
 
@@ -1171,45 +1133,64 @@ impl McpManager {
                     .await
                     .is_some()
                 {
-                    manager.relist_extras(&vault, id).await;
+                    manager.list_menus(&vault, id, false).await;
                 }
             }))
             .await;
         });
     }
 
-    /// Lists a running server's prompts or resources again after their `list_changed`, and sends
-    /// its status when either changed.
-    async fn relist_extras(&self, vault: &SharedVault, id: &str) {
+    /// Lists a running server's prompts and resources (AI-50, AI-51): those it offers, at its
+    /// start (`all`), or those whose `list_changed` arrived. One listing runs at a time per
+    /// server, so an older list never replaces a newer one; a `list_changed` that arrives during
+    /// a listing leaves its flag set for the next. A start or stop meanwhile drops what it
+    /// listed. Sends the status when it stored a list.
+    async fn list_menus(&self, vault: &SharedVault, id: &str, all: bool) {
         let Some(server) = self.existing(id) else {
             return;
         };
         let (conn, generation) = {
-            let s = guard(&server.state);
-            match &s.conn {
-                Some(conn) if s.phase == McpServerState::Running => (conn.clone(), s.generation),
-                _ => return,
-            }
-        };
-        let (prompts, resources) = (conn.prompts_changed(), conn.resources_changed());
-        if !prompts && !resources {
-            return;
-        }
-        let (prompts, resources) = list_extras(id, &conn, prompts, resources).await;
-        {
             let mut s = guard(&server.state);
-            if s.generation != generation || s.phase != McpServerState::Running {
+            let conn = match &s.conn {
+                Some(conn) if s.phase == McpServerState::Running && !s.listing => conn.clone(),
+                _ => return,
+            };
+            s.listing = true;
+            (conn, s.generation)
+        };
+        let (prompts, resources) = if all {
+            (conn.offers_prompts(), conn.offers_resources())
+        } else {
+            (conn.prompts_changed(), conn.resources_changed())
+        };
+        let (prompts, resources) = if prompts || resources {
+            list_extras(id, &conn, prompts, resources).await
+        } else {
+            (None, None)
+        };
+        let stored = {
+            let mut s = guard(&server.state);
+            // A start or stop since has cleared the flag and the lists.
+            if s.generation != generation {
                 return;
             }
+            s.listing = false;
+            if s.phase != McpServerState::Running {
+                return;
+            }
+            let stored = prompts.is_some() || resources.is_some();
             if let Some(prompts) = prompts {
                 s.prompts = prompts;
             }
             if let Some(resources) = resources {
                 s.resources = resources;
             }
+            stored
+        };
+        if stored {
+            tracing::info!(server_id = id, "MCP prompts and resources listed");
+            self.emit(vault, id);
         }
-        tracing::info!(server_id = id, "MCP prompts and resources relisted");
-        self.emit(vault, id);
     }
 
     /// The server a prompt or resource is fetched from for the panel: it exists, is enabled on
@@ -1235,10 +1216,26 @@ impl McpManager {
             }
             server.name.clone()
         };
-        match self
+        let found = self
             .connection(vault, server_id, &CancellationToken::new())
-            .await
+            .await;
+        // Deleted, turned off or locked while it started, as `call` checks right before a call.
         {
+            let v = guard(vault);
+            if !v.is_unlocked() {
+                return Err("the vault is locked".into());
+            }
+            let enabled = v
+                .get(server_id)
+                .and_then(Item::as_mcp_server)
+                .is_some_and(|server| DeviceState::load(&v).enabled(server_id, &server.transport));
+            if !enabled {
+                return Err(format!(
+                    "the MCP server \"{name}\" was deleted or turned off"
+                ));
+            }
+        }
+        match found {
             Ok((conn, generation)) => Ok((conn, generation, name)),
             Err(Unavailable::Failed(error)) => Err(format!(
                 "the MCP server \"{name}\" is not available: {error}"

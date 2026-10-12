@@ -263,6 +263,12 @@ export function pathName(path: string): string {
   return path.replace(/\/+$/, "").split("/").pop() || path;
 }
 
+/** How a chip names a folder: its last part and a `/`, or `/` for the root. */
+export function folderName(path: string): string {
+  const name = pathName(path);
+  return name.endsWith("/") ? name : `${name}/`;
+}
+
 /** A conversation's title when its first message has nothing typed and starts with `a`, as Rust's `title_of` makes it (AI-23). */
 export function blockTitle(a: Attachment): string {
   switch (a.kind) {

@@ -99,8 +99,8 @@ export function useCommandMenu({
   slot: Slot;
   input: RefObject<HTMLTextAreaElement | null>;
   box: RefObject<HTMLDivElement | null>;
-  /** Puts `text` into the box with the caret at `caret`. */
-  setDraft: (text: string, caret: number) => void;
+  /** Puts `text` into the box with the caret at `caret`, giving the box the focus when `focus`. */
+  setDraft: (text: string, caret: number, focus: boolean) => void;
   /** Runs the command the box holds, as Enter in the box would. */
   run: (text: string) => void;
   /** Opens the file picker for text files from this computer (AI-35). */
@@ -111,6 +111,8 @@ export function useCommandMenu({
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const [attaching, setAttaching] = useState(false);
+  // Read by picks whose closures a memo keeps, so a second pick while one attaches does nothing.
+  const attachingRef = useRef(false);
   const draft = slot.draft;
   const trigger = caret ? triggerAt(draft, caret.start, caret.end) : null;
   const triggerKey = trigger ? `${trigger.sign}${trigger.start}` : null;
@@ -141,38 +143,58 @@ export function useCommandMenu({
     if (dismissed && dismissed !== triggerKey) setDismissed(null);
   }, [dismissed, triggerKey]);
 
-  // The host's directory listings, by session and path, while the menu is open.
+  // The host's directory listings, by session and path, while the menu is open. A listing that answers after the
+  // menu closed, or after the tab changed, is dropped.
   const [listings, setListings] = useState<Record<string, AiHostListing | "loading">>({});
+  const listingGen = useRef(0);
+
+  // Another tab's conversation starts with a closed menu, and nothing of this one's.
+  useEffect(() => {
+    setCaret(null);
+    setDismissed(null);
+    setListings({});
+    listingGen.current++;
+  }, [slotId]);
   const pathQuery = open && trigger.sign === "@" && session ? splitPath(trigger.query) : null;
   const dirKey = pathQuery && session ? `${session}\n${listPath(pathQuery.dir)}` : null;
   useEffect(() => {
     if (!dirKey || listings[dirKey] || !session || !pathQuery) return;
     setListings((l) => ({ ...l, [dirKey]: "loading" }));
-    api.ai_host_list(session, listPath(pathQuery.dir)).then(
-      (listing) => setListings((l) => ({ ...l, [dirKey]: listing })),
-      () => setListings((l) => ({ ...l, [dirKey]: { status: "refused", reason: "failed" } })),
-    );
+    const gen = listingGen.current;
+    const store = (listing: AiHostListing) => {
+      if (listingGen.current === gen) setListings((l) => ({ ...l, [dirKey]: listing }));
+    };
+    api.ai_host_list(session, listPath(pathQuery.dir)).then(store, () => store({ status: "refused", reason: "failed" }));
   }, [dirKey, listings, session, pathQuery]);
   // A new opening lists again, so a file created since shows.
   useEffect(() => {
-    if (!open) setListings({});
+    if (open) return;
+    setListings({});
+    listingGen.current++;
   }, [open]);
 
-  const replace = (tr: Trigger, insert: string) => {
+  const replace = (tr: Trigger, insert: string, focus = true) => {
     const next = replaceTrigger(draft, tr, insert);
-    setDraft(next.text, next.caret);
+    setDraft(next.text, next.caret, focus);
   };
 
-  /** Attaches what an `@` row names, then leaves `@` and its name in the text, unless the text changed meanwhile. */
+  /**
+   * Attaches what an `@` row names, then leaves `@` and its name in the text, unless the text changed meanwhile. The box
+   * takes the focus back only when it still has it: a slow read may end after the user moved on.
+   */
   const attach = (tr: Trigger, target: string, work: () => Promise<boolean>) => {
-    if (attaching) return;
+    if (attachingRef.current) return;
+    attachingRef.current = true;
     setAttaching(true);
     const before = draft;
     void work()
       .then((ok) => {
-        if (ok && getSlot(slotId).draft === before) replace(tr, mentionText(target));
+        if (ok && getSlot(slotId).draft === before) replace(tr, mentionText(target), document.activeElement === input.current);
       })
-      .finally(() => setAttaching(false));
+      .finally(() => {
+        attachingRef.current = false;
+        setAttaching(false);
+      });
   };
 
   const rows: Row[] = useMemo(() => {
@@ -280,6 +302,11 @@ export function useCommandMenu({
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (!open) return false;
+    // While a pick attaches, the menu keeps its keys, so Enter does not send meanwhile.
+    if (attachingRef.current && (e.key === "Enter" || e.key === "Tab")) {
+      e.preventDefault();
+      return true;
+    }
     // The Enter that commits an input method's candidate never picks or sends.
     if (isImeEvent(e)) return false;
     const plain = !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
@@ -387,7 +414,8 @@ function MenuPopover({
 
   if (locked || !pos) return null;
   return createPortal(
-    <div ref={ref} id={id} role="listbox" aria-label={label} aria-busy={busy} className={s.menu} style={pos}>
+    // The box keeps the focus when the list's padding or scroll bar is clicked too.
+    <div ref={ref} id={id} role="listbox" aria-label={label} aria-busy={busy} className={s.menu} style={pos} onMouseDown={(e) => e.preventDefault()}>
       {rows.map((row) => {
         const selected = row.key === activeKey;
         return (
@@ -398,8 +426,6 @@ function MenuPopover({
             role={row.pick ? "option" : "presentation"}
             aria-selected={row.pick ? selected : undefined}
             className={cx(s.row, selected && s.active, !row.pick && s.info, row.plain && s.plain)}
-            // The box keeps the focus, and the caret where it was.
-            onMouseDown={(e) => e.preventDefault()}
             onMouseMove={() => row.pick && onHover(row.key)}
             onClick={() => row.pick && onPick(row)}
           >

@@ -58,6 +58,7 @@ import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
 import { conversationModel, judgeChosen, sameModel } from "./models";
 import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
+import { leadingCommand } from "./commands";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
   blankSlot,
@@ -1061,9 +1062,13 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
  */
 function restoreDraft(slotId: string, text: string) {
   const { attachments, typed } = parseMessage(text);
-  const extras: PendingAttachment[] = attachments.flatMap((a) =>
-    a.kind !== "selection" && a.kind !== "diagnostics" ? [{ id: `x${++extraSeq}`, attachment: a }] : [],
-  );
+  // A skill or prompt keeps the command that attached it, so that running the command again replaces it (AI-50).
+  const command = leadingCommand(typed)?.name;
+  const extras: PendingAttachment[] = attachments.flatMap((a): PendingAttachment[] => {
+    if (a.kind === "selection" || a.kind === "diagnostics") return [];
+    const by = a.kind === "skill" ? a.name : a.kind === "mcp_prompt" ? command : undefined;
+    return [{ id: `x${++extraSeq}`, attachment: a, ...(by ? { command: by } : {}) }];
+  });
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
 }
 

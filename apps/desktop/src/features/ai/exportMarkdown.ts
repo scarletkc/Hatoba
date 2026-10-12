@@ -1,7 +1,7 @@
 import { formatTarget } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
-import { parseMessage, pathName, splitPermissionNote, type Attachment } from "./attachments";
+import { folderName, parseMessage, pathName, splitPermissionNote, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "./notes";
 import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "./tools";
@@ -52,7 +52,7 @@ function attachmentLabel(t: Tr, a: Attachment): string {
     case "host_file":
       return `**${t("ai.file", { name: pathName(a.path), n: a.lines })}** · \`${a.host}\` · \`${a.path}\``;
     case "host_directory":
-      return [`**${t("ai.mention.folderChip", { name: pathName(a.path), n: a.entries })}**`, `\`${a.host}\``, `\`${a.path}\``, a.truncated && t("ai.selection.truncated")]
+      return [`**${t("ai.mention.folderChip", { name: folderName(a.path), n: a.entries })}**`, `\`${a.host}\``, `\`${a.path}\``, a.truncated && t("ai.selection.truncated")]
         .filter(Boolean)
         .join(" · ");
     case "mcp_resource":

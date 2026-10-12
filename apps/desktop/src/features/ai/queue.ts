@@ -20,13 +20,16 @@ export function withinCap(m: QueuedMessage): boolean {
 /**
  * §13.1: a second message queued, or the input area sent with the queued message, makes one message
  * in the order it was written: the texts a blank line apart, and the pastes and files in turn. The
- * diagnostics and the selection go before them, as in any message (`orderAttachments`).
+ * diagnostics and the selection go before them, as in any message (`orderAttachments`), and the skill or
+ * prompt of a `/` command that both ran goes once (AI-50).
  */
 export function joinMessages(first: QueuedMessage, then: QueuedMessage): QueuedMessage {
+  // A `/` command run in both keeps the later run's skill or prompt (AI-50).
+  const rerun = new Set(then.extras.flatMap((x) => (x.command ? [x.command] : [])));
   return {
     typed: [first.typed, then.typed].filter(Boolean).join("\n\n"),
     chips: [...first.chips, ...then.chips],
-    extras: [...first.extras, ...then.extras],
+    extras: [...first.extras.filter((x) => !x.command || !rerun.has(x.command)), ...then.extras],
     restore: (kept) => [...first.restore(kept), ...then.restore(kept)],
   };
 }
