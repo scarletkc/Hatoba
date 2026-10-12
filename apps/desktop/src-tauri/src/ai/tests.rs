@@ -1060,7 +1060,8 @@ async fn a_stop_noted_on_a_message_without_a_reply_is_not_noted_again() {
     );
     f.idle(&conv).await;
     f.exchange(Some(&conv), "three", f.context()).await;
-    // "one" named no mode, as in a conversation from before every first message did, so "two" names it.
+    // "one" named no mode, as in a conversation from before every first message did, so "two"
+    // names it.
     assert_eq!(
         f.user_texts(&conv),
         [
