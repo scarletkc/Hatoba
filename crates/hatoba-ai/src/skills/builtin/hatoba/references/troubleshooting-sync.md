@@ -42,16 +42,20 @@ The sidebar's sync button and the Cloud Sync page show one of these. Changes mad
 | Sync failed. | 同步失败。 | 同期に失敗しました。 |
 | Can’t reach the sync service. Check your network. | 无法连接到同步服务，请检查网络。 | 同期サービスに接続できません。ネットワークを確認してください。 |
 | Cloud Sync signed out. Enter your master password again. | 云同步认证失效，请重新输入主密码。 | クラウド同期の認証が切れました。マスターパスワードを再入力してください。 |
-| The cloud already has a vault. On a new device, choose “Restore from Cloud”. | 云端已有保险库，请在新设备上选择“从云端恢复”。 | クラウドにはすでに保管庫があります。新しいデバイスでは「クラウドから復元」を選んでください。 |
+| The cloud already holds a vault. Go back and connect again to join it. | 云端已经有一个保险库。返回上一步重新连接，即可加入它。 | クラウドにはすでに保管庫があります。前の手順に戻ってもう一度接続すると、その保管庫に参加できます。 |
 | The cloud has no vault yet. Turn on Cloud Sync on a device that has your data first. | 云端还没有保险库。请先在已有数据的设备上开启云同步。 | クラウドにまだ保管庫がありません。先にデータのあるデバイスでクラウド同期をオンにしてください。 |
+| Another Cloud Sync setup is still running. Try again when it finishes. | 另一项云同步设置还在进行，请等它完成后再试。 | 別のクラウド同期の設定がまだ進行中です。完了してからもう一度お試しください。 |
+| Cloud Sync is already on for this device. Disconnect it before joining another cloud vault. | 这台设备已经开启了云同步。要加入其他云端保险库，请先断开云同步。 | このデバイスではすでにクラウド同期がオンになっています。別のクラウドの保管庫に参加するには、先にクラウド同期を解除してください。 |
 | Connection failed. Check the URL and your network. | 连接失败，请检查地址和网络。 | 接続に失敗しました。URL とネットワークを確認してください。 |
 | Enter the full Worker address, e.g. https://hatoba-sync.example.workers.dev. | 请输入完整的 Worker 地址，例如 https://hatoba-sync.example.workers.dev。 | Worker の完全なアドレスを入力してください（例: https://hatoba-sync.example.workers.dev）。 |
 | Incorrect master password. | 主密码不正确。 | マスターパスワードが正しくありません。 |
 | Cancelled. | 已取消。 | キャンセルしました。 |
 
-- "The cloud already has a vault…" appears when setting up a device whose local vault would have to merge with a cloud vault that already has data. This version cannot merge. Either restore on a fresh install with **Restore from Cloud**, or deploy under a different Worker name.
+- "The cloud already holds a vault…" appears when the Worker or database got a vault after step 2 checked it (for example another device set it up at the same moment). Go back to step 2 and connect again: it then offers to join that vault (`references/sync.md`, "Join a cloud vault").
 - "The cloud has no vault yet…" appears when restoring from a Worker or database that was never set up. Set sync up first on the device that has the data.
-- "Incorrect master password." during setup or restore: enter the master password of the vault that was uploaded, not a new one. If it changed on another device, use the new one.
+- "Another Cloud Sync setup is still running…" appears when a setup or join started earlier has not finished, for example one left running in the background by closing the wizard. Only one runs at a time. Wait for it; the status page then shows the result.
+- "Cloud Sync is already on for this device…" appears when joining a cloud vault while this device already syncs, for example because an earlier setup finished in the meantime. To move the device to another cloud vault, use **Disconnect…** on the status page first, then join.
+- "Incorrect master password." during setup or restore: enter the master password of the vault that was uploaded, not a new one. If it changed on another device, use the new one. When joining a cloud vault, it is the cloud vault's master password, not this device's.
 - For a Worker URL, use the full address including `https://`. A quick check is opening `<Worker URL>/v1/health` in a browser: it should return JSON with `"service": "hatoba-sync"`, a `version`, and `initialized`.
 
 ## An item too large to sync

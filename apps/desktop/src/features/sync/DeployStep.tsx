@@ -51,12 +51,25 @@ const target = (f: DeployForm): DeployTarget => ({
 
 /**
  * Step 2, in-app deployment (spec §6.7): the API token, a review of what step 2 found, then the
- * deployment steps with their progress. The wizard keeps `form`, so leaving for the password step
- * and coming back keeps the deployment.
+ * deployment steps with their progress. A Worker that already holds a vault is joined instead
+ * (`onJoin`, flow C). The wizard keeps `form`, so leaving for the password step and coming back
+ * keeps the deployment.
  */
-export function DeployStep({ form, set, onBack, onReady }: { form: DeployForm; set: Set; onBack: () => void; onReady: (handle: string) => void }) {
+export function DeployStep({
+  form,
+  set,
+  onBack,
+  onReady,
+  onJoin,
+}: {
+  form: DeployForm;
+  set: Set;
+  onBack: () => void;
+  onReady: (handle: string) => void;
+  onJoin: (handle: string, target: DeployTarget) => void;
+}) {
   if (form.phase === "run" && form.start) return <RunPhase form={form} set={set} handle={form.start.handle} onReady={onReady} />;
-  if (form.phase === "review" && form.start) return <ReviewPhase form={form} set={set} />;
+  if (form.phase === "review" && form.start) return <ReviewPhase form={form} set={set} onJoin={onJoin} />;
   return <TokenPhase form={form} set={set} onBack={onBack} />;
 }
 
@@ -157,7 +170,7 @@ function TokenPhase({ form, set, onBack }: { form: DeployForm; set: Set; onBack:
   );
 }
 
-function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
+function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin: (handle: string, target: DeployTarget) => void }) {
   const t = useT();
   const workerId = useId();
   const databaseId = useId();
@@ -173,10 +186,11 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
     if (form.databaseName && !DATABASE.test(form.databaseName.trim())) return { field: "database", text: t("sync.dep.invalid.database_name") };
     return null;
   })();
-  const subdomainNeeded = !!plan && !plan.subdomain;
+  const subdomainNeeded = !!plan && !plan.subdomain && plan.worker !== "has_vault";
   const subdomainOk = LABEL.test(form.subdomain.trim());
-  const blocked = plan?.worker === "has_vault" || plan?.worker === "foreign";
-  const canDeploy = !!plan && !blocked && !form.inspecting && !nameError && (!subdomainNeeded || subdomainOk);
+  const existing = plan?.worker === "has_vault";
+  const canJoin = existing && !!plan?.vault_url && !form.inspecting && !nameError;
+  const canDeploy = !!plan && !existing && plan.worker !== "foreign" && !form.inspecting && !nameError && (!subdomainNeeded || subdomainOk);
 
   const inspect = async (f: DeployForm) => {
     const t2 = target(f);
@@ -229,9 +243,15 @@ function ReviewPhase({ form, set }: { form: DeployForm; set: Set }) {
       footer={
         <>
           <Button onClick={back}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canDeploy} onClick={deploy}>
-            {t("sync.dep.deploy")}
-          </Button>
+          {existing ? (
+            <Button variant="primary" disabled={!canJoin} onClick={() => canJoin && onJoin(start.handle, target(form))}>
+              {t("sync.dep.connect")}
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={!canDeploy} onClick={deploy}>
+              {t("sync.dep.deploy")}
+            </Button>
+          )}
         </>
       }
     >
@@ -352,10 +372,18 @@ function PlanSummary({ t, form, plan, url, onRetry }: { t: T; form: DeployForm; 
   if (!plan) return null;
 
   const worker = form.workerName.trim();
-  if (plan.worker === "has_vault" || plan.worker === "foreign")
+  if (plan.worker === "has_vault")
+    return plan.vault_url ? (
+      <Callout icon="info">{t("sync.dep.plan.hasVault", { name: worker })}</Callout>
+    ) : (
+      <Callout icon="warning" iconColor="var(--orange)">
+        {t("sync.dep.plan.hasVaultNoUrl", { name: worker })}
+      </Callout>
+    );
+  if (plan.worker === "foreign")
     return (
       <Callout icon="warning" iconColor="var(--orange)">
-        {t(plan.worker === "has_vault" ? "sync.dep.plan.hasVault" : "sync.dep.plan.foreign", { name: worker })}
+        {t("sync.dep.plan.foreign", { name: worker })}
       </Callout>
     );
 

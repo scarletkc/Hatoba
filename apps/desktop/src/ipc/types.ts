@@ -27,6 +27,10 @@ export type ErrorCode =
   | "sync_offline"
   | "remote_initialized"
   | "remote_not_initialized"
+  /** Another sync setup (flow A or C, §6.6) is still running. */
+  | "sync_setup_busy"
+  /** Sync is already on for this device, so it cannot join a cloud vault (flow C). */
+  | "sync_already_configured"
   | "cloudflare_token"
   | "cloudflare_permission"
   | "cloudflare"
@@ -573,6 +577,8 @@ export interface DeployPlan {
   worker: DeployWorkerAction;
   database: DeployDatabaseAction | null;
   database_name: string | null;
+  /** For `has_vault`: the workers.dev URL to join it on (flow C); `null` when no workers.dev URL reaches the Worker. */
+  vault_url: string | null;
 }
 
 export type DeployStep = "verify" | "inspect" | "create_database" | "migrate" | "upload" | "setup_token" | "route" | "wait";

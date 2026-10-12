@@ -61,7 +61,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | Sync engine (§6.3) | ✅ | |
 | Conflict resolution (§6.4) | ✅ | |
 | Flows A and B (§6.6) | ✅ | |
-| Flow C (§6.6) | ⬜ | P1 |
+| Flow C (§6.6) | ✅ | |
 | Device management | ✅ | |
 | Deploy to Cloudflare button (§6.6) | 🟡 | The wizard links to it, and the `deploy` script applies the D1 migrations. Needs a full run through the deploy flow |
 | In-app deployment (§6.7, DEPLOY-01…07) | 🟡 | Tested against a stand-in for the Cloudflare API, not yet against a real account |
@@ -157,8 +157,7 @@ Hosts connect only over SSH. Telnet, Serial, and Mosh are proposed in [#60](http
 1. Whether host online status probing (HOST-10) is on by default. The current implementation turns it on by default, and a setting turns it off.
 2. Whether D1 direct mode ships in the first public release.
 3. Whether one Worker deployment should serve several users (the current design is single-user).
-4. The merge details and UI for Flow C (connecting an existing local vault to an initialized cloud vault).
-5. Whether the in-app deployment (§6.7) offers a data location for the new D1 database. D1 accepts a jurisdiction (`eu`, `fedramp`, or `us`) or a location hint only when a database is created, and §6.7 sets neither.
-6. How a breaking Worker change (a new `api` number) rolls out while devices on older apps still sync, for example whether one Worker serves both `api` numbers for a while.
-7. Whether MCP servers that sign in with OAuth (§13.9) are supported, and where each device keeps their tokens. They cannot sync, because many services rotate the refresh token on each use. Windows Credential Manager holds at most 2,560 bytes per credential, which OAuth tokens often exceed, so a device-local table encrypted with vault_key is the likely place.
-8. Whether MCP servers can run on the remote host over the tab's SSH connection, speaking `stdio` over an exec channel. It would reach data where it lives without opening ports, but `run_command` already covers much of the same ground.
+4. Whether the in-app deployment (§6.7) offers a data location for the new D1 database. D1 accepts a jurisdiction (`eu`, `fedramp`, or `us`) or a location hint only when a database is created, and §6.7 sets neither.
+5. How a breaking Worker change (a new `api` number) rolls out while devices on older apps still sync, for example whether one Worker serves both `api` numbers for a while.
+6. Whether MCP servers that sign in with OAuth (§13.9) are supported, and where each device keeps their tokens. They cannot sync, because many services rotate the refresh token on each use. Windows Credential Manager holds at most 2,560 bytes per credential, which OAuth tokens often exceed, so a device-local table encrypted with vault_key is the likely place.
+7. Whether MCP servers can run on the remote host over the tab's SSH connection, speaking `stdio` over an exec channel. It would reach data where it lives without opening ports, but `run_command` already covers much of the same ground.

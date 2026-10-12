@@ -384,6 +384,12 @@ impl State {
                     cf_error(404, 10056)
                 }
             }
+            ("GET", ["accounts", ACCOUNT, "workers", "scripts", name, "subdomain"]) => {
+                match self.scripts.get(*name) {
+                    Some(s) => ok(json!({ "enabled": s.route, "previews_enabled": false })),
+                    None => cf_error(404, 10007),
+                }
+            }
             ("POST", ["accounts", ACCOUNT, "workers", "scripts", name, "subdomain"]) => {
                 assert_eq!(body, json!({ "enabled": true, "previews_enabled": false }));
                 match self.scripts.get_mut(*name) {
@@ -678,6 +684,7 @@ async fn inspect_plans_a_fresh_account_and_writes_nothing() {
             database: Some(DatabasePlan::Create {
                 name: "hatoba".into()
             }),
+            vault_url: None,
         }
     );
     assert!(
@@ -719,6 +726,38 @@ async fn inspect_never_plans_over_a_foreign_worker_or_a_vault() {
     h.add_hatoba_worker("hatoba-sync", &db);
     let plan = h.deployment().inspect(&target()).await.unwrap();
     assert_eq!((plan.worker, plan.database), (WorkerPlan::HasVault, None));
+}
+
+#[tokio::test]
+async fn finds_the_url_of_a_worker_that_holds_a_vault() {
+    let h = Harness::new().await;
+    assert!(matches!(
+        h.deployment().vault_worker_url(&target()).await,
+        Err(Error::WorkerNotFound)
+    ));
+    let db = h.add_database("synced", &with_vault());
+    h.add_hatoba_worker("hatoba-sync", &db);
+    // Reachable only on a custom domain: no workers.dev URL to join.
+    let plan = h.deployment().inspect(&target()).await.unwrap();
+    assert_eq!((plan.worker, plan.vault_url), (WorkerPlan::HasVault, None));
+    assert!(matches!(
+        h.deployment().vault_worker_url(&target()).await,
+        Err(Error::WorkerNotFound)
+    ));
+
+    h.state().scripts.get_mut("hatoba-sync").unwrap().route = true;
+    assert_eq!(
+        h.deployment().vault_worker_url(&target()).await.unwrap(),
+        format!(
+            "https://hatoba-sync.{}.workers.dev",
+            h.state().subdomain.clone().unwrap()
+        )
+    );
+    assert!(
+        h.log()
+            .iter()
+            .all(|l| l.starts_with("GET ") || l.ends_with("/query"))
+    );
 }
 
 #[tokio::test]

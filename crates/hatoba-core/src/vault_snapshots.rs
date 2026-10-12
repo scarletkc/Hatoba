@@ -100,6 +100,44 @@ fn open(
     String::from_utf8(plain.to_vec()).ok().map(Zeroizing::new)
 }
 
+/// Seals every file snapshot again under `new` (the vault joined another vault, flow C). A
+/// snapshot `old` cannot open is deleted.
+pub(crate) fn reseal_snapshots(tx: &impl StoreOps, old: &[u8; 32], new: &[u8; 32]) -> Result<()> {
+    for listed in tx.snapshot_list(None)? {
+        let Some(row) = tx.snapshot(
+            &listed.conversation_id,
+            &listed.response_id,
+            &listed.tool_call_id,
+        )?
+        else {
+            continue;
+        };
+        let key = key_of(&row);
+        let reseal = |part: &str, sealed: &str| -> Result<Option<String>> {
+            let Some(plain) = open(old, part, &key, sealed) else {
+                return Ok(None);
+            };
+            Ok(Some(
+                seal(new, aad(part, &key).as_bytes(), plain.as_bytes())?.to_json(),
+            ))
+        };
+        let meta = reseal("meta", &row.meta)?;
+        let content = match &row.content {
+            Some(sealed) => reseal("content", sealed)?.map(Some),
+            None => Some(None),
+        };
+        match (meta, content) {
+            (Some(meta), Some(content)) => tx.put_snapshot(&SnapshotRow {
+                meta,
+                content,
+                ..row.clone()
+            })?,
+            _ => tx.delete_snapshot(&row.conversation_id, &row.response_id, &row.tool_call_id)?,
+        }
+    }
+    Ok(())
+}
+
 impl Vault {
     /// Stores the snapshot of a call's change before its write begins, as
     /// [`SnapshotState::Unfinished`], replacing one the call has already, then drops the content

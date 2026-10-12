@@ -105,6 +105,7 @@ export function createTauriApi(): HatobaApi {
     sync_status: () => call("sync_status"),
     sync_test: (config) => call("sync_test", { config }),
     sync_configure: (config, password) => call("sync_configure", { config, password }),
+    sync_join: (config, password) => call("sync_join", { config, password }),
     sync_now: () => call("sync_now"),
     sync_login: (password) => call("sync_login", { password }),
     sync_set_auto: (enabled) => call("sync_set_auto", { enabled }),
@@ -127,6 +128,7 @@ export function createTauriApi(): HatobaApi {
     deploy_cleanup: (handle) => call("deploy_cleanup", { handle }),
     deploy_cancel: (handle) => call("deploy_cancel", { handle }),
     deploy_setup: (handle, password) => call("deploy_setup", { handle, password }),
+    deploy_join: (handle, target, password) => call("deploy_join", { handle, target, password }),
     deploy_upgrade_defaults: () => call("deploy_upgrade_defaults"),
     deploy_upgrade_inspect: (handle, target) => call("deploy_upgrade_inspect", { handle, target }),
     deploy_upgrade: (handle, target, onProgress) => {

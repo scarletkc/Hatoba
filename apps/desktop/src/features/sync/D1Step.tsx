@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { PopupSelect } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
@@ -22,7 +22,7 @@ export function D1Step({
   form: D1Form;
   update: (patch: Partial<D1Form>) => void;
   onBack: () => void;
-  onNext: (config: SyncConfigInput) => void;
+  onNext: (config: SyncConfigInput, join: boolean) => void;
 }) {
   const t = useT();
   const accountId = useId();
@@ -30,7 +30,7 @@ export function D1Step({
   const { verify } = form;
   const verified = verify.status === "ok";
   const canVerify = form.accountId.trim() && form.apiToken.trim() && verify.status !== "testing";
-  const canContinue = verified && !!form.databaseId && !form.initialized && !form.checking;
+  const canContinue = verified && !!form.databaseId && !form.checking;
   const config = (databaseId: string): SyncConfigInput => ({
     kind: "d1",
     account_id: form.accountId.trim(),
@@ -43,31 +43,56 @@ export function D1Step({
       ? { message: errorMessage(t, error), offline: true }
       : { message: t("sync.token.err"), offline: false };
 
+  // Only the latest request's answer counts, for the credentials in the fields: whether the
+  // database holds a vault decides the flow. A new request, an edit and leaving the step all end
+  // the one in flight; the wizard keeps `form`, so a late answer would land in the next visit.
+  // What was still running when the step comes back is one of those: a token check can be run
+  // again, and the chosen database is checked again.
+  const epoch = useRef(0);
+  useEffect(() => {
+    const current = epoch;
+    return () => {
+      current.current++;
+    };
+  }, []);
+
   const pickDatabase = async (databaseId: string) => {
+    const n = ++epoch.current;
     update({ databaseId, initialized: false, checking: true });
     try {
       const result = await api.sync_test(config(databaseId));
-      update({ initialized: result.ok && result.initialized, checking: false });
+      if (n === epoch.current) update({ initialized: result.ok && result.initialized, checking: false });
     } catch {
-      update({ checking: false });
+      if (n === epoch.current) update({ checking: false });
     }
   };
 
+  useEffect(() => {
+    if (verify.status === "testing") update({ verify: { status: "idle" } });
+    if (form.checking) void pickDatabase(form.databaseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runVerify = async () => {
     if (!canVerify) return;
+    const n = ++epoch.current;
     update({ verify: { status: "testing" }, databaseId: "", databases: [], initialized: false });
     try {
       const result = await api.sync_test(config(""));
+      if (n !== epoch.current) return;
       if (!result.ok) return update({ verify: { status: "failed", ...failure(result.error) } });
       const databases = result.databases ?? [];
       update({ verify: { status: "ok", result }, databases });
       if (databases.length === 1) void pickDatabase(databases[0].id);
     } catch (e) {
-      update({ verify: { status: "failed", ...failure(toAppError(e)) } });
+      if (n === epoch.current) update({ verify: { status: "failed", ...failure(toAppError(e)) } });
     }
   };
 
-  const reset = (patch: Partial<D1Form>) => update({ ...EMPTY_D1, accountId: form.accountId, apiToken: form.apiToken, ...patch });
+  const reset = (patch: Partial<D1Form>) => {
+    epoch.current++;
+    update({ ...EMPTY_D1, accountId: form.accountId, apiToken: form.apiToken, ...patch });
+  };
 
   const verifiedLine =
     verify.status === "ok"
@@ -82,7 +107,7 @@ export function D1Step({
       footer={
         <>
           <Button onClick={onBack}>{t("btn.back")}</Button>
-          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId))}>
+          <Button variant="primary" disabled={!canContinue} onClick={() => onNext(config(form.databaseId), form.initialized)}>
             {t("btn.continue")}
           </Button>
         </>
@@ -142,8 +167,7 @@ export function D1Step({
 
         <Field
           label={t("sync.database")}
-          error={form.initialized ? t("err.remote_initialized") : undefined}
-          hint={verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
+          hint={form.initialized ? t("sync.d1.hasVault") : verified && form.databases.length === 0 ? t("sync.d1.noDb") : undefined}
         >
           <PopupSelect
             ariaLabel={t("sync.database")}

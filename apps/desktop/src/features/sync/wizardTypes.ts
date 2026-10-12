@@ -23,7 +23,7 @@ export interface D1Form {
   databases: D1Database[];
   /** Token verification. */
   verify: Probe;
-  /** The chosen database already holds a vault (flow C is not in the MVP). */
+  /** The chosen database already holds a vault, which this device joins (flow C). */
   initialized: boolean;
   /** Checking the chosen database for an existing vault. */
   checking: boolean;

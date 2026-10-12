@@ -23,6 +23,10 @@ pub enum ErrorCode {
     SyncOffline,
     RemoteInitialized,
     RemoteNotInitialized,
+    /// Another sync setup (flow A or C, §6.6) is still running.
+    SyncSetupBusy,
+    /// Sync is already set up on this device, so it cannot join a cloud vault (flow C).
+    SyncAlreadyConfigured,
     /// In-app deployment (§6.7): Cloudflare rejected the API token.
     CloudflareToken,
     /// The API token lacks the permission in `permission`.
@@ -198,6 +202,7 @@ impl From<hatoba_core::Error> for AppError {
             }
             E::RemoteNotInitialized => Self::new(ErrorCode::RemoteNotInitialized, detail),
             E::RemoteInitialized => Self::new(ErrorCode::RemoteInitialized, detail),
+            E::SyncAlreadyConfigured => Self::new(ErrorCode::SyncAlreadyConfigured, detail),
             E::InvalidUrl(_) => Self::invalid("url", detail),
             E::CloudflareToken => Self::new(ErrorCode::CloudflareToken, detail),
             E::CloudflarePermission(p) => Self {

@@ -229,6 +229,30 @@ async fn pull_all(
     }
 }
 
+/// Reads the whole remote vault once and returns the item `id` as it stands there, without
+/// touching the local store. Flow C uses it to take the remote's settings item before it commits.
+pub(crate) async fn find_remote_item(
+    backend: &dyn SyncBackend,
+    id: &str,
+) -> Result<Option<RemoteItem>> {
+    let mut since = 0;
+    let mut found = None;
+    loop {
+        let page = backend.pull(since, PULL_PAGE_SIZE).await?;
+        // Pages come in sequence order, so a later copy is newer.
+        if let Some(item) = page.items.into_iter().rfind(|i| i.id == id) {
+            found = Some(item);
+        }
+        if !page.has_more {
+            return Ok(found);
+        }
+        if page.next_since <= since {
+            return Err(Error::Protocol("pull cursor did not advance".into()));
+        }
+        since = page.next_since;
+    }
+}
+
 /// Accumulates what one transaction changed, so the cache can be refreshed after commit.
 #[derive(Default)]
 struct Batch {
@@ -295,7 +319,7 @@ enum Disposition {
     LocalKept,
 }
 
-fn remote_row(remote: &RemoteItem) -> ItemRow {
+pub(crate) fn remote_row(remote: &RemoteItem) -> ItemRow {
     ItemRow {
         id: remote.id.clone(),
         envelope: remote.envelope.clone().filter(|_| !remote.deleted),

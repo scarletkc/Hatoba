@@ -203,6 +203,8 @@ export interface HatobaApi {
   sync_test(config: SyncConfigInput): Promise<SyncTestResult>;
   /** Flow A: initialise the remote (Setup Token) and push the local vault. Needs the master password. */
   sync_configure(config: SyncConfigInput, password: string): Promise<void>;
+  /** Flow C: connect this device to a remote that already holds a vault, with that vault's master password, and merge this device's data into it. */
+  sync_join(config: SyncConfigInput, password: string): Promise<void>;
   sync_now(): Promise<void>;
   /** Re-authenticate after the session expired or was revoked ("auth_failed"). */
   sync_login(password: string): Promise<void>;
@@ -233,6 +235,8 @@ export interface HatobaApi {
   deploy_cancel(handle: string): Promise<void>;
   /** The master password step after a deployment: initialises the new Worker and enables sync. */
   deploy_setup(handle: string, password: string): Promise<void>;
+  /** The master password step when the Worker already holds a vault: `sync_join` against that Worker. */
+  deploy_join(handle: string, target: DeployTarget, password: string): Promise<void>;
   /** What "Update Worker" starts from. */
   deploy_upgrade_defaults(): Promise<UpgradeDefaults>;
   /** Step 2 of an upgrade, against the deployment started with `deploy_start`. */

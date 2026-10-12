@@ -11,9 +11,11 @@ use hatoba_core::sync::{
 };
 use tauri::{AppHandle, State};
 
+use tauri_specta::Event;
+
 use crate::dto::{
     ConflictAction, ConflictField, ConflictResolution, ConflictView, D1Database, DeviceView,
-    ItemType, SyncConfigInput, SyncStatus, SyncTestResult,
+    ItemType, LockReason, SyncConfigInput, SyncStatus, SyncTestResult, VaultLockedEvent,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::state::AppState;
@@ -147,6 +149,7 @@ pub async fn sync_configure(
     config: SyncConfigInput,
     password: String,
 ) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
     let (cfg, backend) = backend_from_input(&config)?;
     let setup_token = match &config {
         SyncConfigInput::Worker { setup_token, .. } => setup_token
@@ -168,6 +171,80 @@ pub async fn sync_configure(
     sync::emit_status(&app);
     sync::trigger(&app, Trigger::Manual);
     Ok(())
+}
+
+/// Flow C (§6.6): connect this device's vault to a remote that already holds a vault, then run
+/// the first round, which pulls the remote's items and uploads this device's.
+#[tauri::command]
+#[specta::specta]
+pub async fn sync_join(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    config: SyncConfigInput,
+    password: String,
+) -> AppResult<()> {
+    let _setup = state.sync.begin_setup()?;
+    // A lock or a disconnect while this waits for the server ends it: nothing is saved and the
+    // vault stays as it was (§6.3), even if it was unlocked again meanwhile.
+    let generation = state.sync.generation();
+    let (cfg, backend) = backend_from_input(&config)?;
+    let secrets = state.secrets.as_ref();
+    let joined = flows::join_remote_vault(
+        &state.vault,
+        backend.as_ref(),
+        &password,
+        device_info(),
+        &cfg,
+        |session| {
+            if state.sync.generation() != generation {
+                return Err(hatoba_core::Error::Cancelled);
+            }
+            save_session(secrets, session)?;
+            match &config {
+                SyncConfigInput::D1 { api_token, .. } => {
+                    secrets.set(secret_keys::D1_API_TOKEN, api_token.trim())
+                }
+                SyncConfigInput::Worker { .. } => Ok(()),
+            }
+        },
+    )
+    .await?;
+    joined_remote(&app, &state, backend, joined.rekeyed, generation).await;
+    Ok(())
+}
+
+/// After flow C: drops the biometric unlock that wraps the old vault key, installs the backend
+/// and runs the first round. A failed round shows in the sync status and is retried like any
+/// other, so the join itself has succeeded. A vault the join left locked (it could not reload)
+/// goes to the lock screen instead, and unlocking with the remote's password starts sync.
+///
+/// The backend is installed only while the connection is still `generation`: a lock or a
+/// disconnect after the join committed keeps sync stopped (§6.3), and the next unlock or setup
+/// starts it from the recorded configuration.
+pub(crate) async fn joined_remote(
+    app: &AppHandle,
+    state: &AppState,
+    backend: Arc<dyn SyncBackend>,
+    rekeyed: bool,
+    generation: u64,
+) {
+    if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
+        tracing::warn!("could not remove the biometric unlock: {}", e.detail);
+    }
+    if !state.vault().is_unlocked() {
+        crate::lock::lock_vault(app, LockReason::Manual).await;
+        let _ = VaultLockedEvent {
+            reason: LockReason::Manual,
+        }
+        .emit(app);
+        return;
+    }
+    if !state.sync.set_backend_if(generation, backend) {
+        tracing::info!("sync ended while joining; the joined vault stays configured");
+        return;
+    }
+    sync::emit_status(app);
+    let _ = sync::run_round(app).await;
 }
 
 #[tauri::command]

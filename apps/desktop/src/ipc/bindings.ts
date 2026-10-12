@@ -150,6 +150,11 @@ export const commands = {
 	syncTest: (config: SyncConfigInput) => __TAURI_INVOKE<SyncTestResult>("sync_test", { config }),
 	/**  Flow A (§6.6): initialise the remote with this vault, sign in and push everything. */
 	syncConfigure: (config: SyncConfigInput, password: string) => __TAURI_INVOKE<null>("sync_configure", { config, password }),
+	/**
+	 *  Flow C (§6.6): connect this device's vault to a remote that already holds a vault, then run
+	 *  the first round, which pulls the remote's items and uploads this device's.
+	 */
+	syncJoin: (config: SyncConfigInput, password: string) => __TAURI_INVOKE<null>("sync_join", { config, password }),
 	syncNow: () => __TAURI_INVOKE<null>("sync_now"),
 	/**  Re-authenticate after "认证失效" (session expired or revoked). */
 	syncLogin: (password: string) => __TAURI_INVOKE<null>("sync_login", { password }),
@@ -197,6 +202,14 @@ export const commands = {
 	 *  the deployment.
 	 */
 	deploySetup: (handle: string, password: string) => __TAURI_INVOKE<null>("deploy_setup", { handle, password }),
+	/**
+	 *  The master password step when step 2 found the Worker already holding a vault: Flow C (§6.6)
+	 *  against that Worker's workers.dev URL, then ends the deployment, which deployed nothing.
+	 * 
+	 *  The sync settings record no deployment: the app did not deploy this Worker, so an update
+	 *  treats it like one deployed by hand (a Git integration may redeploy it).
+	 */
+	deployJoin: (handle: string, target: DeployTarget, password: string) => __TAURI_INVOKE<null>("deploy_join", { handle, target, password }),
 	/**
 	 *  What "Update Worker" starts from (DEPLOY-08): the account ID and Worker name recorded when the
 	 *  app deployed the Worker, or else the name in its workers.dev URL.
@@ -925,6 +938,11 @@ export type DeployPlan = {
 	worker: DeployWorkerAction,
 	database: DeployDatabaseAction | null,
 	database_name: string | null,
+	/**
+	 *  For `has_vault`: the workers.dev URL to join it on (Flow C), or `None` when no workers.dev
+	 *  URL reaches the Worker.
+	 */
+	vault_url: string | null,
 };
 
 /**  Sent on the `deploy_run` channel as each step starts and ends. */
@@ -990,6 +1008,10 @@ export type DroppedFileRefusal =
 "unreadable";
 
 export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+/**  Another sync setup (flow A or C, §6.6) is still running. */
+"sync_setup_busy" | 
+/**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
+"sync_already_configured" | 
 /**  In-app deployment (§6.7): Cloudflare rejected the API token. */
 "cloudflare_token" | 
 /**  The API token lacks the permission in `permission`. */

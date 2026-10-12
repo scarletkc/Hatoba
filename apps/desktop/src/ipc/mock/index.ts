@@ -756,14 +756,27 @@ export function createMockApi(): HatobaApi {
       if (config.kind === "d1") {
         if (config.api_token.length < 20)
           return { ok: false, initialized: false, version: null, latency_ms: null, databases: null, error: { code: "sync", detail: "token lacks D1 edit permission" } };
-        return { ok: true, initialized: demo === "onboarding", version: null, latency_ms: 64, databases: [{ id: "3f8a2c91-d04e-4b7a-a1e6-c5d2b9f07e13", name: "hatoba", region: "APAC" }], error: null };
+        return { ok: true, initialized: demo === "onboarding" || deployDemo === "vault", version: null, latency_ms: 64, databases: [{ id: "3f8a2c91-d04e-4b7a-a1e6-c5d2b9f07e13", name: "hatoba", region: "APAC" }], error: null };
       }
       if (!/^https?:\/\//.test(config.url) && !config.url.includes("."))
         return { ok: false, initialized: false, version: null, latency_ms: null, databases: null, error: { code: "sync_offline", detail: "dns" } };
-      // First-launch demo (flow B) restores from a remote that already holds a vault.
-      return { ok: true, initialized: demo === "onboarding", version: "0.1.0", latency_ms: 64, databases: null, error: null };
+      // First-launch demo (flow B) restores from a remote that already holds a vault, and so
+      // does `?deploy=vault` (flow C).
+      return { ok: true, initialized: demo === "onboarding" || deployDemo === "vault", version: "0.1.0", latency_ms: 64, databases: null, error: null };
     },
     sync_configure: async (config, password) => {
+      await delay(1200);
+      if (password.length < 4) fail("wrong_password");
+      sync = {
+        ...D.syncStatus(),
+        endpoint: config.kind === "worker" ? config.url.replace(/^https?:\/\//, "") : null,
+        database: config.kind === "d1" ? "hatoba" : "hatoba · APAC",
+        last_synced_at: Date.now(),
+        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
+      };
+      emit("sync://status", sync);
+    },
+    sync_join: async (config, password) => {
       await delay(1200);
       if (password.length < 4) fail("wrong_password");
       sync = {
@@ -837,6 +850,7 @@ export function createMockApi(): HatobaApi {
         worker: fresh ? "create" : deployDemo === "vault" ? "has_vault" : deployDemo === "foreign" ? "foreign" : "create",
         database: "create",
         database_name: target.database_name,
+        vault_url: deployDemo === "vault" && !fresh ? `https://${target.worker_name}.kc.workers.dev` : null,
       };
     },
     deploy_run: async (handle, target, onProgress) => {
@@ -880,6 +894,19 @@ export function createMockApi(): HatobaApi {
       sync = {
         ...D.syncStatus(),
         endpoint: (d.url ?? "").replace(/^https?:\/\//, ""),
+        last_synced_at: Date.now(),
+        counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
+      };
+      deployment = null;
+      emit("sync://status", sync);
+    },
+    deploy_join: async (handle, target, password) => {
+      needDeployment(handle);
+      await delay(1200);
+      if (password.length < 4) fail("wrong_password");
+      sync = {
+        ...D.syncStatus(),
+        endpoint: `${target.worker_name}.kc.workers.dev`,
         last_synced_at: Date.now(),
         counts: { hosts: hosts.length, keys: keys.length, groups: groups.length },
       };

@@ -451,6 +451,19 @@ pub trait StoreOps {
         Ok(n as u64)
     }
 
+    /// Deletes an item row outright, leaving no tombstone.
+    fn delete_item_row(&self, id: &str) -> Result<()> {
+        self.conn()
+            .execute("DELETE FROM items WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    /// Empties the conflict log.
+    fn clear_conflicts(&self) -> Result<()> {
+        self.conn().execute("DELETE FROM conflict_log", [])?;
+        Ok(())
+    }
+
     /// Appends to the conflict log and prunes old entries. Returns the new id.
     fn insert_conflict(&self, c: &NewConflict) -> Result<i64> {
         self.conn().execute(
