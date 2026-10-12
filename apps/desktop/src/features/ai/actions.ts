@@ -49,7 +49,7 @@ import {
   type SelectionAttachment,
 } from "./attachments";
 import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowances } from "./allowances";
-import { hardRule } from "./autoRules";
+import { hardRule, type HardRule } from "./autoRules";
 import { JUDGE_ERROR } from "./autoText";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
@@ -93,6 +93,7 @@ import {
   needsSession,
   parseArgs,
   savedFor,
+  shownCall,
   toolKind,
   type HostRef,
   type Scope,
@@ -262,6 +263,8 @@ class TurnRunner {
   private waiter: ((d: Decision) => void) | null = null;
   /** AI-47: the judge's verdicts asked for ahead (`prefetch`), by call id, until their call takes them. */
   private readonly verdicts = new Map<string, Promise<AiAutoVerdict>>();
+  /** AI-47: the user rejected a call of the response being handled, so Auto asks about the rest of its calls without the judge. */
+  private rejected = false;
   private readonly abort = new AbortController();
   private readonly ready: Promise<string | null>;
   private resolveReady!: (id: string | null) => void;
@@ -407,6 +410,7 @@ class TurnRunner {
       // unlock) before any call is judged ahead.
       if (callMode(this.mode, getSlot(this.slotId).mode) === "auto") await savedAllowances().catch(() => []);
       if (!this.active || this.stopping) return;
+      this.rejected = false;
       this.prefetch(convId, calls);
       for (const call of calls) {
         if (!this.active || this.stopping) return;
@@ -463,6 +467,10 @@ class TurnRunner {
         const d = await this.wait(call.id, "approval", mcp, auto.ask);
         if (!this.acting || d.kind === "stop") return;
         if (d.kind === "reject") {
+          // AI-47: Auto asks about the response's later calls; their verdicts asked for ahead are dropped, so
+          // that no result stores one.
+          this.rejected = true;
+          this.verdicts.clear();
           this.setCall({ id: call.id, state: "running" });
           await this.report(convId, call.id, { status: "rejected", content: d.reason, edited_arguments: null, judged });
           return;
@@ -487,17 +495,19 @@ class TurnRunner {
   }
 
   /**
-   * AI-47: what Auto mode does with a call manual approval would ask about. A hard rule shows the card at
-   * once, without the judge; otherwise the call waits for the judge's verdict (`judging`), asked for here or
-   * ahead (`prefetch`), runs on `run`, and shows the card with the verdict on `ask`. A switch to manual
-   * approval meanwhile applies to the call (§13.5): its card shows as in manual approval, and its result goes
-   * without the verdict. Null when the turn stopped meanwhile.
+   * AI-47: what Auto mode does with a call manual approval would ask about. A hard rule, or a call the user
+   * rejected earlier in the response, shows the card at once, without the judge; otherwise the call waits for
+   * the judge's verdict (`judging`), asked for here or ahead (`prefetch`), runs on `run`, and shows the card with
+   * the verdict on `ask`. A switch to manual approval meanwhile applies to the call (§13.5): its card shows as in
+   * manual approval, and its result goes without the verdict. Null when the turn stopped meanwhile.
    */
   private async judge(convId: string, call: AiToolCall, kind: ToolKind, mcp: McpToolInfo | null): Promise<AutoOutcome | null> {
     const prefetched = this.verdicts.get(call.id);
     this.verdicts.delete(call.id);
     const screen = kind === "send_input" ? this.screenLines() : null;
-    const rule = hardRule({ kind, args: parseArgs(call.arguments) ?? {}, mcp, screen });
+    // A `call_mcp_tool` call's rules read the arguments of the tool it names (AI-45).
+    const args = parseArgs(shownCall(call).arguments) ?? {};
+    const rule: HardRule | null = hardRule({ kind, args, mcp, screen }) ?? (this.rejected ? { kind: "after_reject" } : null);
     if (rule) return { run: false, ask: { rule }, judged: false };
     this.setCall({ id: call.id, state: "judging", mcp });
     let verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
@@ -523,8 +533,8 @@ class TurnRunner {
    * AI-47: in Auto, asks the judge about a response's calls as soon as it arrives, so that their answers
    * mostly overlap (the judge reads no results, so none waits for an earlier call): each `run_command`,
    * `edit_file`, `write_file` and `fetch_url` call that, as far as can be told now, will reach it (it asks, no
-   * approval covers it, and no hard rule sends it to the card). Not `send_input`, whose judge reads the screen
-   * as it is when the call's turn comes, nor MCP calls, whose tool is resolved first. A call that ends up not
+   * approval covers it, and no hard rule sends it to the card). Not `send_input`, whose judge and hard rules read
+   * the screen as it is when the call's turn comes, nor MCP calls, whose tool is resolved first. A call that ends up not
    * taking its verdict stores its result without it.
    */
   private prefetch(convId: string, calls: readonly AiToolCall[]) {

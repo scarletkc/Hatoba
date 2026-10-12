@@ -82,8 +82,56 @@ describe("the commands Auto always asks about (AI-47)", () => {
 
   it("checks the text send_input types", () => {
     expect(hardRule({ kind: "send_input", args: { text: "sudo reboot", key: "enter" } })).toEqual({ kind: "command", command: "reboot" });
+    expect(hardRule({ kind: "send_input", args: { text: "sudo reboot" }, screen: "kc@db1:~$" })).toEqual({ kind: "command", command: "reboot" });
     expect(hardRule({ kind: "send_input", args: { text: "y", key: "enter" } })).toBeNull();
     expect(namedCommand("")).toBeNull();
+  });
+});
+
+describe("a line send_input submits (AI-47)", () => {
+  const typed = (cursor: string, args: Record<string, unknown>) => hardRule({ kind: "send_input", args, screen: `$ uptime\n 10:02:11 up 3 days\n${cursor}` });
+
+  it("checks the cursor's line with the text, so that a command split across calls asks", () => {
+    // `rm ` typed by one call, which the judge decides, and `-rf /data` entered by the next. The screen keeps
+    // no trailing spaces, so the cursor's line ends in `rm`.
+    expect(typed("kc@db1:~$", { text: "rm " })).toBeNull();
+    expect(typed("kc@db1:~$ rm", { text: "-rf /data\n" })).toEqual({ kind: "command", command: "rm -r" });
+    expect(typed("kc@db1:~$ rm", { text: "-rf /data", key: "enter" })).toEqual({ kind: "command", command: "rm -r" });
+    // A word split in two.
+    expect(typed("kc@db1:~$ sudo shut", { text: "down -h now\n" })).toEqual({ kind: "command", command: "shutdown" });
+    // Until it submits, only the text counts.
+    expect(typed("kc@db1:~$ rm", { text: "-rf /data" })).toBeNull();
+  });
+
+  it("checks a line Tab completed when Enter submits it", () => {
+    expect(typed("kc@db1:~$ sudo shut", { text: "", key: "tab" })).toBeNull();
+    expect(typed("kc@db1:~$ sudo shutdown", { key: "enter" })).toEqual({ kind: "command", command: "shutdown" });
+  });
+
+  it("reads past the prompt", () => {
+    const prompts = ["kc@db1:~$", "root@db1:~#", "[root@db1 ~]#", "kc@mac ~ %", "db1>", "PS C:\\Users\\kc>", "(venv) kc@db1:/srv/app$", "➜  app git:(main)"];
+    for (const prompt of prompts) {
+      expect(typed(`${prompt} rm`, { text: "-r old\n" }), prompt).toEqual({ kind: "command", command: "rm -r" });
+      expect(typed(prompt, { text: "sudo reboot\n" }), prompt).toEqual({ kind: "command", command: "reboot" });
+      expect(typed(`${prompt} ls`, { text: " -la /srv\n" }), prompt).toBeNull();
+    }
+    // A prompt without a trailing space, right before what was typed.
+    expect(typed("root@db1:~#rm", { text: " -rf /data\n" })).toEqual({ kind: "command", command: "rm -r" });
+    expect(typed("kc@mac%halt", { key: "enter" })).toEqual({ kind: "command", command: "halt" });
+  });
+
+  it("asks when the cursor's line only mentions one, since a false alarm costs a click", () => {
+    // A question about one, which the answer confirms.
+    expect(typed("Proceed with shutdown of web2? [y/N]", { text: "y", key: "enter" })).toEqual({ kind: "command", command: "shutdown" });
+    // A working directory named like one.
+    expect(typed("deploy@web1:~/backups/dd$", { text: "ls\n" })).toEqual({ kind: "command", command: "dd" });
+    expect(typed("Do you want to continue? [Y/n]", { text: "y", key: "enter" })).toBeNull();
+  });
+
+  it("checks the cursor's line for hidden characters", () => {
+    expect(typed("kc@db1:~$ ls\u200b", { key: "enter" })).toEqual({ kind: "hidden" });
+    // Until it submits, only the text counts.
+    expect(typed("kc@db1:~$ ls\u200b", { text: " -la" })).toBeNull();
   });
 });
 
@@ -148,8 +196,37 @@ describe("MCP servers set to Always ask, and tools that cannot be found (AI-47)"
 
   it("send those tools to the card, and leave the others to the judge", () => {
     expect(hardRule({ kind: "mcp", args: {}, mcp: info(true) })).toEqual({ kind: "mcp_always_ask" });
-    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: info(false) })).toBeNull();
+    expect(hardRule({ kind: "mcp", args: { repo: "scarletkc/infra", title: "staging disk full" }, mcp: info(false) })).toBeNull();
     expect(hardRule({ kind: "mcp", args: {}, mcp: null })).toEqual({ kind: "mcp_unknown" });
+    // Those come first.
+    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: info(true) })).toEqual({ kind: "mcp_always_ask" });
+    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: null })).toEqual({ kind: "mcp_unknown" });
+  });
+
+  it("check every string of an MCP call's arguments for the commands, nested ones too", () => {
+    const mcp = (args: Record<string, unknown>) => hardRule({ kind: "mcp", args, mcp: info(false) });
+    expect(mcp({ command: "rm -rf /srv/old" })).toEqual({ kind: "command", command: "rm -r" });
+    expect(mcp({ steps: [{ run: { argv: ["sudo", "shutdown", "-r", "now"] } }] })).toEqual({ kind: "command", command: "shutdown" });
+    // A command given as a list of words.
+    expect(mcp({ command: "rm", args: ["-rf", "/srv/old"] })).toEqual({ kind: "command", command: "rm -r" });
+    expect(mcp({ script: "#!/bin/sh\nset -e\nmkfs.ext4 /dev/sdb1\n" })).toEqual({ kind: "command", command: "mkfs.ext4" });
+    // A false alarm costs a click.
+    expect(mcp({ title: "staging disk full", body: "Do not reboot web1 before Friday." })).toEqual({ kind: "command", command: "reboot" });
+    // Keys are not commands, and numbers and booleans hold none.
+    expect(mcp({ reboot: false, count: 3, tags: ["ops"], nested: { dd: null } })).toBeNull();
+  });
+
+  it("send an MCP call with hidden or bidirectional characters to the card, but allow tabs and line breaks", () => {
+    const mcp = (args: Record<string, unknown>) => hardRule({ kind: "mcp", args, mcp: info(false) });
+    expect(mcp({ body: "Steps:\r\n\t1. Check the disk\n\t2. Restart nginx\r\n" })).toBeNull();
+    expect(mcp({ files: [{ path: "Makefile", content: "build:\n\tgo build ./...\r\n" }] })).toBeNull();
+    // The joiners of emoji and of Persian text.
+    expect(mcp({ body: "Fixed by 👨‍💻 and می‌خواهم" })).toBeNull();
+    expect(mcp({ title: "invoice\u202efdp.exe" })).toEqual({ kind: "hidden" });
+    expect(mcp({ items: [{ text: "ok\x1b[2J" }] })).toEqual({ kind: "hidden" });
+    expect(mcp({ text: "ls\u200b -la" })).toEqual({ kind: "hidden" });
+    // In a key too.
+    expect(mcp({ "path\u202e": "a" })).toEqual({ kind: "hidden" });
   });
 
   it("apply no rule to the file tools and fetch_url", () => {

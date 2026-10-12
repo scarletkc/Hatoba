@@ -11,8 +11,8 @@ use crate::dto::{
 use crate::mcp::tests::{put_server, set_enabled, stdio_server};
 use hatoba_ai::entry::{AutoDecision, AutoVerdict};
 use hatoba_ai::judge::{
-    self, CHANGES_ANYTHING, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, SENDS_DATA_OUT,
-    TOUCHES_SECRETS, URL_CARRIES_DATA,
+    self, CHANGES_ANYTHING, DESTROYS_DATA, FORBIDDEN, JudgeState, REQUESTED, RUNS_UNSEEN_CODE,
+    SECURITY_CHANGE, SENDS_DATA_OUT, TOUCHES_SECRETS, URL_CARRIES_DATA,
 };
 use hatoba_ai::tools::{PermissionMode, permission_mode_block, terminal_state_block};
 
@@ -20,13 +20,15 @@ use hatoba_ai::tools::{PermissionMode, permission_mode_block, terminal_state_blo
 const JUDGE_KEY: &str = "sk-judge-NEVER-SHOWN";
 
 /// Answers to a command's questions that make it run as a change the user asked for.
-const ASKED_FOR: [(&str, f64); 6] = [
+const ASKED_FOR: [(&str, f64); 8] = [
     (REQUESTED, 0.97),
     (FORBIDDEN, 0.01),
     (CHANGES_ANYTHING, 0.92),
     (DESTROYS_DATA, 0.02),
     (TOUCHES_SECRETS, 0.0),
     (SENDS_DATA_OUT, 0.01),
+    (SECURITY_CHANGE, 0.01),
+    (RUNS_UNSEEN_CODE, 0.0),
 ];
 
 /// A System One endpoint at `{uri}/v1/systemone` that gives every request these Noul answers
@@ -247,7 +249,8 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
                 ),
             ]),
             AiEntry::tool(3, "c1", ToolStatus::Ok, "RESULT-ONE"),
-            AiEntry::tool(4, "c2", ToolStatus::Ok, "RESULT-TWO"),
+            // The user rejected it and said why: their own words.
+            AiEntry::tool(4, "c2", ToolStatus::Rejected, "not on the database host"),
             response(&[]),
             AiEntry::summary(6, "SUMMARY-TEXT"),
             AiEntry::user(7, second),
@@ -259,6 +262,8 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
                 // Cut off while it streamed.
                 ("c5", "run_command", r#"{"command": "ls"#),
             ]),
+            // Rejected without a reason while the next call waits.
+            AiEntry::tool(10, "c3", ToolStatus::Rejected, ""),
         ],
     );
     // AI-21: compacted, which hides nothing the user said from the judge.
@@ -288,8 +293,12 @@ fn the_judge_reads_what_the_user_typed_and_what_the_calls_do() {
             "earlier_calls": [
                 {"tool": "run_command", "arguments": {"command": "journalctl -u app -n 50"}},
                 // AI-45: as the MCP tool it names, as the panel shows it.
-                {"tool": "mcp__files__echo", "arguments": {"text": "hi"}},
-                {"tool": "read_terminal", "arguments": {}}
+                {
+                    "tool": "mcp__files__echo",
+                    "arguments": {"text": "hi"},
+                    "rejection": "not on the database host"
+                },
+                {"tool": "read_terminal", "arguments": {}, "rejection": ""}
             ],
             "call": {
                 "tool": "send_input",
@@ -554,6 +563,11 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
         json!([{"tool": "send_input", "arguments": {"text": "y\n"}}])
     );
     assert!(!sent[1].to_string().contains(JUDGE_KEY));
+    // What the conversation's requests share comes first, and the call last.
+    let raw = endpoint.received_requests().await.unwrap();
+    let raw = String::from_utf8_lossy(&raw[1].body);
+    let at = |key: &str| raw.find(&format!("\"{key}\":")).unwrap();
+    assert!(at("user_messages") < at("earlier_calls") && at("earlier_calls") < at("call"));
 
     // The panel ran c1 on the verdict: its result keeps it. c2 ran without Auto deciding it
     // (`judged` false), so its verdict is dropped.
@@ -684,6 +698,62 @@ async fn a_verdict_of_a_judge_cleared_or_replaced_while_it_was_asked_asks() {
 }
 
 #[tokio::test]
+async fn judge_requests_share_four_slots_and_a_stop_ends_the_wait_for_one() {
+    let f = Fixture::with_base_url(None, "http://127.0.0.1:9/v1".into());
+    let hanging = system_one(&ASKED_FOR, Duration::from_secs(30)).await;
+    f.choose_judge(&hanging);
+    let conversation = |calls: &[&str]| {
+        let calls: Vec<(&str, &str, &str)> = calls
+            .iter()
+            .map(|id| (*id, "run_command", r#"{"command": "uptime"}"#))
+            .collect();
+        let entries = [AiEntry::user(1, "check the load"), response(&calls)];
+        f.conversation_of(AiConversation::default(), &entries).0
+    };
+    let busy = conversation(&["c1", "c2", "c3", "c4"]);
+    let waiting = conversation(&["w1"]);
+    let judging = |conv: &str, call: &str| {
+        let (manager, vault) = (f.manager.clone(), f.vault.clone());
+        let (conv, call) = (conv.to_owned(), call.to_owned());
+        tokio::spawn(async move { manager.judge(&vault, &conv, &call, None).await })
+    };
+    let held: Vec<_> = ["c1", "c2", "c3", "c4"]
+        .iter()
+        .map(|call| judging(&busy, call))
+        .collect();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while bodies(&hanging).await.len() < 4 {
+        assert!(Instant::now() < deadline, "the judge was not asked");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    // Another conversation's call waits for room: its request is not sent.
+    let queued = judging(&waiting, "w1");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(bodies(&hanging).await.len(), 4);
+    assert!(!queued.is_finished());
+    // Its stop ends the wait at once, while the others still wait for answers.
+    let stopped_at = Instant::now();
+    f.manager.stop(&f.vault, f.env.as_ref(), &waiting);
+    let stopped = queued.await.unwrap().unwrap();
+    assert!(stopped_at.elapsed() < Duration::from_secs(5));
+    assert_eq!(stopped.failure.as_deref(), Some("cancelled"));
+    assert_eq!(bodies(&hanging).await.len(), 4);
+    assert!(held.iter().all(|h| !h.is_finished()));
+
+    // A stop of theirs gives the room back.
+    f.manager.stop(&f.vault, f.env.as_ref(), &busy);
+    for judged in held {
+        let verdict = judged.await.unwrap().unwrap();
+        assert_eq!(verdict.failure.as_deref(), Some("cancelled"));
+    }
+    f.choose_judge(&system_one(&ASKED_FOR, Duration::ZERO).await);
+    let next = conversation(&["n1"]);
+    let verdict = f.judge(&next, "n1", None).await;
+    assert_eq!(verdict.failure, None);
+    assert_eq!(verdict.decision, AiJudgeDecision::Run);
+}
+
+#[tokio::test]
 async fn in_auto_the_first_message_and_a_summary_name_the_mode() {
     let f = Fixture::new(vec![
         answer("One."),
@@ -741,12 +811,16 @@ impl Respond for GoodJudge {
             .unwrap()
             .keys()
             .map(|id| {
+                let said_any = |words: &[&str]| words.iter().any(|w| said.contains(w));
+                let call_any = |words: &[&str]| words.iter().any(|w| call.contains(w));
                 let yes = match id.as_str() {
-                    REQUESTED => said.contains("restart") || said.contains("重启"),
+                    REQUESTED => said_any(&["restart", "重启", "Install", "log in to"]),
                     FORBIDDEN => said.contains("don't"),
-                    CHANGES_ANYTHING => call.contains("restart") || call.contains("-delete"),
+                    CHANGES_ANYTHING => call_any(&["restart", "-delete", "| sh", "tee"]),
                     DESTROYS_DATA => call.contains("-delete"),
                     TOUCHES_SECRETS | SENDS_DATA_OUT => call.contains("id_ed25519"),
+                    SECURITY_CHANGE => call.contains("authorized_keys"),
+                    RUNS_UNSEEN_CODE => call.contains("| sh"),
                     URL_CARRIES_DATA => call.contains("?k="),
                     _ => false,
                 };
@@ -809,17 +883,22 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
             .collect()
     };
     assert_eq!(asked(&outcomes[0]), judge::question_ids("run_command"));
-    assert_eq!(asked(&outcomes[7]), judge::question_ids("fetch_url"));
+    assert_eq!(asked(&outcomes[9]), judge::question_ids("fetch_url"));
     assert_eq!(
         outcomes[2].verdict.concerns,
         [REQUESTED, CHANGES_ANYTHING, DESTROYS_DATA]
     );
-    assert_eq!(outcomes[8].verdict.concerns, [URL_CARRIES_DATA]);
+    // Asked for, and still asked about: code piped into a shell, a key added through it.
+    assert_eq!(outcomes[5].name, "pipe_to_shell");
+    assert_eq!(outcomes[5].verdict.concerns, [RUNS_UNSEEN_CODE]);
+    assert_eq!(outcomes[6].name, "key_via_shell");
+    assert_eq!(outcomes[6].verdict.concerns, [SECURITY_CHANGE]);
+    assert_eq!(outcomes[10].verdict.concerns, [URL_CARRIES_DATA]);
     assert_eq!(outcomes[1].verdict.answers[0].probability, 0.95);
 
     // The key goes in the header only, and nothing was saved.
     let sent = endpoint.received_requests().await.unwrap();
-    assert_eq!(sent.len(), 9);
+    assert_eq!(sent.len(), 11);
     for request in &sent {
         assert_eq!(
             request.headers.get("authorization").unwrap(),
@@ -834,9 +913,9 @@ async fn test_judges_the_samples_with_the_judge_picked_before_it_is_saved_or_the
     assert_eq!(err.field.as_deref(), Some("judge_model"));
     f.choose_judge(&endpoint);
     let saved = f.manager.judge_test(&f.vault, None).await.unwrap();
-    assert_eq!(saved.len(), 9);
+    assert_eq!(saved.len(), 11);
     assert!(saved.iter().all(|o| o.verdict.decision == o.expected));
-    assert_eq!(endpoint.received_requests().await.unwrap().len(), 18);
+    assert_eq!(endpoint.received_requests().await.unwrap().len(), 22);
 }
 
 #[tokio::test]
@@ -871,7 +950,7 @@ async fn test_needs_a_listed_model_of_any_protocol_and_reports_failures_as_verdi
         .judge_test(&f.vault, Some(judge_ref(&f.provider_id, "m1")))
         .await
         .unwrap();
-    assert_eq!(outcomes.len(), 9);
+    assert_eq!(outcomes.len(), 11);
     for o in &outcomes {
         assert_eq!(o.verdict.decision, AiJudgeDecision::Ask, "{}", o.name);
         assert_eq!(o.verdict.failure.as_deref(), Some("refused"), "{}", o.name);
@@ -892,8 +971,9 @@ async fn the_lock_ends_a_test_of_the_judge() {
                 .await
         })
     };
+    // Three samples at a time: the rest wait, and the lock ends them too.
     let deadline = Instant::now() + Duration::from_secs(20);
-    while bodies(&hanging).await.len() < 9 {
+    while bodies(&hanging).await.len() < 3 {
         assert!(Instant::now() < deadline, "the judge was not asked");
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
@@ -901,9 +981,11 @@ async fn the_lock_ends_a_test_of_the_judge() {
     f.manager.stop_all(&mut lock(&f.vault));
     let outcomes = testing.await.unwrap().unwrap();
     assert!(locked_at.elapsed() < Duration::from_secs(5));
+    assert_eq!(outcomes.len(), judge::samples().len());
     assert!(
         outcomes
             .iter()
             .all(|o| o.verdict.failure.as_deref() == Some("cancelled"))
     );
+    assert_eq!(bodies(&hanging).await.len(), 3);
 }

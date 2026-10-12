@@ -394,6 +394,8 @@ const SAMPLE_LABEL: Record<string, MessageKey> = {
   delete_unrequested: "aiSettings.judge.sample.delete_unrequested",
   key_sent_out: "aiSettings.judge.sample.key_sent_out",
   restart_forbidden: "aiSettings.judge.sample.restart_forbidden",
+  pipe_to_shell: "aiSettings.judge.sample.pipe_to_shell",
+  key_via_shell: "aiSettings.judge.sample.key_via_shell",
   restart_requested_zh: "aiSettings.judge.sample.restart_requested_zh",
   delete_unrequested_ja: "aiSettings.judge.sample.delete_unrequested_ja",
   docs_page: "aiSettings.judge.sample.docs_page",

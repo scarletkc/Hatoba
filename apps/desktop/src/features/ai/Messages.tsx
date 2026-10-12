@@ -852,7 +852,7 @@ function AutoVerdict({ verdict }: { verdict: AiAutoVerdict }) {
 
 /**
  * AI-47: on the approval card of a call in Auto mode, why it asks: a hard rule, what concerned the judge (its
- * answers on hover), or why the judge could not judge, with a way to Settings → AI when no judge is chosen.
+ * answers on hover), or why the judge could not judge, with a way to Settings → AI when no judge is available.
  */
 function AutoReason({ ask }: { ask: AutoAsk }) {
   const t = useT();

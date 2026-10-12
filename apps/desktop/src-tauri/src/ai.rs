@@ -215,6 +215,8 @@ struct Inner {
     /// the call. Only while the call waits: dropped with its result, or when its conversation
     /// stops, sends its next request, compacts or is deleted, or the vault locks.
     pending_verdicts: Mutex<HashMap<(String, String), AutoVerdict>>,
+    /// Room for the judge's requests (AI-47), shared by every conversation.
+    judge_slots: JudgeSlots,
     /// What the diff of a revert showed the file holding, by conversation, response and call:
     /// Restore anyway writes only over that (AI-41).
     restore_bases: Mutex<HashMap<(String, String, String), files::Found>>,
@@ -227,6 +229,19 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+}
+
+/// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
+/// several conversations make together do not send the judge's provider a burst it refuses.
+const JUDGE_REQUESTS: usize = 4;
+
+/// Room for [`JUDGE_REQUESTS`] requests to the judge at once.
+struct JudgeSlots(tokio::sync::Semaphore);
+
+impl Default for JudgeSlots {
+    fn default() -> Self {
+        Self(tokio::sync::Semaphore::new(JUDGE_REQUESTS))
+    }
 }
 
 struct Op {
@@ -1850,7 +1865,9 @@ impl AiManager {
     /// shows it. Without a judge in `Settings.ai`, or with one whose provider or model is gone,
     /// the verdict asks as `unavailable` and nothing is sent; so does one cleared, replaced or
     /// gone while it was asked, whose verdict no longer counts. The request is an op of the
-    /// conversation, so a stop or the lock ends it, and the verdict asks as `cancelled`.
+    /// conversation, so a stop or the lock ends it, and the verdict asks as `cancelled`. At most
+    /// [`JUDGE_REQUESTS`] requests run at once across conversations; a call waits for room, and a
+    /// stop or the lock ends the wait the same way.
     ///
     /// The verdict is kept, in place of an earlier one, until the call's result is stored, which
     /// carries it when Auto decided the call ([`Self::store_result`]). A call that got its result
@@ -1889,8 +1906,18 @@ impl AiManager {
         let (verdict, op) = match asked {
             None => (Verdict::failed(JudgeFailure::Unavailable), None),
             Some((provider, model, state, op)) => {
-                let verdict =
-                    judge::judge(&self.http(), &provider, &model, state, op.token()).await;
+                let room = tokio::select! {
+                    biased;
+                    () = op.token().cancelled() => None,
+                    room = self.0.judge_slots.0.acquire() => room.ok(),
+                };
+                let verdict = match room {
+                    Some(_room) => {
+                        judge::judge(&self.http(), &provider, &model, state, op.token()).await
+                    }
+                    // Stopped while it waited; the slots are never closed.
+                    None => Verdict::failed(JudgeFailure::Cancelled),
+                };
                 (verdict, Some(op))
             }
         };
@@ -3231,10 +3258,12 @@ fn calls_of(entry: &AiEntry) -> &[ToolCall] {
 
 // ---- what the judge of Auto mode reads (AI-47) ----
 
-/// Most lines of the screen that a `send_input` call shows the judge (AI-47).
-const SCREEN_TAIL_LINES: usize = 10;
+/// Most lines of the screen that a `send_input` call shows the judge (AI-47). The panel sends
+/// the screen's last lines (`SCREEN_TAIL_LINES` in `features/ai/terminalText.ts`); this only
+/// bounds what it sends, so a larger screen from the WebView never reaches the judge.
+const MAX_SCREEN_TAIL_LINES: usize = 10;
 /// Most characters of them.
-const SCREEN_TAIL_CHARS: usize = 2_000;
+const MAX_SCREEN_TAIL_CHARS: usize = 2_000;
 
 /// AI-47: what the judge reads about the call `index` of the response `at` in `entries`, every
 /// entry of the conversation, as spec §13.5 lists it, never what the model wrote or a tool
@@ -3247,7 +3276,8 @@ const SCREEN_TAIL_CHARS: usize = 2_000;
 /// - `user_rules`: the custom instructions (AI-36) and the host's AI notes (AI-37), each cut to
 ///   its limit as the system prompt cuts it, under a line that says which they are.
 /// - `earlier_calls`: the calls before it, oldest first, those of its own response included, as
-///   [`shown_call`] gives them.
+///   [`shown_call`] gives them. A call the user rejected adds the reason they typed
+///   (`rejection`): the user's own words, which no user message carries.
 /// - `call`: the call itself. An MCP tool, called directly or through `call_mcp_tool` (AI-45),
 ///   adds its server's name and the tool's description and annotations; `send_input` adds
 ///   `screen_tail` ([`screen_tail`]).
@@ -3273,12 +3303,29 @@ fn judge_state(
         })
         .filter(|text| !text.is_empty())
         .collect();
+    let results = pair_results(entries);
+    let rejection = |response: usize, call: usize| match results
+        .get(&(response, call))
+        .map(|&result| &entries[result].body)
+    {
+        Some(EntryBody::Tool {
+            status: ToolStatus::Rejected,
+            content,
+            ..
+        }) => Some(content.clone()),
+        _ => None,
+    };
     let calls = calls_of(&entries[at]);
-    let earlier_calls = entries[..at]
-        .iter()
-        .flat_map(calls_of)
-        .chain(&calls[..index])
-        .map(|c| shown_call(&c.name, &c.arguments))
+    let earlier_calls = (0..at)
+        .flat_map(|response| (0..calls_of(&entries[response]).len()).map(move |c| (response, c)))
+        .chain((0..index).map(|c| (at, c)))
+        .map(|(response, c)| {
+            let call = &calls_of(&entries[response])[c];
+            JudgeCall {
+                rejection: rejection(response, c),
+                ..shown_call(&call.name, &call.arguments)
+            }
+        })
         .collect();
     let call = &calls[index];
     let mut judged = shown_call(&call.name, &call.arguments);
@@ -3304,8 +3351,8 @@ fn judge_state(
     }
     JudgeState {
         host,
-        user_messages,
         user_rules: judge_rules(v, conversation),
+        user_messages,
         earlier_calls,
         call: judged,
     }
@@ -3365,7 +3412,8 @@ fn annotations_of(a: &hatoba_ai::mcp::ToolAnnotations) -> Option<Value> {
 
 /// AI-47: the screen's last lines as a `send_input` call shows them to the judge: control
 /// characters removed, the blank lines at the end left out, then at most the last
-/// [`SCREEN_TAIL_LINES`] lines and [`SCREEN_TAIL_CHARS`] characters. `None` when nothing is left.
+/// [`MAX_SCREEN_TAIL_LINES`] lines and [`MAX_SCREEN_TAIL_CHARS`] characters. `None` when nothing
+/// is left.
 fn screen_tail(screen: &str) -> Option<String> {
     let cleaned: String = screen
         .chars()
@@ -3373,8 +3421,8 @@ fn screen_tail(screen: &str) -> Option<String> {
         .collect();
     let lines: Vec<&str> = cleaned.lines().map(str::trim_end).collect();
     let end = lines.iter().rposition(|l| !l.is_empty())? + 1;
-    let tail = lines[end.saturating_sub(SCREEN_TAIL_LINES)..end].join("\n");
-    let surplus = tail.chars().count().saturating_sub(SCREEN_TAIL_CHARS);
+    let tail = lines[end.saturating_sub(MAX_SCREEN_TAIL_LINES)..end].join("\n");
+    let surplus = tail.chars().count().saturating_sub(MAX_SCREEN_TAIL_CHARS);
     Some(tail.chars().skip(surplus).collect())
 }
 

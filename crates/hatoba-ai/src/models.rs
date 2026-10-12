@@ -450,7 +450,7 @@ async fn probe_decision(
     )]);
     let state = json!("The sky is blue.");
     let model = ModelSpec::new(model);
-    decision::evaluate(http, provider, &model, &state, &questions, cancel)
+    decision::evaluate(http, provider, &model, &state, None, &questions, cancel)
         .await
         .map(drop)
 }

@@ -112,10 +112,13 @@ describe("Auto mode on calls (AI-47)", () => {
       "Auto asked because: changes something (71%), not clearly asked for (40%)",
     );
     expect(render(waiting({ id: "call_1", state: "approval", auto: { rule: { kind: "command", command: "rm -r" } } }))).toContain(
-      "Auto always asks for commands that name rm -r.",
+      "Auto always asks when the input names rm -r.",
+    );
+    expect(render(waiting({ id: "call_1", state: "approval", auto: { rule: { kind: "after_reject" } } }))).toContain(
+      "You rejected an earlier call in this reply, so Auto asks about the rest of it.",
     );
     const unavailable = render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", [], "unavailable") } }));
-    expect(unavailable).toContain("Auto could not judge this call: no judge is chosen in Settings → AI.");
+    expect(unavailable).toContain("Auto could not judge this call: no judge is available. Choose one in Settings → AI.");
     expect(unavailable).toContain("Open Settings → AI");
     expect(render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", [], "overloaded_v2") } }))).toContain("Auto could not judge this call.");
     expect(render(waiting({ id: "call_1", state: "approval" }))).not.toContain("Auto");

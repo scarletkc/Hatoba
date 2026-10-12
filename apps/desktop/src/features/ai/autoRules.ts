@@ -8,10 +8,19 @@ import type { ToolKind } from "./tools";
  *
  * - an MCP tool whose server is set to **Always ask** (AI-31), or a tool that cannot be found (its server was
  *   deleted, say), which asks in every mode;
- * - a `run_command` command or `send_input` text with hidden or bidirectional characters, which could show
- *   the judge and the user something other than what runs;
- * - a `run_command` command or `send_input` text that names one of {@link ALWAYS_ASK_COMMANDS};
- * - `send_input` while the screen's last line asks for a password or passphrase.
+ * - a `run_command` command, `send_input` text or string of an MCP call's arguments with hidden or
+ *   bidirectional characters, which could show the judge and the user something other than what runs (an MCP
+ *   call's strings may hold the tabs and line breaks of code and text: {@link MCP_HIDDEN});
+ * - a `run_command` command, `send_input` text or MCP call's arguments that name one of
+ *   {@link ALWAYS_ASK_COMMANDS}: an MCP call's strings at any depth, as its server may run them as a command;
+ * - `send_input` while the screen's last line asks for a password or passphrase;
+ * - any call after the user rejected an earlier call of the same response (`after_reject`, which the turn
+ *   applies).
+ *
+ * A `send_input` call that submits a line (its text has a line break, or its key is Enter) is also checked
+ * with the cursor's line before it, so that a command split across calls is caught: `rm ` typed by one call
+ * and `-rf /data` plus Enter by the next, or `shut` completed by Tab and then entered. The cursor's line
+ * starts with the prompt, which {@link namedCommand} reads past.
  *
  * `sudo` is not one of them: the judge sees what the command does.
  */
@@ -31,12 +40,14 @@ export type HardRule =
   | { kind: "mcp_always_ask" }
   /** The MCP call's tool cannot be found, so it asks in every mode (AI-31). */
   | { kind: "mcp_unknown" }
-  /** The command or the text has hidden or bidirectional characters. */
+  /** The command, the text or the MCP call's arguments have hidden or bidirectional characters. */
   | { kind: "hidden" }
-  /** The command or the text names `command`: one of {@link ALWAYS_ASK_COMMANDS}, or `rm -r`. */
+  /** The command, the line the text submits or the MCP call's arguments name `command`: one of {@link ALWAYS_ASK_COMMANDS}, or `rm -r`. */
   | { kind: "command"; command: string }
   /** `send_input` while the screen asks for a password or passphrase. */
-  | { kind: "password" };
+  | { kind: "password" }
+  /** The user rejected an earlier call of the same response, so Auto asks about the rest of its calls. */
+  | { kind: "after_reject" };
 
 export interface HardRuleInput {
   kind: ToolKind;
@@ -44,28 +55,83 @@ export interface HardRuleInput {
   args: Record<string, unknown>;
   /** An MCP call's tool (`mcp_tool_info`), null when it cannot be found. */
   mcp?: McpToolInfo | null;
-  /** For `send_input`, the screen's last lines, the cursor's line last. */
+  /** For `send_input`, the screen's last lines, the cursor's line last; without them, only the text is checked. */
   screen?: string | null;
 }
 
-/** The hard rule that sends a call in Auto mode straight to the approval card, or null when the judge decides it (AI-47). */
+/**
+ * The hard rule that sends a call in Auto mode straight to the approval card, or null when the judge decides it
+ * (AI-47). `after_reject` is not decided here: it depends on the response's earlier calls.
+ */
 export function hardRule({ kind, args, mcp, screen }: HardRuleInput): HardRule | null {
-  if (kind === "mcp") return !mcp ? { kind: "mcp_unknown" } : mcp.always_ask ? { kind: "mcp_always_ask" } : null;
+  if (kind === "mcp") {
+    if (!mcp) return { kind: "mcp_unknown" };
+    if (mcp.always_ask) return { kind: "mcp_always_ask" };
+    const { keys, values } = mcpStrings(args);
+    if (keys.some((s) => MCP_HIDDEN.test(s)) || values.some((s) => MCP_HIDDEN.test(s))) return { kind: "hidden" };
+    // The values in order as one text, so that a command given as a list of words (`["rm", "-rf", "/srv"]`) asks too.
+    return commandRule([values.join("\n")]);
+  }
   if (kind !== "run_command" && kind !== "send_input") return null;
   const value = kind === "run_command" ? args.command : args.text;
   const text = typeof value === "string" ? value : "";
   if (HIDDEN.test(text)) return { kind: "hidden" };
-  if (kind === "send_input" && screen && passwordPrompt(lastLine(screen))) return { kind: "password" };
-  const command = namedCommand(text);
-  return command ? { kind: "command", command } : null;
+  if (kind !== "send_input" || !screen) return commandRule([text]);
+  const cursor = lastLine(screen);
+  if (passwordPrompt(cursor)) return { kind: "password" };
+  if (!submits(args, text)) return commandRule([text]);
+  if (HIDDEN.test(cursor)) return { kind: "hidden" };
+  // The line the shell receives: the text continues what the cursor's line holds, whose trailing spaces the
+  // screen does not keep, so the two are joined both without and with a space.
+  return commandRule([text, cursor + text, `${cursor} ${text}`]);
+}
+
+function commandRule(lines: readonly string[]): HardRule | null {
+  for (const line of lines) {
+    const command = namedCommand(line);
+    if (command) return { kind: "command", command };
+  }
+  return null;
+}
+
+/** Whether a `send_input` call submits the line it types: its text has a line break, or its key is Enter. */
+function submits(args: Record<string, unknown>, text: string): boolean {
+  return text.includes("\n") || (typeof args.key === "string" && args.key.toLowerCase() === "enter");
+}
+
+/**
+ * What is hidden in an MCP call's strings: {@link HIDDEN} without carriage return. Tab, line feed, carriage
+ * return and the zero-width joiner and non-joiner are allowed, as the code and text an MCP tool takes often
+ * hold them (the joiners in emoji and in Persian or Indic text); every other control character, and the
+ * bidirectional and other zero-width format characters, are not.
+ */
+const MCP_HIDDEN = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060-\u2069\ufeff]/;
+
+/** The strings of an MCP call's arguments, through nested objects and arrays: the objects' keys, and the values. */
+function mcpStrings(args: unknown): { keys: string[]; values: string[] } {
+  const keys: string[] = [];
+  const values: string[] = [];
+  const visit = (value: unknown) => {
+    if (typeof value === "string") values.push(value);
+    else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === "object") {
+      for (const [key, inner] of Object.entries(value)) {
+        keys.push(key);
+        visit(inner);
+      }
+    }
+  };
+  visit(args);
+  return { keys, values };
 }
 
 /**
  * What separates words for {@link namedCommand}: white space and the shell's punctuation, so that a command
  * joined to others (`a;rm`), substituted (`$(rm …)`), in a group or brace expansion (`{rm,-rf,/}`), or set as
- * a value (`alias x=reboot`) is a word of its own.
+ * a value (`alias x=reboot`) is a word of its own; and `#` and `%`, which with `$` and `>` end prompts, so that
+ * a command typed right after a prompt without a space (`root@db1:~#rm`) is one too.
  */
-const SEPARATORS = /[\s;|&()<>{}`$=,]+/;
+const SEPARATORS = /[\s;|&()<>{}`$=,#%]+/;
 
 /**
  * The first of {@link ALWAYS_ASK_COMMANDS} that `line` names, as named (without its directory), or `rm -r` for

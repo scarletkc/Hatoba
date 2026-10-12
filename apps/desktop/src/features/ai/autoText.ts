@@ -16,6 +16,8 @@ const QUESTION: Record<string, MessageKey> = {
   destroys_data: "ai.auto.q.destroys_data",
   touches_secrets: "ai.auto.q.touches_secrets",
   sends_data_out: "ai.auto.q.sends_data_out",
+  security_change: "ai.auto.q.security_change",
+  runs_unseen_code: "ai.auto.q.runs_unseen_code",
   sensitive_file: "ai.auto.q.sensitive_file",
   url_carries_data: "ai.auto.q.url_carries_data",
 };
@@ -31,6 +33,8 @@ const CONCERN: Record<string, MessageKey> = {
   destroys_data: "ai.auto.concern.destroys_data",
   touches_secrets: "ai.auto.concern.touches_secrets",
   sends_data_out: "ai.auto.concern.sends_data_out",
+  security_change: "ai.auto.concern.security_change",
+  runs_unseen_code: "ai.auto.concern.runs_unseen_code",
   sensitive_file: "ai.auto.concern.sensitive_file",
   url_carries_data: "ai.auto.concern.url_carries_data",
 };
@@ -92,6 +96,8 @@ export function ruleText(t: Tr, rule: HardRule): string {
       return t("ai.auto.rule.command", { command: rule.command });
     case "password":
       return t("ai.auto.rule.password");
+    case "after_reject":
+      return t("ai.auto.rule.afterReject");
   }
 }
 
