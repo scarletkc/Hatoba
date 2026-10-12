@@ -227,9 +227,10 @@
   box-shadow: var(--focus-ring);
 }
 
-/* Segmented control */
+/* Segmented control. It keeps the width of its segments, in a grid cell or a flex column alike. */
 .segmented {
   display: inline-flex;
+  width: fit-content;
   padding: 2px;
   border-radius: var(--radius-control);
   background: var(--fill);

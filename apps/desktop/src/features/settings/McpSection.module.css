@@ -366,10 +366,6 @@
   min-width: 0;
 }
 
-.stack > [role="radiogroup"] {
-  align-self: flex-start;
-}
-
 .argRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;

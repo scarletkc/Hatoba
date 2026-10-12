@@ -4,10 +4,6 @@
   gap: 6px;
 }
 
-.field > [role="radiogroup"] {
-  align-self: flex-start;
-}
-
 .label {
   font-size: var(--text-sm);
   font-weight: 500;

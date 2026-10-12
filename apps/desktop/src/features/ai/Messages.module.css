@@ -282,8 +282,12 @@
 }
 
 .toolHeadRow {
+  position: relative;
   display: flex;
   align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 9px 0 10px;
   border-radius: 9px;
   min-width: 0;
 }
@@ -292,18 +296,12 @@
   background: var(--fill);
 }
 
-.toolHeadRow > .toolHead {
-  flex: 1;
-}
-
-.toolHeadRow > .toolHead:hover {
-  background: transparent;
-}
-
-/* AI-41: Revert in the header, shown while the pointer or focus is on the header. */
+/* AI-41: Revert in the header, before the status and shown while the pointer or focus is on the header. It sits
+   above the head's cover, so it takes its own clicks. */
 .toolHeadAction {
+  position: relative;
   flex: none;
-  margin-right: 5px;
+  margin: 0 -4px;
   opacity: 0;
 }
 
@@ -329,21 +327,40 @@
   font-size: inherit;
 }
 
+/* The head's cover spans the whole row, so a click on the status or caret after Revert opens the block too, and
+   its focus ring wraps the row. */
 .toolHead {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 32px;
-  padding: 0 9px 0 10px;
+  align-self: stretch;
+  padding: 0;
   border: 0;
-  border-radius: 9px;
   background: transparent;
   text-align: left;
   min-width: 0;
 }
 
-.toolHead:hover {
-  background: var(--fill);
+.toolHead::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+}
+
+.toolHead:focus-visible {
+  outline: none;
+}
+
+.toolHead:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toolStatus {
+  flex: none;
+  display: flex;
 }
 
 .toolIcon {
