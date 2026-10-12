@@ -211,6 +211,10 @@ struct Inner {
     mcp: McpManager,
     /// Running turns by conversation id.
     turns: Mutex<HashMap<String, Arc<Turn>>>,
+    /// Stops that wait for the commands of their turns to end (AI-18), by conversation id: the
+    /// turn they halted and the `run_command` calls they wait for. They settle the turn once the
+    /// commands have ended, unless another stop or the lock settles it first.
+    stopping: Mutex<HashMap<String, (Halted, Vec<String>)>>,
     /// Running tools, compactions and provider requests, so that stop and lock reach them.
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
@@ -479,9 +483,10 @@ impl AiManager {
             .clone()
     }
 
-    /// A turn of the conversation is running.
+    /// A turn of the conversation is running, or a stop of one waits for its commands to end.
     pub fn is_running(&self, conversation_id: &str) -> bool {
         guard(&self.0.turns).contains_key(conversation_id)
+            || guard(&self.0.stopping).contains_key(conversation_id)
     }
 
     fn running(&self, conversation_id: &str) -> Option<Arc<Turn>> {
@@ -675,9 +680,17 @@ impl AiManager {
     /// tools, stores what a response being streamed has shown as an `interrupted` entry, stores a
     /// cancelled result for every call without one, and sends those entries and
     /// `turn_ended { stopped }` on the turn's channel. Returns the entries it stored.
+    /// A stop that waits for commands ([`Self::stop_commands`]) is settled here at once: its
+    /// commands get results that say they may still be running.
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
+        let mut stored = Vec::new();
+        let waiting = guard(&self.0.stopping).remove(conversation_id);
+        if let Some((halted, waited)) = waiting {
+            stored = self.settle(v, conversation_id, halted, &waited);
+        }
         let halted = self.halt(conversation_id);
-        self.settle(v, conversation_id, halted, &[])
+        stored.extend(self.settle(v, conversation_id, halted, &[]));
+        stored
     }
 
     /// The first part of a stop, with the vault guard held: cancels the conversation's turn and
@@ -790,33 +803,34 @@ impl AiManager {
 
     /// AI-18: stops the conversation when its turn runs commands (`run_command`), after waiting
     /// for them: the stop ends them, and waits up to [`COMMAND_STOP_WAIT`] for their calls to
-    /// store results that say whether they ended. Without a command, does nothing and returns
-    /// `None`, and the caller stops the conversation, if it should, as before. `check` runs
-    /// first, under the vault guard, and refuses the stop. Returns the entries the stop stored.
+    /// store results that say whether they ended. Meanwhile the conversation counts as running,
+    /// and another stop, a message or the lock settles the stop at once ([`Self::stop_locked`]).
+    /// Without a command, does nothing and returns `None`. Returns the entries the stop stored.
     async fn stop_commands(
         &self,
         vault: &SharedVault,
         conversation_id: &str,
-        check: impl FnOnce(&Vault) -> AppResult<()>,
-    ) -> AppResult<Option<Vec<AiEntryView>>> {
-        let (halted, commands) = {
-            let v = lock(vault);
-            let commands: Vec<(String, CancellationToken)> = guard(&self.0.ops)
+    ) -> Option<Vec<AiEntryView>> {
+        let ends = {
+            let _v = lock(vault);
+            self.running(conversation_id)?;
+            let (waited, ends): (Vec<String>, Vec<CancellationToken>) = guard(&self.0.ops)
                 .values()
                 .filter(|op| {
                     op.kind == OpKind::Command
                         && op.conversation_id.as_deref() == Some(conversation_id)
                 })
                 .filter_map(|op| op.tool_call_id.clone().map(|id| (id, op.ended.clone())))
-                .collect();
-            if commands.is_empty() || !self.is_running(conversation_id) {
-                return Ok(None);
+                .unzip();
+            if waited.is_empty() {
+                return None;
             }
-            check(&v)?;
-            (self.halt(conversation_id), commands)
+            let halted = self.halt(conversation_id);
+            guard(&self.0.stopping).insert(conversation_id.to_owned(), (halted, waited));
+            ends
         };
         let ended = async {
-            for (_, ended) in &commands {
+            for ended in &ends {
                 ended.cancelled().await;
             }
         };
@@ -826,21 +840,20 @@ impl AiManager {
         {
             tracing::warn!(conversation_id, "a stopped command did not report in time");
         }
-        let waited: Vec<String> = commands.into_iter().map(|(id, _)| id).collect();
-        Ok(Some(self.settle(
-            &mut lock(vault),
-            conversation_id,
-            halted,
-            &waited,
-        )))
+        let mut v = lock(vault);
+        // Settled meanwhile by another stop, a message or the lock.
+        let Some((halted, waited)) = guard(&self.0.stopping).remove(conversation_id) else {
+            return Some(Vec::new());
+        };
+        Some(self.settle(&mut v, conversation_id, halted, &waited))
     }
 
     /// `ai_stop`: stops the conversation's turn and tools, if any, and cancels its open calls.
     /// A command that runs is ended first, so its result says whether it did (AI-18).
     pub async fn stop(&self, vault: &SharedVault, env: &dyn AiEnv, conversation_id: &str) {
-        let stored = match self.stop_commands(vault, conversation_id, |_| Ok(())).await {
-            Ok(Some(stored)) => stored,
-            _ => self.stop_locked(&mut lock(vault), conversation_id),
+        let stored = match self.stop_commands(vault, conversation_id).await {
+            Some(stored) => stored,
+            None => self.stop_locked(&mut lock(vault), conversation_id),
         };
         if !stored.is_empty() {
             env.changed();
@@ -851,7 +864,10 @@ impl AiManager {
     /// outside a turn, side questions (AI-42) included, so the assistant never acts behind the
     /// lock screen (§13.1). Called with the vault guard, before `Vault::lock`.
     pub fn stop_all(&self, v: &mut Vault) {
-        let running: Vec<String> = guard(&self.0.turns).keys().cloned().collect();
+        let mut running: Vec<String> = guard(&self.0.turns).keys().cloned().collect();
+        running.extend(guard(&self.0.stopping).keys().cloned());
+        running.sort_unstable();
+        running.dedup();
         for conversation_id in &running {
             self.stop_locked(v, conversation_id);
         }
@@ -934,6 +950,10 @@ impl AiManager {
             let mut v = unlocked(vault)?;
             find_conversation(&v, conversation_id)?;
             if let Some(turn) = self.cancel(conversation_id) {
+                turn.end(AiTurnEndReason::Stopped);
+            }
+            let waiting = guard(&self.0.stopping).remove(conversation_id);
+            if let Some(turn) = waiting.and_then(|(halted, _)| halted.turn) {
                 turn.end(AiTurnEndReason::Stopped);
             }
             self.stop_sides(conversation_id);
@@ -1138,20 +1158,7 @@ impl AiManager {
             return Err(AppError::invalid("text", "The message is empty."));
         }
         let server_id = turn_server_id(env.as_ref(), &context);
-        // AI-18: a command the running turn runs ends first, so its result says whether it did.
-        // An edit deletes that result with the entries after the edited message.
-        let mut stopped = Vec::new();
-        if let (Some(id), None) = (&conversation_id, replace)
-            && let Some(entries) = self
-                .stop_commands(vault, id, |v| {
-                    find_conversation(v, id)?;
-                    self.not_reverting(id)
-                })
-                .await?
-        {
-            stopped = entries;
-        }
-        let mut stored = !stopped.is_empty();
+        let mut stored = false;
         let registered = self.open_turn(
             vault,
             conversation_id,
@@ -1159,7 +1166,6 @@ impl AiManager {
             &text,
             (context, server_id),
             sink,
-            stopped,
             &mut stored,
         );
         if stored {
@@ -1332,8 +1338,6 @@ impl AiManager {
     /// context is compacted stores no message, where the entries before the message came from,
     /// which the message records (AI-43), and a new conversation, which is created with its
     /// message under the id registered here, so such a stop leaves no empty conversation.
-    /// `stopped`: the entries [`Self::stop_commands`] stored first, which the new turn's channel
-    /// sends with those of this stop.
     #[expect(
         clippy::too_many_arguments,
         reason = "the pieces of start_turn, which owns them"
@@ -1346,11 +1350,10 @@ impl AiManager {
         text: &str,
         (context, server_id): (AiTurnContext, Option<String>),
         sink: Arc<dyn EventSink>,
-        stopped: Vec<AiEntryView>,
         stored: &mut bool,
     ) -> AppResult<Opened> {
         let mut v = unlocked(vault)?;
-        let mut cancelled = stopped;
+        let mut cancelled = Vec::new();
         let (id, notes, moved_to, recorded, created, edit) = match conversation_id {
             Some(id) => {
                 let conversation = find_conversation(&v, &id)?;
@@ -1360,7 +1363,7 @@ impl AiManager {
                     Some(entry_id) => Some(edited_entry(&v, &id, entry_id)?),
                     None => None,
                 };
-                cancelled.extend(self.stop_locked(&mut v, &id));
+                cancelled = self.stop_locked(&mut v, &id);
                 *stored |= !cancelled.is_empty();
                 // The entries before the new message, and the host the context came from before
                 // the entries an edit deletes, as their earliest host_change note names it.

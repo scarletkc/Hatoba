@@ -838,14 +838,17 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
             "{path} changed on the host while Hatoba was changing it, so nothing was written. \
              Read it again with read_file before you change it."
         ),
-        RemoteFileError::Incomplete => format!(
-            "The new text of {path} did not reach the host whole, so nothing was written. Try \
-             again."
-        ),
-        RemoteFileError::NulByte => format!(
-            "The new text of {path} has a NUL byte, and the file tools write text files only, so \
-             nothing was written."
-        ),
+        RemoteFileError::Incomplete(stderr) => {
+            let why = if stderr.is_empty() {
+                String::new()
+            } else {
+                format!(" ({stderr})")
+            };
+            format!(
+                "The new text of {path} did not reach the host whole{why}, so nothing was \
+                 written. Try again."
+            )
+        }
         RemoteFileError::Failed { status, stderr } => {
             command_failed(&format!("{verb} {path}"), status, &stderr)
         }

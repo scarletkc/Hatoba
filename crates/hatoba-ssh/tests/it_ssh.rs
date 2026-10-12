@@ -736,19 +736,16 @@ async fn remote_files_are_read_and_written_in_place() {
         remote_file::read(&session, new_name, 1024).await,
         Err(RemoteFileError::NotFound)
     ));
-    // Every byte but NUL, which a write cannot carry, arrives as it is.
-    let content: Vec<u8> = pseudo_random(256 * 1024, 5)
-        .into_iter()
-        .map(|b| b.max(1))
-        .collect();
-    assert!(matches!(
-        remote_file::write(&session, new_name, b"a\0b", Expect::Missing, None).await,
-        Err(RemoteFileError::NulByte)
-    ));
-    remote_file::write(&session, new_name, &content, Expect::Missing, Some(0o640))
-        .await
-        .unwrap();
-    assert_eq!(std::fs::read(&new).unwrap(), content);
+    remote_file::write(
+        &session,
+        new_name,
+        &pseudo_random(256 * 1024, 5),
+        Expect::Missing,
+        Some(0o640),
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read(&new).unwrap(), pseudo_random(256 * 1024, 5));
     assert_eq!(std::fs::metadata(&new).unwrap().mode() & 0o777, 0o640);
 
     // Revert (AI-41) deletes a file the tools created, only while it holds what they wrote.
@@ -757,7 +754,7 @@ async fn remote_files_are_read_and_written_in_place() {
         Err(RemoteFileError::Changed)
     ));
     assert!(new.exists());
-    let deleted = remote_file::delete(&session, new_name, &content)
+    let deleted = remote_file::delete(&session, new_name, &pseudo_random(256 * 1024, 5))
         .await
         .unwrap();
     assert_eq!(deleted, new_name);

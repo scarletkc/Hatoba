@@ -1306,7 +1306,8 @@ pub fn stopped_command_result(
         }
         (CommandStop::User, StoppedCommand::Ended) => "The user stopped the command while it \
              ran. Hatoba ended it and the processes it started, so none of them is running on \
-             the host now.\n"
+             the host now, apart from any it started as a daemon or a service, such as a \
+             container.\n"
             .to_owned(),
         (CommandStop::User, StoppedCommand::MayRun) => "The user stopped the command while it \
              ran. Hatoba told it to end but could not confirm that it did, so it may still be \
@@ -1314,7 +1315,8 @@ pub fn stopped_command_result(
             .to_owned(),
         (CommandStop::Timeout(secs), StoppedCommand::Ended) => format!(
             "The command did not finish within {secs} seconds, so Hatoba ended it and the \
-             processes it started; none of them is running on the host now.\n"
+             processes it started; none of them is running on the host now, apart from any it \
+             started as a daemon or a service, such as a container.\n"
         ),
         (CommandStop::Timeout(secs), StoppedCommand::MayRun) => format!(
             "The command did not finish within {secs} seconds. Hatoba told it to end but could \
@@ -2182,7 +2184,8 @@ Skills are instructions for particular tasks. When a request matches a skill's d
         assert_eq!(
             stopped_command_result(User, Ended, "partial\n", ""),
             "The user stopped the command while it ran. Hatoba ended it and the processes it \
-             started, so none of them is running on the host now.\n--- stdout ---\npartial\n"
+             started, so none of them is running on the host now, apart from any it started as \
+             a daemon or a service, such as a container.\n--- stdout ---\npartial\n"
         );
         assert_eq!(
             stopped_command_result(User, MayRun, "", "err"),
@@ -2192,7 +2195,8 @@ Skills are instructions for particular tasks. When a request matches a skill's d
         assert_eq!(
             stopped_command_result(Timeout(30), Ended, "", ""),
             "The command did not finish within 30 seconds, so Hatoba ended it and the processes \
-             it started; none of them is running on the host now.\n(no output)\n"
+             it started; none of them is running on the host now, apart from any it started as a \
+             daemon or a service, such as a container.\n(no output)\n"
         );
         assert_eq!(
             stopped_command_result(Timeout(120), MayRun, "a", "b"),

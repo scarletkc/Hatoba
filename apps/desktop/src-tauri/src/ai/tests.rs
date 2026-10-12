@@ -32,7 +32,8 @@ use super::{
     Entries, EventSink, SIDE_AWAITING_APPROVAL, SIDE_PENDING, SIDE_QUESTION_INSTRUCTION,
 };
 use super::{
-    Halt, OpGuard, OpKind, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results,
+    Halt, OpGuard, OpKind, Streamed, Turn, append, lock, open_call, side_parts, title_of,
+    wait_for_results,
 };
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
@@ -1994,21 +1995,26 @@ async fn a_stop_while_a_file_tool_runs_says_the_file_may_have_changed() {
     );
 }
 
-/// What `tool_run` does for a `run_command` call that a stop cancels: the command takes a moment
-/// to end, then the call stores the result that says so, and lets go of its op.
-async fn command_ends(f: &Fixture, conv: &str, op: OpGuard<'_>, content: &str) {
+/// What `tool_run` does for a `run_command` call that a stop cancels: the command takes `takes`
+/// to end, then the call stores the result that says so, unless the call has one by then, and
+/// lets go of its op.
+async fn command_ends(f: &Fixture, conv: &str, op: OpGuard<'_>, takes: Duration) {
     op.token().cancelled().await;
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    f.manager
-        .store_result(
-            &mut lock(&f.vault),
-            conv,
-            "c1",
-            ToolStatus::Cancelled,
-            content.into(),
-            false,
-        )
-        .unwrap();
+    tokio::time::sleep(takes).await;
+    let mut v = lock(&f.vault);
+    if open_call(&Entries::load(&v, conv).unwrap(), "c1").is_ok() {
+        f.manager
+            .store_result(
+                &mut v,
+                conv,
+                "c1",
+                ToolStatus::Cancelled,
+                "ended".into(),
+                false,
+            )
+            .unwrap();
+    }
+    drop(v);
     drop(op);
 }
 
@@ -2045,8 +2051,9 @@ async fn a_stop_waits_for_a_running_command_and_keeps_its_result() {
 
     tokio::join!(
         f.manager.stop(&f.vault, f.env.as_ref(), &conv),
-        command_ends(&f, &conv, op, "ended"),
+        command_ends(&f, &conv, op, Duration::from_millis(100)),
     );
+    assert!(!f.manager.is_running(&conv));
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     assert_eq!(
         tool_results(&f.entries(&conv)),
@@ -2058,10 +2065,11 @@ async fn a_stop_waits_for_a_running_command_and_keeps_its_result() {
     assert_eq!(sent_results(&sink), ["c1", "c2"]);
 }
 
-/// AI-18: a message sent while a command runs stops the turn the same way, and the new turn's
-/// channel sends what the stop stored, before the message.
+/// AI-18: while a stop waits for a command, the conversation counts as running, and a message
+/// sent meanwhile settles the stop at once: the command's result says it may still run, and comes
+/// before the message, which the new turn's channel sends it with.
 #[tokio::test]
-async fn a_message_sent_while_a_command_runs_waits_for_it() {
+async fn a_message_sent_while_a_stop_waits_settles_it() {
     let f = Fixture::new(vec![
         calls(&[("c1", "run_command", json!({"command": "sleep 300"}))]),
         answer("Stopped it."),
@@ -2072,16 +2080,26 @@ async fn a_message_sent_while_a_command_runs_waits_for_it() {
     sink.done_with(AiFinish::ToolCalls).await;
     let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
 
-    let ((_, next), ()) = tokio::join!(
-        f.send(Some(&conv), "never mind"),
-        command_ends(&f, &conv, op, "ended"),
+    let send = async {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(f.manager.is_running(&conv));
+        f.send(Some(&conv), "never mind").await
+    };
+    let ((), (_, next), ()) = tokio::join!(
+        f.manager.stop(&f.vault, f.env.as_ref(), &conv),
+        send,
+        command_ends(&f, &conv, op, Duration::from_millis(300)),
     );
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     assert_eq!(next.ended().await, AiTurnEndReason::Completed);
     let entries = f.entries(&conv);
     assert_eq!(
         tool_results(&entries),
-        [("c1", ToolStatus::Cancelled, "ended")]
+        [(
+            "c1",
+            ToolStatus::Cancelled,
+            hatoba_ai::tools::COMMAND_STOP_UNCONFIRMED
+        )]
     );
     let result = entries
         .iter()
@@ -2091,6 +2109,44 @@ async fn a_message_sent_while_a_command_runs_waits_for_it() {
         matches!(&entries[result + 1].body, EntryBody::User { text, .. } if text.ends_with("never mind"))
     );
     assert_eq!(sent_results(&next), ["c1"]);
+}
+
+/// AI-18: the lock settles a stop that waits for a command, so the command's call never stays
+/// without a result behind the lock screen.
+#[tokio::test]
+async fn the_lock_settles_a_stop_that_waits() {
+    let f = Fixture::new(vec![calls(&[
+        ("c1", "run_command", json!({"command": "sleep 300"})),
+        ("c2", "run_command", json!({"command": "ls"})),
+    ])])
+    .await;
+    let (started, sink) = f.send(None, "run it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
+    let lock_now = async {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        f.manager.stop_all(&mut lock(&f.vault));
+    };
+    tokio::join!(
+        f.manager.stop(&f.vault, f.env.as_ref(), &conv),
+        lock_now,
+        command_ends(&f, &conv, op, Duration::from_millis(300)),
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert!(!f.manager.is_running(&conv));
+    assert_eq!(
+        tool_results(&f.entries(&conv)),
+        [
+            (
+                "c1",
+                ToolStatus::Cancelled,
+                hatoba_ai::tools::COMMAND_STOP_UNCONFIRMED
+            ),
+            ("c2", ToolStatus::Cancelled, ""),
+        ]
+    );
+    assert_eq!(sent_results(&sink), ["c1", "c2"]);
 }
 
 /// AI-18: locking the vault stops the turn without waiting for a running command, so its result

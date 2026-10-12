@@ -52,8 +52,9 @@ use crate::session::{ExecOutput, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
 /// necessarily those it started). `kill -0` counts a process that ended but that its parent has
 /// not reaped yet, which an orphan stays until init reaps it, and some containers' init takes
 /// seconds or never does: on Linux, such a group is looked up in `/proc` before it counts as
-/// running. A command that ends on its own stops the second process, and leaves the processes it
-/// put in the background running.
+/// running. The signals go to the command's own process too, which a stop that comes before
+/// `setsid` or `perl` has made the group reaches all the same. A command that ends on its own
+/// stops the second process, and leaves the processes it put in the background running.
 ///
 /// One line without single quotes or backslashes, like the file tools' scripts, so every common
 /// login shell reads it the same way.
@@ -71,14 +72,15 @@ const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${SHELL:-sh}; \
      \"$s\" -c \"$d\" </dev/null 3<&- & ;; \
      *) \"$s\" -c \"$d\" </dev/null 3<&- & ;; esac; \
      p=$!; if [ $g = none ]; then t=$p; else t=-$p; fi; \
-     a() { case $(LC_ALL=C kill -0 $t 2>&1) in *\"No such process\"*) return 1;; esac; }; \
+     a() { kill -0 $p 2>/dev/null && return 0; \
+     case $(LC_ALL=C kill -0 $t 2>&1) in *[Nn]\"o such process\"*) return 1;; esac; }; \
      b() { [ -r /proc/self/stat ] || return 0; for f in /proc/[0-9]*/stat; do \
-     read -r l <\"$f\" 2>/dev/null || continue; l=${l##*) }; set -- $l; \
+     read -r l 2>/dev/null <\"$f\" || continue; l=${l##*\") \"}; set -- $l; \
      [ \"$3\" = \"$p\" ] && case $1 in Z) ;; *) return 0;; esac; done; return 1; }; \
-     ( IFS= read -r x; trap \"\" TERM; kill -TERM $t 2>/dev/null; \
+     ( IFS= read -r x; trap \"\" TERM; kill -TERM $t $p 2>/dev/null; \
      if sleep 0.1 2>/dev/null; then i=0.1 j=20 k=10; else i=1 j=2 k=1; fi; \
      while a && [ $j -gt 0 ]; do sleep $i; j=$((j-1)); done; \
-     if a; then kill -KILL $t 2>/dev/null; \
+     if a; then kill -KILL $t $p 2>/dev/null; \
      while a && [ $k -gt 0 ]; do sleep $i; k=$((k-1)); done; fi; \
      v=ended; if a; then v=running; [ $g = none ] || [ -n \"$(LC_ALL=C kill -0 $t 2>&1)\" ] || \
      b || v=ended; elif [ $g = none ]; then v=unknown; fi; echo \"$m $v\" ) <&3 3<&- & \
@@ -608,6 +610,24 @@ mod tests {
                 assert!(began.elapsed() < Duration::from_secs(3), "{command}");
                 assert_eq!(stdout, format!("{marker} ended\n"), "{command}");
                 assert!(running(&format!("sleep {tag}")).is_empty(), "{command}");
+            }
+        }
+
+        /// A stop that comes with the command, before the command's process group exists,
+        /// still ends it: with TERM, not KILL after the grace period, and nothing runs after it.
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn script_ends_a_command_stopped_as_it_arrives() {
+            for _ in 0..5 {
+                let tag = format!("35{}", nonce() % 1000);
+                let local = start(None, &format!("sleep {tag}; echo survived"));
+                let marker = local.marker.clone();
+                let began = Instant::now();
+                let (status, stdout, _) = finish(local, Some(0.0));
+                assert_eq!(stdout, format!("{marker} ended\n"));
+                assert_eq!(status, Some(143));
+                assert!(began.elapsed() < Duration::from_secs(2));
+                assert!(running(&format!("sleep {tag}")).is_empty());
             }
         }
 
