@@ -1364,7 +1364,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             ["runs_unseen_code", 0.01],
           ]),
         ),
-        result(at(2 * MIN + 1000), screen.id, "ok", "Alternate screen: no. This is everything in the terminal, 1 line(s).\n\ndeploy@prod-api-tokyo:/srv/api$"),
+        result(at(2 * MIN + 1000), screen.id, "ok", "Alternate screen: no. This is all of the terminal's 1 line(s).\n\ndeploy@prod-api-tokyo:/srv/api$"),
         reply(at(3 * MIN), SONNET, zh
           ? "上游 `api.service`（127.0.0.1:8080）在返回响应头之前关闭了连接。\n\n| 检查项 | 结果 |\n|---|---|\n| nginx | 正常运行 |\n| 上游 | **提前关闭连接** |\n\n建议先看 `journalctl -u api -n 100`，确认服务是否崩溃重启。"
           : "The upstream `api.service` (127.0.0.1:8080) closed the connection before sending headers.\n\n| Check | Result |\n|---|---|\n| nginx | running |\n| upstream | **closed early** |\n\nNext, look at `journalctl -u api -n 100` to see whether the service crashed and restarted.", {

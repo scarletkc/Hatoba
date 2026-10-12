@@ -75,7 +75,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             READ_TERMINAL,
             "Read the terminal tab's last `lines` lines, counted back from the last line with \
              text across the visible screen and the scrollback, as plain text with soft-wrapped \
-             lines joined, and whether the alternate screen (vim, htop, less and so on) is active. \
+             lines joined, with how many lines the terminal has in all and whether the alternate \
+             screen (vim, htop, less and so on) is active. \
              Use it to see the prompt, earlier output or a full-screen program. It runs without \
              asking."
                 .to_owned(),
@@ -85,7 +86,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     "lines": {
                         "type": "integer",
                         "description": "How many lines to return, counted back from the last \
-                                        line with text (default 100, at most 1000)."
+                                        line with text (at most 1000). Without it: 20, or the \
+                                        whole screen while the alternate screen is active."
                     }
                 }
             }),

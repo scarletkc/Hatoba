@@ -18,16 +18,16 @@ const POLL_MS = 100;
 export const NO_TAB = "No terminal tab is attached to this conversation, so terminal tools cannot run.";
 export const DISCONNECTED = "The terminal tab is disconnected. Ask the user to reconnect it, then try again.";
 
-function screenText(session: LiveSession, lines: number): ScreenText {
+function screenText(session: LiveSession, lines: number | null): ScreenText {
   const term = session.term;
   return readBuffer(term.buffer.active, term.rows, lines);
 }
 
 function describeScreen(s: ScreenText): string {
-  const n = s.text ? s.text.split("\n").length : 0;
+  const { shown, total } = s;
   const head = s.alternate
-    ? `Alternate screen: yes. A full-screen program (such as vim or htop) is running; ${s.more ? `these are the last ${n} line(s) of its screen` : "this is its whole screen"}.`
-    : `Alternate screen: no. ${s.more ? `These are the terminal's last ${n} line(s); earlier output is above them` : `This is everything in the terminal, ${n} line(s)`}.`;
+    ? `Alternate screen: yes. A full-screen program (such as vim or htop) is running; ${shown < total ? `these are the last ${shown} of its screen's ${total} lines` : `this is its whole screen, ${total} line(s)`}.`
+    : `Alternate screen: no. ${shown < total ? `These are the last ${shown} of the terminal's ${total} lines` : `This is all of the terminal's ${total} line(s)`}.`;
   return `${head}\n\n${s.text || "(the terminal is empty)"}`;
 }
 

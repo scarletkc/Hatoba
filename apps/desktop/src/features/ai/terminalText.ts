@@ -21,8 +21,10 @@ export interface ScreenText {
   text: string;
   /** A full-screen program (vim, htop, …) is using the alternate screen. */
   alternate: boolean;
-  /** Lines above the text were left out. */
-  more: boolean;
+  /** Lines in `text`. */
+  shown: number;
+  /** Lines in the terminal up to the last one with text, `shown` included. */
+  total: number;
 }
 
 /** The line that ends on row `last`, with its soft-wrapped rows joined and trailing spaces trimmed, and the row it starts on. */
@@ -37,9 +39,10 @@ function lineEndingAt(buf: BufferLike, last: number): { first: number; text: str
 
 /**
  * Up to `max` lines counted back from the last line with text at the bottom of the screen, reading
- * no line that ends above row `from`. A line that starts above `from` and wraps onto it is read whole.
+ * no line that ends above row `from`, and the last row above them. A line that starts above `from`
+ * and wraps onto it is read whole.
  */
-function readLines(buf: BufferLike, rows: number, max: number, from: number): ScreenText {
+function readLines(buf: BufferLike, rows: number, max: number, from: number): { lines: string[]; above: number } {
   const end = Math.min(buf.length, Math.max(0, buf.baseY) + rows);
   const out: string[] = [];
   let y = end - 1;
@@ -49,19 +52,25 @@ function readLines(buf: BufferLike, rows: number, max: number, from: number): Sc
     if (out.length > 0 || line.text !== "") out.push(line.text);
     y = line.first - 1;
   }
-  return { text: out.reverse().join("\n"), alternate: buf.type === "alternate", more: y >= 0 };
-}
-
-/**
- * AI-11: the terminal's last `lines` lines, counted back from the last line with text across the
- * screen and the scrollback, with soft-wrapped rows joined into one line.
- */
-export function readBuffer(buf: BufferLike, rows: number, lines: number): ScreenText {
-  return readLines(buf, rows, Math.max(1, lines), 0);
+  return { lines: out.reverse(), above: y };
 }
 
 /** Lines of the screen a message's `terminal_state` note shows, unless a full-screen program runs (AI-46). */
 export const SCREEN_NOTE_LINES = 20;
+
+/**
+ * AI-11: the terminal's last `lines` lines, counted back from the last line with text across the
+ * screen and the scrollback, with soft-wrapped rows joined into one line. Without `lines`, as many as
+ * a `terminal_state` note shows: {@link SCREEN_NOTE_LINES}, or the whole screen of a full-screen program.
+ */
+export function readBuffer(buf: BufferLike, rows: number, lines: number | null): ScreenText {
+  const alternate = buf.type === "alternate";
+  const read = readLines(buf, rows, Math.max(1, lines ?? (alternate ? Infinity : SCREEN_NOTE_LINES)), 0);
+  let total = read.lines.length;
+  // Every row that does not continue the one above it starts a line.
+  for (let y = 0; y <= read.above; y++) if (y === 0 || !buf.getLine(y)?.isWrapped) total++;
+  return { text: read.lines.join("\n"), alternate, shown: read.lines.length, total };
+}
 
 /**
  * AI-46: the screen a message's `terminal_state` note shows: its last {@link SCREEN_NOTE_LINES} lines
@@ -70,8 +79,8 @@ export const SCREEN_NOTE_LINES = 20;
  */
 export function screenNote(buf: BufferLike, rows: number): { text: string; alternate: boolean } {
   const alternate = buf.type === "alternate";
-  const { text } = readLines(buf, rows, alternate ? Infinity : SCREEN_NOTE_LINES, Math.max(0, buf.baseY));
-  return { text, alternate };
+  const { lines } = readLines(buf, rows, alternate ? Infinity : SCREEN_NOTE_LINES, Math.max(0, buf.baseY));
+  return { text: lines.join("\n"), alternate };
 }
 
 /** Lines of the screen a `send_input` call's judge reads, and its hard rules check (AI-47). */
@@ -82,7 +91,7 @@ export const SCREEN_TAIL_LINES = 10;
  * cursor waits at a prompt, so the judge can tell what a `send_input` call answers.
  */
 export function screenTail(buf: BufferLike, rows: number): string {
-  return readLines(buf, rows, SCREEN_TAIL_LINES, Math.max(0, buf.baseY)).text;
+  return readLines(buf, rows, SCREEN_TAIL_LINES, Math.max(0, buf.baseY)).lines.join("\n");
 }
 
 /**

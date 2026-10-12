@@ -116,9 +116,9 @@ describe("permission modes (§13.5)", () => {
 });
 
 describe("read_terminal arguments (AI-11)", () => {
-  it("defaults to 100 lines and clamps to 1..1000", () => {
-    expect(parseReadTerminal("{}")).toEqual({ ok: true, value: { lines: 100 } });
-    expect(parseReadTerminal("")).toEqual({ ok: true, value: { lines: 100 } });
+  it("leaves an absent count to the default and clamps to 1..1000", () => {
+    expect(parseReadTerminal("{}")).toEqual({ ok: true, value: { lines: null } });
+    expect(parseReadTerminal("")).toEqual({ ok: true, value: { lines: null } });
     expect(parseReadTerminal('{"lines": 5000}')).toEqual({ ok: true, value: { lines: 1000 } });
     expect(parseReadTerminal('{"lines": -3}')).toEqual({ ok: true, value: { lines: 1 } });
     expect(parseReadTerminal('{"lines": 0}')).toEqual({ ok: true, value: { lines: 1 } });
