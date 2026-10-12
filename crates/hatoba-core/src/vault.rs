@@ -300,6 +300,17 @@ fn fallback_settings_row(vault_key: &[u8; 32], settings: &Item) -> Result<ItemRo
     })
 }
 
+/// Drops this device's sealed recovery secret unless `recovery_vault_key`, the remote's
+/// recovery wrapper about to be stored, is the one stored now: only the same recovery code keeps
+/// the secret valid. A code rotated elsewhere, or another vault, whose wrapper never matches,
+/// makes it stale.
+fn drop_stale_recovery_auth(tx: &impl StoreOps, recovery_vault_key: &str) -> Result<()> {
+    if tx.get_meta(meta::RECOVERY_VAULT_KEY)?.as_deref() != Some(recovery_vault_key) {
+        tx.delete_meta(meta::RECOVERY_AUTH_SEALED)?;
+    }
+    Ok(())
+}
+
 /// Item ids are what the Worker accepts: `[A-Za-z0-9_-]{1,64}`.
 fn valid_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
@@ -1333,12 +1344,11 @@ impl Vault {
     /// same vault key (the password was changed on another device).
     pub(crate) fn adopt_remote_meta(&mut self, remote: &VaultMeta) -> Result<()> {
         self.store.transaction(|tx| {
+            drop_stale_recovery_auth(tx, &remote.recovery_vault_key)?;
             tx.set_meta(meta::KDF_SALT, &remote.kdf_salt)?;
             tx.set_meta(meta::KDF_PARAMS, &remote.kdf_params)?;
             tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
-            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
-            // The recovery code may have been rotated elsewhere; our sealed copy is then stale.
-            tx.delete_meta(meta::RECOVERY_AUTH_SEALED)
+            tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)
         })
     }
 
@@ -1434,6 +1444,7 @@ impl Vault {
             } else {
                 tx.mark_all_dirty_for_upload()?;
             }
+            drop_stale_recovery_auth(tx, &remote.recovery_vault_key)?;
             tx.set_meta(
                 meta::SCHEMA_VERSION,
                 &crate::store::SCHEMA_VERSION
@@ -1445,8 +1456,6 @@ impl Vault {
             tx.set_meta(meta::PROTECTED_VAULT_KEY, &remote.protected_vault_key)?;
             tx.set_meta(meta::RECOVERY_VAULT_KEY, &remote.recovery_vault_key)?;
             tx.set_meta(meta::VAULT_CHECK, &check)?;
-            // The remote's recovery code is not this device's to know.
-            tx.delete_meta(meta::RECOVERY_AUTH_SEALED)?;
             tx.delete_meta(meta::UNLOCK_FAILURES)?;
             tx.delete_meta(meta::UNLOCK_LAST_FAILURE_AT)?;
             tx.set_meta(meta::SYNC_BACKEND, &config)?;

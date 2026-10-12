@@ -729,6 +729,52 @@ async fn join_reconnects_a_device_that_synced_before() {
 }
 
 #[tokio::test]
+async fn the_recovery_secret_stays_as_long_as_the_recovery_code_does() {
+    let (_server, clock, a, b) = two_devices().await;
+    // A password change elsewhere keeps the recovery code, so A, which created the vault, keeps
+    // its recovery secret when it signs in again.
+    change_password_remote(&b.vault, &b.backend, PW, "pw2")
+        .await
+        .unwrap();
+    clock.advance(1000);
+    sign_in(&a.vault, &a.backend, "pw2", a.info())
+        .await
+        .unwrap();
+    assert!(a.v().recovery_auth().is_ok());
+
+    // So does reconnecting to the same vault, which can then still be set up on a new remote.
+    a.v().set_sync_config(None).unwrap();
+    join_remote_vault(&a.vault, &a.backend, "pw2", a.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    assert!(a.v().recovery_auth().is_ok());
+    a.v().set_sync_config(None).unwrap();
+    let other = FakeServer::new();
+    enable_sync(
+        &a.vault,
+        &FakeBackend::new(&other),
+        "pw2",
+        Some(SETUP_TOKEN),
+        a.info(),
+    )
+    .await
+    .unwrap();
+
+    // A recovery code rotated elsewhere makes the secret stale.
+    rotate_recovery_remote(&b.vault, &b.backend, "pw2")
+        .await
+        .unwrap();
+    a.v().set_sync_config(None).unwrap();
+    join_remote_vault(&a.vault, &a.backend, "pw2", a.info(), &config(), |_| Ok(()))
+        .await
+        .unwrap();
+    assert!(matches!(
+        a.v().recovery_auth(),
+        Err(Error::RecoveryMaterialMissing)
+    ));
+}
+
+#[tokio::test]
 async fn join_requires_sync_to_be_off() {
     let (server, clock, a, _b) = world();
     enable(&a).await;
