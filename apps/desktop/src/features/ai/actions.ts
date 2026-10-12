@@ -64,12 +64,14 @@ import {
   defaultMode,
   getSlot,
   HOME_SLOT,
+  inBackground,
   NO_SELECTION,
   offersHomeConversation,
   patchSlot,
   sendsScreen,
   setSlot,
   slotOf,
+  tabOf,
   updateConversation,
   useAi,
   type InputChip,
@@ -79,7 +81,7 @@ import {
   type TabSelection,
 } from "./store";
 import { screenNote, screenTail } from "./terminalText";
-import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
+import { DISCONNECTED, NO_TAB, readTerminal, sendInput, terminalInUse } from "./terminalTools";
 import {
   allowanceOf,
   allowanceScope,
@@ -120,10 +122,11 @@ export function aiErrorMessage(e: unknown, tr: (key: MessageKey, params?: Params
   return errorMessage(tr, e);
 }
 
-/** The terminal tab a slot is attached to; null for the home tab or a tab that is gone. */
+/** The terminal tab a slot belongs to (`tabOf`, AI-07); null for the home tab or a tab that is gone. */
 export function attachedTab(slotId: string): { tab: SessionTab; session: LiveSession | undefined } | null {
-  if (slotId === HOME_SLOT) return null;
-  const tab = useTabs.getState().tabs.find((x) => x.id === slotId);
+  const tabId = tabOf(slotId);
+  if (tabId === HOME_SLOT) return null;
+  const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   return tab ? { tab, session: getSession(tab.id) } : null;
 }
 
@@ -244,14 +247,25 @@ function failedVerdict(): AiAutoVerdict {
 const runners = new Map<string, TurnRunner>();
 
 /**
+ * AI-07: the turn that holds each tab's terminal for `send_input`, by tab. A tab's conversations share its one
+ * interactive shell, so the first turn that types into it holds it until that turn ends, and another turn's input
+ * never lands in the middle of its work. Reading the screen, `run_command` (its own exec channel) and the file
+ * tools need no hold.
+ */
+const terminalHolders = new Map<string, TurnRunner>();
+
+/**
  * Drives one turn (§13.1) for the slot it belongs to: applies the streamed events, then handles the
  * tool calls of each response one at a time, in order, applying the permission mode (§13.5).
  * `read_terminal` and `send_input` run here; other tools run in Rust.
  */
 class TurnRunner {
-  /** The slot the turn's events and state go to; moves with the conversation (Connect to host, AI-09). */
+  /**
+   * The slot the turn's events and state go to; moves with the conversation (Connect to host, AI-09), and
+   * into the background of its tab and back (AI-07).
+   */
   slotId: string;
-  /** The tab the turn started on, the only one whose terminal its tools may use (AI-08). */
+  /** The tab the turn started on, the only one whose terminal its tools may use (AI-08), also from the background (AI-07). */
   private readonly tab: string;
   /** The permission mode the model was told of for this turn (§13.5); a switch to bypass waits for the next message. */
   private readonly mode: AiPermissionMode;
@@ -271,7 +285,7 @@ class TurnRunner {
 
   constructor(slotId: string, convId: string | null, mode: AiPermissionMode) {
     this.slotId = slotId;
-    this.tab = slotId;
+    this.tab = tabOf(slotId);
     this.convId = convId;
     this.mode = mode;
     this.ready = new Promise((resolve) => (this.resolveReady = resolve));
@@ -288,12 +302,22 @@ class TurnRunner {
   }
 
   /**
-   * The terminal the turn's tools act on: its own tab's, and none once the conversation moved to
-   * another slot, whose tab may be on another host (AI-08). Moving a running turn is refused where it
-   * can be; this holds whatever moves it.
+   * The terminal the turn's tools act on: its own tab's, while that tab shows the conversation or holds it in
+   * the background (AI-07), and none once the conversation moved to another tab, which may be on another
+   * host (AI-08). Moving a running turn is refused where it can be; this holds whatever moves it.
    */
   private target(): ReturnType<typeof attachedTab> {
-    return this.slotId === this.tab ? attachedTab(this.tab) : null;
+    return tabOf(this.slotId) === this.tab ? attachedTab(this.tab) : null;
+  }
+
+  /**
+   * AI-07: the error result of a `send_input` call while another turn holds the tab's terminal
+   * (`terminalHolders`), naming that turn's conversation; null when this turn may type into it.
+   */
+  private terminalTaken(): string | null {
+    const holder = terminalHolders.get(this.tab);
+    if (!holder || holder === this || !holder.active) return null;
+    return terminalInUse(getSlot(holder.slotId).conversation?.title ?? "");
   }
 
   get gone(): boolean {
@@ -349,7 +373,7 @@ class TurnRunner {
     }, 3000);
   }
 
-  /** The slot no longer shows this conversation: stop the turn in Rust and forget it here. */
+  /** The conversation is closed with its tab, or deleted: stop the turn in Rust and forget it here. */
   abandon() {
     this.stopping = true;
     const id = this.convId;
@@ -375,6 +399,7 @@ class TurnRunner {
   private release() {
     this.decide({ kind: "stop" });
     this.abort.abort();
+    if (terminalHolders.get(this.tab) === this) terminalHolders.delete(this.tab);
   }
 
   private finish(reason: AiTurnEndReason) {
@@ -426,6 +451,9 @@ class TurnRunner {
     const kind = toolKind(call.name);
     // AI-09: with no terminal tab, a terminal tool cannot run, so it gets its error without asking first.
     if (needsSession(kind) && !this.target()) return this.answer(convId, call.id, NO_TAB);
+    // AI-07: nor can `send_input` while another conversation's turn holds the tab's terminal.
+    const taken = kind === "send_input" ? this.terminalTaken() : null;
+    if (taken) return this.answer(convId, call.id, taken);
     // AI-31: an MCP call's tool, resolved the way Rust runs the call; its Always allow and its server's
     // Always ask decide whether it asks. A `call_mcp_tool` call (AI-45) counts as the tool it names.
     let mcp: McpToolInfo | null = null;
@@ -590,6 +618,10 @@ class TurnRunner {
     try {
       if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited, judged });
       if (kind === "send_input") {
+        // Another turn may have taken the terminal while this call waited for approval.
+        const taken = this.terminalTaken();
+        if (taken) return this.report(convId, call.id, error(taken));
+        terminalHolders.set(this.tab, this);
         const result = await sendInput(target!.session!, args, this.abort.signal);
         if (!result || !this.active) return;
         return this.report(convId, call.id, { ...result, edited_arguments: edited, judged });
@@ -601,7 +633,7 @@ class TurnRunner {
       // AI-41: a write that began keeps a snapshot, which the call's block can now revert, also when it failed
       // partway. Keeping it may have dropped older ones over the size limit, of any conversation.
       if (dropped_file_changes) refreshAllFileChanges();
-      else if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(this.slotId, convId);
+      else if (kind === "edit_file" || kind === "write_file") void refreshFileChanges(convId);
     } catch (e) {
       if (!this.active) return;
       await this.report(convId, call.id, error(`The tool failed: ${toAppError(e).detail}`));
@@ -724,6 +756,19 @@ async function sendQueued(slotId: string) {
   if (!(await sendMessage(slotId, ""))) giveBackQueued(slotId);
 }
 
+/**
+ * AI-07: the first message of a new conversation left in the background was not stored (it failed, or was
+ * stopped): nothing can open that conversation again, so the message, and one queued after it, go back into the
+ * input area of its tab, and the background slot goes.
+ */
+function giveBackUnstored(slotId: string, message: QueuedMessage) {
+  const { queued } = getSlot(slotId);
+  const tab = tabOf(slotId);
+  dropBackground(slotId);
+  if (queued) putBack(tab, queued);
+  putBack(tab, message);
+}
+
 /** The slot's queued message goes back into its input area, unsent, before what that holds (§13.1). */
 function giveBackQueued(slotId: string) {
   const queued = getSlot(slotId).queued;
@@ -802,13 +847,18 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     patchSlot(target, (s) => ({ conversationId: conv.id, conversation: withContext(s, conv), entries: placeUserEntry(s.entries, started.user_entry) }));
     return true;
   } catch (e) {
-    // The conversation may have moved meanwhile (Connect to host); its runner moved with it.
+    // The conversation may have moved meanwhile (Connect to host, or into the background, AI-07); its runner moved
+    // with it. Closing its tab meanwhile discarded the input area, so nothing goes back.
     const target = runner.slotId;
     runner.dispose();
-    // A message queued meanwhile goes back too, after this one.
-    giveBackQueued(target);
-    patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null }));
-    putBack(target, message);
+    const held = target in useAi.getState().slots;
+    if (held && inBackground(target) && !getSlot(target).conversationId) giveBackUnstored(target, message);
+    else if (held) {
+      // A message queued meanwhile goes back too, after this one.
+      giveBackQueued(target);
+      patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null }));
+      putBack(target, message);
+    }
     // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
     // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
     if (toAppError(e).code !== "cancelled") toast(aiErrorMessage(e), "error");
@@ -1084,15 +1134,16 @@ export async function stopTurn(slotId: string) {
 
 /** AI-41: reads again the file changes of every open conversation, as the size limit spans them all. */
 function refreshAllFileChanges() {
-  for (const [id, s] of Object.entries(useAi.getState().slots)) if (s.conversationId) void refreshFileChanges(id, s.conversationId);
+  for (const s of Object.values(useAi.getState().slots)) if (s.conversationId) void refreshFileChanges(s.conversationId);
 }
 
-/** AI-41: reads again which changes of the conversation's file tool calls this device keeps. */
-export async function refreshFileChanges(slotId: string, convId: string) {
+/** AI-41: reads again which changes of the conversation's file tool calls this device keeps, for the slot that holds it then. */
+export async function refreshFileChanges(convId: string) {
   try {
     const fileChanges = await api.ai_file_changes(convId);
+    const target = slotOf(convId);
     // The lock cleared them meanwhile: they name servers and paths.
-    if (unlocked() && getSlot(slotId).conversationId === convId) patchSlot(slotId, { fileChanges });
+    if (unlocked() && target) patchSlot(target, { fileChanges });
   } catch {
     // Locked or deleted meanwhile; the next load reads them again.
   }
@@ -1150,7 +1201,7 @@ export async function revertFileChange(
   } catch (e) {
     toast(aiErrorMessage(e), "error");
     // The size limit may have dropped the change meanwhile, or another device's edit deleted its call.
-    void refreshFileChanges(slotId, convId);
+    void refreshFileChanges(convId);
     return null;
   } finally {
     patchSlot(slotId, { reverting: false });
@@ -1187,7 +1238,7 @@ async function revertChange(slotId: string, convId: string, change: AiFileChange
     if (outcome.status === "reverted") markReverted(slotId, convId, change);
     return outcome;
   } catch (e) {
-    void refreshFileChanges(slotId, convId);
+    void refreshFileChanges(convId);
     return { status: "failed", reason: "failed", detail: aiErrorMessage(e) };
   }
 }
@@ -1213,14 +1264,67 @@ export type { Decision };
 
 // ───────────────────────── conversations in slots ─────────────────────────
 
-/** The slot's conversation leaves it: its turn and its side question (AI-42) stop, and its queued message goes back into the input area (§13.1). */
+let backgroundSeq = 0;
+
+/**
+ * The slot's conversation leaves it, for another one (AI-07): its side question stops (AI-42). A conversation
+ * with work under way, a turn or a compaction, goes on in the background of the slot's tab, with its queued
+ * message (§13.1), which is sent when the turn ends; an idle one's queued message goes back into the input area.
+ */
 function release(slotId: string) {
+  stopSideQuestion(slotId);
+  if (slotWorking(slotId)) toBackground(slotId);
+  else giveBackQueued(slotId);
+}
+
+/**
+ * AI-07: moves the slot's conversation, with its runner, to a background slot of the slot's tab, where its turn
+ * goes on: its tools still act on that tab (AI-08), and its approval card waits there until the conversation is
+ * shown again. The input area stays with the tab, and the side question, stopped, is discarded (AI-42).
+ */
+function toBackground(slotId: string) {
+  const id = `bg-${++backgroundSeq}`;
+  const source = getSlot(slotId);
+  useAi.setState((st) => ({
+    slots: { ...st.slots, [id]: { ...source, draft: "", extras: [], side: null, reveal: null } },
+    background: { ...st.background, [id]: tabOf(slotId) },
+  }));
+  const runner = runners.get(slotId);
+  if (runner) {
+    runners.delete(slotId);
+    runner.slotId = id;
+    runners.set(id, runner);
+  }
+}
+
+/** A background slot goes: its conversation is shown again, deleted, or its tab closed (AI-07). */
+function dropBackground(id: string) {
+  useAi.setState((st) => {
+    const slots = { ...st.slots };
+    const background = { ...st.background };
+    delete slots[id];
+    delete background[id];
+    return { slots, background };
+  });
+}
+
+/**
+ * The conversation stops being held where it is (its tab closes, or it is deleted): its turn and its side
+ * question (AI-42) stop, and its queued message goes back into the input area (§13.1).
+ */
+function stopSlot(slotId: string) {
   runners.get(slotId)?.abandon();
   stopSideQuestion(slotId);
   giveBackQueued(slotId);
 }
 
-/** New conversation (AI-07): stored when its first message is sent. */
+/** The slot's conversation is gone (deleted): a tab's slot gets a new conversation, keeping its input area, and a background slot goes. */
+function clearSlot(slotId: string) {
+  if (inBackground(slotId)) dropBackground(slotId);
+  else setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
+}
+
+/** New conversation (AI-07): stored when its first message is sent. A busy one it replaces goes on in the background (`release`). */
 export function newConversation(slotId: string) {
   release(slotId);
   setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
@@ -1250,39 +1354,52 @@ export async function reloadSlot(slotId: string) {
     if (getSlot(slotId).conversationId !== id) return;
     if (toAppError(e).code === "not_found") {
       giveBackQueued(slotId);
-      setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras)); // deleted on another device
+      clearSlot(slotId); // deleted on another device
       return;
     }
     patchSlot(slotId, { loading: false, loadFailed: true });
   }
 }
 
-/** Whether a slot's conversation is busy: a turn running (here or in Rust), waiting for approval, compacting, or reverting a file change (AI-41). */
-function slotBusy(slotId: string): boolean {
+/** Whether a slot's conversation has work under way: a turn running (here or in Rust) or waiting for approval, or a compaction. */
+function slotWorking(slotId: string): boolean {
   const s = getSlot(slotId);
-  return !!s.turn || s.remoteRunning || s.compacting || s.reverting || runners.has(slotId);
+  return !!s.turn || s.remoteRunning || s.compacting || runners.has(slotId);
 }
 
-/** Whether a conversation is busy in the slot that shows it (`slotBusy`); one no slot shows is not. */
+/** Whether a slot's conversation is busy: working (`slotWorking`), or reverting a file change (AI-41). */
+function slotBusy(slotId: string): boolean {
+  return slotWorking(slotId) || getSlot(slotId).reverting;
+}
+
+/** Whether a conversation is busy in the slot that holds it (`slotBusy`), in a tab or in the background; one no slot holds is not. */
 export function conversationBusy(id: string): boolean {
   const slotId = slotOf(id);
   return !!slotId && slotBusy(slotId);
 }
 
 /**
- * Moves a slot's conversation to another slot; the source gets a new conversation. A running turn moves
- * with it (Connect to host moves the home tab's), but it never uses the terminal of the slot it moved to:
- * its runner stays pinned to the tab it started on (AI-08).
+ * Moves a slot's conversation to another slot; a tab's slot it leaves gets a new conversation, and a background
+ * slot goes. A running turn moves with it (Connect to host moves the home tab's), but it never uses the terminal
+ * of a tab it moved to: its runner stays pinned to the tab it started on (AI-08).
  */
 function moveSlot(from: string, to: string) {
   const source = getSlot(from);
   const runner = runners.get(from);
   const target = getSlot(to);
-  // The input area of the slot the conversation moves to wins when it holds something, a tab's selection or
-  // diagnostics chip included (AI-10); the source's then stays.
-  const keep = !!target.draft || pendingAttachments(to).length > 0;
-  setSlot(to, { ...source, draft: keep ? target.draft : source.draft, extras: keep ? target.extras : source.extras });
-  setSlot(from, keep ? blankSlot(defaultMode(), source.draft, source.extras) : blankSlot());
+  if (inBackground(from)) {
+    // Back from the background (AI-07): the tab's input area keeps what it holds, after what went back into the
+    // conversation's own (a queued message that was not sent, §13.1).
+    const draft = !source.draft.trim() ? target.draft : target.draft.trim() ? `${source.draft}\n\n${target.draft}` : source.draft;
+    setSlot(to, { ...source, draft, extras: [...source.extras, ...target.extras] });
+    dropBackground(from);
+  } else {
+    // The input area of the slot the conversation moves to wins when it holds something, a tab's selection or
+    // diagnostics chip included (AI-10); the source's then stays.
+    const keep = !!target.draft || pendingAttachments(to).length > 0;
+    setSlot(to, { ...source, draft: keep ? target.draft : source.draft, extras: keep ? target.extras : source.extras });
+    setSlot(from, keep ? blankSlot(defaultMode(), source.draft, source.extras) : blankSlot());
+  }
   if (runner) {
     runners.delete(from);
     runner.slotId = to;
@@ -1291,10 +1408,12 @@ function moveSlot(from: string, to: string) {
 }
 
 /**
- * Opens a conversation from history in a slot (AI-09); a conversation shown elsewhere moves here. One
- * that is busy in another tab (a turn running or waiting for approval, or a compaction) stays there,
- * since its turn acts on that tab's terminal (AI-08): its tab comes to the front instead.
- * `reveal`: an entry to scroll to and highlight, from a history search hit (AI-24).
+ * Opens a conversation from history in a slot (AI-09); a conversation shown elsewhere, or left in the
+ * background (AI-07), moves here. One that is busy in another tab (a turn running or waiting for approval, or
+ * a compaction) stays there, since its turn acts on that tab's terminal (AI-08): its tab comes to the front
+ * instead, and shows it when it went on in that tab's background. The slot's own conversation leaves it
+ * (`release`), so a busy one goes on in the background. `reveal`: an entry to scroll to and highlight, from a
+ * history search hit (AI-24).
  */
 export async function openConversation(slotId: string, id: string, reveal: string | null = null) {
   const current = getSlot(slotId);
@@ -1303,8 +1422,10 @@ export async function openConversation(slotId: string, id: string, reveal: strin
     return;
   }
   const from = slotOf(id);
-  if (from && from !== slotId && slotBusy(from)) {
-    useTabs.getState().activate(from);
+  const owner = from ? tabOf(from) : null;
+  if (from && owner && owner !== slotId && slotBusy(from)) {
+    useTabs.getState().activate(owner);
+    if (from !== owner) return openConversation(owner, id, reveal);
     if (reveal) patchSlot(from, { reveal });
     return;
   }
@@ -1350,10 +1471,18 @@ export function continueHomeConversation(tabId: string): boolean {
   return true;
 }
 
-/** Closing a tab detaches its conversation, which stays in history (AI-08). Its turn stops. */
+/**
+ * Closing a tab detaches its conversation, which stays in history (AI-08). Its turn stops, and so do those of the
+ * conversations it left in the background (AI-07), whose queued messages go with the tab's input area (§13.1).
+ */
 export function detachSlot(slotId: string) {
-  release(slotId);
+  stopSlot(slotId);
   setSlot(slotId, null);
+  for (const [id, tab] of Object.entries(useAi.getState().background)) {
+    if (tab !== slotId) continue;
+    stopSlot(id);
+    dropBackground(id);
+  }
   useAi.setState((st) => {
     if (!st.selections[slotId] && !st.diagnostics[slotId]) return {};
     const selections = { ...st.selections };
@@ -1731,8 +1860,8 @@ export async function exportConversation(id: string) {
 export async function deleteConversation(id: string) {
   const slotId = slotOf(id);
   if (slotId) {
-    release(slotId);
-    setSlot(slotId, blankSlot(defaultMode(), getSlot(slotId).draft, getSlot(slotId).extras));
+    stopSlot(slotId);
+    clearSlot(slotId);
   }
   try {
     await api.ai_conversation_delete(id);

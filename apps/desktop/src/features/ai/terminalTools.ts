@@ -18,6 +18,12 @@ const POLL_MS = 100;
 export const NO_TAB = "No terminal tab is attached to this conversation, so terminal tools cannot run.";
 export const DISCONNECTED = "The terminal tab is disconnected. Ask the user to reconnect it, then try again.";
 
+/** AI-07: `send_input` while another conversation's turn on the tab holds its terminal, named by its title. */
+export function terminalInUse(title: string): string {
+  const other = title ? `another conversation on this tab ("${title}")` : "another conversation on this tab";
+  return `The terminal is in use by ${other}, whose turn typed into it and is still running, so send_input cannot type into it until that turn ends. Commands that need no interaction can still run with run_command. Otherwise tell the user, and try again after that turn ends.`;
+}
+
 function screenText(session: LiveSession, lines: number | null): ScreenText {
   const term = session.term;
   return readBuffer(term.buffer.active, term.rows, lines);

@@ -184,6 +184,28 @@
   white-space: nowrap;
 }
 
+/* AI-07: as the tab bar marks a tab whose conversation runs or waits for approval. */
+.activity {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.activityRunning {
+  color: var(--accent);
+  animation: activityPulse 1.4s ease-in-out infinite;
+}
+
+.activityWaiting {
+  color: var(--orange);
+}
+
+@keyframes activityPulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .rowMeta {
   display: flex;
   align-items: center;

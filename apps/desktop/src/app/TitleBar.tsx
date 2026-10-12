@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/controls";
 import { AiPanelButton } from "@/features/ai/AiPanel";
-import { slotActivity, useAi } from "@/features/ai/store";
+import { tabActivity, useAi } from "@/features/ai/store";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
@@ -92,10 +92,10 @@ function TabOsIcon({ hostId, status }: { hostId: string | null; status: TabStatu
   return <OsIcon os={os} badge={STATUS_DOT[status]} />;
 }
 
-/** AI-07: a tab whose conversation is running a turn, or waiting for approval or Continue. */
+/** AI-07: a tab whose conversation, or one it left in the background, is running a turn or waiting for approval. */
 function AiActivity({ slotId }: { slotId: string }) {
   const t = useT();
-  const activity = useAi((st) => slotActivity(st.slots[slotId]));
+  const activity = useAi((st) => tabActivity(st, slotId));
   if (activity === "idle") return null;
   const label = t(activity === "waiting" ? "ai.tabWaiting" : "ai.tabRunning");
   return (
