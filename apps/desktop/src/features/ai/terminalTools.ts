@@ -82,9 +82,15 @@ function flush(session: LiveSession): Promise<void> {
  * or the whole screen when a full-screen program is running. Resolves to null when `signal` aborts
  * (the turn was stopped; Rust stores a cancelled result). Stopping never sends anything to the
  * terminal, so a started command keeps running (AI-18). `onType` runs just before the input goes to the
- * terminal, and not for a call that types nothing (AI-07: the turn holds the terminal from then on).
+ * terminal, and not for a call that types nothing, and the function it returns runs when the input could not be
+ * sent (AI-07: the turn holds the terminal once it types).
  */
-export async function sendInput(session: LiveSession, json: string, signal: AbortSignal, onType: () => void = () => {}): Promise<ToolOutcome | null> {
+export async function sendInput(
+  session: LiveSession,
+  json: string,
+  signal: AbortSignal,
+  onType: () => () => void = () => () => {},
+): Promise<ToolOutcome | null> {
   const parsed = parseSendInput(json);
   if (!parsed.ok) return { status: "error", content: `Invalid arguments: ${parsed.error}` };
   if (session.status !== "connected") return { status: "error", content: DISCONNECTED };
@@ -99,10 +105,11 @@ export async function sendInput(session: LiveSession, json: string, signal: Abor
   let ending: "quiet" | "timeout" | "disconnected" = "quiet";
   try {
     const data = text + (key ? keySequence(key, session.term.modes.applicationCursorKeysMode) : "");
-    onType();
+    const untype = onType();
     try {
       await session.sendInput(data);
     } catch (e) {
+      untype();
       return { status: "error", content: `The input could not be sent: ${toAppError(e).detail}` };
     }
     const started = Date.now();

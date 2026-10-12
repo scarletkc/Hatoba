@@ -45,13 +45,19 @@ vi.mock("@/features/terminal/session", async (importActual) => {
   const session = { status: "connected", term: { rows: 1, buffer: { active } } };
   return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId.startsWith("tab-") ? session : undefined) };
 });
-/** `send_input` typing into a tab's terminal: each call that types waits until the test answers it; one without text types nothing. */
+/** `send_input` typing into a tab's terminal: each call that types waits until the test answers it; one without text, or whose write fails, types nothing. */
 const typing = vi.hoisted(() => ({ calls: [] as { args: string; done: (outcome: ToolOutcome) => void }[] }));
 vi.mock("./terminalTools", async (importActual) => ({
   ...(await importActual<typeof import("./terminalTools")>()),
-  sendInput: (_session: unknown, args: string, _signal: AbortSignal, onType: () => void) => {
-    if (typeof (JSON.parse(args) as { text?: unknown }).text !== "string") return Promise.resolve<ToolOutcome>({ status: "error", content: "Invalid arguments: text is required" });
-    onType();
+  sendInput: (_session: unknown, args: string, _signal: AbortSignal, onType: () => () => void) => {
+    const { text } = JSON.parse(args) as { text?: unknown };
+    if (typeof text !== "string") return Promise.resolve<ToolOutcome>({ status: "error", content: "Invalid arguments: text is required" });
+    const untype = onType();
+    // "lost" stands for a write the connection dropped.
+    if (text === "lost") {
+      untype();
+      return Promise.resolve<ToolOutcome>({ status: "error", content: "The input could not be sent: connection lost" });
+    }
     return new Promise<ToolOutcome>((done) => typing.calls.push({ args, done }));
   },
 }));
@@ -402,9 +408,10 @@ describe("a tab's terminal shared by its conversations (AI-07)", () => {
     const sent = turns();
     patchSlot(TAB, { mode: "bypass" });
     await sendMessage(TAB, "tail the log");
-    answer(sent[0].emit, "a1", [call("call_1", "send_input", { key: "enter" })]);
-    await until(() => ipc.result.mock.calls.length === 1);
+    answer(sent[0].emit, "a1", [call("call_1", "send_input", { key: "enter" }), call("call_1b", "send_input", { text: "lost", key: "enter" })]);
+    await until(() => ipc.result.mock.calls.length === 2);
     expect(ipc.result).toHaveBeenCalledWith(nginx.id, "call_1", expect.objectContaining({ status: "error" }));
+    expect(ipc.result).toHaveBeenCalledWith(nginx.id, "call_1b", expect.objectContaining({ status: "error", content: expect.stringContaining("could not be sent") }));
 
     newConversation(TAB);
     patchSlot(TAB, { mode: "bypass" });

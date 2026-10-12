@@ -322,6 +322,15 @@ class TurnRunner {
     return tabOf(this.slotId) === this.tab ? attachedTab(this.tab) : null;
   }
 
+  /** AI-07: this turn holds the tab's terminal from now on; the function returned lets go of a hold it took just now. */
+  private holdTerminal(): () => void {
+    const held = terminalHolders.get(this.tab) === this;
+    terminalHolders.set(this.tab, this);
+    return () => {
+      if (!held && terminalHolders.get(this.tab) === this) terminalHolders.delete(this.tab);
+    };
+  }
+
   /**
    * AI-07: the error result of a `send_input` call while another turn holds the tab's terminal
    * (`terminalHolders`), naming that turn's conversation; null when this turn may type into it.
@@ -635,10 +644,10 @@ class TurnRunner {
       if (kind === "read_terminal") return this.report(convId, call.id, { ...readTerminal(target!.session!, args), edited_arguments: edited, judged });
       if (kind === "send_input") {
         // Another turn may have taken the terminal while this call waited for approval. This turn takes it once it
-        // types, so a call with invalid arguments, which types nothing, leaves it free.
+        // types, so a call that types nothing (invalid arguments, a write that failed) leaves it as it was.
         const taken = this.terminalTaken();
         if (taken) return this.report(convId, call.id, error(taken));
-        const result = await sendInput(target!.session!, args, this.abort.signal, () => terminalHolders.set(this.tab, this));
+        const result = await sendInput(target!.session!, args, this.abort.signal, () => this.holdTerminal());
         if (!result || !this.active) return;
         return this.report(convId, call.id, { ...result, edited_arguments: edited, judged });
       }
