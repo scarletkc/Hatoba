@@ -80,6 +80,15 @@ describe("useFreshReads", () => {
     expect(shown).toEqual(["first", "pulled"]);
   });
 
+  it("drops a read that a later read overtook", async () => {
+    mount();
+    act(() => useApp.getState().refreshSynced());
+    expect(reads).toHaveLength(2);
+    await answer(1, "after the second round");
+    await answer(0, "after the first round");
+    expect(shown).toEqual(["after the second round"]);
+  });
+
   it("drops a read that an edit raced and reads again once the save landed", async () => {
     mount();
     await answer(0, "first");
