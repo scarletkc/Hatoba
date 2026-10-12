@@ -23,6 +23,9 @@
 //!   each result as a `user` message that names its call (see `request`). Anthropic refuses
 //!   such blocks without `tools`, and so do several Chat Completions servers.
 //!
+//! - A System One provider answers decision questions for the judge of Auto mode (AI-47) and
+//!   cannot chat: [`stream_chat`] refuses it with [`AiError::Config`].
+//!
 //! Neither adapter logs a request, a response or the key (SEC-04).
 
 mod anthropic;
@@ -146,7 +149,8 @@ pub(crate) trait Assembler {
 /// provider reported none) and `finish`.
 ///
 /// Events arrive in order through `on_event`; [`StreamEvent::Usage`] comes last. When `cancel`
-/// fires, the connection is dropped and [`AiError::Cancelled`] returned promptly.
+/// fires, the connection is dropped and [`AiError::Cancelled`] returned promptly. A System One
+/// provider (AI-47) cannot chat, so it gets [`AiError::Config`] without a request.
 pub async fn stream_chat(
     http: &reqwest::Client,
     provider: &ProviderConfig,
@@ -154,6 +158,9 @@ pub async fn stream_chat(
     cancel: &CancellationToken,
     on_event: &mut (dyn FnMut(StreamEvent) + Send),
 ) -> Result<AssistantEntry, AiError> {
+    if provider.protocol == Protocol::SystemOne {
+        return Err(AiError::Config(CANNOT_CHAT.into()));
+    }
     let base = validate_base_url(&provider.base_url)?;
     let headers = provider.headers()?;
     match provider.protocol {
@@ -210,8 +217,13 @@ pub async fn stream_chat(
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }
+        Protocol::SystemOne => Err(AiError::Config(CANNOT_CHAT.into())),
     }
 }
+
+/// Why a System One provider gets no chat request (AI-47).
+const CANNOT_CHAT: &str =
+    "the provider answers decision questions for Auto mode (System One) and cannot chat";
 
 /// [`stream_chat`] without the deltas, for Compact (AI-21). It still streams, so a long summary
 /// never hits a provider's limit on non-streaming requests.

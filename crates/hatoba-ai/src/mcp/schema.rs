@@ -119,7 +119,9 @@ impl Cleaner<'_> {
         }
         match self.protocol {
             Protocol::Anthropic => self.anthropic(map, depth),
-            Protocol::ChatCompletions => self.chat(map, depth),
+            // A System One provider is offered no tools (AI-47); its schemas get the stricter
+            // cleaning.
+            Protocol::ChatCompletions | Protocol::SystemOne => self.chat(map, depth),
         }
     }
 
@@ -129,7 +131,7 @@ impl Cleaner<'_> {
             Value::Object(map) => Some(Value::Object(self.object(map, depth + 1))),
             Value::Bool(accept) => match self.protocol {
                 Protocol::Anthropic => Some(Value::Bool(*accept)),
-                Protocol::ChatCompletions => accept.then(|| json!({})),
+                Protocol::ChatCompletions | Protocol::SystemOne => accept.then(|| json!({})),
             },
             _ => Some(json!({})),
         }
@@ -522,7 +524,7 @@ fn fix_top(mut root: Map<String, Value>, protocol: Protocol) -> Map<String, Valu
     if !root.get("properties").is_some_and(Value::is_object) {
         root.insert("properties".to_owned(), json!({}));
     }
-    if protocol == Protocol::ChatCompletions {
+    if protocol != Protocol::Anthropic {
         keep_declared_required(&mut root);
     }
     root

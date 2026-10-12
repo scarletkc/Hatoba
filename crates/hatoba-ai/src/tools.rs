@@ -418,16 +418,26 @@ pub enum PromptTools {
 }
 
 /// A conversation's permission mode on the device that sends a message (AI-16, spec §13.5), as a
-/// `permission_mode` note names it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// `permission_mode` note names it. The modes order from the strictest: manual approval, Auto,
+/// bypass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PermissionMode {
     /// Calls that run commands, type, change files, fetch pages or use MCP tools wait for the
     /// user's approval, unless the user allowed them already. A conversation is in this mode
     /// until a note says otherwise.
     #[default]
     Manual,
+    /// AI-47: a call that manual approval would ask about goes to a judge first, which runs it
+    /// without the card when its answers show that the call only reads or is a change the user
+    /// asked for ([`judge`](crate::judge)); otherwise the card asks as in manual approval.
+    Auto,
     /// Calls run without asking, except the tools of MCP servers set to Always ask.
     Bypass,
+}
+
+impl PermissionMode {
+    /// Every mode, the strictest first.
+    pub const ALL: [Self; 3] = [Self::Manual, Self::Auto, Self::Bypass];
 }
 
 /// One line of user-controlled text inside the prompt: control characters and line breaks
@@ -638,6 +648,7 @@ pub fn permission_mode_block(mode: PermissionMode) -> String {
     const TAG: &str = "permission_mode";
     let (value, name) = match mode {
         PermissionMode::Manual => ("manual", "manual approval"),
+        PermissionMode::Auto => ("auto", "auto"),
         PermissionMode::Bypass => ("bypass", "bypass"),
     };
     format!(
@@ -649,7 +660,7 @@ pub fn permission_mode_block(mode: PermissionMode) -> String {
 /// summary, which carries the mode past a compaction, and the summary itself.
 #[must_use]
 pub fn split_permission_note(text: &str) -> (Option<PermissionMode>, &str) {
-    for mode in [PermissionMode::Manual, PermissionMode::Bypass] {
+    for mode in PermissionMode::ALL {
         if let Some(rest) = text.strip_prefix(permission_mode_block(mode).as_str()) {
             return (Some(mode), rest);
         }
@@ -731,8 +742,8 @@ const ATTACHMENTS: &str = "<attachments>\n\
      tools offered then, so what they said they could or could not do was true at the time.\n\
      - <model_change from=\"…\" to=\"…\">: with this message the user switched models. Earlier \
      replies came from the model in from.\n\
-     - <permission_mode mode=\"…\">: the permission mode from this message on, manual or bypass; \
-     the newest one applies. One can also start the message that continues a compacted \
+     - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
+     bypass; the newest one applies. One can also start the message that continues a compacted \
      conversation.\n\
      - <file_revert path=\"…\" tool_call_id=\"…\">: the user reverted the change that your \
      call tool_call_id made to the file at path, one block for each reverted call. \
@@ -755,9 +766,10 @@ const ATTACHMENTS: &str = "<attachments>\n\
      </attachments>\n";
 
 /// The rule on the permission modes (AI-16, spec §13.5), so the model plans for the one it is in:
-/// in manual approval the approval card asks the user, in bypass nothing does. Which one applies
-/// comes from the `permission_mode` notes, so a switch keeps the prompt and its cache, and so do
-/// allowances (AI-19, AI-31), which are named as a kind, not one by one.
+/// in manual approval the approval card asks the user, in Auto a judge first decides whether it
+/// needs to (AI-47), in bypass nothing does. Which one applies comes from the `permission_mode`
+/// notes, so a switch keeps the prompt and its cache, and so do allowances (AI-19, AI-31), which
+/// are named as a kind, not one by one.
 fn permission_rule(terminal: bool) -> String {
     let (tools, exempt) = if terminal {
         (
@@ -778,6 +790,12 @@ fn permission_rule(terminal: bool) -> String {
          asking for permission in prose first: the card is the question. Before anything that \
          changes or deletes data, restarts services or affects other users, say what it will \
          do.\n  \
+         - Auto: a call that manual approval would show a card for goes to a reviewer first, \
+         which runs it without the card when it finds that the call only reads, or is a change \
+         the user asked for that deletes nothing, touches no credentials and sends nothing out; \
+         otherwise the approval card shows as in manual approval. So call the tool rather than \
+         asking for permission in prose first. Before anything that changes or deletes data, \
+         restarts services or affects other users, say what it will do.\n  \
          - Bypass: your tool calls run as soon as you make them, without the user seeing them \
          first; only the tools of MCP servers the user set to always ask wait for approval. So \
          before anything that deletes data, cannot be undone, restarts services or affects \
@@ -1492,7 +1510,14 @@ mod tests {
                  run_command calls that only read and calls the user has already allowed run \
                  without one. So call the tool rather than asking for permission in prose first: \
                  the card is the question. Before anything that changes or deletes data, \
-                 restarts services or affects other users, say what it will do.\n  - Bypass: \
+                 restarts services or affects other users, say what it will do.\n  - Auto: a \
+                 call that manual approval would show a card for goes to a reviewer first, which \
+                 runs it without the card when it finds that the call only reads, or is a change \
+                 the user asked for that deletes nothing, touches no credentials and sends \
+                 nothing out; otherwise the approval card shows as in manual approval. So call \
+                 the tool rather than asking for permission in prose first. Before anything that \
+                 changes or deletes data, restarts services or affects other users, say what it \
+                 will do.\n  - Bypass: \
                  your tool calls run as soon as you make them, without the user seeing them \
                  first; only the tools of MCP servers the user set to always ask wait for \
                  approval. So before anything that deletes data, cannot be undone, restarts \
@@ -1524,7 +1549,15 @@ mod tests {
             "<permission_mode mode=\"manual\">\nFrom this message on, the permission mode is \
              manual approval.\n</permission_mode>\n\n"
         );
-        for mode in [PermissionMode::Manual, PermissionMode::Bypass] {
+        // AI-47.
+        assert_eq!(
+            permission_mode_block(PermissionMode::Auto),
+            "<permission_mode mode=\"auto\">\nFrom this message on, the permission mode is \
+             auto.\n</permission_mode>\n\n"
+        );
+        assert!(PermissionMode::Manual < PermissionMode::Auto);
+        assert!(PermissionMode::Auto < PermissionMode::Bypass);
+        for mode in PermissionMode::ALL {
             let stored = format!("{}We cleaned /tmp.", permission_mode_block(mode));
             assert_eq!(
                 split_permission_note(&stored),
@@ -1758,6 +1791,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - After a change, check that it worked before you call it done: test a configuration with the service's own test before reloading what uses it (such as nginx -t, sshd -t or visudo -c), and do not reload it while the test fails; then check what the user cares about, such as the service's status or the request that failed. When edit_file or write_file succeeds, the file holds what the call wrote, so do not read it back to check that. Say what you checked, or that you could not check it.
 - Permission mode: the newest <permission_mode> note says which mode applies; until one does, it is manual approval.
   - Manual approval: a call of run_command, send_input, edit_file, write_file, fetch_url or an MCP tool shows the user an approval card first, where the user can run, edit or reject it; run_command calls that only read and calls the user has already allowed run without one. So call the tool rather than asking for permission in prose first: the card is the question. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
+  - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval. So call the tool rather than asking for permission in prose first. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
   - Bypass: your tool calls run as soon as you make them, without the user seeing them first; only the tools of MCP servers the user set to always ask wait for approval. So before anything that deletes data, cannot be undone, restarts services or affects other users, unless the user asked for exactly that, stop and ask in chat, and go on only after the user agrees.
 - After a rejection, do not repeat the same call unchanged: change your approach as the user's reason says, or ask.
 - Read and change files with read_file, edit_file and write_file, not with cat, sed or heredocs, unless the file needs sudo. Use send_input for anything that needs the shell's working directory, environment or sudo session, or that is interactive, and run_command for the rest.
@@ -1780,7 +1814,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <host_change from="…" to="…">: with this message the conversation moved to another host. Screens and command output before it came from the host in from.
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
-- <permission_mode mode="…">: the permission mode from this message on, manual or bypass; the newest one applies. One can also start the message that continues a compacted conversation.
+- <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. One can also start the message that continues a compacted conversation.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.

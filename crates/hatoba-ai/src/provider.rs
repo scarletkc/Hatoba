@@ -20,10 +20,14 @@ pub enum Protocol {
     ChatCompletions,
     /// Anthropic Messages: `POST {base_url}/v1/messages`.
     Anthropic,
+    /// TypeSafe's System One decision format: `POST {base_url}/systemone`, or the model's own URL
+    /// on Workers AI (see [`decision`](crate::decision)). Such a provider answers decision
+    /// questions for the judge of Auto mode (AI-47) and cannot chat.
+    SystemOne,
 }
 
-/// Which header carries the key for the `anthropic` protocol (Chat Completions always uses
-/// `Authorization: Bearer`).
+/// Which header carries the key for the `anthropic` protocol (Chat Completions and System One
+/// always use `Authorization: Bearer`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AuthHeader {
     /// `x-api-key: <key>`.
@@ -311,6 +315,18 @@ mod tests {
             .unwrap();
         assert!(h.is_empty(), "an empty key sends no auth header");
 
+        // System One: always a bearer token, and nothing when the key is empty.
+        let h = config(Protocol::SystemOne, "k4", AuthHeader::XApiKey)
+            .headers()
+            .unwrap();
+        assert_eq!(h[AUTHORIZATION], "Bearer k4");
+        assert_eq!(h.len(), 1);
+        assert!(h[AUTHORIZATION].is_sensitive());
+        let h = config(Protocol::SystemOne, "", AuthHeader::Authorization)
+            .headers()
+            .unwrap();
+        assert!(h.is_empty());
+
         let err = config(Protocol::ChatCompletions, "bad\nkey", AuthHeader::XApiKey)
             .headers()
             .unwrap_err();
@@ -353,6 +369,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Protocol::Anthropic).unwrap(),
             "\"anthropic\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Protocol::SystemOne).unwrap(),
+            "\"system_one\""
         );
         assert_eq!(
             serde_json::to_string(&AuthHeader::XApiKey).unwrap(),

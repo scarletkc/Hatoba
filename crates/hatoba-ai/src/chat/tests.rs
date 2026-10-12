@@ -44,7 +44,7 @@ fn provider(server: &MockServer, protocol: Protocol) -> ProviderConfig {
         protocol,
         base_url: match protocol {
             Protocol::ChatCompletions => format!("{}/v1", server.uri()),
-            Protocol::Anthropic => server.uri(),
+            Protocol::Anthropic | Protocol::SystemOne => server.uri(),
         },
         api_key: Zeroizing::new(KEY.into()),
         auth_header: AuthHeader::XApiKey,

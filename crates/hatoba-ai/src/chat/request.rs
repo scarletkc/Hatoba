@@ -126,6 +126,8 @@ fn raw_usable(protocol: Protocol, raw: &Value, tools_offered: bool) -> bool {
     let shaped = match protocol {
         Protocol::ChatCompletions => raw.is_object() && raw_arguments_are_objects(raw),
         Protocol::Anthropic => raw.as_array().is_some_and(|blocks| !blocks.is_empty()),
+        // Never the protocol of a chat request (AI-47).
+        Protocol::SystemOne => false,
     };
     shaped && (tools_offered || !raw_has_tool_blocks(protocol, raw))
 }
@@ -173,6 +175,7 @@ fn raw_has_tool_blocks(protocol: Protocol, raw: &Value) -> bool {
                     })
             })
         }),
+        Protocol::SystemOne => false,
     }
 }
 
