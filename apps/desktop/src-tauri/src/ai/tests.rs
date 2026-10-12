@@ -2849,6 +2849,8 @@ async fn a_message_with_attachments_as_large_as_the_panel_allows_is_stored_whole
 
 #[test]
 fn search_finds_titles_and_message_text_once_per_conversation() {
+    use hatoba_ai::tools::{PermissionMode, permission_mode_block, terminal_state_block};
+
     let vault: SharedVault = {
         let mut vault = Vault::open_in_memory().unwrap();
         vault
@@ -2893,8 +2895,9 @@ fn search_finds_titles_and_message_text_once_per_conversation() {
             AiEntry::user(
                 1,
                 format!(
-                    "{}how full is /var?",
-                    hatoba_ai::tools::terminal_state_block("prod", false, "$ df\nscreen-needle")
+                    "{}{}how full is /var?",
+                    permission_mode_block(PermissionMode::Bypass),
+                    terminal_state_block("prod", false, "$ df\nscreen-needle")
                 ),
             ),
             answer("It is at 42% now."),
@@ -2906,7 +2909,10 @@ fn search_finds_titles_and_message_text_once_per_conversation() {
         &[
             AiEntry::user(1, "The NGINX config\nhas a typo"),
             AiEntry::user(2, "nginx again"),
-            AiEntry::summary(3, &long),
+            AiEntry::summary(
+                3,
+                format!("{}{long}", permission_mode_block(PermissionMode::Bypass)),
+            ),
             AiEntry::user(4, "Ärger mit Umlauten"),
         ],
     );
@@ -2928,9 +2934,11 @@ fn search_finds_titles_and_message_text_once_per_conversation() {
     let hits = search("42%");
     assert_eq!(hits[0].entry_id.as_deref(), Some(disk_ids[1].as_str()));
     assert_eq!(hits[0].snippet, "It is at 42% now.");
-    // Tool results are not searched, and neither is the screen a message showed (AI-46).
+    // Tool results are not searched, and neither is the screen a message showed (AI-46) or the
+    // permission mode note of a message or a summary (§13.5).
     assert!(search("tool-only-needle").is_empty());
     assert!(search("screen-needle").is_empty());
+    assert!(search("bypass").is_empty());
     assert_eq!(search("/var")[0].snippet, "how full is /var?");
     // One hit per conversation: the first matching entry, before the title.
     let hits = search("nginx");
@@ -3641,7 +3649,7 @@ async fn a_switch_of_permission_mode_is_noted_once_and_keeps_the_system_prompt()
     let first = system_of(&requests[0]);
     assert!(requests.iter().all(|r| system_of(r) == first));
     assert!(
-        first.contains("\n- Permission mode: the newest <permission_mode> note says"),
+        first.contains("\n- Permission mode: the newest <permission_mode> note among"),
         "{first}"
     );
 }
@@ -3686,7 +3694,9 @@ async fn a_summary_carries_the_permission_mode_past_a_compaction() {
 
 #[tokio::test]
 async fn each_message_shows_the_screen_it_was_sent_with() {
-    use hatoba_ai::tools::{terminal_change_block, terminal_state_block};
+    use hatoba_ai::tools::{
+        PermissionMode, permission_mode_block, terminal_change_block, terminal_state_block,
+    };
 
     let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
     let prod = f.add_host("prod-db", "");
@@ -3720,9 +3730,12 @@ async fn each_message_shows_the_screen_it_was_sent_with() {
         ..on_prod("", false)
     };
     f.exchange(Some(&conv), "fifth", quiet).await;
-    // The screen is the last note, after the others.
-    f.exchange(Some(&conv), "sixth", on_prod("$ back", false))
-        .await;
+    // The screen comes after the other notes.
+    let bypass = AiTurnContext {
+        permission_mode: AiPermissionMode::Bypass,
+        ..on_prod("$ back", false)
+    };
+    f.exchange(Some(&conv), "sixth", bypass).await;
 
     assert_eq!(
         f.user_texts(&conv),
@@ -3738,13 +3751,17 @@ async fn each_message_shows_the_screen_it_was_sent_with() {
             "third".to_owned(),
             format!("{}fourth", terminal_change_block(false)),
             format!("{}fifth", terminal_change_block(true)),
-            format!("{}sixth", terminal_state_block("prod-db", false, "$ back")),
+            format!(
+                "{}{}sixth",
+                permission_mode_block(PermissionMode::Bypass),
+                terminal_state_block("prod-db", false, "$ back")
+            ),
         ]
     );
     // The note goes to the model as part of the message, and never titles the conversation.
     let last = f.requests().await.pop().unwrap();
-    assert!(user_messages(&last).last().unwrap().starts_with(
-        "<terminal_state host=\"prod-db\" alternate_screen=\"false\" lines=\"1\">\n$ back\n"
+    assert!(user_messages(&last).last().unwrap().contains(
+        "\n\n<terminal_state host=\"prod-db\" alternate_screen=\"false\" lines=\"1\">\n$ back\n"
     ));
     assert_eq!(title_of(&f.user_texts(&conv)[0]), "first");
 }

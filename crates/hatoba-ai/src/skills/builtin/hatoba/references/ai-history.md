@@ -24,7 +24,7 @@ Conversations with the assistant are kept in **History**. They are encrypted and
 
 ## Edit and Resend
 
-**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, without asking, unless those messages changed files: then the question in `references/ai-file-changes.md` comes first. A divider about a move to another host stays with the message; the other dividers are worked out again for the tab and model it is resent with. To keep the messages after it, fork from the message instead.
+**Edit and Resend** (a pencil next to one of your messages) edits the text; **Resend** sends it again. It deletes every message after it on all synced devices, without asking, unless those messages changed files: then the question in `references/ai-file-changes.md` comes first. A divider about a move to another host stays with the message; the other dividers are worked out again for the tab, model and permission mode it is resent with, and the terminal's screen is read again. To keep the messages after it, fork from the message instead.
 
 | en | zh-CN | ja |
 |---|---|---|

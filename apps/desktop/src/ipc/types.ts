@@ -972,9 +972,12 @@ export interface AiTurnContext {
   tab: boolean;
   /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */
   session_id: string | null;
-  /** MCP servers switched off for this conversation in the tools menu (AI-30, P2). */
+  /** MCP servers switched off for this conversation in **MCP Tools** (AI-30, P2). */
   disabled_mcp_servers: string[];
-  /** The conversation's permission mode on this device (AI-16), which the system prompt names (§13.5). */
+  /**
+   * The conversation's permission mode on this device (AI-16), which a `permission_mode` note tells the
+   * model of when it changes (§13.5).
+   */
   permission_mode: AiPermissionMode;
   /**
    * The attached terminal's screen when the message is sent (AI-46), while the tab is connected and

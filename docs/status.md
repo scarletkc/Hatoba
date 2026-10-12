@@ -118,6 +118,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-07…09 | One conversation per tab, attaching conversations | ✅ | A conversation with no connected tab is offered every tool but the terminal ones |
 | AI-10 | Terminal selection and connection diagnostics as attachments, **Ask AI** | ✅ | |
 | AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |
+| AI-46 | The terminal's screen with each message: the `terminal_state` note, **Send Terminal Screen**, the Settings default | 🟡 | Unit tests cover the note, how a long screen is cut and when it is sent, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real terminal |
 | AI-42 | Side questions that leave a running turn alone | 🟡 | The panel was tried with the mock backend. Not yet tried against the real providers |
 | AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |

@@ -124,7 +124,8 @@ your data cannot be recovered. The
 the key hierarchy and the threat model.
 
 The AI assistant sends the model provider your messages, their attachments,
-and what its tools read. Host addresses, passwords, and keys reach the provider
+the terminal's screen as each message is sent (unless you turn that off), and
+what its tools read. Host addresses, passwords, and keys reach the provider
 only when they appear on the screen, in a tool result, or in an attachment you
 send.
 

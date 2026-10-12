@@ -79,7 +79,7 @@ export function toolsMenuRows(servers: McpServerView[], status: Record<string, M
     });
 }
 
-/** The tools menu button: how many servers the conversation uses, and whether one of them failed. */
+/** The + button and its **MCP Tools** item: how many servers the conversation uses, and whether one of them failed. */
 export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number; failed: boolean } {
   const used = rows.filter((r) => r.on);
   return { on: used.length, total: rows.length, failed: used.some((r) => r.state === "failed") };

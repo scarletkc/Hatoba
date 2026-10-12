@@ -122,4 +122,4 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the search provider, the built-in skill's switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |

@@ -100,6 +100,7 @@ function AddPopover({
   const [view, setView] = useState<View>("main");
   const loaded = useMcp((st) => st.servers !== null);
   const failed = useMcp((st) => st.failed);
+  const terminal = useTabs((st) => st.tabs.some((x) => x.id === slotId && x.status === "connected"));
   const [pos, setPos] = useState({ left: anchor.left, top: anchor.top });
   const locked = useOverlaysLocked();
 
@@ -117,7 +118,7 @@ function AddPopover({
     let top = anchor.top - r.height - 6;
     if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
     setPos({ left, top: Math.max(b.top + 8, top) });
-  }, [anchor, rows, loaded, failed, view]);
+  }, [anchor, rows, loaded, failed, view, terminal]);
 
   // The first item has the focus when the menu opens, the back button in the tools menu, and the
   // tools item after going back.
@@ -187,8 +188,9 @@ function AddPopover({
           slotId={slotId}
           slot={slot}
           rows={rows}
+          terminal={terminal}
           onAddFiles={() => {
-            onClose(false);
+            onClose(true);
             onAddFiles();
           }}
           onTools={() => setView("tools")}
@@ -200,6 +202,7 @@ function AddPopover({
             type="button"
             className={s.item}
             title={t("btn.back")}
+            aria-label={t("btn.back")}
             data-item
             data-back
             onClick={() => {
@@ -247,10 +250,24 @@ function items(el: HTMLElement): HTMLElement[] {
   return Array.from(el.querySelectorAll<HTMLElement>("[data-item]:not(:disabled), [role=switch]:not(:disabled)"));
 }
 
-function MainView({ slotId, slot, rows, onAddFiles, onTools }: { slotId: string; slot: Slot; rows: ToolsMenuRow[]; onAddFiles: () => void; onTools: () => void }) {
+function MainView({
+  slotId,
+  slot,
+  rows,
+  terminal,
+  onAddFiles,
+  onTools,
+}: {
+  slotId: string;
+  slot: Slot;
+  rows: ToolsMenuRow[];
+  /** Whether the tab is connected: without a terminal, the screen switch is off and disabled. */
+  terminal: boolean;
+  onAddFiles: () => void;
+  onTools: () => void;
+}) {
   const t = useT();
   const settings = useAi((st) => st.catalog.settings);
-  const terminal = useTabs((st) => st.tabs.some((x) => x.id === slotId && x.status === "connected"));
   const on = sendsScreen(slot, settings);
   const sum = toolsSummary(rows);
   return (

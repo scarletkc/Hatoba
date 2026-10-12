@@ -800,9 +800,9 @@ export type AiTurnContext = {
 	/**  MCP servers switched off for this conversation (AI-30, P2). */
 	disabled_mcp_servers: string[],
 	/**
-	 *  The conversation's permission mode on this device (AI-16), which the system prompt names
-	 *  (§13.5). The frontend applies it to each call; a switch reaches the prompt with the next
-	 *  turn.
+	 *  The conversation's permission mode on this device (AI-16). The frontend applies it to each
+	 *  call; a message sent in another mode than the model was last told of starts with a
+	 *  `permission_mode` note (§13.5).
 	 */
 	permission_mode: AiPermissionMode,
 	/**

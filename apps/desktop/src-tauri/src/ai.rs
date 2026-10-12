@@ -4724,12 +4724,18 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
         };
         let in_entries = entries.ids.iter().zip(&entries.list).find_map(|(id, e)| {
             let text = match &e.body {
-                // The screen a message showed is the host's text, not the conversation's (AI-46).
-                EntryBody::User { text, .. } => match note_block(text, TERMINAL_STATE) {
-                    Some(screen) => Cow::Owned(text.replacen(screen, "", 1)),
-                    None => Cow::Borrowed(text.as_str()),
-                },
-                EntryBody::Summary { text } => Cow::Borrowed(text.as_str()),
+                // The screen a message showed is the host's text, not the conversation's (AI-46),
+                // and the permission mode note is Hatoba's (§13.5).
+                EntryBody::User { text, .. } => {
+                    let mut text = Cow::Borrowed(text.as_str());
+                    for tag in [PERMISSION_MODE, TERMINAL_STATE] {
+                        if let Some(block) = note_block(&text, tag) {
+                            text = Cow::Owned(text.replacen(block, "", 1));
+                        }
+                    }
+                    text
+                }
+                EntryBody::Summary { text } => Cow::Borrowed(tools::split_permission_note(text).1),
                 EntryBody::Assistant(a) => Cow::Borrowed(a.text.as_str()),
                 EntryBody::Tool { .. } => return None,
             };

@@ -135,9 +135,9 @@ export function slotEffort(slotId: string): AiEffort | null {
 /**
  * What a request may act on: the tab's host or quick-connect target and, when connected, its terminal
  * tools and session, whose server's identification string the system prompt states (AI-08, AI-09,
- * §13.1), the permission mode the prompt names (§13.5), and the screen a message shows while
- * **Send Terminal Screen** is on (AI-46). The home tab names the conversation's own host or target,
- * which leaves it where it is.
+ * §13.1), the permission mode a `permission_mode` note tells the model of (§13.5), and the screen
+ * a message shows while **Send Terminal Screen** is on (AI-46). The home tab names the
+ * conversation's own host or target, which leaves it where it is.
  */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
@@ -216,7 +216,7 @@ class TurnRunner {
   slotId: string;
   /** The tab the turn started on, the only one whose terminal its tools may use (AI-08). */
   private readonly tab: string;
-  /** The permission mode the turn's requests name (§13.5); a switch to bypass waits for the next turn. */
+  /** The permission mode the model was told of for this turn (§13.5); a switch to bypass waits for the next message. */
   private readonly mode: AiPermissionMode;
   convId: string | null;
   private ended = false;
@@ -803,9 +803,10 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
 
   const runner = new TurnRunner(slotId, id, context.permission_mode);
   runners.set(slotId, runner);
-  // Rust keeps the notes of the message it replaces (AI-05, AI-09), so its dividers stay while it is sent.
+  // Rust keeps the notes of the message it replaces (AI-05, AI-09), so its dividers stay while it is sent;
+  // the screen and the permission mode it works out again (AI-46, §13.5).
   const original = now.entries.find((e) => e.entry_id === entryId);
-  const kept = original?.role === "user" ? parseMessage(original.text).notes : [];
+  const kept = original?.role === "user" ? parseMessage(original.text).notes.filter((n) => n.kind !== "terminal_state" && n.kind !== "permission_mode") : [];
   const local: AiEntryView = { role: "user", entry_id: LOCAL_ENTRY, created_at: Date.now(), text: composeMessage(text, [], kept) };
   patchSlot(slotId, (s) => ({ entries: [...entriesBefore(s.entries, entryId), local], turn: newTurn(), outcome: null, effortIgnored: false }));
   try {

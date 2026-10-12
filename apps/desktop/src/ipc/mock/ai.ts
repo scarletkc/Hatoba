@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, type Note } from "@/features/ai/attachments";
+import { fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, splitPermissionNote, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -1672,12 +1672,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       await delay(200);
       const q = query.trim().toLowerCase();
       if (!q) return [];
-      // Like Rust, without the screen a message showed (AI-46): its text is the host's.
-      const withoutScreen = (text: string) => {
-        const note = parseMessage(text).notes.find((n) => n.kind === "terminal_state");
-        return note ? text.replace(`${noteBlock(note)}\n\n`, "") : text;
-      };
-      const textOf = (e: AiEntryView) => (e.role === "user" ? withoutScreen(e.text) : e.role === "assistant" || e.role === "summary" ? e.text : "");
+      // Like Rust, without the screen a message showed (AI-46), whose text is the host's, or the
+      // permission mode note (§13.5).
+      const withoutNotes = (text: string) =>
+        parseMessage(text)
+          .notes.filter((n) => n.kind === "terminal_state" || n.kind === "permission_mode")
+          .reduce((t, n) => t.replace(`${noteBlock(n)}\n\n`, ""), text);
+      const textOf = (e: AiEntryView) =>
+        e.role === "user" ? withoutNotes(e.text) : e.role === "summary" ? splitPermissionNote(e.text).summary : e.role === "assistant" ? e.text : "";
       const hits: AiSearchHit[] = [];
       for (const c of [...convs.values()].sort((a, b) => view(b).last_activity - view(a).last_activity)) {
         const entry = c.entries.find((e) => textOf(e).toLowerCase().includes(q));
