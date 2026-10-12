@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { fileRevertNote, noteBlock, parseMessage, screenStateNote, type Note } from "@/features/ai/attachments";
+import { fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -639,6 +639,11 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return compactNow(c, turn);
   }
 
+  /** Like Rust's `store_summary` (AI-16): a summary of a conversation in bypass starts with its note. */
+  function summaryText(c: Conv, summary: string): string {
+    return notedPermission(c.entries) === "bypass" ? `${noteBlock({ kind: "permission_mode", mode: "bypass" })}\n\n${summary}` : summary;
+  }
+
   async function compactNow(c: Conv, turn: Turn): Promise<boolean> {
     turn.compacted = true;
     compacting.add(c.view.id);
@@ -649,9 +654,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       role: "summary",
       entry_id: newId(),
       created_at: Date.now(),
-      text: zh
-        ? `**之前的对话摘要（自动压缩）**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态；用户最新的请求是：“${lastUser(c).text}”`
-        : `**Summary of the earlier conversation (compacted automatically)**: ${c.entries.length} entries. The user and the assistant went over this host’s state; the user’s latest request is: “${lastUser(c).text}”`,
+      text: summaryText(
+        c,
+        zh
+          ? `**之前的对话摘要（自动压缩）**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态；用户最新的请求是：“${lastUser(c).text}”`
+          : `**Summary of the earlier conversation (compacted automatically)**: ${c.entries.length} entries. The user and the assistant went over this host’s state; the user’s latest request is: “${lastUser(c).text}”`,
+      ),
     };
     c.view = { ...c.view, context_start: entry.entry_id, updated_at: Date.now() };
     store(c, entry);
@@ -782,7 +790,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
     const screen = await screenNote(c, move, context);
-    if (earlier.length === 0) return screen;
+    // Like Rust (AI-16): the mode, when it is not the one the model was last told of.
+    const permission: Note[] = notedPermission(earlier) === context.permission_mode ? [] : [{ kind: "permission_mode", mode: context.permission_mode }];
+    if (earlier.length === 0) return permission.map((n) => `${noteBlock(n)}\n\n`).join("") + screen;
     for (const e of [...earlier].reverse()) {
       if (e.role === "assistant") {
         if (interrupted.has(e.entry_id)) notes.push({ kind: "interrupted" });
@@ -808,7 +818,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       }
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
     }
-    notes.push(...pendingReverts(c.view.id, earlier));
+    notes.push(...permission, ...pendingReverts(c.view.id, earlier));
     return notes.map((n) => `${noteBlock(n)}\n\n`).join("") + screen;
   }
 
@@ -1601,9 +1611,12 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         role: "summary",
         entry_id: newId(),
         created_at: Date.now(),
-        text: zh
-          ? `**之前的对话摘要**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态，并完成了相关检查。`
-          : `**Summary of the earlier conversation**: ${c.entries.length} entries. The user and the assistant went over this host’s state and finished the checks.`,
+        text: summaryText(
+          c,
+          zh
+            ? `**之前的对话摘要**：共 ${c.entries.length} 条记录。用户和助手讨论了这台主机的状态，并完成了相关检查。`
+            : `**Summary of the earlier conversation**: ${c.entries.length} entries. The user and the assistant went over this host’s state and finished the checks.`,
+        ),
       };
       c.entries.push(entry);
       c.view = { ...c.view, context_start: entry.entry_id, updated_at: Date.now() };

@@ -49,7 +49,7 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, FetchUrlArgs, PromptContext, PromptModel, PromptPermission, PromptTools, ReadSkillArgs,
+    self, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools, ReadSkillArgs,
     RunCommandArgs, ToolSet, WebSearchArgs, escape_closing_tag,
 };
 use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
@@ -2681,10 +2681,18 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
     tokens.saturating_mul(10) > window.saturating_mul(AUTO_COMPACT_TENTHS)
 }
 
-/// Stores a summary entry and moves `context_start` to it (AI-21).
+/// Stores a summary entry and moves `context_start` to it (AI-21). The model sees nothing before
+/// a summary, so a summary of a conversation in bypass starts with its `permission_mode` note
+/// (AI-16), which the request puts before the summary's block: the mode stays the one the model
+/// was told of, also for the rest of a turn compacted between tool calls (AI-22).
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
-    let entry = AiEntry::summary(now_ms(), summary);
+    let mode = noted_permission(&Entries::load(v, conversation_id)?.list);
+    let text = match mode {
+        PermissionMode::Manual => summary.to_owned(),
+        PermissionMode::Bypass => format!("{}{summary}", tools::permission_mode_block(mode)),
+    };
+    let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
     conversation.context_start = Some(entry_id.clone());
     v.put(Some(conversation_id), Item::AiConversation(conversation))?;
@@ -3138,10 +3146,6 @@ fn prompt(
         host_notes: host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
         skills: &skills,
         tools: offered,
-        permission: match context.permission_mode {
-            AiPermissionMode::Manual => PromptPermission::Manual,
-            AiPermissionMode::Bypass => PromptPermission::Bypass,
-        },
     });
     let defs = if fallback.is_none() {
         builtin_tools(v, context)
@@ -3753,6 +3757,9 @@ const HOST_CHANGE: &str = "host_change";
 const TERMINAL_CHANGE: &str = "terminal_change";
 /// The tag of the note Hatoba puts before the first message to another model (AI-05).
 const MODEL_CHANGE: &str = "model_change";
+/// The tag of the note Hatoba puts before a message sent in another permission mode than the
+/// model was last told of (AI-16), and before a summary of a conversation in bypass.
+const PERMISSION_MODE: &str = "permission_mode";
 /// The tag of the note Hatoba puts before the first message after the user reverted a change of
 /// a file tool call (AI-41), one for each call.
 const FILE_REVERT: &str = "file_revert";
@@ -3814,6 +3821,12 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("from", _), ("to", _)]),
+    },
+    AttachmentKind {
+        tag: PERMISSION_MODE,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("mode", "manual" | "bypass")]),
     },
     AttachmentKind {
         tag: FILE_REVERT,
@@ -4321,6 +4334,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `model_change` (AI-05) when the message goes to another model ID than the newest reply in
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
+/// - `permission_mode` (AI-16) when the conversation's mode on this device is not the one the
+///   model was last told of ([`noted_permission`]), also before a conversation's first message.
 /// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
 /// - `terminal_state` (AI-46), the screen of the attached terminal ([`screen_note`]), also before
 ///   a conversation's first message.
@@ -4333,10 +4348,16 @@ fn notes_before(
     reverts: &[(String, files::ChangeMeta)],
 ) -> String {
     let mut notes = String::new();
+    let mode = permission_mode(context.permission_mode);
+    let permission = if noted_permission(earlier) == mode {
+        String::new()
+    } else {
+        tools::permission_mode_block(mode)
+    };
     // A message with nothing before it has no earlier screens or replies to tell apart, but it can
-    // show the screen now.
+    // name its mode and show the screen now.
     if earlier.is_empty() {
-        return screen_note(context, host_now);
+        return permission + &screen_note(context, host_now);
     }
     for entry in earlier.iter().rev() {
         match &entry.body {
@@ -4377,6 +4398,7 @@ fn notes_before(
             EntryBody::Tool { .. } | EntryBody::Summary { .. } => {}
         }
     }
+    notes.push_str(&permission);
     for (tool_call_id, meta) in reverts {
         notes.push_str(&tools::file_revert_block(
             &meta.path,
@@ -4387,6 +4409,37 @@ fn notes_before(
     }
     notes.push_str(&screen_note(context, host_now));
     notes
+}
+
+/// A conversation's permission mode on this device (AI-16) as a `permission_mode` note names it.
+fn permission_mode(mode: AiPermissionMode) -> PermissionMode {
+    match mode {
+        AiPermissionMode::Manual => PermissionMode::Manual,
+        AiPermissionMode::Bypass => PermissionMode::Bypass,
+    }
+}
+
+/// AI-16: the permission mode the model was last told of in `entries`, a conversation's entries
+/// oldest first: the newest `permission_mode` note, or the one the newest summary starts with.
+/// The model sees nothing before a summary, so one without a note, like a conversation with no
+/// note at all, leaves it in manual approval, as the system prompt says.
+fn noted_permission(entries: &[AiEntry]) -> PermissionMode {
+    for entry in entries.iter().rev() {
+        match &entry.body {
+            EntryBody::User { text, .. } => {
+                match note_attr(text, PERMISSION_MODE, "mode").as_deref() {
+                    Some("bypass") => return PermissionMode::Bypass,
+                    Some(_) => return PermissionMode::Manual,
+                    None => {}
+                }
+            }
+            EntryBody::Summary { text } => {
+                return tools::split_permission_note(text).0.unwrap_or_default();
+            }
+            EntryBody::Assistant(_) | EntryBody::Tool { .. } => {}
+        }
+    }
+    PermissionMode::Manual
 }
 
 /// AI-46: the `terminal_state` note of a message whose `context` has the screen of a connected

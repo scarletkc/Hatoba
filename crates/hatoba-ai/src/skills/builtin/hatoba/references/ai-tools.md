@@ -45,11 +45,13 @@ The shield or lightning button next to the + button in the input area (the light
 | Bypass | 绕过批准 | 承認をバイパス |
 | Bypass | 绕过 | バイパス |
 | Turn On Bypass | 绕过批准 | 承認をバイパス |
+| Permission mode: Bypass | 权限模式：绕过批准 | 権限モード：承認をバイパス |
+| Permission mode: Manual approval | 权限模式：手动批准 | 権限モード：手動承認 |
 
 - **Manual approval** (the default): tools marked "Asks" wait for you.
 - **Bypass**: every tool runs without asking, except tools of MCP servers set to **Always ask**. It is riskier: text on the screen or in a page can steer the assistant. Switching to Bypass for the first time on a device shows a confirmation ("Let the assistant act without asking?", button **Turn On Bypass**).
 - The switch changes the current conversation on this device until the app quits. The default for new conversations is Settings → AI → **This Device** → **Default Permission Mode** (device-local, not synced).
-- The assistant is told which mode the conversation is in. In Manual approval it calls the tool and lets the approval card ask, instead of asking first in chat. In Bypass it asks in chat before it deletes data, does something that cannot be undone, restarts a service or affects other users, unless you asked for exactly that. A switch reaches the assistant with your next message: a switch to Bypass while it is working applies from your next message, and a switch to Manual approval applies at once.
+- The assistant is told which mode the conversation is in. In Manual approval it calls the tool and lets the approval card ask, instead of asking first in chat. In Bypass it asks in chat before it deletes data, does something that cannot be undone, restarts a service or affects other users, unless you asked for exactly that. A switch reaches the assistant with your next message, which gets a divider above it, "Permission mode: Bypass" or "Permission mode: Manual approval" (a first message gets one only in Bypass): a switch to Bypass while it is working applies from your next message, and a switch to Manual approval applies at once. Switching does not change the system prompt, so the provider's prompt cache keeps working, and compacting the conversation keeps the mode.
 
 | en | zh-CN | ja |
 |---|---|---|

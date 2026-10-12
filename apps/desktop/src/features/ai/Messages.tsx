@@ -23,7 +23,7 @@ import {
 import { AttachmentCardFor, AttachmentChipFor, ScreenCard } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
-import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
+import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, splitPermissionNote, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { forkPoints } from "./fork";
 import { Markdown } from "./Markdown";
@@ -241,7 +241,7 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
             break;
           }
           case "summary":
-            body = <SummaryBlock text={entry.text} flash={flashed} />;
+            body = <SummaryBlock text={splitPermissionNote(entry.text).summary} flash={flashed} />;
             break;
           case "tool":
             return null; // shown in its call's block
@@ -382,7 +382,16 @@ const NOTE_ICONS = {
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
-  const icon = note.kind === "terminal_change" ? (note.to === "attached" ? "plugs-connected" : "plugs") : NOTE_ICONS[note.kind];
+  const icon =
+    note.kind === "terminal_change"
+      ? note.to === "attached"
+        ? "plugs-connected"
+        : "plugs"
+      : note.kind === "permission_mode"
+        ? note.mode === "bypass"
+          ? "lightning"
+          : "shield-check"
+        : NOTE_ICONS[note.kind];
   return (
     <div className={s.noteDivider} role="note" title={noteTitle(t, note)}>
       <span className={s.noteText}>

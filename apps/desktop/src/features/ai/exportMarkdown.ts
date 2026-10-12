@@ -1,7 +1,7 @@
 import { formatTarget } from "@/features/hosts/quickConnect";
 import type { MessageKey, Params } from "@/i18n";
 import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
-import { parseMessage, type Attachment } from "./attachments";
+import { parseMessage, splitPermissionNote, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "./notes";
 import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "./tools";
@@ -113,7 +113,7 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
         break;
       }
       case "summary":
-        blocks.push(`## ${t("ai.summary")}`, entry.text.trim());
+        blocks.push(`## ${t("ai.summary")}`, splitPermissionNote(entry.text).summary.trim());
         break;
       case "tool":
         break; // with its call

@@ -38,6 +38,7 @@ import {
   makePaste,
   MESSAGE_MAX_BYTES,
   nextSelection,
+  notedPermission,
   parseMessage,
   textFile,
   type Attachment,
@@ -728,7 +729,9 @@ export async function retryTurn(slotId: string) {
     return;
   }
   discardSideQuestion(slotId);
-  const runner = new TurnRunner(slotId, id, context.permission_mode);
+  // A retry stores no message, so no note tells the model of a switch since (§13.5): it works in the
+  // mode its messages named.
+  const runner = new TurnRunner(slotId, id, notedPermission(slot.entries));
   runners.set(slotId, runner);
   patchSlot(slotId, { turn: newTurn(), outcome: null, effortIgnored: false });
   try {
