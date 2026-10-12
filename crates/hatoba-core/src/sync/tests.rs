@@ -409,8 +409,14 @@ async fn restore_errors() {
         .unwrap_err();
     assert!(matches!(err, Error::Offline));
     assert!(!b.v().status().initialized);
+    assert_eq!(server.session_count(), 2, "A's and the failed attempt's");
 
     restore(&b).await;
+    assert_eq!(
+        server.session_count(),
+        2,
+        "the retry signs in as the same device, replacing the session the failed attempt left"
+    );
     // Restoring over an existing vault is refused.
     let err = restore_from_cloud(&b.vault, &b.backend, PW, b.info(), &config())
         .await

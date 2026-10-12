@@ -418,7 +418,8 @@ impl Vault {
         self.unlocked.is_some()
     }
 
-    /// This device's id (empty before the vault exists).
+    /// This device's id (empty before the vault exists, unless a restore from the cloud was
+    /// attempted).
     #[must_use]
     pub fn device_id(&self) -> String {
         self.store
@@ -426,6 +427,18 @@ impl Vault {
             .ok()
             .flatten()
             .unwrap_or_default()
+    }
+
+    /// The device id a restore from the cloud (flow B) signs in with, stored by the first attempt.
+    /// An attempt that fails after signing in leaves a session on the server; a retry signs in as
+    /// the same device, which replaces that session instead of listing another device.
+    pub(crate) fn restore_device_id(&mut self) -> Result<String> {
+        if let Some(id) = self.store.get_meta(meta::DEVICE_ID)? {
+            return Ok(id);
+        }
+        let id = new_id();
+        self.store.set_meta(meta::DEVICE_ID, &id)?;
+        Ok(id)
     }
 
     // ---- creation ----

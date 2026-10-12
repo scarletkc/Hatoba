@@ -220,12 +220,15 @@ async fn authenticate(
 ///
 /// Derives keys from the remote's salt and the master password, logs in, unwraps the vault key
 /// with `enc_key`, reads the remote's settings item, and writes the vault metadata locally under
-/// a new device id together with `config` and those settings, in one transaction. The vault is
-/// left unlocked and the local master password becomes the remote one.
+/// the device id it signed in with, together with `config` and those settings, in one
+/// transaction. The vault is left unlocked and the local master password becomes the remote one.
 ///
 /// Settings are one item that conflicts resolve as a whole (§6.4). Without the remote's, a
 /// settings edit made before the first pull would start from the defaults and, being newer,
 /// replace the remote's settings on every device. Reading them pages through the remote once.
+///
+/// A failed attempt can leave a session on the server once it has signed in. The device id is
+/// kept from the first attempt, so a retry replaces that session instead of adding a device.
 ///
 /// Other items are not pulled here: the caller stores the returned session and then runs an
 /// ordinary sync round. Once this returns, the device is a configured sync device, so an
@@ -241,14 +244,13 @@ pub async fn restore_from_cloud(
     device: DeviceInfo,
     config: &SyncConfig,
 ) -> Result<Session> {
-    with_vault(vault, |v| {
+    let device_id = with_vault(vault, |v| {
         if v.status().initialized {
             Err(Error::VaultAlreadyInitialized)
         } else {
-            Ok(())
+            v.restore_device_id()
         }
     })?;
-    let device_id = new_id();
     let auth = authenticate(backend, password, &device_id, &device).await?;
     let settings = find_remote_item(backend, SETTINGS_ID).await?;
     with_vault(vault, |v| {
