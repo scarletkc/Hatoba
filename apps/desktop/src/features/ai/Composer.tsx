@@ -38,7 +38,7 @@ function isSideQuestionKey(e: KeyboardEvent): boolean {
 
 /**
  * The input area (§9): the attachment chips, a multi-line box, and under it the + menu and the
- * permission mode (AI-16) on the left, the model selector, the context meter, Ask a Side Question
+ * permission mode (AI-16) on the left, the context meter, the model selector, Ask a Side Question
  * (AI-42) and Send / Stop on the right.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
@@ -191,8 +191,8 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
             }}
           />
           <div className={s.grow} />
-          <ModelPicker slotId={slotId} slot={slot} value={model} />
           <ContextMeter slotId={slotId} slot={slot} m={meter} />
+          <ModelPicker slotId={slotId} slot={slot} value={model} />
           {slot.conversationId && (
             <button
               type="button"

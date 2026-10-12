@@ -39,7 +39,7 @@ Under the current model, the same menu has a **Thinking Level** row. It lists **
 
 ## Context and compaction
 
-The context meter at the right of the input area is a ring with a percentage (the percentage only in a panel widened past about 440 pixels, or a token count when the model's context window is unknown) showing how much of the window the conversation uses; hover for the numbers. "≈" marks an estimate. At 80% it turns to a warning color and offers **Compact**; the window comes from the model's **Context** value in the provider.
+The context meter left of the **Model** button is a ring with a percentage (the percentage only in a panel widened past about 440 pixels, or a token count when the model's context window is unknown) showing how much of the window the conversation uses; hover for the numbers. "≈" marks an estimate. At 80% it turns to a warning color and offers **Compact**; the window comes from the model's **Context** value in the provider.
 
 | en | zh-CN | ja |
 |---|---|---|
