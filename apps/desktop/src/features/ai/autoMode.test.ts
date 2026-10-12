@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionTab } from "@/app/tabs";
 import type {
+  AiAllowance,
   AiAutoVerdict,
   AiConversationView,
   AiEntryView,
@@ -20,6 +21,7 @@ const ipc = vi.hoisted(() => ({
   judge: vi.fn<(conversationId: string, toolCallId: string, screenTail: string | null) => Promise<AiAutoVerdict>>(),
   run: vi.fn<(conversationId: string, toolCallId: string, sessionId: string | null, edited: string | null, judged: boolean) => Promise<AiToolRun>>(),
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
+  allowances: vi.fn<() => Promise<AiAllowance[]>>(),
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -29,7 +31,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_judge: ipc.judge,
     ai_tool_run: ipc.run,
     ai_tool_result: ipc.result,
-    ai_allowances_list: () => Promise.resolve([]),
+    ai_allowances_list: ipc.allowances,
   },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
@@ -146,6 +148,7 @@ beforeEach(() => {
   ipc.judge.mockReset();
   ipc.run.mockReset().mockImplementation(async (_conv, callId) => ({ entry: toolEntry(callId), dropped_file_changes: false }));
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
+  ipc.allowances.mockReset().mockResolvedValue([]);
   screen.rows = ["$ "];
   useTabs.setState({ tabs: [tab] });
   useAi.setState({
@@ -253,6 +256,27 @@ describe("a turn in Auto mode (AI-47)", () => {
       ["call_4", false],
     ]);
     expect(ipc.judge).toHaveBeenCalledTimes(3);
+  });
+
+  it("reads the saved approvals before asking ahead, so a call they cover never reaches the judge", async () => {
+    // Right after an unlock, the saved approvals are still being read.
+    let read!: (list: AiAllowance[]) => void;
+    ipc.allowances.mockReturnValue(new Promise((resolve) => (read = resolve)));
+    ipc.judge.mockResolvedValue(verdict("run"));
+    await respond("auto", [
+      call("call_1", "run_command", { command: "sudo systemctl restart nginx" }),
+      call("call_2", "fetch_url", { url: "https://nginx.org/en/docs/" }),
+    ]);
+    await flush();
+    expect(ipc.judge).not.toHaveBeenCalled();
+
+    read([{ kind: "domain", host_id: null, target: null, value: "nginx.org" }]);
+    await until(() => ipc.run.mock.calls.length === 2);
+    expect(ipc.judge.mock.calls.map((c) => c[1])).toEqual(["call_1"]);
+    expect(ipc.run.mock.calls.map((c) => [c[1], c[4]])).toEqual([
+      ["call_1", true],
+      ["call_2", false],
+    ]);
   });
 
   it("shows the card as manual approval does after a switch to it while the judge answers", async () => {

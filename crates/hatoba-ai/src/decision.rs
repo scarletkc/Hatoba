@@ -16,8 +16,8 @@
 //!   `{base_url}/{model id}`, the body's `model` is the id's last `/` segment
 //!   (`@cf/cloudflare/clef-flash` sends `clef-flash`), and the response wraps the answers in
 //!   `result`, which is read wherever it appears. Every question must get an answer of its type
-//!   whose probabilities are between 0 and 1, or the response is malformed
-//!   ([`AiError::Protocol`]).
+//!   whose probabilities are between 0 and 1, and whose distribution sums to 1, or the response
+//!   is malformed ([`AiError::Protocol`]).
 //! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`]) emulates it with
 //!   one non-streaming request that forces a single tool, `answer`. Its input schema has a short
 //!   `notes` string first, written before the answers, then one property per question: a number
@@ -65,6 +65,9 @@ const TOOL_NAME: &str = "answer";
 const ANTHROPIC_MAX_TOKENS: u64 = 4_096;
 /// How far a probability may stray outside 0 to 1 by rounding and still count, as 0 or 1.
 const ROUNDING: f64 = 1e-6;
+/// How far a System One distribution's sum may stray from 1, as each of its probabilities is
+/// rounded, and still count once divided by it.
+const SUM_ROUNDING: f64 = 0.01;
 
 /// A question about the state, as System One defines it. `instructions` and the criteria are a
 /// string, or any JSON (an object or an array) that says more.
@@ -418,8 +421,9 @@ fn read_system_one(
     })
 }
 
-/// A System One answer to `question` when it has the question's type and its values are in
-/// range. A distribution may leave out options or levels it gives no probability; they get 0.
+/// A System One answer to `question` when it has the question's type, its values are in range,
+/// and its distribution sums to 1 ([`system_one_distribution`]). A distribution may leave out
+/// options or levels it gives no probability; they get 0.
 fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
     let answer: Answer = serde_json::from_value(raw.clone()).ok()?;
     let in_range = |p: f64| p.is_finite() && (-ROUNDING..=1.0 + ROUNDING).contains(&p);
@@ -435,22 +439,11 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
                 confidence,
             },
         ) => {
-            let fits = criteria.contains_key(&choice)
-                && in_range(confidence)
-                && probabilities
-                    .iter()
-                    .all(|(option, p)| criteria.contains_key(option) && in_range(*p));
+            let fits = criteria.contains_key(&choice) && in_range(confidence);
+            let probabilities = system_one_distribution(criteria.keys(), &probabilities)?;
             fits.then(|| Answer::Choice {
                 choice,
-                probabilities: criteria
-                    .keys()
-                    .map(|o| {
-                        (
-                            o.clone(),
-                            probabilities.get(o).map_or(0.0, |p| p.clamp(0.0, 1.0)),
-                        )
-                    })
-                    .collect(),
+                probabilities,
                 confidence: confidence.clamp(0.0, 1.0),
             })
         }
@@ -468,10 +461,8 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
             let top = (n - 1) as f64;
             let fits = score.is_finite()
                 && (-ROUNDING..=top + ROUNDING).contains(&score)
-                && in_range(confidence)
-                && probabilities
-                    .iter()
-                    .all(|(level, p)| levels.contains(level) && in_range(*p));
+                && in_range(confidence);
+            let probabilities = system_one_distribution(levels.iter(), &probabilities)?;
             fits.then(|| Answer::Score {
                 score: score.clamp(0.0, top),
                 legend: if legend.is_empty() {
@@ -483,20 +474,35 @@ fn checked_answer(question: &Question, raw: &Value) -> Option<Answer> {
                 } else {
                     legend
                 },
-                probabilities: levels
-                    .iter()
-                    .map(|l| {
-                        (
-                            l.clone(),
-                            probabilities.get(l).map_or(0.0, |p| p.clamp(0.0, 1.0)),
-                        )
-                    })
-                    .collect(),
+                probabilities,
                 confidence: confidence.clamp(0.0, 1.0),
             })
         }
         _ => None,
     }
+}
+
+/// A System One distribution over `keys`, with the keys it leaves out at 0 and divided by its
+/// sum: `None` when it names another key, a probability is out of range, or the sum is not 1
+/// within [`SUM_ROUNDING`].
+fn system_one_distribution<'a>(
+    keys: impl Iterator<Item = &'a String>,
+    probabilities: &BTreeMap<String, f64>,
+) -> Option<BTreeMap<String, f64>> {
+    let all: BTreeMap<String, f64> = keys
+        .map(|k| (k.clone(), probabilities.get(k).copied().unwrap_or(0.0)))
+        .collect();
+    let in_range = |p: f64| p.is_finite() && (-ROUNDING..=1.0 + ROUNDING).contains(&p);
+    let known = probabilities.keys().all(|k| all.contains_key(k));
+    if !known || !all.values().all(|p| in_range(*p)) {
+        return None;
+    }
+    let sum: f64 = all.values().map(|p| p.clamp(0.0, 1.0)).sum();
+    ((sum - 1.0).abs() <= SUM_ROUNDING).then(|| {
+        all.into_iter()
+            .map(|(k, p)| (k, p.clamp(0.0, 1.0) / sum))
+            .collect()
+    })
 }
 
 /// Posts a JSON body and reads the JSON response, or the provider's error.

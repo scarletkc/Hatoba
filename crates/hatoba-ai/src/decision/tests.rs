@@ -260,7 +260,7 @@ async fn workers_ai_takes_the_model_in_the_url_and_wraps_the_answers_in_result()
 }
 
 #[tokio::test]
-async fn system_one_answers_that_are_missing_mistyped_or_out_of_range_are_malformed() {
+async fn system_one_answers_that_are_missing_mistyped_out_of_range_or_unnormalized_are_malformed() {
     let mut cases = Vec::new();
     let mut missing = system_one_answers();
     missing.as_object_mut().unwrap().remove("mood");
@@ -278,6 +278,16 @@ async fn system_one_answers_that_are_missing_mistyped_or_out_of_range_are_malfor
     let mut high_score = system_one_answers();
     high_score["mood"]["score"] = json!(2.5);
     cases.push(json!({"answers": high_score}));
+    // A distribution must sum to 1, an empty one included.
+    let mut short_choice = system_one_answers();
+    short_choice["topic"]["probabilities"] = json!({"billing": 0.5, "technical": 0.2});
+    cases.push(json!({"answers": short_choice}));
+    let mut empty_choice = system_one_answers();
+    empty_choice["topic"]["probabilities"] = json!({});
+    cases.push(json!({"answers": empty_choice}));
+    let mut long_score = system_one_answers();
+    long_score["mood"]["probabilities"] = json!({"1": 0.95, "2": 0.55});
+    cases.push(json!({"answers": long_score}));
     cases.push(json!({"result": {"answers": []}}));
     cases.push(json!({"model": "jev"}));
     for body in cases {
@@ -312,6 +322,16 @@ async fn system_one_answers_that_are_missing_mistyped_or_out_of_range_are_malfor
     };
     assert_eq!(legend["0"], json!("Calm"));
     assert_eq!(probabilities["0"], 0.0);
+
+    // A sum that rounding keeps near 1 counts, divided by it.
+    let mut rounded = system_one_answers();
+    rounded["topic"]["probabilities"] =
+        json!({"billing": 0.333, "technical": 0.333, "sales": 0.333});
+    let evaluation = read_system_one(&json!({"answers": rounded}), &questions()).unwrap();
+    let Answer::Choice { probabilities, .. } = &evaluation.answers["topic"] else {
+        panic!("a choice answer");
+    };
+    assert!((probabilities.values().sum::<f64>() - 1.0).abs() < 1e-12);
 }
 
 #[tokio::test]

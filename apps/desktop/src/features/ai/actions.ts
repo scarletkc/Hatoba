@@ -393,6 +393,10 @@ class TurnRunner {
       const convId = await this.ready;
       if (!convId) return;
       const calls = unansweredCalls(getSlot(this.slotId).entries);
+      // AI-47: a call a saved approval covers never reaches the judge, so they are read (once after each
+      // unlock) before any call is judged ahead.
+      if (callMode(this.mode, getSlot(this.slotId).mode) === "auto") await savedAllowances().catch(() => []);
+      if (!this.active || this.stopping) return;
       this.prefetch(convId, calls);
       for (const call of calls) {
         if (!this.active || this.stopping) return;
