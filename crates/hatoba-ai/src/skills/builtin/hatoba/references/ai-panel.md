@@ -47,7 +47,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 | Stop | 停止 | 停止 |
 | Stop and Send the Queued Message (Esc) | 停止并发送排队的消息（Esc） | 停止して待機中のメッセージを送信（Esc） |
 | Queued: sends when the turn ends | 排队中，当前任务结束后发送 | 待機中：作業が終わったら送信します |
-| Edit (queued message) | 编辑 | 編集 |
+| Edit | 编辑 | 編集 |
 | Remove the Queued Message | 删除排队的消息 | 待機中のメッセージを削除 |
 | Add Files and More | 添加文件等 | ファイルなどを追加 |
 | MCP Tools | MCP 工具 | MCP ツール |
