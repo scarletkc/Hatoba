@@ -116,6 +116,18 @@ export function ComposerAttachments({ slotId, onPasteAsText }: { slotId: string;
   );
 }
 
+/** §13.1: the chips of the queued message, each of which × takes out of it. */
+export function QueuedAttachments({ attachments, onRemove }: { attachments: Attachment[]; onRemove: (a: Attachment) => void }) {
+  if (attachments.length === 0) return null;
+  return (
+    <div className={s.attachments}>
+      {attachments.map((a, i) => (
+        <AttachmentChipFor key={`${a.kind}${i}`} attachment={a} onRemove={() => onRemove(a)} />
+      ))}
+    </div>
+  );
+}
+
 interface ChipAction {
   label: string;
   title?: string;

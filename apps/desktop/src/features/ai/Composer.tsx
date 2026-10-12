@@ -9,14 +9,30 @@ import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { shortcutLabel } from "@/lib/platform";
 import { AddButton } from "./AddMenu";
-import { addPaste, askSideQuestion, attachFiles, compactConversation, removeExtra, sendMessage, setSlotEffort, setSlotMode, setSlotModel, stopTurn } from "./actions";
-import { ComposerAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
+import {
+  addPaste,
+  askSideQuestion,
+  attachFiles,
+  compactConversation,
+  discardQueued,
+  editQueued,
+  queueMessage,
+  removeExtra,
+  removeQueuedAttachment,
+  sendMessage,
+  setSlotEffort,
+  setSlotMode,
+  setSlotModel,
+  stopTurn,
+} from "./actions";
+import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
 import { findModel, sameModel } from "./models";
+import { messageAttachments, messageText } from "./queue";
 import { canAskSide } from "./side";
-import { getSlot, patchSlot, useAi, type Slot } from "./store";
+import { getSlot, patchSlot, useAi, type QueuedMessage, type Slot } from "./store";
 import s from "./Composer.module.css";
 
 /** Ctrl+Shift+V, or ⌘⇧V on macOS: always pastes plain text into the box (AI-35). */
@@ -36,10 +52,17 @@ function isSideQuestionKey(e: KeyboardEvent): boolean {
   return e.key === "Enter" && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey;
 }
 
+/** Ctrl+Enter, or ⌘↩ on macOS: sends at once, stopping a running turn (§13.1). */
+function isSendNowKey(e: KeyboardEvent): boolean {
+  return e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey;
+}
+
+const noModifier = (e: KeyboardEvent) => !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
+
 /**
- * The input area (§9): the attachment chips, a multi-line box, and under it the + menu and the
- * permission mode (AI-16) on the left, the context meter, the model selector, Ask a Side Question
- * (AI-42) and Send / Stop on the right.
+ * The input area (§9): the queued message (§13.1), the attachment chips, a multi-line box, and under
+ * it the + menu and the permission mode (AI-16) on the left, the context meter, the model selector,
+ * Ask a Side Question (AI-42) and Send / Stop on the right.
  */
 export function Composer({ slotId, slot, model, tools }: { slotId: string; slot: Slot; model: AiModelRef | null; tools: boolean }) {
   const t = useT();
@@ -49,7 +72,9 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   const providers = useAi((st) => st.catalog.providers);
   const platform = useApp((st) => st.info.platform);
   const busy = !!slot.turn || slot.remoteRunning;
+  const queued = slot.queued;
   const sideKey = shortcutLabel(platform, "Alt+Enter", "⌥↩");
+  const sendKey = shortcutLabel(platform, "Ctrl+Enter", "⌘↩");
   useTerminalSelection(slotId);
 
   // Focus requests (New conversation, Ask AI, …) put the caret after the draft, or select a
@@ -79,12 +104,21 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
     [slot.entries, slot.conversation?.context_start, model, ctxWindow, live],
   );
   const pending = usePendingAttachments(slotId);
-  const fit = useMemo(() => messageFit(meter, pending.length > 0 ? estimateTokens(composeMessage(slot.draft.trim(), pending)) : estimateTokens(slot.draft)), [meter, pending, slot.draft]);
+  // The queued message goes with what the box holds, or before it (§13.1).
+  const fit = useMemo(() => {
+    const typed = pending.length > 0 ? estimateTokens(composeMessage(slot.draft.trim(), pending)) : estimateTokens(slot.draft);
+    return messageFit(meter, typed + (queued ? estimateTokens(messageText(queued)) : 0));
+  }, [meter, pending, slot.draft, queued]);
   const blocked = fit.level === "over";
 
+  // §13.1: Enter with no turn running, or Ctrl+Enter: the queued message and the input area go now.
+  const canSend = (!!slot.draft.trim() || !!queued) && !!model && !blocked;
   const send = () => {
-    if (!slot.draft.trim() || !model || blocked) return;
-    void sendMessage(slotId, slot.draft);
+    if (canSend) void sendMessage(slotId, slot.draft);
+  };
+  // Enter while a turn runs: the message waits for the turn to end.
+  const queue = () => {
+    if (slot.draft.trim() && model && !blocked) queueMessage(slotId, slot.draft);
   };
 
   // AI-42: the turn, if any, goes on; the answer shows at the end of the conversation. While a turn
@@ -115,18 +149,32 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
       );
       return;
     }
-    // Enter sends, Alt+Enter asks a side question (AI-42), Shift+Enter adds a line, and nothing is sent
-    // while an IME is composing.
+    // Enter sends, or queues while a turn runs, and Ctrl+Enter sends at once (§13.1); Alt+Enter asks a
+    // side question (AI-42), Shift+Enter adds a line, and nothing is sent while an IME is composing.
     if (isSideQuestionKey(e)) {
       if (isImeEvent(e)) return;
       e.preventDefault();
       askSide();
       return;
     }
-    if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (isSendNowKey(e)) {
+      if (isImeEvent(e)) return;
+      e.preventDefault();
+      send();
+      return;
+    }
+    // ↑ in the empty box takes the queued message back to edit it.
+    if (e.key === "ArrowUp" && queued && !slot.draft && noModifier(e)) {
+      if (isImeEvent(e)) return;
+      e.preventDefault();
+      editQueued(slotId);
+      return;
+    }
+    if (e.key !== "Enter" || !noModifier(e)) return;
     if (isImeEvent(e)) return;
     e.preventDefault();
-    send();
+    if (busy) queue();
+    else send();
   };
 
   // AI-35: a long paste becomes an attachment, and pasted files are attached like picked ones.
@@ -144,6 +192,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
 
   return (
     <div className={s.composer}>
+      {queued && <QueuedCard slotId={slotId} queued={queued} />}
       <div className={s.box}>
         <ComposerAttachments
           slotId={slotId}
@@ -168,7 +217,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           rows={1}
           value={slot.draft}
           placeholder={
-            busy && slot.conversationId ? t("ai.input.placeholderBusy", { key: sideKey }) : tools ? t("ai.input.placeholder") : t("ai.input.placeholderChat")
+            busy && slot.conversationId
+              ? t("ai.input.placeholderBusy", { send: sendKey, side: sideKey })
+              : tools
+                ? t("ai.input.placeholder")
+                : t("ai.input.placeholderChat")
           }
           aria-label={t("ai.input.label")}
           spellCheck={false}
@@ -206,7 +259,13 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
             </button>
           )}
           {busy ? (
-            <button type="button" className={cx(s.send, s.stop)} title={t("ai.stopHint")} aria-label={t("ai.stop")} onClick={() => void stopTurn(slotId)}>
+            <button
+              type="button"
+              className={cx(s.send, s.stop)}
+              title={queued ? t("ai.stopAndSend") : t("ai.stopHint")}
+              aria-label={t("ai.stop")}
+              onClick={() => void stopTurn(slotId)}
+            >
               <Icon name="stop" fill size={12} />
             </button>
           ) : (
@@ -215,7 +274,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
               className={s.send}
               title={blocked ? t("ai.fit.blocked") : t("ai.send")}
               aria-label={t("ai.send")}
-              disabled={!slot.draft.trim() || !model || blocked}
+              disabled={!canSend}
               onClick={send}
             >
               <Icon name="arrow-up" size={14} />
@@ -227,6 +286,26 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   );
 }
 
+/** §13.1: the message waiting for the turn to end, above the input box: its text and attachments, Edit and ×. */
+function QueuedCard({ slotId, queued }: { slotId: string; queued: QueuedMessage }) {
+  const t = useT();
+  return (
+    <div className={s.queued} role="group" aria-label={t("ai.queued")}>
+      <div className={s.queuedHead}>
+        <Icon name="clock" size={13} className={s.queuedIcon} />
+        <span className={s.queuedTitle}>{t("ai.queued")}</span>
+        <LinkButton className={s.queuedEdit} title={t("ai.queued.editHint")} onClick={() => editQueued(slotId)}>
+          {t("ai.queued.edit")}
+        </LinkButton>
+        <button type="button" className={s.queuedRemove} title={t("ai.queued.remove")} aria-label={t("ai.queued.remove")} onClick={() => discardQueued(slotId)}>
+          <Icon name="x" size={12} />
+        </button>
+      </div>
+      <QueuedAttachments attachments={messageAttachments(queued)} onRemove={(a) => removeQueuedAttachment(slotId, a)} />
+      <div className={s.queuedText}>{queued.typed}</div>
+    </div>
+  );
+}
 
 /**
  * AI-05: every provider's models, grouped by provider, and under the current model the thinking
