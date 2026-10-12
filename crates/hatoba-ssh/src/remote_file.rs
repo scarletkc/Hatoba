@@ -846,8 +846,9 @@ mod tests {
             std::fs::write(home.join("etc/two\nfake"), b"x").unwrap();
             {
                 use std::os::unix::ffi::OsStrExt;
+                // APFS refuses such a name (EILSEQ), so on macOS there is none to leave out.
                 let latin1 = std::ffi::OsStr::from_bytes(b"caf\xe9");
-                std::fs::write(home.join("etc").join(latin1), b"x").unwrap();
+                let _ = std::fs::write(home.join("etc").join(latin1), b"x");
             }
 
             let listed = list(home, "etc", 4096).unwrap();
