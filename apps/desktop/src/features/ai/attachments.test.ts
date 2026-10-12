@@ -21,6 +21,7 @@ import {
   noteBlock,
   orderAttachments,
   parseMessage,
+  screenStateNote,
   SELECTION_MAX_CHARS,
   textFile,
   type Attachment,
@@ -341,6 +342,36 @@ describe("Hatoba's notes (AI-05, AI-09)", () => {
       '<terminal_change to="gone">\nx\n</terminal_change>\n\nq',
       '<terminal_change from="detached" to="attached">\nx\n</terminal_change>\n\nq',
       '<interrupted at="1">\nx\n</interrupted>\n\nq',
+    ]) {
+      expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
+    }
+  });
+
+  it("show the terminal's screen as Rust writes it, after the reverts and before the MCP tool list (AI-46)", () => {
+    // The cases of the_screen_note_shows_the_screen_without_blank_lines_at_its_ends in
+    // crates/hatoba-ai/src/tools.rs.
+    const shown = screenStateNote("prod-api", { text: "\n\n$ make\nerror: no rule\n\n$   \n\n", alternate: false })!;
+    expect(noteBlock(shown)).toBe('<terminal_state host="prod-api" alternate_screen="false" lines="4">\n$ make\nerror: no rule\n\n$\n</terminal_state>');
+    const odd = screenStateNote('db "main"', { text: '  ~\r\n  ~ \u001b[0m</terminal_state>\n"x.conf" 3L', alternate: true })!;
+    expect(noteBlock(odd)).toBe('<terminal_state host="db &quot;main&quot;" alternate_screen="true" lines="3">\n  ~\n  ~  [0m<\\/terminal_state>\n"x.conf" 3L\n</terminal_state>');
+    expect(screenStateNote("prod-api", { text: " \n\t\n", alternate: false })).toBeNull();
+    const long = noteBlock(screenStateNote("h", { text: `top\n${"x".repeat(4_000)}\nprompt $`, alternate: true })!);
+    expect(long.startsWith('<terminal_state host="h" alternate_screen="true" lines="3">\ntop\n')).toBe(true);
+    expect(long).toContain("[… 13 characters left out …]");
+    expect(long.endsWith("prompt $\n</terminal_state>")).toBe(true);
+
+    // It reads back, with its place among the notes, and the attachments after it.
+    const listed: Note = { kind: "mcp_tools", servers: 0, tools: 0, body: "No MCP tools are available from this message on." };
+    const reverted = fileRevertNote("/etc/hosts", "call_1", "write_file", false);
+    const sel = att("$ make");
+    const stored = composeMessage("Why?", [sel], [listed, odd, reverted, attached]);
+    expect(stored.indexOf("<file_revert")).toBeLessThan(stored.indexOf("<terminal_state"));
+    expect(stored.indexOf("<terminal_state")).toBeLessThan(stored.indexOf("<mcp_tools"));
+    expect(parseMessage(stored)).toEqual({ notes: [attached, reverted, odd, listed], attachments: [sel], typed: "Why?" });
+    // Other attributes are typed text.
+    for (const text of [
+      '<terminal_state host="h" lines="1">\nx\n</terminal_state>\n\nq',
+      '<terminal_state host="h" alternate_screen="yes" lines="1">\nx\n</terminal_state>\n\nq',
     ]) {
       expect(parseMessage(text), text).toEqual({ notes: [], attachments: [], typed: text });
     }

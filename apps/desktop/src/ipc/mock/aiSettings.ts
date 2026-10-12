@@ -99,6 +99,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     search_provider_id: flags.has("search") ? "s-brave" : null,
     builtin_skill_enabled: true,
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
+    send_terminal_screen: true,
   };
 
   let allowances: AiAllowance[] = [];

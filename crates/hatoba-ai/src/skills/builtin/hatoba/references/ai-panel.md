@@ -56,7 +56,7 @@ The tools (read the terminal, run commands, type into the shell, read, edit and 
 
 ## Attachments
 
-What goes with a message is covered in `references/ai-attachments.md`: the terminal selection, **Ask AI** about a failed connection (diagnostics), long pastes (Ctrl+Shift+V pastes as text), and text files attached with the paperclip, the clipboard or a drop on the panel.
+What goes with a message is covered in `references/ai-attachments.md`: the terminal's screen, the terminal selection, **Ask AI** about a failed connection (diagnostics), long pastes (Ctrl+Shift+V pastes as text), and text files attached with the paperclip, the clipboard or a drop on the panel.
 
 ## Model, thinking level, context and compaction
 

@@ -90,8 +90,14 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
       case "user": {
         const { notes, attachments, typed } = parseMessage(entry.text);
         // AI-05, AI-09: Hatoba's notes, a line each, before the message they belong to.
-        for (const n of notes) blocks.push(`*${noteTitle(t, n)}*`);
+        for (const n of notes) if (n.kind !== "terminal_state") blocks.push(`*${noteTitle(t, n)}*`);
         blocks.push(`## ${t("ai.export.you")}`);
+        // AI-46: the screen the message showed, like an attachment.
+        for (const n of notes) {
+          if (n.kind !== "terminal_state") continue;
+          const label = [`**${noteTitle(t, n)}**`, n.host && `\`${n.host}\``, n.alternate && t("ai.note.screen.fullScreen")];
+          blocks.push(label.filter(Boolean).join(" · "), fenced(n.body));
+        }
         // AI-10, AI-35: what was attached to the message, each as a labelled fenced block.
         for (const a of attachments) blocks.push(attachmentLabel(t, a), fenced(a.text));
         blocks.push(typed);

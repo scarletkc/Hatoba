@@ -1181,6 +1181,9 @@ pub struct AiSettings {
     /// [`MAX_CUSTOM_INSTRUCTIONS_BYTES`] bytes of UTF-8. Absent while empty.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub custom_instructions: String,
+    /// Each message goes with the attached terminal's screen (AI-46). On by default, also for
+    /// settings written before it existed.
+    pub send_terminal_screen: bool,
 }
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
@@ -1196,6 +1199,7 @@ impl Default for AiSettings {
             search_provider_id: None,
             builtin_skill_enabled: true,
             custom_instructions: String::new(),
+            send_terminal_screen: true,
         }
     }
 }
@@ -2101,12 +2105,18 @@ mod tests {
                 "default_effort": "medium",
                 "search_provider_id": "sp1",
                 "builtin_skill_enabled": true,
-                "custom_instructions": "Answer in English."
+                "custom_instructions": "Answer in English.",
+                "send_terminal_screen": true
             })
         );
         assert_eq!(
             serde_json::to_value(Item::Settings(Settings::default())).unwrap()["ai"],
-            json!({"default_model": null, "search_provider_id": null, "builtin_skill_enabled": true})
+            json!({
+                "default_model": null,
+                "search_provider_id": null,
+                "builtin_skill_enabled": true,
+                "send_terminal_screen": true
+            })
         );
 
         // Every shape reads back as written.
@@ -2139,6 +2149,10 @@ mod tests {
         assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
         let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
         assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
+        // And those written before the screen note (AI-46) send the screen.
+        assert!(ai.send_terminal_screen);
+        let quiet = read(json!({"type": "settings", "ai": {"send_terminal_screen": false}}));
+        assert!(!quiet.as_settings().unwrap().ai.send_terminal_screen);
         // AI-36: settings from before custom instructions have none.
         assert_eq!(ai.custom_instructions, "");
         let with = read(json!({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanOutput, OutputCapture, readBuffer, stripAnsi, type BufferLike } from "./terminalText";
+import { cleanOutput, OutputCapture, readBuffer, screenNote, SCREEN_NOTE_LINES, stripAnsi, type BufferLike } from "./terminalText";
 
 /** A fake xterm buffer: `[text, isWrapped]` rows, each padded to `cols` like xterm's cells. */
 function buffer(rows: [string, boolean?][], baseY: number, type: "normal" | "alternate" = "normal", cols = 10): BufferLike {
@@ -50,6 +50,27 @@ describe("readBuffer (AI-11)", () => {
     const r = readBuffer(buffer([["top - 09:41"], ["Tasks: 1"]], 0, "alternate"), 2, 100);
     expect(r.alternate).toBe(true);
     expect(r.scrollback).toBe(0);
+  });
+});
+
+describe("screenNote (AI-46)", () => {
+  it("takes the screen's last lines up to the last one with text, without scrollback", () => {
+    const rows: [string, boolean?][] = [["old"], ...Array.from({ length: 30 }, (_, i): [string] => [`line ${i}`]), ["$ "], [""], [""]];
+    const s = screenNote(buffer(rows, 1, "normal"), 33);
+    expect(s.alternate).toBe(false);
+    const lines = s.text.split("\n");
+    expect(lines).toHaveLength(SCREEN_NOTE_LINES);
+    expect(lines[0]).toBe("line 11");
+    expect(lines.at(-1)).toBe("$");
+    expect(s.text).not.toContain("old");
+    // A short screen goes whole.
+    expect(screenNote(buffer([["$ make"], ["error"], ["$ "]], 0), 3)).toEqual({ text: "$ make\nerror\n$", alternate: false });
+  });
+
+  it("takes the whole screen of a full-screen program", () => {
+    const rows = Array.from({ length: 30 }, (_, i): [string] => [`row ${i}`]);
+    const s = screenNote(buffer(rows, 0, "alternate"), 30);
+    expect(s).toEqual({ text: rows.map((r) => r[0]).join("\n"), alternate: true });
   });
 });
 

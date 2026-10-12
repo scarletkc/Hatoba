@@ -70,6 +70,16 @@ The paperclip button in the input area (**Attach Text Files**) opens a file pick
 | Drop text files to attach them | 松开以附加文本文件 | ドロップしてテキストファイルを添付 |
 | Preview the file | 预览文件内容 | ファイルの内容をプレビュー |
 
+## The terminal's screen
+
+Each message sent while a connected terminal tab is attached also shows the assistant that tab's screen as it is at that moment: the last 20 lines, or the whole screen while a full-screen program such as vim, less or htop runs, never the scrollback. Hatoba adds it when it stores the message, so no chip shows in the input. The sent message shows it as a collapsed block, "Terminal screen · N lines" with the host, marked "full-screen program" when one was running. Like attachments, it is stored and synced with the conversation and appears in an export, but History search skips it. The assistant reads the screen again before it types when the screen may have changed. To stop sending it, turn off **Send with Each Message** under Settings → AI → **Terminal Screen** (synced, on by default).
+
+| en | zh-CN | ja |
+|---|---|---|
+| full-screen program | 全屏程序 | 全画面プログラム |
+| Terminal Screen | 终端屏幕 | ターミナル画面 |
+| Send with Each Message | 随每条消息发送 | メッセージごとに送信 |
+
 ## Does it fit the model?
 
 The input area counts the message with its attachments (about 4 characters per token). When the message would bring the conversation past 80% of the model's context window, a note says "With this message the conversation uses about N% of the model’s context. Past 90%, it is compacted before sending." Past 90%, Hatoba compacts the earlier conversation before the request. A message larger than the whole window cannot be sent, because compacting cannot shrink it: the note says "This message is about N tokens, more than the model’s context window… Remove attachments or choose a model with a larger context.", and Send is disabled. The check needs the model's **Context** window to be set (`references/ai-settings.md`).

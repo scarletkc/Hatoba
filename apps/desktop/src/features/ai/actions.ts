@@ -70,6 +70,7 @@ import {
   type Slot,
   type TabSelection,
 } from "./store";
+import { screenNote } from "./terminalText";
 import { DISCONNECTED, NO_TAB, readTerminal, sendInput } from "./terminalTools";
 import {
   allowanceOf,
@@ -131,14 +132,16 @@ export function slotEffort(slotId: string): AiEffort | null {
 /**
  * What a request may act on: the tab's host or quick-connect target and, when connected, its terminal
  * tools and session, whose server's identification string the system prompt states (AI-08, AI-09,
- * §13.1), and the permission mode the prompt names (§13.5). The home tab names the conversation's own
- * host or target, which leaves it where it is.
+ * §13.1), the permission mode the prompt names (§13.5), and the screen a message shows while
+ * **Send with Each Message** is on (AI-46). The home tab names the conversation's own host or target,
+ * which leaves it where it is.
  */
 export function turnContext(slotId: string): AiTurnContext | null {
   const model = slotModel(slotId);
   if (!model) return null;
   const attached = attachedTab(slotId);
   const connected = !!attached && attached.tab.status === "connected";
+  const term = connected && (useAi.getState().catalog.settings?.send_terminal_screen ?? true) ? attached.session?.term : undefined;
   const slot = getSlot(slotId);
   const conversation = slot.conversation;
   return {
@@ -151,6 +154,7 @@ export function turnContext(slotId: string): AiTurnContext | null {
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: slot.mcpOff,
     permission_mode: slot.mode,
+    screen: term ? screenNote(term.buffer.active, term.rows) : null,
   };
 }
 

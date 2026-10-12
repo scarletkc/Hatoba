@@ -141,6 +141,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         search_provider_id: s.search_provider_id.clone(),
         builtin_skill_enabled: s.builtin_skill_enabled,
         custom_instructions: s.custom_instructions.clone(),
+        send_terminal_screen: s.send_terminal_screen,
     }
 }
 
@@ -619,6 +620,9 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
             .custom_instructions
             .clone()
             .unwrap_or_else(|| current.custom_instructions.clone()),
+        send_terminal_screen: patch
+            .send_terminal_screen
+            .unwrap_or(current.send_terminal_screen),
     };
     if ai == settings.ai {
         return Ok(false);
@@ -1266,6 +1270,13 @@ mod tests {
         assert!(!v.settings().ai.builtin_skill_enabled);
         assert!(v.settings().ai.default_model.is_some());
 
+        // AI-46: so is the switch of the screen note.
+        assert!(ai_settings_view(&v.settings().ai).send_terminal_screen);
+        let quiet = patch(|p| p.send_terminal_screen = Some(false));
+        save_ai_settings(&mut v, &quiet).unwrap();
+        assert!(!ai_settings_view(&v.settings().ai).send_terminal_screen);
+        assert!(!v.settings().ai.builtin_skill_enabled);
+
         // AI-05: the default thinking level is stored with them, and Default is `None`.
         let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::Xhigh));
         save_ai_settings(&mut v, &level).unwrap();
@@ -1370,6 +1381,7 @@ mod tests {
         let mut pulled = v.settings();
         pulled.ai.custom_instructions = "Answer in Japanese.".into();
         pulled.ai.builtin_skill_enabled = false;
+        pulled.ai.send_terminal_screen = false;
         v.put(Some(SETTINGS_ID), Item::Settings(pulled)).unwrap();
 
         // The user picks a thinking level in that pane.
@@ -1380,7 +1392,7 @@ mod tests {
         let ai = v.settings().ai;
         assert_eq!(ai.default_effort, Some(CoreEffort::Low));
         assert_eq!(ai.custom_instructions, "Answer in Japanese.");
-        assert!(!ai.builtin_skill_enabled);
+        assert!(!ai.builtin_skill_enabled && !ai.send_terminal_screen);
         assert_eq!(ai.default_model.map(|m| m.model_id), Some("m1".into()));
     }
 
@@ -1396,6 +1408,7 @@ mod tests {
             p.search_provider_id = Clearable::Clear;
             p.builtin_skill_enabled = Some(shown.builtin_skill_enabled);
             p.custom_instructions = Some(shown.custom_instructions.clone());
+            p.send_terminal_screen = Some(shown.send_terminal_screen);
         });
         assert!(!save_ai_settings(&mut v, &same).unwrap());
         assert!(!save_ai_settings(&mut v, &AiSettingsPatch::default()).unwrap());

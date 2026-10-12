@@ -135,6 +135,8 @@ export default defineMessages({
     "ai.note.fileRevert": "已撤销对 {path} 的修改",
     "ai.note.mcpTools": "列出了 {n} 个 MCP 工具",
     "ai.note.mcpToolsNone": "没有可用的 MCP 工具",
+    "ai.note.screen": "终端屏幕 · {n} 行",
+    "ai.note.screen.fullScreen": "全屏程序",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "撤销修改",
@@ -497,6 +499,9 @@ export default defineMessages({
     "ai.note.mcpTools": "Listed {n} MCP tools",
     "ai.note.mcpTools_one": "Listed 1 MCP tool",
     "ai.note.mcpToolsNone": "No MCP tools available",
+    "ai.note.screen": "Terminal screen · {n} lines",
+    "ai.note.screen_one": "Terminal screen · 1 line",
+    "ai.note.screen.fullScreen": "full-screen program",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "Revert",
@@ -850,6 +855,8 @@ export default defineMessages({
     "ai.note.fileRevert": "{path} への変更を元に戻しました",
     "ai.note.mcpTools": "MCP ツールを {n} 個一覧にしました",
     "ai.note.mcpToolsNone": "使える MCP ツールはありません",
+    "ai.note.screen": "ターミナル画面 · {n} 行",
+    "ai.note.screen.fullScreen": "全画面プログラム",
 
     // revert a file tool's change (AI-41)
     "ai.revert.action": "元に戻す",

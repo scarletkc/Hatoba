@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
-import { Button, Icon, IconButton, Segmented, Spinner, controlStyles } from "@/components/controls";
+import { Button, Icon, IconButton, Segmented, Spinner, Switch, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
 import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
@@ -36,8 +36,8 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 
 /**
  * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
- * web search (AI-14), custom instructions (AI-36), and the permission mode and saved approvals of this
- * device (AI-16, AI-19).
+ * web search (AI-14), custom instructions (AI-36), the terminal screen each message sends (AI-46), and
+ * the permission mode and saved approvals of this device (AI-16, AI-19).
  */
 export function AiPane() {
   const t = useT();
@@ -222,6 +222,20 @@ export function AiPane() {
           value={data.settings.custom_instructions}
           onSave={(custom_instructions) => void saveSettings({ custom_instructions })}
         />
+      )}
+      {data && (
+        <section className={layoutStyles.section}>
+          <div className={layoutStyles.sectionTitle}>{t("aiSettings.screen")}</div>
+          <Group>
+            <SettingRow label={t("aiSettings.screen.row")} hint={t("aiSettings.screen.hint")}>
+              <Switch
+                label={t("aiSettings.screen.row")}
+                checked={data.settings.send_terminal_screen}
+                onChange={(send_terminal_screen) => void saveSettings({ send_terminal_screen })}
+              />
+            </SettingRow>
+          </Group>
+        </section>
       )}
       <SkillsSection
         builtin={

@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionTab } from "@/app/tabs";
-import type { AiConversationView, AiProviderView, QuickTarget } from "@/ipc/types";
+import type { AiConversationView, AiProviderView, AiSettingsView, QuickTarget } from "@/ipc/types";
 
 // turnContext never calls the backend; this keeps the real IPC layer out of the test.
 vi.mock("@/ipc/api", async (importActual) => ({ ...(await importActual<typeof import("@/ipc/api")>()), api: {} }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+// The quick-connect tab's terminal, whose screen a message shows (AI-46).
+vi.mock("@/features/terminal/session", async (importActual) => {
+  const rows = ["$ make", "error: no rule", "$ "];
+  const line = (y: number) => ({ isWrapped: false, translateToString: () => rows[y] });
+  const term = { rows: rows.length, buffer: { active: { type: "normal", length: rows.length, baseY: 0, getLine: (y: number) => (rows[y] === undefined ? undefined : line(y)) } } };
+  return { ...(await importActual<typeof import("@/features/terminal/session")>()), getSession: (tabId: string) => (tabId === "tab-1" ? { term } : undefined) };
+});
 
 const { turnContext } = await import("./actions");
 const { blankSlot, HOME_SLOT, useAi } = await import("./store");
@@ -36,9 +43,17 @@ const view = (host_id: string | null, quick_target: QuickTarget | null): AiConve
 });
 const quickTab: SessionTab = { id: "tab-1", hostId: null, target: { address: "10.0.0.8", port: 22, username: "root" }, title: "root@10.0.0.8", status: "connected", sessionId: "s1" };
 
-function attach(slotId: string, conversation: AiConversationView) {
-  useAi.setState({ slots: { [slotId]: { ...blankSlot("manual"), conversationId: conversation.id, conversation } } });
+function attach(slotId: string, conversation: AiConversationView, mode: "manual" | "bypass" = "manual") {
+  useAi.setState({ slots: { [slotId]: { ...blankSlot(mode), conversationId: conversation.id, conversation } } });
 }
+const settings = (send_terminal_screen: boolean): AiSettingsView => ({
+  default_model: null,
+  default_effort: null,
+  search_provider_id: null,
+  builtin_skill_enabled: true,
+  custom_instructions: "",
+  send_terminal_screen,
+});
 
 beforeEach(() => {
   useAi.setState({ catalog: { providers: [provider], settings: null, loaded: true } });
@@ -64,5 +79,26 @@ describe("turnContext (AI-09)", () => {
   it("names the tab's target in a terminal tab, which the next message moves the conversation to", () => {
     attach(quickTab.id, view(null, { address: "10.0.0.7", port: 22, username: "root" }));
     expect(turnContext(quickTab.id)).toMatchObject({ host_id: null, target: quickTab.target, tab: true, session_id: "s1" });
+  });
+
+  it("names the conversation's permission mode (§13.5)", () => {
+    attach(quickTab.id, view(null, null), "bypass");
+    expect(turnContext(quickTab.id)?.permission_mode).toBe("bypass");
+    attach(HOME_SLOT, view(null, null));
+    expect(turnContext(HOME_SLOT)?.permission_mode).toBe("manual");
+  });
+
+  it("reads the connected tab's screen while Send with Each Message is on (AI-46)", () => {
+    attach(quickTab.id, view(null, null));
+    expect(turnContext(quickTab.id)?.screen).toEqual({ text: "$ make\nerror: no rule\n$", alternate: false });
+    useAi.setState({ catalog: { providers: [provider], settings: settings(false), loaded: true } });
+    expect(turnContext(quickTab.id)?.screen).toBeNull();
+    useAi.setState({ catalog: { providers: [provider], settings: settings(true), loaded: true } });
+    expect(turnContext(quickTab.id)?.screen).not.toBeNull();
+    // Not while the tab is disconnected, nor on the home tab, which has no terminal.
+    useTabs.setState({ tabs: [{ ...quickTab, status: "disconnected" }] });
+    expect(turnContext(quickTab.id)?.screen).toBeNull();
+    attach(HOME_SLOT, view(null, null));
+    expect(turnContext(HOME_SLOT)?.screen).toBeNull();
   });
 });

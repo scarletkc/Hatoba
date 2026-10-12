@@ -1,5 +1,5 @@
 import type { TabSource } from "@/app/tabs";
-import { fileRevertNote, noteBlock, parseMessage, type Note } from "@/features/ai/attachments";
+import { fileRevertNote, noteBlock, parseMessage, screenStateNote, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
 import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
@@ -776,12 +776,13 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * `null`; `cameFrom` names the other, `null` without a move), a
    * `terminal_change` note when the message has the terminal tools and `terminalBefore` says there was
    * none, or the other way round, and a `model_change` note when the newest reply came from another
-   * model, unless a message without a reply noted that switch already. Returned as the text that goes
-   * before the message.
+   * model, unless a message without a reply noted that switch already, then the screen (`screenNote`), also
+   * before a conversation's first message. Returned as the text that goes before the message.
    */
   async function notesBefore(c: Conv, earlier: AiEntryView[], move: Move | null, cameFrom: string | null, context: AiTurnContext): Promise<string> {
     const notes: Note[] = [];
-    if (earlier.length === 0) return "";
+    const screen = await screenNote(c, move, context);
+    if (earlier.length === 0) return screen;
     for (const e of [...earlier].reverse()) {
       if (e.role === "assistant") {
         if (interrupted.has(e.entry_id)) notes.push({ kind: "interrupted" });
@@ -808,7 +809,20 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       if (e.role === "user" && parseMessage(e.text).notes.some((n) => n.kind === "model_change" && n.to === now)) break;
     }
     notes.push(...pendingReverts(c.view.id, earlier));
-    return notes.map((n) => `${noteBlock(n)}\n\n`).join("");
+    return notes.map((n) => `${noteBlock(n)}\n\n`).join("") + screen;
+  }
+
+  /**
+   * Like Rust's `screen_note` (AI-46): the `terminal_state` note of a message the panel sent with the screen
+   * of a connected tab, while **Send with Each Message** is on, on the host the conversation is on with `move`.
+   */
+  async function screenNote(c: Conv, move: Move | null, context: AiTurnContext): Promise<string> {
+    if (!context.tab || !context.screen || !(await deps.settings()).send_terminal_screen) return "";
+    const hosts = (await deps.hosts?.()) ?? [];
+    const place = move ?? c.view;
+    const host = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quick_target ? formatTarget(place.quick_target) : "");
+    const note = screenStateNote(host, context.screen);
+    return note ? `${noteBlock(note)}\n\n` : "";
   }
 
   /**
@@ -1461,7 +1475,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       convs.set(c.view.id, c);
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
-      const notes = (input.conversation_id ? await notesBefore(c, earlier, move, move?.from ?? null, input.context) : "") + (await deferredList(input.context, input.text));
+      const notes = (await notesBefore(c, earlier, move, move?.from ?? null, input.context)) + (await deferredList(input.context, input.text));
       const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null };
       const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move, recorded);
       return { conversation: view(c), user_entry };

@@ -20,7 +20,7 @@ import {
   tooMuchMessage,
   type Decision,
 } from "./actions";
-import { AttachmentCardFor, AttachmentChipFor } from "./AttachmentChips";
+import { AttachmentCardFor, AttachmentChipFor, ScreenCard } from "./AttachmentChips";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, type MessageParts, type Note } from "./attachments";
@@ -334,7 +334,9 @@ function UserMessage({
   const [editing, setEditing] = useState(false);
   // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
   const parts = useMemo(() => parseMessage(text), [text]);
-  const notes = parts.notes.map((note, i) => <NoteDivider key={i} note={note} />);
+  const notes = parts.notes.filter((note) => note.kind !== "terminal_state").map((note, i) => <NoteDivider key={i} note={note} />);
+  // AI-46: the screen the message showed is a collapsed block above its attachments.
+  const screen = parts.notes.find((note) => note.kind === "terminal_state");
   if (editing && onResend)
     return (
       <>
@@ -352,6 +354,7 @@ function UserMessage({
           {onFork && <ForkButton onFork={onFork} />}
         </div>
         <div className={s.userStack}>
+          {screen?.kind === "terminal_state" && <ScreenCard note={screen} />}
           {parts.attachments.map((a, i) => (
             <AttachmentCardFor key={i} attachment={a} />
           ))}
@@ -363,7 +366,14 @@ function UserMessage({
   );
 }
 
-const NOTE_ICONS = { interrupted: "stop-circle", host_change: "arrows-left-right", model_change: "swap", file_revert: "arrow-counter-clockwise", mcp_tools: "plug" } as const;
+const NOTE_ICONS = {
+  interrupted: "stop-circle",
+  host_change: "arrows-left-right",
+  model_change: "swap",
+  file_revert: "arrow-counter-clockwise",
+  terminal_state: "terminal-window",
+  mcp_tools: "plug",
+} as const;
 
 /**
  * A note Hatoba stored before a message: the user stopped the reply before it, the conversation moved

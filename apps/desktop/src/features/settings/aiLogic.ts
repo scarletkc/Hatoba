@@ -298,6 +298,7 @@ export function sanitizeSettings(
     search_provider_id: searchId,
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
+    send_terminal_screen: settings.send_terminal_screen,
   };
 }
 
@@ -327,6 +328,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;
   if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
+  if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

@@ -32,6 +32,7 @@
 //! SEC-04: logs carry conversation ids, statuses and error kinds, never messages, tool inputs or
 //! results, provider messages or keys.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -1291,9 +1292,15 @@ impl AiManager {
                     updated_at: 0,
                 };
                 let id = hatoba_core::new_id();
+                let host_now = context
+                    .host_id
+                    .as_deref()
+                    .and_then(|id| host_name(&v, id))
+                    .or_else(|| created.quick_target.as_ref().map(target_name));
+                let notes = notes_before(&v, &[], None, host_now.as_deref(), &context, &[]);
                 (
                     id,
-                    String::new(),
+                    notes,
                     None,
                     Some(EntryPlace::default()),
                     Some(created),
@@ -3752,6 +3759,9 @@ const FILE_REVERT: &str = "file_revert";
 /// The tag of the note Hatoba puts before a message that comes with another list of deferred MCP
 /// tools than the model last saw (AI-45). A conversation with one is deferred.
 const MCP_TOOLS: &str = deferred::LIST_TAG;
+/// The tag of the note Hatoba puts before a message sent with a connected terminal attached,
+/// which shows its screen (AI-46).
+const TERMINAL_STATE: &str = "terminal_state";
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
@@ -3810,6 +3820,15 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("path", _), ("tool_call_id", _)]),
+    },
+    AttachmentKind {
+        tag: TERMINAL_STATE,
+        note: true,
+        title: |_| String::new(),
+        attributes: |attrs| {
+            matches!(attrs, [("host", _), ("alternate_screen", "true" | "false"), ("lines", lines)]
+                if is_count(lines))
+        },
     },
     AttachmentKind {
         tag: MCP_TOOLS,
@@ -4303,6 +4322,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 ///   `earlier` (the entries before the message) came from. A switch an earlier message noted
 ///   already, which got no reply (a failed request, say), is not noted again.
 /// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
+/// - `terminal_state` (AI-46), the screen of the attached terminal ([`screen_note`]), also before
+///   a conversation's first message.
 fn notes_before(
     v: &Vault,
     earlier: &[AiEntry],
@@ -4312,9 +4333,10 @@ fn notes_before(
     reverts: &[(String, files::ChangeMeta)],
 ) -> String {
     let mut notes = String::new();
-    // A message with nothing before it has no earlier screens or replies to tell apart.
+    // A message with nothing before it has no earlier screens or replies to tell apart, but it can
+    // show the screen now.
     if earlier.is_empty() {
-        return notes;
+        return screen_note(v, context, host_now);
     }
     for entry in earlier.iter().rev() {
         match &entry.body {
@@ -4363,7 +4385,20 @@ fn notes_before(
             meta.created,
         ));
     }
+    notes.push_str(&screen_note(v, context, host_now));
     notes
+}
+
+/// AI-46: the `terminal_state` note of a message whose `context` has the screen of a connected
+/// tab, on the host `host` (its display name or quick-connect target), while
+/// **Send with Each Message** is on. Empty otherwise, and for a blank screen.
+fn screen_note(v: &Vault, context: &AiTurnContext, host: Option<&str>) -> String {
+    match &context.screen {
+        Some(screen) if context.tab && v.settings().ai.send_terminal_screen => {
+            tools::terminal_state_block(host.unwrap_or_default(), screen.alternate, &screen.text)
+        }
+        _ => String::new(),
+    }
 }
 
 /// The calls whose `file_revert` notes (AI-41) a user entry starts with.
@@ -4635,11 +4670,16 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
         };
         let in_entries = entries.ids.iter().zip(&entries.list).find_map(|(id, e)| {
             let text = match &e.body {
-                EntryBody::User { text, .. } | EntryBody::Summary { text } => text.as_str(),
-                EntryBody::Assistant(a) => a.text.as_str(),
+                // The screen a message showed is the host's text, not the conversation's (AI-46).
+                EntryBody::User { text, .. } => match note_block(text, TERMINAL_STATE) {
+                    Some(screen) => Cow::Owned(text.replacen(screen, "", 1)),
+                    None => Cow::Borrowed(text.as_str()),
+                },
+                EntryBody::Summary { text } => Cow::Borrowed(text.as_str()),
+                EntryBody::Assistant(a) => Cow::Borrowed(a.text.as_str()),
                 EntryBody::Tool { .. } => return None,
             };
-            snippet(text, &needle).map(|s| (Some(id.clone()), s))
+            snippet(&text, &needle).map(|s| (Some(id.clone()), s))
         });
         if let Some((entry_id, snippet)) =
             in_entries.or_else(|| snippet(&title, &needle).map(|s| (None, s)))

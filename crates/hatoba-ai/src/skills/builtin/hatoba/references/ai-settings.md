@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Skills, MCP Servers and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Skills, MCP Servers and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -10,6 +10,7 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 | Default Model | 默认模型 | 既定のモデル |
 | Web Search | 网页搜索 | Web 検索 |
 | Custom Instructions | 自定义指令 | カスタム指示 |
+| Terminal Screen | 终端屏幕 | ターミナル画面 |
 | Skills | 技能 | スキル |
 | MCP Servers | MCP 服务器 | MCP サーバー |
 | This Device | 此设备 | このデバイス |
@@ -68,6 +69,14 @@ The assistant calls the providers added here directly from the device, with the 
 - **Model for new conversations** is the model a new conversation starts with. It needs at least one provider with a model, and it syncs. Each conversation then keeps the model it used last.
 - **Thinking level for new conversations** is the level a new conversation starts at: Default, Low, Medium, High, Extra High or Max (see `references/ai-models.md`). It syncs. A model that does not offer that level uses the highest lower level it has. Each conversation then keeps the level it used last. What is sent: for OpenAI Chat Completions a `reasoning_effort` of low, medium or high (xhigh or max only for a model whose levels include them); for Anthropic Messages an `output_config` effort, with adaptive thinking switched on for models that support it. Default sends none of these.
 - **Search provider** is the backend of the assistant's web search. Choose **Brave Search API** or **Tavily** (enter the **API Key**) or **SearXNG** (enter the **Instance URL** of your own instance, which must have the JSON format enabled), then **Test Connection** and **Save**. **None** (the default) means the assistant has no web search tool. Search terms go to the chosen service. **Remove Configuration** deletes the saved settings and key.
+
+## Terminal Screen
+
+**Send with Each Message** (on by default, synced) shows the assistant the attached terminal's screen with every message; see `references/ai-attachments.md`.
+
+| en | zh-CN | ja |
+|---|---|---|
+| Send with Each Message | 随每条消息发送 | メッセージごとに送信 |
 
 ## Skills
 

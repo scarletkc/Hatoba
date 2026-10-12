@@ -34,9 +34,9 @@ use super::{
 use super::{Halt, Streamed, Turn, append, lock, side_parts, title_of, wait_for_results};
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
-    AiPermissionMode, AiRevertFailure, AiSendInput, AiSendStarted, AiSideAnswer, AiSideEvent,
-    AiSideQuestionInput, AiToolResultInput, AiToolStatus, AiTurnContext, AiTurnEndReason,
-    AiTurnEvent, QuickTarget,
+    AiPermissionMode, AiRevertFailure, AiScreen, AiSendInput, AiSendStarted, AiSideAnswer,
+    AiSideEvent, AiSideQuestionInput, AiToolResultInput, AiToolStatus, AiTurnContext,
+    AiTurnEndReason, AiTurnEvent, QuickTarget,
 };
 use crate::error::{AppResult, ErrorCode};
 use crate::mcp::McpManager;
@@ -353,6 +353,7 @@ impl Fixture {
             session_id: None,
             disabled_mcp_servers: Vec::new(),
             permission_mode: AiPermissionMode::Manual,
+            screen: None,
         }
     }
 
@@ -2889,7 +2890,13 @@ fn search_finds_titles_and_message_text_once_per_conversation() {
     let (disk, disk_ids) = conversation(
         "Disk usage on prod",
         &[
-            AiEntry::user(1, "how full is /var?"),
+            AiEntry::user(
+                1,
+                format!(
+                    "{}how full is /var?",
+                    hatoba_ai::tools::terminal_state_block("prod", false, "$ df\nscreen-needle")
+                ),
+            ),
             answer("It is at 42% now."),
             AiEntry::tool(3, "call_1", ToolStatus::Ok, "tool-only-needle"),
         ],
@@ -2921,8 +2928,10 @@ fn search_finds_titles_and_message_text_once_per_conversation() {
     let hits = search("42%");
     assert_eq!(hits[0].entry_id.as_deref(), Some(disk_ids[1].as_str()));
     assert_eq!(hits[0].snippet, "It is at 42% now.");
-    // Tool results are not searched.
+    // Tool results are not searched, and neither is the screen a message showed (AI-46).
     assert!(search("tool-only-needle").is_empty());
+    assert!(search("screen-needle").is_empty());
+    assert_eq!(search("/var")[0].snippet, "how full is /var?");
     // One hit per conversation: the first matching entry, before the title.
     let hits = search("nginx");
     assert_eq!(hits.len(), 1);
@@ -3486,6 +3495,14 @@ impl Fixture {
         v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
     }
 
+    /// AI-46: Settings → AI → **Send with Each Message**.
+    fn set_send_screen(&self, on: bool) {
+        let mut v = lock(&self.vault);
+        let mut settings = v.settings();
+        settings.ai.send_terminal_screen = on;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+
     /// The text of every stored user entry, oldest first.
     fn user_texts(&self, conversation_id: &str) -> Vec<String> {
         self.entries(conversation_id)
@@ -3623,6 +3640,70 @@ async fn the_prompt_names_the_permission_mode_of_each_turn() {
         "{second}"
     );
     assert_eq!(f.user_texts(&conv), ["first", "second"]);
+}
+
+#[tokio::test]
+async fn each_message_shows_the_screen_it_was_sent_with() {
+    use hatoba_ai::tools::{terminal_change_block, terminal_state_block};
+
+    let f = Fixture::new((0..6).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "");
+    let on_prod = |text: &str, alternate| AiTurnContext {
+        host_id: Some(prod.clone()),
+        screen: Some(AiScreen {
+            text: text.into(),
+            alternate,
+        }),
+        ..f.context()
+    };
+
+    // The first message shows it too, and each one the screen it was sent with (AI-46).
+    let (conv, _) = f
+        .exchange(None, "first", on_prod("$ make\nerror", false))
+        .await;
+    f.exchange(Some(&conv), "second", on_prod("~\n\"a.conf\" 3L", true))
+        .await;
+    // A blank screen shows nothing.
+    f.exchange(Some(&conv), "third", on_prod("\n  \n", false))
+        .await;
+    // Nor does a tab that is not connected, whatever the panel sent.
+    let detached = AiTurnContext {
+        tab: false,
+        ..on_prod("$ stale", false)
+    };
+    f.exchange(Some(&conv), "fourth", detached).await;
+    // Nor anything while the setting is off.
+    f.set_send_screen(false);
+    f.exchange(Some(&conv), "fifth", on_prod("$ quiet", false))
+        .await;
+    f.set_send_screen(true);
+    // The screen is the last note, after the others.
+    f.exchange(Some(&conv), "sixth", on_prod("$ back", false))
+        .await;
+
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            format!(
+                "{}first",
+                terminal_state_block("prod-db", false, "$ make\nerror")
+            ),
+            format!(
+                "{}second",
+                terminal_state_block("prod-db", true, "~\n\"a.conf\" 3L")
+            ),
+            "third".to_owned(),
+            format!("{}fourth", terminal_change_block(false)),
+            format!("{}fifth", terminal_change_block(true)),
+            format!("{}sixth", terminal_state_block("prod-db", false, "$ back")),
+        ]
+    );
+    // The note goes to the model as part of the message, and never titles the conversation.
+    let last = f.requests().await.pop().unwrap();
+    assert!(user_messages(&last).last().unwrap().starts_with(
+        "<terminal_state host=\"prod-db\" alternate_screen=\"false\" lines=\"1\">\n$ back\n"
+    ));
+    assert_eq!(title_of(&f.user_texts(&conv)[0]), "first");
 }
 
 #[tokio::test]

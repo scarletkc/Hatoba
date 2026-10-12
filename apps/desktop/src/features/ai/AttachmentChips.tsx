@@ -8,7 +8,7 @@ import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { shortcutLabel } from "@/lib/platform";
 import { hideSelection, noteSelection, removeDiagnostics, removeExtra } from "./actions";
-import { attachmentTokens, chipShown, makeAttachment, type Attachment, type SelectionAttachment } from "./attachments";
+import { attachmentTokens, chipShown, makeAttachment, type Attachment, type Note, type SelectionAttachment } from "./attachments";
 import { formatTokens } from "./meter";
 import { HOME_SLOT, NO_SELECTION, useAi } from "./store";
 import s from "./AttachmentChips.module.css";
@@ -317,6 +317,20 @@ function AttachmentCard({ icon, title, host, badge, body }: { icon: string; titl
       </button>
       {open && <pre className={cx(s.cardBody, "selectable")}>{body}</pre>}
     </div>
+  );
+}
+
+/** AI-46: the terminal's screen a message showed, which Hatoba stored before it, collapsed like an attachment. */
+export function ScreenCard({ note }: { note: Extract<Note, { kind: "terminal_state" }> }) {
+  const t = useT();
+  return (
+    <AttachmentCard
+      icon="terminal-window"
+      title={t("ai.note.screen", { n: note.lines })}
+      host={note.host}
+      badge={note.alternate ? t("ai.note.screen.fullScreen") : undefined}
+      body={note.body}
+    />
   );
 }
 

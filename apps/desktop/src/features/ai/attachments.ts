@@ -14,9 +14,10 @@
  *
  * Before them, Rust stores the notes Hatoba writes itself when a message follows a reply the user
  * stopped, moves the conversation to another host, changes whether a terminal is attached, goes to
- * another model, follows a revert of a file tool's change, or comes with another list of deferred MCP
- * tools (`interrupted`, `host_change`, `terminal_change`, `model_change`, `file_revert`,
- * `mcp_tools`); the panel shows those as dividers. The block
+ * another model, follows a revert of a file tool's change, is sent with a connected terminal, or comes
+ * with another list of deferred MCP tools (`interrupted`, `host_change`, `terminal_change`,
+ * `model_change`, `file_revert`, `terminal_state`, `mcp_tools`); the panel shows the terminal's screen
+ * as a collapsed block and the others as dividers. The block
  * format and its escaping are specified once, in docs/hatoba-spec.md §13.3
  * ("Attachment blocks"); Rust's `title_of` (src-tauri/src/ai.rs) reads the same blocks to title a
  * conversation.
@@ -205,20 +206,30 @@ export function attachmentTokens(a: Attachment): number {
  * A note Hatoba writes before a message (§13.1, AI-05, AI-09, AI-41), never the user: the reply before
  * it was stopped by the user, or with this message the conversation moved to another host, a terminal
  * became attached or stopped being attached, it went to another model, or the user reverted the change
- * a file tool call made, or this message lists the deferred MCP tools (AI-45). `from` of a host change
- * is empty when the earlier host no longer exists; a model is named as `Name (id)`, or by its ID alone. A
- * revert's `path` is the file's path as the call resolved it, and `body` its text for the model; the
- * MCP tool list counts its servers and tools, and `body` lists them.
+ * a file tool call made, or this message shows the attached terminal's screen (AI-46) or lists the
+ * deferred MCP tools (AI-45). `from` of a host change is empty when the earlier host no longer exists;
+ * a model is named as `Name (id)`, or by its ID alone. A revert's `path` is the file's path as the call
+ * resolved it, and `body` its text for the model; the screen counts its lines, and `alternate` says a
+ * full-screen program showed it; the MCP tool list counts its servers and tools, and `body` lists them.
  */
 export type Note =
   | { kind: "interrupted" }
   | { kind: "host_change" | "model_change"; from: string; to: string }
   | { kind: "terminal_change"; to: "attached" | "detached" }
   | { kind: "file_revert"; path: string; toolCallId: string; body: string }
+  | { kind: "terminal_state"; host: string; alternate: boolean; lines: number; body: string }
   | { kind: "mcp_tools"; servers: number; tools: number; body: string };
 
 /** The order Hatoba writes its notes in; a `file_revert` comes once for each reverted call. */
-const NOTE_ORDER = ["interrupted", "host_change", "terminal_change", "model_change", "file_revert", "mcp_tools"] as const satisfies readonly Note["kind"][];
+const NOTE_ORDER = [
+  "interrupted",
+  "host_change",
+  "terminal_change",
+  "model_change",
+  "file_revert",
+  "terminal_state",
+  "mcp_tools",
+] as const satisfies readonly Note["kind"][];
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -274,11 +285,14 @@ const INTERRUPTED_BODY =
 
 /**
  * A note as Rust writes it (`interrupted_block`, `host_change_block`, `terminal_change_block`,
- * `model_change_block`, `file_revert_block` and `deferred::list_block` in crates/hatoba-ai). The panel never sends one; Rust adds
- * them when it stores a message, and the mock does the same.
+ * `model_change_block`, `file_revert_block`, `terminal_state_block` and `deferred::list_block` in
+ * crates/hatoba-ai). The panel never sends one; Rust adds them when it stores a message, and the mock
+ * does the same.
  */
 export function noteBlock(n: Note): string {
   if (n.kind === "mcp_tools") return writeBlock(n.kind, [["servers", String(n.servers)], ["tools", String(n.tools)]], n.body);
+  if (n.kind === "terminal_state")
+    return writeBlock(n.kind, [["host", noteText(n.host)], ["alternate_screen", String(n.alternate)], ["lines", String(n.lines)]], n.body);
   if (n.kind === "interrupted") return writeBlock(n.kind, [], INTERRUPTED_BODY);
   if (n.kind === "terminal_change") return writeBlock(n.kind, [["to", n.to]], TERMINAL_BODY[n.to]);
   if (n.kind === "file_revert") return writeBlock(n.kind, [["path", noteText(n.path)], ["tool_call_id", noteText(n.toolCallId)]], n.body);
@@ -288,6 +302,32 @@ export function noteBlock(n: Note): string {
       ? "Earlier replies in this conversation came from another model."
       : `The conversation moved to another host. Screens and command output before this message came from ${from ? `"${from}"` : "another host"}.`;
   return writeBlock(n.kind, [["from", from], ["to", noteText(n.to)]], body);
+}
+
+/** As Rust's `MAX_SCREEN_CHARS` (AI-46): a longer screen keeps its first quarter and the rest from its end. */
+const SCREEN_MAX_CHARS = 4_000;
+
+/**
+ * The `terminal_state` note of a message sent with `screen` (AI-46), as Rust's `terminal_state_block`
+ * writes it: control characters as spaces, blank lines at either end left out, and a long screen cut
+ * like a tool result. Null for a blank screen.
+ */
+export function screenStateNote(host: string, screen: { text: string; alternate: boolean }): Note | null {
+  const lines = screen.text
+    .replace(/\r\n/g, "\n")
+    .replace(/[^\P{Cc}\n\t]/gu, " ")
+    .split("\n")
+    .map((l) => l.trimEnd());
+  const first = lines.findIndex((l) => l !== "");
+  if (first < 0) return null;
+  const shown = lines.slice(first, lines.findLastIndex((l) => l !== "") + 1);
+  const chars = Array.from(shown.join("\n"));
+  const head = SCREEN_MAX_CHARS / 4;
+  const body =
+    chars.length <= SCREEN_MAX_CHARS
+      ? chars.join("")
+      : `${chars.slice(0, head).join("")}\n\n[… ${chars.length - SCREEN_MAX_CHARS} characters left out …]\n\n${chars.slice(chars.length - (SCREEN_MAX_CHARS - head)).join("")}`;
+  return { kind: "terminal_state", host, alternate: screen.alternate, lines: shown.length, body };
 }
 
 /** The note of a revert (AI-41) as Rust's `file_revert_block` words it; `created`: the call created the file, which the revert deleted. */
@@ -328,7 +368,8 @@ export interface MessageParts {
   typed: string;
 }
 
-const OPEN = /^<(interrupted|host_change|terminal_change|model_change|file_revert|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
+const OPEN =
+  /^<(interrupted|host_change|terminal_change|model_change|file_revert|terminal_state|mcp_tools|terminal_selection|connection_diagnostics|pasted_text|file)((?: [a-z_]+="[^"]*")*)>\n/;
 const DIGITS = /^\d+$/;
 
 type Block = { kind: "note"; note: Note } | { kind: "attachment"; attachment: Attachment };
@@ -350,6 +391,10 @@ function blockOf(tag: string, attrs: [string, string][], body: string): Block | 
     }
     case "file_revert":
       return names === "path,tool_call_id" ? { kind: "note", note: { kind: tag, path: value(0), toolCallId: value(1), body } } : null;
+    case "terminal_state":
+      return names === "host,alternate_screen,lines" && (value(1) === "true" || value(1) === "false") && DIGITS.test(value(2))
+        ? { kind: "note", note: { kind: tag, host: value(0), alternate: value(1) === "true", lines: Number(value(2)), body } }
+        : null;
     case "mcp_tools":
       return names === "servers,tools" && DIGITS.test(value(0)) && DIGITS.test(value(1))
         ? { kind: "note", note: { kind: tag, servers: Number(value(0)), tools: Number(value(1)), body } }

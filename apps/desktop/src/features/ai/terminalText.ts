@@ -50,6 +50,19 @@ export function readBuffer(buf: BufferLike, rows: number, lines: number): Screen
   return { text: out.map((l) => l.trimEnd()).join("\n"), alternate: buf.type === "alternate", scrollback: screenStart - start };
 }
 
+/** Lines of the screen a message's `terminal_state` note shows, unless a full-screen program runs (AI-46). */
+export const SCREEN_NOTE_LINES = 20;
+
+/**
+ * AI-46: the screen a message's `terminal_state` note shows: its last {@link SCREEN_NOTE_LINES} lines
+ * up to the last one with text, or the whole screen while a full-screen program uses the alternate
+ * screen. Scrollback is left out.
+ */
+export function screenNote(buf: BufferLike, rows: number): { text: string; alternate: boolean } {
+  const { text, alternate } = readBuffer(buf, rows, 0);
+  return { text: alternate ? text : text.split("\n").slice(-SCREEN_NOTE_LINES).join("\n"), alternate };
+}
+
 /**
  * Escape sequences: CSI (7- and 8-bit), OSC (ended by BEL or ST), DCS / SOS / PM / APC strings, and
  * two-character ESC sequences such as `ESC =` or charset selection `ESC ( B`.
