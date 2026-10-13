@@ -56,6 +56,9 @@ const reading = (cpu: number | null): ServerStatsView => ({
   disk_used: 4,
   disk_available: 5,
   uptime_secs: 100,
+  net_rx_total: null,
+  net_tx_total: null,
+  mounts: [],
 });
 
 const T0 = Date.UTC(2026, 9, 9, 12);

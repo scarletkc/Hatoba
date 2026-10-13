@@ -8,8 +8,8 @@ use hatoba_core::vault::Vault;
 use hatoba_ssh::ServerStats;
 
 use crate::dto::{
-    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, ProxyKind, ProxyMode,
-    ProxyView, ServerStatsView,
+    AuthKind, GroupView, HostEnvVar, HostView, KeyAlgorithm, KeyView, MountView, ProxyKind,
+    ProxyMode, ProxyView, ServerStatsView,
 };
 
 pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
@@ -45,6 +45,7 @@ pub fn host_view(id: &str, host: &Host, vault: &Vault) -> HostView {
         last_connected_at: vault.last_connected(id),
         os: vault.host_os(id),
         show_stats: vault.host_show_stats(id),
+        dashboard: vault.dashboard_shown(id),
         env: host
             .env
             .iter()
@@ -94,15 +95,29 @@ pub fn stats_view(stats: ServerStats) -> ServerStatsView {
         disk_used: stats.disk_used,
         disk_available: stats.disk_available,
         uptime_secs: stats.uptime_secs,
+        net_rx_total: stats.net_rx_total,
+        net_tx_total: stats.net_tx_total,
+        mounts: stats
+            .mounts
+            .into_iter()
+            .map(|m| MountView {
+                source: m.source,
+                mount_point: m.mount_point,
+                total: m.total,
+                used: m.used,
+                available: m.available,
+            })
+            .collect(),
     }
 }
 
-pub fn group_view(id: &str, group: &Group) -> GroupView {
+pub fn group_view(id: &str, group: &Group, vault: &Vault) -> GroupView {
     GroupView {
         id: id.to_owned(),
         name: group.name.clone(),
         parent_id: group.parent_id.clone(),
         sort: group.sort.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+        dashboard: vault.dashboard_shown(id),
     }
 }
 

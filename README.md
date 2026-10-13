@@ -39,6 +39,9 @@ account.
   status, `~/.ssh/config` import, ProxyJump, and SOCKS5 and HTTP proxies. Type
   `ssh user@host` in the search box to connect without saving a host, or run
   `hatoba user@host` in a terminal once the `hatoba` command is on in Settings.
+- **Dashboard**: the online status, CPU, memory, disks, network, load, and
+  uptime of every saved host on one page, as cards or a table, read over SSH
+  without installing anything on the servers.
 - **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
   methods, confirmation before multi-line paste, search, clickable links, and
   the CPU, memory, and network usage of Linux servers in the status bar.

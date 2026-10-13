@@ -62,6 +62,8 @@ async fn readings_arrive_each_interval_and_stop_with_the_handle() {
     assert!(first.load.is_some());
     assert!(first.uptime_secs.is_some());
     assert!(first.disk_total.unwrap() >= first.disk_used.unwrap());
+    // The terminal's readout leaves the filesystems to the dashboard.
+    assert!(first.mounts.is_empty(), "{:?}", first.mounts);
 
     let second = reading(&mut rx).await;
     let cpu = second.cpu_percent.expect("a CPU share from two readings");
@@ -129,4 +131,27 @@ async fn sampling_ends_with_the_connection() {
         }
     }
     assert!(next(&mut rx).await.is_none());
+}
+
+#[tokio::test]
+async fn the_dashboard_also_reads_every_filesystem() {
+    let server = server!();
+    if !cfg!(target_os = "linux") {
+        return;
+    }
+    let session = server.connect_key("ed25519", None).await;
+    let (_handle, mut rx) = session
+        .open_dashboard_stats(Duration::from_secs(1))
+        .await
+        .unwrap();
+    let first = reading(&mut rx).await;
+    assert!(
+        first.mounts.iter().any(|m| m.mount_point == "/"),
+        "{:?}",
+        first.mounts
+    );
+    assert!(first.net_rx_total.is_some() || first.net_interfaces.is_empty());
+    // The readings between two lists repeat the last one.
+    let second = reading(&mut rx).await;
+    assert_eq!(second.mounts, first.mounts);
 }

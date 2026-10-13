@@ -20,6 +20,8 @@ mod handler;
 pub mod hostkey;
 pub mod interactive;
 pub mod keys;
+#[cfg(all(test, unix))]
+mod local_sh;
 mod net;
 mod ppk;
 pub mod probe;
@@ -46,7 +48,7 @@ pub use probe::{tcp_probe, tcp_probe_via};
 pub use proxy::{ProxyConfig, ProxyKind};
 pub use server_os::{ServerOs, server_os};
 pub use session::{
-    AuthMethod, ConnectConfig, ExecOutput, JumpHop, ServerStats, ShellEvent, ShellHandle,
-    ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
+    AuthMethod, ConnectConfig, ExecOutput, JumpHop, MountStats, ServerStats, ShellEvent,
+    ShellHandle, ShellOptions, SshSession, StatsEvent, StatsHandle, connect,
 };
 pub use sftp::{FileEntry, SftpClient, TransferDirection, TransferProgress};

@@ -254,27 +254,31 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         ));
         tools.push(tool(
             GREP,
-            "Search text files on the tab's host for lines that match a regular expression, with \
-             find and grep on a separate exec channel. `path` is a file, or a directory searched \
-             with its subdirectories; a relative path or `~/` starts at the user's home \
-             directory. `pattern` is a POSIX extended regular expression, as grep -E reads it, \
-             where \\d, \\s and \\w work too. `glob` limits a directory's search to the files glob \
-             would find; a file given as `path` is searched whatever its name, as with rg. \
-             output_mode files_with_matches (the default) returns the paths of the files \
-             with a matching line, count the number of matching lines in each, and content the \
-             lines as path:line:text, with `context` lines around each as path-line-text. \
-             Results are sorted by path, at most `limit` entries (files, or lines for content; \
-             default 250) from `offset` (default 0) and 30,000 characters; lines are cut at 500 \
-             characters. Binary files and .git directories are skipped, and so are /proc, /sys, \
-             /dev and /run when it searches /. It runs without asking, and without sudo. A search \
-             stops after 30 seconds."
+            "Search text files on the tab's host for lines that match a regular expression, on a \
+             separate exec channel: with rg where the host has it, and with find and grep -E \
+             otherwise. `path` is a file, or a directory searched with its subdirectories; a \
+             relative path or `~/` starts at the user's home directory. `pattern` is a regular \
+             expression as rg reads it (Rust regex syntax), so literal braces need a backslash, \
+             as in interface\\{\\}; for grep -E, Hatoba translates it. `multiline` lets a match \
+             span lines, with . matching line breaks, as in struct \\{[\\s\\S]*?field; it needs \
+             rg, and so do Unicode classes such as \\p{L} and inline flags other than a leading \
+             (?i). `glob` limits a directory's search to the files glob would find; a file given \
+             as `path` is searched whatever its name, as with rg. output_mode files_with_matches \
+             (the default) returns the paths of the files with a matching line, count the number \
+             of matching lines in each, and content the lines as path:line:text, with lines of \
+             context as path-line-text: `before_context` lines before each matching line, \
+             `after_context` after, `context` both. Results are sorted by path, at most `limit` \
+             entries (files, or lines for content; default 250, 0 for no limit) from `offset` \
+             (default 0) and 30,000 characters; lines are cut at 500 characters. Binary files \
+             and .git are skipped, and so are /proc, /sys, /dev and /run when it searches /. It \
+             runs without asking, and without sudo. A search stops after 30 seconds."
                 .to_owned(),
             json!({
                 "type": "object",
                 "properties": {
                     "pattern": {
                         "type": "string",
-                        "description": "The regular expression to search for."
+                        "description": "The regular expression to search for, as rg reads it."
                     },
                     "path": {
                         "type": "string",
@@ -301,9 +305,25 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "description": "Lines to show before and after each matching line in \
                                         content mode (default 0, at most 100)."
                     },
+                    "before_context": {
+                        "type": "integer",
+                        "description": "Lines to show before each matching line in content \
+                                        mode, in place of context's (at most 100)."
+                    },
+                    "after_context": {
+                        "type": "integer",
+                        "description": "Lines to show after each matching line in content mode, \
+                                        in place of context's (at most 100)."
+                    },
+                    "multiline": {
+                        "type": "boolean",
+                        "description": "Let a match span lines, with . matching line breaks \
+                                        (default false). Needs rg on the host."
+                    },
                     "limit": {
                         "type": "integer",
-                        "description": "The most entries to return (default 250)."
+                        "description": "The most entries to return (default 250; 0 for no \
+                                        limit)."
                     },
                     "offset": {
                         "type": "integer",
@@ -918,6 +938,12 @@ fn permission_rule(terminal: bool) -> String {
     )
 }
 
+/// The rule that lets the model make independent tool calls together (§13.1), as Claude Code, Codex
+/// and Cursor tell their models.
+const PARALLEL_CALLS_RULE: &str = "- You can call several tools in one response. When calls do not \
+     depend on each other, such as reading several files or running several checks, make them \
+     together in the same response rather than one at a time.\n";
+
 /// Hatoba's system prompt: an opening that says what the assistant can do in this request, then
 /// sections in XML tags. Deterministic: the same context gives the same bytes.
 #[must_use]
@@ -1021,6 +1047,7 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     }
     if tools {
         out.push_str(&permission_rule(terminal));
+        out.push_str(PARALLEL_CALLS_RULE);
     }
     if terminal {
         out.push_str(
@@ -1188,14 +1215,29 @@ pub struct GrepArgs {
     /// What the result lists; [`GrepOutput::FilesWithMatches`] by default.
     #[serde(default)]
     pub output_mode: Option<GrepOutput>,
-    /// Match regardless of letter case; `false` by default.
-    #[serde(default)]
+    /// Match regardless of letter case; `false` by default. Claude Code's `-i` too.
+    #[serde(default, alias = "-i")]
     pub ignore_case: Option<bool>,
-    /// Lines around each matching line in content mode; 0 by default.
-    #[serde(default)]
+    /// Lines before and after each matching line in content mode; 0 by default. Claude Code's
+    /// `-C` too.
+    #[serde(default, alias = "-C")]
     pub context: Option<u64>,
-    /// The most entries to return; 250 by default.
+    /// Lines before each matching line, in place of `context`'s. Claude Code's `-B` too.
+    #[serde(default, alias = "-B")]
+    pub before_context: Option<u64>,
+    /// Lines after each matching line, in place of `context`'s. Claude Code's `-A` too.
+    #[serde(default, alias = "-A")]
+    pub after_context: Option<u64>,
+    /// A match may span lines, and `.` matches a line break; `false` by default.
     #[serde(default)]
+    pub multiline: Option<bool>,
+    /// Content mode numbers its lines; `true` by default. Claude Code's `-n`, which the schema
+    /// leaves out.
+    #[serde(default, alias = "-n")]
+    pub line_numbers: Option<bool>,
+    /// The most entries to return, 0 for no limit; 250 by default. Claude Code's `head_limit`
+    /// too.
+    #[serde(default, alias = "head_limit")]
     pub limit: Option<u64>,
     /// Entries to skip; 0 by default.
     #[serde(default)]
@@ -1520,6 +1562,34 @@ mod tests {
         assert!(
             serde_json::from_str::<GrepArgs>(r#"{"pattern":"x","output_mode":"all"}"#).is_err()
         );
+        // Claude Code's names for the same arguments.
+        let args: GrepArgs = serde_json::from_str(
+            r#"{"pattern":"x","-i":true,"-C":1,"-B":2,"-A":3,"-n":false,"head_limit":0,
+                "multiline":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                args.ignore_case,
+                args.context,
+                args.before_context,
+                args.after_context,
+                args.line_numbers,
+                args.limit,
+                args.multiline
+            ),
+            (
+                Some(true),
+                Some(1),
+                Some(2),
+                Some(3),
+                Some(false),
+                Some(0),
+                Some(true)
+            )
+        );
+        let properties = grep.input_schema["properties"].as_object().unwrap();
+        assert!(properties.keys().all(|k| !k.starts_with('-')));
         let args: GlobArgs = serde_json::from_str(r#"{"pattern":"*.conf"}"#).unwrap();
         assert_eq!(args.path, None);
         let args: EditFileArgs =
@@ -1586,6 +1656,7 @@ mod tests {
             // for that.
             "Fall back to the shell when these tools cannot do the job, such as finding files by \
              size or age, or files that need sudo.",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(prompt.contains(needle), "missing {needle:?}");
         }
@@ -1627,6 +1698,7 @@ mod tests {
             "You are the model \"Claude Opus 5.5\"",
             "<attachments>",
             "- alpha: First one\n- zeta: Last one\n",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(detached.contains(needle), "missing {needle:?}");
         }
@@ -1663,6 +1735,7 @@ mod tests {
             "<skills>",
             "- alpha:",
             "SSH server",
+            PARALLEL_CALLS_RULE,
         ] {
             assert!(!bare.contains(absent), "unexpected {absent:?}");
         }
@@ -2075,6 +2148,7 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
   - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval. So call the tool rather than asking for permission in prose first. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
   - Bypass: your tool calls run as soon as you make them, without the user seeing them first; only the tools of MCP servers the user set to always ask wait for approval. So before anything that deletes data, cannot be undone, restarts services or affects other users, unless the user asked for exactly that, stop and ask in chat, and go on only after the user agrees.
 - After a rejection, do not repeat the same call unchanged: change your approach as the user's reason says, or ask.
+- You can call several tools in one response. When calls do not depend on each other, such as reading several files or running several checks, make them together in the same response rather than one at a time.
 - Prefer glob to find files, grep to search them, and read_file, edit_file and write_file to read and change them, over the same work with find, grep, cat, sed or heredocs in the shell: edit_file and write_file show the user the change and can be reverted. Fall back to the shell when these tools cannot do the job, such as finding files by size or age, or files that need sudo. Use send_input for anything that needs the shell's working directory, environment or sudo session, or that is interactive, and run_command for the rest.
 - Answer in the user's language. Be concise, use Markdown, and put commands in code blocks.
 - Follow the user's instructions and the host notes below; where they differ from the rules above, follow them instead. Which tool calls need the user's approval is still up to Hatoba.

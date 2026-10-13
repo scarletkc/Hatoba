@@ -6,16 +6,18 @@ use std::future::Future;
 use std::time::Duration;
 
 use hatoba_ai::entry::ToolStatus;
-use hatoba_ai::search::{self, Found, MAX_CONTEXT, MAX_OUTPUT_BYTES, Search};
+use hatoba_ai::search::{self, Found, MAX_OUTPUT_BYTES, Search};
 use hatoba_ai::tools::{self, GlobArgs, GrepArgs, GrepOutput};
 use hatoba_ssh::SshSession;
-use hatoba_ssh::remote_search::{self, GrepMode, GrepQuery, RemoteSearchError, SearchOutput};
+use hatoba_ssh::remote_search::{
+    self, GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput,
+};
 use tokio_util::sync::CancellationToken;
 
 use super::files::{DISCONNECTED, command_failed};
 use super::parse;
 
-/// How long a search may take.
+/// How long a search may take, here and on the host, which ends it should the channel stay open.
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A call of a search tool, with its arguments.
@@ -36,7 +38,8 @@ impl SearchJob {
     }
 }
 
-/// Runs a search tool. A stop ends it at once: it changes nothing on the host.
+/// Runs a search tool. A stop ends it at once: it changes nothing on the host, and the host ends
+/// it within a second of its channel closing.
 pub(super) async fn run(
     session: Option<SshSession>,
     job: SearchJob,
@@ -62,42 +65,40 @@ async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> 
         SearchJob::Glob(args) => {
             let target = Search::glob(args.path.as_deref(), &args.pattern)?;
             let out = within(
-                &target.path,
+                &target,
                 tools::GLOB,
-                remote_search::glob(
-                    session,
-                    &target.path,
-                    target.max_depth,
-                    &target.names,
-                    MAX_OUTPUT_BYTES,
-                ),
+                None,
+                remote_search::glob(session, &scope(&target), MAX_OUTPUT_BYTES, TIMEOUT),
             )
             .await?;
             Ok(search::glob_result(&args.pattern, &target, &found(&out)))
         }
         SearchJob::Grep(args) => {
             let target = Search::new(args.path.as_deref(), args.glob.as_deref())?;
-            let pattern = search::extended_regex(&args.pattern)?;
+            let multiline = args.multiline.unwrap_or(false);
+            let pattern =
+                search::pattern(&args.pattern, args.ignore_case.unwrap_or(false), multiline)?;
             let mode = match args.output_mode.unwrap_or_default() {
                 GrepOutput::FilesWithMatches => GrepMode::Files,
                 GrepOutput::Count => GrepMode::Count,
-                GrepOutput::Content => GrepMode::Lines {
-                    context: u32::try_from(args.context.unwrap_or(0).min(MAX_CONTEXT))
-                        .unwrap_or_default(),
-                },
+                GrepOutput::Content => {
+                    let (before, after) = search::context(&args);
+                    GrepMode::Lines { before, after }
+                }
             };
             let query = GrepQuery {
-                path: &target.path,
-                max_depth: target.max_depth,
-                names: &target.names,
-                pattern: &pattern,
-                ignore_case: args.ignore_case.unwrap_or(false),
+                scope: scope(&target),
+                pattern: &pattern.rg,
+                extended: pattern.extended.as_deref().ok(),
+                ignore_case: pattern.ignore_case,
+                multiline,
                 mode,
             };
             let out = within(
-                &target.path,
+                &target,
                 tools::GREP,
-                remote_search::grep(session, &query, MAX_OUTPUT_BYTES),
+                pattern.extended.as_ref().err().copied(),
+                remote_search::grep(session, &query, MAX_OUTPUT_BYTES, TIMEOUT),
             )
             .await?;
             Ok(search::grep_result(&args, &target, &found(&out)))
@@ -105,24 +106,36 @@ async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> 
     }
 }
 
+fn scope(target: &Search) -> Scope<'_> {
+    Scope {
+        path: &target.path,
+        below: &target.below,
+        max_depth: target.max_depth,
+        names: &target.names,
+    }
+}
+
 fn found(out: &SearchOutput) -> Found<'_> {
     Found {
         start: &out.start,
         stdout: &out.stdout,
+        nul: out.nul,
         cut: out.cut,
         stderr: &out.stderr,
     }
 }
 
-/// The search's output within [`TIMEOUT`], or the message for the model.
+/// The search's output within [`TIMEOUT`], or the message for the model. `rg_only` says what
+/// only `rg` can run, for grep.
 async fn within(
-    path: &str,
+    target: &Search,
     tool: &str,
+    rg_only: Option<&str>,
     search: impl Future<Output = Result<SearchOutput, RemoteSearchError>>,
 ) -> Result<SearchOutput, String> {
     match tokio::time::timeout(TIMEOUT, search).await {
         Ok(Ok(out)) => Ok(out),
-        Ok(Err(e)) => Err(describe(path, tool, e)),
+        Ok(Err(e)) => Err(describe(target, tool, rg_only, e)),
         Err(_) => Err(format!(
             "The search did not finish within 30 seconds, so Hatoba closed its channel. Search a \
              smaller directory, or narrow it with {}.",
@@ -136,7 +149,13 @@ async fn within(
 }
 
 /// The message for the model when a search did not run.
-fn describe(path: &str, tool: &str, error: RemoteSearchError) -> String {
+fn describe(
+    target: &Search,
+    tool: &str,
+    rg_only: Option<&str>,
+    error: RemoteSearchError,
+) -> String {
+    let path = target.shown();
     match error {
         RemoteSearchError::InvalidArgument => {
             "The path or the pattern has a line break, so nothing was searched.".to_owned()
@@ -145,19 +164,32 @@ fn describe(path: &str, tool: &str, error: RemoteSearchError) -> String {
         RemoteSearchError::DanglingLink => {
             format!("{path} is a symbolic link to a file that does not exist.")
         }
-        RemoteSearchError::NotDirectory => format!(
-            "{path} is a file, not a directory, so glob found nothing in it. Use read_file to \
-             read it, or grep to search it."
+        RemoteSearchError::NotDirectory(resolved) => format!(
+            "{} is a file, not a directory, so glob found nothing in it. Use read_file to read \
+             it, or grep to search it.",
+            if resolved.is_empty() {
+                &path
+            } else {
+                &resolved
+            }
         ),
         RemoteSearchError::PermissionDenied => format!(
             "Permission denied: the user this tab is logged in as cannot read {path}. {tool} \
              never uses sudo. To go on, use send_input to run the search with sudo in the \
              terminal's shell, where the user can enter a password, or ask the user."
         ),
-        RemoteSearchError::BadPattern(message) => format!(
-            "grep -E on the host refused the pattern, so nothing was searched: {message}. The \
-             pattern is a POSIX extended regular expression; escape ( ) [ ] {{ }} . * + ? | ^ $ \
-             and \\ with a backslash to match them as they are."
+        RemoteSearchError::BadPattern { rg: true, message } => {
+            format!("rg on the host refused the pattern, so nothing was searched: {message}.")
+        }
+        RemoteSearchError::BadPattern { rg: false, message } => format!(
+            "grep -E on the host, which runs where there is no rg, refused the pattern as Hatoba \
+             translated it, so nothing was searched: {message}. Rewrite the part the message \
+             names more simply."
+        ),
+        RemoteSearchError::NeedsRg => format!(
+            "The host has no rg, and grep -E cannot run {}, so nothing was searched. Search \
+             again without that.",
+            rg_only.unwrap_or("this search")
         ),
         RemoteSearchError::Failed { status, stderr } => {
             command_failed(&format!("search {path}"), status, &stderr)
@@ -185,21 +217,53 @@ mod tests {
 
     #[test]
     fn failures_tell_the_model_what_to_do() {
+        let at = |path: &str, glob: &str| Search::new(Some(path), Some(glob)).unwrap();
         assert_eq!(
-            describe("/etc/x", tools::GLOB, RemoteSearchError::NotFound),
+            describe(
+                &at("/etc", "x/*"),
+                tools::GLOB,
+                None,
+                RemoteSearchError::NotFound
+            ),
             "/etc/x does not exist."
         );
         assert!(
-            describe("/root", tools::GREP, RemoteSearchError::PermissionDenied)
-                .contains("grep never uses sudo. To go on, use send_input")
+            describe(
+                &at("/root", ""),
+                tools::GREP,
+                None,
+                RemoteSearchError::PermissionDenied
+            )
+            .contains("grep never uses sudo. To go on, use send_input")
         );
         let bad = describe(
-            "~",
+            &at("~", ""),
             tools::GREP,
-            RemoteSearchError::BadPattern("grep: Unmatched ( or \\(".into()),
+            None,
+            RemoteSearchError::BadPattern {
+                rg: false,
+                message: "grep: Unmatched ( or \\(".into(),
+            },
         );
-        assert!(bad.contains("refused the pattern, so nothing was searched: grep: Unmatched ("));
-        assert!(describe("/x", tools::GLOB, RemoteSearchError::NotDirectory).contains("read_file"));
+        assert!(bad.contains("refused the pattern as Hatoba translated it, so nothing was"));
+        let file = describe(
+            &at("/etc/hosts", "conf.d/*"),
+            tools::GLOB,
+            None,
+            RemoteSearchError::NotDirectory("/etc/hosts".into()),
+        );
+        assert!(file.starts_with("/etc/hosts is a file") && file.contains("read_file"));
+        let multiline = search::pattern("a.*b", false, true).unwrap().extended.err();
+        assert_eq!(
+            describe(
+                &at("~", ""),
+                tools::GREP,
+                multiline,
+                RemoteSearchError::NeedsRg
+            ),
+            "The host has no rg, and grep -E cannot run a search across lines (multiline), so \
+             nothing was searched. Search again without that."
+        );
     }
 
     #[tokio::test]

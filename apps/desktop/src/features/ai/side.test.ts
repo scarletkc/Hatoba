@@ -114,22 +114,22 @@ describe("the side question's state (AI-42)", () => {
   });
 
   it("names the call whose approval card waits", () => {
-    expect(approvalCall(slot({ turn: { ...newTurn(), call: { id: "c9", state: "approval" } } }))).toBe("c9");
-    expect(approvalCall(slot({ turn: { ...newTurn(), call: { id: "c9", state: "running" } } }))).toBeNull();
+    expect(approvalCall(slot({ turn: { ...newTurn(), calls: [{ id: "c9", state: "approval" }] } }))).toBe("c9");
+    expect(approvalCall(slot({ turn: { ...newTurn(), calls: [{ id: "c9", state: "running" }] } }))).toBeNull();
     expect(approvalCall(slot())).toBeNull();
   });
 
   it("counts a call Auto's judge is checking as running, not waiting for the user (AI-47)", () => {
-    const judging = slot({ turn: { ...newTurn(), call: { id: "c9", state: "judging" } } });
+    const judging = slot({ turn: { ...newTurn(), calls: [{ id: "c9", state: "judging" }] } });
     expect(approvalCall(judging)).toBeNull();
     expect(slotActivity(judging)).toBe("running");
-    expect(slotActivity(slot({ turn: { ...newTurn(), call: { id: "c9", state: "approval" } } }))).toBe("waiting");
+    expect(slotActivity(slot({ turn: { ...newTurn(), calls: [{ id: "c9", state: "approval" }] } }))).toBe("waiting");
   });
 });
 
 describe("askSideQuestion (AI-42)", () => {
   it("takes the input area and its attachments, names the waiting call, and leaves the turn alone", async () => {
-    const turn = { ...newTurn(), phase: "tools" as const, call: { id: "call_1", state: "approval" as const } };
+    const turn = { ...newTurn(), phase: "tools" as const, calls: [{ id: "call_1", state: "approval" as const }] };
     patchSlot(HOME_SLOT, { turn, draft: "  Is it safe?  ", extras: [{ id: "x1", attachment: paste }] });
     const p = pending();
     expect(askSideQuestion(HOME_SLOT, getSlot(HOME_SLOT).draft)).toBe(true);

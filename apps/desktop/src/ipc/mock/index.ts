@@ -23,6 +23,7 @@ import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
 import { createAiSettingsMock } from "./aiSettings";
+import { createDashboardMock } from "./dashboard";
 import * as D from "./data";
 import { mockStats } from "./data";
 import { applyPatch } from "./patch";
@@ -114,6 +115,7 @@ export function createMockApi(): HatobaApi {
   let deployment: { handle: string; failed: boolean; waited: boolean; url: string | null; upgrade: boolean } | null = null;
   const listeners = new Map<string, Set<(p: unknown) => void>>();
   const shells = new Map<string, FakeShell>();
+  const dashboard = createDashboardMock({ host: (hid) => hosts.find((h) => h.id === hid), unlocked: () => vaultState === "unlocked" });
   /** TERM-12: the mock resource usage of each session that shows it, by the id of its start. */
   const statsTimers = new Map<string, { id: number; timer: ReturnType<typeof setInterval> }>();
   let lastStatsId = 0;
@@ -300,6 +302,7 @@ export function createMockApi(): HatobaApi {
     },
     vault_lock: async () => {
       vaultState = "locked";
+      dashboard.stopAll();
     },
     vault_verify_password: async (password) => password.length >= 4,
     vault_change_password: async (current) => {
@@ -378,6 +381,7 @@ export function createMockApi(): HatobaApi {
         last_connected_at: existing?.last_connected_at ?? null,
         os: existing?.os ?? null,
         show_stats: existing?.show_stats ?? false,
+        dashboard: existing?.dashboard ?? true,
       };
       hosts = existing ? hosts.map((h) => (h.id === view.id ? view : h)) : [...hosts, view];
       touch();
@@ -403,10 +407,23 @@ export function createMockApi(): HatobaApi {
       needUnlocked();
       hosts = hosts.map((h) => (h.id === hid ? { ...h, show_stats: on } : h));
     },
+    dashboard_set_shown: async (itemId, shown) => {
+      needUnlocked();
+      if (!hosts.some((h) => h.id === itemId) && !groups.some((g) => g.id === itemId)) fail("not_found", "host or group");
+      hosts = hosts.map((h) => (h.id === itemId ? { ...h, dashboard: shown } : h));
+      groups = groups.map((g) => (g.id === itemId ? { ...g, dashboard: shown } : g));
+    },
+    ...dashboard,
     host_copy_password: async () => {},
     groups_list: async () => groups.map((g) => ({ ...g })),
     group_save: async (input) => {
-      const g: GroupView = { id: input.id ?? id("g"), name: input.name, parent_id: input.parent_id, sort: input.sort };
+      const g: GroupView = {
+        id: input.id ?? id("g"),
+        name: input.name,
+        parent_id: input.parent_id,
+        sort: input.sort,
+        dashboard: groups.find((x) => x.id === input.id)?.dashboard ?? true,
+      };
       groups = input.id ? groups.map((x) => (x.id === g.id ? g : x)) : [...groups, g];
       touch();
       return g;

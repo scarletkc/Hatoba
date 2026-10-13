@@ -195,6 +195,17 @@ impl SshdServer {
 
     /// Like [`Self::start_with`], with `extra` lines at the end of `sshd_config`.
     pub fn start_configured(host_key: HostKeyType, extra: &str) -> Option<Self> {
+        Self::start_sshd(host_key, 100, extra)
+    }
+
+    /// Starts sshd allowing `max_sessions` sessions per connection (`MaxSessions`): shells, exec
+    /// channels and SFTP together.
+    pub fn start_max_sessions(max_sessions: u32) -> Option<Self> {
+        Self::start_sshd(HostKeyType::Ed25519, max_sessions, "")
+    }
+
+    /// `MaxSessions` is set here rather than in `extra`: sshd takes the first value it reads.
+    fn start_sshd(host_key: HostKeyType, max_sessions: u32, extra: &str) -> Option<Self> {
         if std::env::var("HATOBA_SSH_IT").as_deref() != Ok("1") {
             eprintln!("HATOBA_SSH_IT=1 not set: skipping sshd integration test");
             return None;
@@ -275,7 +286,7 @@ impl SshdServer {
                  AcceptEnv LANG HATOBA_*\n\
                  Subsystem sftp internal-sftp\n\
                  MaxAuthTries 10\n\
-                 MaxSessions 100\n\
+                 MaxSessions {max_sessions}\n\
                  LoginGraceTime 30\n\
                  UseDNS no\n\
                  PrintMotd no\n\

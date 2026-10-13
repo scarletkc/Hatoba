@@ -29,7 +29,7 @@ use tokio::time::Instant;
 
 use crate::error::SshError;
 use crate::server_os::ServerOs;
-use crate::session::{ExecOutput, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
+use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
 
 /// Starts the command it reads from stdin in a process group of its own, and ends the group when
 /// stdin ends. `$1` is a number: the script's marker is `hatoba-run-` and the number after it, a
@@ -149,7 +149,7 @@ async fn wrapped(
 ) -> Result<Option<CommandRun>, SshError> {
     let n = nonce();
     let marker = marker(n);
-    let Some((mut reader, writer)) = open(session, stop.as_mut()).await? else {
+    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
         return Ok(Some(not_started()));
     };
     writer
@@ -236,7 +236,7 @@ async fn plain(
     command: &str,
     mut stop: Pin<&mut impl Future<Output = ()>>,
 ) -> Result<CommandRun, SshError> {
-    let Some((mut reader, writer)) = open(session, stop.as_mut()).await? else {
+    let Some((mut reader, writer, _slot)) = open(session, stop.as_mut()).await? else {
         return Ok(not_started());
     };
     writer
@@ -270,11 +270,12 @@ async fn plain(
     }
 }
 
-/// Opens an exec channel, unless `stop` completes first.
+/// Opens an exec channel, counted among the connection's exec channels while the slot lives, so a
+/// channel the server refuses is opened again once another closes, unless `stop` completes first.
 async fn open(
     session: &SshSession,
     stop: Pin<&mut impl Future<Output = ()>>,
-) -> Result<Option<(ChannelReadHalf, ExecWriter)>, SshError> {
+) -> Result<Option<(ChannelReadHalf, ExecWriter, ExecSlot)>, SshError> {
     tokio::select! {
         biased;
         () = stop => Ok(None),

@@ -4,6 +4,7 @@
 mod ai;
 mod commands;
 mod convert;
+mod dashboard;
 mod deploy;
 mod dropped;
 mod dto;
@@ -19,9 +20,9 @@ mod sync;
 mod update;
 
 use commands::{
-    ai as ai_cmd, allowances, app, cli, deploy as deploy_cmd, forwards, hosts, keys,
-    mcp as mcp_cmd, proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd,
-    vault,
+    ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
+    hosts, keys, mcp as mcp_cmd, proxies, quick, settings, sftp, skills, ssh as ssh_cmd,
+    sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -63,12 +64,16 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             hosts::host_duplicate,
             hosts::host_set_favorite,
             hosts::host_set_show_stats,
+            hosts::dashboard_set_shown,
             hosts::host_copy_password,
             hosts::groups_list,
             hosts::group_save,
             hosts::group_delete,
             hosts::tags_list,
             hosts::hosts_probe,
+            dashboard_cmd::dashboard_watch,
+            dashboard_cmd::dashboard_unwatch,
+            dashboard_cmd::dashboard_retry,
             hosts::ssh_config_preview,
             hosts::ssh_config_import,
             proxies::proxies_list,

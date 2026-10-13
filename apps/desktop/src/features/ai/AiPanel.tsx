@@ -28,6 +28,7 @@ import { chats, conversationModel, hasModels } from "./models";
 import { connectionFor, movedFrom } from "./place";
 import { sideRunning } from "./side";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
+import { approvalOf } from "./turn";
 import s from "./AiPanel.module.css";
 
 export const PANEL_DEFAULT_WIDTH = 380;
@@ -323,7 +324,7 @@ export function AiPanelButton({ className, activeClassName, dotClassName }: { cl
   const t = useT();
   const open = useApp((st) => st.prefs.ai_panel_open);
   const platform = useApp((st) => st.info.platform);
-  const waiting = useAi((st) => Object.values(st.slots).some((x) => x.turn?.call?.state === "approval"));
+  const waiting = useAi((st) => Object.values(st.slots).some((x) => !!approvalOf(x.turn)));
   const label = `${t(open ? "ai.hide" : "ai.show")} (${shortcutLabel(platform, "Ctrl+Shift+A", "⌘⇧A")})`;
   return (
     <button type="button" className={cx(className, open && activeClassName)} title={label} aria-label={label} aria-pressed={open} onClick={() => toggleAiPanel()}>

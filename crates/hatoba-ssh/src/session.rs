@@ -1,14 +1,15 @@
 //! Connecting (including ProxyJump chains) and the [`SshSession`] handle.
 
 use std::fmt;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use bytes::Bytes;
 use russh::client::{self, Handle, Msg};
 use russh::{Channel, ChannelMsg, ChannelReadHalf, ChannelWriteHalf, Disconnect};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
+use tokio::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::auth::{self, AuthContext};
@@ -24,7 +25,7 @@ use crate::sftp::SftpClient;
 use crate::shell;
 pub use crate::shell::{ShellEvent, ShellHandle, ShellOptions};
 use crate::stats;
-pub use crate::stats::{ServerStats, StatsEvent, StatsHandle};
+pub use crate::stats::{MountStats, ServerStats, StatsEvent, StatsHandle};
 
 /// Upper bound for output collected by [`SshSession::exec_output`] and
 /// [`crate::remote_command::run`].
@@ -32,6 +33,11 @@ pub(crate) const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;
 /// How long the round trip measured through a proxy may take before the proxy's own answer
 /// time stands in for it.
 const PROXY_PING_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long after one of a connection's exec channels closed a channel the server refuses is
+/// still opened again ([`ExecChannels`]).
+const REOPEN_GRACE: Duration = Duration::from_secs(1);
+/// The pause before a channel refused within [`REOPEN_GRACE`] is opened again.
+const REOPEN_PAUSE: Duration = Duration::from_millis(50);
 
 /// How to prove who we are to a server.
 #[derive(Clone)]
@@ -389,6 +395,7 @@ pub async fn connect(
         handle: hop.handle,
         jumps,
         shared: hop.shared,
+        exec: ExecChannels::default(),
         latency_ms: first_rtt.map(ceil_ms).unwrap_or(0),
         host: cfg.host,
         port: cfg.port,
@@ -457,10 +464,97 @@ struct Inner {
     handle: Handle<ClientHandler>,
     jumps: Vec<JumpConn>,
     shared: Arc<SessionShared>,
+    exec: ExecChannels,
     latency_ms: u32,
     host: String,
     port: u16,
     username: String,
+}
+
+/// The exec channels of a connection that [`SshSession::exec_output`] holds or is opening. A
+/// server allows only so many sessions on one connection (OpenSSH's `MaxSessions`, 10 by
+/// default), and the shell, the resource usage readout and SFTP may hold some. When the server
+/// refuses an exec channel while another of these is open or opening, the call waits, and opens
+/// its channel again once one closes, instead of failing a command that runs beside others. The
+/// server frees a closed channel's session only once it has handled the close, which can come
+/// after it handled the next open, so for [`REOPEN_GRACE`] after a close a refused channel is
+/// opened again every [`REOPEN_PAUSE`] first.
+#[derive(Default)]
+struct ExecChannels {
+    state: Mutex<ExecState>,
+    /// Woken whenever the state changes.
+    changed: Notify,
+}
+
+#[derive(Clone, Copy, Default)]
+struct ExecState {
+    open: usize,
+    opening: usize,
+    /// How many have closed so far.
+    closes: u64,
+    /// When one last closed.
+    closed_at: Option<Instant>,
+}
+
+impl ExecChannels {
+    fn state(&self) -> ExecState {
+        *self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn update(&self, change: impl FnOnce(&mut ExecState)) {
+        change(&mut self.state.lock().unwrap_or_else(PoisonError::into_inner));
+        self.changed.notify_waiters();
+    }
+}
+
+/// An exec channel being opened, counted in [`ExecChannels`] until it opened or failed.
+struct Opening(Option<SshSession>);
+
+impl Opening {
+    fn new(session: &SshSession) -> Self {
+        session.inner.exec.update(|s| s.opening += 1);
+        Self(Some(session.clone()))
+    }
+
+    /// The channel opened: it counts as open until the slot drops.
+    fn opened(mut self) -> ExecSlot {
+        let session = self.0.take().expect("an opening is taken once");
+        session.inner.exec.update(|s| {
+            s.opening -= 1;
+            s.open += 1;
+        });
+        ExecSlot(session)
+    }
+}
+
+impl Drop for Opening {
+    fn drop(&mut self) {
+        if let Some(session) = self.0.take() {
+            session.inner.exec.update(|s| s.opening -= 1);
+        }
+    }
+}
+
+/// Counts an open exec channel in [`ExecChannels`] until it drops, which is when the call is done
+/// with the channel.
+pub(crate) struct ExecSlot(SshSession);
+
+impl Drop for ExecSlot {
+    fn drop(&mut self) {
+        self.0.inner.exec.update(|s| {
+            s.open -= 1;
+            s.closes += 1;
+            s.closed_at = Some(Instant::now());
+        });
+    }
+}
+
+/// Why an exec channel did not open.
+enum OpenFailure {
+    /// The server refused the channel.
+    Refused(SshError),
+    /// Anything else, such as a closed connection.
+    Failed(SshError),
 }
 
 /// Result of [`SshSession::exec_output`].
@@ -607,13 +701,30 @@ impl SshSession {
         &self,
         interval: Duration,
     ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
+        self.sample(interval, false).await
+    }
+
+    /// Like [`open_stats`](Self::open_stats), with every mounted filesystem in
+    /// [`ServerStats::mounts`] as well, read every fifth reading (the dashboard, HOST-14).
+    pub async fn open_dashboard_stats(
+        &self,
+        interval: Duration,
+    ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
+        self.sample(interval, true).await
+    }
+
+    async fn sample(
+        &self,
+        interval: Duration,
+        mounts: bool,
+    ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
         match self.server_os() {
             Some(os @ (ServerOs::FreeBsd | ServerOs::NetBsd | ServerOs::Windows)) => {
                 Ok(stats::unsupported(os.name()))
             }
             _ => {
                 let channel = self.open_channel().await?;
-                stats::start(self, channel, interval).await
+                stats::start(self, channel, interval, mounts).await
             }
         }
     }
@@ -639,7 +750,9 @@ impl SshSession {
 
     /// Runs `command` and returns `(exit status, stdout)`. If the command is
     /// killed by a signal the status is 255. `stdin`, if given, is sent to the
-    /// command; stdin is always closed afterwards.
+    /// command; stdin is always closed afterwards. Each call opens an exec channel of its own;
+    /// several can run at once, and one whose channel the server refuses while another is open
+    /// waits for that one to close and opens its channel again.
     pub async fn exec(
         &self,
         command: &str,
@@ -656,7 +769,7 @@ impl SshSession {
         command: &str,
         stdin: Option<Vec<u8>>,
     ) -> Result<ExecOutput, SshError> {
-        let (mut reader, writer) = self.open_exec_channel().await?;
+        let (mut reader, writer, _slot) = self.open_exec_channel().await?;
         writer
             .half()
             .exec(true, command.as_bytes().to_vec())
@@ -717,23 +830,82 @@ impl SshSession {
     }
 
     /// Opens and splits a session channel for [`exec_output`](Self::exec_output), its write half
-    /// in an [`ExecWriter`]. The open runs in a task of its own: a call dropped while the server
-    /// has yet to confirm the channel would otherwise leave it open on both sides once the
-    /// confirmation comes, with nothing holding it to close it.
+    /// in an [`ExecWriter`], counted in the connection's [`ExecChannels`] while the slot lives. A
+    /// channel the server refuses is opened again once another exec channel of the connection
+    /// closes, while one is open or opening; with none, the refusal is the error.
     pub(crate) async fn open_exec_channel(
         &self,
-    ) -> Result<(ChannelReadHalf, ExecWriter), SshError> {
+    ) -> Result<(ChannelReadHalf, ExecWriter, ExecSlot), SshError> {
+        let channels = &self.inner.exec;
+        loop {
+            let closes = channels.state().closes;
+            let refused = match self.try_open_exec_channel().await {
+                Ok(opened) => return Ok(opened),
+                Err(OpenFailure::Failed(e)) => return Err(e),
+                Err(OpenFailure::Refused(e)) => e,
+            };
+            loop {
+                let changed = channels.changed.notified();
+                tokio::pin!(changed);
+                // Registered before the check, so a change in between still wakes it.
+                changed.as_mut().enable();
+                let state = channels.state();
+                if state.closes != closes {
+                    break;
+                }
+                // The server may not have freed the session of one that just closed yet.
+                if state
+                    .closed_at
+                    .is_some_and(|at| at.elapsed() < REOPEN_GRACE)
+                {
+                    tokio::time::sleep(REOPEN_PAUSE).await;
+                    break;
+                }
+                // A channel opening may open, and then close.
+                if state.open > 0 || state.opening > 0 {
+                    changed.await;
+                    continue;
+                }
+                return Err(refused);
+            }
+            tracing::debug!("exec: opening a channel the server refused again");
+        }
+    }
+
+    /// Opens and splits a session channel once. The open runs in a task of its own: a call
+    /// dropped while the server has yet to confirm the channel would otherwise leave it open on
+    /// both sides once the confirmation comes, with nothing holding it to close it.
+    async fn try_open_exec_channel(
+        &self,
+    ) -> Result<(ChannelReadHalf, ExecWriter, ExecSlot), OpenFailure> {
         let (tx, rx) = oneshot::channel();
         let session = self.clone();
+        let opening = Opening::new(self);
         tokio::spawn(async move {
-            let opened = session.open_channel().await.map(|channel| {
-                let (reader, writer) = channel.split();
-                (reader, ExecWriter::new(writer))
-            });
+            let opened = if session.is_closed() {
+                drop(opening);
+                Err(OpenFailure::Failed(session.close_error()))
+            } else {
+                match session.inner.handle.channel_open_session().await {
+                    Ok(channel) => {
+                        let (reader, writer) = channel.split();
+                        Ok((reader, ExecWriter::new(writer), opening.opened()))
+                    }
+                    Err(e @ russh::Error::ChannelOpenFailure(_)) => {
+                        drop(opening);
+                        Err(OpenFailure::Refused(SshError::from(e)))
+                    }
+                    Err(e) => {
+                        drop(opening);
+                        Err(OpenFailure::Failed(SshError::from(e)))
+                    }
+                }
+            };
             // Unsent or unreceived because the call was dropped, the writer closes the channel.
             let _ = tx.send(opened);
         });
-        rx.await.unwrap_or_else(|_| Err(self.close_error()))
+        rx.await
+            .unwrap_or_else(|_| Err(OpenFailure::Failed(self.close_error())))
     }
 }
 

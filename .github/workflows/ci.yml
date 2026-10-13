@@ -80,8 +80,32 @@ jobs:
       # Includes checks that the app's version files agree, and that the Worker's do.
       - run: node --test "scripts/**/*.test.mjs"
 
+  # Pull requests that change nothing the Rust jobs build or check skip them. A job skipped by its
+  # `if` passes as a required check. Pushes and manual runs run them all.
+  changes:
+    name: Changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Compares with the base branch, the parent of the pull request's merge commit.
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: changes
+        run: node scripts/ci/changes.mjs HEAD^1
+
   rust-linux:
     name: Rust (Linux, SSH integration)
+    needs: changes
+    # Runs unless the changes job found no Rust inputs, so it also runs when that job fails or is
+    # skipped.
+    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -120,6 +144,8 @@ jobs:
 
   rust-windows:
     name: Rust (Windows)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -137,13 +163,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hatoba/desktop build
       - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-desktop
-      # The release profile (fat LTO, one codegen unit) is a second full build, so PRs skip it.
+
+  windows-installer:
+    name: Windows installer
+    # The release profile (fat LTO, one codegen unit) is a second full build, so PRs skip it.
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # No Rust cache: the release build shares no artifacts with the test builds, and caching it
+      # too takes the repository past its 10 GB Actions cache limit, which evicts the test jobs'
+      # caches.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       # Only the Release workflow has the update signing key.
-      - name: Build NSIS installer
-        if: github.event_name != 'pull_request'
-        run: pnpm tauri build --bundles nsis --no-sign
+      - run: pnpm tauri build --bundles nsis --no-sign
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
         with:
           name: hatoba-windows-nsis
           path: target/release/bundle/nsis/*.exe
@@ -151,7 +192,7 @@ jobs:
 
   linux-packages:
     name: Linux packages
-    # A release build, like the NSIS installer above, so PRs skip it.
+    # A release build without a Rust cache, like the Windows installer above, so PRs skip it.
     if: github.event_name != 'pull_request'
     # The runner of the Linux build in release.yml, whose glibc the packages require.
     runs-on: ubuntu-22.04
@@ -163,10 +204,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libdbus-1-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -185,6 +222,8 @@ jobs:
 
   rust-macos:
     name: Rust (macOS)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.rust != 'false' }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -207,13 +246,27 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # The SSH integration tests stay off here: their harness needs Linux and root to start sshd.
       - run: cargo test --workspace
-      # The release profile is a second full build, so PRs skip it. Only the Release workflow has the
-      # update signing key, so this build signs its updater archive with a throwaway key that this
-      # checkout's tauri.conf.json trusts instead. The release script then checks the archive as the
-      # Release workflow does, before a release depends on it. The DMG therefore trusts the throwaway
-      # key and cannot install real updates.
+
+  macos-bundle:
+    name: macOS app bundle
+    # A release build without a Rust cache, like the Windows installer above, so PRs skip it.
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Only the Release workflow has the update signing key, so this build signs its updater
+      # archive with a throwaway key that this checkout's tauri.conf.json trusts instead. The
+      # release script then checks the archive as the Release workflow does, before a release
+      # depends on it. The DMG therefore trusts the throwaway key and cannot install real updates.
       - name: Trust a throwaway update signing key
-        if: github.event_name != 'pull_request'
         run: |
           pnpm tauri signer generate --ci -p ci -w "$RUNNER_TEMP/update.key"
           node -e '
@@ -226,16 +279,13 @@ jobs:
       # The CI environment variable makes the DMG step skip the Finder window layout, which fails on a
       # runner without a desktop session. No --no-sign, which would also drop the ad-hoc code signature.
       - name: Build app bundle and DMG
-        if: github.event_name != 'pull_request'
         run: pnpm tauri build --bundles app,dmg
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ runner.temp }}/update.key
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ci
       - name: Check the release files
-        if: github.event_name != 'pull_request'
         run: node scripts/release/release.mjs dist --platform macos --bundle target/release/bundle --output "$RUNNER_TEMP/dist"
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
         with:
           name: hatoba-macos-dmg
           path: target/release/bundle/dmg/*.dmg

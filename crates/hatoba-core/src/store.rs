@@ -178,6 +178,7 @@ const MIGRATIONS: &[&str] = &[
 const LOCAL_COLUMNS: &[(&str, &str, &str)] = &[
     ("local_state", "os", "TEXT"),
     ("local_state", "show_stats", "INTEGER"),
+    ("local_state", "dashboard_off", "INTEGER"),
 ];
 
 /// Device-local tables added after the schema shipped, created if missing for the same reason as
@@ -603,6 +604,31 @@ pub trait StoreOps {
             "INSERT INTO local_state (item_id, show_stats) VALUES (?1, ?2) \
              ON CONFLICT(item_id) DO UPDATE SET show_stats = excluded.show_stats",
             params![item_id, i64::from(on)],
+        )?;
+        Ok(())
+    }
+
+    /// Whether a host or group is left out of the dashboard (HOST-14). Device-local.
+    fn dashboard_off(&self, item_id: &str) -> Result<bool> {
+        Ok(self
+            .conn()
+            .query_row(
+                "SELECT dashboard_off FROM local_state WHERE item_id = ?1",
+                [item_id],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten()
+            .is_some_and(|v| v != 0))
+    }
+
+    /// Leaves a host or group out of the dashboard, or brings it back (device-local, never
+    /// synced).
+    fn set_dashboard_off(&self, item_id: &str, off: bool) -> Result<()> {
+        self.conn().execute(
+            "INSERT INTO local_state (item_id, dashboard_off) VALUES (?1, ?2) \
+             ON CONFLICT(item_id) DO UPDATE SET dashboard_off = excluded.dashboard_off",
+            params![item_id, i64::from(off)],
         )?;
         Ok(())
     }
@@ -1129,6 +1155,15 @@ mod tests {
         assert!(!store.host_show_stats("h").unwrap());
         assert!(!store.host_show_stats("other").unwrap());
         assert!(!store.host_show_stats("missing").unwrap());
+        assert!(!store.dashboard_off("h").unwrap());
+        store.set_dashboard_off("h", true).unwrap();
+        assert!(store.dashboard_off("h").unwrap());
+        assert!(!store.host_show_stats("h").unwrap());
+        assert_eq!(store.last_connected("h").unwrap(), Some(300));
+        store.set_dashboard_off("g", true).unwrap();
+        store.set_dashboard_off("h", false).unwrap();
+        assert!(!store.dashboard_off("h").unwrap());
+        assert!(store.dashboard_off("g").unwrap());
         assert!(store.item_rows().unwrap().is_empty());
     }
 
@@ -1155,6 +1190,7 @@ mod tests {
         assert_eq!(store.last_connected("h").unwrap(), Some(100));
         assert_eq!(store.host_os("h").unwrap(), None);
         assert!(!store.host_show_stats("h").unwrap());
+        assert!(!store.dashboard_off("h").unwrap());
         store.set_host_os("h", Some("freebsd")).unwrap();
         store.set_host_show_stats("h", true).unwrap();
         assert_eq!(

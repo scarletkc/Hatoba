@@ -147,6 +147,16 @@ pub fn prefs_get(state: State<'_, AppState>) -> AppResult<LocalPrefs> {
 #[specta::specta]
 pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResult<()> {
     prefs.auto_lock_minutes = prefs.auto_lock_minutes.min(MAX_AUTO_LOCK_MINUTES);
+    prefs.dashboard_interval_secs = prefs.dashboard_interval_secs.clamp(1, 60);
+    for alert in [
+        &mut prefs.dashboard_cpu_alert,
+        &mut prefs.dashboard_mem_alert,
+        &mut prefs.dashboard_disk_alert,
+    ] {
+        *alert = (*alert).min(100);
+    }
+    prefs.dashboard_hidden_columns.retain(|c| c.len() <= 32);
+    prefs.dashboard_hidden_columns.truncate(32);
     {
         let mut vault = state.vault();
         let json = merge_prefs(vault.local_prefs()?.as_deref(), &prefs)?;

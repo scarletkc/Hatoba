@@ -4,6 +4,7 @@ pub mod ai;
 pub mod allowances;
 pub mod app;
 pub mod cli;
+pub mod dashboard;
 pub mod deploy;
 pub mod forwards;
 pub mod hosts;

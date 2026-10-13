@@ -95,11 +95,14 @@ export function HostEditPage({
   hostId,
   groupId,
   back,
+  fromDashboard,
   prefill,
 }: {
   hostId: string | null;
   groupId: string | null;
   back: HostFilter;
+  /** Back and Save return to the dashboard (HOST-14) rather than the host list. */
+  fromDashboard?: boolean;
   /** A quick-connect target the new host starts from (HOST-12). */
   prefill?: QuickTarget;
 }) {
@@ -136,7 +139,7 @@ export function HostEditPage({
       setTest({ state: "idle" });
   };
 
-  const goBack = () => navigate({ kind: "hosts", filter: back });
+  const goBack = () => navigate(fromDashboard ? { kind: "dashboard", filter: back } : { kind: "hosts", filter: back });
 
   const validate = (): Errors => {
     const e: Errors = {};

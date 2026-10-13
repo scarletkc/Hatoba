@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
-import type { AiSideEvent, AiTurnEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
+import type { AiSideEvent, AiTurnEvent, DashboardEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
 
 /**
  * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
@@ -44,12 +44,20 @@ export function createTauriApi(): HatobaApi {
     host_duplicate: (id) => call("host_duplicate", { id }),
     host_set_favorite: (id, favorite) => call("host_set_favorite", { id, favorite }),
     host_set_show_stats: (id, on) => call("host_set_show_stats", { id, on }),
+    dashboard_set_shown: (id, shown) => call("dashboard_set_shown", { id, shown }),
     host_copy_password: (id) => call("host_copy_password", { id }),
     groups_list: () => call("groups_list"),
     group_save: (input) => call("group_save", { input }),
     group_delete: (id) => call("group_delete", { id }),
     tags_list: () => call("tags_list"),
     hosts_probe: (ids) => call("hosts_probe", { ids }),
+    dashboard_watch: (hostIds, intervalSecs, onEvent) => {
+      const channel = new Channel<DashboardEvent>();
+      channel.onmessage = onEvent;
+      return call("dashboard_watch", { hostIds, intervalSecs, channel });
+    },
+    dashboard_unwatch: (watchId) => call("dashboard_unwatch", { watchId }),
+    dashboard_retry: (hostId) => call("dashboard_retry", { hostId }),
     ssh_config_preview: () => call("ssh_config_preview"),
     ssh_config_import: (aliases, keyFiles) => call("ssh_config_import", { aliases, keyFiles }),
 

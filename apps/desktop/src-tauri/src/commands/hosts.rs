@@ -296,12 +296,28 @@ pub fn host_set_show_stats(state: State<'_, AppState>, id: String, on: bool) -> 
     })
 }
 
+/// Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-14).
+#[tauri::command]
+#[specta::specta]
+pub fn dashboard_set_shown(state: State<'_, AppState>, id: String, shown: bool) -> AppResult<()> {
+    state.with_unlocked(|v| {
+        match v.get(&id) {
+            Some(Item::Host(_) | Item::Group(_)) => {}
+            _ => return Err(AppError::not_found("host or group")),
+        }
+        Ok(v.set_dashboard_shown(&id, shown)?)
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn groups_list(state: State<'_, AppState>) -> AppResult<Vec<GroupView>> {
     state.with_unlocked(|v| {
-        let mut groups: Vec<GroupView> =
-            v.groups().iter().map(|(id, g)| group_view(id, g)).collect();
+        let mut groups: Vec<GroupView> = v
+            .groups()
+            .iter()
+            .map(|(id, g)| group_view(id, g, v))
+            .collect();
         groups.sort_by(|a, b| a.sort.cmp(&b.sort).then_with(|| a.name.cmp(&b.name)));
         Ok(groups)
     })
@@ -344,7 +360,7 @@ pub fn group_save(
             .and_then(Item::as_group)
             .cloned()
             .ok_or_else(|| AppError::not_found("group"))?;
-        Ok(group_view(&id, &saved))
+        Ok(group_view(&id, &saved, v))
     })?;
     sync::local_change(&app);
     Ok(view)

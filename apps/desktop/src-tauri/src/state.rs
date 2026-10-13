@@ -8,6 +8,7 @@ use hatoba_core::vault::Vault;
 use tauri::{AppHandle, Manager};
 
 use crate::ai::AiManager;
+use crate::dashboard::Dashboard;
 use crate::deploy::Deployments;
 use crate::dropped::DroppedPaths;
 use crate::error::{AppError, AppResult};
@@ -24,6 +25,8 @@ pub struct AppState {
     pub vault: SharedVault,
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
+    /// The dashboard's background connections and readers (HOST-14).
+    pub dashboard: Dashboard,
     pub sync: SyncController,
     /// The in-app deployment in progress (§6.7).
     pub deploy: Deployments,
@@ -47,6 +50,7 @@ impl AppState {
             vault: Arc::new(Mutex::new(vault)),
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
+            dashboard: Dashboard::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),
             ai: AiManager::with_mcp(mcp.clone()),

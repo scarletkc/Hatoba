@@ -109,7 +109,7 @@ describe("Auto mode on calls (AI-47)", () => {
     failure,
   });
   const result = (auto: AiAutoVerdict | null): AiEntryView => ({ role: "tool", entry_id: "t1", created_at: 0, tool_call_id: "call_1", status: "ok", content: "done", auto });
-  const waiting = (call: CallInfo): Slot => ({ ...slot([user, calling]), turn: { ...newTurn(), phase: "tools", call } });
+  const waiting = (call: CallInfo): Slot => ({ ...slot([user, calling]), turn: { ...newTurn(), phase: "tools", calls: [call] } });
 
   it("marks a call Auto ran with a chip whose title lists the answers, and says so in its block", () => {
     const host = mount(slot([user, calling, result(verdict("run"))]));
@@ -146,5 +146,25 @@ describe("Auto mode on calls (AI-47)", () => {
     expect(unavailable).toContain("Open Settings → AI");
     expect(render(waiting({ id: "call_1", state: "approval", auto: { verdict: verdict("ask", [], "overloaded_v2") } }))).toContain("Auto could not judge this call.");
     expect(render(waiting({ id: "call_1", state: "approval" }))).not.toContain("Auto");
+  });
+});
+
+describe("calls that run together (§13.1)", () => {
+  const read = (id: string, path: string): AiToolCall => ({ id, name: "read_file", arguments: JSON.stringify({ path }) });
+  const calls = [read("call_1", "/etc/hosts"), read("call_2", "/etc/hostname"), read("call_3", "/etc/motd")];
+  const calling: AiEntryView = { ...(reply("tool_calls") as Extract<AiEntryView, { role: "assistant" }>), tool_calls: calls };
+  const done: AiEntryView = { role: "tool", entry_id: "t1", created_at: 0, tool_call_id: "call_2", status: "ok", content: "prod-api", auto: null };
+
+  it("shows each running call as running, a finished one with its result, and the rest as queued", () => {
+    const running: CallInfo[] = [
+      { id: "call_1", state: "running" },
+      { id: "call_2", state: "running" },
+    ];
+    const host = mount({ ...slot([user, calling, done]), turn: { ...newTurn(), phase: "tools", calls: running } });
+    const chips = [...host.querySelectorAll("[data-reveal^=\"call:\"]")].map((block) => block.textContent ?? "");
+    expect(chips).toHaveLength(3);
+    expect(chips[0]).toContain("Running");
+    expect(chips[1]).not.toContain("Running");
+    expect(chips[2]).toContain("Queued");
   });
 });

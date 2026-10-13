@@ -88,6 +88,8 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
     sync::stop(app);
     // DEPLOY-07: a deployment's tokens do not outlive the unlocked vault.
     state.deploy.clear();
+    // HOST-14: the dashboard reads nothing behind the lock screen, and its connections close.
+    state.dashboard.stop_all();
     let disconnect = async {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.

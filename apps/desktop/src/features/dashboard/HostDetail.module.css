@@ -1,0 +1,189 @@
+/* A host's detail on the dashboard (HOST-14): the resource usage popover's charts and meters (TERM-12), wider. */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.headText {
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-wizard);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  margin-top: -8px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.normal,
+.dim {
+  color: var(--fg2);
+}
+
+.warn {
+  color: var(--orange);
+}
+
+.error {
+  color: var(--red);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Readings from before the host stopped answering. */
+.stale {
+  opacity: 0.55;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub {
+  margin-left: 6px;
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 40px;
+  justify-content: flex-end;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.value i {
+  font-size: 13px;
+}
+
+.detail {
+  font-size: var(--text-xs);
+  color: var(--fg2);
+}
+
+.usage {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.usageLabel {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.amount {
+  font-size: var(--text-sm);
+  color: var(--fg2);
+  white-space: nowrap;
+}
+
+.meter {
+  --meter: var(--accent);
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--meter) 16%, transparent);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--meter);
+}
+
+.alert {
+  color: var(--red);
+}
+
+.alert .meter {
+  --meter: var(--red);
+}
+
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.key {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--spark-line);
+}
+
+.cpuLine {
+  --spark-line: var(--fg3);
+  --spark-dot: var(--accent);
+}
+
+.rxLine {
+  --spark-line: var(--accent);
+  --spark-dot: var(--accent);
+}
+
+.txLine {
+  --spark-line: var(--chart-tx);
+  --spark-dot: var(--chart-tx);
+}

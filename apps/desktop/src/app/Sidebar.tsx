@@ -17,12 +17,13 @@ import { TitlebarDrag } from "./TitleBar";
 import { selectUpdateAvailable, useUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
-type Key = "all" | "favorites" | "recent" | `group:${string}` | `tag:${string}` | "keys" | "sync";
+type Key = "dashboard" | "all" | "favorites" | "recent" | `group:${string}` | `tag:${string}` | "keys" | "sync";
 
 function pageKey(page: Page): Key | null {
   switch (page.kind) {
     case "hosts":
     case "host-edit": {
+      if (page.kind === "host-edit" && page.fromDashboard) return "dashboard";
       const f: HostFilter = page.kind === "hosts" ? page.filter : page.back;
       if (f.kind === "group") return `group:${f.id}`;
       if (f.kind === "tag") return `tag:${f.name}`;
@@ -32,6 +33,8 @@ function pageKey(page: Page): Key | null {
       return "keys";
     case "sync":
       return "sync";
+    case "dashboard":
+      return "dashboard";
   }
 }
 
@@ -102,6 +105,9 @@ export function Sidebar() {
       </TitlebarDrag>
 
       <div className={st.list}>
+        {item("dashboard", "gauge", t("dashboard.title"), null, () =>
+          go({ kind: "dashboard", filter: page.kind === "dashboard" ? page.filter : { kind: "all" } }),
+        )}
         {item("all", "hard-drives", t("sidebar.all"), hosts.length, () => hostsWith({ kind: "all" }))}
         {item("favorites", "star", t("sidebar.favorites"), favorites, () => hostsWith({ kind: "favorites" }))}
         {item("recent", "clock-counter-clockwise", t("sidebar.recent"), null, () => hostsWith({ kind: "recent" }))}

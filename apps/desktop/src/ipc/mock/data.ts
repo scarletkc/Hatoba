@@ -32,11 +32,11 @@ function at(month: number, day: number) {
 }
 
 export const GROUPS: GroupView[] = [
-  { id: "g-tokyo", name: zh ? "东京生产" : "Tokyo Prod", parent_id: null, sort: 0 },
-  { id: "g-osaka", name: zh ? "大阪数据库" : "Osaka DB", parent_id: null, sort: 1 },
-  { id: "g-staging", name: "Staging", parent_id: null, sort: 2 },
-  { id: "g-infra", name: zh ? "基础设施" : "Infrastructure", parent_id: null, sort: 3 },
-  { id: "g-home", name: zh ? "家庭实验室" : "Homelab", parent_id: null, sort: 4 },
+  { id: "g-tokyo", name: zh ? "东京生产" : "Tokyo Prod", parent_id: null, sort: 0, dashboard: true },
+  { id: "g-osaka", name: zh ? "大阪数据库" : "Osaka DB", parent_id: null, sort: 1, dashboard: true },
+  { id: "g-staging", name: "Staging", parent_id: null, sort: 2, dashboard: true },
+  { id: "g-infra", name: zh ? "基础设施" : "Infrastructure", parent_id: null, sort: 3, dashboard: true },
+  { id: "g-home", name: zh ? "家庭实验室" : "Homelab", parent_id: null, sort: 4, dashboard: true },
 ];
 
 function host(
@@ -71,6 +71,7 @@ function host(
     last_connected_at: last,
     os: null,
     show_stats: false,
+    dashboard: true,
     env: [],
     ...extra,
   };
@@ -287,6 +288,12 @@ export const PREFS: LocalPrefs = {
   lock_on_sleep: true,
   lock_disconnects_sessions: false,
   clipboard_clear_secs: 90,
+  dashboard_layout: "cards",
+  dashboard_hidden_columns: [],
+  dashboard_interval_secs: 3,
+  dashboard_cpu_alert: 90,
+  dashboard_mem_alert: 90,
+  dashboard_disk_alert: 90,
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */
@@ -401,38 +408,82 @@ function file(dir: string, f: { name: string; dir?: boolean; size?: number; date
 
 const GIB = 1024 ** 3;
 
-/** A random walk of a 4-CPU, 8 GB Linux server's resource usage, one reading per call (TERM-12). */
-export function mockStats(): (first: boolean) => ServerStatsView {
+/** A server the mock resource usage pretends to be: its size, how busy it runs, and its filesystems in GiB. */
+export interface StatsProfile {
+  cpus: number;
+  memGib: number;
+  /** Where the CPU share starts and the share of memory used. */
+  cpu: number;
+  mem: number;
+  /** Mount point, used and total GiB; the first is `/`. */
+  disks: [string, number, number][];
+  uptimeDays: number;
+  /** Seconds between readings. */
+  interval: number;
+}
+
+const DEFAULT_PROFILE: StatsProfile = {
+  cpus: 4,
+  memGib: 8,
+  cpu: 18,
+  mem: 0.46,
+  disks: [
+    ["/", 31, 80],
+    ["/boot", 0.2, 1],
+  ],
+  uptimeDays: 12,
+  interval: 2,
+};
+
+/** A random walk of a Linux server's resource usage, by default a 4-CPU, 8 GB one, one reading per call (TERM-12, HOST-14). */
+export function mockStats(profile: Partial<StatsProfile> = {}): (first: boolean) => ServerStatsView {
+  const p = { ...DEFAULT_PROFILE, ...profile };
   const walk = (v: number, step: number, min: number, max: number) => Math.min(max, Math.max(min, v + (Math.random() - 0.5) * step));
-  let cpu = 18;
-  let mem = 0.46;
+  let cpu = p.cpu;
+  let mem = p.mem;
   let rx = 180_000;
   let tx = 42_000;
-  let uptime = 12 * 86_400 + 3 * 3600 + 17 * 60;
+  let rxTotal = 412 * GIB;
+  let txTotal = 96 * GIB;
+  let uptime = p.uptimeDays * 86_400 + 3 * 3600 + 17 * 60;
+  const mounts = p.disks.map(([mount_point, used, total], i) => ({
+    source: i === 0 ? "/dev/sda1" : `/dev/sd${String.fromCharCode(98 + i)}1`,
+    mount_point,
+    total: total * GIB,
+    used: used * GIB,
+    available: Math.max(0, total * 0.95 - used) * GIB,
+  }));
   return (first) => {
     cpu = walk(cpu, 16, 2, 97);
-    mem = walk(mem, 0.012, 0.38, 0.62);
+    mem = walk(mem, 0.012, Math.max(0.05, p.mem - 0.1), Math.min(0.99, p.mem + 0.1));
     rx = walk(rx, 120_000, 8_000, 900_000);
     tx = walk(tx, 30_000, 2_000, 200_000);
-    if (!first) uptime += 2;
+    if (!first) {
+      uptime += p.interval;
+      rxTotal += rx * p.interval;
+      txTotal += tx * p.interval;
+    }
     // Now and then a download: a burst of traffic and CPU.
     const burst = Math.random() < 0.08;
-    const load = (cpu / 100) * 4;
+    const load = (cpu / 100) * p.cpus;
     return {
       cpu_percent: first ? null : Math.round((burst ? Math.min(99, cpu + 35) : cpu) * 10) / 10,
-      cpus: 4,
+      cpus: p.cpus,
       load: [Math.round(load * 100) / 100, Math.round(load * 80) / 100, Math.round(load * 60) / 100],
-      mem_total: 8 * GIB,
-      mem_used: Math.round(mem * 8 * GIB),
+      mem_total: p.memGib * GIB,
+      mem_used: Math.round(mem * p.memGib * GIB),
       swap_total: 2 * GIB,
       swap_used: Math.round(0.06 * GIB),
       net_rx_rate: first ? null : Math.round(burst ? rx * 9 : rx),
       net_tx_rate: first ? null : Math.round(tx),
       net_interfaces: ["eth0"],
-      disk_total: 80 * GIB,
-      disk_used: 31 * GIB,
-      disk_available: 45 * GIB,
+      disk_total: mounts[0].total,
+      disk_used: mounts[0].used,
+      disk_available: mounts[0].available,
       uptime_secs: uptime,
+      net_rx_total: Math.round(rxTotal),
+      net_tx_total: Math.round(txTotal),
+      mounts: mounts.map((m) => ({ ...m })),
     };
   };
 }

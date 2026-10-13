@@ -1,6 +1,7 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
-import { allowancePrefixes, commandAllowed, savablePrefixes } from "./commandRules";
+import type { CallLimit } from "./batches";
+import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes } from "./commandRules";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -87,7 +88,7 @@ export function isFileTool(kind: ToolKind): kind is "read_file" | "edit_file" | 
   return kind === "read_file" || kind === "edit_file" || kind === "write_file";
 }
 
-/** The search tools (AI-48, AI-49), which run `find` and `grep` in Rust over an exec channel of the tab's connection. */
+/** The search tools (AI-48, AI-49), which run `find`, and `rg` or `grep`, in Rust over an exec channel of the tab's connection. */
 export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
   return kind === "grep" || kind === "glob";
 }
@@ -95,6 +96,38 @@ export function isSearchTool(kind: ToolKind): kind is "grep" | "glob" {
 /** Tools that act on the tab's SSH session and return an error while it is disconnected (AI-08). */
 export function needsSession(kind: ToolKind): boolean {
   return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
+}
+
+/**
+ * §13.1: the limit of a batch that a call of the tool counts toward while it runs, if any: the tools that open an
+ * exec channel on the tab's SSH connection for each call, and web searches.
+ */
+export function limitOf(kind: ToolKind): CallLimit | null {
+  if (kind === "run_command" || isFileTool(kind) || isSearchTool(kind)) return "channel";
+  return kind === "web_search" ? "search" : null;
+}
+
+/**
+ * §13.1: whether a call can run at the same time as the calls beside it: a tool that only reads, or a `run_command`
+ * call whose command line only reads (§13.5). Edits, writes, typing into the shell, other commands and MCP tools run
+ * alone.
+ */
+export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>): boolean {
+  switch (kind) {
+    case "read_terminal":
+    case "read_file":
+    case "grep":
+    case "glob":
+    case "web_search":
+    case "fetch_url":
+    case "read_skill":
+    case "search_tools":
+      return true;
+    case "run_command":
+      return readsOnlyCommand(str(args.command));
+    default:
+      return false;
+  }
 }
 
 /**

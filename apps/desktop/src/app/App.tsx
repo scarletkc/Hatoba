@@ -4,6 +4,8 @@ import { toggleAiPanel } from "@/features/ai/actions";
 import { AiPanel } from "@/features/ai/AiPanel";
 import { EditFilesHost } from "@/features/ai/EditFiles";
 import { useAiLifecycle } from "@/features/ai/lifecycle";
+import { DashboardPage } from "@/features/dashboard/DashboardPage";
+import { clearReadouts } from "@/features/dashboard/readings";
 import { HostEditPage } from "@/features/hosts/HostEditPage";
 import { HostsPage } from "@/features/hosts/HostsPage";
 import { KeysPage } from "@/features/keys/KeysPage";
@@ -159,6 +161,7 @@ function HomePage({ page }: { page: Page }) {
           hostId={page.hostId}
           groupId={page.groupId}
           back={page.back}
+          fromDashboard={page.fromDashboard}
           prefill={page.prefill}
         />
       );
@@ -166,6 +169,8 @@ function HomePage({ page }: { page: Page }) {
       return <KeysPage />;
     case "sync":
       return <SyncPage />;
+    case "dashboard":
+      return <DashboardPage filter={page.filter} />;
   }
 }
 
@@ -194,6 +199,8 @@ function homeTab(page: Page, t: (k: MessageKey) => string, groupName: (id: strin
       return { label: t("sidebar.keys"), icon: "key" };
     case "sync":
       return { label: t("sidebar.sync"), icon: "cloud" };
+    case "dashboard":
+      return { label: t("dashboard.title"), icon: "gauge" };
   }
 }
 
@@ -204,6 +211,8 @@ function useGlobalEvents() {
     let lastSync: SyncState | null = null;
     const subs = [
       api.listen("vault://locked", () => {
+        // HOST-14: the readings are not kept behind the lock screen.
+        clearReadouts();
         useApp.getState().setPhase("locked");
         useApp.getState().openSettings(false);
         void useApp.getState().refreshVault();

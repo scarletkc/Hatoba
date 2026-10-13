@@ -1059,6 +1059,21 @@ impl Vault {
         self.store.host_show_stats(host_id).unwrap_or(false)
     }
 
+    /// Leaves a host or a group out of the dashboard on this device, or brings it back
+    /// (HOST-14). Device-local; never synced.
+    ///
+    /// # Errors
+    /// Storage errors.
+    pub fn set_dashboard_shown(&mut self, item_id: &str, shown: bool) -> Result<()> {
+        self.store.set_dashboard_off(item_id, !shown)
+    }
+
+    /// Whether the dashboard shows a host or a group on this device. On until turned off.
+    #[must_use]
+    pub fn dashboard_shown(&self, item_id: &str) -> bool {
+        !self.store.dashboard_off(item_id).unwrap_or(false)
+    }
+
     /// The opaque device-local UI preferences (plaintext JSON owned by the shell). Works while
     /// locked.
     ///
@@ -2270,6 +2285,21 @@ mod tests {
         assert_eq!(vault.pending_count(), pending);
         vault.set_host_show_stats(&id, false).unwrap();
         assert!(!vault.host_show_stats(&id));
+    }
+
+    #[test]
+    fn dashboard_switch_is_device_local_and_on_by_default() {
+        let (mut vault, _clock, _code) = created();
+        let id = vault.put(None, host("h")).unwrap();
+        let row = vault.store.item_row(&id).unwrap();
+        let pending = vault.pending_count();
+        assert!(vault.dashboard_shown(&id));
+        vault.set_dashboard_shown(&id, false).unwrap();
+        assert!(!vault.dashboard_shown(&id));
+        assert_eq!(vault.store.item_row(&id).unwrap(), row);
+        assert_eq!(vault.pending_count(), pending);
+        vault.set_dashboard_shown(&id, true).unwrap();
+        assert!(vault.dashboard_shown(&id));
     }
 
     #[test]

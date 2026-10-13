@@ -858,13 +858,16 @@ pub async fn ai_tool_result(
     tool_call_id: String,
     result: AiToolResultInput,
 ) -> AppResult<AiEntryView> {
-    state.ai.tool_result(
-        &state.vault,
-        &AppEnv(app),
-        &conversation_id,
-        &tool_call_id,
-        &result,
-    )
+    state
+        .ai
+        .tool_result(
+            &state.vault,
+            &AppEnv(app),
+            &conversation_id,
+            &tool_call_id,
+            &result,
+        )
+        .await
 }
 
 /// The change an open `edit_file` or `write_file` call would make to the file on `session_id`'s
