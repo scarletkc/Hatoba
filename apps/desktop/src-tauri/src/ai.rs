@@ -589,7 +589,14 @@ impl AiManager {
     }
 
     /// A token that a stop of the conversation's running turn cancels.
+    /// While a stop waits for the conversation's commands, the token is cancelled already, so
+    /// nothing new starts in the stopped turn.
     fn turn_token(&self, conversation_id: &str) -> CancellationToken {
+        if guard(&self.0.stopping).contains_key(conversation_id) {
+            let stopped = CancellationToken::new();
+            stopped.cancel();
+            return stopped;
+        }
         self.running(conversation_id)
             .map_or_else(CancellationToken::new, |turn| turn.cancel.child_token())
     }

@@ -2049,9 +2049,16 @@ async fn a_stop_waits_for_a_running_command_and_keeps_its_result() {
     sink.done_with(AiFinish::ToolCalls).await;
     let op = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
 
+    // Nothing new starts in the turn while the stop waits.
+    let meanwhile = async {
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(f.manager.is_running(&conv));
+        assert!(f.manager.start_op(&conv).token().is_cancelled());
+    };
     tokio::join!(
         f.manager.stop(&f.vault, f.env.as_ref(), &conv),
         command_ends(&f, &conv, op, Duration::from_millis(100)),
+        meanwhile,
     );
     assert!(!f.manager.is_running(&conv));
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);

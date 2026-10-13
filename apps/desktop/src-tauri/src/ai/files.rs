@@ -845,8 +845,9 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
                 format!(" ({stderr})")
             };
             format!(
-                "The new text of {path} did not reach the host whole{why}, so nothing was \
-                 written. Try again."
+                "The host could not receive or keep the whole new text of {path}{why}, so \
+                 nothing was written. Try again once what stopped it is fixed, such as a full \
+                 temporary directory."
             )
         }
         RemoteFileError::Failed { status, stderr } => {

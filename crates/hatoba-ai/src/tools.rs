@@ -1276,11 +1276,12 @@ pub enum StoppedCommand {
     MayRun,
 }
 
-/// The cancelled result of a `run_command` call whose command still ran when the turn stopped
-/// without waiting for it, as locking the vault does (AI-18).
+/// The cancelled result of a `run_command` call whose command still ran when the turn stopped,
+/// and whose end Hatoba could not confirm: the stop did not wait for it, as locking the vault does,
+/// or the command did not report in time (AI-18).
 pub const COMMAND_STOP_UNCONFIRMED: &str = "The command was still running when the turn stopped. \
-     Hatoba told it to end but did not wait to confirm that it did, so it may still be running \
-     on the host.";
+     Hatoba told it to end but could not confirm that it did, so it may still be running on the \
+     host.";
 
 /// The `run_command` result text of a command Hatoba stopped (AI-12, AI-18): a line that says
 /// what became of it, then what it printed until then, as [`format_exec_result`] shows it, without
