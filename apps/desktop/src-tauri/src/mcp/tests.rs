@@ -353,12 +353,18 @@ impl Events {
         self.0.lock().unwrap().clone()
     }
 
+    /// The states a server went through, in order. A status that only brings new lists
+    /// repeats the state, as the prompts and resources a server lists after its tools do
+    /// (AI-50, AI-51), and is left out, so that it never races an assertion.
     pub(crate) fn states(&self, id: &str) -> Vec<McpServerState> {
-        self.all()
+        let mut states: Vec<_> = self
+            .all()
             .into_iter()
             .filter(|s| s.server_id == id)
             .map(|s| s.state)
-            .collect()
+            .collect();
+        states.dedup();
+        states
     }
 }
 
