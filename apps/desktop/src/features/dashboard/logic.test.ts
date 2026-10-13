@@ -104,6 +104,16 @@ describe("dashboard events (HOST-13)", () => {
     expect(back.history).toHaveLength(1);
   });
 
+  it("drops the readings of a host whose connection settings changed", () => {
+    const r = apply([
+      { kind: "reading", host_id: "h", os: "ubuntu", tab: false },
+      { kind: "stats", host_id: "h", stats: stats() },
+      { kind: "reset", host_id: "h" },
+    ])!;
+    expect(r.history).toHaveLength(0);
+    expect(r.os).toBeNull();
+  });
+
   it("holds a host that needs the user and clears the hold once it reads", () => {
     const held = apply([
       { kind: "probe", host_id: "h", online: true },

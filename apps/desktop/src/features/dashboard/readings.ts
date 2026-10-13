@@ -43,6 +43,8 @@ export function applyEvent(prev: HostReadout | undefined, event: DashboardEvent,
       return { ...r, online: true, phase: r.phase === "offline" ? "waiting" : r.phase };
     case "connecting":
       return { ...r, online: true, phase: "connecting", hold: null, error: null };
+    case "reset":
+      return { ...r, os: null, history: [] };
     case "reading":
       return { ...r, online: true, phase: "reading", os: event.os ?? r.os, tab: event.tab, hold: null, error: null, system: null };
     case "stats":

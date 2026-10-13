@@ -98,6 +98,8 @@ struct HostEntry {
     reprobe: bool,
     /// The jump host whose hold the host waits on, which **Retry** also ends.
     blocked_by: Option<String>,
+    /// [`Versions::config`] of the connection the page's readings of the host came from.
+    read_with: Option<String>,
 }
 
 struct Reader {
@@ -253,6 +255,7 @@ impl Dashboard {
                         reader.cancel.cancel();
                     }
                     entry.unsupported = None;
+                    entry.read_with = None;
                     entry.own.take().map(|own| own.session)
                 })
                 .collect()
@@ -334,6 +337,26 @@ impl Dashboard {
             .hosts
             .get(host_id)
             .is_some_and(|e| e.own.is_some())
+    }
+
+    /// Whether the page's readings of the host came from a connection made for other settings
+    /// (another server, perhaps), and are to be dropped. Once.
+    fn settings_changed(&self, host_id: &str, config: &str) -> bool {
+        let mut inner = lock(&self.inner);
+        let Some(entry) = inner.hosts.get_mut(host_id) else {
+            return false;
+        };
+        let changed = entry.read_with.as_deref().is_some_and(|c| c != config);
+        if changed {
+            entry.read_with = None;
+        }
+        changed
+    }
+
+    fn reading_with(&self, host_id: &str, config: &str) {
+        let mut inner = lock(&self.inner);
+        let entry = inner.hosts.entry(host_id.to_owned()).or_default();
+        entry.read_with = Some(config.to_owned());
     }
 
     /// Closes the dashboard's own connection to the host, now that a tab's serves it.
@@ -804,6 +827,11 @@ async fn connect_step(
     let state = state(app);
     let dash = &state.dashboard;
     let host = host_id.to_owned();
+    if dash.settings_changed(host_id, &plan.versions.config) {
+        dash.emit(DashboardEvent::Reset {
+            host_id: host.clone(),
+        });
+    }
     let tab = state
         .ssh
         .connection_for_host(host_id, &plan.versions.config);
@@ -820,10 +848,13 @@ async fn connect_step(
             host_id: host.clone(),
             online,
         });
-        dash.emit(DashboardEvent::Unsupported {
-            host_id: host,
-            system,
-        });
+        // An offline host shows as offline.
+        if online {
+            dash.emit(DashboardEvent::Unsupported {
+                host_id: host,
+                system,
+            });
+        }
         return Next::Wait(Some(RECHECK));
     }
     if let Some(session) = tab {
@@ -995,6 +1026,7 @@ async fn read_step(
             return Some(RECHECK);
         }
     };
+    dash.reading_with(host_id, &config);
     dash.emit(DashboardEvent::Reading {
         host_id: host.clone(),
         os: session
@@ -1158,6 +1190,21 @@ mod tests {
         dash.set_unsupported(&id, after.clone(), "FreeBSD".into());
         dash.stop_all();
         assert_eq!(dash.unsupported(&id, &after), None);
+    }
+
+    #[test]
+    fn readings_made_with_other_settings_are_dropped_once() {
+        let dash = Dashboard::default();
+        assert!(!dash.settings_changed("h", "a"));
+        dash.reading_with("h", "a");
+        assert!(!dash.settings_changed("h", "a"));
+        assert!(dash.settings_changed("h", "b"));
+        // Dropped: nothing more to drop until the host is read again.
+        assert!(!dash.settings_changed("h", "b"));
+        assert!(!dash.settings_changed("h", "c"));
+        dash.reading_with("h", "b");
+        dash.stop_all();
+        assert!(!dash.settings_changed("h", "c"));
     }
 
     #[test]

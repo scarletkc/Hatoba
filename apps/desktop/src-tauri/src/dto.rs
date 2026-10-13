@@ -441,6 +441,9 @@ pub enum DashboardEvent {
     Probe { host_id: String, online: bool },
     /// Waiting for one of the connection slots, or signing in.
     Connecting { host_id: String },
+    /// The host's connection settings changed since its readings were made, so they may be of
+    /// another server: they are dropped.
+    Reset { host_id: String },
     /// Connected and reading, over the dashboard's own connection or a tab's (`tab`).
     Reading {
         host_id: String,

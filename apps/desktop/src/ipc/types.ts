@@ -423,6 +423,8 @@ export type DashboardEvent =
   | { kind: "probe"; host_id: string; online: boolean }
   /** Waiting for a connection slot, or signing in. */
   | { kind: "connecting"; host_id: string }
+  /** The host's connection settings changed since its readings were made (another server, perhaps): drop them. */
+  | { kind: "reset"; host_id: string }
   /** Connected and reading, over the dashboard's own connection or a tab's. */
   | { kind: "reading"; host_id: string; os: string | null; tab: boolean }
   | { kind: "stats"; host_id: string; stats: ServerStatsView }
