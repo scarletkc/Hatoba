@@ -7,7 +7,7 @@ export const en = {
   meta: {
     description:
       "Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync through your own Cloudflare account",
-    tagline: "Open-source SSH client with an AI assistant",
+    tagline: "Open-source SSH client with AI and encrypted sync",
     downloadTitle: "Download Hatoba",
     downloadLead: (version: string) => `Download Hatoba ${version} for Windows, Linux, and macOS.`,
   },

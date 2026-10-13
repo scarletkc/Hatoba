@@ -4,7 +4,7 @@ export const ja: Messages = {
   meta: {
     description:
       "AI アシスタントを搭載し、自分の Cloudflare アカウントを通じてエンドツーエンド暗号化で同期できる、オープンソースのデスクトップ SSH クライアント",
-    tagline: "AI アシスタント搭載のオープンソース SSH クライアント",
+    tagline: "AI と暗号化同期を備えたオープンソース SSH クライアント",
     downloadTitle: "Hatoba をダウンロード",
     downloadLead: (version) => `Windows、Linux、macOS 向けの Hatoba ${version} をダウンロードできます。`,
   },

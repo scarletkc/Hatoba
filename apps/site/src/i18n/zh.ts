@@ -3,7 +3,7 @@ import type { Messages } from "./en";
 export const zh: Messages = {
   meta: {
     description: "开源桌面 SSH 客户端，内置 AI 助手，并通过你自己的 Cloudflare 账户进行端到端加密同步",
-    tagline: "内置 AI 助手的开源 SSH 客户端",
+    tagline: "内置 AI 与加密同步的开源 SSH 客户端",
     downloadTitle: "下载 Hatoba",
     downloadLead: (version) => `下载适用于 Windows、Linux 和 macOS 的 Hatoba ${version}。`,
   },
