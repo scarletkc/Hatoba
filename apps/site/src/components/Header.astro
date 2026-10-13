@@ -83,7 +83,10 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
     padding-bottom: 38px;
   }
 
+  /* Above the strip of sea, which comes later in the header, so the language menu opens over it. */
   .bar {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
