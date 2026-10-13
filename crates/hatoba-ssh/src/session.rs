@@ -26,8 +26,9 @@ pub use crate::shell::{ShellEvent, ShellHandle, ShellOptions};
 use crate::stats;
 pub use crate::stats::{ServerStats, StatsEvent, StatsHandle};
 
-/// Upper bound for output collected by [`SshSession::exec_output`].
-const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;
+/// Upper bound for output collected by [`SshSession::exec_output`] and
+/// [`crate::remote_command::run`].
+pub(crate) const MAX_EXEC_OUTPUT: usize = 64 * 1024 * 1024;
 /// How long the round trip measured through a proxy may take before the proxy's own answer
 /// time stands in for it.
 const PROXY_PING_TIMEOUT: Duration = Duration::from_secs(2);
@@ -719,7 +720,9 @@ impl SshSession {
     /// in an [`ExecWriter`]. The open runs in a task of its own: a call dropped while the server
     /// has yet to confirm the channel would otherwise leave it open on both sides once the
     /// confirmation comes, with nothing holding it to close it.
-    async fn open_exec_channel(&self) -> Result<(ChannelReadHalf, ExecWriter), SshError> {
+    pub(crate) async fn open_exec_channel(
+        &self,
+    ) -> Result<(ChannelReadHalf, ExecWriter), SshError> {
         let (tx, rx) = oneshot::channel();
         let session = self.clone();
         tokio::spawn(async move {
@@ -738,7 +741,7 @@ impl SshSession {
 /// [`SshSession::exec_output`] midway, or it gave up on the command), it sends the channel's Close:
 /// the halves of a split channel send nothing when dropped, so the server would keep the channel,
 /// and a command still reading stdin would wait for the rest of it for good.
-struct ExecWriter {
+pub(crate) struct ExecWriter {
     half: Option<ChannelWriteHalf<Msg>>,
     ended: AtomicBool,
 }
@@ -751,12 +754,12 @@ impl ExecWriter {
         }
     }
 
-    fn half(&self) -> &ChannelWriteHalf<Msg> {
+    pub(crate) fn half(&self) -> &ChannelWriteHalf<Msg> {
         self.half.as_ref().expect("taken only when dropped")
     }
 
     /// The server closed the channel, or the connection is gone: nothing to close.
-    fn ended(&self) {
+    pub(crate) fn ended(&self) {
         self.ended.store(true, Ordering::Relaxed);
     }
 }

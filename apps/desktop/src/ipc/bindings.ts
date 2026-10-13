@@ -30,6 +30,14 @@ export const commands = {
 	 *  session, and the installer starts the new version.
 	 */
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
+	/**
+	 *  The arguments of the launches the window has not handled yet, oldest first. Each is taken
+	 *  once, and only while the vault is unlocked: a launch during a lock waits for the unlock.
+	 */
+	launchTake: () => __TAURI_INVOKE<string[][]>("launch_take"),
+	cliCommandGet: () => __TAURI_INVOKE<CliCommandView>("cli_command_get"),
+	/**  Adds or removes the command. On macOS this may wait for an administrator's password. */
+	cliCommandSet: (enabled: boolean) => __TAURI_INVOKE<CliCommandView>("cli_command_set", { enabled }),
 	vaultStatus: () => __TAURI_INVOKE<VaultStatus>("vault_status"),
 	/**  VAULT-01/02: creates the vault and returns the recovery code (shown exactly once). */
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
@@ -421,6 +429,7 @@ export const commands = {
 /** Events */
 export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
+	appLaunch: makeEvent<LaunchEvent>("app://launch"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1010,6 +1019,22 @@ export type BuiltinSkillView = {
 	files: SkillFileView[],
 };
 
+/**  The `hatoba` command on this device (HOST-13). */
+export type CliCommandView = {
+	/**  Settings → General has it on. */
+	enabled: boolean,
+	/**
+	 *  Where the command lives: the folder added to the user's `PATH` on Windows, the launcher
+	 *  itself on Linux and macOS.
+	 */
+	location: string,
+	/**
+	 *  Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
+	 *  `~/.local/bin` joins the `PATH` at the next sign-in.
+	 */
+	on_path: boolean,
+};
+
 export type CloudflareAccount = {
 	id: string,
 	name: string,
@@ -1352,6 +1377,9 @@ export type KeyView = {
 };
 
 export type Language = "system" | "zh-CN" | "en" | "ja";
+
+/**  A second launch handed its arguments to this window (HOST-13); `launch_take` returns them. */
+export type LaunchEvent = null;
 
 /**  Device-local UI preferences (readable while locked; never synced). */
 export type LocalPrefs = {

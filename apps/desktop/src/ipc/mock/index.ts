@@ -51,6 +51,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?star=due
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
+ *   ?launch=<command line>                  ?cli=offpath
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -60,6 +61,10 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * then stays at "installing", where the real app closes; `badsig` fails the signature check and
  * `dropped` loses the connection partway through the download.
  * The in-app deployment accepts any API token of 20 or more characters.
+ * `?launch` is what followed `hatoba` on the command line (HOST-13), which the window takes once
+ * it is unlocked, e.g. `?launch=root@db` or `?launch=ssh -p 2222 deploy@10.0.0.5`. The `hatoba`
+ * command starts off; with `?cli=offpath`, its folder is not on the PATH, as on Linux before the
+ * next sign-in.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
  * `?worker` shows a Worker update notice (§6.7, Upgrades): `available` on a Worker the app
  * deployed, `required` on one deployed another way (sync paused), `custom` on a custom domain,
@@ -117,6 +122,14 @@ export function createMockApi(): HatobaApi {
     statsTimers.delete(sid);
   };
   let seq = 0;
+  const launches = q.get("launch")?.trim() ? [q.get("launch")!.trim().split(/\s+/)] : [];
+  let cliCommand = false;
+  const cliView = () => ({
+    enabled: cliCommand,
+    location:
+      platform === "windows" ? "C:\\Users\\demo\\AppData\\Local\\Hatoba\\bin" : platform === "macos" ? "/usr/local/bin/hatoba" : "/home/demo/.local/bin/hatoba",
+    on_path: q.get("cli") !== "offpath",
+  });
 
   function makeSync(): SyncStatus {
     const s = D.syncStatus();
@@ -219,6 +232,16 @@ export function createMockApi(): HatobaApi {
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
     app_info: async () => ({ version, platform, mica: false, local_user: "demo" }),
+    launch_take: async () => {
+      needUnlocked();
+      return launches.splice(0);
+    },
+    cli_command_get: async () => cliView(),
+    cli_command_set: async (enabled) => {
+      await delay(300);
+      cliCommand = enabled;
+      return cliView();
+    },
     update_check: async () => {
       await delay(800);
       if (updateDemo === "offline") fail("sync_offline", "GitHub could not be reached");

@@ -60,6 +60,8 @@ interface AppState {
   settingsTab: SettingsTab | null;
   /** Bumped to ask the hosts page to focus its search field (Ctrl+Shift+K). */
   searchFocusTick: number;
+  /** The text the search field takes with that focus, or null to keep its own (HOST-13). */
+  searchFocusText: string | null;
   /** Bumped after each sync status that may follow a pull, so open views of synced data re-read it. */
   syncTick: number;
 
@@ -70,7 +72,7 @@ interface AppState {
   setPhase(phase: Phase): void;
   toggleSidebar(): void;
   openSettings(open: boolean, tab?: SettingsTab): void;
-  focusSearch(): void;
+  focusSearch(text?: string): void;
   refreshSynced(): void;
   lock(): Promise<void>;
 }
@@ -87,6 +89,7 @@ export const useApp = create<AppState>((set, get) => ({
   settingsOpen: false,
   settingsTab: null,
   searchFocusTick: 0,
+  searchFocusText: null,
   syncTick: 0,
 
   navigate: (page) => set({ page }),
@@ -104,7 +107,7 @@ export const useApp = create<AppState>((set, get) => ({
   setPhase: (phase) => set({ phase }),
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
   openSettings: (settingsOpen, tab) => set({ settingsOpen, settingsTab: tab ?? null }),
-  focusSearch: () => set((s) => ({ searchFocusTick: s.searchFocusTick + 1 })),
+  focusSearch: (text) => set((s) => ({ searchFocusTick: s.searchFocusTick + 1, searchFocusText: text ?? null })),
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {
     await api.vault_lock();

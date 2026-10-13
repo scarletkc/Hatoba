@@ -36,6 +36,10 @@
   text-wrap: pretty;
 }
 
+.warn {
+  color: var(--orange);
+}
+
 .control {
   flex: none;
   display: flex;

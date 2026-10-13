@@ -37,7 +37,8 @@ account.
 
 - **Hosts**: groups, tags, favorites, fuzzy search, recent connections, online
   status, `~/.ssh/config` import, ProxyJump, and SOCKS5 and HTTP proxies. Type
-  `ssh user@host` in the search box to connect without saving a host.
+  `ssh user@host` in the search box to connect without saving a host, or run
+  `hatoba user@host` in a terminal once the `hatoba` command is on in Settings.
 - **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
   methods, confirmation before multi-line paste, search, clickable links, and
   the CPU, memory, and network usage of Linux servers in the status bar.
@@ -56,11 +57,12 @@ account.
   sync, automatic conflict resolution you can review item by item, and a
   device list with revocation.
 - **AI assistant**: a panel beside each terminal that reads the screen, runs
-  commands, and types into the shell with your approval (or without it, in
-  bypass mode), and can search the web and read pages. It uses your own
-  OpenAI-compatible or Anthropic API key, supports skills and MCP servers, and
-  takes terminal selections, connection errors, long pastes, and text files as
-  attachments. Conversations sync with the rest of the vault.
+  commands, types into the shell, reads, edits, and searches files on the host,
+  and can search the web and read pages. You approve its actions, a model you
+  choose approves the safe ones in Auto mode, or bypass mode skips approval. It
+  uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
+  servers, and takes terminal selections, connection errors, long pastes, and
+  text files as attachments. Conversations sync with the rest of the vault.
 
 ## Download
 

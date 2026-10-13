@@ -20,6 +20,7 @@ import type { SyncState } from "@/ipc/types";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
+import { useLaunches } from "./launch";
 import { useShortcuts, type ShortcutAction } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
 import { useApp, type HostFilter, type Page } from "./store";
@@ -42,6 +43,7 @@ export function App() {
   useAiLifecycle();
   useActivityPing(phase === "unlocked");
   useStartupUpdateCheck(phase === "unlocked");
+  useLaunches(phase === "unlocked");
 
   if (phase === "boot") return null;
   if (phase === "onboarding")

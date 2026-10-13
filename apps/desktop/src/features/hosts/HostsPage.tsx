@@ -231,6 +231,9 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   useEffect(() => {
     if (searchTick === handledSearchTick) return;
     handledSearchTick = searchTick;
+    // A `hatoba …` command line that cannot connect (HOST-13).
+    const text = useApp.getState().searchFocusText;
+    if (text !== null) setQuery(text);
     searchRef.current?.focus();
     searchRef.current?.select();
   }, [searchTick]);

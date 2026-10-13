@@ -2238,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-ai"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "encoding_rs",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-core"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -2293,7 +2293,7 @@ dependencies = [
 
 [[package]]
 name = "hatoba-desktop"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2319,6 +2319,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-specta",
  "thiserror 2.0.21",
@@ -2330,13 +2331,14 @@ dependencies = [
  "uuid",
  "window-vibrancy",
  "windows",
+ "winreg",
  "wiremock",
  "zeroize",
 ]
 
 [[package]]
 name = "hatoba-ssh"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 dependencies = [
  "aes 0.9.3",
  "async-trait",
@@ -6025,6 +6027,22 @@ dependencies = [
  "thiserror 2.0.21",
  "url",
  "windows",
+ "zbus 5.19.0",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c142ed88deee222bd2d979269d35c73b6c1c0f6ebd5b79b4ff80066fcad6af1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "windows-sys 0.61.2",
  "zbus 5.19.0",
 ]
 
