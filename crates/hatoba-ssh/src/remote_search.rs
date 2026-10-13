@@ -22,10 +22,10 @@
 //!
 //! Messages are in English (`LC_MESSAGES=C`, with an `LC_ALL` moved to the character and collation
 //! categories, where it would override that), so the caller can count the files that could not be
-//! read. sshd does not signal a command without a PTY when its channel closes, so a watchdog writes
-//! an empty line to stderr each second: once the channel is closed the write fails, and the
-//! watchdog ends the command's process group, which sshd made for it. It does so too after the
-//! time limit, should the connection die without the channel closing.
+//! read. sshd does not signal a command without a PTY when its channel closes, so the search runs
+//! under [`RUNNER`], whose watchdog ends it once the channel is closed or the time limit passes,
+//! should the connection die without the channel closing. It signals only the search: never the
+//! script's own process group, which Dropbear, unlike OpenSSH, shares with the connection.
 
 use std::time::Duration;
 
@@ -70,28 +70,47 @@ macro_rules! prune {
     };
 }
 
-/// Starts the watchdog, which ends the process group once stderr is closed or `$t` seconds have
-/// passed, and ends itself at once on a `SIGWINCH`, which everything else ignores: the script sends
-/// one to its process group when it is done, since `$!` is out of reach. Its `sleep` holds none of
-/// the channel's pipes, which would keep the channel open.
-macro_rules! watchdog {
-    () => {
-        "( trap \"kill 0\" PIPE; trap \"exit 0\" WINCH; n=0; \
-         while sleep 1 < /dev/null > /dev/null 2>&1 & wait; do n=$((n + 1)); \
-         [ $n -lt \"$t\" ] || kill 0; echo >&2 || kill 0; done ) > /dev/null & "
-    };
-}
+/// Runs the search, its arguments, as the scripts end with it, `exec`ed in their place: its output
+/// goes through `$y` (a filter, or `cat`) and `head -c $c`, and a watchdog ends it once stderr is
+/// closed or `$t` seconds have passed. It travels on stdin, so it may use `$!`, which the scripts
+/// may not: the search writes to a FIFO, so `$!` is its process. That is in a process group of its
+/// own where `setsid` (util-linux and BusyBox) or `perl`'s `setpgrp` (macOS and the BSDs) can make
+/// one, and the watchdog sends the group TERM. Where neither can, it sends TERM to the search's
+/// process and those it started, such as the `rg` of a `find -exec`, found by their parents in
+/// `/proc`, or with `ps` where there is none. The script's own process group is never signalled.
+/// When the output is done, the watchdog is stopped and the search ended. The watchdog's `sleep`
+/// holds none of the channel's pipes, which would keep the channel open. Without `mktemp -d` or
+/// `mkfifo`, the search runs without a watchdog.
+const RUNNER: &str = "if setsid true 2>/dev/null; then g=setsid; \
+     elif perl -e 1 2>/dev/null; then g=perl; else g=none; fi; \
+     d=$(mktemp -d 2>/dev/null) && mkfifo \"$d/o\" 2>/dev/null || \
+     { [ -z \"$d\" ] || rm -rf \"$d\"; \"$@\" | $y | head -c \"$c\"; exit 0; }; \
+     case $g in setsid) setsid \"$@\" > \"$d/o\" & ;; \
+     perl) perl -e 'setpgrp(0,0); exec @ARGV or exit 127' \"$@\" > \"$d/o\" & ;; \
+     *) \"$@\" > \"$d/o\" & ;; esac; s=$!; \
+     l() { if [ -r /proc/self/stat ]; then for q in /proc/[0-9]*/stat; do \
+     read -r p < \"$q\" 2>/dev/null || continue; set -- ${p##*\") \"}; echo \"${p%% *} $2\"; done; \
+     else ps -A -o pid= -o ppid= 2>/dev/null; fi; }; \
+     e() { if [ $g = none ]; then x=\" $s \"; m=1; l > \"$d/p\"; while [ $m = 1 ]; do m=0; \
+     while read -r a b; do case $x in *\" $b \"*) case $x in *\" $a \"*) ;; \
+     *) x=\"$x$a \"; m=1;; esac;; esac; done < \"$d/p\"; done; kill -TERM $x 2>/dev/null; \
+     else kill -TERM -$s $s 2>/dev/null; fi; }; \
+     $y < \"$d/o\" | head -c \"$c\" & h=$!; \
+     ( trap 'e; exit 0' PIPE; n=0; \
+     while sleep 1 < /dev/null > /dev/null 2>&1 & wait $!; do n=$((n + 1)); \
+     [ $n -lt \"$t\" ] || break; echo >&2 || break; done; e ) > /dev/null & w=$!; \
+     wait $h; kill $w 2>/dev/null; e; wait; rm -rf \"$d\"; exit 0";
 
 /// Lists the files, and the symbolic links to files, below the directory named on stdin's first
 /// line (with stdin's second line, when not empty, appended), at most as many levels down as its
 /// third line says (`-` for any), whose names match one of the `find -name` patterns on the lines
-/// after the fourth, [`GLOB_LINKS`] (any name without one). Prints the marker, the directory with
-/// `/.` after it, and at most `$1` bytes of `find`'s output; ends after `$2` seconds. Exit statuses
-/// as for [`resolve!`], and 4 not readable, 6 not a directory (the path as resolved on stderr), 9
-/// no path.
+/// after the fifth, [`GLOB_LINKS`] (any name without one). Prints the marker, the directory with
+/// `/.` after it, and at most `$1` bytes of `find`'s output, run by [`RUNNER`], stdin's fifth line,
+/// which ends it after `$2` seconds. Exit statuses as for [`resolve!`], and 4 not readable, 6 not a
+/// directory (the path as resolved on stderr), 9 no path.
 const GLOB_SCRIPT: &str = concat!(
     "c=$1; t=$2; IFS= read -r f || exit 9; IFS= read -r s || exit 9; IFS= read -r d || exit 9; \
-     IFS= read -r h || exit 9; ",
+     IFS= read -r h || exit 9; IFS= read -r z || exit 9; ",
     resolve!(),
     english!(),
     "[ -d \"$f\" ] || { printf %s \"$f\" >&2; exit 6; }; \
@@ -100,9 +119,8 @@ const GLOB_SCRIPT: &str = concat!(
     "if find \"$r\" -maxdepth 0 -xtype f > /dev/null 2>&1; then set -- \"$@\" -xtype f -print; \
      else set -- \"$@\" -type f -print -o \"$@\" -type l -exec sh -c \"$h\" sh {} +; fi; ",
     prune!(),
-    watchdog!(),
-    "echo hatoba-file; printf %s \"$r\"; echo; find \"$r\" \"$@\" | head -c \"$c\"; \
-     kill -s WINCH 0; exit 0"
+    "y=cat; export c t y; echo hatoba-file; printf %s \"$r\"; echo; set -- find \"$r\" \"$@\"; \
+     exec sh -c \"$z\" sh \"$@\""
 );
 
 /// What `find -exec` runs on symbolic links for the glob script where it lacks `-xtype`: prints
@@ -113,19 +131,19 @@ const GLOB_LINKS: &str = "for f do if [ -f \"$f\" ]; then printf '%s\\n' \"$f\";
 /// script reads them, the third the depth. Stdin's fourth line is the output (`l` the files, `c`
 /// the counts of those with a match, `n` the lines), its fifth `i` to ignore case, its sixth and
 /// seventh the lines of context before and after, its eighth `u` for a multiline search, its ninth
-/// [`GREP_LINKS`], its tenth the pattern for `rg` and its eleventh the pattern for `grep -E`
-/// (empty when only `rg` can run it). The `find -name` patterns, which `rg` reads as globs, follow,
-/// and a file is searched whatever its name. Prints the marker, where `find` started (the directory
-/// with `/.` after it, or the file), the matcher (`rg` or `grep`, with ` --null` when each line's
-/// file is followed by a NUL) and at most `$1` bytes of its output; ends after `$2` seconds. Exit
-/// statuses as for the glob script, without 6, and 10 when `grep -E` refuses the pattern, 11 when
-/// only `rg` could run the search and the host has none, 12 when `rg` refuses the pattern, with
-/// their message on stderr.
+/// [`GREP_LINKS`], its tenth [`RUNNER`], its eleventh the pattern for `rg` and its twelfth the
+/// pattern for `grep -E` (empty when only `rg` can run it). The `find -name` patterns, which `rg`
+/// reads as globs, follow, and a file is searched whatever its name. Prints the marker, where
+/// `find` started (the directory with `/.` after it, or the file), the matcher (`rg` or `grep`,
+/// with ` --null` when each line's file is followed by a NUL) and at most `$1` bytes of its
+/// output, run as the glob script runs `find`. Exit statuses as for the glob script, without 6,
+/// and 10 when `grep -E` refuses the pattern, 11 when only `rg` could run the search and the host
+/// has none, 12 when `rg` refuses the pattern, with their message on stderr.
 const GREP_SCRIPT: &str = concat!(
     "c=$1; t=$2; IFS= read -r f || exit 9; IFS= read -r s || exit 9; IFS= read -r d || exit 9; \
      IFS= read -r m || exit 9; IFS= read -r i || exit 9; IFS= read -r b || exit 9; \
      IFS= read -r a || exit 9; IFS= read -r u || exit 9; IFS= read -r h || exit 9; \
-     IFS= read -r q || exit 9; IFS= read -r p || exit 9; ",
+     IFS= read -r z || exit 9; IFS= read -r q || exit 9; IFS= read -r p || exit 9; ",
     resolve!(),
     english!(),
     "[ -r \"$f\" ] || exit 4; o=; [ \"$i\" = i ] && o=-i; \
@@ -152,11 +170,10 @@ const GREP_SCRIPT: &str = concat!(
      else set -- \"$@\" -type f -exec grep $o -e \"$p\" {} + -o \"$@\" -type l \
      -exec sh -c \"$h\" sh {} +; fi; fi; ",
     prune!(),
-    "fi; y=cat; [ $m = c ] && y=\"grep -v -e :0$\"; ",
-    watchdog!(),
-    "echo hatoba-file; printf %s \"$r\"; echo; echo \"$g\"; \
-     if [ -d \"$f\" ]; then find \"$r\" \"$@\"; elif [ -f \"$f\" ]; then $x $o -e \"$p\" \"$f\"; fi \
-     | $y | head -c \"$c\"; kill -s WINCH 0; exit 0"
+    "fi; y=cat; [ $m = c ] && y=\"grep -v -e :0$\"; export c t y; \
+     echo hatoba-file; printf %s \"$r\"; echo; echo \"$g\"; \
+     if [ -d \"$f\" ]; then set -- find \"$r\" \"$@\"; elif [ -f \"$f\" ]; then \
+     set -- $x $o -e \"$p\" \"$f\"; else set -- true; fi; exec sh -c \"$z\" sh \"$@\""
 );
 
 /// What `find -exec` runs on symbolic links for the grep script where it lacks `-xtype`: `grep`,
@@ -333,6 +350,8 @@ fn glob_request(
     let mut stdin = scope_lines(scope)?;
     stdin.push_str(GLOB_LINKS);
     stdin.push('\n');
+    stdin.push_str(RUNNER);
+    stdin.push('\n');
     push_names(&mut stdin, scope.names)?;
     Ok((
         command_for(GLOB_SCRIPT, max, time_limit),
@@ -353,7 +372,7 @@ fn grep_request(
     };
     let mut stdin = scope_lines(&query.scope)?;
     stdin.push_str(&format!(
-        "{mode}\n{}\n{before}\n{after}\n{}\n{GREP_LINKS}\n{}\n{}\n",
+        "{mode}\n{}\n{before}\n{after}\n{}\n{GREP_LINKS}\n{RUNNER}\n{}\n{}\n",
         if query.ignore_case { "i" } else { "s" },
         if query.multiline { "u" } else { "-" },
         line(query.pattern, false)?,
@@ -439,7 +458,11 @@ mod tests {
             assert!(!script.contains(['\'', '\\', '\n', '!']), "{script}");
         }
         // The helpers travel on stdin, a line each.
-        assert!(!GLOB_LINKS.contains('\n') && !GREP_LINKS.contains('\n'));
+        assert!(
+            ![GLOB_LINKS, GREP_LINKS, RUNNER]
+                .iter()
+                .any(|h| h.contains('\n'))
+        );
         let names = ["*.conf".to_owned(), "it's [!a]*".to_owned()];
         let mut s = scope("~/etc", &names);
         s.max_depth = Some(2);
@@ -447,7 +470,7 @@ mod tests {
         assert!(command.ends_with("' sh 11 2"), "{command}");
         assert_eq!(
             stdin,
-            format!("~/etc\n\n2\n{GLOB_LINKS}\n*.conf\nit's [!a]*\n").as_bytes()
+            format!("~/etc\n\n2\n{GLOB_LINKS}\n{RUNNER}\n*.conf\nit's [!a]*\n").as_bytes()
         );
         let mut s = scope("/", &[]);
         s.below = "etc/nginx";
@@ -465,7 +488,7 @@ mod tests {
         assert_eq!(
             stdin,
             format!(
-                "/etc\n\n-\nn\ni\n2\n0\n-\n{GREP_LINKS}\nlisten\\s+80$\nlisten[[:space:]]+80$\n\
+                "/etc\n\n-\nn\ni\n2\n0\n-\n{GREP_LINKS}\n{RUNNER}\nlisten\\s+80$\nlisten[[:space:]]+80$\n\
                  *.conf\n"
             )
             .as_bytes()
@@ -478,7 +501,8 @@ mod tests {
         let (_, stdin) = grep_request(&q, 10, LIMIT).unwrap();
         assert_eq!(
             stdin,
-            format!("/etc\n\n1\nc\ns\n0\n0\nu\n{GREP_LINKS}\nlisten\\s+80$\n\n*.conf\n").as_bytes()
+            format!("/etc\n\n1\nc\ns\n0\n0\nu\n{GREP_LINKS}\n{RUNNER}\nlisten\\s+80$\n\n*.conf\n")
+                .as_bytes()
         );
 
         let mut below = query("/etc", "x", &[]);
@@ -1066,23 +1090,39 @@ mod tests {
             }
         }
 
-        /// A `find` that never ends, and records its process ID; it answers the `-xtype` check.
-        fn endless_find(home: &Path) -> String {
+        /// A `find` that never ends, with a child that never ends either, as `find -exec rg` has
+        /// one, and records both process IDs; it answers the `-xtype` check. Without `group`,
+        /// `setsid` and `perl` fail, so the search cannot have a process group of its own.
+        fn endless_find(home: &Path, group: bool) -> String {
             let bin = home.join("bin-endless");
             std::fs::create_dir_all(&bin).unwrap();
-            let find = bin.join("find");
-            std::fs::write(
-                &find,
-                "#!/bin/sh\ncase \" $* \" in *\" -maxdepth 0 \"*) exit 0;; esac\n\
-                 echo $$ > \"$HOME/find.pid\"\nexec sleep 60\n",
-            )
-            .unwrap();
-            std::fs::set_permissions(&find, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let script = |name: &str, body: &str| {
+                let file = bin.join(name);
+                std::fs::write(&file, format!("#!/bin/sh\n{body}\n")).unwrap();
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755)).unwrap();
+            };
+            script(
+                "find",
+                "case \" $* \" in *\" -maxdepth 0 \"*) exit 0;; esac\n\
+                 sleep 60 < /dev/null > /dev/null 2>&1 &\n\
+                 echo \"$$ $!\" > \"$HOME/find.pid\"\nexec sleep 60",
+            );
+            if !group {
+                script("setsid", "exit 127");
+                script("perl", "exit 127");
+            }
             format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
         }
 
-        /// Starts the glob script with the endless `find`, and waits for that to start.
-        fn start_endless(home: &Path, limit: Duration) -> (std::process::Child, String) {
+        /// Starts the glob script with the endless `find`, and waits for that to start. The
+        /// script shares its process group with the shell that starts it, as with Dropbear, which
+        /// gives a command no process group of its own; that shell writes `alive` once the
+        /// script is done.
+        fn start_endless(
+            home: &Path,
+            group: bool,
+            limit: Duration,
+        ) -> (std::process::Child, String) {
             std::fs::create_dir_all(home.join("etc")).unwrap();
             let (command, stdin) = glob_request(
                 &Scope {
@@ -1097,10 +1137,10 @@ mod tests {
             .unwrap();
             let mut child = Command::new("sh")
                 .arg("-c")
-                .arg(command)
+                .arg(format!("{command}; echo alive > \"$HOME/alive\""))
                 .current_dir("/")
                 .env("HOME", home)
-                .env("PATH", endless_find(home))
+                .env("PATH", endless_find(home, group))
                 .process_group(0)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -1121,55 +1161,68 @@ mod tests {
             (child, pid)
         }
 
-        /// Waits for the script to end, then checks that its `find` ended with it.
-        fn ends_with_find(mut child: std::process::Child, pid: &str, within: Duration) {
+        /// Waits for the script to end, then checks that its `find` and the child of that, `pids`,
+        /// ended with it, and that the shell that started it, in the same process group, lived on.
+        fn ends_with_find(home: &Path, mut child: std::process::Child, pids: &str) {
             let started = Instant::now();
             while child.try_wait().unwrap().is_none() {
-                assert!(started.elapsed() < within, "the script is still running");
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            // Until its parent's parent reaps it, a process killed is still there.
-            let started = Instant::now();
-            while Command::new("kill")
-                .args(["-0", pid])
-                .stderr(Stdio::null())
-                .status()
-                .unwrap()
-                .success()
-            {
                 assert!(
-                    started.elapsed() < Duration::from_secs(5),
-                    "find {pid} is still running"
+                    started.elapsed() < Duration::from_secs(10),
+                    "the script is still running"
                 );
                 std::thread::sleep(Duration::from_millis(50));
+            }
+            assert!(
+                home.join("alive").exists(),
+                "the script signalled its own process group"
+            );
+            // Until its parent's parent reaps it, a process killed is still there.
+            let started = Instant::now();
+            for pid in pids.split_whitespace() {
+                while Command::new("kill")
+                    .args(["-0", pid])
+                    .stderr(Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success()
+                {
+                    assert!(
+                        started.elapsed() < Duration::from_secs(5),
+                        "{pid} of {pids} is still running"
+                    );
+                    std::thread::sleep(Duration::from_millis(50));
+                }
             }
         }
 
         #[test]
         fn a_search_ends_when_its_channel_closes() {
-            let dir = tempfile::tempdir().unwrap();
-            let (mut child, pid) = start_endless(dir.path(), LIMIT);
-            let mut marker = [0; 12];
-            child
-                .stdout
-                .as_mut()
-                .unwrap()
-                .read_exact(&mut marker)
-                .unwrap();
-            assert_eq!(&marker, b"hatoba-file\n");
-            // As sshd does when the channel closes: nothing reads the command's output any more.
-            drop(child.stdout.take());
-            drop(child.stderr.take());
-            ends_with_find(child, &pid, Duration::from_secs(10));
+            for group in [true, false] {
+                let dir = tempfile::tempdir().unwrap();
+                let (mut child, pid) = start_endless(dir.path(), group, LIMIT);
+                let mut marker = [0; 12];
+                child
+                    .stdout
+                    .as_mut()
+                    .unwrap()
+                    .read_exact(&mut marker)
+                    .unwrap();
+                assert_eq!(&marker, b"hatoba-file\n");
+                // As sshd does when the channel closes: nothing reads the command's output any
+                // more.
+                drop(child.stdout.take());
+                drop(child.stderr.take());
+                ends_with_find(dir.path(), child, &pid);
+            }
         }
 
         #[test]
         fn a_search_ends_at_its_time_limit() {
-            let dir = tempfile::tempdir().unwrap();
-            let started = Instant::now();
-            let (child, pid) = start_endless(dir.path(), Duration::from_secs(1));
-            ends_with_find(child, &pid, Duration::from_secs(10));
-            assert!(started.elapsed() < Duration::from_secs(10));
+            for group in [true, false] {
+                let dir = tempfile::tempdir().unwrap();
+                let (child, pid) = start_endless(dir.path(), group, Duration::from_secs(1));
+                ends_with_find(dir.path(), child, &pid);
+            }
         }
     }
 }
