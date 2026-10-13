@@ -241,14 +241,44 @@ function changelog(previous, tag, repository, root) {
   return parts.join("\n\n");
 }
 
+/**
+ * How to install Hatoba on each platform, which the release notes and the website's download page
+ * give. `bundles` are the installers people download for the platform, and `steps` takes the
+ * release's installer names by bundle type. The website translates the steps in
+ * apps/site/src/i18n/install.ts, whose test fails when the English here changes.
+ */
+export const INSTALL_STEPS = {
+  windows: {
+    heading: "Windows",
+    bundles: ["nsis"],
+    steps: ({ nsis }) =>
+      `download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
+  },
+  linux: {
+    heading: "Linux (x86_64)",
+    bundles: ["deb", "appimage"],
+    steps: ({ deb, appimage }) =>
+      `on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
+  },
+  macos: {
+    heading: "macOS (Apple Silicon, experimental)",
+    bundles: ["dmg"],
+    steps: ({ dmg }) =>
+      `on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
+  },
+};
+
+/** The release's installer names by bundle type. */
+export function installerNames(version) {
+  return Object.fromEntries(Object.keys(INSTALLERS).map((bundle) => [bundle, installerName(bundle, version)]));
+}
+
 function installSection(version) {
-  const [nsis, deb, appimage, dmg, app] = ["nsis", "deb", "appimage", "dmg", "app"].map((bundle) => installerName(bundle, version));
+  const names = installerNames(version);
   return [
     "## Install",
-    `**Windows:** download \`${nsis}\` and run it. It installs Hatoba for the current user and needs no administrator rights. The installer is not code-signed, so Windows SmartScreen may stop it: choose **More info**, then **Run anyway**.`,
-    `**Linux (x86_64):** on Debian, Ubuntu, and distributions based on them, download \`${deb}\` and install it with \`sudo apt install ./${deb}\`. On other distributions, download \`${appimage}\`, make it executable with \`chmod +x ${appimage}\`, and run it.`,
-    `**macOS (Apple Silicon, experimental):** on macOS 13 or later, download \`${dmg}\`, open it, and drag Hatoba to Applications. The app is not signed with an Apple Developer ID or notarized, so macOS blocks it the first time you open it: close the warning, go to **System Settings → Privacy & Security**, choose **Open Anyway** under **Security**, and enter your login password. After an update, macOS may ask whether Hatoba can use its keychain items: enter your login password and choose **Always Allow**, because sync fails if you deny it.`,
-    `\`${CHECKSUMS}\` has the SHA-256 checksum of each file. The \`.sig\` files, \`${app}\`, and \`${LATEST}\` are for the app's updater, so you don't need to download them.`,
+    ...Object.values(INSTALL_STEPS).map(({ heading, steps }) => `**${heading}:** ${steps(names)}`),
+    `\`${CHECKSUMS}\` has the SHA-256 checksum of each file. The \`.sig\` files, \`${names.app}\`, and \`${LATEST}\` are for the app's updater, so you don't need to download them.`,
   ].join("\n\n");
 }
 

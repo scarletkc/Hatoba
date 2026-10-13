@@ -186,6 +186,7 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
 export function createAiMock(deps: AiMockDeps): AiApi {
   const flags = new Set((new URLSearchParams(location.search).get("ai") ?? "").split(",").map((x) => x.trim()));
   const zh = detectLocale() === "zh-CN";
+  const ja = detectLocale() === "ja";
   const convs = new Map<string, Conv>();
   const turns = new Map<string, Turn>();
   /** Conversations being compacted (AI-21, AI-22), which refuse a fork (AI-43) and a side question (AI-42). */
@@ -388,14 +389,24 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     return call("mcp__github__list_issues", { repo: "scarletkc/Hatoba", state: "open" });
   }
 
-  /** `?ai=showcase`: step `step` (the replies so far in this turn) of the scripted nginx 502 fix. */
+  /**
+   * `?ai=showcase`: step `step` (the replies so far in this turn) of the scripted nginx 502 fix. It is
+   * written in Japanese too, since the website's Japanese screenshots show it.
+   */
   function showcase(step: number): Plan {
+    const say = (en: string, zhText: string, jaText: string) => (zh ? zhText : ja ? jaText : en);
     if (step === 0)
       return {
-        reasoning: zh
-          ? "502 说明 nginx 连不上上游。先看 nginx 的错误日志，再看 API 实际监听的端口。"
-          : "A 502 means nginx could not get a response from the upstream. Check nginx’s error log, then the port the API actually listens on.",
-        text: zh ? "我先看 nginx 的错误日志和 API 监听的端口。" : "Let me check nginx’s error log and the port the API listens on.",
+        reasoning: say(
+          "A 502 means nginx could not get a response from the upstream. Check nginx’s error log, then the port the API actually listens on.",
+          "502 说明 nginx 连不上上游。先看 nginx 的错误日志，再看 API 实际监听的端口。",
+          "502 は nginx が上流から応答を受け取れていないということ。nginx のエラーログと、API が実際に待ち受けているポートを確認する。",
+        ),
+        text: say(
+          "Let me check nginx’s error log and the port the API listens on.",
+          "我先看 nginx 的错误日志和 API 监听的端口。",
+          "nginx のエラーログと、API が待ち受けているポートを確認します。",
+        ),
         calls: [
           call("run_command", { command: "sudo tail -n 3 /var/log/nginx/error.log", timeout_seconds: 30 }),
           call("run_command", { command: "sudo ss -ltnp | grep api", timeout_seconds: 30 }),
@@ -404,10 +415,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       };
     if (step === 1)
       return {
-        reasoning: zh ? "nginx 连的是 8081，API 监听的是 8080。改 upstream，测试配置后重新加载。" : "nginx connects to 8081, but the API listens on 8080. Fix the upstream, test the config, then reload.",
-        text: zh
-          ? "找到了：nginx 把请求转发到 `127.0.0.1:8081`，但 `api` 监听的是 `127.0.0.1:8080`。我把 upstream 改成 8080，测试配置后重新加载 nginx。"
-          : "Found it: nginx forwards to `127.0.0.1:8081`, but `api` listens on `127.0.0.1:8080`. I’ll point the upstream at 8080, test the config, and reload nginx.",
+        reasoning: say(
+          "nginx connects to 8081, but the API listens on 8080. Fix the upstream, test the config, then reload.",
+          "nginx 连的是 8081，API 监听的是 8080。改 upstream，测试配置后重新加载。",
+          "nginx は 8081 に接続しているが、API は 8080 で待ち受けている。upstream を直し、設定をテストしてからリロードする。",
+        ),
+        text: say(
+          "Found it: nginx forwards to `127.0.0.1:8081`, but `api` listens on `127.0.0.1:8080`. I’ll point the upstream at 8080, test the config, and reload nginx.",
+          "找到了：nginx 把请求转发到 `127.0.0.1:8081`，但 `api` 监听的是 `127.0.0.1:8080`。我把 upstream 改成 8080，测试配置后重新加载 nginx。",
+          "原因がわかりました。nginx は `127.0.0.1:8081` に転送していますが、`api` は `127.0.0.1:8080` で待ち受けています。upstream を 8080 に変更し、設定をテストしてから nginx をリロードします。",
+        ),
         calls: [
           call("run_command", {
             command: "sudo sed -i 's/127.0.0.1:8081/127.0.0.1:8080/' /etc/nginx/conf.d/api.conf && sudo nginx -t && sudo systemctl reload nginx",
@@ -419,15 +436,17 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (step === 2)
       return {
         reasoning: "",
-        text: zh ? "nginx 已重新加载。我在你的终端里验证一下。" : "nginx reloaded. I’ll verify it from your shell.",
+        text: say("nginx reloaded. I’ll verify it from your shell.", "nginx 已重新加载。我在你的终端里验证一下。", "nginx をリロードしました。ターミナルで確認します。"),
         calls: [call("send_input", { text: "curl -sI http://localhost/v1/hosts", key: "enter", wait_seconds: 3 })],
         finish: "tool_calls",
       };
     return {
       reasoning: "",
-      text: zh
-        ? "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```"
-        : "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+      text: say(
+        "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+        "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+        "**修正しました。** 502 の原因はポートの不一致でした。\n\n| 確認項目 | 修正前 | 修正後 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n前回のデプロイで API は 8080 に移りましたが、`/etc/nginx/conf.d/api.conf` は 8081 のままでした。デプロイスクリプトの最後にこのチェックを入れれば、次はすぐ気づけます。\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+      ),
       calls: [],
       finish: "stop",
     };
