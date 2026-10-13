@@ -53,7 +53,7 @@ The background never shows a prompt. A host that cannot sign in on its own says 
 |---|---|---|
 | Asks for a password on every connection | 每次连接都询问密码 | 接続のたびにパスワードを確認します |
 | The key’s passphrase isn’t saved | 密钥口令未保存 | 鍵のパスフレーズが保存されていません |
-| Asks for a password or verification code | 需要输入密码或验证码 | パスワードや確認コードの入力が必要です |
+| Asks for a password or verification code | 需要输入密码或验证码 | パスワードまたは確認コードの入力が必要です |
 | Host key not confirmed yet | 主机指纹尚未确认 | ホスト鍵がまだ確認されていません |
 | Host key changed | 主机指纹已变更 | ホスト鍵が変更されています |
 | Sign-in failed | 登录失败 | サインインに失敗しました |

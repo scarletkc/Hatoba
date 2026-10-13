@@ -181,7 +181,7 @@ export default defineMessages({
     "dashboard.state.unsupportedUnknown": "オンライン状態のみ（Linux 以外）",
     "dashboard.hold.password": "接続のたびにパスワードを確認します",
     "dashboard.hold.passphrase": "鍵のパスフレーズが保存されていません",
-    "dashboard.hold.prompt": "パスワードや確認コードの入力が必要です",
+    "dashboard.hold.prompt": "パスワードまたは確認コードの入力が必要です",
     "dashboard.hold.host_key_new": "ホスト鍵がまだ確認されていません",
     "dashboard.hold.host_key_changed": "ホスト鍵が変更されています",
     "dashboard.hold.sign_in_failed": "サインインに失敗しました",
