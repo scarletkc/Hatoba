@@ -203,24 +203,36 @@ describe("the queued message (§13.1)", () => {
     }
   });
 
-  it("goes back into the input area when the vault locks or another conversation is shown, with its chips", async () => {
-    const ends = [() => resetForLock(), () => newConversation(TAB)];
-    for (const end of ends) {
-      useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, selections: {}, diagnostics: {} });
-      ipc.send.mockReset();
-      const sent = turns();
-      await running(sent, TAB);
-      noteSelection(TAB, "502 Bad Gateway");
-      queueMessage(TAB, "why?");
-      expect(getSlot(TAB).queued?.chips).toMatchObject([{ kind: "selection", text: "502 Bad Gateway" }]);
-      expect(tabSelection(TAB).hidden).not.toBeNull();
+  it("goes back into the input area when the vault locks, with its chips", async () => {
+    useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, selections: {}, diagnostics: {} });
+    const sent = turns();
+    await running(sent, TAB);
+    noteSelection(TAB, "502 Bad Gateway");
+    queueMessage(TAB, "why?");
+    expect(getSlot(TAB).queued?.chips).toMatchObject([{ kind: "selection", text: "502 Bad Gateway" }]);
+    expect(tabSelection(TAB).hidden).not.toBeNull();
 
-      end();
-      await flush();
-      expect(getSlot(TAB)).toMatchObject({ queued: null, draft: "why?" });
-      expect(tabSelection(TAB).hidden).toBeNull();
-      expect(ipc.send).toHaveBeenCalledTimes(1);
-    }
+    resetForLock();
+    await flush();
+    expect(getSlot(TAB)).toMatchObject({ queued: null, draft: "why?" });
+    expect(tabSelection(TAB).hidden).toBeNull();
+    expect(ipc.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays with its conversation when another one is shown, and goes with its chips when the turn ends (AI-07)", async () => {
+    useAi.setState({ slots: { [TAB]: slot({ conversationId: "c2", conversation: { ...view, id: "c2" } }) }, background: {}, selections: {}, diagnostics: {} });
+    const sent = turns();
+    await running(sent, TAB);
+    noteSelection(TAB, "502 Bad Gateway");
+    queueMessage(TAB, "why?");
+
+    newConversation(TAB);
+    expect(getSlot(TAB)).toMatchObject({ conversationId: null, queued: null, draft: "" });
+    expect(tabSelection(TAB).hidden).not.toBeNull();
+    sent[0].emit({ kind: "turn_ended", reason: "completed" });
+    await flush();
+    expect(sent[1].text).toMatch(/^<terminal_selection [^]*502 Bad Gateway[^]*why\?$/);
+    expect(getSlot(TAB).draft).toBe("");
   });
 
   it("leaves out, when it goes back, a chip removed from it", async () => {

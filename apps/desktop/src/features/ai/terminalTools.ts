@@ -18,6 +18,12 @@ const POLL_MS = 100;
 export const NO_TAB = "No terminal tab is attached to this conversation, so terminal tools cannot run.";
 export const DISCONNECTED = "The terminal tab is disconnected. Ask the user to reconnect it, then try again.";
 
+/** AI-07: `send_input` while another conversation's turn on the tab holds its terminal, named by its title. */
+export function terminalInUse(title: string): string {
+  const other = title ? `another conversation on this tab ("${title}")` : "another conversation on this tab";
+  return `The terminal is in use by ${other}, whose turn typed into it and is still running, so send_input cannot type into it until that turn ends. Commands that need no interaction can still run with run_command. Otherwise tell the user, and try again after that turn ends.`;
+}
+
 function screenText(session: LiveSession, lines: number | null): ScreenText {
   const term = session.term;
   return readBuffer(term.buffer.active, term.rows, lines);
@@ -75,9 +81,16 @@ function flush(session: LiveSession): Promise<void> {
  * been quiet for 1 s or `wait_seconds` passed, and returns the output that appeared after the input,
  * or the whole screen when a full-screen program is running. Resolves to null when `signal` aborts
  * (the turn was stopped; Rust stores a cancelled result). Stopping never sends anything to the
- * terminal, so a started command keeps running (AI-18).
+ * terminal, so a started command keeps running (AI-18). `onType` runs just before the input goes to the
+ * terminal, and not for a call that types nothing, and the function it returns runs when the input could not be
+ * sent (AI-07: the turn holds the terminal once it types).
  */
-export async function sendInput(session: LiveSession, json: string, signal: AbortSignal): Promise<ToolOutcome | null> {
+export async function sendInput(
+  session: LiveSession,
+  json: string,
+  signal: AbortSignal,
+  onType: () => () => void = () => () => {},
+): Promise<ToolOutcome | null> {
   const parsed = parseSendInput(json);
   if (!parsed.ok) return { status: "error", content: `Invalid arguments: ${parsed.error}` };
   if (session.status !== "connected") return { status: "error", content: DISCONNECTED };
@@ -92,9 +105,11 @@ export async function sendInput(session: LiveSession, json: string, signal: Abor
   let ending: "quiet" | "timeout" | "disconnected" = "quiet";
   try {
     const data = text + (key ? keySequence(key, session.term.modes.applicationCursorKeysMode) : "");
+    const untype = onType();
     try {
       await session.sendInput(data);
     } catch (e) {
+      untype();
       return { status: "error", content: `The input could not be sent: ${toAppError(e).detail}` };
     }
     const started = Date.now();

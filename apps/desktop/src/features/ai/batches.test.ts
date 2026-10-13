@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CHANNELS, type CallLimit, nextBatch, runConcurrently, toolBatches } from "./batches";
+import { CallRoom, MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CHANNELS, type CallLimit, nextBatch, runConcurrently, toolBatches } from "./batches";
 import { concurrencySafe, limitOf, toolKind } from "./tools";
 
 describe("which calls run together (§13.1)", () => {
@@ -143,6 +143,49 @@ describe("runConcurrently", () => {
     expect(started).toEqual(calls);
     for (const c of ["ch2", "ch3", "ch4", "ch5"]) finish.get(c)!();
     expect(await done).toBe(6);
+  });
+
+  it("shares a room's channels with the other batches and calls that take room from it", async () => {
+    const h = harness();
+    const room = new CallRoom();
+    const lone = room.take("channel");
+    const first = runConcurrently(["ch0", "ch1", "ch2", "ch3"], h.limit, h.run, () => true, room);
+    const second = runConcurrently(["ch4", "ch5"], h.limit, h.run, () => true, room);
+    await flush();
+    // The call that runs alone holds one of the four channels.
+    expect(h.started).toEqual(["ch0", "ch1", "ch2"]);
+    lone();
+    lone();
+    await flush();
+    expect(h.started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
+    expect(room.full("channel")).toBe(true);
+    h.finish.get("ch1")!();
+    await flush();
+    expect(h.started).toEqual(["ch0", "ch1", "ch2", "ch3", "ch4"]);
+    for (const c of ["ch0", "ch2", "ch3", "ch4"]) h.finish.get(c)!();
+    await flush();
+    h.finish.get("ch5")!();
+    expect([await first, await second]).toEqual([4, 2]);
+    expect(h.mostChannels()).toBe(MAX_CONCURRENT_CHANNELS);
+    expect(room.full("channel")).toBe(false);
+  });
+
+  it("lets a call that waits for room give up once woken", async () => {
+    const room = new CallRoom();
+    const held = Array.from({ length: MAX_CONCURRENT_CHANNELS }, () => room.take("channel"));
+    let waits = true;
+    const entered = room.enter("channel", () => waits);
+    let settled = false;
+    void entered.then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+    waits = false;
+    room.wake();
+    expect(await entered).toBeNull();
+    // It took nothing: the room is as full as before, and has room again once a call gives its back.
+    expect(room.full("channel")).toBe(true);
+    held[0]();
+    expect(await room.enter("channel", () => true)).toBeTypeOf("function");
   });
 
   it("goes on past a call that fails", async () => {

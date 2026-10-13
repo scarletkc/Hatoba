@@ -46,14 +46,15 @@ export function useAiLifecycle() {
     return () => subs.forEach((p) => void p.then((un) => un()));
   }, []);
 
-  // AI-08: closing a tab detaches its conversation (it stays in history).
+  // AI-08: closing a tab detaches its conversation (it stays in history), and stops those it left in the background (AI-07).
   useEffect(
     () =>
       useTabs.subscribe((st, prev) => {
         if (st.tabs === prev.tabs) return;
         const open = new Set(st.tabs.map((x) => x.id));
-        const { slots, selections } = useAi.getState();
-        for (const tab of prev.tabs) if (!open.has(tab.id) && (slots[tab.id] || selections[tab.id])) detachSlot(tab.id);
+        const { slots, selections, background } = useAi.getState();
+        const held = new Set(Object.values(background));
+        for (const tab of prev.tabs) if (!open.has(tab.id) && (slots[tab.id] || selections[tab.id] || held.has(tab.id))) detachSlot(tab.id);
       }),
     [],
   );

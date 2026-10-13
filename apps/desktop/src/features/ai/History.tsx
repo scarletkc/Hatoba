@@ -12,7 +12,7 @@ import { MAX_TITLE_CHARS } from "./fork";
 import { sortConversations } from "./models";
 import { conversationPlace, placeName } from "./place";
 import { highlightParts, oneLine, SEARCH_DEBOUNCE_MS } from "./search";
-import { useAi } from "./store";
+import { conversationActivity, useAi } from "./store";
 import s from "./History.module.css";
 
 type Search = { state: "idle" } | { state: "searching" } | { state: "done"; query: string; hits: AiSearchHit[] } | { state: "failed" };
@@ -165,6 +165,7 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                     <div className={s.rowTitle}>
                       {c.pinned && <Icon name="push-pin" fill size={11} className={s.pin} />}
                       <span className={s.titleText}>{c.title || t("ai.untitled")}</span>
+                      <Activity id={c.id} />
                     </div>
                   )}
                   <div className={s.rowMeta}>
@@ -191,6 +192,22 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
       )}
       {menu.anchor && <Menu anchor={menu.anchor} entries={menuEntries} onClose={menu.close} minWidth={168} />}
     </div>
+  );
+}
+
+/**
+ * AI-07: a conversation whose turn is running or waiting for approval, in a tab or in the background, marked as
+ * the tab bar marks its tab, so that it can be found and opened again.
+ */
+function Activity({ id }: { id: string }) {
+  const t = useT();
+  const activity = useAi((st) => conversationActivity(st, id));
+  if (activity === "idle") return null;
+  const label = t(activity === "waiting" ? "ai.tabWaiting" : "ai.tabRunning");
+  return (
+    <span className={cx(s.activity, activity === "waiting" ? s.activityWaiting : s.activityRunning)} title={label} aria-label={label} role="img">
+      <Icon name={activity === "waiting" ? "hand-palm" : "sparkle"} fill={activity === "waiting"} size={12} />
+    </span>
   );
 }
 
@@ -316,6 +333,7 @@ function SearchResults({
                 <span className={s.titleText}>
                   <Highlighted text={title} query={search.query} />
                 </span>
+                <Activity id={hit.conversation_id} />
               </div>
               {hit.entry_id && (
                 <div className={s.snippet}>
