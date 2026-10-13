@@ -61,7 +61,6 @@
   position: relative;
   display: block;
   width: 100%;
-  max-width: 280px;
   height: 4px;
   border-radius: 2px;
   background: var(--fill2);
