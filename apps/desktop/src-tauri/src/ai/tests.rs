@@ -2156,6 +2156,44 @@ async fn the_lock_settles_a_stop_that_waits() {
     assert_eq!(sent_results(&sink), ["c1", "c2"]);
 }
 
+/// AI-18: a stop that something else settled while it waited leaves alone a later stop of the
+/// same conversation when its own wait ends.
+#[tokio::test]
+async fn a_settled_stop_leaves_a_later_stop_alone() {
+    let f = Fixture::new(vec![calls(&[(
+        "c1",
+        "run_command",
+        json!({"command": "sleep 300"}),
+    )])])
+    .await;
+    let (started, sink) = f.send(None, "run it").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let first_command = f.manager.start_call(&conv, "c1", OpKind::Command).unwrap();
+    let later = async {
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        // A message settles the first stop at once, and its turn runs a command of its own.
+        f.manager.stop_locked(&mut lock(&f.vault), &conv);
+        let next = Arc::new(Sink::default());
+        let _turn = f.manager.register(&conv, f.context(), None, next.clone());
+        let second_command = f.manager.start_call(&conv, "c2", OpKind::Command).unwrap();
+        let ends = async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            // The first stop's command ends, which ends its wait.
+            drop(first_command);
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            assert!(f.manager.is_running(&conv), "the second stop still waits");
+            assert!(next.events().is_empty());
+            drop(second_command);
+        };
+        tokio::join!(f.manager.stop(&f.vault, f.env.as_ref(), &conv), ends);
+        assert_eq!(next.ended().await, AiTurnEndReason::Stopped);
+    };
+    tokio::join!(f.manager.stop(&f.vault, f.env.as_ref(), &conv), later);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert!(!f.manager.is_running(&conv));
+}
+
 /// AI-18: locking the vault stops the turn without waiting for a running command, so its result
 /// says the command may still run.
 #[tokio::test]

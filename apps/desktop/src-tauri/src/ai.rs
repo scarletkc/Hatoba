@@ -211,10 +211,10 @@ struct Inner {
     mcp: McpManager,
     /// Running turns by conversation id.
     turns: Mutex<HashMap<String, Arc<Turn>>>,
-    /// Stops that wait for the commands of their turns to end (AI-18), by conversation id: the
-    /// turn they halted and the `run_command` calls they wait for. They settle the turn once the
-    /// commands have ended, unless another stop or the lock settles it first.
-    stopping: Mutex<HashMap<String, (Halted, Vec<String>)>>,
+    /// Stops that wait for the commands of their turns to end (AI-18), by conversation id. They
+    /// settle the turn once the commands have ended, unless another stop or the lock settles it
+    /// first.
+    stopping: Mutex<HashMap<String, Waiting>>,
     /// Running tools, compactions and provider requests, so that stop and lock reach them.
     ops: Mutex<HashMap<u64, Op>>,
     next_op: AtomicU64,
@@ -337,6 +337,16 @@ struct Turn {
     /// What the response being streamed has sent so far, from its request until it is stored or
     /// fails. A stop takes it under the vault guard and stores what the user saw (§13.1).
     streamed: Mutex<Option<Streamed>>,
+}
+
+/// A stop that waits for the commands of its turn to end (AI-18).
+struct Waiting {
+    /// Tells the stop from a later one of the same conversation, which may start once another
+    /// stop or a message settled this one.
+    id: u64,
+    halted: Halted,
+    /// The `run_command` calls it waits for.
+    waited: Vec<String>,
 }
 
 /// What the first part of a stop took ([`AiManager::halt`]), for the rest of it.
@@ -692,7 +702,7 @@ impl AiManager {
     fn stop_locked(&self, v: &mut Vault, conversation_id: &str) -> Vec<AiEntryView> {
         let mut stored = Vec::new();
         let waiting = guard(&self.0.stopping).remove(conversation_id);
-        if let Some((halted, waited)) = waiting {
+        if let Some(Waiting { halted, waited, .. }) = waiting {
             stored = self.settle(v, conversation_id, halted, &waited);
         }
         let halted = self.halt(conversation_id);
@@ -818,6 +828,7 @@ impl AiManager {
         vault: &SharedVault,
         conversation_id: &str,
     ) -> Option<Vec<AiEntryView>> {
+        let id = self.0.next_op.fetch_add(1, Ordering::Relaxed);
         let ends = {
             let _v = lock(vault);
             self.running(conversation_id)?;
@@ -833,7 +844,8 @@ impl AiManager {
                 return None;
             }
             let halted = self.halt(conversation_id);
-            guard(&self.0.stopping).insert(conversation_id.to_owned(), (halted, waited));
+            let waiting = Waiting { id, halted, waited };
+            guard(&self.0.stopping).insert(conversation_id.to_owned(), waiting);
             ends
         };
         let ended = async {
@@ -848,8 +860,16 @@ impl AiManager {
             tracing::warn!(conversation_id, "a stopped command did not report in time");
         }
         let mut v = lock(vault);
-        // Settled meanwhile by another stop, a message or the lock.
-        let Some((halted, waited)) = guard(&self.0.stopping).remove(conversation_id) else {
+        let waiting = {
+            let mut stopping = guard(&self.0.stopping);
+            match stopping.get(conversation_id) {
+                Some(waiting) if waiting.id == id => stopping.remove(conversation_id),
+                // Settled meanwhile by another stop, a message or the lock, and perhaps followed
+                // by a newer stop, which is left to its own wait.
+                _ => None,
+            }
+        };
+        let Some(Waiting { halted, waited, .. }) = waiting else {
             return Some(Vec::new());
         };
         Some(self.settle(&mut v, conversation_id, halted, &waited))
@@ -960,7 +980,7 @@ impl AiManager {
                 turn.end(AiTurnEndReason::Stopped);
             }
             let waiting = guard(&self.0.stopping).remove(conversation_id);
-            if let Some(turn) = waiting.and_then(|(halted, _)| halted.turn) {
+            if let Some(turn) = waiting.and_then(|waiting| waiting.halted.turn) {
                 turn.end(AiTurnEndReason::Stopped);
             }
             self.stop_sides(conversation_id);
