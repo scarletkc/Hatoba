@@ -80,10 +80,9 @@ export function toolsMenuRows(servers: McpServerView[], status: Record<string, M
     });
 }
 
-/** How many servers the conversation uses, and those of them that failed, which the input area names (AI-32). */
-export function toolsSummary(rows: ToolsMenuRow[]): { on: number; total: number; failed: ToolsMenuRow[] } {
-  const used = rows.filter((r) => r.on);
-  return { on: used.length, total: rows.length, failed: used.filter((r) => r.state === "failed") };
+/** The servers the conversation uses that failed, which the input area names (AI-32). */
+export function failedServers(rows: ToolsMenuRow[]): ToolsMenuRow[] {
+  return rows.filter((r) => r.on && r.state === "failed");
 }
 
 /**

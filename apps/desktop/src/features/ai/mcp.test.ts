@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { McpServerStatus, McpServerView } from "@/ipc/types";
-import { menuSources, toolsMenuRows, toolsSummary, transportLabel } from "./mcp";
+import { failedServers, menuSources, toolsMenuRows, transportLabel } from "./mcp";
 
 const server = (id: string, name: string, enabled = true): McpServerView => ({
   id,
@@ -47,13 +47,11 @@ describe("/mcp (AI-30)", () => {
     ]);
   });
 
-  it("counts the servers the conversation uses and names the failed ones among them", () => {
+  it("names the failed servers among those the conversation uses", () => {
     const st = { a: status("a", "failed"), b: status("b", "running", 1) };
-    const all = toolsSummary(toolsMenuRows(servers, st, []));
-    expect([all.on, all.total, all.failed.map((r) => r.server.name)]).toEqual([2, 2, ["filesystem"]]);
-    const off = toolsSummary(toolsMenuRows(servers, st, ["a"]));
-    expect([off.on, off.total, off.failed]).toEqual([1, 2, []]);
-    expect(toolsSummary([])).toEqual({ on: 0, total: 0, failed: [] });
+    expect(failedServers(toolsMenuRows(servers, st, [])).map((r) => r.server.name)).toEqual(["filesystem"]);
+    expect(failedServers(toolsMenuRows(servers, st, ["a"]))).toEqual([]);
+    expect(failedServers([])).toEqual([]);
   });
 
   it("offers the prompts and resources of the running servers the conversation uses (AI-50, AI-51)", () => {

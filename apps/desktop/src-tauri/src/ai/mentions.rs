@@ -10,14 +10,13 @@ use std::time::Duration;
 use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_file::{self, RemoteFileError};
 
+use crate::dropped::{FILE_MAX_BYTES, text_of};
 use crate::dto::{AiHostEntry, AiHostFile, AiHostListing, AiHostRefusal};
 
 /// How long a listing or a read may take.
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// The most a listing reads of the host's output: some thousands of entries.
 const MAX_LISTING_BYTES: u64 = 256 * 1024;
-/// The largest file an `@` mention attaches, as a text file from this computer (AI-35).
-pub const MAX_ATTACH_BYTES: u64 = 256 * 1024;
 
 /// The entries of the directory at `path` on the session's host, sorted by name.
 pub async fn list(session: Option<SshSession>, path: &str) -> AiHostListing {
@@ -50,15 +49,15 @@ pub async fn list(session: Option<SshSession>, path: &str) -> AiHostListing {
 }
 
 /// The text file at `path` on the session's host: UTF-8 without NUL bytes, at most
-/// [`MAX_ATTACH_BYTES`], without a byte order mark.
+/// [`FILE_MAX_BYTES`] as a text file from this computer (AI-35), without a byte order mark.
 pub async fn read(session: Option<SshSession>, path: &str) -> AiHostFile {
     let Some(session) = session.filter(|s| !s.is_closed()) else {
         return AiHostFile::Refused {
             reason: AiHostRefusal::Disconnected,
         };
     };
-    match within(remote_file::read(&session, path, MAX_ATTACH_BYTES)).await {
-        Ok(file) => match text(file.bytes) {
+    match within(remote_file::read(&session, path, FILE_MAX_BYTES)).await {
+        Ok(file) => match text_of(file.bytes) {
             Some(text) => AiHostFile::Ok {
                 path: file.path,
                 text,
@@ -71,18 +70,6 @@ pub async fn read(session: Option<SshSession>, path: &str) -> AiHostFile {
             reason: refusal(&session, reason),
         },
     }
-}
-
-/// A file's bytes as text: UTF-8 without NUL bytes, its byte order mark left out.
-fn text(bytes: Vec<u8>) -> Option<String> {
-    if bytes.contains(&0) {
-        return None;
-    }
-    let text = String::from_utf8(bytes).ok()?;
-    Some(match text.strip_prefix('\u{feff}') {
-        Some(rest) => rest.to_owned(),
-        None => text,
-    })
 }
 
 /// The operation within [`TIMEOUT`]; a timeout counts as a failure.
@@ -119,11 +106,14 @@ mod tests {
 
     #[test]
     fn text_files_are_utf8_without_nul_or_bom() {
-        assert_eq!(text(b"a\r\nb".to_vec()).as_deref(), Some("a\r\nb"));
-        assert_eq!(text("\u{feff}x".as_bytes().to_vec()).as_deref(), Some("x"));
-        assert_eq!(text(b"a\0b".to_vec()), None);
-        assert_eq!(text(vec![0xff, 0xfe]), None);
-        assert_eq!(text(Vec::new()).as_deref(), Some(""));
+        assert_eq!(text_of(b"a\r\nb".to_vec()).as_deref(), Some("a\r\nb"));
+        assert_eq!(
+            text_of("\u{feff}x".as_bytes().to_vec()).as_deref(),
+            Some("x")
+        );
+        assert_eq!(text_of(b"a\0b".to_vec()), None);
+        assert_eq!(text_of(vec![0xff, 0xfe]), None);
+        assert_eq!(text_of(Vec::new()).as_deref(), Some(""));
     }
 
     #[tokio::test]

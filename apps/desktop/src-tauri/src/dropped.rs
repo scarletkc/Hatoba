@@ -94,20 +94,23 @@ pub fn read(path: &Path) -> DroppedFile {
     if bytes.len() as u64 > FILE_MAX_BYTES {
         return refused(DroppedFileRefusal::TooLarge);
     }
+    match text_of(bytes) {
+        Some(text) => DroppedFile::Ok { text, name },
+        None => refused(DroppedFileRefusal::Binary),
+    }
+}
+
+/// A file's bytes as an attachment's text (AI-35): UTF-8 without NUL bytes, its byte order mark
+/// left out, like the WebView's `TextDecoder`. `None` for anything else, which counts as binary.
+pub fn text_of(bytes: Vec<u8>) -> Option<String> {
     if bytes.contains(&0) {
-        return refused(DroppedFileRefusal::Binary);
+        return None;
     }
-    match String::from_utf8(bytes) {
-        Ok(text) => DroppedFile::Ok {
-            // Like the WebView's `TextDecoder`, which drops a byte order mark.
-            text: text
-                .strip_prefix('\u{feff}')
-                .map(str::to_owned)
-                .unwrap_or(text),
-            name,
-        },
-        Err(_) => refused(DroppedFileRefusal::Binary),
-    }
+    let text = String::from_utf8(bytes).ok()?;
+    Some(match text.strip_prefix('\u{feff}') {
+        Some(rest) => rest.to_owned(),
+        None => text,
+    })
 }
 
 #[cfg(test)]

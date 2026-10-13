@@ -23,7 +23,9 @@ export function findPrompt(slotId: string, name: string): PromptCommand | undefi
  * Runs the skill or MCP prompt that a `/` command at the start of the box names (AI-50): its `SKILL.md`, or the
  * prompt's messages for the arguments that follow its name, become an attachment of the slot's next message, in place
  * of one the same command attached before. `none`: the command names neither, so the text goes as it was typed.
- * `failed` too when the slot shows another conversation by the time the text arrives: it attaches nothing there.
+ * `failed` too when the slot shows another conversation by the time the text arrives: it attaches nothing there, and
+ * for an `mcp__…` command that names no prompt of a running server (one still starting, say), which would otherwise
+ * go as plain text without its prompt.
  */
 export async function attachCommand(slotId: string, name: string, args: string): Promise<"attached" | "none" | "failed"> {
   const generation = slotGeneration(slotId);
@@ -50,8 +52,12 @@ export async function attachCommand(slotId: string, name: string, args: string):
     const text = await api.ai_skill_text(name);
     return attach({ kind: "skill", name, text });
   } catch (e) {
-    if (toAppError(e).code === "not_found") return "none";
-    toast(aiErrorMessage(e), "error");
+    if (toAppError(e).code !== "not_found") {
+      toast(aiErrorMessage(e), "error");
+      return "failed";
+    }
+    if (!name.startsWith("mcp__")) return "none";
+    toast(t("ai.cmd.prompt.unavailable", { command: `/${name}` }), "error");
     return "failed";
   }
 }

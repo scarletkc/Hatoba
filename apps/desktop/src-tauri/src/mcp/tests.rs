@@ -1113,3 +1113,15 @@ async fn the_menus_start_servers_and_fetch_their_prompts_and_resources() {
 
     mcp.shutdown().await;
 }
+
+#[test]
+fn a_prompt_or_resource_larger_than_a_message_attaches_is_refused() {
+    use super::{MAX_FETCH_BYTES, fits_message};
+    let most = "x".repeat(MAX_FETCH_BYTES);
+    assert_eq!(fits_message(most.clone(), "docs", "resource"), Ok(most));
+    let over = fits_message("x".repeat(MAX_FETCH_BYTES + 1), "docs", "resource").unwrap_err();
+    assert!(
+        over.contains("\"docs\"") && over.contains("512 KB"),
+        "{over}"
+    );
+}

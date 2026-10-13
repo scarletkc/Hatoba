@@ -27,6 +27,13 @@ describe("attachCommand (AI-50)", () => {
     expect(getSlot(TAB).extras.map((x) => [x.command, x.attachment.kind])).toEqual([["nginx", "skill"]]);
   });
 
+  it("lets an unknown command go as typed, but not an MCP prompt command no running server offers", async () => {
+    skillText.mockRejectedValue({ code: "not_found", detail: "skill" });
+    await expect(attachCommand(TAB, "tmp", "is full")).resolves.toBe("none");
+    await expect(attachCommand(TAB, "mcp__github__review_pr", "42")).resolves.toBe("failed");
+    expect(getSlot(TAB).extras).toEqual([]);
+  });
+
   it("attaches nothing once the tab shows another conversation, though New keeps the box", async () => {
     let resolve!: (text: string) => void;
     skillText.mockReturnValue(new Promise<string>((r) => (resolve = r)));

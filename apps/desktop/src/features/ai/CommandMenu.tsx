@@ -78,6 +78,8 @@ export interface CommandMenu {
   onBlur: () => void;
   /** The textarea's combobox attributes. */
   inputProps: Record<string, string | boolean | undefined>;
+  /** An `@` pick is being attached: the message waits for it, so that it does not go without it. */
+  busy: boolean;
 }
 
 /**
@@ -206,16 +208,16 @@ export function useCommandMenu({
       else if (list.length === 0) list.push({ key: "none", icon: "info", label: t("ai.cmd.none") });
       return list;
     }
-    const list: Row[] = [];
+    const host: Row[] = [];
     if (session && pathQuery && dirKey) {
       const listing = listings[dirKey];
       const shownDir = pathQuery.dir || "~/";
-      if (!listing || listing === "loading") list.push({ key: "listing", icon: "", label: t("ai.mention.listing", { path: shownDir }), busy: true });
+      if (!listing || listing === "loading") host.push({ key: "listing", icon: "", label: t("ai.mention.listing", { path: shownDir }), busy: true });
       else if (listing.status === "refused") {
-        if (listing.reason !== "not_found" || pathQuery.dir) list.push({ key: "refused", icon: "warning-circle", label: hostRefusal(listing.reason, shownDir, "list") });
+        if (listing.reason !== "not_found" || pathQuery.dir) host.push({ key: "refused", icon: "warning-circle", label: hostRefusal(listing.reason, shownDir, "list") });
       } else {
         if (!pathQuery.leaf)
-          list.push({
+          host.push({
             key: "folder",
             icon: "folder-open",
             label: shownDir,
@@ -224,38 +226,45 @@ export function useCommandMenu({
           });
         for (const entry of pathItems(listing.entries, pathQuery.leaf)) {
           const path = `${pathQuery.dir}${entry.name}`;
-          list.push(
+          host.push(
             entry.dir
               ? { key: `d:${entry.name}`, icon: "folder", label: `${entry.name}/`, pick: () => replace(trigger, trigger.quoted || /\s/.test(path) ? `@"${path}/` : `@${path}/`) }
               : { key: `f:${entry.name}`, icon: "file-text", label: entry.name, pick: () => attach(trigger, path, () => attachHostFile(slotId, session, path)) },
           );
         }
-        if (listing.cut) list.push({ key: "cut", icon: "info", label: t("ai.mention.cut") });
+        if (listing.cut) host.push({ key: "cut", icon: "info", label: t("ai.mention.cut") });
       }
     }
-    for (const item of resourceItems(sources.resources, trigger.query))
-      list.push({
-        key: `r:${item.serverId}:${item.resource.uri}`,
-        icon: "database",
-        label: item.resource.title || item.resource.name,
-        plain: true,
-        description: item.resource.uri,
-        badge: item.server,
-        pick: () => attach(trigger, resourceTarget(item), () => attachResource(slotId, item)),
-      });
-    if (!trigger.query)
-      list.push({
-        key: "local",
-        icon: "paperclip",
-        label: t("ai.mention.local"),
-        plain: true,
-        pick: () => {
-          replace(trigger, "");
-          onLocalFiles();
-        },
-      });
+    const resources: Row[] = resourceItems(sources.resources, trigger.query).map((item) => ({
+      key: `r:${item.serverId}:${item.resource.uri}`,
+      icon: "database",
+      label: item.resource.title || item.resource.name,
+      plain: true,
+      description: item.resource.uri,
+      badge: item.server,
+      pick: () => attach(trigger, resourceTarget(item), () => attachResource(slotId, item)),
+    }));
+    const local: Row[] = trigger.query
+      ? []
+      : [
+          {
+            key: "local",
+            icon: "paperclip",
+            label: t("ai.mention.local"),
+            plain: true,
+            pick: () => {
+              replace(trigger, "");
+              onLocalFiles();
+            },
+          },
+        ];
+    // A large directory never pushes the resources and the files from this computer out of the menu: the host's rows
+    // get what the resources leave, and at least half.
+    const room = MAX_ROWS - local.length;
+    const hostRoom = Math.max(Math.ceil(room / 2), room - resources.length);
+    const list = [...[...host.slice(0, hostRoom), ...resources].slice(0, room), ...local];
     if (list.length === 0) list.push({ key: "none", icon: "info", label: session ? t("ai.mention.none") : t("ai.mention.noTerminal") });
-    return list.slice(0, MAX_ROWS);
+    return list;
     // The pick closures read the draft through `replace` at pick time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, trigger?.sign, trigger?.query, trigger?.start, skills, sources, session, listings, dirKey, draft, t]);
@@ -354,14 +363,20 @@ export function useCommandMenu({
     onKeyDown,
     onCaret,
     onBlur: () => setCaret(null),
+    busy: attaching,
     inputProps: {
       role: "combobox",
       "aria-expanded": open,
       "aria-controls": open ? listId : undefined,
       "aria-autocomplete": "list",
-      "aria-activedescendant": open && activeRow ? `${listId}-${activeRow.key}` : undefined,
+      "aria-activedescendant": open && activeRow ? rowId(listId, activeRow.key) : undefined,
     },
   };
+}
+
+/** A row's element id: its key holds file names, which may have spaces, and an id may not. */
+function rowId(listId: string, key: string): string {
+  return `${listId}-${encodeURIComponent(key)}`;
 }
 
 /** The menu's list above the input box, as wide as the box. */
@@ -421,7 +436,7 @@ function MenuPopover({
         return (
           <div
             key={row.key}
-            id={row.pick ? `${id}-${row.key}` : undefined}
+            id={row.pick ? rowId(id, row.key) : undefined}
             data-key={row.key}
             role={row.pick ? "option" : "presentation"}
             aria-selected={row.pick ? selected : undefined}

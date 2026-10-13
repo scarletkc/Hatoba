@@ -34,7 +34,7 @@ import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTermi
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
 import { AUTO_COMPACT_RATIO, contextUsage, estimateTokens, formatTokens, messageFit, type MeterState } from "./meter";
-import { loadMcp, toolsMenuRows, toolsSummary, useMcp } from "./mcp";
+import { failedServers, loadMcp, toolsMenuRows, useMcp } from "./mcp";
 import { chats, findModel, judgeChosen, sameModel } from "./models";
 import { messageAttachments, messageText, takenBeside } from "./queue";
 import { canAskSide } from "./side";
@@ -139,7 +139,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   // AI-32: the MCP servers the conversation uses that failed, which the line above the box names.
   const mcpServers = useMcp((st) => st.servers);
   const mcpStatus = useMcp((st) => st.status);
-  const failedServers = useMemo(() => (mcpServers ? toolsSummary(toolsMenuRows(mcpServers, mcpStatus, slot.mcpOff)).failed : []), [mcpServers, mcpStatus, slot.mcpOff]);
+  const failed = useMemo(() => (mcpServers ? failedServers(toolsMenuRows(mcpServers, mcpStatus, slot.mcpOff)) : []), [mcpServers, mcpStatus, slot.mcpOff]);
   useEffect(() => {
     if (useMcp.getState().servers === null) void loadMcp();
   }, []);
@@ -187,6 +187,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           toast(t("ai.cmd.btw.noConversation"), "error");
           return;
         }
+        // As Alt+Enter: with no turn running, a question that does not fit the context waits (AI-42).
+        if (!s.turn && !s.remoteRunning && blocked) {
+          toast(t("ai.fit.blocked"), "error");
+          return;
+        }
         askSideQuestion(slotId, args, true, raw);
         return;
       case "clear":
@@ -203,7 +208,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
           return;
         }
         patchSlot(slotId, { draft: "" });
-        void compactConversation(slotId, args || null);
+        // What was typed comes back when no summary was stored (refused or failed), unless the box holds something new.
+        void compactConversation(slotId, args || null).then((done) => {
+          if (!done && !getSlot(slotId).draft) patchSlot(slotId, { draft: raw });
+        });
         return;
       case "mcp":
         patchSlot(slotId, { draft: rest });
@@ -221,6 +229,8 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
    * prompt the text starts with is attached first, and the text then goes as typed, its command included.
    */
   const submit = async (how: Submit, raw: string = getSlot(slotId).draft) => {
+    // An `@` pick still attaching (AI-51): Send would leave it behind for the next message.
+    if (menu.busy) return;
     const command = leadingCommand(raw);
     if (command) {
       const builtin = findBuiltin(command.name);
@@ -322,11 +332,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
   return (
     <div className={s.composer}>
       {queued && <QueuedCard slotId={slotId} queued={queued} />}
-      {failedServers.length > 0 && (
+      {failed.length > 0 && (
         <div className={s.mcpFailed} role="status">
           <Icon name="warning-circle" size={13} className={s.fitIcon} />
           <span className={s.mcpFailedText}>
-            {failedServers.length === 1 ? t("ai.mcp.failed", { name: failedServers[0].server.name }) : t("ai.mcp.failedMany", { n: failedServers.length })}
+            {failed.length === 1 ? t("ai.mcp.failed", { name: failed[0].server.name }) : t("ai.mcp.failedMany", { n: failed.length })}
           </span>
           <LinkButton className={s.mcpFailedLink} onClick={showMcp}>
             /mcp
@@ -400,7 +410,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
               className={s.side}
               title={t("ai.side.askHint", { key: sideKey })}
               aria-label={t("ai.side.ask")}
-              disabled={!canSide || resolving}
+              disabled={!canSide || resolving || menu.busy}
               onClick={() => void submit("side")}
             >
               <Icon name="chat-teardrop-dots" size={15} />
@@ -422,7 +432,7 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
               className={s.send}
               title={blocked ? t("ai.fit.blocked") : t("ai.send")}
               aria-label={t("ai.send")}
-              disabled={!canSend || resolving}
+              disabled={!canSend || resolving || menu.busy}
               onClick={() => void submit("enter")}
             >
               <Icon name="arrow-up" size={14} />

@@ -58,7 +58,7 @@ import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
 import { conversationModel, judgeChosen, sameModel } from "./models";
 import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
-import { leadingCommand } from "./commands";
+import { menuSources, useMcp } from "./mcp";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
 import {
   blankSlot,
@@ -1062,11 +1062,14 @@ export async function editAndResend(slotId: string, entryId: string, raw: string
  */
 function restoreDraft(slotId: string, text: string) {
   const { attachments, typed } = parseMessage(text);
-  // A skill or prompt keeps the command that attached it, so that running the command again replaces it (AI-50).
-  const command = leadingCommand(typed)?.name;
+  // A skill or prompt keeps the command that attached it, so that running the command again replaces it (AI-50): a
+  // prompt's as the running servers name it now, whatever else the text holds (a joined message may start with another).
+  const { servers, status } = useMcp.getState();
+  const prompts = menuSources(servers ?? [], status, getSlot(slotId).mcpOff).prompts;
   const extras: PendingAttachment[] = attachments.flatMap((a): PendingAttachment[] => {
     if (a.kind === "selection" || a.kind === "diagnostics") return [];
-    const by = a.kind === "skill" ? a.name : a.kind === "mcp_prompt" ? command : undefined;
+    const by =
+      a.kind === "skill" ? a.name : a.kind === "mcp_prompt" ? prompts.find((p) => p.server === a.server && p.prompt.name === a.name)?.command : undefined;
     return [{ id: `x${++extraSeq}`, attachment: a, ...(by ? { command: by } : {}) }];
   });
   patchSlot(slotId, (s) => messageBack(s, { typed, chips: [], extras, restore: () => [] }));
@@ -1627,33 +1630,35 @@ export function removeDiagnostics(tabId: string) {
 
 /**
  * AI-21 Compact: the summary becomes the start of the context. `instructions`: what `/compact <instructions>` asks
- * of the summary (AI-50).
+ * of the summary (AI-50). Resolves to whether a summary was stored.
  */
-export async function compactConversation(slotId: string, instructions: string | null = null) {
+export async function compactConversation(slotId: string, instructions: string | null = null): Promise<boolean> {
   const slot = getSlot(slotId);
   const id = slot.conversationId;
-  if (!id || slot.turn || slot.compacting || reverting(slotId)) return;
+  if (!id || slot.turn || slot.compacting || reverting(slotId)) return false;
   const context = turnContext(slotId);
   if (!context) {
     toast(t("ai.err.noModel"), "error");
-    return;
+    return false;
   }
   patchSlot(slotId, { compacting: true });
   try {
     const entry = await api.ai_compact(id, context, instructions);
     // The slot that shows the conversation now: it may have moved meanwhile (Connect to host).
     const target = slotOf(id);
-    if (!target) return;
+    if (!target) return true;
     patchSlot(target, (s) => ({
       compacting: false,
       entries: upsertEntry(s.entries, entry),
       conversation: s.conversation ? { ...s.conversation, context_start: entry.entry_id } : s.conversation,
     }));
     void reloadSlot(target);
+    return true;
   } catch (e) {
     const target = slotOf(id);
     if (target) patchSlot(target, { compacting: false });
     toast(aiErrorMessage(e), "error");
+    return false;
   }
 }
 

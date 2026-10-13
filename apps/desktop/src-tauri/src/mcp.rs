@@ -61,6 +61,10 @@ const START_TIMEOUT: Duration = Duration::from_secs(60);
 const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// How long getting a prompt or reading a resource for the panel's menus may take (AI-50, AI-51).
 const FETCH_TIMEOUT: Duration = Duration::from_secs(60);
+/// The most text a prompt or resource attaches: what a whole message may attach (AI-35,
+/// `MESSAGE_MAX_BYTES` in `attachments.ts`). A larger one is refused here rather than sent to the
+/// WebView to be refused there.
+const MAX_FETCH_BYTES: usize = 512 * 1024;
 /// How long stopping every server waits for the starts in flight to end (their children are
 /// killed as soon as they see the stop).
 const START_STOP_WAIT: Duration = Duration::from_secs(5);
@@ -487,6 +491,18 @@ async fn list_extras(
             .ok()
     };
     futures::join!(prompts, resources)
+}
+
+/// The text of a prompt or resource (`what`) of the server `server`, unless it is over
+/// [`MAX_FETCH_BYTES`], more than a message attaches (AI-35).
+fn fits_message(text: String, server: &str, what: &str) -> Result<String, String> {
+    if text.len() > MAX_FETCH_BYTES {
+        return Err(format!(
+            "the {what} of the MCP server \"{server}\" is over {} KB, more than a message can attach",
+            MAX_FETCH_BYTES / 1024
+        ));
+    }
+    Ok(text)
 }
 
 // ───────────────────────── the manager ─────────────────────────
@@ -1176,14 +1192,24 @@ impl McpManager {
             if s.phase != McpServerState::Running {
                 return;
             }
-            let stored = prompts.is_some() || resources.is_some();
-            if let Some(prompts) = prompts {
-                s.prompts = prompts;
+            if conn.is_closed() {
+                None
+            } else {
+                let stored = prompts.is_some() || resources.is_some();
+                if let Some(prompts) = prompts {
+                    s.prompts = prompts;
+                }
+                if let Some(resources) = resources {
+                    s.resources = resources;
+                }
+                Some(stored)
             }
-            if let Some(resources) = resources {
-                s.resources = resources;
-            }
-            stored
+        };
+        let Some(stored) = stored else {
+            // The session ended during the listing: the server fails, as a call that finds it
+            // closed fails it, rather than showing `running` until the next request.
+            self.lost(vault, id, generation);
+            return;
         };
         if stored {
             tracing::info!(server_id = id, "MCP prompts and resources listed");
@@ -1255,12 +1281,14 @@ impl McpManager {
         let (conn, generation, name) = self.fetch_connection(vault, server_id).await?;
         let result = conn.get_prompt(prompt, arguments, FETCH_TIMEOUT).await;
         tracing::info!(server_id, ok = result.is_ok(), "MCP prompt fetched");
-        result.map_err(|e| {
-            if e == McpError::Closed {
-                self.lost(vault, server_id, generation);
-            }
-            format!("the MCP server \"{name}\" could not get the prompt: {e}")
-        })
+        result
+            .map_err(|e| {
+                if e == McpError::Closed {
+                    self.lost(vault, server_id, generation);
+                }
+                format!("the MCP server \"{name}\" could not get the prompt: {e}")
+            })
+            .and_then(|text| fits_message(text, &name, "prompt"))
     }
 
     /// Reads a resource for the panel's `@` menu (AI-51): its text, or why it failed.
@@ -1273,12 +1301,14 @@ impl McpManager {
         let (conn, generation, name) = self.fetch_connection(vault, server_id).await?;
         let result = conn.read_resource(uri, FETCH_TIMEOUT).await;
         tracing::info!(server_id, ok = result.is_ok(), "MCP resource read");
-        result.map_err(|e| {
-            if e == McpError::Closed {
-                self.lost(vault, server_id, generation);
-            }
-            format!("the MCP server \"{name}\" could not read the resource: {e}")
-        })
+        result
+            .map_err(|e| {
+                if e == McpError::Closed {
+                    self.lost(vault, server_id, generation);
+                }
+                format!("the MCP server \"{name}\" could not read the resource: {e}")
+            })
+            .and_then(|text| fits_message(text, &name, "resource"))
     }
 
     /// Keeps the offer a conversation's calls map back to: that of its latest request, or, once
