@@ -170,6 +170,7 @@ each item → AES-256-GCM(vault_key)
 | SEC-08 | Clear a copied password from the clipboard, if it still holds it, after a delay chosen per device: 30, 60, or 90 seconds (the default), 2 or 5 minutes, or never | P1 |
 | SEC-09 | Show password strength (zxcvbn) when setting the master password, with a warning below a score of 2. Only the minimum of 12 characters blocks it | P1 |
 | SEC-10 | Touch ID unlock (with the macOS version): store vault_key in the macOS Keychain with biometric access control | P2 |
+| SEC-11 | Optional passwordless mode: the vault can be created with a random master password (24 random bytes, base64) that only the OS credential store holds — Windows Credential Manager, macOS Keychain, or Secret Service — so the app unlocks on its own at launch and from the unlock screen. Setting a master password later runs the ordinary change flow and deletes the entry; removing one stores a fresh random password. Data stays encrypted at rest exactly as with a chosen password; the recovery code is the only way in if the entry is lost | P1 |
 
 ### 4.4 Threat model
 
@@ -642,7 +643,7 @@ In the MVP, deleted items keep their tombstones forever (`envelope = NULL, delet
 
 **Flow A: enable sync on the first device**
 
-1. On first launch, create the local vault: set the master password, generate the recovery code, and have the user confirm it is saved. From here on the app works fully offline.
+1. On first launch, create the local vault: set the master password, or start without one (VAULT-09), generate the recovery code, and have the user confirm it is saved. From here on the app works fully offline.
 2. Open **Cloud Sync** in the sidebar, choose Worker mode, enter the Worker URL and the setup token, and select **Test Connection** (which calls `/v1/health`). An in-app deployment (§6.7) supplies the URL and the setup token itself.
 3. Call `/v1/setup` to upload meta, then sign in and push all items.
 
@@ -879,6 +880,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | VAULT-06 | Reset the master password with the recovery code | P1 |
 | VAULT-07 | Export an encrypted backup: a single file that uses the same envelope format | P1 |
 | VAULT-08 | Plaintext export (asks for the master password again and shows a warning) | P2 |
+| VAULT-09 | First launch may start without a master password (SEC-11): a third wizard choice, followed by the same recovery-code step, since that code is the way back if the credential-store entry is lost | P1 |
 
 ### 8.2 Hosts
 

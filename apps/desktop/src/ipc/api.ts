@@ -119,6 +119,14 @@ export interface HatobaApi {
   vault_create(password: string): Promise<string>;
   vault_unlock(password: string): Promise<void>;
   vault_unlock_biometric(): Promise<void>;
+  /** Issue #190: create the vault without a master password; one is stored in the OS credential store. */
+  vault_create_keychain(): Promise<string>;
+  /** Issue #190: unlock with the stored device password. */
+  vault_unlock_keychain(): Promise<void>;
+  /** Issue #190: set a master password, ending the stored-device-password mode. */
+  vault_set_password(password: string): Promise<void>;
+  /** Issue #190: go back to the stored-device-password mode; `current` is the master password. */
+  vault_remove_password(current: string): Promise<void>;
   vault_lock(): Promise<void>;
   vault_verify_password(password: string): Promise<boolean>;
   vault_change_password(current: string, next: string): Promise<void>;

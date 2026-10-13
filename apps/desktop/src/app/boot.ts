@@ -18,7 +18,16 @@ export async function boot() {
 
     const vault = await useApp.getState().refreshVault();
     if (vault.state === "unlocked") await enterUnlocked();
-    else useApp.setState({ phase: vault.state === "uninitialized" ? "onboarding" : "locked" });
+    // #190: a vault without a master password unlocks from the OS credential store, so the app
+    // opens straight in. A failure falls back to the unlock screen, which offers the same unlock.
+    else if (vault.state === "locked" && vault.keychain_unlock) {
+      try {
+        await api.vault_unlock_keychain();
+        await enterUnlocked();
+      } catch {
+        useApp.setState({ phase: "locked" });
+      }
+    } else useApp.setState({ phase: vault.state === "uninitialized" ? "onboarding" : "locked" });
   } catch (e) {
     console.error("boot failed", e);
     applyPrefs(DEFAULT_PREFS);

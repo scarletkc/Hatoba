@@ -172,6 +172,68 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Issue #190: sets the first master password on a vault that runs without one. */
+export function SetPasswordDialog({ onClose, onDone }: { onClose: () => void; onDone: () => Promise<void> | void }) {
+  const t = useT();
+  const syncOn = useApp((st) => st.sync?.kind !== undefined && st.sync.kind !== "none");
+  const pw = useNewPassword();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!pw.valid || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.vault_set_password(pw.password);
+      pw.setPassword("");
+      pw.setConfirm("");
+      await onDone();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(t, err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      width={480}
+      onClose={busy ? undefined : onClose}
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <FooterSpacer />
+          <Button onClick={onClose} disabled={busy}>
+            {t("btn.cancel")}
+          </Button>
+          <Button variant="primary" busy={busy} disabled={!pw.valid} onClick={() => void submit()}>
+            {t("settings.set.submit")}
+          </Button>
+        </>
+      }
+    >
+      <SheetHeader title={t("settings.set.title")} subtitle={syncOn ? t("sync.password.body") : undefined} />
+      <form className={s.form} onSubmit={(e) => void submit(e)}>
+        <NewPasswordFields
+          state={pw}
+          autoFocus
+          disabled={busy}
+          passwordLabel={t("settings.change.new")}
+          confirmLabel={t("vault.field.confirm")}
+        />
+        {error && (
+          <div className={s.error} role="alert">
+            {error}
+          </div>
+        )}
+        <button type="submit" hidden />
+      </form>
+    </Sheet>
+  );
+}
+
 /** Shows a freshly rotated recovery code. The old one is already void, so leaving needs the same confirmation as setup. */
 export function NewRecoveryDialog({ code, onClose }: { code: string; onClose: () => void }) {
   const t = useT();

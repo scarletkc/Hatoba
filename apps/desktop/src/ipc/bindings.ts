@@ -45,6 +45,27 @@ export const commands = {
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
 	/**  SEC-07 (P1): Windows Hello. */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
+	/**
+	 *  Issue #190: creates the vault without a master password for its user to remember or type. The
+	 *  vault itself is an ordinary one, encrypted with a random password that only the OS credential
+	 *  store holds; the recovery code is the way back if that entry is ever lost.
+	 */
+	vaultCreateKeychain: () => __TAURI_INVOKE<string>("vault_create_keychain"),
+	/**
+	 *  Unlocks with the stored device password: the app start and the unlock screen use it, so the
+	 *  user never types anything (issue #190).
+	 */
+	vaultUnlockKeychain: () => __TAURI_INVOKE<null>("vault_unlock_keychain"),
+	/**
+	 *  Issue #190: gives the vault a master password its user chose, ending the stored-device-password
+	 *  mode. The stored password is the current one; the entry goes once the change is through.
+	 */
+	vaultSetPassword: (password: string) => __TAURI_INVOKE<null>("vault_set_password", { password }),
+	/**
+	 *  Issue #190: goes back to the stored-device-password mode: a fresh random password takes the
+	 *  user's place and moves into the OS credential store.
+	 */
+	vaultRemovePassword: (current: string) => __TAURI_INVOKE<null>("vault_remove_password", { current }),
 	vaultLock: () => __TAURI_INVOKE<void>("vault_lock"),
 	vaultVerifyPassword: (password: string) => __TAURI_INVOKE<boolean>("vault_verify_password", { password }),
 	/**
@@ -2170,6 +2191,11 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+	/**
+	 *  #190: the vault runs without a master password; one is stored in the OS credential
+	 *  store, so the app can unlock on its own.
+	 */
+	keychain_unlock: boolean,
 };
 
 /**

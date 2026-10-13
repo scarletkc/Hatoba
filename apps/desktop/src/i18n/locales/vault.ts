@@ -16,6 +16,8 @@ export default defineMessages({
 
     "vault.unlock.title": "Hatoba 已锁定",
     "vault.unlock.subtitle": "输入主密码以解锁保险库",
+    "vault.unlock.keychainSubtitle": "此保险库没有主密码，点击即可解锁。",
+    "vault.unlock.keychain": "解锁 Hatoba",
     "vault.unlock.field": "主密码",
     "vault.unlock.submit": "解锁",
     "vault.unlock.or": "或",
@@ -41,6 +43,8 @@ export default defineMessages({
     "vault.welcome.body": "选择如何开始。",
     "vault.opt.create": "创建新保险库",
     "vault.opt.createDesc": "数据只保存在本机，之后可以随时开启云同步",
+    "vault.opt.keychain": "不设密码开始",
+    "vault.opt.keychainDesc": "随机生成的主密码由系统凭据存储保管，打开 Hatoba 无需输入。数据在本机仍然加密，之后可在设置中设置主密码。",
     "vault.opt.restore": "从云端恢复",
     "vault.opt.restoreDesc": "在新设备上，从你的 Cloudflare Worker 恢复保险库",
 
@@ -93,6 +97,8 @@ export default defineMessages({
 
     "vault.unlock.title": "Hatoba is locked",
     "vault.unlock.subtitle": "Enter your master password to unlock the vault",
+    "vault.unlock.keychainSubtitle": "This vault has no master password; one click unlocks it.",
+    "vault.unlock.keychain": "Unlock Hatoba",
     "vault.unlock.field": "Master password",
     "vault.unlock.submit": "Unlock",
     "vault.unlock.or": "or",
@@ -118,6 +124,8 @@ export default defineMessages({
     "vault.welcome.body": "Choose how to get started.",
     "vault.opt.create": "Create a New Vault",
     "vault.opt.createDesc": "Your data stays on this device. You can turn on Cloud Sync any time.",
+    "vault.opt.keychain": "Start Without a Password",
+    "vault.opt.keychainDesc": "A random master password is kept by your OS credential store, so Hatoba opens without typing one. Your data stays encrypted, and you can set a password any time in Settings.",
     "vault.opt.restore": "Restore from Cloud",
     "vault.opt.restoreDesc": "On a new device, restore your vault from your own Cloudflare Worker.",
 
@@ -170,6 +178,8 @@ export default defineMessages({
 
     "vault.unlock.title": "Hatoba はロックされています",
     "vault.unlock.subtitle": "マスターパスワードを入力して保管庫のロックを解除",
+    "vault.unlock.keychainSubtitle": "この保管庫にマスターパスワードはありません。クリックでロックを解除できます。",
+    "vault.unlock.keychain": "Hatoba のロックを解除",
     "vault.unlock.field": "マスターパスワード",
     "vault.unlock.submit": "ロック解除",
     "vault.unlock.or": "または",
@@ -195,6 +205,8 @@ export default defineMessages({
     "vault.welcome.body": "開始方法を選んでください。",
     "vault.opt.create": "新しい保管庫を作成",
     "vault.opt.createDesc": "データはこのデバイスにだけ保存されます。クラウド同期はあとからいつでもオンにできます。",
+    "vault.opt.keychain": "パスワードなしで始める",
+    "vault.opt.keychainDesc": "ランダムなマスターパスワードを OS の資格情報ストアに保管するため、入力は不要です。データは引き続き暗号化され、パスワードは設定からいつでも設定できます。",
     "vault.opt.restore": "クラウドから復元",
     "vault.opt.restoreDesc": "新しいデバイスで、自分の Cloudflare Worker から保管庫を復元します。",
 

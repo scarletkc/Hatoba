@@ -29,6 +29,9 @@ pub struct VaultStatus {
     pub sync_kind: SyncKind,
     pub biometric_available: bool,
     pub biometric_enabled: bool,
+    /// #190: the vault runs without a master password; one is stored in the OS credential
+    /// store, so the app can unlock on its own.
+    pub keychain_unlock: bool,
 }
 
 // ───────────────────────── Hosts ─────────────────────────

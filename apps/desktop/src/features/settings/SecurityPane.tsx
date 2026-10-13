@@ -7,7 +7,7 @@ import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
-import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "./dialogs";
+import { ChangePasswordDialog, NewRecoveryDialog, SetPasswordDialog, VerifyPasswordDialog } from "./dialogs";
 import { durationLabel } from "./durations";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./SecurityPane.module.css";
@@ -15,7 +15,7 @@ import s from "./SecurityPane.module.css";
 const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 240, 480, 0];
 const CLIPBOARD_CLEAR_SECS = [30, 60, 90, 120, 300, 0];
 
-type Dialog = null | "hello" | "recovery" | "password";
+type Dialog = null | "hello" | "recovery" | "password" | "set" | "remove";
 
 /** The choices, plus the stored value when it is none of them. */
 const withValue = (choices: number[], value: number) => (choices.includes(value) ? choices : [...choices, value]);
@@ -34,6 +34,8 @@ export function SecurityPane() {
 
   const mac = platform === "macos";
   const biometricLabel = mac ? t("settings.sec.touchId") : t("settings.sec.hello");
+  // #190: a vault that runs without a master password (a random one in the OS credential store).
+  const keychain = vault?.keychain_unlock ?? false;
 
   const setBiometric = async (on: boolean) => {
     if (on) return setDialog("hello");
@@ -85,15 +87,29 @@ export function SecurityPane() {
 
       <Group>
         <SettingRow label={t("settings.sec.password")}>
-          <Button icon="lock-key" onClick={() => setDialog("password")}>
-            {t("settings.sec.password.button")}
-          </Button>
+          {keychain ? (
+            <Button icon="lock-key" onClick={() => setDialog("set")}>
+              {t("settings.sec.setPassword.button")}
+            </Button>
+          ) : (
+            <Button icon="lock-key" onClick={() => setDialog("password")}>
+              {t("settings.sec.password.button")}
+            </Button>
+          )}
         </SettingRow>
         <SettingRow label={t("settings.sec.recovery")}>
           <Button icon="shield-check" onClick={() => setDialog("recovery")}>
             {t("settings.sec.recovery.button")}
           </Button>
         </SettingRow>
+        {/* #190: leave the password-protected mode; a vault without one has nothing to remove. */}
+        {!keychain && (
+          <SettingRow label={t("settings.sec.removePassword")} hint={t("settings.sec.removePassword.hint")}>
+            <Button icon="lock-key-open" onClick={() => setDialog("remove")}>
+              {t("settings.sec.removePassword.button")}
+            </Button>
+          </SettingRow>
+        )}
       </Group>
 
       <Group>
@@ -123,6 +139,26 @@ export function SecurityPane() {
         />
       )}
       {dialog === "password" && <ChangePasswordDialog onClose={() => setDialog(null)} />}
+      {dialog === "set" && (
+        <SetPasswordDialog
+          onClose={() => setDialog(null)}
+          onDone={async () => {
+            await useApp.getState().refreshVault();
+            toast(t("settings.setPassword.done"), "success");
+          }}
+        />
+      )}
+      {dialog === "remove" && (
+        <VerifyPasswordDialog
+          body={t("settings.verify.removePassword")}
+          onClose={() => setDialog(null)}
+          onVerify={async (pw) => {
+            await api.vault_remove_password(pw);
+            await useApp.getState().refreshVault();
+            toast(t("settings.removePassword.done"), "success");
+          }}
+        />
+      )}
       {newCode && <NewRecoveryDialog code={newCode} onClose={() => setNewCode(null)} />}
     </Pane>
   );

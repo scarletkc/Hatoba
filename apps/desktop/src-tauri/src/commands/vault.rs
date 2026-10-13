@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use base64::Engine as _;
+use hatoba_core::platform::{SecretStore, secret_keys};
 use hatoba_core::sync::{SyncConfig, flows, save_session};
 use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
@@ -26,6 +28,23 @@ fn check_new_password(field: &str, password: &str) -> AppResult<()> {
         ));
     }
     Ok(())
+}
+
+/// A random master password for a vault that runs without one (issue #190): 24 random bytes,
+/// base64, so it clears `check_new_password` with room to spare and never contains characters a
+/// command line or credential store could mangle. Only its holder — the OS credential store —
+/// ever sees it.
+fn generate_device_password() -> AppResult<Zeroizing<String>> {
+    let bytes = hatoba_core::crypto::random_bytes::<24>()
+        .map_err(|e| AppError::internal(format!("password randomness unavailable: {e:?}")))?;
+    Ok(Zeroizing::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes),
+    ))
+}
+
+/// The stored device password, or `None` for an ordinary password-protected vault.
+fn stored_device_password(state: &AppState) -> AppResult<Option<Zeroizing<String>>> {
+    Ok(state.secrets.get(secret_keys::DEVICE_PASSWORD)?)
 }
 
 /// Common work after any successful unlock (password, recovery code, biometrics, restore).
@@ -72,6 +91,12 @@ pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
         sync_kind,
         biometric_available: biometric::available(),
         biometric_enabled: info.initialized && biometric::enrolled(state.secrets.as_ref()),
+        // #190: a stored device password means the app can unlock on its own. A credential
+        // store that cannot be read counts as none, so the unlock screen asks for the password.
+        keychain_unlock: info.initialized
+            && stored_device_password(&state)
+                .map(|password| password.is_some())
+                .unwrap_or(false),
     }
 }
 
@@ -115,6 +140,90 @@ pub async fn vault_unlock(
     })
     .await?;
     after_unlock(&app, &state);
+    Ok(())
+}
+
+/// Issue #190: creates the vault without a master password for its user to remember or type. The
+/// vault itself is an ordinary one, encrypted with a random password that only the OS credential
+/// store holds; the recovery code is the way back if that entry is ever lost.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_create_keychain(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<String> {
+    let password = generate_device_password()?;
+    let vault = state.vault.clone();
+    let secrets = state.secrets.clone();
+    let code = blocking(move || {
+        let code = vault
+            .lock()
+            .map_err(|_| AppError::internal("vault poisoned"))?
+            .create(&password)?;
+        secrets.set(secret_keys::DEVICE_PASSWORD, &password)?;
+        Ok(code)
+    })
+    .await?;
+    after_unlock(&app, &state);
+    Ok(code.to_string())
+}
+
+/// Unlocks with the stored device password: the app start and the unlock screen use it, so the
+/// user never types anything (issue #190).
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_unlock_keychain(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let password = stored_device_password(&state)?.ok_or_else(|| {
+        AppError::new(
+            ErrorCode::NotFound,
+            "no device password is stored for this vault",
+        )
+    })?;
+    let vault = state.vault.clone();
+    blocking(move || {
+        Ok(vault
+            .lock()
+            .map_err(|_| AppError::internal("vault poisoned"))?
+            .unlock(&password)?)
+    })
+    .await?;
+    after_unlock(&app, &state);
+    Ok(())
+}
+
+/// Issue #190: gives the vault a master password its user chose, ending the stored-device-password
+/// mode. The stored password is the current one; the entry goes once the change is through.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_set_password(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    password: String,
+) -> AppResult<()> {
+    check_new_password("password", &password)?;
+    let current = stored_device_password(&state)?.ok_or_else(|| {
+        AppError::new(
+            ErrorCode::NotFound,
+            "this vault already asks for its master password",
+        )
+    })?;
+    change_password(&app, &state, &current, &password).await?;
+    state.secrets.delete(secret_keys::DEVICE_PASSWORD)?;
+    Ok(())
+}
+
+/// Issue #190: goes back to the stored-device-password mode: a fresh random password takes the
+/// user's place and moves into the OS credential store.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_remove_password(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    current: String,
+) -> AppResult<()> {
+    let next = generate_device_password()?;
+    change_password(&app, &state, &current, &next).await?;
+    state.secrets.set(secret_keys::DEVICE_PASSWORD, &next)?;
     Ok(())
 }
 
@@ -162,9 +271,20 @@ pub async fn vault_change_password(
     next: String,
 ) -> AppResult<()> {
     check_new_password("next", &next)?;
+    change_password(&app, &state, &current, &next).await
+}
+
+/// The password change both commands share: [`vault_change_password`] and the moves to and from
+/// a stored device password (issue #190).
+async fn change_password(
+    app: &AppHandle,
+    state: &AppState,
+    current: &str,
+    next: &str,
+) -> AppResult<()> {
     match state.sync.backend() {
         Some(backend) => {
-            flows::change_password_remote(&state.vault, backend.as_ref(), &current, &next).await?
+            flows::change_password_remote(&state.vault, backend.as_ref(), current, next).await?
         }
         None if state.sync_configured() => {
             return Err(AppError::new(
@@ -173,7 +293,7 @@ pub async fn vault_change_password(
             ));
         }
         None => {
-            let (cur, new) = (Zeroizing::new(current), Zeroizing::new(next));
+            let (cur, new) = (Zeroizing::new(current.to_owned()), Zeroizing::new(next.to_owned()));
             let vault = state.vault.clone();
             blocking(move || {
                 vault
@@ -186,7 +306,7 @@ pub async fn vault_change_password(
         }
     }
     // Biometric unlock wraps the vault key, which did not change, so it stays valid.
-    sync::emit_status(&app);
+    sync::emit_status(app);
     Ok(())
 }
 
@@ -337,5 +457,13 @@ mod tests {
         // Characters, not bytes: twelve CJK characters are enough, eleven are not.
         assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS)).is_ok());
         assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS - 1)).is_err());
+    }
+
+    #[test]
+    fn a_generated_device_password_is_long_and_never_repeats() {
+        let a = generate_device_password().unwrap();
+        let b = generate_device_password().unwrap();
+        assert!(a.chars().count() >= MIN_PASSWORD_CHARS);
+        assert_ne!(*a, *b);
     }
 }

@@ -116,6 +116,8 @@ export interface VaultStatus {
   biometric_available: boolean;
   /** Biometric unlock has been enrolled for this vault (P1). */
   biometric_enabled: boolean;
+  /** #190: no master password; one is stored in the OS credential store. */
+  keychain_unlock: boolean;
 }
 
 // ───────────────────────── Hosts ─────────────────────────

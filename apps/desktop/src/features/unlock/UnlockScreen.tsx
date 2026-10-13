@@ -28,6 +28,9 @@ export function UnlockScreen() {
   const [revealed, setRevealed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
+  // #190: no master password; the vault unlocks from the OS credential store instead.
+  const keychain = vault?.keychain_unlock ?? false;
+
   // The password shown goes back to dots when the window loses focus, so it is not left on screen
   // for whoever comes to the computer next.
   useEffect(() => {
@@ -114,6 +117,19 @@ export function UnlockScreen() {
     }
   };
 
+  const unlockKeychain = async () => {
+    if (busy || throttled) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.vault_unlock_keychain();
+      await enterUnlocked();
+    } catch (err) {
+      setBusy(false);
+      await fail(err);
+    }
+  };
+
   const message = throttled ? t("err.throttled", { s: remaining }) : error;
   const biometricLabel = platform === "macos" ? t("vault.unlock.touchId") : t("vault.unlock.hello");
 
@@ -123,65 +139,86 @@ export function UnlockScreen() {
       <div className={s.center}>
         <AppLogo className={s.logo} />
         <h1 className={s.title}>{t("vault.unlock.title")}</h1>
-        <div className={s.subtitle}>{t("vault.unlock.subtitle")}</div>
+        <div className={s.subtitle}>
+          {keychain ? t("vault.unlock.keychainSubtitle") : t("vault.unlock.subtitle")}
+        </div>
 
-        <form className={s.form} onSubmit={(e) => void submit(e)}>
-          <div
-            className={cx(s.field, message && s.fieldError, shake && s.shake, revealed && s.fieldRevealed)}
-            onAnimationEnd={() => setShake(false)}
-          >
-            <input
-              ref={input}
-              type={revealed ? "text" : "password"}
-              autoFocus
-              autoComplete="current-password"
-              aria-label={t("vault.unlock.field")}
-              aria-invalid={!!error || undefined}
-              spellCheck={false}
-              autoCorrect="off"
-              autoCapitalize="off"
-              disabled={throttled}
-              readOnly={busy}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(null);
-              }}
-            />
-            {/* Keeps the focus in the field, so typing and Enter go on from where they were. */}
+        {keychain ? (
+          <form className={s.form} onSubmit={(e) => e.preventDefault()}>
             <button
               type="button"
-              className={s.reveal}
-              aria-label={revealed ? t("field.hide") : t("field.show")}
-              title={revealed ? t("field.hide") : t("field.show")}
-              disabled={throttled}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setRevealed((v) => !v)}
+              className={cx(s.biometric, message && s.fieldError)}
+              disabled={busy || throttled}
+              onClick={() => void unlockKeychain()}
             >
-              <Icon name={revealed ? "eye-slash" : "eye"} />
+              {busy ? <Spinner size={13} /> : <Icon name="lock-key-open" />}
+              {t("vault.unlock.keychain")}
             </button>
-            <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
-              {busy ? <Spinner size={13} /> : <Icon name="arrow-right" />}
-            </button>
-          </div>
-          <div className={s.message} role="alert" aria-live="assertive">
-            {message}
-          </div>
-
-          {vault?.biometric_enabled && (
-            <>
-              <div className={s.divider}>{t("vault.unlock.or")}</div>
-              <button type="button" className={s.biometric} disabled={busy} onClick={() => void unlockBiometric()}>
-                <Icon name="fingerprint" />
-                {biometricLabel}
+            <div className={s.message} role="alert" aria-live="assertive">
+              {message}
+            </div>
+          </form>
+        ) : (
+          <form className={s.form} onSubmit={(e) => void submit(e)}>
+            <div
+              className={cx(s.field, message && s.fieldError, shake && s.shake, revealed && s.fieldRevealed)}
+              onAnimationEnd={() => setShake(false)}
+            >
+              <input
+                ref={input}
+                type={revealed ? "text" : "password"}
+                autoFocus
+                autoComplete="current-password"
+                aria-label={t("vault.unlock.field")}
+                aria-invalid={!!error || undefined}
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                disabled={throttled}
+                readOnly={busy}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (error) setError(null);
+                }}
+              />
+              {/* Keeps the focus in the field, so typing and Enter go on from where they were. */}
+              <button
+                type="button"
+                className={s.reveal}
+                aria-label={revealed ? t("field.hide") : t("field.show")}
+                title={revealed ? t("field.hide") : t("field.show")}
+                disabled={throttled}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setRevealed((v) => !v)}
+              >
+                <Icon name={revealed ? "eye-slash" : "eye"} />
               </button>
-            </>
-          )}
-        </form>
+              <button type="submit" className={s.go} aria-label={t("vault.unlock.submit")} disabled={!password || busy || throttled}>
+                {busy ? <Spinner size={13} /> : <Icon name="arrow-right" />}
+              </button>
+            </div>
+            <div className={s.message} role="alert" aria-live="assertive">
+              {message}
+            </div>
 
-        <button type="button" className={s.forgot} onClick={() => setRecovering(true)}>
-          {t("vault.unlock.forgot")}
-        </button>
+            {vault?.biometric_enabled && (
+              <>
+                <div className={s.divider}>{t("vault.unlock.or")}</div>
+                <button type="button" className={s.biometric} disabled={busy} onClick={() => void unlockBiometric()}>
+                  <Icon name="fingerprint" />
+                  {biometricLabel}
+                </button>
+              </>
+            )}
+          </form>
+        )}
+
+        {!keychain && (
+          <button type="button" className={s.forgot} onClick={() => setRecovering(true)}>
+            {t("vault.unlock.forgot")}
+          </button>
+        )}
       </div>
 
       <div className={s.foot}>

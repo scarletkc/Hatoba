@@ -109,6 +109,8 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  /** #190: the demo vault runs without a master password (?keychain). */
+  let keychain = q.get("keychain") === "on";
   let failed = 0;
   let retryAt: number | null = null;
   let sync: SyncStatus = makeSync();
@@ -273,6 +275,7 @@ export function createMockApi(): HatobaApi {
       sync_kind: sync.kind,
       biometric_available: true,
       biometric_enabled: biometric,
+      keychain_unlock: keychain,
     }),
     vault_create: async (password) => {
       await delay(600);
@@ -299,6 +302,30 @@ export function createMockApi(): HatobaApi {
     vault_unlock_biometric: async () => {
       await delay(700);
       vaultState = "unlocked";
+    },
+    vault_create_keychain: async () => {
+      await delay(600);
+      keychain = true;
+      vaultState = "unlocked";
+      hosts = [];
+      groups = [];
+      keys = [];
+      sync = { ...sync, kind: "none", state: "off", endpoint: null, database: null, last_synced_at: null, counts: null };
+      return recovery;
+    },
+    vault_unlock_keychain: async () => {
+      if (!keychain) fail("not_found", "no device password is stored for this vault");
+      await delay(450);
+      vaultState = "unlocked";
+    },
+    vault_set_password: async () => {
+      await delay(500);
+      keychain = false;
+    },
+    vault_remove_password: async (current) => {
+      await delay(500);
+      if (current.length < 4) fail("wrong_password");
+      keychain = true;
     },
     vault_lock: async () => {
       vaultState = "locked";

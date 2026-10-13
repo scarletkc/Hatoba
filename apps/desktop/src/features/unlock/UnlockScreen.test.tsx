@@ -72,4 +72,21 @@ describe("unlock screen", () => {
     expect(reveal().disabled).toBe(true);
     expect(field.type).toBe("password");
   });
+
+  it("offers a one-click unlock when the vault runs without a master password", () => {
+    setLocale("en");
+    act(() => useApp.setState({ vault: { keychain_unlock: true } as VaultStatus }));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    act(() => root.render(<UnlockScreen />));
+    unmount = () => {
+      root.unmount();
+      host.remove();
+    };
+    expect(document.querySelector(`input[aria-label="${t("vault.unlock.field")}"]`)).toBeNull();
+    const labels = [...document.querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).toContain(t("vault.unlock.keychain"));
+    expect(labels).not.toContain(t("vault.unlock.forgot"));
+  });
 });

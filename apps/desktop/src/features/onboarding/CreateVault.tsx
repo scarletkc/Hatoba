@@ -75,7 +75,16 @@ export function CreatePassword({
 }
 
 /** Flow A step 3: show the recovery code once and require confirmation before finishing (VAULT-02). */
-export function CreateRecovery({ steps, code }: { steps: string[]; code: string }) {
+export function CreateRecovery({
+  steps,
+  current = 3,
+  code,
+}: {
+  steps: string[];
+  /** The password-less flow (issue #190) reaches this step as the second of two. */
+  current?: number;
+  code: string;
+}) {
   const t = useT();
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,7 +99,7 @@ export function CreateRecovery({ steps, code }: { steps: string[]; code: string 
   return (
     <WizardCard
       steps={steps}
-      current={3}
+      current={current}
       title={t("vault.code.title")}
       body={t("vault.code.body")}
       onSubmit={() => void finish()}
