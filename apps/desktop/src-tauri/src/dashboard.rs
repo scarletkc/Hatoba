@@ -316,6 +316,14 @@ impl Dashboard {
         true
     }
 
+    /// Whether the dashboard still holds its own connection to the host.
+    fn owns(&self, host_id: &str) -> bool {
+        lock(&self.inner)
+            .hosts
+            .get(host_id)
+            .is_some_and(|e| e.own.is_some())
+    }
+
     /// Closes the dashboard's own connection to the host, now that a tab's serves it.
     fn drop_own(&self, host_id: &str) {
         let own = lock(&self.inner)
@@ -565,9 +573,17 @@ struct ProbeTarget {
 }
 
 impl ProbeTarget {
+    /// The proxy's credentials count too, as a hash: a probe through stale ones must not stand
+    /// for one through the right ones.
     fn key(&self) -> String {
         let via = self.proxy.as_ref().map_or_else(String::new, |p| {
-            format!(" via {:?} {}:{}", p.kind, p.host, p.port)
+            format!(
+                " via {:?} {}:{} as {:x}",
+                p.kind,
+                p.host,
+                p.port,
+                secret_hash(&[&p.username, &p.password])
+            )
         });
         format!("{}:{}{via}", self.host, self.port)
     }
@@ -852,7 +868,7 @@ async fn read_step(
     app: &AppHandle,
     host_id: &str,
     session: &SshSession,
-    tab: bool,
+    mut tab: bool,
     interval: Duration,
     config: String,
 ) -> Option<Duration> {
@@ -887,6 +903,17 @@ async fn read_step(
                     host_id: host.clone(),
                     stats: Box::new(stats_view(*stats)),
                 });
+                // A tab took the connection over: it is the tab's from now on.
+                if !tab && !dash.owns(host_id) {
+                    tab = true;
+                    dash.emit(DashboardEvent::Reading {
+                        host_id: host.clone(),
+                        os: session
+                            .server_os()
+                            .map(|os| hatoba_ssh::ServerOs::as_str(os).to_owned()),
+                        tab,
+                    });
+                }
                 // The dashboard's own connection serves the host as it was when it connected.
                 if !tab && checked.elapsed() >= CONFIG_CHECK {
                     checked = tokio::time::Instant::now();
@@ -1141,9 +1168,15 @@ mod tests {
             username: String::new(),
             password: zeroize::Zeroizing::new("secret".to_owned()),
         };
-        let via = target("bastion", Some(proxy)).key();
+        let via = target("bastion", Some(proxy.clone())).key();
         assert_ne!(via, target("bastion", None).key());
         assert!(!via.contains("secret"));
+        // Other credentials for the same proxy probe on their own.
+        let other = ProxyConfig {
+            password: zeroize::Zeroizing::new("other".to_owned()),
+            ..proxy
+        };
+        assert_ne!(target("bastion", Some(other)).key(), via);
     }
 
     #[tokio::test]
