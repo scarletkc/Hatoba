@@ -40,6 +40,13 @@ on:
 permissions:
   contents: read
 
+# Deploying runs build and deploy one run at a time, so an older run cannot deploy over a newer one;
+# a newer run waiting replaces any older one still waiting. A pull request's newer push cancels its
+# older build.
+concurrency:
+  group: site-${{ github.event_name == 'pull_request' && github.head_ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build
@@ -80,9 +87,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     steps:
       - id: deploy
         uses: actions/deploy-pages@v4
