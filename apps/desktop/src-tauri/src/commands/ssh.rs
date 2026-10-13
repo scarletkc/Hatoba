@@ -99,7 +99,7 @@ pub async fn ssh_connect(
 ) -> AppResult<String> {
     let session_id = uuid::Uuid::now_v7().to_string();
     let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
-    let (target, env) = state.with_unlocked(|v| {
+    let (target, env, version) = state.with_unlocked(|v| {
         let host = v
             .get(&host_id)
             .and_then(Item::as_host)
@@ -117,7 +117,7 @@ pub async fn ssh_connect(
                 Some(&overrides(&options)),
             )?)),
         };
-        Ok((target, host_env(&host)))
+        Ok((target, host_env(&host), version))
     })?;
     let (live, events) = open_terminal(
         &app,
@@ -125,7 +125,7 @@ pub async fn ssh_connect(
         target,
         env,
         &session_id,
-        Some(&host_id),
+        Some((&host_id, version)),
         &options,
     )
     .await?;
@@ -207,9 +207,13 @@ async fn open_terminal(
     target: Target,
     env: Vec<(String, String)>,
     session_id: &str,
-    host_id: Option<&str>,
+    host: Option<(&str, String)>,
     options: &ConnectOptions,
 ) -> AppResult<(Arc<LiveSession>, mpsc::Receiver<ShellEvent>)> {
+    let (host_id, config) = match host {
+        Some((id, config)) => (Some(id), Some(config)),
+        None => (None, None),
+    };
     emit_state(app, session_id, host_id, SessionState::Connecting, |_| {});
     let fail = |err: AppError| {
         emit_state(app, session_id, host_id, SessionState::Failed, |e| {
@@ -240,6 +244,7 @@ async fn open_terminal(
         session.clone(),
         shell,
         host_id.map(str::to_owned),
+        config,
     ));
     state.ssh.insert(session_id.to_owned(), live.clone());
     // HOST-13: the dashboard reads the host over this tab from now on.

@@ -32,6 +32,9 @@ pub struct LiveSession {
     pub shell: ShellHandle,
     /// The saved host the terminal connected to; `None` for a quick connection (HOST-12).
     pub host_id: Option<String>,
+    /// What the connection was made from (`dashboard::config_version`), so that the dashboard
+    /// reads a host over it only while the host still connects the same way (HOST-13).
+    pub config: Option<String>,
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
     pub forwards: Mutex<HashMap<String, ForwardHandle>>,
@@ -40,11 +43,17 @@ pub struct LiveSession {
 }
 
 impl LiveSession {
-    pub fn new(session: SshSession, shell: ShellHandle, host_id: Option<String>) -> Self {
+    pub fn new(
+        session: SshSession,
+        shell: ShellHandle,
+        host_id: Option<String>,
+        config: Option<String>,
+    ) -> Self {
         Self {
             session,
             shell,
             host_id,
+            config,
             sftp: OnceCell::new(),
             forwards: Mutex::new(HashMap::new()),
             stats: Mutex::new(None),
@@ -139,13 +148,16 @@ impl SshManager {
         }
     }
 
-    /// The connection of a terminal open on the saved host, which the dashboard reads over
-    /// (HOST-13). The newest tab's, when several are open.
-    pub fn connection_for_host(&self, host_id: &str) -> Option<SshSession> {
+    /// The connection of a terminal open on the saved host and made the way the host connects
+    /// now (`config`), which the dashboard reads over (HOST-13). The newest tab's, when several
+    /// are open; a tab still connected to the address the host had before an edit is not one.
+    pub fn connection_for_host(&self, host_id: &str, config: &str) -> Option<SshSession> {
         lock(&self.sessions)
             .iter()
             .filter(|(_, live)| {
-                live.host_id.as_deref() == Some(host_id) && !live.session.is_closed()
+                live.host_id.as_deref() == Some(host_id)
+                    && live.config.as_deref() == Some(config)
+                    && !live.session.is_closed()
             })
             // Session ids are UUIDv7, so the largest is the newest.
             .max_by(|(a, _), (b, _)| a.cmp(b))
@@ -502,7 +514,9 @@ impl KeyboardInteractive for Interactive {
 #[derive(Default)]
 pub struct Unattended {
     host_key: Mutex<Option<HostKeyPromptKind>>,
-    /// A hop's host key was trusted, so signing in to it began.
+    /// The hop being connected to, as its address and port: the last one reached.
+    hop: Mutex<Option<(String, u16)>>,
+    /// That hop's host key was trusted, so signing in to it began.
     signing_in: AtomicBool,
     prompted: AtomicBool,
     /// One of the prompts was a lone password prompt.
@@ -526,15 +540,22 @@ impl Unattended {
         self.password_prompted.load(Ordering::Relaxed)
     }
 
-    /// A hop's host key checked out, so a failure after it may come from signing in.
+    /// The last hop's host key checked out, so a failure after it may come from signing in to
+    /// that hop. An earlier hop that signed in does not count.
     pub fn signing_in(&self) -> bool {
         self.signing_in.load(Ordering::Relaxed)
+    }
+
+    /// The hop a failure happened at: the last one the connection reached.
+    pub fn hop(&self) -> Option<(String, u16)> {
+        lock(&self.hop).clone()
     }
 
     #[cfg(test)]
     pub fn for_tests(signing_in: bool, prompted: bool, password_prompted: bool) -> Self {
         Self {
             host_key: Mutex::new(None),
+            hop: Mutex::new(None),
             signing_in: AtomicBool::new(signing_in),
             prompted: AtomicBool::new(prompted),
             password_prompted: AtomicBool::new(password_prompted),
@@ -550,7 +571,10 @@ struct UnattendedVerifier {
 
 #[async_trait]
 impl HostKeyVerifier for UnattendedVerifier {
+    /// Asked as each hop's connection begins, so it also marks the hop being connected to.
     async fn known_key_types(&self, host: &str, port: u16) -> Vec<String> {
+        *lock(&self.outcome.hop) = Some((host.to_owned(), port));
+        self.outcome.signing_in.store(false, Ordering::Relaxed);
         let state = state(&self.app);
         let vault = state.vault();
         if !vault.is_unlocked() {

@@ -61,6 +61,7 @@ The background never shows a prompt. A host that cannot sign in on its own says 
 | Retry | 重试 | 再試行 |
 
 - A failed sign-in, with the server's answer, is not tried again on its own, so tools like fail2ban do not ban this computer. That includes a server that hangs up during sign-in, as one does after too many keys from the agent. **Retry** tries once more. Changing how the host connects (a new password, key, user, address or jump host, say) or confirming its host key in a tab also lets the dashboard try again; renaming it or marking it a favorite does not.
+- When a jump host turns one host away, every host behind it waits too, so its rejected password is not tried once per host. **Retry** on any of them tries again.
 - Other failures, such as a timeout or a lost connection, show the error and are tried again after a minute; **Retry** tries at once.
 
 ## Leaving hosts out

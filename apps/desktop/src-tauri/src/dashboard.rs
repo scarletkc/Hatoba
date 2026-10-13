@@ -78,6 +78,9 @@ struct Inner {
     watch: Option<Watch>,
     hosts: HashMap<String, HostEntry>,
     probes: HashMap<String, Arc<Probe>>,
+    /// Jump hosts that failed to sign in (or need the user) for one host, by item id: every
+    /// host behind one waits with it, so its rejected credentials are not tried again for each.
+    hop_holds: HashMap<String, Held>,
 }
 
 struct Watch {
@@ -99,6 +102,8 @@ struct HostEntry {
     released: u64,
     /// **Retry** asks the probe again rather than taking a recent answer.
     reprobe: bool,
+    /// The jump host whose hold the host waits on, which **Retry** also ends.
+    blocked_by: Option<String>,
 }
 
 struct Reader {
@@ -116,8 +121,10 @@ struct Own {
 struct Held {
     hold: DashboardHold,
     error: Option<AppError>,
-    /// [`Versions::all`] when it was held.
+    /// [`Versions::all`] when it was held, or [`JumpVersion::version`] for a jump host's hold.
     version: String,
+    /// The jump host it failed at, whose hold **Retry** ends too.
+    hop: Option<String>,
 }
 
 struct Probe {
@@ -217,12 +224,23 @@ impl Dashboard {
     /// **Retry**: signs in to a held host again, and looks at an offline or failed one now.
     pub fn retry(&self, host_id: &str) {
         let mut inner = lock(&self.inner);
-        if let Some(entry) = inner.hosts.get_mut(host_id) {
-            entry.hold = None;
-            entry.reprobe = true;
-            if let Some(reader) = &entry.reader {
-                reader.retry.notify_one();
-            }
+        let Some(entry) = inner.hosts.get_mut(host_id) else {
+            return;
+        };
+        let hops: Vec<String> = entry
+            .hold
+            .take()
+            .and_then(|h| h.hop)
+            .into_iter()
+            .chain(entry.blocked_by.take())
+            .collect();
+        entry.reprobe = true;
+        if let Some(reader) = &entry.reader {
+            reader.retry.notify_one();
+        }
+        // Only this host tries the jump host again; the others follow once it has signed in.
+        for hop in hops {
+            inner.hop_holds.remove(&hop);
         }
     }
 
@@ -389,16 +407,58 @@ impl Dashboard {
         entry.hold.as_ref().map(|h| (h.hold, h.error.clone()))
     }
 
-    fn hold(&self, host_id: &str, hold: DashboardHold, error: Option<AppError>, version: String) {
-        lock(&self.inner)
-            .hosts
-            .entry(host_id.to_owned())
-            .or_default()
-            .hold = Some(Held {
+    fn hold(
+        &self,
+        host_id: &str,
+        hold: DashboardHold,
+        error: Option<AppError>,
+        version: String,
+        hop: Option<&JumpVersion>,
+    ) {
+        let mut inner = lock(&self.inner);
+        if let Some(jump) = hop {
+            inner.hop_holds.insert(
+                jump.id.clone(),
+                Held {
+                    hold,
+                    error: error.clone(),
+                    version: jump.version.clone(),
+                    hop: None,
+                },
+            );
+        }
+        inner.hosts.entry(host_id.to_owned()).or_default().hold = Some(Held {
             hold,
             error,
             version,
+            hop: hop.map(|j| j.id.clone()),
         });
+    }
+
+    /// The hold of a jump host the host goes through, while the jump host connects as it did
+    /// when it was held.
+    fn jump_held(
+        &self,
+        host_id: &str,
+        jumps: &[JumpVersion],
+    ) -> Option<(DashboardHold, Option<AppError>)> {
+        let mut inner = lock(&self.inner);
+        let mut found = None;
+        for jump in jumps {
+            match inner.hop_holds.get(&jump.id) {
+                Some(h) if h.version == jump.version => {
+                    found = Some((jump.id.clone(), h.hold, h.error.clone()));
+                    break;
+                }
+                Some(_) => {
+                    inner.hop_holds.remove(&jump.id);
+                }
+                None => {}
+            }
+        }
+        let entry = inner.hosts.entry(host_id.to_owned()).or_default();
+        entry.blocked_by = found.as_ref().map(|(id, ..)| id.clone());
+        found.map(|(_, hold, error)| (hold, error))
     }
 
     fn unsupported(&self, host_id: &str, config: &str) -> Option<String> {
@@ -465,16 +525,28 @@ struct Versions {
     config: String,
     /// The trusted host keys of every hop: a key accepted in a tab ends a host key hold.
     trust: String,
+    /// Each jump host, outwards, with its own part of the two.
+    jumps: Vec<JumpVersion>,
+}
+
+/// A jump host of a chain, and how it connects: what its shared hold is valid for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct JumpVersion {
+    id: String,
+    address: String,
+    port: u16,
+    version: String,
 }
 
 impl Versions {
     /// Only what the connection is made from counts, so starring a host or a sync pull that
     /// changes its notes neither ends a hold nor closes a connection.
     fn of(vault: &Vault, host: &Host) -> Self {
-        let hops = hops(vault, host);
+        let hops = chain(vault, host);
         let mut config = Vec::new();
         let mut trust = Vec::new();
-        for (i, hop) in hops.iter().enumerate() {
+        let mut jumps = Vec::new();
+        for (i, (id, hop)) in hops.iter().enumerate() {
             let auth = match &hop.auth {
                 HostAuth::Password { password } => {
                     format!("password#{:x}", secret_hash(&[password]))
@@ -506,20 +578,31 @@ impl Versions {
             } else {
                 String::new()
             };
-            config.push(format!(
+            let hop_config = format!(
                 "{}@{}:{} {auth} {proxy}",
                 hop.username, hop.address, hop.port
-            ));
+            );
             let mut keys: Vec<String> = known_host_keys(vault, &hop.address, hop.port)
                 .into_iter()
                 .map(|(_, k)| k.fingerprint)
                 .collect();
             keys.sort();
-            trust.push(keys.join(","));
+            let hop_trust = keys.join(",");
+            if let Some(id) = id {
+                jumps.push(JumpVersion {
+                    id: (*id).to_owned(),
+                    address: hop.address.clone(),
+                    port: hop.port,
+                    version: format!("{hop_config}|{hop_trust}"),
+                });
+            }
+            config.push(hop_config);
+            trust.push(hop_trust);
         }
         Self {
             config: config.join(";"),
             trust: trust.join(";"),
+            jumps,
         }
     }
 
@@ -540,19 +623,25 @@ fn secret_hash(parts: &[&str]) -> u64 {
     hasher.finish()
 }
 
-/// The host, then its jump hosts outwards, as far as the chain goes without looping.
-fn hops<'a>(vault: &'a Vault, host: &'a Host) -> Vec<&'a Host> {
-    let mut hops = vec![host];
+/// The host, then its jump hosts outwards with their ids, as far as the chain goes without
+/// looping.
+fn chain<'a>(vault: &'a Vault, host: &'a Host) -> Vec<(Option<&'a str>, &'a Host)> {
+    let mut hops = vec![(None, host)];
     let mut seen = HashSet::new();
     let mut next = host.jump_host_id.as_deref();
     while let Some(id) = next.filter(|id| seen.insert(*id) && seen.len() <= 8) {
         let Some(jump) = vault.get(id).and_then(Item::as_host) else {
             break;
         };
-        hops.push(jump);
+        hops.push((Some(id), jump));
         next = jump.jump_host_id.as_deref();
     }
     hops
+}
+
+/// The host, then its jump hosts outwards.
+fn hops<'a>(vault: &'a Vault, host: &'a Host) -> Vec<&'a Host> {
+    chain(vault, host).into_iter().map(|(_, h)| h).collect()
 }
 
 /// Whether a hop asks for its password on every connection (SSH-03).
@@ -729,7 +818,9 @@ async fn connect_step(
     let state = state(app);
     let dash = &state.dashboard;
     let host = host_id.to_owned();
-    let tab = state.ssh.connection_for_host(host_id);
+    let tab = state
+        .ssh
+        .connection_for_host(host_id, &plan.versions.config);
     let unsupported = plan
         .no_proc
         .map(str::to_owned)
@@ -769,6 +860,16 @@ async fn connect_step(
             error,
         });
         // Never signs in on its own, but finds a tab opened on the host.
+        return Next::Wait(Some(RECHECK));
+    }
+    let jumps = plan.versions.jumps.clone();
+    // A jump host it goes through failed for another host behind it: not tried again from here.
+    if let Some((hold, error)) = dash.jump_held(host_id, &jumps) {
+        dash.emit(DashboardEvent::Held {
+            host_id: host,
+            hold,
+            error,
+        });
         return Next::Wait(Some(RECHECK));
     }
     let probe = match plan.probe {
@@ -819,6 +920,17 @@ async fn connect_step(
     let Ok(permit) = Arc::clone(&dash.setups).acquire_owned().await else {
         return Next::Wait(None);
     };
+    // Another host behind the same jump host may have been turned away while this one waited.
+    if let Some((hold, error)) = dash.jump_held(host_id, &jumps) {
+        drop(permit);
+        dash.emit(DashboardEvent::Held {
+            host_id: host,
+            hold,
+            error,
+        });
+        return Next::Wait(Some(RECHECK));
+    }
+    let destination = (cfg.host.clone(), cfg.port);
     let (result, outcome) = connect_unattended(app, cfg).await;
     drop(permit);
     let session = match result {
@@ -826,7 +938,15 @@ async fn connect_step(
         Err(error) => {
             match hold_for(&error, &outcome) {
                 Some(hold) => {
-                    dash.hold(host_id, hold, Some(error.clone()), version);
+                    // At a jump host, every host behind it waits with this one.
+                    let hop = outcome.hop().filter(|hop| *hop != destination).and_then(
+                        |(address, port)| {
+                            jumps
+                                .iter()
+                                .find(|j| j.address == address && j.port == port)
+                        },
+                    );
+                    dash.hold(host_id, hold, Some(error.clone()), version, hop);
                     dash.emit(DashboardEvent::Held {
                         host_id: host,
                         hold,
@@ -842,7 +962,10 @@ async fn connect_step(
         }
     };
     // A tab may have connected while this one did.
-    if let Some(tab) = state.ssh.connection_for_host(host_id) {
+    if let Some(tab) = state
+        .ssh
+        .connection_for_host(host_id, &plan.versions.config)
+    {
         close(session);
         return Next::Read {
             session: tab,
@@ -914,8 +1037,9 @@ async fn read_step(
                         tab,
                     });
                 }
-                // The dashboard's own connection serves the host as it was when it connected.
-                if !tab && checked.elapsed() >= CONFIG_CHECK {
+                // A connection serves the host as it was when it connected: after an edit or a
+                // sync pull, the reader connects again (a tab keeps its connection).
+                if checked.elapsed() >= CONFIG_CHECK {
                     checked = tokio::time::Instant::now();
                     let current = state.with_unlocked(|v| {
                         Ok(v.get(host_id)
@@ -1177,6 +1301,82 @@ mod tests {
             ..proxy
         };
         assert_ne!(target("bastion", Some(other)).key(), via);
+    }
+
+    #[test]
+    fn a_jump_host_that_turned_one_host_away_holds_every_host_behind_it() {
+        let dash = Dashboard::default();
+        let bastion = JumpVersion {
+            id: "bastion".to_owned(),
+            address: "bastion.example".to_owned(),
+            port: 22,
+            version: "v1".to_owned(),
+        };
+        let rejected = AppError::ssh(SshErrorKind::AuthFailed, "denied");
+        dash.hold(
+            "app-1",
+            DashboardHold::SignInFailed,
+            Some(rejected),
+            "app-1 v".to_owned(),
+            Some(&bastion),
+        );
+        // Another host behind it waits without trying the rejected credentials.
+        let held = dash.jump_held("app-2", std::slice::from_ref(&bastion));
+        assert_eq!(held.map(|(h, _)| h), Some(DashboardHold::SignInFailed));
+        // A host that goes through other jump hosts does not.
+        let other = JumpVersion {
+            id: "other".to_owned(),
+            ..bastion.clone()
+        };
+        assert!(
+            dash.jump_held("app-3", std::slice::from_ref(&other))
+                .is_none()
+        );
+
+        // Retry on any of them lets that one try the jump host again.
+        dash.retry("app-2");
+        assert!(
+            dash.jump_held("app-4", std::slice::from_ref(&bastion))
+                .is_none()
+        );
+
+        // So does a change to how the jump host connects.
+        dash.hold(
+            "app-1",
+            DashboardHold::SignInFailed,
+            None,
+            "app-1 v".to_owned(),
+            Some(&bastion),
+        );
+        let edited = JumpVersion {
+            version: "v2".to_owned(),
+            ..bastion.clone()
+        };
+        assert!(dash.jump_held("app-2", &[edited]).is_none());
+        assert!(dash.jump_held("app-2", &[bastion]).is_none());
+    }
+
+    #[test]
+    fn each_jump_host_has_a_version_of_its_own() {
+        let mut v = vault();
+        let bastion = v.put(None, host("bastion", password("pw"), None)).unwrap();
+        let id = v
+            .put(None, host("app", password("pw"), Some(&bastion)))
+            .unwrap();
+        let before = Versions::of(&v, &get(&v, &id));
+        assert_eq!(before.jumps.len(), 1);
+        assert_eq!(before.jumps[0].id, bastion);
+        assert_eq!(before.jumps[0].address, "bastion");
+        // The destination's own password does not change the jump host's version.
+        let mut app = get(&v, &id);
+        app.auth = password("new");
+        v.put(Some(&id), Item::Host(app)).unwrap();
+        let after = Versions::of(&v, &get(&v, &id));
+        assert_eq!(after.jumps, before.jumps);
+        let mut jump = get(&v, &bastion);
+        jump.auth = password("new");
+        v.put(Some(&bastion), Item::Host(jump)).unwrap();
+        assert_ne!(Versions::of(&v, &get(&v, &id)).jumps, before.jumps);
     }
 
     #[tokio::test]
