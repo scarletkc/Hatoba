@@ -962,11 +962,14 @@ async fn connect_step(
                 host_id: host.clone(),
                 online,
             });
-            dash.emit(DashboardEvent::Held {
-                host_id: host,
-                hold,
-                error: None,
-            });
+            // An offline host shows as offline.
+            if online {
+                dash.emit(DashboardEvent::Held {
+                    host_id: host,
+                    hold,
+                    error: None,
+                });
+            }
             return Next::Wait(Some(RECHECK));
         }
         Err(Stop::Failed(error)) => {
