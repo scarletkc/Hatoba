@@ -10,7 +10,7 @@ import { useTransfers } from "@/features/sftp/transfers";
 import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
 import type { AppError, AvailableUpdate, UpdateProgress } from "@/ipc/types";
-import { REPO_URL, bugReportUrl } from "@/lib/github";
+import { REPO_URL, WEBSITE_URL, bugReportUrl } from "@/lib/github";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
@@ -182,6 +182,9 @@ export function AboutPane() {
       )}
 
       <div className={s.links}>
+        <LinkButton icon="globe" onClick={() => void openExternal(WEBSITE_URL)}>
+          {t("settings.about.website")}
+        </LinkButton>
         <LinkButton icon="github-logo" onClick={() => void openExternal(REPO_URL)}>
           {t("settings.about.source")}
         </LinkButton>

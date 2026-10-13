@@ -1,6 +1,7 @@
 import type { AppInfo } from "@/ipc/types";
 
 export const REPO_URL = "https://github.com/scarletkc/Hatoba";
+export const WEBSITE_URL = "https://hatoba.fog.moe";
 
 const OS_NAMES: Partial<Record<AppInfo["platform"], string>> = { windows: "Windows", macos: "macOS", linux: "Linux" };
 

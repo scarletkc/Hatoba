@@ -105,6 +105,7 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 | Checking… | 正在检查… | 確認しています… |
 | Hatoba is up to date. | 已是最新版本。 | 最新バージョンです。 |
 | Copy version | 复制版本号 | バージョンをコピー |
+| Website | 官网 | Web サイト |
 | Source Code | 源代码 | ソースコード |
 | MIT License | MIT 许可证 | MIT ライセンス |
 | Report a Problem | 反馈问题 | 問題を報告 |
@@ -117,7 +118,7 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 - **Download and Install** asks first only when SSH sessions are open or file transfers are running, and says how many closing Hatoba will end. After **Install and Restart** (or right away when nothing would end), Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run. Update error messages are in `references/troubleshooting.md`.
 - **Automatically check for updates at startup** is on by default. When on, Hatoba asks GitHub once after the first unlock of each launch; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
 - When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
-- **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
+- **Website** opens https://hatoba.fog.moe, with downloads and these docs. **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
 - A card in the sidebar (**Enjoying Hatoba?**) asks once for a GitHub star, a day after first use and after a session has connected. **Star** opens the repository, **Report a Problem** opens the bug form, and the × closes it for good.
 
 ## Which settings sync

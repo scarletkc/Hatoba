@@ -174,3 +174,14 @@ jobs:
       - run: node scripts/release/release.mjs publish --notes release-notes/release-notes.md --dist dist
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # Rebuilds the website, whose download page offers the newest release and whose docs describe it.
+  # A release published with github.token starts no other workflow, so this one calls it.
+  site:
+    name: Site
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/site.yml

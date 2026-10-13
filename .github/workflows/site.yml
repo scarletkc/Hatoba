@@ -1,0 +1,86 @@
+name: Site
+
+# Builds the website in apps/site and deploys it to GitHub Pages, which serves it at
+# hatoba.fog.moe. The build reads the newest release from GitHub, so the Release workflow calls this
+# one after publishing; pull requests only build it.
+on:
+  push:
+    branches: [main]
+    # Keep in sync with the paths under pull_request.
+    paths:
+      - apps/site/**
+      - crates/hatoba-ai/src/skills/builtin/hatoba/**
+      - docs/media/**
+      - apps/desktop/src-tauri/app-icon.svg
+      - apps/desktop/src-tauri/icons/**
+      - apps/desktop/src-tauri/tauri.conf.json
+      - scripts/release/release.mjs
+      - README.md
+      - package.json
+      - pnpm-lock.yaml
+      - .github/workflows/site.yml
+  pull_request:
+    paths:
+      - apps/site/**
+      - crates/hatoba-ai/src/skills/builtin/hatoba/**
+      - docs/media/**
+      - apps/desktop/src-tauri/app-icon.svg
+      - apps/desktop/src-tauri/icons/**
+      - apps/desktop/src-tauri/tauri.conf.json
+      - scripts/release/release.mjs
+      - README.md
+      - package.json
+      - pnpm-lock.yaml
+      - .github/workflows/site.yml
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Reads the releases without the unauthenticated rate limit.
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The docs come from the release's tag.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @hatoba/site
+      - run: pnpm --filter @hatoba/site typecheck
+      - run: pnpm --filter @hatoba/site test
+      - run: pnpm --filter @hatoba/site build
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/site/dist
+
+  deploy:
+    name: Deploy
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

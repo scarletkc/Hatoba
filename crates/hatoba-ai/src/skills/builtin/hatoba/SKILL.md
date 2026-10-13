@@ -116,6 +116,7 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 *Newer information.* This skill describes the build it ships with. When the user asks about the latest version, recent changes, or whether a feature exists in a newer release, use `fetch_url` (when offered; in manual approval mode it asks first) or `web_search` on these pages:
 
 - https://github.com/scarletkc/Hatoba/releases/latest
+- https://hatoba.fog.moe/docs/ (these docs as of the newest release; each page names the version it describes)
 - https://api.github.com/repos/scarletkc/Hatoba/releases/latest (JSON)
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/README.md
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/docs/status.md

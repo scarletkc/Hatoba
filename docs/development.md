@@ -173,7 +173,7 @@ A page in the main area gets its narrowest in the smallest window (`MIN_SIZE` in
 
 ## Keep the built-in skill current
 
-The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.
+The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba, and the [website](#website) publishes them as its docs. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.
 
 - Each file stays under 15,000 characters, because `read_skill` shortens a longer file.
 - Quote UI labels in tables headed `| en | zh-CN | ja |`, copied character for character from the message tables in `apps/desktop/src/i18n/locales`, and only from messages without `{placeholders}`.
@@ -194,6 +194,18 @@ python scripts/media/video.py                        # hatoba-demo.mp4 with musi
 ```
 
 `--out DIR` writes somewhere else for a look before replacing the files. The video's music is synthesized by `scripts/media/music.py`, so it carries no license.
+
+## Website
+
+The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it, and deploys it to GitHub Pages from `main` and after each release.
+
+```sh
+pnpm --filter @hatoba/site dev    # http://localhost:4321
+pnpm --filter @hatoba/site test
+pnpm --filter @hatoba/site build  # writes apps/site/dist
+```
+
+The build reads the newest release from the GitHub API (set `GITHUB_TOKEN` if it hits the rate limit) and takes the docs from the built-in skill at that release's tag, so they describe the version people download. To preview a change to the docs, run it with `HATOBA_DOCS_REF=worktree`. A new reference file needs a place in `DOC_GROUPS` in [`apps/site/src/lib/docs.ts`](../apps/site/src/lib/docs.ts), which a test checks.
 
 ## Checks before committing
 
