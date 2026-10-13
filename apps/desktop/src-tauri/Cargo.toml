@@ -19,7 +19,8 @@ tauri-build = { version = "2.7", features = [] }
 hatoba-ai.workspace = true
 hatoba-core.workspace = true
 hatoba-ssh.workspace = true
-tauri = { version = "2.12", features = [] }
+# The system tray (issue #189): the sessions and forwards keep running without a window.
+tauri = { version = "2.12", features = ["tray-icon"] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-opener = "2.7"

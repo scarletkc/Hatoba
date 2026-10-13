@@ -79,6 +79,12 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
           <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
         </SettingRow>
+        {/* macOS's close button already hides the window and keeps the app running. */}
+        {platform !== "macos" && (
+          <SettingRow label={t("settings.tray")} hint={t("settings.tray.hint")}>
+            <Switch label={t("settings.tray")} checked={prefs.close_to_tray} onChange={(close_to_tray) => setPrefs({ close_to_tray })} />
+          </SettingRow>
+        )}
       </Group>
 
       <Group>

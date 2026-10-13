@@ -786,6 +786,8 @@ export interface LocalPrefs {
   dashboard_cpu_alert: number;
   dashboard_mem_alert: number;
   dashboard_disk_alert: number;
+  /** #189: the close button hides the window to the tray instead of quitting. */
+  close_to_tray: boolean;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */

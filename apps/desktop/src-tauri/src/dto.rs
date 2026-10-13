@@ -972,6 +972,9 @@ pub struct LocalPrefs {
     pub dashboard_cpu_alert: u32,
     pub dashboard_mem_alert: u32,
     pub dashboard_disk_alert: u32,
+    /// #189: the window's close button hides it to the tray instead of quitting, keeping the
+    /// sessions and forwards running. Off by default, and it needs a tray to exist.
+    pub close_to_tray: bool,
 }
 
 impl Default for LocalPrefs {
@@ -997,6 +1000,7 @@ impl Default for LocalPrefs {
             dashboard_cpu_alert: 90,
             dashboard_mem_alert: 90,
             dashboard_disk_alert: 90,
+            close_to_tray: false,
         }
     }
 }

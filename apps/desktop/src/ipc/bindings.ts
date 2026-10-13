@@ -1581,6 +1581,11 @@ export type LocalPrefs = {
 	dashboard_cpu_alert: number,
 	dashboard_mem_alert: number,
 	dashboard_disk_alert: number,
+	/**
+	 *  #189: the window's close button hides it to the tray instead of quitting, keeping the
+	 *  sessions and forwards running. Off by default, and it needs a tray to exist.
+	 */
+	close_to_tray: boolean,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";

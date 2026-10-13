@@ -17,6 +17,7 @@ mod platform;
 mod ssh;
 mod state;
 mod sync;
+mod tray;
 mod update;
 
 use commands::{
@@ -277,6 +278,7 @@ pub fn run() {
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());
             platform::window::show_main(&handle);
+            tray::init(&handle);
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -299,6 +301,16 @@ pub fn run() {
             {
                 api.prevent_close();
                 platform::window::hide_main(window.clone());
+            }
+            // Windows / Linux: the same close-to-tray behaviour behind a device pref, so nothing
+            // changes for anyone until it is turned on (issue #189). Without a tray — a session
+            // without a StatusNotifier — the close button quits as before.
+            #[cfg(not(target_os = "macos"))]
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if window.label() == platform::window::MAIN && tray::close_to_tray(window.app_handle()) =>
+            {
+                api.prevent_close();
+                let _ = window.hide();
             }
             _ => {}
         })
