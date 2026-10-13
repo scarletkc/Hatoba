@@ -53,14 +53,14 @@ The background never shows a prompt. A host that cannot sign in on its own says 
 |---|---|---|
 | Asks for a password on every connection | 每次连接都询问密码 | 接続のたびにパスワードを確認します |
 | The key’s passphrase isn’t saved | 密钥口令未保存 | 鍵のパスフレーズが保存されていません |
-| Asks for a verification code | 需要输入验证码等信息 | 確認コードなどの入力が必要です |
+| Asks for a password or verification code | 需要输入密码或验证码 | パスワードまたは確認コードの入力が必要です |
 | Host key not confirmed yet | 主机指纹尚未确认 | ホスト鍵がまだ確認されていません |
 | Host key changed | 主机指纹已变更 | ホスト鍵が変更されています |
 | Sign-in failed | 登录失败 | サインインに失敗しました |
 | Connect | 连接 | 接続 |
 | Retry | 重试 | 再試行 |
 
-- A failed sign-in, with the server's answer, is not tried again on its own, so tools like fail2ban do not ban this computer. That includes a server that hangs up during sign-in, as one does after too many keys from the agent. **Retry** tries once more. Changing how the host connects (a new password, key, user, address or jump host, say) or confirming its host key in a tab also lets the dashboard try again; renaming it or marking it a favorite does not.
+- A failed sign-in, with the server's answer, is not tried again on its own until the vault is locked and unlocked, so tools like fail2ban do not ban this computer. That includes a server that hangs up during sign-in, as one does after too many keys from the agent. **Retry** tries once more. Changing how the host connects (a new password, key, user, address or jump host, say) or confirming its host key in a tab also lets the dashboard try again; renaming it or marking it a favorite does not.
 - When a jump host turns one host away (or turns the dashboard away when the jump host itself is on it), every host behind it waits too, so its rejected password is not tried once per host. **Retry** on any of them tries again from that host only; the others follow once it gets past the jump host.
 - Other failures, such as a timeout or a lost connection, show the error and are tried again after a minute; **Retry** tries at once.
 

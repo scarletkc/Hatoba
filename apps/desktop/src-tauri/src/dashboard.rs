@@ -13,6 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasher, Hash, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -128,8 +129,8 @@ struct Held {
     error: Option<AppError>,
     /// [`Versions::all`] when it was held, or [`JumpVersion::version`] for a jump host's hold.
     version: String,
-    /// The jump host it failed at, whose hold **Retry** ends too.
-    hop: Option<String>,
+    /// The jump host it failed at, as it connected then, whose hold **Retry** ends too.
+    hop: Option<JumpVersion>,
     /// For a jump host's hold: the host whose **Retry** tries the jump host again. The other
     /// hosts behind it keep waiting until that one gets past it.
     retry_by: Option<String>,
@@ -255,6 +256,7 @@ impl Dashboard {
             .hold
             .take()
             .and_then(|h| h.hop)
+            .map(|jump| jump.id)
             .into_iter()
             .chain(entry.blocked_by.take())
             .collect();
@@ -271,13 +273,15 @@ impl Dashboard {
     }
 
     /// The lock (SEC-03): every reader stops and every connection of the dashboard closes now.
-    /// Held hosts stay held.
+    /// The holds go too: they were made with hashes of the credentials, which start over at the
+    /// lock ([`forget_secret_hashes`]), so a held host is tried once more after the unlock.
     pub fn stop_all(&self) {
         let sessions: Vec<SshSession> = {
             let mut inner = lock(&self.inner);
             inner.watch = None;
             inner.probes.clear();
             inner.hop_gates.clear();
+            inner.hop_holds.clear();
             inner
                 .hosts
                 .values_mut()
@@ -287,6 +291,8 @@ impl Dashboard {
                     }
                     entry.unsupported = None;
                     entry.read_with = None;
+                    entry.hold = None;
+                    entry.blocked_by = None;
                     entry.own.take().map(|own| own.session)
                 })
                 .collect()
@@ -483,7 +489,7 @@ impl Dashboard {
             hold,
             error,
             version,
-            hop: hop.map(|j| j.id.clone()),
+            hop: hop.cloned(),
             retry_by: None,
         });
     }
@@ -506,13 +512,13 @@ impl Dashboard {
             {
                 inner.hop_holds.remove(&jump.id);
             }
-            // A host held at the jump host follows as well. One held when the jump host connected
-            // another way has a stale version of its own, so its hold would end anyway.
+            // A host held at the jump host as it connects now follows as well; one turned away
+            // after the jump host changed stays held.
             for entry in inner.hosts.values_mut() {
                 if entry
                     .hold
                     .as_ref()
-                    .is_some_and(|h| h.hop.as_deref() == Some(jump.id.as_str()))
+                    .is_some_and(|h| h.hop.as_ref() == Some(jump))
                 {
                     entry.hold = None;
                 }
@@ -759,12 +765,41 @@ fn hop_config(vault: &Vault, hop: &Host, outermost: bool) -> String {
     )
 }
 
-/// A hash of secrets under a key drawn once per run, so a version can tell a changed password
-/// from the old one without holding either, or copying it.
+/// Mixed into every hash of secrets, and replaced at the lock: a hash made before it, which
+/// may linger in memory, can then no longer be checked against guesses. 0 until first used.
+static SALT: AtomicU64 = AtomicU64::new(0);
+
+/// A salt from the system's random source, never 0.
+fn new_salt() -> u64 {
+    let random = uuid::Uuid::new_v4().as_u128();
+    ((random as u64) ^ ((random >> 64) as u64)).max(1)
+}
+
+/// The lock (SEC-03): hashes of secrets start over, so none made while the vault was unlocked
+/// stays useful after it locks. Versions made before it no longer match any made after it.
+pub fn forget_secret_hashes() {
+    SALT.store(new_salt(), Ordering::Relaxed);
+}
+
+/// A hash of secrets, so a version can tell a changed password from the old one without
+/// holding either, or copying it.
 fn secret_hash(parts: &[&str]) -> u64 {
+    let salt = match SALT.load(Ordering::Relaxed) {
+        0 => {
+            let fresh = new_salt();
+            SALT.compare_exchange(0, fresh, Ordering::Relaxed, Ordering::Relaxed)
+                .map_or_else(|set| set, |_| fresh)
+        }
+        salt => salt,
+    };
+    salted_hash(salt, parts)
+}
+
+fn salted_hash(salt: u64, parts: &[&str]) -> u64 {
     static KEY: std::sync::OnceLock<std::collections::hash_map::RandomState> =
         std::sync::OnceLock::new();
     let mut hasher = KEY.get_or_init(Default::default).build_hasher();
+    salt.hash(&mut hasher);
     for part in parts {
         part.hash(&mut hasher);
     }
@@ -1343,6 +1378,34 @@ mod tests {
     }
 
     #[test]
+    fn the_lock_starts_hashes_of_secrets_over_and_ends_the_holds() {
+        // Another salt, another hash: one made before the lock matches none made after it.
+        assert_eq!(salted_hash(7, &["pw"]), salted_hash(7, &["pw"]));
+        assert_ne!(salted_hash(7, &["pw"]), salted_hash(8, &["pw"]));
+        let (a, b) = (new_salt(), new_salt());
+        assert!(a != 0 && b != 0 && a != b);
+        // The holds made with them go at the lock.
+        let dash = Dashboard::default();
+        let bastion = JumpVersion {
+            id: "bastion".to_owned(),
+            version: "v".to_owned(),
+        };
+        dash.hold(
+            "app",
+            DashboardHold::SignInFailed,
+            None,
+            "app v".to_owned(),
+            Some(&bastion),
+        );
+        dash.stop_all();
+        assert!(dash.held("app", "app v").is_none());
+        assert!(
+            dash.jump_held("other", std::slice::from_ref(&bastion))
+                .is_none()
+        );
+    }
+
+    #[test]
     fn readings_made_with_other_settings_are_dropped_once() {
         let dash = Dashboard::default();
         assert!(!dash.settings_changed("h", "a"));
@@ -1539,6 +1602,21 @@ mod tests {
                 .is_none()
         );
         assert!(dash.held("app-1", "app-1 v").is_none());
+        // One turned away after the jump host changed stays held when a connection made with
+        // its old settings gets past it.
+        let changed = JumpVersion {
+            version: "v-new".to_owned(),
+            ..bastion.clone()
+        };
+        dash.hold(
+            "app-5",
+            DashboardHold::SignInFailed,
+            None,
+            "app-5 v".to_owned(),
+            Some(&changed),
+        );
+        dash.passed(std::slice::from_ref(&bastion));
+        assert!(dash.held("app-5", "app-5 v").is_some());
 
         // So does a change to how the jump host connects.
         dash.hold(

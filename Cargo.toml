@@ -23,7 +23,7 @@ zeroize = { version = "1.8", features = ["zeroize_derive"] }
 async-trait = "0.1"
 base64 = "0.22"
 sha2 = "0.11"
-uuid = { version = "1", features = ["v7", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 bytes = "1"
 futures = "0.3"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
