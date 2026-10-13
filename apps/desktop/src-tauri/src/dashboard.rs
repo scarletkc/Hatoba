@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 use crate::convert::stats_view;
 use crate::dto::{DashboardEvent, DashboardHold, HostKeyPromptKind};
 use crate::error::{AppError, KeyParseErrorKind, SshErrorKind};
-use crate::ssh::{Unattended, build_config, connect_unattended, first_hop, known_host_keys};
+use crate::ssh::{Unattended, build_config, connect_unattended, known_host_keys};
 use crate::state::state;
 
 /// Connections being set up at the same time, from the TCP connection to the end of sign-in.
@@ -205,10 +205,17 @@ impl Dashboard {
                 entry.reader = Some(reader);
             }
         }
-        // What is neither read, connected nor held is forgotten.
-        inner
-            .hosts
-            .retain(|_, e| e.reader.is_some() || e.own.is_some() || e.hold.is_some());
+        // What is neither read, connected nor held is forgotten. The settings the page's readings
+        // came from, and a server found not to run Linux, stay until the lock: a host read again
+        // later drops readings made with other settings, and is not signed in to again to learn
+        // that it has no `/proc`.
+        inner.hosts.retain(|_, e| {
+            e.reader.is_some()
+                || e.own.is_some()
+                || e.hold.is_some()
+                || e.read_with.is_some()
+                || e.unsupported.is_some()
+        });
         id
     }
 
@@ -482,7 +489,8 @@ impl Dashboard {
     }
 
     /// A connection got past these jump hosts, so their holds end for every host behind them,
-    /// and those hosts no longer try them one at a time.
+    /// the one whose connection failed at them included, and those hosts no longer try them
+    /// one at a time.
     fn passed(&self, jumps: &[JumpVersion]) {
         let mut inner = lock(&self.inner);
         for jump in jumps {
@@ -498,6 +506,17 @@ impl Dashboard {
             {
                 inner.hop_holds.remove(&jump.id);
             }
+            // A host held at the jump host follows as well. One held when the jump host connected
+            // another way has a stale version of its own, so its hold would end anyway.
+            for entry in inner.hosts.values_mut() {
+                if entry
+                    .hold
+                    .as_ref()
+                    .is_some_and(|h| h.hop.as_deref() == Some(jump.id.as_str()))
+                {
+                    entry.hold = None;
+                }
+            }
         }
     }
 
@@ -507,8 +526,12 @@ impl Dashboard {
     /// held until the attempt's outcome is recorded.
     async fn through(&self, jumps: &[JumpVersion]) -> Option<Vec<OwnedSemaphorePermit>> {
         let mut permits = Vec::new();
-        // Outermost first, the order every chain through a jump host takes them in.
-        for jump in jumps.iter().rev() {
+        // In one order for every host, so two hosts whose chains were edited in between never
+        // wait on each other's gates.
+        let mut order: Vec<&JumpVersion> = jumps.iter().collect();
+        order.sort_by(|a, b| a.id.cmp(&b.id));
+        order.dedup_by(|a, b| a.id == b.id);
+        for jump in order {
             let gate = {
                 let mut inner = lock(&self.inner);
                 let entry = inner
@@ -647,41 +670,7 @@ impl Versions {
         let mut trust = Vec::new();
         let mut jumps: Vec<(usize, JumpVersion)> = Vec::new();
         for (i, (id, hop)) in hops.iter().enumerate() {
-            let auth = match &hop.auth {
-                HostAuth::Password { password } => {
-                    format!("password#{:x}", secret_hash(&[password]))
-                }
-                HostAuth::Key { key_id } => {
-                    let key = vault.get(key_id).and_then(Item::as_key).map(|k| {
-                        let passphrase = k.passphrase.as_deref().map_or("", |p| p.as_str());
-                        secret_hash(&[&k.private_key, passphrase])
-                    });
-                    format!("key:{key_id}#{:x}", key.unwrap_or(0))
-                }
-                HostAuth::Agent => "agent".to_owned(),
-                HostAuth::Ask => "ask".to_owned(),
-            };
-            // The proxy only matters on the first hop, the outermost one.
-            let proxy = if i + 1 == hops.len() {
-                match crate::ssh::resolve_proxy(vault, &hop.proxy) {
-                    Ok(Some(p)) => format!(
-                        "{:?} {}@{}:{}#{:x}",
-                        p.kind,
-                        p.username,
-                        p.host,
-                        p.port,
-                        secret_hash(&[&p.password])
-                    ),
-                    Ok(None) => "direct".to_owned(),
-                    Err(_) => "missing".to_owned(),
-                }
-            } else {
-                String::new()
-            };
-            let hop_config = format!(
-                "{}@{}:{} {auth} {proxy}",
-                hop.username, hop.address, hop.port
-            );
+            let hop_config = hop_config(vault, hop, i + 1 == hops.len());
             let mut keys: Vec<String> = known_host_keys(vault, &hop.address, hop.port)
                 .into_iter()
                 .map(|(_, k)| k.fingerprint)
@@ -718,6 +707,56 @@ impl Versions {
     fn all(&self) -> String {
         format!("{}|{}", self.config, self.trust)
     }
+
+    /// [`Versions::config`] alone, without reading the trusted keys of every hop.
+    fn config_of(vault: &Vault, host: &Host) -> String {
+        let hops = chain(vault, host);
+        hops.iter()
+            .enumerate()
+            .map(|(i, (_, hop))| hop_config(vault, hop, i + 1 == hops.len()))
+            .collect::<Vec<_>>()
+            .join(";")
+    }
+}
+
+/// How one hop of a chain connects: its target, its credentials (hashed) and, on the first
+/// hop (`outermost`), the proxy.
+fn hop_config(vault: &Vault, hop: &Host, outermost: bool) -> String {
+    let auth = match &hop.auth {
+        HostAuth::Password { password } => {
+            format!("password#{:x}", secret_hash(&[password]))
+        }
+        HostAuth::Key { key_id } => {
+            let key = vault.get(key_id).and_then(Item::as_key).map(|k| {
+                let passphrase = k.passphrase.as_deref().map_or("", |p| p.as_str());
+                secret_hash(&[&k.private_key, passphrase])
+            });
+            format!("key:{key_id}#{:x}", key.unwrap_or(0))
+        }
+        HostAuth::Agent => "agent".to_owned(),
+        HostAuth::Ask => "ask".to_owned(),
+    };
+    // The proxy only matters on the first hop, the outermost one.
+    let proxy = if outermost {
+        match crate::ssh::resolve_proxy(vault, &hop.proxy) {
+            Ok(Some(p)) => format!(
+                "{:?} {}@{}:{}#{:x}",
+                p.kind,
+                p.username,
+                p.host,
+                p.port,
+                secret_hash(&[&p.password])
+            ),
+            Ok(None) => "direct".to_owned(),
+            Err(_) => "missing".to_owned(),
+        }
+    } else {
+        String::new()
+    };
+    format!(
+        "{}@{}:{} {auth} {proxy}",
+        hop.username, hop.address, hop.port
+    )
 }
 
 /// A hash of secrets under a key drawn once per run, so a version can tell a changed password
@@ -799,12 +838,14 @@ struct Plan {
 fn plan(vault: &Vault, host_id: &str) -> Option<Plan> {
     let host = vault.get(host_id).and_then(Item::as_host)?;
     let versions = Versions::of(vault, host);
-    let connect = if hops(vault, host).into_iter().any(asks_password) {
+    let hops = hops(vault, host);
+    let connect = if hops.iter().any(|h| asks_password(h)) {
         Err(Stop::Hold(DashboardHold::Password))
     } else {
         build_config(vault, host, Some(host_id), None).map_err(Stop::Failed)
     };
-    let first = first_hop(vault, host);
+    // The first hop, the outermost one: where the TCP connection goes.
+    let first = hops.last().copied().unwrap_or(host);
     let probe = crate::ssh::resolve_proxy(vault, &first.proxy).map(|proxy| ProbeTarget {
         host: first.address.clone(),
         port: first.port,
@@ -1169,7 +1210,7 @@ async fn read_step(
                     let current = state.with_unlocked(|v| {
                         Ok(v.get(host_id)
                             .and_then(Item::as_host)
-                            .map(|h| Versions::of(v, h).config))
+                            .map(|h| Versions::config_of(v, h)))
                     });
                     if !matches!(current, Ok(Some(c)) if c == config) {
                         break Some(Duration::ZERO);
@@ -1200,7 +1241,7 @@ async fn read_step(
 
 /// The version `take_connection` compares, for `ssh_connect`.
 pub fn config_version(vault: &Vault, host: &Host) -> String {
-    Versions::of(vault, host).config
+    Versions::config_of(vault, host)
 }
 
 #[cfg(test)]
@@ -1344,6 +1385,7 @@ mod tests {
         }
         let trusted = Versions::of(&v, &get(&v, &id));
         assert_eq!(trusted.config, before.config);
+        assert_eq!(config_version(&v, &get(&v, &id)), trusted.config);
         assert_ne!(trusted.trust, before.trust);
         assert!(trusted.trust.contains("SHA256:a,SHA256:b"));
 
@@ -1366,6 +1408,7 @@ mod tests {
         v.put(Some(&bastion), Item::Host(jump)).unwrap();
         let edited = Versions::of(&v, &get(&v, &id));
         assert_ne!(edited.config, repassed.config);
+        assert_eq!(config_version(&v, &get(&v, &id)), edited.config);
         assert_ne!(edited.all(), repassed.all());
     }
 
@@ -1488,12 +1531,14 @@ mod tests {
             dash.jump_held("app-4", std::slice::from_ref(&bastion))
                 .is_some()
         );
-        // Once it got past the jump host, the others follow.
+        // Once it got past the jump host, the others follow, the one turned away first included.
+        assert!(dash.held("app-1", "app-1 v").is_some());
         dash.passed(std::slice::from_ref(&bastion));
         assert!(
             dash.jump_held("app-4", std::slice::from_ref(&bastion))
                 .is_none()
         );
+        assert!(dash.held("app-1", "app-1 v").is_none());
 
         // So does a change to how the jump host connects.
         dash.hold(

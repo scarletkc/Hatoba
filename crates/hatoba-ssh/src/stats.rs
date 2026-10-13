@@ -30,7 +30,8 @@ const MAX_STDERR: usize = 2048;
 const EXIT_NOT_FOUND: u32 = 127;
 /// The most filesystems a reading lists; a server with more lists the first ones `df` printed.
 const MAX_MOUNTS: usize = 32;
-/// The most `@mounts` lines a block keeps, so output without an `@end` cannot grow it for good.
+/// The most `@mounts` lines of filesystems that store files a block keeps, so output without an
+/// `@end` cannot grow it for good.
 const MAX_MOUNT_LINES: usize = 256;
 /// Filesystem types that hold no files of their own on a disk with room to fill: memory-backed
 /// ones, the kernel's, the layers of containers, and read-only images (always full).
@@ -438,10 +439,12 @@ impl Parser {
             // The header line does not parse, the filesystem's line does.
             Section::Disk => sample.disk = parse_df(line).or(sample.disk),
             Section::Mounts => {
+                // Only filesystems that store files count towards the cap, so a host with
+                // hundreds of container mounts still lists the disks `df` prints after them.
                 if let Some(mounts) = &mut self.block_mounts
                     && mounts.len() < MAX_MOUNT_LINES
                 {
-                    mounts.extend(parse_mount(line));
+                    mounts.extend(parse_mount(line).filter(stores_files));
                 }
             }
         }
@@ -1015,6 +1018,23 @@ ext4 /dev/sdb1 500 400 100 80% /data
             parser.block_mounts.as_ref().map(Vec::len),
             Some(MAX_MOUNT_LINES)
         );
+    }
+
+    #[test]
+    fn container_mounts_do_not_crowd_out_the_disks_after_them() {
+        let containers: String = (0..1000)
+            .map(|i| format!("tmpfs tmpfs 100 1 99 1% /run/pod{i}\n"))
+            .collect();
+        let samples = samples(&format!(
+            "@mounts\next4 /dev/sda1 100 40 60 40% /\n{containers}ext4 /dev/sdb1 100 40 60 40% /data\n@end\n"
+        ));
+        let points: Vec<String> = samples[0]
+            .stats(None)
+            .mounts
+            .into_iter()
+            .map(|m| m.mount_point)
+            .collect();
+        assert_eq!(points, ["/", "/data"]);
     }
 
     #[test]
