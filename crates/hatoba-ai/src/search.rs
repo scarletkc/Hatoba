@@ -521,21 +521,13 @@ pub fn pattern(given: &str, ignore_case: bool, multiline: bool) -> Result<Patter
                 .to_owned(),
         );
     }
-    let (leading_i, body) = match &ast {
-        Ast::Flags(set) if is_case_flag(&set.flags) => (true, &[][..]),
-        Ast::Concat(concat) => match concat.asts.split_first() {
-            Some((Ast::Flags(set), rest)) if is_case_flag(&set.flags) => (true, rest),
-            _ => (false, &concat.asts[..]),
-        },
-        other => (false, std::slice::from_ref(other)),
-    };
+    let mut body = ast.clone();
+    let leading_i = strip_case_flag(&mut body);
     let extended = if multiline {
         Err(MULTILINE)
     } else {
         let mut out = String::new();
-        body.iter()
-            .try_for_each(|ast| extended(ast, &mut out))
-            .map(|()| if out.is_empty() { "^".to_owned() } else { out })
+        extended(&body, &mut out).map(|()| if out.is_empty() { "^".to_owned() } else { out })
     };
     Ok(Pattern {
         rg: given.to_owned(),
@@ -551,6 +543,20 @@ fn invalid(kind: &impl Display, span: &ast::Span) -> String {
          they are.",
         span.start.column
     )
+}
+
+/// Takes out a `(?i)` that starts the pattern, also when it starts the first of its alternatives,
+/// which it covers too: whether there was one. One inside a group covers only the group.
+fn strip_case_flag(ast: &mut Ast) -> bool {
+    match ast {
+        Ast::Flags(set) if is_case_flag(&set.flags) => {
+            *ast = Ast::empty(set.span);
+            true
+        }
+        Ast::Concat(concat) => concat.asts.first_mut().is_some_and(strip_case_flag),
+        Ast::Alternation(alternation) => alternation.asts.first_mut().is_some_and(strip_case_flag),
+        _ => false,
+    }
 }
 
 fn is_case_flag(flags: &ast::Flags) -> bool {
@@ -790,7 +796,11 @@ impl Bracket {
             body.push('-');
         }
         if body.is_empty() {
-            // Only line breaks, which no line has.
+            // Only line breaks, which no line has: negated, any character of the line.
+            if self.negated {
+                out.push('.');
+                return Ok(());
+            }
             return Err(CONTROL);
         }
         out.push('[');
@@ -1532,6 +1542,21 @@ mod tests {
             ere(r"(?:a|b)(?P<n>c)+?x{2}y{1,}z{0,3}?"),
             "(a|b)(c)+x{2}y{1,}z{0,3}"
         );
+        // A leading (?i) covers every alternative, as rg reads it; one later covers only the rest.
+        let p = pattern("(?i)error|warn", false, false).unwrap();
+        assert_eq!(
+            (p.extended, p.ignore_case),
+            (Ok("error|warn".to_owned()), true)
+        );
+        assert!(
+            regex_syntax::parse("(?i)a|b")
+                .unwrap()
+                .to_string()
+                .contains('B')
+        );
+        for later in ["a|(?i)b", "((?i)a)b"] {
+            assert_eq!(pattern(later, false, false).unwrap().extended, Err(FLAGS));
+        }
         let p = pattern("(?i)error", false, false).unwrap();
         assert_eq!(
             (p.extended.unwrap(), p.ignore_case, p.rg.as_str()),
@@ -1590,8 +1615,13 @@ mod tests {
         );
         let p = pattern(r"struct \{[\s\S]*?field", false, true).unwrap();
         assert_eq!(p.rg, r"struct \{[\s\S]*?field");
-        // A class with \n leaves it out, as rg does.
+        // A class with \n leaves it out, as rg does: a negated one of \n alone is any character.
         assert_eq!(ere(r"[\na]"), "[a]");
+        assert_eq!(ere(r"a[^\n]*b"), "a.*b");
+        assert_eq!(
+            pattern(r"[\n]", false, false).unwrap().extended,
+            Err(CONTROL)
+        );
     }
 
     fn found<'a>(start: &'a str, stdout: &'a str, stderr: &'a str) -> Found<'a> {
