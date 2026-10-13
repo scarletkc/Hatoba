@@ -1160,8 +1160,8 @@ async fn results_are_stored_in_the_order_of_the_calls() {
     f.idle(&conv).await;
 }
 
-/// A result that waits for an earlier call's stops waiting on a stop, which gives every call
-/// without a result a cancelled one (AI-18).
+/// A result that waits for an earlier call's stops waiting on a stop, which stores what the tools
+/// that ended returned and gives every other call without a result a cancelled one (AI-18).
 #[tokio::test]
 async fn stopping_ends_the_wait_of_results_for_earlier_calls() {
     let f = Fixture::new(vec![calls(&[
@@ -1183,11 +1183,13 @@ async fn stopping_ends_the_wait_of_results_for_earlier_calls() {
         f.result(&conv, "call_3", AiToolStatus::Ok, "late", None),
         stop,
     );
-    assert_eq!(run.unwrap_err().code, ErrorCode::Cancelled);
+    // read_skill had ended, so the stop stored what it returned.
+    let run = run.unwrap();
+    assert_eq!(view_content(&run).1, AiToolStatus::Ok);
     assert_eq!(result.unwrap_err().code, ErrorCode::InvalidInput);
     assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
     let entries = f.entries(&conv);
-    let cancelled: Vec<(&str, ToolStatus)> = entries[2..]
+    let stored: Vec<(&str, ToolStatus)> = entries[2..]
         .iter()
         .map(|e| {
             let (id, status, _) = tool_entry(e);
@@ -1195,14 +1197,98 @@ async fn stopping_ends_the_wait_of_results_for_earlier_calls() {
         })
         .collect();
     assert_eq!(
-        cancelled,
+        stored,
         [
             ("call_1", ToolStatus::Cancelled),
-            ("call_2", ToolStatus::Cancelled),
+            ("call_2", ToolStatus::Ok),
             ("call_3", ToolStatus::Cancelled),
         ]
     );
+    assert_eq!(tool_entry(&entries[3]).2, view_content(&run).2);
+    assert_eq!(sent_results(&sink), ["call_1", "call_2", "call_3"]);
     f.idle(&conv).await;
+}
+
+/// A response with a batch of a read and a `run_command`, whose calls the panel runs at once.
+async fn a_read_and_a_command() -> (Fixture, String, Arc<Sink>) {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "read_file", json!({"path": "/etc/hosts"})),
+            ("c2", "run_command", json!({"command": "ls /etc"})),
+        ]),
+        answer("Fine."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "look around").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    (f, conv, sink)
+}
+
+/// The command has run (without a session, it reports that) and its result waits for the read's:
+/// it no longer counts as a running command.
+async fn until_the_command_waits(f: &Fixture, conv: &str) {
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let entries = Entries::load(&lock(&f.vault), conv).unwrap();
+    assert!(open_call(&entries, "c2").is_ok());
+    assert!(f.manager.running_commands(conv).is_empty());
+}
+
+/// A stop that does not wait for commands, such as a message sent while the turn runs, stores
+/// what a command that has ended returned while its result waits for an earlier call's, rather
+/// than a result that says it may still run (AI-18).
+#[tokio::test]
+async fn a_message_keeps_the_result_of_a_command_that_ended_and_waits() {
+    let (f, conv, sink) = a_read_and_a_command().await;
+    // The read still runs.
+    let read = f.manager.start_call(&conv, "c1", OpKind::Other).unwrap();
+    let send = async {
+        until_the_command_waits(&f, &conv).await;
+        f.send(Some(&conv), "never mind").await
+    };
+    let (command, (_, next)) = tokio::join!(f.run(&conv, "c2", None, None), send);
+    drop(read);
+    assert_eq!(
+        view_content(&command.unwrap()),
+        ("c2", AiToolStatus::Error, DISCONNECTED)
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(next.ended().await, AiTurnEndReason::Completed);
+    assert_eq!(
+        tool_results(&f.entries(&conv)),
+        [
+            ("c1", ToolStatus::Cancelled, ""),
+            ("c2", ToolStatus::Error, DISCONNECTED),
+        ]
+    );
+    assert_eq!(sent_results(&sink), ["c1", "c2"]);
+    f.idle(&conv).await;
+}
+
+/// The lock, like a message, stores what a command that has ended returned (AI-18).
+#[tokio::test]
+async fn the_lock_keeps_the_result_of_a_command_that_ended_and_waits() {
+    let (f, conv, sink) = a_read_and_a_command().await;
+    let read = f.manager.start_call(&conv, "c1", OpKind::Other).unwrap();
+    let lock_now = async {
+        until_the_command_waits(&f, &conv).await;
+        let mut v = lock(&f.vault);
+        f.manager.stop_all(&mut v);
+        v.lock();
+    };
+    let (command, ()) = tokio::join!(f.run(&conv, "c2", None, None), lock_now);
+    drop(read);
+    assert_eq!(command.unwrap_err().code, ErrorCode::Locked);
+    assert_eq!(sink.ended().await, AiTurnEndReason::Stopped);
+    assert_eq!(sent_results(&sink), ["c1", "c2"]);
+    lock(&f.vault).unlock(PW).unwrap();
+    assert_eq!(
+        tool_results(&f.entries(&conv)),
+        [
+            ("c1", ToolStatus::Cancelled, ""),
+            ("c2", ToolStatus::Error, DISCONNECTED),
+        ]
+    );
 }
 
 /// A stop that waits for a `run_command` of a batch (AI-18) does not wait on the calls before
@@ -4997,6 +5083,7 @@ fn bare_turn(f: &Fixture) -> Turn {
         context: f.context(),
         server_id: None,
         results: Notify::new(),
+        waiting: Notify::new(),
         ended: AtomicBool::new(false),
         streamed: Mutex::new(None),
     }
