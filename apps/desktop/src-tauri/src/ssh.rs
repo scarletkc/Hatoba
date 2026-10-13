@@ -519,8 +519,12 @@ pub struct Unattended {
     /// That hop's host key was trusted, so signing in to it began.
     signing_in: AtomicBool,
     prompted: AtomicBool,
-    /// One of the prompts was a lone password prompt.
+    /// One of the prompts was a lone password prompt at a hop that signs in with a saved
+    /// password.
     password_prompted: AtomicBool,
+    /// Whether each hop, the first one outermost, signs in with a saved password, which answers
+    /// the first lone password prompt itself.
+    saved_password: Vec<bool>,
 }
 
 impl Unattended {
@@ -560,6 +564,7 @@ impl Unattended {
             signing_in: AtomicBool::new(signing_in),
             prompted: AtomicBool::new(prompted),
             password_prompted: AtomicBool::new(password_prompted),
+            saved_password: Vec::new(),
         }
     }
 }
@@ -618,7 +623,11 @@ impl KeyboardInteractive for UnattendedPrompts {
         self.0.prompted.store(true, Ordering::Relaxed);
         let lone_password = matches!(request.prompts.as_slice(), [p]
             if !p.echo && p.text.to_ascii_lowercase().contains("password"));
-        if request.password || lone_password {
+        // Only a hop with a saved password had it rejected; at a hop signing in with a key or
+        // the agent, a password asked after it is a second factor the user has to give.
+        let hop = self.0.hops.load(Ordering::Relaxed).saturating_sub(1);
+        let saved = self.0.saved_password.get(hop).copied().unwrap_or(false);
+        if saved && (request.password || lone_password) {
             self.0.password_prompted.store(true, Ordering::Relaxed);
         }
         None
@@ -631,7 +640,17 @@ pub async fn connect_unattended(
     app: &AppHandle,
     mut cfg: ConnectConfig,
 ) -> (AppResult<SshSession>, Arc<Unattended>) {
-    let outcome = Arc::new(Unattended::default());
+    let saved_password = cfg
+        .jump
+        .iter()
+        .map(|j| &j.auth)
+        .chain(std::iter::once(&cfg.auth))
+        .map(|auth| matches!(auth, AuthMethod::Password(_)))
+        .collect();
+    let outcome = Arc::new(Unattended {
+        saved_password,
+        ..Unattended::default()
+    });
     let attempt = Attempt::of(&cfg);
     attempt.log_start();
     cfg.keyboard_interactive = Some(Arc::new(UnattendedPrompts(Arc::clone(&outcome))));
@@ -926,5 +945,43 @@ mod tests {
             .unwrap();
         save_host_key(&mut vault, "demo.example", 22, &ed25519).unwrap();
         assert_eq!(vault.known_hosts().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_password_asked_after_a_key_is_a_prompt_not_a_rejection() {
+        let request = || PromptRequest {
+            host: "h".to_owned(),
+            port: 22,
+            username: "u".to_owned(),
+            password: false,
+            name: String::new(),
+            instructions: String::new(),
+            prompts: vec![hatoba_ssh::Prompt {
+                text: "Password: ".to_owned(),
+                echo: false,
+            }],
+        };
+        // A jump host signing in with a saved password, then the destination with a key.
+        let outcome = |at: usize| {
+            let outcome = Arc::new(Unattended {
+                saved_password: vec![true, false],
+                ..Unattended::default()
+            });
+            outcome.hops.store(at, Ordering::Relaxed);
+            outcome
+        };
+        let at_jump = outcome(1);
+        assert!(
+            UnattendedPrompts(Arc::clone(&at_jump))
+                .respond(request())
+                .await
+                .is_none()
+        );
+        assert!(at_jump.prompted() && at_jump.password_prompted());
+        let at_key = outcome(2);
+        UnattendedPrompts(Arc::clone(&at_key))
+            .respond(request())
+            .await;
+        assert!(at_key.prompted() && !at_key.password_prompted());
     }
 }

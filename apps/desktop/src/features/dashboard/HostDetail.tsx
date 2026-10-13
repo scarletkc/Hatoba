@@ -3,7 +3,7 @@ import { Button, Icon } from "@/components/controls";
 import { FooterSpacer, Sheet } from "@/components/overlay";
 import { OsIcon } from "@/features/hosts/OsIcon";
 import { Sparkline } from "@/features/terminal/Sparkline";
-import { formatLoad, formatPercent, formatRate, formatUptime, percentOf, type StatsReading } from "@/features/terminal/stats";
+import { formatLoad, formatPercent, formatRate, formatUptime, percentOf, STATS_WINDOW_MS, type StatsReading } from "@/features/terminal/stats";
 import { formatBytes, formatMessageTime, useT } from "@/i18n";
 import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -16,8 +16,6 @@ import s from "./HostDetail.module.css";
 /** The charts span the sheet's content width. */
 const CHART_WIDTH = 484;
 const CHART_HEIGHT = 44;
-/** The charts show the readings of the last 3 minutes. */
-const SPAN_MS = 180_000;
 /** The network chart's scale never drops below 1 KB/s. */
 const MIN_RATE_SCALE = 1024;
 
@@ -110,7 +108,7 @@ export function HostDetail({
             <Sparkline
               series={[{ values: history.map((r) => r.cpu_percent), className: s.cpuLine }]}
               times={times}
-              span={SPAN_MS}
+              span={STATS_WINDOW_MS}
               gap={gap}
               max={100}
               width={CHART_WIDTH}
@@ -238,7 +236,7 @@ function NetworkSection({
           { values: tx, className: s.txLine },
         ]}
         times={history.map((r) => r.at)}
-        span={SPAN_MS}
+        span={STATS_WINDOW_MS}
         gap={gap}
         max={max}
         width={CHART_WIDTH}
