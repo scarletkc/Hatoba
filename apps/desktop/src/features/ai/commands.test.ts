@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { McpPromptView } from "@/ipc/types";
 import {
+  commandDraft,
   commandItems,
   commandNames,
   findBuiltin,
@@ -90,6 +91,21 @@ describe("leading commands (AI-50)", () => {
     expect(promptArguments('"all of it"', ["a"])).toEqual([{ name: "a", value: "all of it" }]);
     expect(promptArguments("", ["a"])).toEqual([]);
     expect(promptArguments("x y", [])).toEqual([]);
+  });
+
+  it("starts the box with / or a skill from the + menu, keeping what was typed", () => {
+    // Slash Commands: the caret on the command's word opens the menu.
+    expect(commandDraft("", null)).toEqual({ text: "/", caret: 1 });
+    expect(triggerAt("/", 1)).toMatchObject({ sign: "/", query: "" });
+    expect(commandDraft("  check nginx", null)).toEqual({ text: "/ check nginx", caret: 1 });
+    expect(triggerAt("/ check nginx", 1)).toMatchObject({ sign: "/", query: "" });
+    // A skill: its command, then what was typed, in place of a command the text started with.
+    expect(commandDraft("", "nginx-ops")).toEqual({ text: "/nginx-ops ", caret: 11 });
+    expect(commandDraft("reload it", "nginx-ops")).toEqual({ text: "/nginx-ops reload it", caret: 11 });
+    expect(commandDraft("/btw why?", "nginx-ops")).toEqual({ text: "/nginx-ops why?", caret: 11 });
+    expect(commandDraft("/btw why?", null)).toEqual({ text: "/ why?", caret: 1 });
+    // A path is no command, so it stays.
+    expect(commandDraft("/etc/hosts is wrong", "fix")).toEqual({ text: "/fix /etc/hosts is wrong", caret: 5 });
   });
 });
 

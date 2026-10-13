@@ -76,6 +76,18 @@ export function leadingCommand(text: string): { name: string; args: string } | n
 }
 
 /**
+ * The + menu's **Slash Commands** (`name` null) and a skill of its **Skills** (AI-50): the box's text with `/` or
+ * `/name ` at its start, in place of a command it starts with, what was typed after it, and the caret. After `/` alone
+ * the caret stays on the command's word, so the menu opens on it.
+ */
+export function commandDraft(draft: string, name: string | null): { text: string; caret: number } {
+  const rest = (leadingCommand(draft)?.args ?? draft).trimStart();
+  if (name === null) return { text: rest ? `/ ${rest}` : "/", caret: 1 };
+  const head = `/${name} `;
+  return { text: head + rest, caret: head.length };
+}
+
+/**
  * The words of a prompt command's arguments (AI-50), filling the prompt's arguments in order: words are
  * separated by spaces, a word in double quotes may hold spaces, and the last argument takes the rest of
  * the text as it was written.

@@ -139,10 +139,10 @@ Without a search provider the assistant has no web search tool. In Settings → 
 | Start | 启动 | 起動 |
 | Restart | 重新启动 | 再起動 |
 
-- A server that fails to start shows **Failed** with the error and the last lines of stderr, in Settings → AI → **MCP Servers** (click its row) and in the panel's `/mcp`; while a server the conversation uses has failed, a red line above the input box names it. Its tool calls return errors meanwhile. Read the stderr, fix the command or the environment, then **Restart**.
+- A server that fails to start shows **Failed** with the error and the last lines of stderr, in Settings → AI → **MCP Servers** (click its row) and in the panel's **MCP Tools** (+ menu) or `/mcp`; while a server the conversation uses has failed, a red line above the input box names it. Its tool calls return errors meanwhile. Read the stderr, fix the command or the environment, then **Restart**.
 - Command servers are started like a shell would: `npx` finds `npx.cmd` on Windows. Put only the program in **Command** and each argument on its own row; if the whole command line was pasted, use **Split Into Arguments**. A missing program or a wrong `PATH` is the usual cause of a failed start.
 - Servers that need OAuth sign-in are not supported; use a token in **Headers** if the service allows it. When a server with an `Authorization` header fails with "the token is invalid or has expired (HTTP 401)", **Replace** the header's value with a valid token; a token pasted without a scheme is saved with `Bearer ` in front of it.
-- Servers start when a conversation first needs their tools and stop on quit or lock; after unlocking they start again when needed. Opening the panel's `/` or `@` menu starts them too, for their prompts and resources. A server switched off for this device, or for the conversation in `/mcp`, offers no tools, prompts or resources.
+- Servers start when a conversation first needs their tools and stop on quit or lock; after unlocking they start again when needed. Opening the panel's `/` or `@` menu starts them too, for their prompts and resources. A server switched off for this device, or for the conversation in **MCP Tools** or `/mcp`, offers no tools, prompts or resources.
 - A server added on another device arrives off if it is a Command server, and a Command server turns off here when its command, arguments or environment variable names change on another device (its **Always allow** is cleared too); switch it on here after checking the command.
 
 ## Still not solved

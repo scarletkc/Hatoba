@@ -40,10 +40,10 @@ const BUILTIN_ICON: Record<BuiltinName, string> = {
   model: "cube",
 };
 
-/** The skills the `/` menu offers (AI-50), read again each time the menu opens. */
-const useSkills = create<{ skills: AiSkillCommand[] | null }>(() => ({ skills: null }));
+/** The skills the `/` menu and the + menu's Skills offer (AI-50), read again each time either opens. */
+export const useSkills = create<{ skills: AiSkillCommand[] | null }>(() => ({ skills: null }));
 
-function loadSkills() {
+export function loadSkills() {
   api.ai_skill_commands().then(
     (skills) => useSkills.setState({ skills }),
     () => useSkills.setState((st) => ({ skills: st.skills ?? [] })),

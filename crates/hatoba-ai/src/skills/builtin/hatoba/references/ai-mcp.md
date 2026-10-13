@@ -1,6 +1,6 @@
 # MCP servers
 
-Settings → AI → **MCP Servers**: adding servers, **Always ask**, import and export, and each server's state and tools. The panel's `/mcp`, MCP prompts as `/` commands and MCP resources under `@` are in `references/ai-panel.md`, how MCP calls ask in `references/ai-tools.md`, and errors in `references/troubleshooting-ai.md`.
+Settings → AI → **MCP Servers**: adding servers, **Always ask**, import and export, and each server's state and tools. The panel's **MCP Tools** and `/mcp`, MCP prompts as `/` commands and MCP resources under `@` are in `references/ai-panel.md`, how MCP calls ask in `references/ai-tools.md`, and errors in `references/troubleshooting-ai.md`.
 
 MCP (Model Context Protocol) servers add tools to the assistant, and prompts and resources that you attach yourself: a prompt runs as a `/` command, and a resource is picked after `@`. Resource templates are not listed. Two kinds: **Command** (stdio: a program started on this device with the user's privileges, which Hatoba talks to over standard input and output) and **HTTP** (a Streamable HTTP URL). A stdio server runs arbitrary code, so add only servers you trust. Tool descriptions reach the model as instructions.
 

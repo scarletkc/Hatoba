@@ -29,7 +29,7 @@ import {
 } from "./actions";
 import { attachCommand } from "./commandActions";
 import { useCommandMenu } from "./CommandMenu";
-import { findBuiltin, leadingCommand, type BuiltinCommand } from "./commands";
+import { commandDraft, findBuiltin, leadingCommand, type BuiltinCommand } from "./commands";
 import { ComposerAttachments, QueuedAttachments, usePendingAttachments, useTerminalSelection } from "./AttachmentChips";
 import { composeMessage, isLongPaste } from "./attachments";
 import { chosenEffort, effectiveEffort, effortKey, modelEfforts } from "./effort";
@@ -388,7 +388,15 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         />
         {menu.element}
         <div className={s.bar}>
-          <AddButton slotId={slotId} slot={slot} onAddFiles={() => fileRef.current?.click()} />
+          <AddButton
+            slotId={slotId}
+            slot={slot}
+            onAddFiles={() => fileRef.current?.click()}
+            onCommand={(skill) => {
+              const next = commandDraft(getSlot(slotId).draft, skill);
+              setDraft(next.text, next.caret, true);
+            }}
+          />
           <ModeButton slotId={slotId} mode={slot.mode} />
           <input
             ref={fileRef}
