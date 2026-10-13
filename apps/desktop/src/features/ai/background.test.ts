@@ -13,6 +13,7 @@ import type {
   AiTurnEvent,
 } from "@/ipc/types";
 import type { ToolOutcome } from "./terminalTools";
+import { approvalOf } from "./turn";
 
 /** The calls the actions make, answered by each test. */
 const ipc = vi.hoisted(() => ({
@@ -166,7 +167,7 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     const sent = turns();
     await sendMessage(TAB, "restart nginx");
     answer(sent[0].emit, "a1", [call("call_1", "run_command", { command: "sudo systemctl restart nginx" })]);
-    await until(() => getSlot(TAB).turn?.call?.state === "approval");
+    await until(() => !!approvalOf(getSlot(TAB).turn));
 
     newConversation(TAB);
     expect(ipc.stop).not.toHaveBeenCalled();
@@ -181,7 +182,7 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     await openConversation(TAB, nginx.id);
     expect(held()).toBe(TAB);
     expect(useAi.getState().background).toEqual({});
-    expect(getSlot(TAB).turn?.call).toMatchObject({ id: "call_1", state: "approval" });
+    expect(approvalOf(getSlot(TAB).turn)).toMatchObject({ id: "call_1", state: "approval" });
     // Shown from memory, as it is: nothing is read again.
     expect(ipc.get).not.toHaveBeenCalled();
 
@@ -363,14 +364,14 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     const sent = turns();
     await sendMessage(TAB, "restart nginx");
     answer(sent[0].emit, "a1", [call("call_1", "run_command", { command: "sudo systemctl restart nginx" })]);
-    await until(() => getSlot(TAB).turn?.call?.state === "approval");
+    await until(() => !!approvalOf(getSlot(TAB).turn));
     newConversation(TAB);
     useTabs.setState({ active: OTHER });
 
     await openConversation(OTHER, nginx.id);
     expect(useTabs.getState().active).toBe(TAB);
     expect(held()).toBe(TAB);
-    expect(getSlot(TAB).turn?.call?.state).toBe("approval");
+    expect(approvalOf(getSlot(TAB).turn)?.id).toBe("call_1");
     expect(getSlot(OTHER).conversationId).toBeNull();
   });
 
@@ -411,6 +412,39 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     resetForLock();
     expect(tabActivity(useAi.getState(), TAB)).toBe("idle");
     expect(nginxSlot()).toMatchObject({ turn: null, queued: null, draft: "then this", entries: [] });
+  });
+});
+
+describe("the marks of a tab whose conversations run several calls at once (AI-07)", () => {
+  it("count a background turn's concurrent calls as running, and an approval card of another conversation as waiting", async () => {
+    const reads: (() => void)[] = [];
+    ipc.run.mockImplementation((_conv, callId) => new Promise((done) => reads.push(() => done({ entry: toolEntry(callId), dropped_file_changes: false }))));
+    const sent = turns();
+    await sendMessage(TAB, "read the configs");
+    answer(sent[0].emit, "a1", [call("call_1", "read_file", { path: "/etc/nginx/nginx.conf" }), call("call_2", "read_file", { path: "/etc/hosts" })]);
+    await until(() => reads.length === 2);
+
+    newConversation(TAB);
+    expect(nginxSlot().turn?.calls.map((c) => [c.id, c.state])).toEqual([
+      ["call_1", "running"],
+      ["call_2", "running"],
+    ]);
+    expect(tabActivity(useAi.getState(), TAB)).toBe("running");
+    expect(conversationActivity(useAi.getState(), nginx.id)).toBe("running");
+
+    // The tab's other conversation asks for approval: the tab shows that it waits, History each one's own state.
+    await sendMessage(TAB, "restart nginx");
+    answer(sent[1].emit, "b1", [call("call_3", "run_command", { command: "sudo systemctl restart nginx" })]);
+    await until(() => !!approvalOf(getSlot(TAB).turn));
+    expect(tabActivity(useAi.getState(), TAB)).toBe("waiting");
+    expect(conversationActivity(useAi.getState(), nginx.id)).toBe("running");
+    expect(conversationActivity(useAi.getState(), disk.id)).toBe("waiting");
+
+    for (const done of reads) done();
+    await until(() => nginxSlot().turn?.calls.length === 0);
+    // Its turn goes on until the next response ends it.
+    expect(conversationActivity(useAi.getState(), nginx.id)).toBe("running");
+    expect(tabActivity(useAi.getState(), TAB)).toBe("waiting");
   });
 });
 

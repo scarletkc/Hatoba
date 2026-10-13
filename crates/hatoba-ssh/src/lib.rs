@@ -4,7 +4,8 @@
 //! entry point is [`connect`], which returns an [`SshSession`] from which
 //! shells ([`SshSession::open_shell`]), SFTP clients ([`SshSession::sftp`]),
 //! local port forwards ([`SshSession::local_forward`]), resource usage sampling
-//! ([`SshSession::open_stats`]) and one-off commands ([`SshSession::exec`]) are opened.
+//! ([`SshSession::open_stats`]) and one-off commands ([`SshSession::exec`], and
+//! [`remote_command::run`] for a command that stopping ends) are opened.
 //! The first hop can go through a SOCKS5 or HTTP proxy ([`ConnectConfig::proxy`]).
 //!
 //! Secrets (passwords, private keys, passphrases) are wrapped in
@@ -19,10 +20,13 @@ mod handler;
 pub mod hostkey;
 pub mod interactive;
 pub mod keys;
+#[cfg(all(test, unix))]
+mod local_sh;
 mod net;
 mod ppk;
 pub mod probe;
 pub mod proxy;
+pub mod remote_command;
 pub mod remote_file;
 pub mod remote_search;
 mod server_os;

@@ -9,13 +9,13 @@ export interface LiveResponse {
   usage: AiUsage | null;
 }
 
-/** What the current tool call is waiting for. `judging`: Auto mode asks its judge whether it can run without the card (AI-47). */
+/** What a tool call being handled is waiting for. `judging`: Auto mode asks its judge whether it can run without the card (AI-47). */
 export type CallState = "approval" | "judging" | "running";
 
 /** AI-47: why the approval card of a call in Auto mode shows: a hard rule, or the judge's verdict. */
 export type AutoAsk = { rule: HardRule } | { verdict: AiAutoVerdict };
 
-/** The tool call being handled. */
+/** A tool call being handled. */
 export interface CallInfo {
   id: string;
   state: CallState;
@@ -29,7 +29,11 @@ export interface TurnState {
   /** `starting`: `ai_send` / `ai_retry` is on its way. `waiting`: a request is sent, nothing streamed yet. */
   phase: "starting" | "waiting" | "streaming" | "tools";
   live: LiveResponse | null;
-  call: CallInfo | null;
+  /**
+   * The calls being handled: one that waits for approval or its judge, or the calls that run, several at once for a
+   * batch of calls that only read (§13.1).
+   */
+  calls: CallInfo[];
   /** An `error` event, reported when the turn ends. */
   error: { status: number | null; message: string } | null;
 }
@@ -50,7 +54,18 @@ export interface TurnSnapshot {
 }
 
 export function newTurn(): TurnState {
-  return { phase: "starting", live: null, call: null, error: null };
+  return { phase: "starting", live: null, calls: [], error: null };
+}
+
+/** The calls being handled with `call` in place of the one with its id, or added after them. */
+export function withCall(calls: readonly CallInfo[], call: CallInfo): CallInfo[] {
+  const i = calls.findIndex((c) => c.id === call.id);
+  return i < 0 ? [...calls, call] : calls.map((c, at) => (at === i ? call : c));
+}
+
+/** The call whose approval card waits, if any. */
+export function approvalOf(turn: TurnState | null | undefined): CallInfo | null {
+  return turn?.calls.find((c) => c.state === "approval") ?? null;
 }
 
 const emptyLive = (): LiveResponse => ({ text: "", reasoning: "", toolCalls: [], usage: null });
@@ -123,6 +138,8 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
       return { ...s, turn: { ...turn, live: null, phase: ev.finish === "tool_calls" ? "tools" : turn.phase } };
     case "effort_ignored":
       return { ...s, effortIgnored: true };
+    case "tool_ran":
+      return s;
     case "error":
       if (!turn) return { ...s, outcome: { reason: "error", status: ev.status, message: ev.message } };
       return { ...s, turn: { ...turn, error: { status: ev.status, message: ev.message } } };

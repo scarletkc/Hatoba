@@ -3,7 +3,8 @@
 use std::fmt;
 use std::time::Duration;
 
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderName, HeaderValue};
+use reqwest::StatusCode;
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderName, HeaderValue, RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -72,6 +73,12 @@ const MAX_RESULTS: usize = 10;
 const MAX_SNIPPET_CHARS: usize = 1_000;
 /// Overall limit of a search.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
+/// How many times a search the provider turns away with 429 Too Many Requests is sent again: the
+/// searches of one response go out one after another (§13.1), and a free plan may allow one a
+/// second.
+const RATE_LIMIT_RETRIES: u32 = 3;
+/// The longest wait before such a retry that the provider's `Retry-After` can ask for.
+const MAX_RETRY_AFTER: Duration = Duration::from_secs(5);
 const BRAVE_ENDPOINT: &str = "https://api.search.brave.com/res/v1/web/search";
 const TAVILY_ENDPOINT: &str = "https://api.tavily.com/search";
 
@@ -186,12 +193,50 @@ async fn search(
             )
         }
     };
-    let response = net::send(request, cancel).await?;
+    let response = send_retrying(request, cancel).await?;
     if !response.status().is_success() {
         return Err(net::http_error(response, cancel).await);
     }
     let body = net::read_json(response, cancel).await?;
     Ok(parse_results(&body, list_pointer, snippet_key))
+}
+
+/// Sends `request`, and after a 429 sends it again, up to [`RATE_LIMIT_RETRIES`] times: after as
+/// many seconds as `Retry-After` says, at most [`MAX_RETRY_AFTER`], or else a second longer each
+/// time.
+async fn send_retrying(
+    request: reqwest::RequestBuilder,
+    cancel: &CancellationToken,
+) -> Result<reqwest::Response, AiError> {
+    for attempt in 1..=RATE_LIMIT_RETRIES {
+        let Some(again) = request.try_clone() else {
+            break;
+        };
+        let response = net::send(again, cancel).await?;
+        if response.status() != StatusCode::TOO_MANY_REQUESTS {
+            return Ok(response);
+        }
+        let wait = retry_after(&response).unwrap_or(Duration::from_secs(attempt.into()));
+        tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Err(AiError::Cancelled),
+            () = tokio::time::sleep(wait) => {}
+        }
+    }
+    net::send(request, cancel).await
+}
+
+/// A `Retry-After` in seconds, at most [`MAX_RETRY_AFTER`]; a date is not read.
+fn retry_after(response: &reqwest::Response) -> Option<Duration> {
+    let seconds: u64 = response
+        .headers()
+        .get(RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(Duration::from_secs(seconds).min(MAX_RETRY_AFTER))
 }
 
 fn parse_results(body: &Value, list_pointer: &str, snippet_key: &str) -> Vec<SearchResult> {
@@ -366,12 +411,47 @@ mod tests {
         assert_eq!(found[0].url, "https://openzfs.org");
     }
 
+    /// The searches of a response go out one after another (§13.1), and a provider's per-second
+    /// limit can still turn one away; it is sent again.
+    #[tokio::test]
+    async fn a_search_turned_away_for_its_rate_is_sent_again() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("retry-after", "0")
+                    .set_body_json(json!({"error": {"message": "Rate limit exceeded"}})),
+            )
+            .up_to_n_times(2)
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "web": {"results": [{"title": "nginx", "url": "https://nginx.org", "description": "Docs"}]}
+            })))
+            .mount(&server)
+            .await;
+        let found = search_at(
+            &http_client(),
+            &cfg(SearchKind::Brave, "k", None),
+            "nginx",
+            &CancellationToken::new(),
+            &endpoints(&server),
+        )
+        .await
+        .unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(server.received_requests().await.unwrap().len(), 3);
+    }
+
     #[tokio::test]
     async fn errors_and_missing_configuration() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .respond_with(
                 ResponseTemplate::new(429)
+                    .insert_header("retry-after", "0")
                     .set_body_json(json!({"error": {"message": "Rate limit exceeded"}})),
             )
             .mount(&server)

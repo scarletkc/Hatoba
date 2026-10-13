@@ -170,7 +170,8 @@ async function respond(mode: AiPermissionMode, calls: AiToolCall[]): Promise<Emi
   return emit;
 }
 
-const current = () => getSlot(TAB).turn?.call ?? null;
+/** The call being handled: a turn in Auto mode handles the calls that ask one at a time. */
+const current = () => getSlot(TAB).turn?.calls.at(-1) ?? null;
 
 /** Every state the slot's current call goes through, in order. */
 const unsubscribe: (() => void)[] = [];
@@ -178,7 +179,7 @@ function watchStates(): CallState[] {
   const seen: CallState[] = [];
   unsubscribe.push(
     useAi.subscribe((st) => {
-      const state = st.slots[TAB]?.turn?.call?.state;
+      const state = st.slots[TAB]?.turn?.calls.at(-1)?.state;
       if (state && seen.at(-1) !== state) seen.push(state);
     }),
   );

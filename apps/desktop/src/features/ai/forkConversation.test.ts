@@ -137,7 +137,7 @@ describe("forkConversation (AI-43)", () => {
 
   it("opens a fork from History over the active tab's turn waiting for approval, which goes on in the background (AI-07)", async () => {
     const other = conversation("c3", "Restart nginx");
-    const waiting = { ...newTurn(), phase: "tools" as const, call: { id: "call-1", state: "approval" as const } };
+    const waiting = { ...newTurn(), phase: "tools" as const, calls: [{ id: "call-1", state: "approval" as const }] };
     useAi.setState({ history: [original, other], slots: { [HOME_SLOT]: { ...blankSlot("manual"), conversationId: other.id, conversation: other, turn: waiting } } });
     fork.mockResolvedValue(copy);
     await forkConversation(HOME_SLOT, original.id, null);

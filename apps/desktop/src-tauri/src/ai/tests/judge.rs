@@ -168,25 +168,27 @@ impl Fixture {
     }
 
     /// Stores a result the panel produced for a call Auto decided.
-    fn judged_result(
+    async fn judged_result(
         &self,
         conversation_id: &str,
         call: &str,
         status: AiToolStatus,
         content: &str,
     ) -> AppResult<AiEntryView> {
-        self.manager.tool_result(
-            &self.vault,
-            self.env.as_ref(),
-            conversation_id,
-            call,
-            &AiToolResultInput {
-                status,
-                content: content.into(),
-                edited_arguments: None,
-                judged: true,
-            },
-        )
+        self.manager
+            .tool_result(
+                &self.vault,
+                self.env.as_ref(),
+                conversation_id,
+                call,
+                &AiToolResultInput {
+                    status,
+                    content: content.into(),
+                    edited_arguments: None,
+                    judged: true,
+                },
+            )
+            .await
     }
 
     /// The verdicts kept for calls that wait.
@@ -432,7 +434,7 @@ async fn an_mcp_call_shows_the_judge_its_server_description_and_annotations() {
         state["earlier_calls"],
         json!([{"tool": "mcp__files__echo", "arguments": {"text": "hi"}}])
     );
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
 }
 
 #[tokio::test]
@@ -481,6 +483,7 @@ async fn without_a_judge_a_call_asks_as_unavailable_and_nothing_is_sent() {
     // The card asked, and the user rejected the call: the result keeps why the card asked.
     let rejected = f
         .judged_result(&conv, "c1", AiToolStatus::Rejected, "not now")
+        .await
         .unwrap();
     assert_eq!(verdict_of(&rejected), Some(&verdict));
     assert_eq!(f.pending_verdicts(), 0);
@@ -575,6 +578,7 @@ async fn a_judge_lets_a_requested_change_run_and_its_result_keeps_the_verdict() 
     // (`judged` false), so its verdict is dropped.
     let typed = f
         .judged_result(&conv, "c1", AiToolStatus::Ok, "sent")
+        .await
         .unwrap();
     assert_eq!(verdict_of(&typed), Some(&first));
     assert_eq!(f.pending_verdicts(), 1);
@@ -629,6 +633,7 @@ async fn a_verdict_for_a_call_answered_meanwhile_is_not_kept_and_a_stop_ends_the
     // The user answered the call while the judge was asked.
     let answered = f
         .judged_result(&conv, "c1", AiToolStatus::Rejected, "")
+        .await
         .unwrap();
     assert_eq!(verdict_of(&answered), None);
     let late = judging.await.unwrap().unwrap();
@@ -648,7 +653,7 @@ async fn a_verdict_for_a_call_answered_meanwhile_is_not_kept_and_a_stop_ends_the
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let stopped_at = Instant::now();
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     let stopped = judging.await.unwrap().unwrap();
     assert!(stopped_at.elapsed() < Duration::from_secs(5));
     assert_eq!(stopped.decision, AiJudgeDecision::Ask);
@@ -735,7 +740,7 @@ async fn judge_requests_share_four_slots_and_a_stop_ends_the_wait_for_one() {
     assert!(!queued.is_finished());
     // Its stop ends the wait at once, while the others still wait for answers.
     let stopped_at = Instant::now();
-    f.manager.stop(&f.vault, f.env.as_ref(), &waiting);
+    f.manager.stop(&f.vault, f.env.as_ref(), &waiting).await;
     let stopped = queued.await.unwrap().unwrap();
     assert!(stopped_at.elapsed() < Duration::from_secs(5));
     assert_eq!(stopped.failure.as_deref(), Some("cancelled"));
@@ -743,7 +748,7 @@ async fn judge_requests_share_four_slots_and_a_stop_ends_the_wait_for_one() {
     assert!(held.iter().all(|h| !h.is_finished()));
 
     // A stop of theirs gives the room back.
-    f.manager.stop(&f.vault, f.env.as_ref(), &busy);
+    f.manager.stop(&f.vault, f.env.as_ref(), &busy).await;
     for judged in held {
         let verdict = judged.await.unwrap().unwrap();
         assert_eq!(verdict.failure.as_deref(), Some("cancelled"));

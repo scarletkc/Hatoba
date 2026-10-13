@@ -960,6 +960,24 @@ pub struct WindowChromeEvent {
     pub floating: bool,
 }
 
+/// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "app://launch")]
+pub struct LaunchEvent;
+
+/// The `hatoba` command on this device (HOST-13).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct CliCommandView {
+    /// Settings → General has it on.
+    pub enabled: bool,
+    /// Where the command lives: the folder added to the user's `PATH` on Windows, the launcher
+    /// itself on Linux and macOS.
+    pub location: String,
+    /// Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
+    /// `~/.local/bin` joins the `PATH` at the next sign-in.
+    pub on_path: bool,
+}
+
 /// What the update check found (spec §11).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct UpdateCheck {
@@ -1720,6 +1738,12 @@ pub enum AiTurnEvent {
     /// One response finished. With `tool_calls`, Rust waits for every call's result.
     Done {
         finish: AiFinish,
+    },
+    /// The tool of an `ai_tool_run` call finished, and closed its exec channel if it had one; its
+    /// result is stored once every earlier call of the response has one (§13.1). The panel counts
+    /// the channel as free from now on.
+    ToolRan {
+        tool_call_id: String,
     },
     Error {
         status: Option<u16>,

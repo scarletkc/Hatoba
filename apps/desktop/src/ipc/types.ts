@@ -754,6 +754,16 @@ export interface AppInfo {
   local_user: string;
 }
 
+/** The `hatoba` command on this device (HOST-13). */
+export interface CliCommandView {
+  /** Settings → General has it on. */
+  enabled: boolean;
+  /** The folder added to the user's PATH on Windows, the launcher itself on Linux and macOS. */
+  location: string;
+  /** Whether that folder is on the PATH Hatoba started with. Only Linux reports false, until the next sign-in. */
+  on_path: boolean;
+}
+
 /** What the update check found (spec §11). */
 export interface UpdateCheck {
   current_version: string;
@@ -1071,6 +1081,8 @@ export type AiTurnEvent =
   /** One response finished. With `tool_calls`, Rust waits for every call's result. A stored `summary`
    * entry means `context_start` moved to it (AI-21, or automatic compaction before a request, AI-22). */
   | { kind: "done"; finish: AiFinish }
+  /** The tool of an `ai_tool_run` call ended, closing its exec channel; its result may still wait for an earlier call's (§13.1). */
+  | { kind: "tool_ran"; tool_call_id: string }
   | { kind: "error"; status: number | null; message: string }
   /** The provider refused the thinking level: the request went again without it, at the model's default depth (AI-05). */
   | { kind: "effort_ignored" }
@@ -1393,4 +1405,6 @@ export interface EventMap {
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;
+  /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
+  "app://launch": null;
 }

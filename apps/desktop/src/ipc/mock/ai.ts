@@ -1091,9 +1091,10 @@ export function createAiMock(deps: AiMockDeps): AiApi {
   const FILE_DISCONNECTED = "The terminal tab is disconnected, so the tool did not run. Ask the user to reconnect the tab.";
 
   /**
-   * AI-48, AI-49: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results. The
-   * glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a JS RegExp. A file
-   * given as grep's path is searched whatever its glob, as with rg.
+   * AI-48, AI-49: `glob` and `grep` over the mock's files, as `hatoba_ai::search` words their results, as on a
+   * host with rg. The glob is read roughly (`**` any directories, `*` and `?` within a name), the pattern as a
+   * JS RegExp. A file given as grep's path is searched whatever its glob, as with rg. Claude Code's argument
+   * names work too.
    */
   function search(name: string, args: Record<string, unknown>): { status: AiToolStatus; content: string } {
     const root = filePath(String(args.path || "~")).replace(/\/$/, "") || "/";
@@ -1115,25 +1116,48 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const ok = (content: string) => ({ status: "ok" as const, content });
     if (name === "glob")
       return ok(paths.length ? `${files(paths.length)} under ${root} ${paths.length === 1 ? "matches" : "match"} ${glob}, sorted by path:\n${paths.join("\n")}\n` : `No files under ${root} match ${glob}.\n`);
+    const arg = (name: string, alias: string) => args[name] ?? args[alias];
+    const multiline = Boolean(args.multiline);
     let re: RegExp;
     try {
-      re = new RegExp(String(args.pattern ?? ""), args.ignore_case ? "i" : "");
+      re = new RegExp(String(args.pattern ?? ""), `g${arg("ignore_case", "-i") ? "i" : ""}${multiline ? "ms" : ""}`);
     } catch (e) {
-      return { status: "error", content: `grep -E on the host refused the pattern, so nothing was searched: ${String(e)}.` };
+      return { status: "error", content: `rg on the host refused the pattern, so nothing was searched: ${String(e)}.` };
     }
-    const hits = paths.map((p) => ({ p, lines: fileLines(remoteFiles.get(p) ?? "") })).filter((f) => f.lines.some((l) => re.test(l)));
-    const matching = hits.reduce((n, f) => n + f.lines.filter((l) => re.test(l)).length, 0);
+    // The numbers of the lines each match spans: one per line unless multiline.
+    const matched = (text: string): Set<number> => {
+      const lines = fileLines(text);
+      if (!multiline) return new Set(lines.flatMap((l, i) => (l.match(re) ? [i] : [])));
+      const starts = lines.map((_, i) => lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0));
+      const lineAt = (offset: number) => starts.filter((s) => s <= offset).length - 1;
+      return new Set([...text.matchAll(re)].flatMap((m) => {
+        const first = lineAt(m.index ?? 0);
+        const last = lineAt((m.index ?? 0) + Math.max(m[0].length - 1, 0));
+        return Array.from({ length: last - first + 1 }, (_, k) => first + k);
+      }));
+    };
+    const hits = paths
+      .map((p) => ({ p, lines: fileLines(remoteFiles.get(p) ?? ""), hit: matched(remoteFiles.get(p) ?? "") }))
+      .filter((f) => f.hit.size);
+    const matching = hits.reduce((n, f) => n + f.hit.size, 0);
     if (!hits.length) return ok(`No lines match the pattern ${place}.\n`);
     if (args.output_mode === "content") {
-      const context = Number(args.context ?? 0) || 0;
-      const out = hits.flatMap(({ p, lines }) => {
-        const shown = new Set(lines.flatMap((l, i) => (re.test(l) ? Array.from({ length: 2 * context + 1 }, (_, k) => i - context + k) : [])));
-        return lines.flatMap((l, i) => (shown.has(i) ? [`${p}${re.test(l) ? ":" : "-"}${i + 1}${re.test(l) ? ":" : "-"}${l}`] : []));
+      const context = Number(arg("context", "-C") ?? 0) || 0;
+      const before = Number(arg("before_context", "-B") ?? context) || 0;
+      const after = Number(arg("after_context", "-A") ?? context) || 0;
+      const numbers = arg("line_numbers", "-n") !== false;
+      const out = hits.flatMap(({ p, lines, hit }) => {
+        const shown = new Set([...hit].flatMap((i) => Array.from({ length: before + after + 1 }, (_, k) => i - before + k)));
+        return lines.flatMap((l, i) => {
+          if (!shown.has(i)) return [];
+          const separator = hit.has(i) ? ":" : "-";
+          return [numbers ? `${p}${separator}${i + 1}${separator}${l}` : `${p}${separator}${l}`];
+        });
       });
       return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${out.join("\n")}\n`);
     }
     if (args.output_mode === "count")
-      return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${hits.map(({ p, lines }) => `${p}:${lines.filter((l) => re.test(l)).length}`).join("\n")}\n`);
+      return ok(`${matching} matching lines in ${files(hits.length)} ${place}, sorted by path:\n${hits.map(({ p, hit }) => `${p}:${hit.size}`).join("\n")}\n`);
     return ok(`${files(hits.length)} with a matching line ${place}, sorted by path:\n${hits.map((h) => h.p).join("\n")}\n`);
   }
 
