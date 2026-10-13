@@ -138,6 +138,8 @@ export function reduceTurnEvent(s: TurnSnapshot, ev: AiTurnEvent): TurnSnapshot 
       return { ...s, turn: { ...turn, live: null, phase: ev.finish === "tool_calls" ? "tools" : turn.phase } };
     case "effort_ignored":
       return { ...s, effortIgnored: true };
+    case "tool_ran":
+      return s;
     case "error":
       if (!turn) return { ...s, outcome: { reason: "error", status: ev.status, message: ev.message } };
       return { ...s, turn: { ...turn, error: { status: ev.status, message: ev.message } } };

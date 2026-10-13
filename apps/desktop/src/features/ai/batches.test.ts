@@ -95,6 +95,36 @@ describe("runConcurrently", () => {
     expect(settled).toBe(true);
   });
 
+  it("starts the next call that opens a channel once a running call releases its own", async () => {
+    const started: string[] = [];
+    const releases = new Map<string, () => void>();
+    const finish = new Map<string, () => void>();
+    const run = (c: string, release: () => void) =>
+      new Promise<void>((resolve) => {
+        started.push(c);
+        releases.set(c, release);
+        finish.set(c, resolve);
+      });
+    const calls = ["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"];
+    const done = runConcurrently(calls, () => true, run, () => true);
+    await flush();
+    expect(started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
+    // ch1's tool ended, but its call waits for ch0's result: its channel is free.
+    releases.get("ch1")!();
+    releases.get("ch1")!();
+    await flush();
+    expect(started).toEqual(["ch0", "ch1", "ch2", "ch3", "ch4"]);
+    // A call that settles after releasing frees nothing more.
+    finish.get("ch1")!();
+    await flush();
+    expect(started).toHaveLength(5);
+    finish.get("ch0")!();
+    await flush();
+    expect(started).toEqual(calls);
+    for (const c of ["ch2", "ch3", "ch4", "ch5"]) finish.get(c)!();
+    expect(await done).toBe(6);
+  });
+
   it("goes on past a call that fails", async () => {
     const ran: string[] = [];
     await runConcurrently(

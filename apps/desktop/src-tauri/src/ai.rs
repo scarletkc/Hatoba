@@ -1907,6 +1907,13 @@ impl AiManager {
                 .await
             }
         };
+        // The tool's channel is closed: while its result waits for the earlier calls', the panel
+        // may start another call that opens one (§13.1).
+        if let Some(turn) = self.running(conversation_id) {
+            turn.emit(AiTurnEvent::ToolRan {
+                tool_call_id: tool_call_id.to_owned(),
+            });
+        }
         let content = result_content(status, content, edited_arguments);
         let shown = guard(&shown).take();
         let mut response = None;

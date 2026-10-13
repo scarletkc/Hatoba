@@ -139,6 +139,7 @@ fn kind(e: &AiTurnEvent) -> &'static str {
         AiTurnEvent::Usage { .. } => "usage",
         AiTurnEvent::Entry { .. } => "entry",
         AiTurnEvent::Done { .. } => "done",
+        AiTurnEvent::ToolRan { .. } => "tool_ran",
         AiTurnEvent::Error { .. } => "error",
         AiTurnEvent::EffortIgnored => "effort_ignored",
         AiTurnEvent::TurnEnded { .. } => "turn_ended",
@@ -1141,6 +1142,20 @@ async fn results_are_stored_in_the_order_of_the_calls() {
         })
         .collect();
     assert_eq!(shown, ["call_1", "call_2", "call_3"]);
+    // read_skill's run said it ended before its result waited for call_1's, so the panel could
+    // count its channel as free meanwhile.
+    let events = sink.events();
+    let ran = events
+        .iter()
+        .position(
+            |e| matches!(e, AiTurnEvent::ToolRan { tool_call_id } if tool_call_id == "call_2"),
+        )
+        .expect("call_2 ran");
+    let first = events
+        .iter()
+        .position(|e| matches!(e, AiTurnEvent::Entry { entry: AiEntryView::Tool { tool_call_id, .. } } if tool_call_id == "call_1"))
+        .expect("call_1 stored");
+    assert!(ran < first);
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
 }

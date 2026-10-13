@@ -1739,6 +1739,12 @@ pub enum AiTurnEvent {
     Done {
         finish: AiFinish,
     },
+    /// The tool of an `ai_tool_run` call finished, and closed its exec channel if it had one; its
+    /// result is stored once every earlier call of the response has one (§13.1). The panel counts
+    /// the channel as free from now on.
+    ToolRan {
+        tool_call_id: String,
+    },
     Error {
         status: Option<u16>,
         message: String,

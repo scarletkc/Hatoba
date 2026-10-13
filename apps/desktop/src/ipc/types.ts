@@ -1081,6 +1081,8 @@ export type AiTurnEvent =
   /** One response finished. With `tool_calls`, Rust waits for every call's result. A stored `summary`
    * entry means `context_start` moved to it (AI-21, or automatic compaction before a request, AI-22). */
   | { kind: "done"; finish: AiFinish }
+  /** The tool of an `ai_tool_run` call ended, closing its exec channel; its result may still wait for an earlier call's (§13.1). */
+  | { kind: "tool_ran"; tool_call_id: string }
   | { kind: "error"; status: number | null; message: string }
   /** The provider refused the thinking level: the request went again without it, at the model's default depth (AI-05). */
   | { kind: "effort_ignored" }

@@ -935,7 +935,13 @@ export type AiTurnEvent =
 /**  An entry was stored: the assistant response, a tool result, or a cancelled result. */
 { kind: "entry"; entry: AiEntryView } | 
 /**  One response finished. With `tool_calls`, Rust waits for every call's result. */
-{ kind: "done"; finish: AiFinish } | { kind: "error"; status: number | null; message: string } | 
+{ kind: "done"; finish: AiFinish } | 
+/**
+ *  The tool of an `ai_tool_run` call finished, and closed its exec channel if it had one; its
+ *  result is stored once every earlier call of the response has one (§13.1). The panel counts
+ *  the channel as free from now on.
+ */
+{ kind: "tool_ran"; tool_call_id: string } | { kind: "error"; status: number | null; message: string } | 
 /**
  *  The provider refused the thinking level, so the request was sent again without it and the
  *  model answers at its default depth (AI-05).

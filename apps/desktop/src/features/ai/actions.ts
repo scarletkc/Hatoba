@@ -270,6 +270,8 @@ class TurnRunner {
   private readonly verdicts = new Map<string, Promise<AiAutoVerdict>>();
   /** AI-47: the user rejected a call of the response being handled, so Auto asks about the rest of its calls without the judge. */
   private rejected = false;
+  /** §13.1: what frees the exec channel of a call that runs with others, by call id, once its tool ended (`tool_ran`). */
+  private readonly releases = new Map<string, () => void>();
   private readonly abort = new AbortController();
   private readonly ready: Promise<string | null>;
   private resolveReady!: (id: string | null) => void;
@@ -331,6 +333,11 @@ class TurnRunner {
     // After the end (e.g. the fallback below), only stored entries still matter.
     if (this.ended) {
       if (ev.kind === "entry") this.addEntry(ev.entry);
+      return;
+    }
+    // §13.1: the call's tool ended, while its result may wait for an earlier call's.
+    if (ev.kind === "tool_ran") {
+      this.releases.get(ev.tool_call_id)?.();
       return;
     }
     applyEvent(this.slotId, ev);
@@ -439,7 +446,7 @@ class TurnRunner {
           // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
           // applies to the turn's next call (§13.5), and the calls left run as the next batches.
           const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
-          done = await runConcurrently(batch, channel, (call) => this.runAlongside(convId, call), starts);
+          done = await runConcurrently(batch, channel, (call, release) => this.runAlongside(convId, call, release), starts);
         }
         if (done === 0) {
           if (!this.acting) return;
@@ -482,8 +489,12 @@ class TurnRunner {
     };
   }
 
-  /** Runs a call of a batch whose calls run together (§13.1), which needs no approval card. */
-  private async runAlongside(convId: string, call: AiToolCall) {
+  /**
+   * Runs a call of a batch whose calls run together (§13.1), which needs no approval card. `release` frees its exec
+   * channel for the batch once Rust says its tool ended (`tool_ran`).
+   */
+  private async runAlongside(convId: string, call: AiToolCall, release: () => void) {
+    this.releases.set(call.id, release);
     try {
       const kind = toolKind(call.name);
       if (needsSession(kind) && !this.target()) return await this.answer(convId, call.id, NO_TAB);
@@ -491,6 +502,7 @@ class TurnRunner {
       this.setCall({ id: call.id, state: "running" });
       await this.execute(convId, call, kind, null, false);
     } finally {
+      this.releases.delete(call.id);
       this.endCall(call.id);
     }
   }

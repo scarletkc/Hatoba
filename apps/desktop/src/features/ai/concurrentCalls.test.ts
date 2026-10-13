@@ -255,6 +255,19 @@ describe("calls that only read run together (§13.1)", () => {
     await until(() => shown().length === 0);
   });
 
+  it("frees the channel of a call whose tool ended while its result waits for a slower earlier call's", async () => {
+    const emit = await respond("manual", [1, 2, 3, 4, 5, 6].map((i) => read(`call_${i}`)));
+    await until(() => running().length === MAX_CONCURRENT_CHANNELS);
+    expect(ran()).toEqual(["call_1", "call_2", "call_3", "call_4"]);
+    // call_1 is slow; the reads after it are done on the host, and their results wait for call_1's.
+    emit({ kind: "tool_ran", tool_call_id: "call_2" });
+    emit({ kind: "tool_ran", tool_call_id: "call_3" });
+    await until(() => ran().length === 6);
+    expect(running()).toEqual(["call_1", "call_2", "call_3", "call_4", "call_5", "call_6"]);
+    finish(...running());
+    await until(() => shown().length === 0);
+  });
+
   it("asks about a fetch the user has not allowed, alone, and runs one on an allowed domain with the reads", async () => {
     useAi.setState({ allowed: { [view.id]: ["fetch_url:nginx.org"] } });
     await respond("manual", [

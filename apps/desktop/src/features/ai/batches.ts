@@ -34,26 +34,47 @@ export function toolBatches<T>(calls: readonly T[], joins: (call: T) => boolean)
 
 /**
  * Runs `run` for the calls of a batch, starting them in order, at most {@link MAX_CONCURRENT_CALLS} at once and of
- * those at most {@link MAX_CONCURRENT_CHANNELS} that `usesChannel`. A call starts only after every earlier one has,
- * so a call that waits for an earlier one's result to be stored never holds the room that one needs. Starts no
- * more once `starts` refuses the next call, and resolves, once every call it started has settled, with how many it
- * started.
+ * those at most {@link MAX_CONCURRENT_CHANNELS} that `usesChannel` and hold their channel. A call holds it until it
+ * settles or calls the `release` it is given, as it does once its tool ended while its result waits for an earlier
+ * call's. A call starts only after every earlier one has, so a call that waits for an earlier one's result to be
+ * stored never holds the room that one needs. Starts no more once `starts` refuses the next call, and resolves, once
+ * every call it started has settled, with how many it started.
  */
-export async function runConcurrently<T>(calls: readonly T[], usesChannel: (call: T) => boolean, run: (call: T) => Promise<void>, starts: (call: T) => boolean): Promise<number> {
+export async function runConcurrently<T>(
+  calls: readonly T[],
+  usesChannel: (call: T) => boolean,
+  run: (call: T, release: () => void) => Promise<void>,
+  starts: (call: T) => boolean,
+): Promise<number> {
   const running = new Set<Promise<void>>();
   let channels = 0;
   let started = 0;
+  // Settles when a call settles or releases its channel.
+  let changed!: () => void;
+  let change = new Promise<void>((resolve) => (changed = resolve));
+  const notify = () => {
+    changed();
+    change = new Promise<void>((resolve) => (changed = resolve));
+  };
   for (const call of calls) {
     const channel = usesChannel(call);
-    while (running.size >= MAX_CONCURRENT_CALLS || (channel && channels >= MAX_CONCURRENT_CHANNELS)) await Promise.race(running);
+    while (running.size >= MAX_CONCURRENT_CALLS || (channel && channels >= MAX_CONCURRENT_CHANNELS)) await change;
     if (!starts(call)) break;
     started++;
-    if (channel) channels++;
-    const done: Promise<void> = run(call)
+    let holds = channel;
+    if (holds) channels++;
+    const release = () => {
+      if (!holds) return;
+      holds = false;
+      channels--;
+      notify();
+    };
+    const done: Promise<void> = run(call, release)
       .catch(() => {})
       .finally(() => {
         running.delete(done);
-        if (channel) channels--;
+        release();
+        notify();
       });
     running.add(done);
   }
