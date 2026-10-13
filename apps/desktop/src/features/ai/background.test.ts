@@ -298,6 +298,34 @@ describe("leaving a conversation while its turn runs (AI-07)", () => {
     expect(getSlot(TAB)).toMatchObject({ conversationId: null, draft: "then restart it\n\ntyped since" });
   });
 
+  it("gives a message still on its way in a background conversation that is deleted back to its tab", async () => {
+    let fail!: (e: unknown) => void;
+    ipc.send.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    const sending = sendMessage(TAB, "check the logs");
+    queueMessage(TAB, "then restart it");
+    newConversation(TAB);
+    patchSlot(TAB, { draft: "typed since" });
+
+    await deleteConversation(nginx.id);
+    fail({ code: "cancelled", detail: "stopped" });
+    expect(await sending).toBe(false);
+    expect(useAi.getState().background).toEqual({});
+    expect(getSlot(TAB)).toMatchObject({ conversationId: null, turn: null, draft: "check the logs\n\nthen restart it\n\ntyped since" });
+  });
+
+  it("discards a message still on its way in a background conversation when its tab closes", async () => {
+    let fail!: (e: unknown) => void;
+    ipc.send.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    const sending = sendMessage(TAB, "check the logs");
+    newConversation(TAB);
+
+    detachSlot(TAB);
+    fail({ code: "cancelled", detail: "stopped" });
+    expect(await sending).toBe(false);
+    expect(useAi.getState().slots).not.toHaveProperty(TAB);
+    expect(useAi.getState().background).toEqual({});
+  });
+
   it("gives a new conversation's messages back to the tab when the vault locks before the first one is stored", async () => {
     for (const settle of ["reject", "resolve"] as const) {
       useAi.setState({ slots: { [TAB]: blankSlot("manual") }, background: {} });

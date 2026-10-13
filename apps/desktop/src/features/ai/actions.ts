@@ -296,7 +296,7 @@ class TurnRunner {
    */
   slotId: string;
   /** The tab the turn started on, the only one whose terminal its tools may use (AI-08), also from the background (AI-07). */
-  private readonly tab: string;
+  readonly tab: string;
   /** The permission mode the model was told of for this turn (§13.5); a switch to bypass waits for the next message. */
   private readonly mode: AiPermissionMode;
   convId: string | null;
@@ -1005,13 +1005,18 @@ export async function sendMessage(slotId: string, raw: string): Promise<boolean>
     // with it. Closing its tab meanwhile discarded the input area, so nothing goes back.
     const target = runner.slotId;
     runner.dispose();
-    const held = target in useAi.getState().slots;
+    const { slots } = useAi.getState();
+    const held = target in slots;
     if (held && inBackground(target) && !getSlot(target).conversationId) giveBackUnstored(target, message);
     else if (held) {
       // A message queued meanwhile goes back too, after this one.
       giveBackQueued(target);
       patchSlot(target, (s) => ({ entries: s.entries.filter((x) => x.entry_id !== LOCAL_ENTRY), turn: null }));
       putBack(target, message);
+    } else if (runner.tab in slots) {
+      // Deleted in the background, whose slot went with its input area into the tab's (`clearBackground`): the
+      // message goes there too, before the one queued after it.
+      putBack(runner.tab, message);
     }
     // Stopped before it was stored, while the MCP servers started (AI-45) or the context was compacted
     // (AI-22): nothing was stored, a new conversation was not created, and the message is back in the input.
