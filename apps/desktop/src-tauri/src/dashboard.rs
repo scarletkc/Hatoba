@@ -817,19 +817,19 @@ fn plan(vault: &Vault, host_id: &str) -> Option<Plan> {
     })
 }
 
-/// The jump hosts (`jumps` is outwards) a connection got past before it failed at hop `hop`,
-/// counted from the outermost one: all of them once it reached the destination.
-fn passed(jumps: &[JumpVersion], hop: Option<usize>) -> &[JumpVersion] {
+/// The hops (`hops` is the host, then its jump hosts outwards) a connection got past before it
+/// failed at hop `hop`, counted from the outermost one.
+fn passed(hops: &[JumpVersion], hop: Option<usize>) -> &[JumpVersion] {
     match hop {
-        Some(at) => &jumps[jumps.len() - at.min(jumps.len())..],
+        Some(at) => &hops[hops.len() - at.min(hops.len())..],
         None => &[],
     }
 }
 
-/// The jump host at hop `hop`, counted from the outermost one, unless that is the destination.
-fn jump_at(jumps: &[JumpVersion], hop: Option<usize>) -> Option<&JumpVersion> {
+/// The hop at place `hop`, counted from the outermost one.
+fn jump_at(hops: &[JumpVersion], hop: Option<usize>) -> Option<&JumpVersion> {
     let at = hop?;
-    (at < jumps.len()).then(|| &jumps[jumps.len() - 1 - at])
+    (at < hops.len()).then(|| &hops[hops.len() - 1 - at])
 }
 
 /// The hold a failed unattended connection puts the host in, if it needs the user.
@@ -998,9 +998,16 @@ async fn connect_step(
         // Never signs in on its own, but finds a tab opened on the host.
         return Next::Wait(Some(RECHECK));
     }
-    let jumps = plan.versions.jumps.clone();
-    // A jump host it goes through failed for another host behind it: not tried again from here.
-    if let Some((hold, error)) = dash.jump_held(host_id, &jumps) {
+    // The host's hops: the host itself, which other hosts may be reached through, then its jump
+    // hosts outwards. Its version as a jump host is that of its own chain.
+    let hops: Vec<JumpVersion> = std::iter::once(JumpVersion {
+        id: host_id.to_owned(),
+        version: version.clone(),
+    })
+    .chain(plan.versions.jumps.iter().cloned())
+    .collect();
+    // It, or a jump host it goes through, failed for another host: not tried again from here.
+    if let Some((hold, error)) = dash.jump_held(host_id, &hops) {
         dash.emit(DashboardEvent::Held {
             host_id: host,
             hold,
@@ -1029,14 +1036,14 @@ async fn connect_step(
     dash.emit(DashboardEvent::Connecting {
         host_id: host.clone(),
     });
-    let Some(gates) = dash.through(&jumps).await else {
+    let Some(gates) = dash.through(&hops).await else {
         return Next::Wait(None);
     };
     let Ok(permit) = Arc::clone(&dash.setups).acquire_owned().await else {
         return Next::Wait(None);
     };
     // Another host behind the same jump host may have been turned away while this one waited.
-    if let Some((hold, error)) = dash.jump_held(host_id, &jumps) {
+    if let Some((hold, error)) = dash.jump_held(host_id, &hops) {
         drop(permit);
         dash.emit(DashboardEvent::Held {
             host_id: host,
@@ -1046,21 +1053,21 @@ async fn connect_step(
         return Next::Wait(Some(RECHECK));
     }
     // The connection's hops are those of the plan's chain, unless the vault changed in between.
-    let same_chain = cfg.jump.len() == jumps.len();
+    let same_chain = cfg.jump.len() + 1 == hops.len();
     let (result, outcome) = connect_unattended(app, cfg).await;
     let hop = outcome.hop().filter(|_| same_chain);
     drop(permit);
     let session = match result {
         Ok(session) => {
-            dash.passed(&jumps);
+            dash.passed(&hops);
             session
         }
         Err(error) => {
-            dash.passed(passed(&jumps, hop));
+            dash.passed(passed(&hops, hop));
             match hold_for(&error, &outcome) {
                 Some(hold) => {
                     // At a jump host, every host behind it waits with this one.
-                    let jump = jump_at(&jumps, hop);
+                    let jump = jump_at(&hops, hop);
                     dash.hold(host_id, hold, Some(error.clone()), version, jump);
                     dash.emit(DashboardEvent::Held {
                         host_id: host,
@@ -1514,6 +1521,11 @@ mod tests {
         let before = Versions::of(&v, &get(&v, &id));
         assert_eq!(before.jumps.len(), 1);
         assert_eq!(before.jumps[0].id, bastion);
+        // The jump host's own connection shares its gate and holds with the hosts behind it.
+        assert_eq!(
+            Versions::of(&v, &get(&v, &bastion)).all(),
+            before.jumps[0].version
+        );
         // The destination's own password does not change the jump host's version.
         let mut app = get(&v, &id);
         app.auth = password("new");
@@ -1579,20 +1591,21 @@ mod tests {
             id: id.to_owned(),
             version: "v".to_owned(),
         };
-        // Outwards: the inner jump host, then the outer one, which is connected to first.
-        let jumps = [jump("inner"), jump("outer")];
+        // Outwards: the host, the inner jump host, then the outer one, which is connected to
+        // first.
+        let hops = [jump("app"), jump("inner"), jump("outer")];
         let ids = |hop: Option<usize>| -> Vec<String> {
-            passed(&jumps, hop).iter().map(|j| j.id.clone()).collect()
+            passed(&hops, hop).iter().map(|j| j.id.clone()).collect()
         };
         assert!(ids(None).is_empty());
         assert!(ids(Some(0)).is_empty());
         assert_eq!(ids(Some(1)), ["outer"]);
         assert_eq!(ids(Some(2)), ["inner", "outer"]);
         // Hops are told apart by place, so two on one address and port are not confused.
-        let at = |hop: Option<usize>| jump_at(&jumps, hop).map(|j| j.id.as_str());
+        let at = |hop: Option<usize>| jump_at(&hops, hop).map(|j| j.id.as_str());
         assert_eq!(at(Some(0)), Some("outer"));
         assert_eq!(at(Some(1)), Some("inner"));
-        assert_eq!(at(Some(2)), None);
+        assert_eq!(at(Some(2)), Some("app"));
         assert_eq!(at(None), None);
     }
 
