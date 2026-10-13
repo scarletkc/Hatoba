@@ -14,10 +14,11 @@ on:
       - apps/desktop/src-tauri/app-icon.svg
       - apps/desktop/src-tauri/icons/**
       - apps/desktop/src-tauri/tauri.conf.json
-      - scripts/release/release.mjs
+      - scripts/release/**
       - README.md
       - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
       - .github/workflows/site.yml
   pull_request:
     paths:
@@ -27,10 +28,11 @@ on:
       - apps/desktop/src-tauri/app-icon.svg
       - apps/desktop/src-tauri/icons/**
       - apps/desktop/src-tauri/tauri.conf.json
-      - scripts/release/release.mjs
+      - scripts/release/**
       - README.md
       - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
       - .github/workflows/site.yml
   workflow_dispatch:
   workflow_call:

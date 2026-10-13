@@ -1,5 +1,4 @@
 ---
-import icon from "../../../desktop/src-tauri/app-icon.svg?url";
 import { REPO_URL } from "../consts";
 import { LANG, LANGUAGE_NAME, LOCALES, localePath, messages, type Locale } from "../i18n";
 import Icon from "./Icon.astro";
@@ -22,7 +21,7 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
 <header class:list={["night", "site-header", { edge }]}>
   <nav class="container bar" aria-label="Hatoba">
     <a class="brand" href={localePath(locale)} aria-label={t.nav.home}>
-      <img src={icon} alt="" width="32" height="32" />
+      <img src="/favicon.svg" alt="" width="32" height="32" />
       <span class="wide">Hatoba</span>
     </a>
     <ul class="links">

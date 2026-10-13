@@ -7,7 +7,7 @@ import { installSteps } from "../../i18n/install";
 import Base from "../../layouts/Base.astro";
 import { inlineMarkdown } from "../../lib/markdown";
 import { PLATFORMS, loadRelease } from "../../lib/release";
-import { pageTitle, softwareApplication } from "../../lib/seo";
+import { softwareApplication } from "../../lib/seo";
 
 export function getStaticPaths() {
   return localeStaticPaths();
@@ -22,7 +22,7 @@ const description =
 
 <Base
   locale={locale}
-  title={pageTitle(locale, t.meta.downloadTitle)}
+  title={`${t.meta.downloadTitle} – ${t.meta.tagline}`}
   description={description}
   path="/download/"
   jsonLd={softwareApplication(locale, release)}
@@ -76,9 +76,15 @@ const description =
                     <p class="sha">
                       <span class="label">{t.download.sha256}</span>
                       <code class="hash">{download.sha256}</code>
-                      <button type="button" class="copy" data-copy={download.sha256} data-copied={t.download.copied}>
+                      <button
+                        type="button"
+                        class="copy"
+                        data-copy={download.sha256}
+                        data-copied={t.download.copied}
+                        aria-label={`${t.download.copy} ${t.download.sha256}: ${download.name}`}
+                      >
                         <Icon name="copy" size={16} />
-                        <span>{t.download.copy}</span>
+                        <span aria-live="polite">{t.download.copy}</span>
                       </button>
                     </p>
                   </li>
@@ -113,6 +119,9 @@ const description =
       try {
         await navigator.clipboard.writeText(button.dataset.copy!);
       } catch {
+        // Without the clipboard, select the checksum so it can be copied by hand.
+        const hash = button.parentElement?.querySelector(".hash");
+        if (hash) getSelection()?.selectAllChildren(hash);
         return;
       }
       label.textContent = button.dataset.copied!;

@@ -62,19 +62,29 @@ export function parseChecksums(text: string): Map<string, string> {
   return sums;
 }
 
-/** The installers people download from `release`, with their checksums. Throws when one is missing. */
-export function downloadsOf(release: GitHubRelease, sums: Map<string, string>): Download[] {
+/**
+ * The installers people download from `release`, with their checksums. The names come from
+ * INSTALLERS on this commit, which may name an installer that the release predates, such as a new
+ * package: `warn` hears of each one left out. Throws when a platform has no installer at all, or
+ * when an installer has no checksum.
+ */
+export function downloadsOf(release: GitHubRelease, sums: Map<string, string>, warn: (message: string) => void = console.warn): Download[] {
   const names = installerNames(versionOf(release.tag_name));
-  return PLATFORMS.flatMap((platform) =>
-    INSTALL_STEPS[platform].bundles.map((bundle) => {
+  return PLATFORMS.flatMap((platform) => {
+    const downloads = INSTALL_STEPS[platform].bundles.flatMap((bundle) => {
       const name = names[bundle];
       const asset = release.assets.find((candidate) => candidate.name === name);
-      if (!asset) throw new Error(`${release.tag_name} has no ${name}, the ${bundle} installer that INSTALLERS in scripts/release/release.mjs names.`);
+      if (!asset) {
+        warn(`${release.tag_name} has no ${name}, the ${bundle} installer that INSTALLERS in scripts/release/release.mjs names, so the download page leaves it out.`);
+        return [];
+      }
       const sha256 = sums.get(name);
       if (!sha256) throw new Error(`${CHECKSUMS} of ${release.tag_name} has no checksum for ${name}.`);
-      return { bundle, platform, name, url: asset.browser_download_url, size: asset.size, sha256 };
-    }),
-  );
+      return [{ bundle, platform, name, url: asset.browser_download_url, size: asset.size, sha256 }];
+    });
+    if (downloads.length === 0) throw new Error(`${release.tag_name} has none of the ${platform} installers that INSTALLERS in scripts/release/release.mjs names.`);
+    return downloads;
+  });
 }
 
 async function github(path: string): Promise<Response> {

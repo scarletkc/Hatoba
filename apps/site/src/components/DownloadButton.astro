@@ -17,7 +17,7 @@ const downloadPage = localePath(locale, "/download/");
  * unsigned app, so they go to their part of the download page.
  */
 const targets: Record<Platform, string> = {
-  windows: release.downloads.find((download) => download.bundle === "nsis")!.url,
+  windows: release.downloads.find((download) => download.platform === "windows")!.url,
   linux: `${downloadPage}#linux`,
   macos: `${downloadPage}#macos`,
 };

@@ -1,9 +1,6 @@
 ---
 import "@fontsource-variable/archivo/wdth.css";
 import "../styles/global.css";
-import favicon from "../../../desktop/src-tauri/app-icon.svg?url";
-import faviconPng from "../../../desktop/src-tauri/icons/32x32.png?url";
-import touchIcon from "../../../desktop/src-tauri/icons/128x128@2x.png?url";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import { SITE_URL } from "../consts";
@@ -59,9 +56,10 @@ const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_UR
     {translated && LOCALES.filter((other) => other !== locale).map((other) => <meta property="og:locale:alternate" content={OG_LOCALE[other]} />)}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#0d1735" />
-    <link rel="icon" href={favicon} type="image/svg+xml" />
-    <link rel="icon" href={faviconPng} type="image/png" sizes="32x32" />
-    <link rel="apple-touch-icon" href={touchIcon} />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-96x96.png" type="image/png" sizes="96x96" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
     <script is:inline>
@@ -70,6 +68,8 @@ const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_UR
         const ua = navigator.userAgent.toLowerCase();
         if (/android|iphone|ipad|ipod/.test(ua)) return;
         const platform = (navigator.userAgentData?.platform || navigator.platform || ua).toLowerCase();
+        // iPadOS reports itself as a Mac, but a Mac has no touch screen.
+        if (/mac/.test(platform) && navigator.maxTouchPoints > 1) return;
         const os = /win/.test(platform) ? "windows" : /mac/.test(platform) ? "macos" : /linux|x11|cros/.test(platform) ? "linux" : "";
         if (os) document.documentElement.dataset.os = os;
       })();

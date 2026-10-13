@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { APIRoute } from "astro";
 import sharp from "sharp";
 import { localeStaticPaths, type Locale } from "../../i18n";
 import { repoRoot } from "../../lib/docs";
+import { appIconPng } from "../../lib/icons";
 
 export function getStaticPaths() {
   return localeStaticPaths();
@@ -72,7 +72,7 @@ export const GET: APIRoute = async ({ props }) => {
     .composite([{ input: Buffer.from(corners), blend: "dest-in" }])
     .png()
     .toBuffer();
-  const icon = await sharp(readFileSync(join(root, "apps/desktop/src-tauri/app-icon.svg")), { density: 72 }).resize(64, 64).png().toBuffer();
+  const icon = Buffer.from(await appIconPng(64));
   const image = await sharp(Buffer.from(sky))
     .composite([
       { input: screenshot, left: SHOT.x, top: SHOT.y },

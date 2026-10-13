@@ -70,9 +70,17 @@ describe("downloadsOf", () => {
     expect(downloads[3]).toMatchObject({ url: "https://example.com/Hatoba_0.1.0_macos-apple-silicon.dmg", sha256: "3".repeat(64), size: 1003 });
   });
 
-  it("refuses a release without an installer", () => {
+  it("leaves out an installer the release does not have, and says so", () => {
+    const withoutDeb = assets.filter((asset) => !asset.name.endsWith(".deb"));
+    const warnings: string[] = [];
+    const downloads = downloadsOf(release("v0.1.0", false, { assets: withoutDeb }), sums, (message) => warnings.push(message));
+    expect(downloads.map((download) => download.bundle)).toEqual(["nsis", "appimage", "dmg"]);
+    expect(warnings).toEqual([expect.stringMatching(/no Hatoba_0\.1\.0_linux-x64\.deb/)]);
+  });
+
+  it("refuses a release without any installer for a platform", () => {
     const withoutDmg = assets.filter((asset) => !asset.name.endsWith(".dmg"));
-    expect(() => downloadsOf(release("v0.1.0", false, { assets: withoutDmg }), sums)).toThrow(/no Hatoba_0\.1\.0_macos-apple-silicon\.dmg/);
+    expect(() => downloadsOf(release("v0.1.0", false, { assets: withoutDmg }), sums, () => {})).toThrow(/none of the macos installers/);
   });
 
   it("refuses an installer without a checksum", () => {
