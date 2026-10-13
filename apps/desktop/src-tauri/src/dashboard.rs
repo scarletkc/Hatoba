@@ -924,6 +924,26 @@ async fn connect_step(
             tab: false,
         };
     }
+    let probe = match plan.probe {
+        Ok(target) => target,
+        Err(error) => {
+            dash.emit(DashboardEvent::Failed {
+                host_id: host,
+                error,
+            });
+            return Next::Wait(Some(RECHECK));
+        }
+    };
+    // An offline host shows as offline, whatever else would keep it from signing in. A dead
+    // host would also hold a slot until its connection timed out.
+    let online = dash.probe(host_id, &probe).await;
+    dash.emit(DashboardEvent::Probe {
+        host_id: host.clone(),
+        online,
+    });
+    if !online {
+        return Next::Wait(Some(RECHECK));
+    }
     let version = plan.versions.all();
     if let Some((hold, error)) = dash.held(host_id, &version) {
         dash.emit(DashboardEvent::Held {
@@ -944,32 +964,14 @@ async fn connect_step(
         });
         return Next::Wait(Some(RECHECK));
     }
-    let probe = match plan.probe {
-        Ok(target) => target,
-        Err(error) => {
-            dash.emit(DashboardEvent::Failed {
-                host_id: host,
-                error,
-            });
-            return Next::Wait(Some(RECHECK));
-        }
-    };
     let cfg = match plan.connect {
         Ok(cfg) => cfg,
         Err(Stop::Hold(hold)) => {
-            let online = dash.probe(host_id, &probe).await;
-            dash.emit(DashboardEvent::Probe {
-                host_id: host.clone(),
-                online,
+            dash.emit(DashboardEvent::Held {
+                host_id: host,
+                hold,
+                error: None,
             });
-            // An offline host shows as offline.
-            if online {
-                dash.emit(DashboardEvent::Held {
-                    host_id: host,
-                    hold,
-                    error: None,
-                });
-            }
             return Next::Wait(Some(RECHECK));
         }
         Err(Stop::Failed(error)) => {
@@ -980,15 +982,6 @@ async fn connect_step(
             return Next::Wait(Some(RECHECK));
         }
     };
-    // A dead host would hold a slot until its connection timed out.
-    let online = dash.probe(host_id, &probe).await;
-    dash.emit(DashboardEvent::Probe {
-        host_id: host.clone(),
-        online,
-    });
-    if !online {
-        return Next::Wait(Some(RECHECK));
-    }
     dash.emit(DashboardEvent::Connecting {
         host_id: host.clone(),
     });
