@@ -767,7 +767,7 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
         assert!(Instant::now() < deadline, "the server did not start");
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     let stopped = send.await.unwrap().unwrap_err();
     assert_eq!(stopped.code, ErrorCode::Cancelled);
     assert_eq!(user_texts(&f, &conv), [manual("hello")]);
@@ -795,7 +795,7 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
         })
     };
     turn_registered(&f).await;
-    f.manager.stop(&f.vault, f.env.as_ref(), &conv);
+    f.manager.stop(&f.vault, f.env.as_ref(), &conv).await;
     let stopped = edit.await.unwrap().unwrap_err();
     assert_eq!(stopped.code, ErrorCode::Cancelled);
     assert_eq!(f.entries(&conv), entries);
@@ -839,7 +839,7 @@ async fn a_message_stopped_while_the_servers_start_is_not_stored() {
             _ => None,
         })
         .unwrap();
-    f.manager.stop(&f.vault, f.env.as_ref(), &opened);
+    f.manager.stop(&f.vault, f.env.as_ref(), &opened).await;
     let stopped = send.await.unwrap().unwrap_err();
     assert_eq!(stopped.code, ErrorCode::Cancelled);
     assert!(lock(&f.vault).get(&opened).is_none());

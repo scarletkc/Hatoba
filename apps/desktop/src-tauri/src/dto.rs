@@ -960,6 +960,24 @@ pub struct WindowChromeEvent {
     pub floating: bool,
 }
 
+/// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "app://launch")]
+pub struct LaunchEvent;
+
+/// The `hatoba` command on this device (HOST-13).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct CliCommandView {
+    /// Settings → General has it on.
+    pub enabled: bool,
+    /// Where the command lives: the folder added to the user's `PATH` on Windows, the launcher
+    /// itself on Linux and macOS.
+    pub location: String,
+    /// Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
+    /// `~/.local/bin` joins the `PATH` at the next sign-in.
+    pub on_path: bool,
+}
+
 /// What the update check found (spec §11).
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct UpdateCheck {
