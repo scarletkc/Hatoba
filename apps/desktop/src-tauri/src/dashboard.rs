@@ -635,8 +635,6 @@ struct Versions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct JumpVersion {
     id: String,
-    address: String,
-    port: u16,
     version: String,
 }
 
@@ -695,8 +693,6 @@ impl Versions {
                     i,
                     JumpVersion {
                         id: (*id).to_owned(),
-                        address: hop.address.clone(),
-                        port: hop.port,
                         version: String::new(),
                     },
                 ));
@@ -821,26 +817,19 @@ fn plan(vault: &Vault, host_id: &str) -> Option<Plan> {
     })
 }
 
-/// The jump hosts (`jumps` is outwards) a connection got past before it failed at `hop`: all of
-/// them once it reached the destination, which is connected to last.
-fn passed<'a>(
-    jumps: &'a [JumpVersion],
-    hop: Option<(String, u16)>,
-    destination: &(String, u16),
-) -> &'a [JumpVersion] {
-    let Some((address, port)) = hop else {
-        return &[];
-    };
-    if (address.as_str(), port) == (destination.0.as_str(), destination.1) {
-        return jumps;
-    }
-    match jumps
-        .iter()
-        .position(|j| j.address == address && j.port == port)
-    {
-        Some(at) => &jumps[at + 1..],
+/// The jump hosts (`jumps` is outwards) a connection got past before it failed at hop `hop`,
+/// counted from the outermost one: all of them once it reached the destination.
+fn passed(jumps: &[JumpVersion], hop: Option<usize>) -> &[JumpVersion] {
+    match hop {
+        Some(at) => &jumps[jumps.len() - at.min(jumps.len())..],
         None => &[],
     }
+}
+
+/// The jump host at hop `hop`, counted from the outermost one, unless that is the destination.
+fn jump_at(jumps: &[JumpVersion], hop: Option<usize>) -> Option<&JumpVersion> {
+    let at = hop?;
+    (at < jumps.len()).then(|| &jumps[jumps.len() - 1 - at])
 }
 
 /// The hold a failed unattended connection puts the host in, if it needs the user.
@@ -1056,8 +1045,10 @@ async fn connect_step(
         });
         return Next::Wait(Some(RECHECK));
     }
-    let destination = (cfg.host.clone(), cfg.port);
+    // The connection's hops are those of the plan's chain, unless the vault changed in between.
+    let same_chain = cfg.jump.len() == jumps.len();
     let (result, outcome) = connect_unattended(app, cfg).await;
+    let hop = outcome.hop().filter(|_| same_chain);
     drop(permit);
     let session = match result {
         Ok(session) => {
@@ -1065,18 +1056,12 @@ async fn connect_step(
             session
         }
         Err(error) => {
-            dash.passed(passed(&jumps, outcome.hop(), &destination));
+            dash.passed(passed(&jumps, hop));
             match hold_for(&error, &outcome) {
                 Some(hold) => {
                     // At a jump host, every host behind it waits with this one.
-                    let hop = outcome.hop().filter(|hop| *hop != destination).and_then(
-                        |(address, port)| {
-                            jumps
-                                .iter()
-                                .find(|j| j.address == address && j.port == port)
-                        },
-                    );
-                    dash.hold(host_id, hold, Some(error.clone()), version, hop);
+                    let jump = jump_at(&jumps, hop);
+                    dash.hold(host_id, hold, Some(error.clone()), version, jump);
                     dash.emit(DashboardEvent::Held {
                         host_id: host,
                         hold,
@@ -1462,8 +1447,6 @@ mod tests {
         let dash = Dashboard::default();
         let bastion = JumpVersion {
             id: "bastion".to_owned(),
-            address: "bastion.example".to_owned(),
-            port: 22,
             version: "v1".to_owned(),
         };
         let rejected = AppError::ssh(SshErrorKind::AuthFailed, "denied");
@@ -1531,7 +1514,6 @@ mod tests {
         let before = Versions::of(&v, &get(&v, &id));
         assert_eq!(before.jumps.len(), 1);
         assert_eq!(before.jumps[0].id, bastion);
-        assert_eq!(before.jumps[0].address, "bastion");
         // The destination's own password does not change the jump host's version.
         let mut app = get(&v, &id);
         app.auth = password("new");
@@ -1556,8 +1538,6 @@ mod tests {
         let dash = Dashboard::default();
         let bastion = JumpVersion {
             id: "bastion".to_owned(),
-            address: "bastion.example".to_owned(),
-            port: 22,
             version: "v1".to_owned(),
         };
         let jumps = std::slice::from_ref(&bastion);
@@ -1597,23 +1577,23 @@ mod tests {
     fn a_connection_that_failed_further_in_got_past_the_jump_hosts_outwards() {
         let jump = |id: &str| JumpVersion {
             id: id.to_owned(),
-            address: format!("{id}.example"),
-            port: 22,
             version: "v".to_owned(),
         };
-        // Outwards: the inner jump host, then the outer one.
+        // Outwards: the inner jump host, then the outer one, which is connected to first.
         let jumps = [jump("inner"), jump("outer")];
-        let destination = ("app.example".to_owned(), 22);
-        let ids = |hop: Option<(&str, u16)>| -> Vec<String> {
-            passed(&jumps, hop.map(|(a, p)| (a.to_owned(), p)), &destination)
-                .iter()
-                .map(|j| j.id.clone())
-                .collect()
+        let ids = |hop: Option<usize>| -> Vec<String> {
+            passed(&jumps, hop).iter().map(|j| j.id.clone()).collect()
         };
         assert!(ids(None).is_empty());
-        assert!(ids(Some(("outer.example", 22))).is_empty());
-        assert_eq!(ids(Some(("inner.example", 22))), ["outer"]);
-        assert_eq!(ids(Some(("app.example", 22))), ["inner", "outer"]);
+        assert!(ids(Some(0)).is_empty());
+        assert_eq!(ids(Some(1)), ["outer"]);
+        assert_eq!(ids(Some(2)), ["inner", "outer"]);
+        // Hops are told apart by place, so two on one address and port are not confused.
+        let at = |hop: Option<usize>| jump_at(&jumps, hop).map(|j| j.id.as_str());
+        assert_eq!(at(Some(0)), Some("outer"));
+        assert_eq!(at(Some(1)), Some("inner"));
+        assert_eq!(at(Some(2)), None);
+        assert_eq!(at(None), None);
     }
 
     #[tokio::test]

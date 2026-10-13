@@ -1,7 +1,7 @@
 //! Live SSH sessions, host-key verification (SSH-04) and interactive prompts (SSH-08).
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -514,8 +514,8 @@ impl KeyboardInteractive for Interactive {
 #[derive(Default)]
 pub struct Unattended {
     host_key: Mutex<Option<HostKeyPromptKind>>,
-    /// The hop being connected to, as its address and port: the last one reached.
-    hop: Mutex<Option<(String, u16)>>,
+    /// The hops connected to so far, the first one outermost.
+    hops: AtomicUsize,
     /// That hop's host key was trusted, so signing in to it began.
     signing_in: AtomicBool,
     prompted: AtomicBool,
@@ -546,16 +546,17 @@ impl Unattended {
         self.signing_in.load(Ordering::Relaxed)
     }
 
-    /// The hop a failure happened at: the last one the connection reached.
-    pub fn hop(&self) -> Option<(String, u16)> {
-        lock(&self.hop).clone()
+    /// The hop a failure happened at, the last one the connection reached, counted from the
+    /// first (outermost) one: past the jump hosts, the destination. `None` before any.
+    pub fn hop(&self) -> Option<usize> {
+        self.hops.load(Ordering::Relaxed).checked_sub(1)
     }
 
     #[cfg(test)]
     pub fn for_tests(signing_in: bool, prompted: bool, password_prompted: bool) -> Self {
         Self {
             host_key: Mutex::new(None),
-            hop: Mutex::new(None),
+            hops: AtomicUsize::new(0),
             signing_in: AtomicBool::new(signing_in),
             prompted: AtomicBool::new(prompted),
             password_prompted: AtomicBool::new(password_prompted),
@@ -573,7 +574,7 @@ struct UnattendedVerifier {
 impl HostKeyVerifier for UnattendedVerifier {
     /// Asked as each hop's connection begins, so it also marks the hop being connected to.
     async fn known_key_types(&self, host: &str, port: u16) -> Vec<String> {
-        *lock(&self.outcome.hop) = Some((host.to_owned(), port));
+        self.outcome.hops.fetch_add(1, Ordering::Relaxed);
         self.outcome.signing_in.store(false, Ordering::Relaxed);
         let state = state(&self.app);
         let vault = state.vault();
