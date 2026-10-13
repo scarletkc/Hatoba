@@ -20,7 +20,7 @@ use hatoba_core::model::{Host, HostAuth, Item};
 use hatoba_core::vault::Vault;
 use hatoba_ssh::{ConnectConfig, ProxyConfig, SshSession};
 use tauri::AppHandle;
-use tokio::sync::{Notify, OnceCell, Semaphore};
+use tokio::sync::{Notify, OnceCell, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::convert::stats_view;
@@ -75,6 +75,15 @@ struct Inner {
     /// Jump hosts that failed to sign in (or need the user) for one host, by item id: every
     /// host behind one waits with it, so its rejected credentials are not tried again for each.
     hop_holds: HashMap<String, Held>,
+    /// Jump hosts by item id: until one has let a connection through, the hosts behind it try
+    /// it one at a time.
+    hop_gates: HashMap<String, HopGate>,
+}
+
+struct HopGate {
+    /// [`JumpVersion::version`] when it last let a connection through.
+    passed: Option<String>,
+    gate: Arc<Semaphore>,
 }
 
 struct Watch {
@@ -124,6 +133,15 @@ struct Held {
     /// For a jump host's hold: the host whose **Retry** tries the jump host again. The other
     /// hosts behind it keep waiting until that one gets past it.
     retry_by: Option<String>,
+}
+
+impl HopGate {
+    fn new() -> Self {
+        Self {
+            passed: None,
+            gate: Arc::new(Semaphore::new(1)),
+        }
+    }
 }
 
 struct Probe {
@@ -252,6 +270,7 @@ impl Dashboard {
             let mut inner = lock(&self.inner);
             inner.watch = None;
             inner.probes.clear();
+            inner.hop_gates.clear();
             inner
                 .hosts
                 .values_mut()
@@ -439,6 +458,9 @@ impl Dashboard {
     ) {
         let mut inner = lock(&self.inner);
         if let Some(jump) = hop {
+            if let Some(gate) = inner.hop_gates.get_mut(&jump.id) {
+                gate.passed = None;
+            }
             inner.hop_holds.insert(
                 jump.id.clone(),
                 Held {
@@ -459,10 +481,16 @@ impl Dashboard {
         });
     }
 
-    /// A connection got past these jump hosts, so their holds end for every host behind them.
+    /// A connection got past these jump hosts, so their holds end for every host behind them,
+    /// and those hosts no longer try them one at a time.
     fn passed(&self, jumps: &[JumpVersion]) {
         let mut inner = lock(&self.inner);
         for jump in jumps {
+            inner
+                .hop_gates
+                .entry(jump.id.clone())
+                .or_insert_with(HopGate::new)
+                .passed = Some(jump.version.clone());
             if inner
                 .hop_holds
                 .get(&jump.id)
@@ -471,6 +499,39 @@ impl Dashboard {
                 inner.hop_holds.remove(&jump.id);
             }
         }
+    }
+
+    /// Waits until the host may try its jump hosts: through one that has not let a connection
+    /// through as it connects now, one connection at a time goes, so its rejected password is
+    /// not sent once per host behind it before the first rejection is known. The permits are
+    /// held until the attempt's outcome is recorded.
+    async fn through(&self, jumps: &[JumpVersion]) -> Option<Vec<OwnedSemaphorePermit>> {
+        let mut permits = Vec::new();
+        // Outermost first, the order every chain through a jump host takes them in.
+        for jump in jumps.iter().rev() {
+            let gate = {
+                let mut inner = lock(&self.inner);
+                let entry = inner
+                    .hop_gates
+                    .entry(jump.id.clone())
+                    .or_insert_with(HopGate::new);
+                if entry.passed.as_deref() == Some(jump.version.as_str()) {
+                    continue;
+                }
+                Arc::clone(&entry.gate)
+            };
+            let permit = gate.acquire_owned().await.ok()?;
+            // The connection before this one may have got through.
+            let passed = lock(&self.inner)
+                .hop_gates
+                .get(&jump.id)
+                .and_then(|g| g.passed.as_deref())
+                == Some(jump.version.as_str());
+            if !passed {
+                permits.push(permit);
+            }
+        }
+        Some(permits)
     }
 
     /// The hold of a jump host the host goes through, while the jump host connects as it did
@@ -979,6 +1040,9 @@ async fn connect_step(
     dash.emit(DashboardEvent::Connecting {
         host_id: host.clone(),
     });
+    let Some(gates) = dash.through(&jumps).await else {
+        return Next::Wait(None);
+    };
     let Ok(permit) = Arc::clone(&dash.setups).acquire_owned().await else {
         return Next::Wait(None);
     };
@@ -1027,6 +1091,8 @@ async fn connect_step(
             return Next::Wait(Some(RECHECK));
         }
     };
+    // The outcome is recorded: the next host behind the jump hosts may try them.
+    drop(gates);
     // A tab may have connected while this one did.
     if let Some(tab) = state
         .ssh
@@ -1483,6 +1549,48 @@ mod tests {
         jump.jump_host_id = Some(outer);
         v.put(Some(&bastion), Item::Host(jump)).unwrap();
         assert_ne!(Versions::of(&v, &get(&v, &id)).jumps[0], repassed[0]);
+    }
+
+    #[tokio::test]
+    async fn hosts_behind_a_jump_host_try_it_one_at_a_time_until_one_got_through() {
+        let dash = Dashboard::default();
+        let bastion = JumpVersion {
+            id: "bastion".to_owned(),
+            address: "bastion.example".to_owned(),
+            port: 22,
+            version: "v1".to_owned(),
+        };
+        let jumps = std::slice::from_ref(&bastion);
+        let first = dash.through(jumps).await.unwrap();
+        assert_eq!(first.len(), 1);
+        // The next host waits for the first one's outcome.
+        let second = dash.through(jumps);
+        tokio::pin!(second);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut second)
+                .await
+                .is_err()
+        );
+        // It got through, so the others no longer wait for each other.
+        dash.passed(jumps);
+        drop(first);
+        assert!(second.await.unwrap().is_empty());
+        assert!(dash.through(jumps).await.unwrap().is_empty());
+        // Turned away later, or connecting another way, the jump host is tried by one again.
+        dash.hold(
+            "app",
+            DashboardHold::SignInFailed,
+            None,
+            "app v".to_owned(),
+            Some(&bastion),
+        );
+        assert_eq!(dash.through(jumps).await.unwrap().len(), 1);
+        dash.passed(jumps);
+        let edited = JumpVersion {
+            version: "v2".to_owned(),
+            ..bastion.clone()
+        };
+        assert_eq!(dash.through(&[edited]).await.unwrap().len(), 1);
     }
 
     #[test]
