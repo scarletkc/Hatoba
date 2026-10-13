@@ -183,12 +183,12 @@ The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/
 
 ## Update the screenshots and demo video
 
-The scripts in [`scripts/media`](../scripts/media) capture the screenshots and the demo video from the browser frontend's mock backend: the README and the website's English pages use the ones in `docs/media`, and the website's Chinese and Japanese pages use the ones in `apps/site/src/assets/screenshots`. `?ai=showcase` in `apps/desktop/src/ipc/mock/ai.ts` scripts the AI conversation they show. They need Python 3 and ffmpeg with libx264 and libwebp. Start `pnpm dev`, then from the repository root:
+The scripts in [`scripts/media`](../scripts/media) capture the demo video and the screenshots from the browser frontend's mock backend. The README shows the demo video in `docs/media`; the website's English pages use the screenshots there, and its Chinese and Japanese pages the ones in `apps/site/src/assets/screenshots`. `?ai=showcase` in `apps/desktop/src/ipc/mock/ai.ts` scripts the AI conversation they show. They need Python 3 and ffmpeg with libx264 and libwebp. Start `pnpm dev`, then from the repository root:
 
 ```sh
 pip install -r scripts/media/requirements.txt
 playwright install chromium
-python scripts/media/screenshots.py                  # ai-assistant, ai-approval, dashboard, sync, and sync-deploy PNGs
+python scripts/media/screenshots.py                  # ai-assistant, ai-approval, dashboard, and sync-deploy PNGs
 python scripts/media/screenshots.py --locale zh-CN   # the same in Chinese, and with --locale ja in Japanese
 python scripts/media/video.py                        # hatoba-demo.mp4 with music, and the silent hatoba-demo.webp for the README
 ```

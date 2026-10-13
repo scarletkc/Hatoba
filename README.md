@@ -73,54 +73,16 @@ account.
 
 ## Download
 
-[![Download for Windows](https://img.shields.io/badge/Download-Windows%20x64-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4=)](https://hatoba.fog.moe/download/#windows)
-
+[![Download for Windows](https://img.shields.io/badge/Download-Windows%20x64-0078D4?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgxM3oiLz48L3N2Zz4=)](https://hatoba.fog.moe/download/#windows)
 [![Download for Linux](https://img.shields.io/badge/Download-Linux%20x64-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://hatoba.fog.moe/download/#linux)
-
 [![Download for macOS](https://img.shields.io/badge/Download-macOS%20Apple%20Silicon%20%28experimental%29-000000?style=for-the-badge&logo=apple&logoColor=white)](https://hatoba.fog.moe/download/#macos)
 
-Download from [Releases](https://github.com/scarletkc/Hatoba/releases):
-
-- **Windows**: `Hatoba_<version>_windows-x64-setup.exe` installs for the
-  current user without administrator rights.
-- **Linux (x86_64)**: `Hatoba_<version>_linux-x64.deb` for Debian, Ubuntu, and
-  distributions based on them, or `Hatoba_<version>_linux-x64.AppImage` for the
-  others. Sync keeps its credentials in the Secret Service, so it needs GNOME
-  Keyring, KWallet, or another Secret Service provider.
-- **macOS (Apple Silicon, experimental)**:
-  `Hatoba_<version>_macos-apple-silicon.dmg` for macOS 13 or later. The app is
-  not signed with an Apple Developer ID or notarized, so macOS blocks it the
-  first time you open it. Within the next hour, go to
-  **System Settings → Privacy & Security**, choose **Open Anyway** under
-  **Security**, and enter your login password. After an update, macOS may ask
-  whether Hatoba can use its keychain items: enter your login password and
-  choose **Always Allow**, because sync fails if you deny it.
-
-The maintainer uses Windows, so the Linux and macOS builds get little testing
-on real machines. If something doesn't work on them, please
+The [download page](https://hatoba.fog.moe/download/) offers the newest
+release for your system, with its checksums and install steps, and
+[Releases](https://github.com/scarletkc/Hatoba/releases) has every version. The
+maintainer uses Windows, so the Linux and macOS builds get little testing on
+real machines. If something doesn't work on them, please
 [open an issue](https://github.com/scarletkc/Hatoba/issues).
-
-Each release's notes cover what changed and how to install it.
-
-## Screenshots
-
-### AI assistant
-
-The assistant reads the terminal, finds the cause, and fixes it. Each command
-waits for your approval, and you can edit it before it runs.
-
-![The AI assistant beside a terminal, after fixing an nginx 502 and checking the result with curl](docs/media/ai-assistant.png)
-
-![An approval card for a command the assistant wants to run](docs/media/ai-approval.png)
-
-### Cloud sync
-
-Hatoba deploys the sync Worker and its D1 database to your Cloudflare account,
-then keeps every device in sync.
-
-![The Cloud Sync page with the connection, the device list, and the encryption notice](docs/media/sync.png)
-
-![The sync Worker deployed from Hatoba, with each deployment step checked](docs/media/sync-deploy.png)
 
 ## Security
 

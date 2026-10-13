@@ -1,10 +1,10 @@
-"""Capture the screenshots of the README and the website from the frontend's mock backend.
+"""Capture the website's screenshots from the frontend's mock backend.
 
 usage: python scripts/media/screenshots.py [--locale en|zh-CN|ja] [--out DIR] [--url URL]
 
 Needs `pnpm dev` running; --url defaults to http://localhost:1420. The English screenshots go to
-docs/media, where the README and the website's English pages use them; the Chinese and Japanese
-ones go to apps/site/src/assets/screenshots/<locale> for the website's pages in those languages.
+docs/media and the Chinese and Japanese ones to apps/site/src/assets/screenshots/<locale>, where
+the website's pages in each language use them.
 """
 import argparse
 import re
@@ -115,12 +115,6 @@ def main():
         pg.get_by_text(label["dashboard"], exact=True).first.click()
         pg.wait_for_timeout(4000)
         shot(pg, "dashboard")
-
-        # Sync: the status page with its devices
-        pg = page()
-        pg.get_by_text(label["sync"], exact=True).first.click()
-        pg.wait_for_timeout(1000)
-        shot(pg, "sync")
 
         # Sync: the in-app deployment, finished
         pg = page("?sync=none")
