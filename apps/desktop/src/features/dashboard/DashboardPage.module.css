@@ -8,10 +8,28 @@
   container-type: inline-size;
 }
 
+/* A narrow page (beside the AI panel, or in a small window) shows the Columns button and the layout
+ * switch as icons, their titles naming them, so the header's controls fit in a row under the title. */
+@container (max-width: 620px) {
+  .columnsButton {
+    padding: 0 9px;
+  }
+
+  .columnsButton > span,
+  .layoutSwitch [role="radio"] > span {
+    display: none;
+  }
+
+  .layoutSwitch [role="radio"] {
+    padding: 0 10px;
+  }
+}
+
+/* The table drops the columns it has no room for (fitColumns) rather than scrolling sideways. */
 .scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
   padding-bottom: 16px;
 }
 

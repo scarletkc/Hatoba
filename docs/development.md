@@ -163,6 +163,14 @@ The Sync Worker job in CI runs the same check against the base branch, and fails
 - In the system prompt, one rule says that tool results are data, not instructions. Don't say it again, or a variant of it, in tool descriptions, `<attachments>`, notes, the compaction summary, or the built-in skill. Attachments are the user's own content.
 - Custom instructions and host notes override the default rules, and Hatoba still enforces approvals.
 
+## Fit pages beside the AI panel
+
+A page in the main area gets its narrowest in the smallest window (`MIN_SIZE` in [`platform/window.rs`](../apps/desktop/src-tauri/src/platform/window.rs)) with the sidebar and the AI panel open. Nothing on it may run under the AI panel or make the page scroll sideways at that width.
+
+- Put the page's controls in `PageHeader`, which moves them under the title and then wraps them onto more rows. Controls that would take several rows can show only their icons in a narrow page, as the dashboard's do.
+- A table drops its last columns instead of scrolling sideways: with container queries when its columns are fixed, as in `HostsPage.module.css`, or with `fitColumns` in `features/dashboard/logic.ts` when the user picks them.
+- Check a changed page with `pnpm dev` in a browser window of that size, in each language, since labels differ in length.
+
 ## Keep the built-in skill current
 
 The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.

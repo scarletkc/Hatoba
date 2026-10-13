@@ -10,6 +10,37 @@ export const DASHBOARD_SORTS: DashboardSort[] = ["list", "name", "status", "cpu"
 export type DashboardColumn = "status" | "cpu" | "memory" | "disk" | "network" | "load" | "uptime";
 export const DASHBOARD_COLUMNS: DashboardColumn[] = ["status", "cpu", "memory", "disk", "network", "load", "uptime"];
 
+/** A table column's least width in pixels, and the most it grows to: a width, or a share of the room left over. */
+export type ColumnWidth = [least: number, most: string];
+export const NAME_WIDTH: ColumnWidth = [130, "1.4fr"];
+export const COLUMN_WIDTHS: Record<DashboardColumn, ColumnWidth> = {
+  status: [90, "1.2fr"],
+  cpu: [72, "80px"],
+  memory: [72, "80px"],
+  disk: [80, "90px"],
+  network: [140, "1fr"],
+  load: [100, "100px"],
+  uptime: [96, "96px"],
+};
+/** The gap between the table's columns and the padding at each end of a row, as in the stylesheet. */
+export const COLUMN_GAP = 12;
+export const ROW_PADDING = 10;
+
+/**
+ * The columns a table row `width` pixels wide has room for: the name, then the shown columns in their order up to the
+ * first that does not fit. A narrow page drops the last columns, as the host list does, instead of scrolling sideways.
+ */
+export function fitColumns(columns: DashboardColumn[], width: number): DashboardColumn[] {
+  let used = 2 * ROW_PADDING + NAME_WIDTH[0];
+  const fit: DashboardColumn[] = [];
+  for (const c of columns) {
+    used += COLUMN_GAP + COLUMN_WIDTHS[c][0];
+    if (used > width) break;
+    fit.push(c);
+  }
+  return fit;
+}
+
 /** What left a host out of the dashboard on this device: its own switch, its group's, or nothing. */
 export function leftOutBy(host: HostView, groups: ReadonlyMap<string, GroupView>): "host" | "group" | null {
   if (!host.dashboard) return "host";

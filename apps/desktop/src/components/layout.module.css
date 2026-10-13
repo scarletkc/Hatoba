@@ -35,10 +35,16 @@
   gap: 8px;
 }
 
+/* Buttons wider than the page wrap onto more rows rather than running under the AI panel. Their width
+ * on one row is still what moves the actions under the title. */
 .pageButtons {
   flex: none;
+  width: max-content;
+  max-width: 100%;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
 }
 

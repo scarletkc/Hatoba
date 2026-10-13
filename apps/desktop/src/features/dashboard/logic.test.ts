@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { StatsReading } from "@/features/terminal/stats";
 import type { DashboardEvent, GroupView, HostView, ServerStatsView } from "@/ipc/types";
 import {
+  DASHBOARD_COLUMNS,
+  fitColumns,
   fullestMount,
   groupSections,
   isStale,
@@ -207,5 +209,17 @@ describe("dashboard view", () => {
     expect(isStale(live, at + 18_000, 3)).toBe(true);
     expect(isStale({ ...live, phase: "failed" }, at + 1_000, 3)).toBe(true);
     expect(isStale({ ...NO_READOUT, phase: "offline" }, at, 3)).toBe(false);
+  });
+
+  it("drops the table's last columns that a narrow row has no room for", () => {
+    expect(fitColumns(DASHBOARD_COLUMNS, 884)).toEqual(DASHBOARD_COLUMNS);
+    expect(fitColumns(DASHBOARD_COLUMNS, 883)).toEqual(["status", "cpu", "memory", "disk", "network", "load"]);
+    // Beside the widest AI panel, and in the smallest window.
+    expect(fitColumns(DASHBOARD_COLUMNS, 422)).toEqual(["status", "cpu", "memory"]);
+    expect(fitColumns(DASHBOARD_COLUMNS, 274)).toEqual(["status"]);
+    expect(fitColumns(DASHBOARD_COLUMNS, 200)).toEqual([]);
+    // Only the shown columns count, and none after the first that does not fit.
+    expect(fitColumns(["cpu", "uptime"], 342)).toEqual(["cpu", "uptime"]);
+    expect(fitColumns(["network", "cpu"], 300)).toEqual([]);
   });
 });

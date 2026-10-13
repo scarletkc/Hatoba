@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type RefCallback } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, Spinner } from "@/components/controls";
@@ -16,8 +16,11 @@ import { cx } from "@/lib/cx";
 import { dashboardSwitch, openTerminal, retryHost, setShownOnDashboard, useDashboardUi } from "./actions";
 import { HostDetail } from "./HostDetail";
 import {
+  COLUMN_WIDTHS,
   DASHBOARD_COLUMNS,
   DASHBOARD_SORTS,
+  NAME_WIDTH,
+  fitColumns,
   fullestMount,
   groupSections,
   isStale,
@@ -116,7 +119,11 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
   const hidden = prefs.dashboard_hidden_columns;
   const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
   const alerts: Alerts = useMemo(() => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }), [cpuAlert, memAlert, diskAlert]);
-  const columns = useMemo(() => DASHBOARD_COLUMNS.filter((c) => !hidden.includes(c)), [hidden]);
+  const [measureTable, tableWidth] = useWidth();
+  const columns = useMemo(() => {
+    const shownColumns = DASHBOARD_COLUMNS.filter((c) => !hidden.includes(c));
+    return tableWidth === null ? shownColumns : fitColumns(shownColumns, tableWidth);
+  }, [hidden, tableWidth]);
 
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
   // The host list's order, which "Host List Order" keeps and the other sorts break ties with.
@@ -195,19 +202,22 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
         <Button
           ref={columnsButton}
           icon="columns"
+          className={s.columnsButton}
+          title={t("dashboard.columns")}
           aria-haspopup="menu"
           aria-expanded={!!columnsMenu.anchor}
           onClick={() => columnsButton.current && columnsMenu.openBelow(columnsButton.current, true)}
         >
-          {t("dashboard.columns")}
+          <span>{t("dashboard.columns")}</span>
         </Button>
       )}
       <Segmented<LocalPrefs["dashboard_layout"]>
         ariaLabel={t("dashboard.layout")}
+        className={s.layoutSwitch}
         value={layout}
         options={[
-          { value: "cards", label: t("dashboard.layout.cards"), icon: "squares-four" },
-          { value: "table", label: t("dashboard.layout.table"), icon: "rows" },
+          { value: "cards", label: t("dashboard.layout.cards"), title: t("dashboard.layout.cards"), icon: "squares-four" },
+          { value: "table", label: t("dashboard.layout.table"), title: t("dashboard.layout.table"), icon: "rows" },
         ]}
         onChange={(dashboard_layout) => savePrefs({ dashboard_layout })}
       />
@@ -248,7 +258,7 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
   } else {
     body = (
       <div className={s.scroll}>
-        {layout === "table" && <TableHead columns={columns} t={t} />}
+        {layout === "table" && <TableHead columns={columns} t={t} measure={measureTable} />}
         {sections.map((section) => (
           <section key={section.group?.id ?? "none"} className={s.section} aria-label={section.group?.name ?? t("dashboard.noGroup")}>
             <div className={s.sectionHead}>
@@ -547,37 +557,30 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
 
 // ───────────────────────── Table ─────────────────────────
 
-/** Each column's least width in pixels, and its share of the room left over (0: fixed). */
-const NAME_WIDTH: [number, number] = [150, 1.4];
-const COLUMN_WIDTHS: Record<DashboardColumn, [number, number]> = {
-  status: [150, 1.2],
-  cpu: [80, 0],
-  memory: [80, 0],
-  disk: [90, 0],
-  network: [140, 1],
-  load: [100, 0],
-  uptime: [96, 0],
-};
-/** The gap between columns and the padding at each end of a row, as in the stylesheet. */
-const COLUMN_GAP = 12;
-const ROW_PADDING = 10;
-
-/**
- * The grid of the table's head and rows. Every section is a grid of its own, so a least width shared by all of
- * them keeps the columns in line when a narrow page scrolls sideways.
- */
+/** The grid of the table's head and rows, the columns fitColumns left room for. */
 function gridOf(columns: DashboardColumn[]): CSSProperties {
   const widths = [NAME_WIDTH, ...columns.map((c) => COLUMN_WIDTHS[c])];
-  const least = widths.reduce((sum, [min]) => sum + min, 0) + COLUMN_GAP * (widths.length - 1) + 2 * ROW_PADDING;
-  return {
-    gridTemplateColumns: widths.map(([min, share]) => (share ? `minmax(${min}px, ${share}fr)` : `${min}px`)).join(" "),
-    minWidth: least,
-  };
+  return { gridTemplateColumns: widths.map(([least, most]) => `minmax(${least}px, ${most})`).join(" ") };
 }
 
-function TableHead({ columns, t }: { columns: DashboardColumn[]; t: T }) {
+/** The width of the element given the returned ref, kept current as it resizes; null before it mounts. */
+function useWidth(): [RefCallback<HTMLElement>, number | null] {
+  const [width, setWidth] = useState<number | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
+}
+
+function TableHead({ columns, t, measure }: { columns: DashboardColumn[]; t: T; measure: RefCallback<HTMLElement> }) {
   return (
-    <div className={cx(s.tableHead, s.grid)} style={gridOf(columns)}>
+    <div ref={measure} className={cx(s.tableHead, s.grid)} style={gridOf(columns)}>
       <span className={s.headName}>{t("dashboard.col.name")}</span>
       {columns.map((c) => (
         <span key={c}>{t(`dashboard.col.${c}` as MessageKey)}</span>

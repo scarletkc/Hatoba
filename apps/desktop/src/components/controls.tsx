@@ -191,6 +191,8 @@ export interface SegmentOption<V extends string> {
   value: V;
   label: string;
   icon?: string;
+  /** Names the segment where a narrow page shows only its icon. */
+  title?: string;
   /** Not offered now; the selected option stays selected. */
   disabled?: boolean;
 }
@@ -200,14 +202,16 @@ export function Segmented<V extends string>({
   options,
   onChange,
   ariaLabel,
+  className,
 }: {
   value: V;
   options: SegmentOption<V>[];
   onChange: (v: V) => void;
   ariaLabel?: string;
+  className?: string;
 }) {
   return (
-    <div className={s.segmented} role="radiogroup" aria-label={ariaLabel}>
+    <div className={cx(s.segmented, className)} role="radiogroup" aria-label={ariaLabel}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -216,10 +220,11 @@ export function Segmented<V extends string>({
           aria-checked={o.value === value}
           disabled={o.disabled}
           className={cx(s.segment, o.value === value && s.segmentOn)}
+          title={o.title}
           onClick={() => onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} />}
-          {o.label}
+          <span>{o.label}</span>
         </button>
       ))}
     </div>
