@@ -134,9 +134,10 @@ pub fn hide_main(window: tauri::Window) {
     });
 }
 
-/// Brings the main window back after the red button hid it or after it was minimized (Dock click).
-#[cfg(target_os = "macos")]
+/// Brings the main window back after the red button hid it or after it was minimized: a Dock
+/// click, or another launch (HOST-13).
 pub fn reopen_main(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
     REOPENS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     if let Some(w) = app.get_webview_window(MAIN) {
         let _ = w.unminimize();

@@ -1,6 +1,7 @@
 //! The russh client handler: host key verification, the server's identification string and
 //! disconnect tracking.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use russh::Names;
@@ -57,6 +58,8 @@ pub(crate) struct SessionShared {
     reason: Mutex<Option<CloseReason>>,
     /// The identification string the server sent in the version exchange, cleaned.
     server_id: OnceLock<String>,
+    /// The host could not run `remote_command`'s script, so commands run as they are.
+    plain_commands: AtomicBool,
 }
 
 impl SessionShared {
@@ -65,6 +68,7 @@ impl SessionShared {
             closed_tx: watch::Sender::new(false),
             reason: Mutex::new(None),
             server_id: OnceLock::new(),
+            plain_commands: AtomicBool::new(false),
         })
     }
 
@@ -78,6 +82,16 @@ impl SessionShared {
 
     pub(crate) fn server_id(&self) -> Option<&str> {
         self.server_id.get().map(String::as_str)
+    }
+
+    /// Commands run as they are on this connection: the host could not run `remote_command`'s
+    /// script.
+    pub(crate) fn plain_commands(&self) -> bool {
+        self.plain_commands.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_plain_commands(&self) {
+        self.plain_commands.store(true, Ordering::Relaxed);
     }
 
     /// Records why the connection ended (first reason wins) and wakes watchers.

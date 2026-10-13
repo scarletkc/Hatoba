@@ -169,7 +169,7 @@ pub(crate) fn merge_prefs(stored: Option<&str>, prefs: &LocalPrefs) -> AppResult
     serde_json::to_string(&merged).map_err(|e| AppError::internal(e.to_string()))
 }
 
-fn stored_prefs(json: Option<&str>) -> Map<String, Value> {
+pub(crate) fn stored_prefs(json: Option<&str>) -> Map<String, Value> {
     match json.map(serde_json::from_str) {
         Some(Ok(Value::Object(map))) => map,
         _ => Map::new(),

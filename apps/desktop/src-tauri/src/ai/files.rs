@@ -748,16 +748,24 @@ async fn write_bytes(
     result
 }
 
-/// The message for a write that failed after it may have begun.
+/// The message for a write that failed after it may have begun. A lost connection never cuts the
+/// file short, since the host writes it only once the whole new text has arrived; a write that
+/// failed on the host (a full disk, say) may have.
 fn unfinished(path: &str, error: &RemoteFileError, closed: bool) -> String {
     let reconnect = if closed {
         " once the user has reconnected the tab"
     } else {
         ""
     };
+    let state = match error {
+        RemoteFileError::Ssh(_) => {
+            "The file holds either what it held before or all of the new text"
+        }
+        _ => "The file may be unchanged, cut short or empty",
+    };
     format!(
-        "Writing {path} failed: {error}. The file may be unchanged, cut short or empty, so read \
-         it with read_file{reconnect} before you change it."
+        "Writing {path} failed: {error}. {state}, so read it with read_file{reconnect} before you \
+         change it."
     )
 }
 
@@ -775,8 +783,9 @@ fn timed_out(path: &str, op: Op) -> String {
     match op {
         Op::Read => format!("Reading {path} did not finish within 30 seconds."),
         Op::Write => format!(
-            "Writing {path} did not finish within 30 seconds. Hatoba closed its channel; the file \
-             may be partly written, so read it again before you change it."
+            "Writing {path} did not finish within 30 seconds, so Hatoba closed its channel. The \
+             file holds either what it held before or all of the new text, so read it again \
+             before you change it."
         ),
     }
 }
@@ -829,6 +838,18 @@ fn describe(path: &str, op: Op, error: RemoteFileError, from_card: bool) -> Stri
             "{path} changed on the host while Hatoba was changing it, so nothing was written. \
              Read it again with read_file before you change it."
         ),
+        RemoteFileError::Incomplete(stderr) => {
+            let why = if stderr.is_empty() {
+                String::new()
+            } else {
+                format!(" ({stderr})")
+            };
+            format!(
+                "The host could not receive or keep the whole new text of {path}{why}, so \
+                 nothing was written. Try again once what stopped it is fixed, such as a full \
+                 temporary directory."
+            )
+        }
         RemoteFileError::Failed { status, stderr } => {
             command_failed(&format!("{verb} {path}"), status, &stderr)
         }
@@ -1157,7 +1178,12 @@ mod tests {
             hatoba_ssh::SshErrorKind::Disconnected,
             "the connection closed",
         ));
-        assert!(unfinished("x", &gone, true).contains("once the user has reconnected the tab"));
+        assert_eq!(
+            unfinished("x", &gone, true),
+            "Writing x failed: the connection closed. The file holds either what it held before \
+             or all of the new text, so read it with read_file once the user has reconnected the \
+             tab before you change it."
+        );
     }
 
     #[test]

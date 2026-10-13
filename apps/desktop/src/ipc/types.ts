@@ -754,6 +754,16 @@ export interface AppInfo {
   local_user: string;
 }
 
+/** The `hatoba` command on this device (HOST-13). */
+export interface CliCommandView {
+  /** Settings → General has it on. */
+  enabled: boolean;
+  /** The folder added to the user's PATH on Windows, the launcher itself on Linux and macOS. */
+  location: string;
+  /** Whether that folder is on the PATH Hatoba started with. Only Linux reports false, until the next sign-in. */
+  on_path: boolean;
+}
+
 /** What the update check found (spec §11). */
 export interface UpdateCheck {
   current_version: string;
@@ -1393,4 +1403,6 @@ export interface EventMap {
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;
+  /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
+  "app://launch": null;
 }
