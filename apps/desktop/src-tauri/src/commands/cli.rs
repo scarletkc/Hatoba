@@ -17,11 +17,11 @@ use crate::state::AppState;
 const PREF: &str = "cli_command";
 
 /// The arguments of the launches the window has not handled yet, oldest first. Each is taken
-/// once.
+/// once, and only while the vault is unlocked: a launch during a lock waits for the unlock.
 #[tauri::command]
 #[specta::specta]
-pub fn launch_take() -> Vec<Vec<String>> {
-    launch::QUEUE.take()
+pub fn launch_take(state: State<'_, AppState>) -> AppResult<Vec<Vec<String>>> {
+    state.with_unlocked(|_| Ok(launch::QUEUE.take()))
 }
 
 #[tauri::command]

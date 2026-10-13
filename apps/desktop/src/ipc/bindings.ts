@@ -32,7 +32,7 @@ export const commands = {
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
 	/**
 	 *  The arguments of the launches the window has not handled yet, oldest first. Each is taken
-	 *  once.
+	 *  once, and only while the vault is unlocked: a launch during a lock waits for the unlock.
 	 */
 	launchTake: () => __TAURI_INVOKE<string[][]>("launch_take"),
 	cliCommandGet: () => __TAURI_INVOKE<CliCommandView>("cli_command_get"),

@@ -31,7 +31,11 @@ function runLaunch(args: string[]) {
 export function useLaunches(unlocked: boolean) {
   useEffect(() => {
     if (!unlocked) return;
+    let active = true;
+    // The backend hands launches over only while the vault is unlocked, so what this takes runs
+    // even if the effect has ended since.
     const take = () => {
+      if (!active) return;
       api
         .launch_take()
         .then((launches) => launches.forEach(runLaunch))
@@ -42,6 +46,9 @@ export function useLaunches(unlocked: boolean) {
       take();
       return un;
     });
-    return () => void sub.then((un) => un());
+    return () => {
+      active = false;
+      void sub.then((un) => un());
+    };
   }, [unlocked]);
 }

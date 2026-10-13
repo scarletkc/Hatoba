@@ -232,7 +232,10 @@ export function createMockApi(): HatobaApi {
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
     app_info: async () => ({ version, platform, mica: false, local_user: "demo" }),
-    launch_take: async () => launches.splice(0),
+    launch_take: async () => {
+      needUnlocked();
+      return launches.splice(0);
+    },
     cli_command_get: async () => cliView(),
     cli_command_set: async (enabled) => {
       await delay(300);

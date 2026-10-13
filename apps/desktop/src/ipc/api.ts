@@ -102,7 +102,7 @@ export interface HatobaApi {
    * closes and the installer starts the new version, so this settles only when that fails.
    */
   update_install(onProgress: (p: UpdateProgress) => void): Promise<void>;
-  /** The arguments of each `hatoba …` launch the window has not handled yet, oldest first (HOST-13). Each is returned once. */
+  /** The arguments of each `hatoba …` launch the window has not handled yet, oldest first (HOST-13). Each is returned once, and only while the vault is unlocked. */
   launch_take(): Promise<string[][]>;
   cli_command_get(): Promise<CliCommandView>;
   /** Adds or removes the `hatoba` command. On macOS this may wait for an administrator's password. */
