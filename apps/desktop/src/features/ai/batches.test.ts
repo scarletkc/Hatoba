@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CHANNELS, nextBatch, runConcurrently, toolBatches } from "./batches";
-import { concurrencySafe, toolKind, usesChannel } from "./tools";
+import { MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CHANNELS, type CallLimit, nextBatch, runConcurrently, toolBatches } from "./batches";
+import { concurrencySafe, limitOf, toolKind } from "./tools";
 
 describe("which calls run together (§13.1)", () => {
   const safe = (name: string, args: Record<string, unknown> = {}) => concurrencySafe(toolKind(name), args);
@@ -12,9 +12,11 @@ describe("which calls run together (§13.1)", () => {
     for (const name of ["edit_file", "write_file", "send_input", "mcp__github__list_issues", "call_mcp_tool", "no_such_tool"]) expect(safe(name), name).toBe(false);
   });
 
-  it("names the tools that open an exec channel", () => {
-    expect(["run_command", "read_file", "edit_file", "write_file", "grep", "glob"].every((n) => usesChannel(toolKind(n)))).toBe(true);
-    expect(["read_terminal", "send_input", "web_search", "fetch_url", "read_skill", "search_tools", "mcp__a__b"].some((n) => usesChannel(toolKind(n)))).toBe(false);
+  it("counts the tools that open an exec channel, and web searches, toward their limits", () => {
+    const limits = (names: string[]) => names.map((n) => limitOf(toolKind(n)));
+    expect(limits(["run_command", "read_file", "edit_file", "write_file", "grep", "glob"])).toEqual(Array(6).fill("channel"));
+    expect(limitOf(toolKind("web_search"))).toBe("search");
+    expect(limits(["read_terminal", "send_input", "fetch_url", "read_skill", "search_tools", "mcp__a__b"])).toEqual(Array(6).fill(null));
   });
 
   it("splits calls into runs of calls that join, with every other call alone, in order", () => {
@@ -36,6 +38,7 @@ describe("runConcurrently", () => {
     let most = 0;
     let mostChannels = 0;
     const channel = (c: string) => c.startsWith("ch");
+    const limit = (c: string): CallLimit | null => (channel(c) ? "channel" : c.startsWith("search") ? "search" : null);
     const run = (c: string) =>
       new Promise<void>((resolve) => {
         started.push(c);
@@ -47,14 +50,14 @@ describe("runConcurrently", () => {
           resolve();
         });
       });
-    return { running, started, finish, channel, run, most: () => most, mostChannels: () => mostChannels };
+    return { running, started, finish, limit, run, most: () => most, mostChannels: () => mostChannels };
   }
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
   it("runs at most four calls that open an exec channel at once, and up to ten in all, starting them in order", async () => {
     const h = harness();
     const calls = [...Array.from({ length: 6 }, (_, i) => `ch${i}`), ...Array.from({ length: 12 }, (_, i) => `web${i}`)];
-    const done = runConcurrently(calls, h.channel, h.run, () => true);
+    const done = runConcurrently(calls, h.limit, h.run, () => true);
     await flush();
     // The fifth channel call waits for a channel, and the calls after it wait for it to start.
     expect(h.started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
@@ -76,11 +79,28 @@ describe("runConcurrently", () => {
     expect(h.mostChannels()).toBe(MAX_CONCURRENT_CHANNELS);
   });
 
+  it("runs one web search at a time, beside the other calls", async () => {
+    const h = harness();
+    const calls = ["search0", "web0", "search1", "ch0", "search2"];
+    const done = runConcurrently(calls, h.limit, h.run, () => true);
+    await flush();
+    // search1 waits for search0, and the calls after it wait for it to start.
+    expect(h.started).toEqual(["search0", "web0"]);
+    h.finish.get("search0")!();
+    await flush();
+    expect(h.started).toEqual(["search0", "web0", "search1", "ch0"]);
+    h.finish.get("search1")!();
+    await flush();
+    expect(h.started).toEqual(calls);
+    for (const c of ["web0", "ch0", "search2"]) h.finish.get(c)!();
+    expect(await done).toBe(calls.length);
+  });
+
   it("starts no more calls once one may not start, and waits for the ones it started", async () => {
     const h = harness();
     let going = true;
     let settled = false;
-    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.channel, h.run, () => going).then((started) => {
+    const done = runConcurrently(["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"], h.limit, h.run, () => going).then((started) => {
       settled = true;
       return started;
     });
@@ -106,7 +126,7 @@ describe("runConcurrently", () => {
         finish.set(c, resolve);
       });
     const calls = ["ch0", "ch1", "ch2", "ch3", "ch4", "ch5"];
-    const done = runConcurrently(calls, () => true, run, () => true);
+    const done = runConcurrently(calls, () => "channel", run, () => true);
     await flush();
     expect(started).toEqual(["ch0", "ch1", "ch2", "ch3"]);
     // ch1's tool ended, but its call waits for ch0's result: its channel is free.
@@ -129,7 +149,7 @@ describe("runConcurrently", () => {
     const ran: string[] = [];
     await runConcurrently(
       ["a", "b", "c"],
-      () => false,
+      () => null,
       async (c) => {
         ran.push(c);
         if (c === "a") throw new Error("failed");

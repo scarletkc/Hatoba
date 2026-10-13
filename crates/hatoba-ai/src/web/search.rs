@@ -74,7 +74,8 @@ const MAX_SNIPPET_CHARS: usize = 1_000;
 /// Overall limit of a search.
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
 /// How many times a search the provider turns away with 429 Too Many Requests is sent again: the
-/// searches of one response go out at once (§13.1), and a free plan may allow one a second.
+/// searches of one response go out one after another (§13.1), and a free plan may allow one a
+/// second.
 const RATE_LIMIT_RETRIES: u32 = 3;
 /// The longest wait before such a retry that the provider's `Retry-After` can ask for.
 const MAX_RETRY_AFTER: Duration = Duration::from_secs(5);
@@ -410,8 +411,8 @@ mod tests {
         assert_eq!(found[0].url, "https://openzfs.org");
     }
 
-    /// The searches of a response go out at once (§13.1), so a provider's per-second limit turns
-    /// some away; they are sent again.
+    /// The searches of a response go out one after another (§13.1), and a provider's per-second
+    /// limit can still turn one away; it is sent again.
     #[tokio::test]
     async fn a_search_turned_away_for_its_rate_is_sent_again() {
         let server = MockServer::start().await;

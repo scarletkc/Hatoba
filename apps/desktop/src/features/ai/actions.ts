@@ -89,6 +89,7 @@ import {
   callMode,
   concurrencySafe,
   grantKeys,
+  limitOf,
   mcpOffResult,
   mustAsk,
   needsApproval,
@@ -97,7 +98,6 @@ import {
   savedFor,
   shownCall,
   toolKind,
-  usesChannel,
   type HostRef,
   type Scope,
   type ToolKind,
@@ -442,11 +442,11 @@ class TurnRunner {
         const batch = nextBatch(rest, joins);
         let done = 0;
         if (batch.length > 1) {
-          const channel = (call: AiToolCall) => usesChannel(toolKind(call.name));
+          const limit = (call: AiToolCall) => limitOf(toolKind(call.name));
           // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
           // applies to the turn's next call (§13.5), and the calls left run as the next batches.
           const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
-          done = await runConcurrently(batch, channel, (call, release) => this.runAlongside(convId, call, release), starts);
+          done = await runConcurrently(batch, limit, (call, release) => this.runAlongside(convId, call, release), starts);
         }
         if (done === 0) {
           if (!this.acting) return;

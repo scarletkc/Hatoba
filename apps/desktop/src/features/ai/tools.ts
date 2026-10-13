@@ -1,5 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
+import type { CallLimit } from "./batches";
 import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes } from "./commandRules";
 
 /**
@@ -97,9 +98,13 @@ export function needsSession(kind: ToolKind): boolean {
   return kind === "read_terminal" || kind === "send_input" || kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
 }
 
-/** Tools that open an exec channel on the tab's SSH connection for each call. */
-export function usesChannel(kind: ToolKind): boolean {
-  return kind === "run_command" || isFileTool(kind) || isSearchTool(kind);
+/**
+ * §13.1: the limit of a batch that a call of the tool counts toward while it runs, if any: the tools that open an
+ * exec channel on the tab's SSH connection for each call, and web searches.
+ */
+export function limitOf(kind: ToolKind): CallLimit | null {
+  if (kind === "run_command" || isFileTool(kind) || isSearchTool(kind)) return "channel";
+  return kind === "web_search" ? "search" : null;
 }
 
 /**

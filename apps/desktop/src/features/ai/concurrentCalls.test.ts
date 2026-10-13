@@ -268,6 +268,19 @@ describe("calls that only read run together (§13.1)", () => {
     await until(() => shown().length === 0);
   });
 
+  it("runs one web search at a time, beside the other calls", async () => {
+    const search = (id: string) => call(id, "web_search", { query: id });
+    await respond("manual", [read("call_1"), search("call_2"), search("call_3"), read("call_4")]);
+    await until(() => running().length === 2);
+    await flush();
+    // call_3 waits for call_2's search, and call_4 waits for call_3 to start.
+    expect(ran()).toEqual(["call_1", "call_2"]);
+    finish("call_2");
+    await until(() => ran().length === 4);
+    finish("call_1", "call_3", "call_4");
+    await until(() => shown().length === 0);
+  });
+
   it("asks about a fetch the user has not allowed, alone, and runs one on an allowed domain with the reads", async () => {
     useAi.setState({ allowed: { [view.id]: ["fetch_url:nginx.org"] } });
     await respond("manual", [
