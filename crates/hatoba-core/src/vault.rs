@@ -1060,7 +1060,7 @@ impl Vault {
     }
 
     /// Leaves a host or a group out of the dashboard on this device, or brings it back
-    /// (HOST-13). Device-local; never synced.
+    /// (HOST-14). Device-local; never synced.
     ///
     /// # Errors
     /// Storage errors.

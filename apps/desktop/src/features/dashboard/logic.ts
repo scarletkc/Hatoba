@@ -2,7 +2,7 @@ import { percentOf, type StatsReading } from "@/features/terminal/stats";
 import type { GroupView, HostView, MountView } from "@/ipc/types";
 import type { HostPhase, HostReadout } from "./readings";
 
-/** How the dashboard orders hosts within a group (HOST-13). `list` keeps the host list's order. */
+/** How the dashboard orders hosts within a group (HOST-14). `list` keeps the host list's order. */
 export type DashboardSort = "list" | "name" | "status" | "cpu" | "memory" | "disk" | "network" | "uptime";
 export const DASHBOARD_SORTS: DashboardSort[] = ["list", "name", "status", "cpu", "memory", "disk", "network", "uptime"];
 

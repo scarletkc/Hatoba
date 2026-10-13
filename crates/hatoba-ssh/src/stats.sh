@@ -6,7 +6,7 @@ if [ "$system" != Linux ] || [ ! -r /proc/stat ]; then
 fi
 # The routing tables there are; awk stops at a file it cannot open.
 routes=$(for f in /proc/net/route /proc/net/ipv6_route; do [ -r "$f" ] && printf '%s ' "$f"; done)
-# The dashboard (HOST-13) also asks for every filesystem ("$2" is "mounts"). A network
+# The dashboard (HOST-14) also asks for every filesystem ("$2" is "mounts"). A network
 # filesystem that stopped answering would hold `df` up, so `timeout` bounds it where present
 # (BusyBox before 1.30 takes the seconds as -t).
 dft=

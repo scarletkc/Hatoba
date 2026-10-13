@@ -47,6 +47,7 @@
       "webviewInstallMode": { "type": "embedBootstrapper", "silent": true },
       "nsis": {
         "installMode": "currentUser",
+        "installerHooks": "./windows/installer-hooks.nsh",
         "languages": ["SimpChinese", "English", "Japanese"],
         "displayLanguageSelector": false
       }

@@ -69,7 +69,7 @@ const group = (id: string, sort: number, dashboard = true): GroupView => ({ id, 
 
 const reads = (...readings: StatsReading[]): HostReadout => ({ ...NO_READOUT, phase: "reading", online: true, history: readings });
 
-describe("dashboard events (HOST-13)", () => {
+describe("dashboard events (HOST-14)", () => {
   const T0 = Date.UTC(2026, 9, 12, 12);
   const apply = (events: DashboardEvent[], start?: HostReadout) =>
     events.reduce<HostReadout | undefined>((r, e, i) => applyEvent(r, e, T0 + i * 3000), start);

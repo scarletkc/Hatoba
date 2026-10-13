@@ -435,7 +435,7 @@ const DEFAULT_PROFILE: StatsProfile = {
   interval: 2,
 };
 
-/** A random walk of a Linux server's resource usage, by default a 4-CPU, 8 GB one, one reading per call (TERM-12, HOST-13). */
+/** A random walk of a Linux server's resource usage, by default a 4-CPU, 8 GB one, one reading per call (TERM-12, HOST-14). */
 export function mockStats(profile: Partial<StatsProfile> = {}): (first: boolean) => ServerStatsView {
   const p = { ...DEFAULT_PROFILE, ...profile };
   const walk = (v: number, step: number, min: number, max: number) => Math.min(max, Math.max(min, v + (Math.random() - 0.5) * step));

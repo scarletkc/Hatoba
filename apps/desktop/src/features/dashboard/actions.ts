@@ -9,7 +9,7 @@ import { api } from "@/ipc/api";
 import type { GroupView, HostView } from "@/ipc/types";
 import { leftOutBy, type DashboardSort } from "./logic";
 
-/** Dashboard view state that survives leaving the page and coming back (HOST-13). */
+/** Dashboard view state that survives leaving the page and coming back (HOST-14). */
 export const useDashboardUi = create<{
   sort: DashboardSort;
   showLeftOut: boolean;

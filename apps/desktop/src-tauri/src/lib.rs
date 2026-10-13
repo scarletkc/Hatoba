@@ -9,6 +9,7 @@ mod deploy;
 mod dropped;
 mod dto;
 mod error;
+mod launch;
 mod lock;
 mod logging;
 mod mcp;
@@ -19,7 +20,7 @@ mod sync;
 mod update;
 
 use commands::{
-    ai as ai_cmd, allowances, app, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
+    ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
     hosts, keys, mcp as mcp_cmd, proxies, quick, settings, sftp, skills, ssh as ssh_cmd,
     sync as sync_cmd, vault,
 };
@@ -40,6 +41,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             app::activity_ping,
             app::update_check,
             app::update_install,
+            cli::launch_take,
+            cli::cli_command_get,
+            cli::cli_command_set,
             vault::vault_status,
             vault::vault_create,
             vault::vault_unlock,
@@ -210,14 +214,31 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::ForwardStatusEvent,
             dto::McpServerStatus,
             dto::WindowChromeEvent,
+            dto::LaunchEvent,
         ])
 }
 
+/// One Hatoba runs at a time, and another launch hands its arguments to it (HOST-13).
+/// Development builds skip this to run beside the installed app, unless `HATOBA_SINGLE_INSTANCE`
+/// is set.
+fn single_instance() -> bool {
+    !cfg!(debug_assertions) || std::env::var_os("HATOBA_SINGLE_INSTANCE").is_some()
+}
+
 pub fn run() {
+    if launch::uninstall_command() {
+        return;
+    }
     let builder = specta_builder();
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let mut app = tauri::Builder::default();
+    // First, so a second launch quits before the other plugins start.
+    if single_instance() {
+        app = app.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            launch::forwarded(app, argv);
+        }));
+    }
+    app.plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -242,6 +263,9 @@ pub fn run() {
             app.state::<state::AppState>()
                 .mcp
                 .set_events(std::sync::Arc::new(mcp_cmd::AppMcpEvents(handle.clone())));
+
+            launch::queue_startup(&data_dir);
+            cli::restore(&app.state::<state::AppState>());
 
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());

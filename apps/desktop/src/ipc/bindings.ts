@@ -30,6 +30,14 @@ export const commands = {
 	 *  session, and the installer starts the new version.
 	 */
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
+	/**
+	 *  The arguments of the launches the window has not handled yet, oldest first. Each is taken
+	 *  once, and only while the vault is unlocked: a launch during a lock waits for the unlock.
+	 */
+	launchTake: () => __TAURI_INVOKE<string[][]>("launch_take"),
+	cliCommandGet: () => __TAURI_INVOKE<CliCommandView>("cli_command_get"),
+	/**  Adds or removes the command. On macOS this may wait for an administrator's password. */
+	cliCommandSet: (enabled: boolean) => __TAURI_INVOKE<CliCommandView>("cli_command_set", { enabled }),
 	vaultStatus: () => __TAURI_INVOKE<VaultStatus>("vault_status"),
 	/**  VAULT-01/02: creates the vault and returns the recovery code (shown exactly once). */
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
@@ -63,7 +71,7 @@ export const commands = {
 	hostSetFavorite: (id: string, favorite: boolean) => __TAURI_INVOKE<null>("host_set_favorite", { id, favorite }),
 	/**  Turns the resource usage in a host's terminals on or off on this device (TERM-12). */
 	hostSetShowStats: (id: string, on: boolean) => __TAURI_INVOKE<null>("host_set_show_stats", { id, on }),
-	/**  Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-13). */
+	/**  Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-14). */
 	dashboardSetShown: (id: string, shown: boolean) => __TAURI_INVOKE<null>("dashboard_set_shown", { id, shown }),
 	/**
 	 *  SEC-08: copies a saved host password to the clipboard from Rust (it never reaches the WebView)
@@ -437,6 +445,7 @@ export const commands = {
 /** Events */
 export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
+	appLaunch: makeEvent<LaunchEvent>("app://launch"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1026,6 +1035,22 @@ export type BuiltinSkillView = {
 	files: SkillFileView[],
 };
 
+/**  The `hatoba` command on this device (HOST-13). */
+export type CliCommandView = {
+	/**  Settings → General has it on. */
+	enabled: boolean,
+	/**
+	 *  Where the command lives: the folder added to the user's `PATH` on Windows, the launcher
+	 *  itself on Linux and macOS.
+	 */
+	location: string,
+	/**
+	 *  Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
+	 *  `~/.local/bin` joins the `PATH` at the next sign-in.
+	 */
+	on_path: boolean,
+};
+
 export type CloudflareAccount = {
 	id: string,
 	name: string,
@@ -1073,7 +1098,7 @@ export type D1Database = {
 	region: string | null,
 };
 
-/**  Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host. */
+/**  Streamed on the channel of `dashboard_watch` (HOST-14), each naming its host. */
 export type DashboardEvent = 
 /**
  *  Whether the host's first hop answered the HOST-10 probe: the host itself, or its
@@ -1294,7 +1319,7 @@ export type GroupView = {
 	parent_id: string | null,
 	sort: number,
 	/**
-	 *  The dashboard shows the group's hosts on this device (HOST-13). Device-local, and on
+	 *  The dashboard shows the group's hosts on this device (HOST-14). Device-local, and on
 	 *  until turned off.
 	 */
 	dashboard: boolean,
@@ -1377,7 +1402,7 @@ export type HostView = {
 	 */
 	show_stats: boolean,
 	/**
-	 *  The dashboard shows the host on this device (HOST-13). Device-local, like
+	 *  The dashboard shows the host on this device (HOST-14). Device-local, like
 	 *  `last_connected_at`, and on until turned off.
 	 */
 	dashboard: boolean,
@@ -1427,6 +1452,9 @@ export type KeyView = {
 
 export type Language = "system" | "zh-CN" | "en" | "ja";
 
+/**  A second launch handed its arguments to this window (HOST-13); `launch_take` returns them. */
+export type LaunchEvent = null;
+
 /**  Device-local UI preferences (readable while locked; never synced). */
 export type LocalPrefs = {
 	language: Language,
@@ -1456,14 +1484,14 @@ export type LocalPrefs = {
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,
-	/**  HOST-13: the dashboard shows cards or a table. */
+	/**  HOST-14: the dashboard shows cards or a table. */
 	dashboard_layout: DashboardLayout,
-	/**  HOST-13: the table columns turned off. */
+	/**  HOST-14: the table columns turned off. */
 	dashboard_hidden_columns: string[],
-	/**  HOST-13: seconds between readings, 1 to 60. */
+	/**  HOST-14: seconds between readings, 1 to 60. */
 	dashboard_interval_secs: number,
 	/**
-	 *  HOST-13: the CPU, memory and disk use, in percent, past which a value stands out; 0
+	 *  HOST-14: the CPU, memory and disk use, in percent, past which a value stands out; 0
 	 *  turns one off.
 	 */
 	dashboard_cpu_alert: number,
@@ -1698,7 +1726,7 @@ export type ServerStatsView = {
 	net_tx_total: number | null,
 	/**
 	 *  Every mounted filesystem that stores files, each device once, at most 32; only on the
-	 *  dashboard (HOST-13), refreshed every fifth reading.
+	 *  dashboard (HOST-14), refreshed every fifth reading.
 	 */
 	mounts: MountView[],
 };

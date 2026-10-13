@@ -25,7 +25,7 @@ pub struct AppState {
     pub vault: SharedVault,
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
-    /// The dashboard's background connections and readers (HOST-13).
+    /// The dashboard's background connections and readers (HOST-14).
     pub dashboard: Dashboard,
     pub sync: SyncController,
     /// The in-app deployment in progress (§6.7).

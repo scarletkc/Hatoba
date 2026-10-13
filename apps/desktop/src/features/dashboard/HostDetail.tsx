@@ -24,7 +24,7 @@ const MIN_RATE_SCALE = 1024;
 type T = ReturnType<typeof useT>;
 
 /**
- * A host's detail on the dashboard (HOST-13): CPU and network over the last minutes, memory and swap, every
+ * A host's detail on the dashboard (HOST-14): CPU and network over the last minutes, memory and swap, every
  * filesystem, the load and uptime, as the terminal's resource usage popover shows them (TERM-12). **Open
  * Terminal** brings the host's tab to the front or opens one.
  */

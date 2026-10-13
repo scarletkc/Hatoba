@@ -105,7 +105,7 @@ pub async fn ssh_connect(
             .and_then(Item::as_host)
             .cloned()
             .ok_or_else(|| AppError::not_found("host"))?;
-        // HOST-13: the dashboard's connection to the host becomes this tab's, so the tab signs
+        // HOST-14: the dashboard's connection to the host becomes this tab's, so the tab signs
         // in to nothing and asks nothing.
         let version = crate::dashboard::config_version(v, &host);
         let target = match state.dashboard.take_connection(&host_id, &version) {
@@ -193,7 +193,7 @@ fn host_env(host: &Host) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Where a terminal's shell opens: on a new connection, or on one the dashboard made (HOST-13).
+/// Where a terminal's shell opens: on a new connection, or on one the dashboard made (HOST-14).
 enum Target {
     Connect(Box<ConnectConfig>),
     Connected(SshSession),
@@ -247,7 +247,7 @@ async fn open_terminal(
         config,
     ));
     state.ssh.insert(session_id.to_owned(), live.clone());
-    // HOST-13: the dashboard reads the host over this tab from now on.
+    // HOST-14: the dashboard reads the host over this tab from now on.
     if let Some(host_id) = host_id {
         state.dashboard.wake(host_id);
     }

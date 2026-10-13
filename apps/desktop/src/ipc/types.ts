@@ -152,7 +152,7 @@ export interface HostView {
   os: string | null;
   /** The host's terminals show the server's resource usage; device-local, never synced, off until turned on (TERM-12). */
   show_stats: boolean;
-  /** The dashboard shows the host; device-local, never synced, on until turned off (HOST-13). */
+  /** The dashboard shows the host; device-local, never synced, on until turned off (HOST-14). */
   dashboard: boolean;
   /** Environment variables the terminal asks the server to set (SSH-14). */
   env: HostEnvVar[];
@@ -194,7 +194,7 @@ export interface GroupView {
   name: string;
   parent_id: string | null;
   sort: number;
-  /** The dashboard shows the group's hosts; device-local, never synced, on until turned off (HOST-13). */
+  /** The dashboard shows the group's hosts; device-local, never synced, on until turned off (HOST-14). */
   dashboard: boolean;
 }
 
@@ -399,7 +399,7 @@ export interface ServerStatsView {
   /** Bytes received and sent over `net_interfaces` since each came up, usually at boot. */
   net_rx_total: number | null;
   net_tx_total: number | null;
-  /** Every mounted filesystem that stores files, each device once, at most 32; only on the dashboard (HOST-13), refreshed every fifth reading. */
+  /** Every mounted filesystem that stores files, each device once, at most 32; only on the dashboard (HOST-14), refreshed every fifth reading. */
   mounts: MountView[];
 }
 
@@ -414,10 +414,10 @@ export interface MountView {
   available: number;
 }
 
-/** Why the dashboard does not sign in to a host on its own (HOST-13). */
+/** Why the dashboard does not sign in to a host on its own (HOST-14). */
 export type DashboardHold = "password" | "passphrase" | "prompt" | "host_key_new" | "host_key_changed" | "sign_in_failed";
 
-/** Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host. */
+/** Streamed on the channel of `dashboard_watch` (HOST-14), each naming its host. */
 export type DashboardEvent =
   /** Whether the host's first hop (the host, or its outermost jump host) answered the HOST-10 probe. */
   | { kind: "probe"; host_id: string; online: boolean }
@@ -776,13 +776,13 @@ export interface LocalPrefs {
   lock_disconnects_sessions: boolean;
   /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
   clipboard_clear_secs: number;
-  /** HOST-13: the dashboard shows cards or a table. */
+  /** HOST-14: the dashboard shows cards or a table. */
   dashboard_layout: "cards" | "table";
-  /** HOST-13: the table columns turned off. */
+  /** HOST-14: the table columns turned off. */
   dashboard_hidden_columns: string[];
-  /** HOST-13: seconds between readings, 1 to 60. */
+  /** HOST-14: seconds between readings, 1 to 60. */
   dashboard_interval_secs: number;
-  /** HOST-13: the use in percent past which a value stands out; 0 turns one off. */
+  /** HOST-14: the use in percent past which a value stands out; 0 turns one off. */
   dashboard_cpu_alert: number;
   dashboard_mem_alert: number;
   dashboard_disk_alert: number;
@@ -803,6 +803,16 @@ export interface AppInfo {
   mica: boolean;
   /** The local user name, which quick connect uses when the target names no user (HOST-12); empty when unknown. */
   local_user: string;
+}
+
+/** The `hatoba` command on this device (HOST-13). */
+export interface CliCommandView {
+  /** Settings → General has it on. */
+  enabled: boolean;
+  /** The folder added to the user's PATH on Windows, the launcher itself on Linux and macOS. */
+  location: string;
+  /** Whether that folder is on the PATH Hatoba started with. Only Linux reports false, until the next sign-in. */
+  on_path: boolean;
 }
 
 /** What the update check found (spec §11). */
@@ -1444,4 +1454,6 @@ export interface EventMap {
   /** An MCP server started, stopped, failed or relisted its tools (AI-32). */
   "ai://mcp-status": McpServerStatus;
   "window://chrome": WindowChromeEvent;
+  /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
+  "app://launch": null;
 }

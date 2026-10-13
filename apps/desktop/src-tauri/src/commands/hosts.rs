@@ -296,7 +296,7 @@ pub fn host_set_show_stats(state: State<'_, AppState>, id: String, on: bool) -> 
     })
 }
 
-/// Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-13).
+/// Leaves a host or a group out of the dashboard on this device, or brings it back (HOST-14).
 #[tauri::command]
 #[specta::specta]
 pub fn dashboard_set_shown(state: State<'_, AppState>, id: String, shown: bool) -> AppResult<()> {

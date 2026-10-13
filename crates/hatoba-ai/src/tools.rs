@@ -1252,9 +1252,87 @@ pub fn format_exec_result(exit_status: Option<u32>, stdout: &str, stderr: &str) 
         None => "exit status: none (killed by a signal, or the channel closed without a status)\n"
             .to_owned(),
     };
+    push_streams(&mut out, stdout, stderr);
+    out
+}
+
+/// Why Hatoba stopped a `run_command` command before it ended on its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandStop {
+    /// The user stopped the turn (AI-18).
+    User,
+    /// The call's timeout passed: this many seconds (AI-12).
+    Timeout(u64),
+}
+
+/// What Hatoba knows of a `run_command` command it stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoppedCommand {
+    /// The stop came before the command reached the host, so it did not run.
+    NotStarted,
+    /// The command and the processes it started ended.
+    Ended,
+    /// Hatoba could not confirm that the command ended.
+    MayRun,
+}
+
+/// The cancelled result of a `run_command` call whose command still ran when the turn stopped,
+/// and whose end Hatoba could not confirm: the stop did not wait for it, as locking the vault does,
+/// or the command did not report in time (AI-18).
+pub const COMMAND_STOP_UNCONFIRMED: &str = "The command was still running when the turn stopped. \
+     Hatoba told it to end but could not confirm that it did, so it may still be running on the \
+     host.";
+
+/// The `run_command` result text of a command Hatoba stopped (AI-12, AI-18): a line that says
+/// what became of it, then what it printed until then, as [`format_exec_result`] shows it, without
+/// the exit status. Not shortened; pass it through [`truncate_result`].
+#[must_use]
+pub fn stopped_command_result(
+    stop: CommandStop,
+    state: StoppedCommand,
+    stdout: &str,
+    stderr: &str,
+) -> String {
+    let mut out = match (stop, state) {
+        (CommandStop::User, StoppedCommand::NotStarted) => {
+            return "The user stopped the call before the command reached the host, so it did \
+                    not run."
+                .to_owned();
+        }
+        (CommandStop::Timeout(secs), StoppedCommand::NotStarted) => {
+            return format!(
+                "The command did not reach the host within {secs} seconds, so Hatoba gave up on \
+                 it; it did not run."
+            );
+        }
+        (CommandStop::User, StoppedCommand::Ended) => "The user stopped the command while it \
+             ran. Hatoba ended it and the processes it started, so none of them is running on \
+             the host now, apart from any it started as a daemon or a service, such as a \
+             container.\n"
+            .to_owned(),
+        (CommandStop::User, StoppedCommand::MayRun) => "The user stopped the command while it \
+             ran. Hatoba told it to end but could not confirm that it did, so it may still be \
+             running on the host.\n"
+            .to_owned(),
+        (CommandStop::Timeout(secs), StoppedCommand::Ended) => format!(
+            "The command did not finish within {secs} seconds, so Hatoba ended it and the \
+             processes it started; none of them is running on the host now, apart from any it \
+             started as a daemon or a service, such as a container.\n"
+        ),
+        (CommandStop::Timeout(secs), StoppedCommand::MayRun) => format!(
+            "The command did not finish within {secs} seconds. Hatoba told it to end but could \
+             not confirm that it did, so it may still be running on the host.\n"
+        ),
+    };
+    push_streams(&mut out, stdout, stderr);
+    out
+}
+
+/// Adds stdout and stderr to a `run_command` result, each only when non-empty, or `(no output)`.
+fn push_streams(out: &mut String, stdout: &str, stderr: &str) {
     if stdout.is_empty() && stderr.is_empty() {
         out.push_str("(no output)\n");
-        return out;
+        return;
     }
     for (name, stream) in [("stdout", stdout), ("stderr", stderr)] {
         if !stream.is_empty() {
@@ -1264,7 +1342,6 @@ pub fn format_exec_result(exit_status: Option<u32>, stdout: &str, stderr: &str) 
             }
         }
     }
-    out
 }
 
 #[cfg(test)]
@@ -2098,5 +2175,50 @@ Skills are instructions for particular tasks. When a request matches a skill's d
         assert!(
             format_exec_result(None, "", "").starts_with("exit status: none (killed by a signal")
         );
+    }
+
+    /// AI-12, AI-18: a stopped command's result says whether it ended, and what it printed.
+    #[test]
+    fn stopped_command_results_say_what_became_of_the_command() {
+        use CommandStop::{Timeout, User};
+        use StoppedCommand::{Ended, MayRun, NotStarted};
+        assert_eq!(
+            stopped_command_result(User, Ended, "partial\n", ""),
+            "The user stopped the command while it ran. Hatoba ended it and the processes it \
+             started, so none of them is running on the host now, apart from any it started as \
+             a daemon or a service, such as a container.\n--- stdout ---\npartial\n"
+        );
+        assert_eq!(
+            stopped_command_result(User, MayRun, "", "err"),
+            "The user stopped the command while it ran. Hatoba told it to end but could not \
+             confirm that it did, so it may still be running on the host.\n--- stderr ---\nerr\n"
+        );
+        assert_eq!(
+            stopped_command_result(Timeout(30), Ended, "", ""),
+            "The command did not finish within 30 seconds, so Hatoba ended it and the processes \
+             it started; none of them is running on the host now, apart from any it started as a \
+             daemon or a service, such as a container.\n(no output)\n"
+        );
+        assert_eq!(
+            stopped_command_result(Timeout(120), MayRun, "a", "b"),
+            "The command did not finish within 120 seconds. Hatoba told it to end but could not \
+             confirm that it did, so it may still be running on the host.\n--- stdout ---\na\n\
+             --- stderr ---\nb\n"
+        );
+        // Nothing ran, so there is no output to show.
+        assert_eq!(
+            stopped_command_result(User, NotStarted, "", ""),
+            "The user stopped the call before the command reached the host, so it did not run."
+        );
+        assert_eq!(
+            stopped_command_result(Timeout(5), NotStarted, "", ""),
+            "The command did not reach the host within 5 seconds, so Hatoba gave up on it; it \
+             did not run."
+        );
+        // No first line the frontend would read as an exit status.
+        for state in [Ended, MayRun] {
+            let text = stopped_command_result(User, state, "exit status: 0\n", "");
+            assert!(!text.starts_with("exit status"), "{text}");
+        }
     }
 }

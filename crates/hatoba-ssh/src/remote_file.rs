@@ -4,9 +4,10 @@
 //! Each operation runs a fixed `sh -c` script. The path, and for a write the expected state and
 //! the content, travel on stdin, so nothing the caller passes goes through the quoting of the
 //! user's login shell, which may be bash, zsh, fish or csh. The scripts are one line without
-//! single quotes or backslashes for the same reason. A write pipes into the file
-//! (`cat > path`), so an existing file keeps its inode, owner, mode and the links to it; a file
-//! it creates gets the login's umask, or the mode the caller names.
+//! single quotes or backslashes for the same reason. A write copies the content into the file
+//! (`cat tmp > path`) once all of it has reached the host, so an existing file keeps its inode,
+//! owner, mode and the links to it, and is never cut short on the way; a file it creates gets
+//! the login's umask, or the mode the caller names.
 
 use std::fmt;
 
@@ -46,18 +47,25 @@ const LINES_SCRIPT: &str = "IFS= read -r f || exit 9; \
 /// `cksum` output (`crc size`). Its third line is the mode, in octal, of a file the write
 /// creates, or `none` for the umask's: such a file is created readable by its owner only and then
 /// given that mode, so it is never open to others in between. An existing file keeps its mode.
-/// Prints the marker and the resolved path. Exit statuses: 2 no such directory, 3 directory,
-/// 4 not writable, 6 not a regular file, 7 not in the expected state, 8 a symbolic link to
-/// nothing (writing would create its target, wherever that is), 9 no path. A file that passed the
-/// checks and still cannot be opened, written or given its mode (a read-only file system, a full
-/// disk) is status 1, with the message on stderr: dash would exit with 2 for the failed
-/// redirection, which reads as a missing directory.
+/// Its fourth line is the content's size: the script first copies the whole content into a file
+/// of `mktemp`'s, and leaves the file alone unless the content arrived whole (exit status 11,
+/// which a `mktemp` or a copy that fails, with its message on stderr, is too), so a channel
+/// closed or a connection lost while the content travels never cuts the file short. Once the
+/// file is opened the script writes nothing more to the channel, so a closed channel does not
+/// stop it either. The copy is removed at the end. Prints the marker and the resolved path. Exit
+/// statuses: 2 no such directory, 3 directory, 4 not writable, 6 not a regular file, 7 not in the
+/// expected state, 8 a symbolic link to nothing (writing would create its target, wherever that
+/// is), 9 no path. A file that passed the checks and still cannot be opened, written or given its
+/// mode (a read-only file system, a full disk) is status 1, with the message on stderr: dash would
+/// exit with 2 for the failed redirection, which reads as a missing directory.
 ///
-/// The check and the write run in one command, so a change made since the caller read the file
-/// is caught. A write by another process in the moment between the check and `cat` is not: an
-/// in-place rewrite has no lock that every writer honors.
+/// The check and the write run in one command, after the content arrived, so a change made since
+/// the caller read the file is caught. A write by another process in the moment between the
+/// check and the write is not: an in-place rewrite has no lock that every writer honors.
 const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; \
-     IFS= read -r m || exit 9; \
+     IFS= read -r m || exit 9; IFS= read -r k || exit 9; t=$(mktemp) || exit 11; \
+     if cat > \"$t\"; then n=$(wc -c < \"$t\"); n=$(echo $n); else n=; fi; \
+     if [ \"$n\" = \"$k\" ]; then ( \
      case $f in \"~\") f=$HOME;; \"~/\"*) f=$HOME/${f#\"~/\"};; /*) ;; *) f=$HOME/$f;; esac; \
      [ -d \"$f\" ] && exit 3; [ -L \"$f\" ] && { [ -e \"$f\" ] || exit 8; }; \
      if [ -e \"$f\" ]; then [ -f \"$f\" ] || exit 6; [ \"$g\" = missing ] && exit 7; \
@@ -65,8 +73,9 @@ const WRITE_SCRIPT: &str = "IFS= read -r f || exit 9; IFS= read -r g || exit 9; 
      [ \"$1 $2\" = \"$g\" ] || exit 7;; esac; [ -w \"$f\" ] || exit 4; m=none; \
      else [ \"$g\" = any ] || [ \"$g\" = missing ] || exit 7; d=$(dirname -- \"$f\"); \
      [ -d \"$d\" ] || exit 2; [ -w \"$d\" ] || exit 4; [ \"$m\" = none ] || umask 077; fi; \
-     echo hatoba-file; printf %s \"$f\"; echo; cat > \"$f\" || exit 1; \
-     [ \"$m\" = none ] || chmod $m \"$f\" || exit 1";
+     echo hatoba-file; printf %s \"$f\"; echo; cat -- \"$t\" > \"$f\" || exit 1; \
+     [ \"$m\" = none ] || chmod $m \"$f\" || exit 1 ); s=$?; else s=11; fi; \
+     rm -f -- \"$t\"; exit $s";
 
 /// Deletes the file named on stdin's first line, resolved as the read script resolves it, if it
 /// is a regular file (not a symbolic link) whose `cksum` output is stdin's second line. Prints
@@ -116,6 +125,9 @@ pub enum RemoteFileError {
     TooLarge(u64),
     /// Write: the file is not in the state [`Expect`] named, so nothing was written.
     Changed,
+    /// Write: the content did not reach the host whole, or the host could not keep it until it
+    /// writes the file, so nothing was written. The last line of stderr, empty when there is none.
+    Incomplete(String),
     /// The command failed otherwise: its exit status and the last line of its stderr.
     Failed {
         /// `None` when the command ended without one (a signal).
@@ -140,6 +152,10 @@ impl fmt::Display for RemoteFileError {
             Self::PermissionDenied => f.write_str("permission denied"),
             Self::TooLarge(size) => write!(f, "the file is too large ({size} bytes)"),
             Self::Changed => f.write_str("the file changed"),
+            Self::Incomplete(stderr) if stderr.is_empty() => {
+                f.write_str("the content did not arrive whole")
+            }
+            Self::Incomplete(stderr) => write!(f, "the content did not arrive whole: {stderr}"),
             Self::Failed { status, stderr } => {
                 match status {
                     Some(code) => write!(f, "the command exited with status {code}")?,
@@ -217,7 +233,8 @@ pub async fn read(
 /// Writes `content` to the file at `path` in place, if the file is in the state `expect` names,
 /// and returns the path as resolved. `mode`: the permission bits a file the write creates gets,
 /// readable by its owner only until then; `None` leaves them to the login's umask. An existing
-/// file keeps its own.
+/// file keeps its own. The file is opened only once the whole content has reached the host, so
+/// a write dropped or cut off on its way leaves the file as it was.
 pub async fn write(
     session: &SshSession,
     path: &str,
@@ -305,7 +322,7 @@ fn write_request(
         }
     };
     let mode = mode.map_or_else(|| "none".to_owned(), |m| format!("{:o}", m & 0o777));
-    let mut stdin = format!("{path}\n{state}\n{mode}\n").into_bytes();
+    let mut stdin = format!("{path}\n{state}\n{mode}\n{}\n", content.len()).into_bytes();
     stdin.extend_from_slice(content);
     Ok((command(WRITE_SCRIPT, None), stdin))
 }
@@ -449,6 +466,7 @@ fn parse_write(out: &ExecOutput) -> Result<String, RemoteFileError> {
         Some(6) => Err(RemoteFileError::NotRegular),
         Some(7) => Err(RemoteFileError::Changed),
         Some(8) => Err(RemoteFileError::DanglingLink),
+        Some(11) => Err(RemoteFileError::Incomplete(last_line(&out.stderr))),
         _ => Err(failed(out)),
     }
 }
@@ -523,10 +541,11 @@ mod tests {
         ));
         let (_, stdin) =
             write_request("/tmp/x", b"body", Expect::Content(b"123456789"), None).unwrap();
-        assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\nbody");
+        // The content's size follows the state and the mode.
+        assert_eq!(stdin, b"/tmp/x\n930766865 9\nnone\n4\nbody");
         // Permission bits only, in octal.
         let (_, stdin) = write_request("/tmp/x", b"", Expect::Missing, Some(0o4640)).unwrap();
-        assert_eq!(stdin, b"/tmp/x\nmissing\n640\n");
+        assert_eq!(stdin, b"/tmp/x\nmissing\n640\n0\n");
         assert!(matches!(
             delete_request("a\rb", b""),
             Err(RemoteFileError::InvalidPath)
@@ -830,6 +849,40 @@ mod tests {
                 read_lines(home, "/dev/null", 1, 10),
                 Err(RemoteFileError::NotRegular)
             ));
+        }
+
+        /// A write whose content stops on its way (the channel closed, the connection went)
+        /// leaves the file as it was, and its copy in the temporary directory is removed.
+        #[test]
+        fn a_write_cut_short_on_its_way_leaves_the_file_alone() {
+            let dir = tempfile::tempdir().unwrap();
+            let home = dir.path();
+            let path = home.join("app.conf");
+            std::fs::write(&path, b"old\n").unwrap();
+            let content = b"line one\nline two\n\n\n";
+            let (command, stdin) =
+                write_request("app.conf", content, Expect::Content(b"old\n"), None).unwrap();
+            let tmp = tempfile::tempdir().unwrap();
+            for cut in [1, 10, content.len() - 1] {
+                let sent = &stdin[..stdin.len() - cut];
+                let mut child = Command::new("sh")
+                    .arg("-c")
+                    .arg(&command)
+                    .env("HOME", home)
+                    .env("TMPDIR", tmp.path())
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                child.stdin.take().unwrap().write_all(sent).unwrap();
+                let out = child.wait_with_output().unwrap();
+                assert_eq!(out.status.code(), Some(11));
+                assert_eq!(std::fs::read(&path).unwrap(), b"old\n");
+                assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 0);
+            }
+            write(home, "app.conf", content, Expect::Any).unwrap();
+            assert_eq!(std::fs::read(&path).unwrap(), content);
         }
 
         #[test]

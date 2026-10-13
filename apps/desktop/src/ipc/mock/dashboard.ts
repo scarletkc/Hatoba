@@ -4,7 +4,7 @@ import { mockStats, PROBE, type StatsProfile } from "./data";
 
 type DashboardApi = Pick<HatobaApi, "dashboard_watch" | "dashboard_unwatch" | "dashboard_retry">;
 
-/** What the mock dashboard does with a host (HOST-13). Hosts not listed read as a small Linux server. */
+/** What the mock dashboard does with a host (HOST-14). Hosts not listed read as a small Linux server. */
 type Scenario =
   | { kind: "read"; profile?: Partial<StatsProfile>; lostAfter?: number }
   | { kind: "sign_in_failed" }
@@ -39,7 +39,7 @@ const SCENARIOS: Record<string, Scenario> = {
 const NO_PROC: Record<string, string> = { windows: "Windows", freebsd: "FreeBSD", netbsd: "NetBSD" };
 
 /**
- * The dashboard's background readings for the browser mock (HOST-13): each watched host connects after a
+ * The dashboard's background readings for the browser mock (HOST-14): each watched host connects after a
  * short, staggered delay and reads every interval, as `SCENARIOS` says. **Retry** signs in to a host whose
  * sign-in failed, which then reads.
  */

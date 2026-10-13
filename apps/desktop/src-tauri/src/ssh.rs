@@ -33,7 +33,7 @@ pub struct LiveSession {
     /// The saved host the terminal connected to; `None` for a quick connection (HOST-12).
     pub host_id: Option<String>,
     /// What the connection was made from (`dashboard::config_version`), so that the dashboard
-    /// reads a host over it only while the host still connects the same way (HOST-13).
+    /// reads a host over it only while the host still connects the same way (HOST-14).
     pub config: Option<String>,
     pub sftp: OnceCell<SftpClient>,
     /// Running local port forwards by forward item id (FWD-01).
@@ -149,7 +149,7 @@ impl SshManager {
     }
 
     /// The connection of a terminal open on the saved host and made the way the host connects
-    /// now (`config`), which the dashboard reads over (HOST-13). The newest tab's, when several
+    /// now (`config`), which the dashboard reads over (HOST-14). The newest tab's, when several
     /// are open; a tab still connected to the address the host had before an edit is not one.
     pub fn connection_for_host(&self, host_id: &str, config: &str) -> Option<SshSession> {
         lock(&self.sessions)
@@ -509,7 +509,7 @@ impl KeyboardInteractive for Interactive {
     }
 }
 
-/// What stopped a connection made without the user (HOST-13): the host key it could not check,
+/// What stopped a connection made without the user (HOST-14): the host key it could not check,
 /// or a prompt the server wanted answered. Nothing is ever asked.
 #[derive(Default)]
 pub struct Unattended {
@@ -624,7 +624,7 @@ impl KeyboardInteractive for UnattendedPrompts {
     }
 }
 
-/// Connects without the user (HOST-13): a host key that is not trusted yet and a prompt from
+/// Connects without the user (HOST-14): a host key that is not trusted yet and a prompt from
 /// the server both fail the connection, and the returned [`Unattended`] says which did.
 pub async fn connect_unattended(
     app: &AppHandle,

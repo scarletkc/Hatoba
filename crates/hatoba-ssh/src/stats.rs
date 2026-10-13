@@ -161,7 +161,7 @@ pub(crate) fn unsupported(system: &str) -> (StatsHandle, mpsc::Receiver<StatsEve
 }
 
 /// Runs the script every `interval`; with `mounts`, it also lists every filesystem now and then
-/// (the dashboard, HOST-13), which the terminal's readout leaves out so that a network
+/// (the dashboard, HOST-14), which the terminal's readout leaves out so that a network
 /// filesystem that stopped answering cannot slow it down.
 pub(crate) async fn start(
     session: &SshSession,

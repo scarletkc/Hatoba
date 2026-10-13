@@ -18,6 +18,9 @@ export function createTauriApi(): HatobaApi {
       progress.onmessage = onProgress;
       return call("update_install", { progress });
     },
+    launch_take: () => call("launch_take"),
+    cli_command_get: () => call("cli_command_get"),
+    cli_command_set: (enabled) => call("cli_command_set", { enabled }),
 
     vault_status: () => call("vault_status"),
     vault_create: (password) => call("vault_create", { password }),

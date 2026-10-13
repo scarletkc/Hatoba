@@ -608,7 +608,7 @@ pub trait StoreOps {
         Ok(())
     }
 
-    /// Whether a host or group is left out of the dashboard (HOST-13). Device-local.
+    /// Whether a host or group is left out of the dashboard (HOST-14). Device-local.
     fn dashboard_off(&self, item_id: &str) -> Result<bool> {
         Ok(self
             .conn()

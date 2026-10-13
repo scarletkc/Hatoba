@@ -83,7 +83,7 @@ pub struct HostView {
     /// The host's terminals show the server's resource usage on this device (TERM-12).
     /// Device-local, like `last_connected_at`, and off until turned on.
     pub show_stats: bool,
-    /// The dashboard shows the host on this device (HOST-13). Device-local, like
+    /// The dashboard shows the host on this device (HOST-14). Device-local, like
     /// `last_connected_at`, and on until turned off.
     pub dashboard: bool,
     /// Environment variables the terminal asks the server to set (SSH-14).
@@ -128,7 +128,7 @@ pub struct GroupView {
     pub name: String,
     pub parent_id: Option<String>,
     pub sort: i32,
-    /// The dashboard shows the group's hosts on this device (HOST-13). Device-local, and on
+    /// The dashboard shows the group's hosts on this device (HOST-14). Device-local, and on
     /// until turned off.
     pub dashboard: bool,
 }
@@ -383,7 +383,7 @@ pub struct ServerStatsView {
     pub net_rx_total: Option<u64>,
     pub net_tx_total: Option<u64>,
     /// Every mounted filesystem that stores files, each device once, at most 32; only on the
-    /// dashboard (HOST-13), refreshed every fifth reading.
+    /// dashboard (HOST-14), refreshed every fifth reading.
     pub mounts: Vec<MountView>,
 }
 
@@ -412,7 +412,7 @@ pub enum StatsEvent {
     Ended { error: crate::error::AppError },
 }
 
-// ───────────────────────── Dashboard (HOST-13) ─────────────────────────
+// ───────────────────────── Dashboard (HOST-14) ─────────────────────────
 
 /// Why the dashboard does not sign in to a host on its own: the connection needs the user.
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
@@ -432,7 +432,7 @@ pub enum DashboardHold {
     SignInFailed,
 }
 
-/// Streamed on the channel of `dashboard_watch` (HOST-13), each naming its host.
+/// Streamed on the channel of `dashboard_watch` (HOST-14), each naming its host.
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DashboardEvent {
@@ -961,13 +961,13 @@ pub struct LocalPrefs {
     pub lock_disconnects_sessions: bool,
     /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
     pub clipboard_clear_secs: u32,
-    /// HOST-13: the dashboard shows cards or a table.
+    /// HOST-14: the dashboard shows cards or a table.
     pub dashboard_layout: DashboardLayout,
-    /// HOST-13: the table columns turned off.
+    /// HOST-14: the table columns turned off.
     pub dashboard_hidden_columns: Vec<String>,
-    /// HOST-13: seconds between readings, 1 to 60.
+    /// HOST-14: seconds between readings, 1 to 60.
     pub dashboard_interval_secs: u32,
-    /// HOST-13: the CPU, memory and disk use, in percent, past which a value stands out; 0
+    /// HOST-14: the CPU, memory and disk use, in percent, past which a value stands out; 0
     /// turns one off.
     pub dashboard_cpu_alert: u32,
     pub dashboard_mem_alert: u32,
@@ -1066,6 +1066,24 @@ pub struct AppInfo {
 #[tauri_specta(event_name = "window://chrome")]
 pub struct WindowChromeEvent {
     pub floating: bool,
+}
+
+/// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "app://launch")]
+pub struct LaunchEvent;
+
+/// The `hatoba` command on this device (HOST-13).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct CliCommandView {
+    /// Settings → General has it on.
+    pub enabled: bool,
+    /// Where the command lives: the folder added to the user's `PATH` on Windows, the launcher
+    /// itself on Linux and macOS.
+    pub location: String,
+    /// Whether that folder is on the `PATH` Hatoba started with. Only Linux reports false: a new
+    /// `~/.local/bin` joins the `PATH` at the next sign-in.
+    pub on_path: bool,
 }
 
 /// What the update check found (spec §11).

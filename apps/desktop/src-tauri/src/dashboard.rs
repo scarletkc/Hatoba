@@ -1,4 +1,4 @@
-//! The dashboard (HOST-13): the resource usage of every host the page shows, read in the
+//! The dashboard (HOST-14): the resource usage of every host the page shows, read in the
 //! background without the user.
 //!
 //! Each host the page shows gets a reader task. It reads over a terminal tab's connection to the

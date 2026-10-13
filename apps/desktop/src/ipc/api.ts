@@ -28,6 +28,7 @@ import type {
   AppError,
   AppInfo,
   BuiltinSkillView,
+  CliCommandView,
   ConflictView,
   ConnectOptions,
   DashboardEvent,
@@ -102,6 +103,11 @@ export interface HatobaApi {
    * closes and the installer starts the new version, so this settles only when that fails.
    */
   update_install(onProgress: (p: UpdateProgress) => void): Promise<void>;
+  /** The arguments of each `hatoba …` launch the window has not handled yet, oldest first (HOST-13). Each is returned once, and only while the vault is unlocked. */
+  launch_take(): Promise<string[][]>;
+  cli_command_get(): Promise<CliCommandView>;
+  /** Adds or removes the `hatoba` command. On macOS this may wait for an administrator's password. */
+  cli_command_set(enabled: boolean): Promise<CliCommandView>;
 
   // vault
   vault_status(): Promise<VaultStatus>;
@@ -134,7 +140,7 @@ export interface HatobaApi {
   host_set_favorite(id: string, favorite: boolean): Promise<void>;
   /** TERM-12: show the server's resource usage in this host's terminals (device-local). */
   host_set_show_stats(id: string, on: boolean): Promise<void>;
-  /** HOST-13: leave a host or a group out of the dashboard, or bring it back (device-local). */
+  /** HOST-14: leave a host or a group out of the dashboard, or bring it back (device-local). */
   dashboard_set_shown(id: string, shown: boolean): Promise<void>;
   /** SEC-08: Rust copies the saved password to the clipboard and clears it after this device's delay. */
   host_copy_password(id: string): Promise<void>;
@@ -144,7 +150,7 @@ export interface HatobaApi {
   tags_list(): Promise<TagCount[]>;
   hosts_probe(ids: string[]): Promise<ProbeResult[]>;
   /**
-   * HOST-13: reads the resource usage of `host_ids` every `interval_secs` in the background, in place of the
+   * HOST-14: reads the resource usage of `host_ids` every `interval_secs` in the background, in place of the
    * earlier watch, until `dashboard_unwatch` with the id this resolves to, or the lock. Hosts both watches read
    * keep their connections.
    */

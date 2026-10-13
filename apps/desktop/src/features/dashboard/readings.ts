@@ -4,7 +4,7 @@ import { appendReading, type StatsReading } from "@/features/terminal/stats";
 import { api } from "@/ipc/api";
 import type { AppError, DashboardEvent, DashboardHold } from "@/ipc/types";
 
-/** Where the dashboard stands with a host (HOST-13). */
+/** Where the dashboard stands with a host (HOST-14). */
 export type HostPhase = "waiting" | "connecting" | "reading" | "held" | "failed" | "unsupported" | "offline";
 
 export interface HostReadout {
@@ -100,7 +100,7 @@ let generation = 0;
 
 /**
  * Reads `hostIds` every `intervalSecs` while `active`: the page is shown, the window is visible and the vault
- * unlocked (HOST-13). A change of hosts or interval replaces the watch, so the hosts both watches read keep
+ * unlocked (HOST-14). A change of hosts or interval replaces the watch, so the hosts both watches read keep
  * their connections; going inactive stops it, and the backend closes its connections a minute later.
  */
 export function useDashboardWatch(hostIds: string[], intervalSecs: number, active: boolean) {

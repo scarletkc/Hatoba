@@ -85,7 +85,7 @@ function useNow(ms: number): number {
 }
 
 /**
- * The dashboard (HOST-13): the online status and resource usage of every host the filter shows, as cards or a
+ * The dashboard (HOST-14): the online status and resource usage of every host the filter shows, as cards or a
  * table, a section per group. The hosts are read in the background while the page is shown and the window is
  * visible; the page unmounts behind the lock screen.
  */

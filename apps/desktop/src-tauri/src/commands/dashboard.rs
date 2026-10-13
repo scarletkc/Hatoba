@@ -1,4 +1,4 @@
-//! The dashboard's readings (HOST-13). `dashboard::Dashboard` holds the connections.
+//! The dashboard's readings (HOST-14). `dashboard::Dashboard` holds the connections.
 
 use std::sync::Arc;
 

@@ -1,6 +1,6 @@
 import { defineMessages } from "./define";
 
-/** Strings for the dashboard (HOST-13). Keys are prefixed with "dashboard.". */
+/** Strings for the dashboard (HOST-14). Keys are prefixed with "dashboard.". */
 export default defineMessages({
   "zh-CN": {
     "dashboard.title": "仪表盘",
