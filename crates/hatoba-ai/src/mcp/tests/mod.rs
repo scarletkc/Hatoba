@@ -193,6 +193,8 @@ async fn stdio_session_lists_and_gets_prompts_and_resources() {
         .await
         .unwrap();
     assert!(conn.offers_prompts() && conn.offers_resources());
+    // Nothing is listed yet, so the first listing lists both, whoever asks.
+    assert!(conn.prompts_changed() && conn.resources_changed() && !conn.tools_changed());
 
     // A prompt without a name is left out.
     let prompts = conn.list_prompts().await.unwrap();

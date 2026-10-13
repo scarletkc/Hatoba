@@ -76,8 +76,9 @@ impl ClientHandler for Handler {
     }
 }
 
-/// The `list_changed` notifications a session has had since it last listed each kind. A failed
-/// listing of prompts or resources sets its flag too, so that the next asks again.
+/// The `list_changed` notifications a session has had since it last listed each kind. The
+/// prompts and resources a server offers start set, as none are listed yet, and a failed listing
+/// of them sets its flag again, so that the next asks again.
 #[derive(Default)]
 struct ListChanges {
     tools: AtomicBool,
@@ -226,7 +227,7 @@ impl McpConnection {
         stderr: StderrTail,
         list_timeout: Duration,
     ) -> Self {
-        Self {
+        let conn = Self {
             inner: Arc::new(Inner {
                 kind,
                 peer: service.peer().clone(),
@@ -237,7 +238,15 @@ impl McpConnection {
                 closed: AtomicBool::new(false),
                 list_timeout,
             }),
+        };
+        // Whoever lists the prompts and resources first lists them all (AI-50, AI-51).
+        if conn.offers_prompts() {
+            conn.inner.changes.prompts.store(true, Ordering::SeqCst);
         }
+        if conn.offers_resources() {
+            conn.inner.changes.resources.store(true, Ordering::SeqCst);
+        }
+        conn
     }
 
     /// Every tool of the server, reading all `tools/list` pages. Clears [`Self::tools_changed`]
@@ -545,15 +554,17 @@ impl McpConnection {
         self.inner.changes.tools.load(Ordering::SeqCst)
     }
 
-    /// Whether a `notifications/prompts/list_changed` arrived since the last
-    /// [`Self::list_prompts`], or that listing failed.
+    /// Whether the prompts are to be listed: the server offers them and none were listed yet, a
+    /// `notifications/prompts/list_changed` arrived since the last [`Self::list_prompts`], or
+    /// that listing failed.
     #[must_use]
     pub fn prompts_changed(&self) -> bool {
         self.inner.changes.prompts.load(Ordering::SeqCst)
     }
 
-    /// Whether a `notifications/resources/list_changed` arrived since the last
-    /// [`Self::list_resources`], or that listing failed.
+    /// Whether the resources are to be listed: the server offers them and none were listed yet, a
+    /// `notifications/resources/list_changed` arrived since the last [`Self::list_resources`], or
+    /// that listing failed.
     #[must_use]
     pub fn resources_changed(&self) -> bool {
         self.inner.changes.resources.load(Ordering::SeqCst)

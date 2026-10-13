@@ -1065,7 +1065,7 @@ impl McpManager {
             // The prompts and resources follow (AI-50, AI-51): the tools, which requests wait
             // for, do not wait for them.
             if current {
-                manager.list_menus(&vault, &id, true).await;
+                manager.list_menus(&vault, &id).await;
             }
         });
     }
@@ -1113,8 +1113,8 @@ impl McpManager {
 
     /// The panel's `/` or `@` menu opened: starts the servers a conversation with `disabled`
     /// switched off would offer the tools of, as its next message would ([`Self::offer`]), and
-    /// lists again the prompts and resources of the running ones after their `list_changed`.
-    /// Returns at once; `ai://mcp-status` brings what changes.
+    /// lists the prompts and resources of the running ones that are to be listed
+    /// ([`Self::list_menus`]). Returns at once; `ai://mcp-status` brings what changes.
     pub fn warm(&self, vault: &SharedVault, disabled: Vec<String>) {
         let (manager, vault) = (self.clone(), Arc::clone(vault));
         spawn(async move {
@@ -1134,19 +1134,20 @@ impl McpManager {
                     .await
                     .is_some()
                 {
-                    manager.list_menus(&vault, id, false).await;
+                    manager.list_menus(&vault, id).await;
                 }
             }))
             .await;
         });
     }
 
-    /// Lists a running server's prompts and resources (AI-50, AI-51): those it offers, at its
-    /// start (`all`), or those whose `list_changed` arrived or whose last listing failed. One
-    /// listing runs at a time per server, so an older list never replaces a newer one; a
-    /// `list_changed` that arrives during a listing leaves its flag set for the next. A start or
-    /// stop meanwhile drops what it listed. Sends the status when it stored a list.
-    async fn list_menus(&self, vault: &SharedVault, id: &str, all: bool) {
+    /// Lists a running server's prompts and resources (AI-50, AI-51) that are to be listed: those
+    /// it offers and none listed yet, or whose `list_changed` arrived or whose last listing
+    /// failed. The start and a menu opening that waited for it both call this, and whichever runs
+    /// first lists them. One listing runs at a time per server, so an older list never replaces a
+    /// newer one; a `list_changed` that arrives during a listing leaves its flag set for the next.
+    /// A start or stop meanwhile drops what it listed. Sends the status when it stored a list.
+    async fn list_menus(&self, vault: &SharedVault, id: &str) {
         let Some(server) = self.existing(id) else {
             return;
         };
@@ -1159,11 +1160,7 @@ impl McpManager {
             s.listing = true;
             (conn, s.generation)
         };
-        let (prompts, resources) = if all {
-            (conn.offers_prompts(), conn.offers_resources())
-        } else {
-            (conn.prompts_changed(), conn.resources_changed())
-        };
+        let (prompts, resources) = (conn.prompts_changed(), conn.resources_changed());
         let (prompts, resources) = if prompts || resources {
             list_extras(id, &conn, prompts, resources).await
         } else {
