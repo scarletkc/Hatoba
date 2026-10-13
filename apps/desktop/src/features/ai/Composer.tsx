@@ -38,7 +38,7 @@ import { loadMcp, toolsMenuRows, toolsSummary, useMcp } from "./mcp";
 import { chats, findModel, judgeChosen, sameModel } from "./models";
 import { messageAttachments, messageText, takenBeside } from "./queue";
 import { canAskSide } from "./side";
-import { getSlot, patchSlot, useAi, type QueuedMessage, type Slot } from "./store";
+import { getSlot, patchSlot, slotGeneration, useAi, type QueuedMessage, type Slot } from "./store";
 import { MODE_ICON } from "./tools";
 import s from "./Composer.module.css";
 
@@ -231,9 +231,11 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
       if (resolving) return;
       if (model) {
         setResolving(true);
+        const generation = slotGeneration(slotId);
         const outcome = await attachCommand(slotId, command.name, command.args).finally(() => setResolving(false));
-        // Not when it failed, or when the box changed meanwhile.
-        if (outcome === "failed" || getSlot(slotId).draft !== raw) return;
+        // Not when it failed, or when the box changed or the tab opened another conversation meanwhile (New and
+        // History keep the box).
+        if (outcome === "failed" || getSlot(slotId).draft !== raw || slotGeneration(slotId) !== generation) return;
         // AI-35: what the command attached counts toward whether the message fits.
         if (outcome === "attached" && messageFit(meter, estimateTokens(composeMessage(raw.trim(), pendingAttachments(slotId)))).level === "over") {
           toast(t("ai.fit.blocked"), "error");

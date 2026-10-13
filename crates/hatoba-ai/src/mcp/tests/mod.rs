@@ -276,6 +276,17 @@ async fn stdio_session_lists_and_gets_prompts_and_resources() {
     assert!(!conn.prompts_changed() && conn.resources_changed());
     conn.list_resources().await.unwrap();
     assert!(!conn.resources_changed());
+
+    // A failed listing sets its flag, though no list_changed came, so that the next asks again.
+    assert_eq!(
+        call(&conn, "fail_lists", json!({})).await.content,
+        "failing"
+    );
+    assert!(conn.list_prompts().await.is_err() && conn.list_resources().await.is_err());
+    assert!(conn.prompts_changed() && conn.resources_changed());
+    assert_eq!(conn.list_prompts().await.unwrap().len(), 2);
+    assert_eq!(conn.list_resources().await.unwrap().len(), 2);
+    assert!(!conn.prompts_changed() && !conn.resources_changed());
     conn.shutdown().await;
 }
 

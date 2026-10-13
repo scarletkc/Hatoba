@@ -76,7 +76,8 @@ impl ClientHandler for Handler {
     }
 }
 
-/// The `list_changed` notifications a session has had since it last listed each kind.
+/// The `list_changed` notifications a session has had since it last listed each kind. A failed
+/// listing of prompts or resources sets its flag too, so that the next asks again.
 #[derive(Default)]
 struct ListChanges {
     tools: AtomicBool,
@@ -362,10 +363,10 @@ impl McpConnection {
     }
 
     /// Every prompt of the server (AI-50), reading all `prompts/list` pages; none when the server
-    /// does not offer prompts. Clears [`Self::prompts_changed`] (it stays set when the listing
-    /// fails).
+    /// does not offer prompts. Clears [`Self::prompts_changed`], or sets it when the listing
+    /// fails, the first one included, so that the next asks again.
     pub async fn list_prompts(&self) -> Result<Vec<McpPrompt>, McpError> {
-        let was_changed = self.inner.changes.prompts.swap(false, Ordering::SeqCst);
+        self.inner.changes.prompts.store(false, Ordering::SeqCst);
         if !self.offers_prompts() {
             return Ok(Vec::new());
         }
@@ -375,7 +376,7 @@ impl McpConnection {
             })
             .await
             .map(|items| items.iter().filter_map(prompt_from_value).collect());
-        if result.is_err() && was_changed {
+        if result.is_err() {
             self.inner.changes.prompts.store(true, Ordering::SeqCst);
         }
         result
@@ -383,9 +384,10 @@ impl McpConnection {
 
     /// Every resource of the server (AI-51), reading all `resources/list` pages; none when the
     /// server does not offer resources. Resource templates are not listed. Clears
-    /// [`Self::resources_changed`] (it stays set when the listing fails).
+    /// [`Self::resources_changed`], or sets it when the listing fails, the first one included, so
+    /// that the next asks again.
     pub async fn list_resources(&self) -> Result<Vec<McpResource>, McpError> {
-        let was_changed = self.inner.changes.resources.swap(false, Ordering::SeqCst);
+        self.inner.changes.resources.store(false, Ordering::SeqCst);
         if !self.offers_resources() {
             return Ok(Vec::new());
         }
@@ -395,7 +397,7 @@ impl McpConnection {
             })
             .await
             .map(|items| items.iter().filter_map(resource_from_value).collect());
-        if result.is_err() && was_changed {
+        if result.is_err() {
             self.inner.changes.resources.store(true, Ordering::SeqCst);
         }
         result
@@ -544,14 +546,14 @@ impl McpConnection {
     }
 
     /// Whether a `notifications/prompts/list_changed` arrived since the last
-    /// [`Self::list_prompts`].
+    /// [`Self::list_prompts`], or that listing failed.
     #[must_use]
     pub fn prompts_changed(&self) -> bool {
         self.inner.changes.prompts.load(Ordering::SeqCst)
     }
 
     /// Whether a `notifications/resources/list_changed` arrived since the last
-    /// [`Self::list_resources`].
+    /// [`Self::list_resources`], or that listing failed.
     #[must_use]
     pub fn resources_changed(&self) -> bool {
         self.inner.changes.resources.load(Ordering::SeqCst)

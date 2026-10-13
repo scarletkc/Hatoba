@@ -11,7 +11,7 @@ import { addAttachment, aiErrorMessage, selectionHost } from "./actions";
 import { lineCount, pathName } from "./attachments";
 import { listingText, promptArguments, resourceTarget, type PromptCommand, type ResourceItem } from "./commands";
 import { menuSources, useMcp } from "./mcp";
-import { getSlot } from "./store";
+import { getSlot, slotGeneration } from "./store";
 
 /** The prompt a `/` command names among the running servers the slot's conversation uses, if any. */
 export function findPrompt(slotId: string, name: string): PromptCommand | undefined {
@@ -23,8 +23,12 @@ export function findPrompt(slotId: string, name: string): PromptCommand | undefi
  * Runs the skill or MCP prompt that a `/` command at the start of the box names (AI-50): its `SKILL.md`, or the
  * prompt's messages for the arguments that follow its name, become an attachment of the slot's next message, in place
  * of one the same command attached before. `none`: the command names neither, so the text goes as it was typed.
+ * `failed` too when the slot shows another conversation by the time the text arrives: it attaches nothing there.
  */
 export async function attachCommand(slotId: string, name: string, args: string): Promise<"attached" | "none" | "failed"> {
+  const generation = slotGeneration(slotId);
+  const attach = (attachment: Parameters<typeof addAttachment>[1]): "attached" | "failed" =>
+    slotGeneration(slotId) === generation && addAttachment(slotId, attachment, name) ? "attached" : "failed";
   const prompt = findPrompt(slotId, name);
   if (prompt) {
     const names = prompt.prompt.arguments.map((a) => a.name);
@@ -36,7 +40,7 @@ export async function attachCommand(slotId: string, name: string, args: string):
     }
     try {
       const text = await api.mcp_prompt_get(prompt.serverId, prompt.prompt.name, values);
-      return addAttachment(slotId, { kind: "mcp_prompt", server: prompt.server, name: prompt.prompt.name, text }, name) ? "attached" : "failed";
+      return attach({ kind: "mcp_prompt", server: prompt.server, name: prompt.prompt.name, text });
     } catch (e) {
       toast(aiErrorMessage(e), "error");
       return "failed";
@@ -44,7 +48,7 @@ export async function attachCommand(slotId: string, name: string, args: string):
   }
   try {
     const text = await api.ai_skill_text(name);
-    return addAttachment(slotId, { kind: "skill", name, text }, name) ? "attached" : "failed";
+    return attach({ kind: "skill", name, text });
   } catch (e) {
     if (toAppError(e).code === "not_found") return "none";
     toast(aiErrorMessage(e), "error");

@@ -186,7 +186,17 @@ export function patchSlot(id: string, patch: Partial<Slot> | ((slot: Slot) => Pa
   });
 }
 
+/** Per slot, how many times `setSlot` has given it another conversation (or none). */
+const generations = new Map<string, number>();
+
+/** Changes each time the slot shows another conversation, so that work begun for one can tell it has left. */
+export function slotGeneration(id: string): number {
+  return generations.get(id) ?? 0;
+}
+
+/** Gives the slot another conversation, or none. */
 export function setSlot(id: string, slot: Slot | null) {
+  generations.set(id, slotGeneration(id) + 1);
   useAi.setState((st) => {
     const slots = { ...st.slots };
     if (slot) slots[id] = slot;

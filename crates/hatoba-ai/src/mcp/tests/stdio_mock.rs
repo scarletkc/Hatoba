@@ -73,6 +73,8 @@ fn serve() -> ! {
     let _ = writeln!(std::io::stderr(), "mock server starting");
     let mut capabilities = Value::Null;
     let mut cancelled: Vec<Value> = Vec::new();
+    // The tool `fail_lists` makes the next `prompts/list` and the next `resources/list` fail.
+    let (mut fail_prompts, mut fail_resources) = (false, false);
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
@@ -147,7 +149,24 @@ fn serve() -> ! {
                 };
                 reply(&out, &id, page);
             }
+            "tools/call" if message["params"]["name"] == "fail_lists" => {
+                (fail_prompts, fail_resources) = (true, true);
+                reply(&out, &id, text("failing"));
+            }
             "tools/call" => call(&out, &id, &message["params"], &capabilities, &cancelled),
+            "prompts/list" | "resources/list"
+                if std::mem::take(if method == "prompts/list" {
+                    &mut fail_prompts
+                } else {
+                    &mut fail_resources
+                }) =>
+            {
+                send(
+                    &out,
+                    &json!({"jsonrpc": "2.0", "id": id,
+                            "error": {"code": -32603, "message": "listing failed"}}),
+                );
+            }
             "prompts/list" => reply(
                 &out,
                 &id,

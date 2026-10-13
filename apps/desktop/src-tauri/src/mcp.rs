@@ -448,7 +448,8 @@ fn resource_view(resource: &McpResource) -> McpResourceView {
 
 /// The prompts and resources of a server, each listed when asked for (AI-50, AI-51). `None` for a
 /// list not asked for, or one whose listing failed: a server whose prompts or resources cannot be
-/// listed still serves its tools, so the failure is only logged.
+/// listed still serves its tools, so the failure is only logged, and the next menu opening lists
+/// them again.
 async fn list_extras(
     id: &str,
     conn: &McpConnection,
@@ -1141,10 +1142,10 @@ impl McpManager {
     }
 
     /// Lists a running server's prompts and resources (AI-50, AI-51): those it offers, at its
-    /// start (`all`), or those whose `list_changed` arrived. One listing runs at a time per
-    /// server, so an older list never replaces a newer one; a `list_changed` that arrives during
-    /// a listing leaves its flag set for the next. A start or stop meanwhile drops what it
-    /// listed. Sends the status when it stored a list.
+    /// start (`all`), or those whose `list_changed` arrived or whose last listing failed. One
+    /// listing runs at a time per server, so an older list never replaces a newer one; a
+    /// `list_changed` that arrives during a listing leaves its flag set for the next. A start or
+    /// stop meanwhile drops what it listed. Sends the status when it stored a list.
     async fn list_menus(&self, vault: &SharedVault, id: &str, all: bool) {
         let Some(server) = self.existing(id) else {
             return;
