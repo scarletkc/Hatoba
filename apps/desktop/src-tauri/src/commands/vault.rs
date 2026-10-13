@@ -293,7 +293,10 @@ async fn change_password(
             ));
         }
         None => {
-            let (cur, new) = (Zeroizing::new(current.to_owned()), Zeroizing::new(next.to_owned()));
+            let (cur, new) = (
+                Zeroizing::new(current.to_owned()),
+                Zeroizing::new(next.to_owned()),
+            );
             let vault = state.vault.clone();
             blocking(move || {
                 vault
