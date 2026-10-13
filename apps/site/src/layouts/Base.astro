@@ -22,9 +22,11 @@ interface Props {
   jsonLd?: Record<string, unknown>;
   /** The header without its bottom edge, for a page whose first section continues the night band. */
   heroHeader?: boolean;
+  /** Keeps the page out of search results, as the 404 page. */
+  noindex?: boolean;
 }
 
-const { locale, title, description, path, translated = true, jsonLd, heroHeader = false } = Astro.props;
+const { locale, title, description, path, translated = true, jsonLd, heroHeader = false, noindex = false } = Astro.props;
 const t = messages(locale);
 const url = new URL(localePath(locale, path), SITE_URL).href;
 const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_URL).href;
@@ -37,7 +39,7 @@ const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_UR
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={url} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={url} />}
     {
       translated && [
         ...LOCALES.map((other) => <link rel="alternate" hreflang={LANG[other]} href={new URL(localePath(other, path), SITE_URL).href} />),

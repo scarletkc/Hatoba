@@ -34,7 +34,7 @@ const link = (target: string) => ({ href: target, "aria-current": current === ta
       </li>
       <li>
         <details class="lang">
-          <summary aria-label={t.nav.language}><Icon name="globe" size={18} /><span>{LANGUAGE_NAME[locale]}</span></summary>
+          <summary aria-label={`${t.nav.language}: ${LANGUAGE_NAME[locale]}`}><Icon name="globe" size={18} /><span>{LANGUAGE_NAME[locale]}</span></summary>
           <ul>
             {
               LOCALES.map((other) => (

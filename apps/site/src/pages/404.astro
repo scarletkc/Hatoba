@@ -3,7 +3,7 @@ import Base from "../layouts/Base.astro";
 import { LANG, LOCALES, localePath, messages } from "../i18n";
 ---
 
-<Base locale="en" title="Page not found – Hatoba" description={messages("en").meta.description} path="/404/" translated={false}>
+<Base locale="en" title="Page not found – Hatoba" description={messages("en").meta.description} path="/404/" translated={false} noindex>
   <div class="container lost">
     {
       LOCALES.map((locale) => {
