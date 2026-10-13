@@ -11,7 +11,7 @@ export const zh: Messages = {
     home: "Hatoba 首页",
     features: "功能",
     download: "下载",
-    docs: "文档（英文）",
+    docs: "文档",
     github: "GitHub",
     language: "语言",
     skip: "跳到正文",

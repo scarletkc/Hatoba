@@ -12,7 +12,7 @@ export const ja: Messages = {
     home: "Hatoba ホーム",
     features: "機能",
     download: "ダウンロード",
-    docs: "ドキュメント（英語）",
+    docs: "ドキュメント",
     github: "GitHub",
     language: "言語",
     skip: "本文へスキップ",
