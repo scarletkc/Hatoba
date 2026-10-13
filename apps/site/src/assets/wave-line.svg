@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="448" height="38" viewBox="0 0 448 38" preserveAspectRatio="none">
+  <!-- The sea surface of wave.svg as a line, one unit lower so the stroke stays inside the tile. -->
+  <path d="M0 1C40.5 1 75.5 9.8 112 19S183.5 37 224 37 299.5 28.2 336 19 407.5 1 448 1" fill="none" stroke="#fff" stroke-width="1.5"/>
+</svg>

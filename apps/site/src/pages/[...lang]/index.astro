@@ -1,0 +1,349 @@
+---
+import DownloadButton from "../../components/DownloadButton.astro";
+import Icon from "../../components/Icon.astro";
+import Sea from "../../components/Sea.astro";
+import Shot from "../../components/Shot.astro";
+import { REPO_URL, SECURITY_MODEL_URL } from "../../consts";
+import { localePath, localeStaticPaths, messages, type Locale } from "../../i18n";
+import Base from "../../layouts/Base.astro";
+import { loadRelease } from "../../lib/release";
+import { screenshot } from "../../lib/screenshots";
+import { pageTitle, softwareApplication } from "../../lib/seo";
+
+export function getStaticPaths() {
+  return localeStaticPaths();
+}
+
+const { locale } = Astro.props as { locale: Locale };
+const t = messages(locale);
+const release = await loadRelease();
+
+/** The AI panel down to the approval card, and the deployment dialog, in screenshot pixels. */
+const AI_PANEL = { x: 2002, y: 172, w: 878, h: 1200 };
+const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
+---
+
+<Base locale={locale} title={pageTitle(locale)} description={t.meta.description} path="/" jsonLd={softwareApplication(locale, release)} heroHeader>
+  <section class="hero night">
+    <div class="container intro">
+      <h1 class="wordmark wide">Hatoba</h1>
+      <p class="lead">{t.meta.description}</p>
+      <div class="actions">
+        <DownloadButton locale={locale} release={release} />
+        <a class="btn btn-outline" href={REPO_URL}><Icon name="github" size={20} />{t.hero.github}</a>
+      </div>
+      <p class="available"><a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a></p>
+    </div>
+    <div class="horizon">
+      <div class="window rise">
+        <Shot src={screenshot(locale, "ai-assistant")} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
+      </div>
+      <Sea depth="calc(var(--shot) * var(--sink) + var(--water))" />
+    </div>
+  </section>
+
+  <section id="features" class="feature">
+    <div class="container split">
+      <div class="text">
+        <h2 class="wide">{t.ai.title}</h2>
+        <p class="body">{t.ai.body}</p>
+        <ul class="points">{t.ai.points.map((point) => <li>{point}</li>)}</ul>
+      </div>
+      <div class="media">
+        <div class="window panel">
+          <Shot src={screenshot(locale, "ai-approval")} alt={t.ai.alt} width="min(420px, 100vw - 32px)" crop={AI_PANEL} />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature reverse">
+    <div class="container split">
+      <div class="text">
+        <h2 class="wide">{t.sync.title}</h2>
+        <p class="body">{t.sync.body}</p>
+        <ul class="points">{t.sync.points.map((point) => <li>{point}</li>)}</ul>
+      </div>
+      <div class="media">
+        <div class="window dialog">
+          <Shot src={screenshot(locale, "sync-deploy")} alt={t.sync.alt} width="min(560px, 100vw - 32px)" crop={DEPLOY_DIALOG} />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="essentials">
+    <div class="container">
+      <h2 class="wide">{t.essentials.title}</h2>
+      <div class="window">
+        <Shot src={screenshot(locale, "dashboard")} alt={t.essentials.alt} width="min(1180px, 100vw - 32px)" />
+      </div>
+      <dl>
+        {
+          t.essentials.items.map((item) => (
+            <div>
+              <dt>{item.term}</dt>
+              <dd>{item.text}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+  </section>
+
+  <section class="security">
+    <div class="container columns">
+      <h2 class="wide">{t.security.title}</h2>
+      <div class="text">
+        <p>{t.security.body}</p>
+        <p>{t.security.openSource}</p>
+        <p><a href={SECURITY_MODEL_URL} hreflang="en">{t.security.link}</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta night">
+    <div class="container">
+      <h2 class="wide">{t.cta.title}</h2>
+      <p>{t.cta.body}</p>
+      <div class="actions">
+        <DownloadButton locale={locale} release={release} />
+        <a class="btn btn-outline" href={localePath(locale, "/download/")}>{t.hero.allDownloads}</a>
+      </div>
+    </div>
+    <Sea depth="40px" />
+  </section>
+</Base>
+
+<style>
+  /* The hero: the name over the night sky, and the app standing in the sea like the pier of the icon. */
+  .hero {
+    overflow: hidden;
+    padding-top: clamp(32px, 7vw, 88px);
+  }
+
+  .intro {
+    text-align: center;
+  }
+
+  .wordmark {
+    font-size: clamp(76px, 16vw, 184px);
+    font-weight: 800;
+    font-stretch: 125%;
+    line-height: 0.88;
+    letter-spacing: -0.035em;
+  }
+
+  .lead {
+    max-width: 34em;
+    margin: 28px auto 0;
+    font-size: clamp(18px, 2.1vw, 22px);
+    line-height: 1.5;
+    color: var(--on-night-2);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 36px;
+  }
+
+  .available {
+    margin-top: 16px;
+    font-size: 14px;
+  }
+
+  .available a {
+    color: var(--on-night-2);
+  }
+
+  /* The water under the window is the horizon's bottom padding, which the sea fills. */
+  .horizon {
+    --shot: min(1100px, 100vw - 2 * var(--gutter));
+    position: relative;
+    --water: 72px;
+    /* How much of the window stands in the water, as a share of its width. */
+    --sink: 0.14;
+    margin-top: clamp(48px, 7vw, 80px);
+    padding-bottom: var(--water);
+  }
+
+  .horizon .window {
+    position: relative;
+    width: var(--shot);
+    margin: 0 auto;
+  }
+
+  .rise {
+    animation: rise 1.4s cubic-bezier(0.2, 0.7, 0.15, 1) 0.1s both;
+  }
+
+  @keyframes rise {
+    from {
+      transform: translateY(56px);
+    }
+  }
+
+  /* Features: the text beside a detail of the app. */
+  .feature {
+    padding: clamp(72px, 10vw, 128px) 0;
+  }
+
+  .feature + .feature {
+    padding-top: 0;
+  }
+
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(32px, 6vw, 88px);
+    align-items: center;
+  }
+
+  .reverse .text {
+    order: 2;
+  }
+
+  h2 {
+    font-size: clamp(30px, 4vw, 44px);
+    line-height: 1.1;
+  }
+
+  .body {
+    margin-top: 20px;
+    font-size: 19px;
+    color: var(--ink-2);
+  }
+
+  .points {
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 14px;
+  }
+
+  .points li {
+    position: relative;
+    padding-left: 26px;
+  }
+
+  /* Each point is a ring of the seigaiha. */
+  .points li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: calc(var(--body-leading) * 0.5em - 6px);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--sea);
+  }
+
+  .media {
+    display: flex;
+    justify-content: center;
+  }
+
+  .panel {
+    width: min(420px, 100%);
+  }
+
+  .dialog {
+    width: min(560px, 100%);
+  }
+
+  /* Everything else: the dashboard, then the list. */
+  .essentials {
+    padding: clamp(72px, 10vw, 128px) 0;
+    background: var(--mist);
+  }
+
+  .essentials h2 {
+    max-width: 18em;
+  }
+
+  .essentials .window {
+    margin-top: 40px;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 36px 48px;
+    margin: 56px 0 0;
+  }
+
+  dt {
+    font-weight: 700;
+    font-size: 19px;
+  }
+
+  dd {
+    margin: 8px 0 0;
+    color: var(--ink-2);
+  }
+
+  /* Security: a quiet statement. */
+  .security {
+    padding: clamp(72px, 10vw, 128px) 0;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(24px, 6vw, 88px);
+  }
+
+  .security .text {
+    display: grid;
+    gap: 16px;
+    font-size: 18px;
+    color: var(--ink-2);
+  }
+
+  /* The closing call, back on the night sea. */
+  .cta {
+    padding: clamp(72px, 10vw, 120px) 0 calc(76px + clamp(48px, 6vw, 72px));
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .cta h2 {
+    font-size: clamp(36px, 5.4vw, 64px);
+  }
+
+  .cta p {
+    max-width: 36em;
+    margin: 20px auto 0;
+    color: var(--on-night-2);
+  }
+
+  @media (max-width: 900px) {
+    .split,
+    .columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .reverse .text {
+      order: 0;
+    }
+
+    dl {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 600px) {
+    dl {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .horizon {
+      --water: 48px;
+      --sink: 0.07;
+    }
+  }
+</style>

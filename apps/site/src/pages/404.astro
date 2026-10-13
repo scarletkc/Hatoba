@@ -1,0 +1,38 @@
+---
+import Base from "../layouts/Base.astro";
+import { LANG, LOCALES, localePath, messages } from "../i18n";
+---
+
+<Base locale="en" title="Page not found – Hatoba" description={messages("en").meta.description} path="/404/" translated={false}>
+  <div class="container lost">
+    {
+      LOCALES.map((locale) => {
+        const t = messages(locale);
+        return (
+          <section lang={LANG[locale]}>
+            <h1 class="wide">{t.notFound.title}</h1>
+            <p>{t.notFound.body}</p>
+            <a href={localePath(locale)}>{t.notFound.home}</a>
+          </section>
+        );
+      })
+    }
+  </div>
+</Base>
+
+<style>
+  .lost {
+    display: grid;
+    gap: 40px;
+    padding: 72px 0 120px;
+  }
+
+  h1 {
+    font-size: 30px;
+    margin-bottom: 8px;
+  }
+
+  section:first-child h1 {
+    font-size: clamp(40px, 6vw, 64px);
+  }
+</style>

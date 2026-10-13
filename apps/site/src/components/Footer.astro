@@ -1,0 +1,105 @@
+---
+import { BUG_REPORT_URL, CONTRIBUTING_URL, LICENSE_URL, RELEASES_URL, REPO_URL, SECURITY_URL } from "../consts";
+import { LANG, LANGUAGE_NAME, LOCALES, localePath, messages, type Locale } from "../i18n";
+
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const t = messages(locale);
+---
+
+<footer class="site-footer">
+  <div class="container inner">
+    <div class="about">
+      <p class="name wide">Hatoba</p>
+      <p>{t.meta.tagline}</p>
+      <p class="license"><a href={LICENSE_URL}>{t.footer.license}</a></p>
+    </div>
+    <ul class="links">
+      <li><a href={localePath(locale, "/download/")}>{t.nav.download}</a></li>
+      <li><a href="/docs/" hreflang="en">{t.nav.docs}</a></li>
+      <li><a href={RELEASES_URL}>{t.footer.releases}</a></li>
+      <li><a href={REPO_URL}>{t.nav.github}</a></li>
+      <li><a href={BUG_REPORT_URL}>{t.footer.report}</a></li>
+      <li><a href={SECURITY_URL}>{t.footer.security}</a></li>
+      <li><a href={CONTRIBUTING_URL}>{t.footer.contributing}</a></li>
+    </ul>
+    <ul class="languages" aria-label={t.nav.language}>
+      {
+        LOCALES.map((other) => (
+          <li>
+            <a href={localePath(other)} hreflang={LANG[other]} lang={LANG[other]} aria-current={other === locale ? "true" : undefined}>
+              {LANGUAGE_NAME[other]}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background: var(--night-deep);
+    color: var(--on-night-2);
+    font-size: 15px;
+    padding: 56px 0 64px;
+  }
+
+  .inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto;
+    gap: 32px 48px;
+    align-items: start;
+  }
+
+  .name {
+    color: var(--on-night);
+    font-weight: 800;
+    font-size: 21px;
+    margin-bottom: 4px;
+  }
+
+  .license {
+    margin-top: 16px;
+  }
+
+  a {
+    color: var(--on-night-2);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--on-night);
+    text-decoration: underline;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .links {
+    columns: 2;
+    column-gap: 32px;
+  }
+
+  .links li,
+  .languages li {
+    padding: 4px 0;
+  }
+
+  .languages a[aria-current="true"] {
+    color: var(--on-night);
+    font-weight: 600;
+  }
+
+  @media (max-width: 760px) {
+    .inner {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

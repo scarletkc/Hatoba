@@ -1,0 +1,287 @@
+---
+import Icon from "../../components/Icon.astro";
+import Sea from "../../components/Sea.astro";
+import { BUILD_FROM_SOURCE_URL, RELEASES_URL, REPO_URL } from "../../consts";
+import { formatDate, formatMegabytes, localeStaticPaths, messages, type Locale } from "../../i18n";
+import { installSteps } from "../../i18n/install";
+import Base from "../../layouts/Base.astro";
+import { inlineMarkdown } from "../../lib/markdown";
+import { PLATFORMS, loadRelease } from "../../lib/release";
+import { pageTitle, softwareApplication } from "../../lib/seo";
+
+export function getStaticPaths() {
+  return localeStaticPaths();
+}
+
+const { locale } = Astro.props as { locale: Locale };
+const t = messages(locale);
+const release = await loadRelease();
+const description =
+  locale === "en" ? `${t.meta.downloadLead(release.version)} ${t.meta.description}.` : `${t.meta.downloadLead(release.version)}${t.meta.description}。`;
+---
+
+<Base
+  locale={locale}
+  title={pageTitle(locale, t.meta.downloadTitle)}
+  description={description}
+  path="/download/"
+  jsonLd={softwareApplication(locale, release)}
+  heroHeader
+>
+  <section class="night head">
+    <div class="container">
+      <h1 class="wide">{t.meta.downloadTitle}</h1>
+      <p class="released">
+        {t.download.released(release.version, formatDate(locale, release.publishedAt))}
+        <a href={release.url}>{t.download.notes}</a>
+      </p>
+      {
+        release.preview && (
+          <p class="preview">
+            {t.download.preview(release.preview.version)} <a href={release.preview.url}>{t.download.previewLink}</a>
+          </p>
+        )
+      }
+    </div>
+    <Sea depth="20px" />
+  </section>
+
+  <div class="container platforms">
+    {
+      PLATFORMS.map((platform) => (
+        <section id={platform} class="platform" aria-labelledby={`${platform}-title`}>
+          <div class="about">
+            <h2 id={`${platform}-title`} class="wide">
+              {t.platforms[platform]}
+            </h2>
+            <span class="this-device">{t.download.thisDevice}</span>
+            <p class="requirements">{t.download.requirements[platform]}</p>
+          </div>
+          <div class="get">
+            <ul class="files">
+              {release.downloads
+                .filter((download) => download.platform === platform)
+                .map((download) => (
+                  <li class="file">
+                    <a class="btn btn-deep" href={download.url}>
+                      <Icon name="download" />
+                      {t.download.files[download.bundle]}
+                    </a>
+                    <p class="name">
+                      <code>{download.name}</code>
+                      <span>{t.download.size(formatMegabytes(locale, download.size))}</span>
+                    </p>
+                    <p class="sha">
+                      <span class="label">{t.download.sha256}</span>
+                      <code class="hash">{download.sha256}</code>
+                      <button type="button" class="copy" data-copy={download.sha256} data-copied={t.download.copied}>
+                        <Icon name="copy" size={16} />
+                        <span>{t.download.copy}</span>
+                      </button>
+                    </p>
+                  </li>
+                ))}
+            </ul>
+            <h3>{t.download.install}</h3>
+            <p class="steps" set:html={inlineMarkdown(installSteps(locale, platform, release.names))} />
+          </div>
+        </section>
+      ))
+    }
+  </div>
+
+  <div class="container more">
+    <p>
+      <a href={release.checksumsUrl}><code>SHA256SUMS.txt</code></a>
+      {t.download.checksums}
+    </p>
+    <p>{t.download.testing} <a href={`${REPO_URL}/issues`}>{t.download.issue}</a></p>
+    <ul>
+      <li><a href={RELEASES_URL}>{t.download.allReleases}</a></li>
+      <li><a href={BUILD_FROM_SOURCE_URL} hreflang="en">{t.download.source}</a></li>
+    </ul>
+  </div>
+</Base>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+    const label = button.querySelector("span")!;
+    const idle = label.textContent;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy!);
+      } catch {
+        return;
+      }
+      label.textContent = button.dataset.copied!;
+      setTimeout(() => (label.textContent = idle), 2000);
+    });
+  }
+</script>
+
+<style>
+  .head {
+    padding: clamp(40px, 7vw, 80px) 0 calc(56px + clamp(40px, 6vw, 64px));
+    overflow: hidden;
+  }
+
+  h1 {
+    font-size: clamp(40px, 7vw, 76px);
+    font-weight: 800;
+    font-stretch: 125%;
+    letter-spacing: -0.03em;
+  }
+
+  .released,
+  .preview {
+    margin-top: 16px;
+    color: var(--on-night-2);
+    font-size: 18px;
+  }
+
+  .released a,
+  .preview a {
+    margin-left: 6px;
+  }
+
+  /* The visitor's platform comes first. */
+  .platforms {
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+  }
+
+  :global(html[data-os="linux"]) #linux,
+  :global(html[data-os="macos"]) #macos,
+  :global(html[data-os="windows"]) #windows {
+    order: -1;
+  }
+
+  .platform {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+    gap: 24px 64px;
+    padding: 48px 0;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 16px;
+  }
+
+  h2 {
+    display: inline;
+    font-size: clamp(30px, 4vw, 40px);
+  }
+
+  .this-device {
+    display: none;
+    margin-left: 12px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--code-bg);
+    color: var(--link);
+    font-size: 13px;
+    font-weight: 600;
+    vertical-align: 0.6em;
+  }
+
+  :global(html[data-os="linux"]) #linux .this-device,
+  :global(html[data-os="macos"]) #macos .this-device,
+  :global(html[data-os="windows"]) #windows .this-device {
+    display: inline-block;
+  }
+
+  .requirements {
+    margin-top: 12px;
+    color: var(--ink-2);
+  }
+
+  .files {
+    display: grid;
+    gap: 28px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .name {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    align-items: baseline;
+    margin-top: 12px;
+    font-size: 15px;
+    color: var(--ink-2);
+  }
+
+  .name code {
+    background: none;
+    padding: 0;
+    color: var(--ink);
+  }
+
+  .sha {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+
+  .hash {
+    font-size: 12.5px;
+    word-break: break-all;
+  }
+
+  .copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .copy:hover {
+    color: var(--ink);
+    border-color: var(--ink-2);
+  }
+
+  h3 {
+    margin-top: 32px;
+    font-size: 17px;
+  }
+
+  .steps {
+    margin-top: 8px;
+    max-width: 44em;
+  }
+
+  .more {
+    display: grid;
+    gap: 12px;
+    padding: 16px 0 96px;
+    color: var(--ink-2);
+  }
+
+  .more ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (max-width: 800px) {
+    .platform {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

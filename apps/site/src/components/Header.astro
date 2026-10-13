@@ -1,0 +1,201 @@
+---
+import icon from "../../../desktop/src-tauri/app-icon.svg?url";
+import { REPO_URL } from "../consts";
+import { LANG, LANGUAGE_NAME, LOCALES, localePath, messages, type Locale } from "../i18n";
+import Icon from "./Icon.astro";
+import Sea from "./Sea.astro";
+
+interface Props {
+  locale: Locale;
+  path: string;
+  translated: boolean;
+  /** Ends the night band with a strip of sea, for pages whose content starts on paper. */
+  edge: boolean;
+}
+
+const { locale, path, translated, edge } = Astro.props;
+const t = messages(locale);
+const current = Astro.url.pathname;
+const link = (target: string) => ({ href: target, "aria-current": current === target ? "page" : undefined });
+---
+
+<header class:list={["night", "site-header", { edge }]}>
+  <nav class="container bar" aria-label="Hatoba">
+    <a class="brand" href={localePath(locale)} aria-label={t.nav.home}>
+      <img src={icon} alt="" width="32" height="32" />
+      <span class="wide">Hatoba</span>
+    </a>
+    <ul class="links">
+      <li class="features"><a href={`${localePath(locale)}#features`}>{t.nav.features}</a></li>
+      <li><a {...link(localePath(locale, "/download/"))}>{t.nav.download}</a></li>
+      <li><a href="/docs/" aria-current={current.startsWith("/docs/") ? "page" : undefined} hreflang="en">{t.nav.docs}</a></li>
+      <li>
+        <a class="github" href={REPO_URL} aria-label={t.nav.github}><Icon name="github" size={20} /><span>{t.nav.github}</span></a>
+      </li>
+      <li>
+        <details class="lang">
+          <summary aria-label={t.nav.language}><Icon name="globe" size={18} /><span>{LANGUAGE_NAME[locale]}</span></summary>
+          <ul>
+            {
+              LOCALES.map((other) => (
+                <li>
+                  <a
+                    href={localePath(other, translated ? path : "/")}
+                    hreflang={LANG[other]}
+                    lang={LANG[other]}
+                    aria-current={other === locale ? "true" : undefined}
+                  >
+                    {LANGUAGE_NAME[other]}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </details>
+      </li>
+    </ul>
+  </nav>
+  {edge && <Sea depth="2px" class="header-sea" />}
+</header>
+
+<script>
+  // Close the language menu when a click or Escape lands outside it.
+  const menu = document.querySelector<HTMLDetailsElement>(".lang");
+  document.addEventListener("click", (event) => {
+    if (menu?.open && !menu.contains(event.target as Node)) menu.open = false;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && menu?.open) {
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    }
+  });
+</script>
+
+<style>
+  .site-header {
+    position: relative;
+    z-index: 3;
+    background: var(--night);
+  }
+
+  .site-header.edge {
+    padding-bottom: 38px;
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 72px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 21px;
+    letter-spacing: -0.01em;
+  }
+
+  .brand img {
+    border-radius: 8px;
+  }
+
+  .links {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .links a,
+  .lang summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: var(--on-night);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .links a:hover,
+  .lang summary:hover {
+    background: rgb(227 238 255 / 0.1);
+  }
+
+  .links a[aria-current="page"] {
+    background: rgb(227 238 255 / 0.14);
+  }
+
+  .lang {
+    position: relative;
+  }
+
+  .lang summary {
+    cursor: pointer;
+    list-style: none;
+    color: var(--on-night-2);
+  }
+
+  .lang summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .lang ul {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    min-width: 160px;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgb(5 12 40 / 0.28);
+  }
+
+  .lang ul a {
+    display: flex;
+    width: 100%;
+    color: var(--ink);
+    border-radius: 8px;
+  }
+
+  .lang ul a:hover {
+    background: var(--mist);
+  }
+
+  .lang ul a[aria-current="true"] {
+    font-weight: 700;
+  }
+
+  @media (max-width: 760px) {
+    .features,
+    .github span,
+    .lang summary span {
+      display: none;
+    }
+
+    .links a,
+    .lang summary {
+      padding: 0 10px;
+    }
+  }
+
+  @media (max-width: 400px) {
+    .brand span {
+      display: none;
+    }
+  }
+</style>

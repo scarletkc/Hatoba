@@ -1,0 +1,270 @@
+/*
+ * Hatoba's site: the night sea of the app icon (a pier standing in seigaiha water) frames the page,
+ * and the content between sits on plain paper. Colors come from app-icon.svg.
+ */
+:root {
+  --night: #0d1735;
+  --night-deep: #091027;
+  --harbor: #24408a;
+  --sea: #22a6e8;
+  --deep: #0d4590;
+  --foam: #e3eeff;
+
+  --paper: #ffffff;
+  --mist: #f1f5fb;
+  --ink: #0f1d3d;
+  --ink-2: #4b5a7a;
+  --line: #d9e1ee;
+  --link: #0d4590;
+  --code-bg: #e9eff8;
+
+  --on-night: #ffffff;
+  --on-night-2: rgb(227 238 255 / 0.74);
+
+  --cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC";
+  --font: "Archivo Variable", var(--cjk), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --gutter: 24px;
+  --max: 1180px;
+  --radius: 12px;
+  --body-leading: 1.6;
+
+  color-scheme: light;
+}
+
+:root:lang(ja) {
+  --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
+}
+
+:root:lang(zh),
+:root:lang(ja) {
+  --body-leading: 1.85;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0b1430;
+    --mist: #0f1a3b;
+    --ink: #e6eefc;
+    --ink-2: #a5b4d2;
+    --line: #22325c;
+    --link: #6cc4f2;
+    --code-bg: #182651;
+    color-scheme: dark;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --gutter: 16px;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 24px;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: var(--body-leading);
+  font-variation-settings: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--sea);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.12em 0.36em;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.container {
+  width: min(var(--max), 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 10;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+.skip:focus {
+  top: 12px;
+}
+
+/* Headings set wide, like the name on a harbor sign; CJK text has no width axis, so it keeps its own. */
+.wide {
+  font-stretch: 118%;
+  letter-spacing: -0.01em;
+}
+
+:lang(zh) .wide,
+:lang(ja) .wide {
+  letter-spacing: 0.01em;
+}
+
+/* Buttons: the white of the pier on the night sea, or the deep blue of the water on paper. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.2;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn svg {
+  flex: none;
+}
+
+.btn-pier {
+  background: #ffffff;
+  color: var(--night);
+}
+
+.btn-pier:hover {
+  background: var(--foam);
+}
+
+.btn-outline {
+  color: var(--on-night);
+  border-color: rgb(227 238 255 / 0.35);
+}
+
+.btn-outline:hover {
+  border-color: rgb(227 238 255 / 0.75);
+}
+
+.btn-deep {
+  background: var(--deep);
+  color: #ffffff;
+}
+
+.btn-deep:hover {
+  background: #0b3a7a;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn-deep {
+    background: var(--sea);
+    color: var(--night);
+  }
+
+  .btn-deep:hover {
+    background: #4bb8ee;
+  }
+}
+
+/* The night band that heads every page. */
+.night {
+  position: relative;
+  background: linear-gradient(180deg, var(--night) 0%, var(--harbor) 100%);
+  color: var(--on-night);
+}
+
+.night a:not(.btn) {
+  color: var(--on-night);
+}
+
+/* A screenshot of the app, framed as its window. */
+.window {
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #1c1d21;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 30px 80px rgb(5 12 40 / 0.45),
+    0 8px 24px rgb(5 12 40 / 0.25);
+}
+
+.window img {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

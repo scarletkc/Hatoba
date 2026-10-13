@@ -1,0 +1,232 @@
+---
+import { getCollection, render, type CollectionEntry } from "astro:content";
+import Icon from "../../components/Icon.astro";
+import Base from "../../layouts/Base.astro";
+import { OVERVIEW, docPath, sidebar } from "../../lib/docs";
+import { pageTitle } from "../../lib/seo";
+
+export async function getStaticPaths() {
+  const docs = await getCollection("docs");
+  return docs.map((doc) => ({ params: { slug: doc.id === OVERVIEW ? undefined : doc.id }, props: { doc, docs } }));
+}
+
+const { doc, docs } = Astro.props as { doc: CollectionEntry<"docs">; docs: CollectionEntry<"docs">[] };
+const { Content } = await render(doc);
+const groups = sidebar(docs.map(({ id, data }) => ({ slug: id, title: data.title })));
+const { title, description, editUrl, version } = doc.data;
+const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
+---
+
+<Base locale="en" title={pageTitle("en", doc.id === OVERVIEW ? "Documentation" : title)} description={description} path={docPath(doc.id)} translated={false}>
+  <div class="container docs">
+    <nav class="sidebar" aria-label="Documentation">
+      <details open>
+        <summary>Contents</summary>
+        {
+          groups.map((group) => (
+            <div class="group">
+              <p class="group-title">{group.title}</p>
+              <ul>
+                {group.pages.map((page) => (
+                  <li>
+                    <a href={docPath(page.slug)} aria-current={page.slug === doc.id ? "page" : undefined}>
+                      {page.slug === OVERVIEW ? "Overview" : page.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </details>
+    </nav>
+    <article>
+      <h1 class="wide">{heading}</h1>
+      <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
+      <div class="prose">
+        <Content />
+      </div>
+      <p class="edit">
+        <a href={editUrl}><Icon name="external" size={16} />Edit this page on GitHub</a>
+      </p>
+    </article>
+  </div>
+</Base>
+
+<script>
+  // On a narrow screen the contents start closed, so the page starts with the article.
+  const contents = document.querySelector<HTMLDetailsElement>(".sidebar details");
+  if (contents && matchMedia("(max-width: 900px)").matches) contents.open = false;
+</script>
+
+<style>
+  .docs {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    gap: 56px;
+    padding: 40px 0 96px;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    font-size: 15px;
+  }
+
+  summary {
+    display: none;
+  }
+
+  .group + .group {
+    margin-top: 22px;
+  }
+
+  .group-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .sidebar ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sidebar a {
+    display: block;
+    padding: 5px 10px;
+    margin-left: -10px;
+    border-radius: 8px;
+    color: var(--ink-2);
+    text-decoration: none;
+    line-height: 1.35;
+  }
+
+  .sidebar a:hover {
+    color: var(--ink);
+    background: var(--mist);
+  }
+
+  .sidebar a[aria-current="page"] {
+    color: var(--link);
+    background: var(--mist);
+    font-weight: 600;
+  }
+
+  article {
+    max-width: 46em;
+  }
+
+  h1 {
+    font-size: clamp(32px, 4.4vw, 48px);
+  }
+
+  .version {
+    margin-top: 12px;
+    color: var(--ink-2);
+    font-size: 15px;
+  }
+
+  .edit {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 15px;
+  }
+
+  .edit a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .prose {
+    margin-top: 32px;
+  }
+
+  .prose :global(h2) {
+    margin: 48px 0 12px;
+    font-size: 26px;
+    font-stretch: 110%;
+  }
+
+  .prose :global(h3) {
+    margin: 32px 0 8px;
+    font-size: 19px;
+  }
+
+  .prose :global(p),
+  .prose :global(ul),
+  .prose :global(ol) {
+    margin: 0 0 16px;
+  }
+
+  .prose :global(li + li) {
+    margin-top: 6px;
+  }
+
+  .prose :global(table) {
+    width: 100%;
+    margin: 8px 0 24px;
+    border-collapse: collapse;
+    font-size: 14px;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .prose :global(th),
+  .prose :global(td) {
+    padding: 7px 12px 7px 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .prose :global(th) {
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+
+  .prose :global(pre) {
+    padding: 16px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 14px;
+  }
+
+  .prose :global(pre code) {
+    background: none;
+    padding: 0;
+  }
+
+  @media (max-width: 900px) {
+    .docs {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 24px;
+      padding-top: 24px;
+    }
+
+    .sidebar {
+      position: static;
+      max-height: none;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    summary {
+      display: list-item;
+      cursor: pointer;
+      font-weight: 600;
+      padding: 8px 0;
+    }
+
+    details[open] summary {
+      margin-bottom: 12px;
+    }
+  }
+</style>

@@ -1,0 +1,51 @@
+---
+/**
+ * The sea of the app icon: a sine-wave surface over seigaiha water. It sits at the bottom of its
+ * positioned parent and covers what is below its surface, as the water covers the pier's posts.
+ */
+interface Props {
+  /** The height of the water below the surface, as a CSS length. */
+  depth?: string;
+  class?: string;
+}
+const { depth = "96px", class: className } = Astro.props;
+---
+
+<div class:list={["sea", className]} style={`--depth: ${depth}`} aria-hidden="true"></div>
+
+<style>
+  .sea {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: calc(var(--depth) + 36px);
+    pointer-events: none;
+    background: linear-gradient(180deg, rgb(34 166 232 / 0.9) 0, rgb(26 132 210 / 0.95) 36px, var(--deep) 100%);
+    -webkit-mask:
+      url("../assets/wave.svg") 0 0 / 448px 36px repeat-x,
+      linear-gradient(#000 0 0) 0 35px / 100% calc(100% - 35px) no-repeat;
+    mask:
+      url("../assets/wave.svg") 0 0 / 448px 36px repeat-x,
+      linear-gradient(#000 0 0) 0 35px / 100% calc(100% - 35px) no-repeat;
+  }
+
+  /* The rings, bright near the surface and fading with depth. */
+  .sea::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url("../assets/seigaiha.svg") 0 4px / 56px 28px repeat;
+    opacity: 0.2;
+    -webkit-mask: linear-gradient(180deg, #000 0, #000 30%, transparent 100%);
+    mask: linear-gradient(180deg, #000 0, #000 30%, transparent 100%);
+  }
+
+  /* The surface, catching the light. */
+  .sea::after {
+    content: "";
+    position: absolute;
+    inset: -1px 0 auto 0;
+    height: 38px;
+    background: url("../assets/wave-line.svg") 0 0 / 448px 38px repeat-x;
+    opacity: 0.55;
+  }
+</style>

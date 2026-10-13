@@ -1,0 +1,55 @@
+---
+import { localePath, messages, type Locale } from "../i18n";
+import type { Platform, SiteRelease } from "../lib/release";
+import Icon from "./Icon.astro";
+
+interface Props {
+  locale: Locale;
+  release: SiteRelease;
+  class?: string;
+}
+
+const { locale, release, class: className = "btn-pier" } = Astro.props;
+const t = messages(locale);
+const downloadPage = localePath(locale, "/download/");
+/**
+ * Windows downloads its installer at once. Linux has two packages and macOS needs the steps for an
+ * unsigned app, so they go to their part of the download page.
+ */
+const targets: Record<Platform, string> = {
+  windows: release.downloads.find((download) => download.bundle === "nsis")!.url,
+  linux: `${downloadPage}#linux`,
+  macos: `${downloadPage}#macos`,
+};
+---
+
+<a
+  class:list={["btn", className]}
+  href={targets.windows}
+  data-download
+  data-all-href={downloadPage}
+  data-all-label={t.hero.allDownloads}
+  {...Object.fromEntries(
+    (Object.keys(targets) as Platform[]).flatMap((platform) => [
+      [`data-${platform}-href`, targets[platform]],
+      [`data-${platform}-label`, t.hero.downloadFor(t.platforms[platform])],
+    ]),
+  )}
+>
+  <Icon name="download" />
+  <span>{t.hero.downloadFor(t.platforms.windows)}</span>
+</a>
+
+<script>
+  // Offer the visitor's platform, which the layout detected; phones and unknown systems get the
+  // download page.
+  const os = document.documentElement.dataset.os;
+  for (const button of document.querySelectorAll<HTMLAnchorElement>("a[data-download]")) {
+    const href = os ? button.dataset[`${os}Href`] : button.dataset.allHref;
+    const label = os ? button.dataset[`${os}Label`] : button.dataset.allLabel;
+    if (href && label) {
+      button.href = href;
+      button.querySelector("span")!.textContent = label;
+    }
+  }
+</script>

@@ -1,0 +1,84 @@
+---
+import "@fontsource-variable/archivo/wdth.css";
+import "../styles/global.css";
+import favicon from "../../../desktop/src-tauri/app-icon.svg?url";
+import faviconPng from "../../../desktop/src-tauri/icons/32x32.png?url";
+import touchIcon from "../../../desktop/src-tauri/icons/128x128@2x.png?url";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { SITE_URL } from "../consts";
+import { LANG, LOCALES, OG_LOCALE, localePath, messages, type Locale } from "../i18n";
+
+interface Props {
+  locale: Locale;
+  /** The full <title>. */
+  title: string;
+  description: string;
+  /** The page's path without the locale prefix, starting and ending with a slash. */
+  path: string;
+  /** Whether the page exists in every locale, so it names the others as alternates. */
+  translated?: boolean;
+  /** Structured data (schema.org) for search engines. */
+  jsonLd?: Record<string, unknown>;
+  /** The header without its bottom edge, for a page whose first section continues the night band. */
+  heroHeader?: boolean;
+}
+
+const { locale, title, description, path, translated = true, jsonLd, heroHeader = false } = Astro.props;
+const t = messages(locale);
+const url = new URL(localePath(locale, path), SITE_URL).href;
+const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_URL).href;
+---
+
+<!doctype html>
+<html lang={LANG[locale]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={url} />
+    {
+      translated && [
+        ...LOCALES.map((other) => <link rel="alternate" hreflang={LANG[other]} href={new URL(localePath(other, path), SITE_URL).href} />),
+        <link rel="alternate" hreflang="x-default" href={new URL(path, SITE_URL).href} />,
+      ]
+    }
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Hatoba" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={url} />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={t.hero.alt} />
+    <meta property="og:locale" content={OG_LOCALE[locale]} />
+    {translated && LOCALES.filter((other) => other !== locale).map((other) => <meta property="og:locale:alternate" content={OG_LOCALE[other]} />)}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0d1735" />
+    <link rel="icon" href={favicon} type="image/svg+xml" />
+    <link rel="icon" href={faviconPng} type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href={touchIcon} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+    <script is:inline>
+      // The visitor's platform, which the download buttons and the download page offer first.
+      (() => {
+        const ua = navigator.userAgent.toLowerCase();
+        if (/android|iphone|ipad|ipod/.test(ua)) return;
+        const platform = (navigator.userAgentData?.platform || navigator.platform || ua).toLowerCase();
+        const os = /win/.test(platform) ? "windows" : /mac/.test(platform) ? "macos" : /linux|x11|cros/.test(platform) ? "linux" : "";
+        if (os) document.documentElement.dataset.os = os;
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">{t.nav.skip}</a>
+    <Header locale={locale} path={path} translated={translated} edge={!heroHeader} />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer locale={locale} />
+  </body>
+</html>
