@@ -44,12 +44,6 @@ const CONFIG_CHECK: Duration = Duration::from_secs(10);
 /// behind one jump host probe it once.
 const PROBE_FRESH: Duration = Duration::from_secs(30);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
-/// The systems (HOST-11 ids) whose servers have no `/proc` to read, with their names.
-const NO_PROC: &[(&str, &str)] = &[
-    ("freebsd", "FreeBSD"),
-    ("netbsd", "NetBSD"),
-    ("windows", "Windows"),
-];
 
 /// Where a watch's events go. `false` once the page can no longer receive them.
 pub type Sink = Arc<dyn Fn(DashboardEvent) -> bool + Send + Sync>;
@@ -690,8 +684,6 @@ struct Plan {
     versions: Versions,
     connect: Result<ConnectConfig, Stop>,
     probe: Result<ProbeTarget, AppError>,
-    /// The system of a server the host was last seen on, when it has no `/proc`.
-    no_proc: Option<&'static str>,
 }
 
 /// `None` once the host is gone.
@@ -709,16 +701,10 @@ fn plan(vault: &Vault, host_id: &str) -> Option<Plan> {
         port: first.port,
         proxy,
     });
-    let os = vault.host_os(host_id);
-    let no_proc = NO_PROC
-        .iter()
-        .find(|(id, _)| os.as_deref() == Some(*id))
-        .map(|(_, name)| *name);
     Some(Plan {
         versions,
         connect,
         probe,
-        no_proc,
     })
 }
 
@@ -821,11 +807,9 @@ async fn connect_step(
     let tab = state
         .ssh
         .connection_for_host(host_id, &plan.versions.config);
-    let unsupported = plan
-        .no_proc
-        .map(str::to_owned)
-        .or_else(|| dash.unsupported(host_id, &plan.versions.config));
-    if let Some(system) = unsupported {
+    // Known only from a connection made for the host as it is now: the system HOST-11 recorded
+    // may be that of a server the host no longer names, or one since replaced.
+    if let Some(system) = dash.unsupported(host_id, &plan.versions.config) {
         // Online status only, as in the host list; nothing to read, even over a tab.
         let online = match (&tab, &plan.probe) {
             (Some(_), _) => true,
@@ -1154,14 +1138,26 @@ mod tests {
     }
 
     #[test]
-    fn a_server_without_proc_is_not_signed_in_to() {
+    fn a_server_without_proc_is_known_for_the_settings_it_was_seen_with() {
         let mut v = vault();
         let id = v.put(None, host("bsd", password("pw"), None)).unwrap();
-        assert_eq!(plan_of(&v, &id).no_proc, None);
+        let dash = Dashboard::default();
+        let before = plan_of(&v, &id).versions.config;
+        dash.set_unsupported(&id, before.clone(), "FreeBSD".into());
+        assert_eq!(dash.unsupported(&id, &before).as_deref(), Some("FreeBSD"));
+        // The system HOST-11 recorded does not stop a sign-in.
         v.set_host_os(&id, Some("freebsd")).unwrap();
-        assert_eq!(plan_of(&v, &id).no_proc, Some("FreeBSD"));
-        v.set_host_os(&id, Some("ubuntu")).unwrap();
-        assert_eq!(plan_of(&v, &id).no_proc, None);
+        assert_eq!(plan_of(&v, &id).versions.config, before);
+        // Pointed at another server, the host is signed in to again.
+        let mut edited = get(&v, &id);
+        edited.address = "linux.example".to_owned();
+        v.put(Some(&id), Item::Host(edited)).unwrap();
+        let after = plan_of(&v, &id).versions.config;
+        assert_eq!(dash.unsupported(&id, &after), None);
+        // The lock forgets it.
+        dash.set_unsupported(&id, after.clone(), "FreeBSD".into());
+        dash.stop_all();
+        assert_eq!(dash.unsupported(&id, &after), None);
     }
 
     #[test]

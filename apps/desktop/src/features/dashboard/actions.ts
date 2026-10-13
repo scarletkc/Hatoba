@@ -57,5 +57,5 @@ export function dashboardSwitch(host: HostView, groups: ReadonlyMap<string, Grou
 }
 
 export function retryHost(hostId: string) {
-  void api.dashboard_retry(hostId).catch(() => {});
+  void api.dashboard_retry(hostId).catch((e) => toast(errorMessage(t, e), "error"));
 }

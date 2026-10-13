@@ -31,7 +31,7 @@
 - A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute, or at once with **Retry** in its menu.
 - When a host's connection settings change (on another device, say), the dashboard connects again with the new ones.
 - **Opening a tab** on a host the dashboard is connected to takes over that connection: the tab opens its shell without signing in again, then sets the environment variables and starts the forwards set to start with the connection. Closing the tab closes the connection, and the dashboard connects again.
-- Servers that do not run Linux show their online status only.
+- Servers that do not run Linux show their online status only. The dashboard signs in once to find that out, and again only after the vault was locked or the host's connection settings changed.
 
 | en | zh-CN | ja |
 |---|---|---|
