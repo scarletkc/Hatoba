@@ -6,7 +6,8 @@ import { toast } from "@/components/overlay";
 import { connectHost } from "@/features/terminal/connect";
 import { t } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { DashboardSort } from "./logic";
+import type { GroupView, HostView } from "@/ipc/types";
+import { leftOutBy, type DashboardSort } from "./logic";
 
 /** Dashboard view state that survives leaving the page and coming back (HOST-13). */
 export const useDashboardUi = create<{
@@ -37,6 +38,21 @@ export async function setShownOnDashboard(id: string, shown: boolean) {
     await useVaultData.getState().reload();
   } catch (e) {
     toast(errorMessage(t, e), "error");
+  }
+}
+
+/**
+ * The switch a host's menu offers: **Include in Dashboard** for a host left out on its own, **Include Group in
+ * Dashboard** for one whose group is left out (its own switch is on), else **Leave Out of Dashboard**.
+ */
+export function dashboardSwitch(host: HostView, groups: ReadonlyMap<string, GroupView>) {
+  switch (leftOutBy(host, groups)) {
+    case "host":
+      return { key: "dashboard.include", icon: "eye", run: () => void setShownOnDashboard(host.id, true) } as const;
+    case "group":
+      return { key: "dashboard.includeGroup", icon: "eye", run: () => void setShownOnDashboard(host.group_id!, true) } as const;
+    case null:
+      return { key: "dashboard.leaveOut", icon: "eye-slash", run: () => void setShownOnDashboard(host.id, false) } as const;
   }
 }
 

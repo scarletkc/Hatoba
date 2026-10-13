@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp, type HostFilter } from "@/app/store";
 import { Button, Icon, IconButton, LinkButton, Segmented, Spinner } from "@/components/controls";
@@ -13,7 +13,7 @@ import { connectHost } from "@/features/terminal/connect";
 import { formatBytes, formatMessageTime, useT, type MessageKey } from "@/i18n";
 import type { GroupView, HostView, LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { openTerminal, retryHost, setShownOnDashboard, useDashboardUi } from "./actions";
+import { dashboardSwitch, openTerminal, retryHost, setShownOnDashboard, useDashboardUi } from "./actions";
 import { HostDetail } from "./HostDetail";
 import {
   DASHBOARD_COLUMNS,
@@ -22,6 +22,7 @@ import {
   groupSections,
   isStale,
   latestReading,
+  leftOutBy,
   memPercent,
   mountPercent,
   pastThreshold,
@@ -50,6 +51,7 @@ interface View {
   now: number;
   interval: number;
   alerts: Alerts;
+  groups: ReadonlyMap<string, GroupView>;
   onOpen(id: string): void;
   onContext(e: MouseEvent, host: HostView): void;
 }
@@ -112,7 +114,9 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
   const interval = prefs.dashboard_interval_secs;
   const layout = prefs.dashboard_layout;
   const hidden = prefs.dashboard_hidden_columns;
-  const alerts: Alerts = { cpu: prefs.dashboard_cpu_alert, mem: prefs.dashboard_mem_alert, disk: prefs.dashboard_disk_alert };
+  const { dashboard_cpu_alert: cpuAlert, dashboard_mem_alert: memAlert, dashboard_disk_alert: diskAlert } = prefs;
+  const alerts: Alerts = useMemo(() => ({ cpu: cpuAlert, mem: memAlert, disk: diskAlert }), [cpuAlert, memAlert, diskAlert]);
+  const columns = useMemo(() => DASHBOARD_COLUMNS.filter((c) => !hidden.includes(c)), [hidden]);
 
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
   // The host list's order, which "Host List Order" keeps and the other sorts break ties with.
@@ -139,30 +143,32 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
   const toggleColumn = (c: DashboardColumn) =>
     savePrefs({ dashboard_hidden_columns: hidden.includes(c) ? hidden.filter((x) => x !== c) : [...hidden, c] });
 
-  const view: View = {
-    t,
-    now,
-    interval,
-    alerts,
-    onOpen: setDetail,
-    onContext: (e, host) => {
+  const openHostMenu = hostMenu.openAt;
+  const onContext = useCallback(
+    (e: MouseEvent, host: HostView) => {
       e.preventDefault();
       setCtxHost(host);
-      hostMenu.openAt({ x: e.clientX, y: e.clientY });
+      openHostMenu({ x: e.clientX, y: e.clientY });
     },
-  };
+    [openHostMenu],
+  );
+  // Stable between readings, so only the cards and rows whose host changed render again.
+  const view: View = useMemo(() => ({ t, now, interval, alerts, groups: groupMap, onOpen: setDetail, onContext }), [t, now, interval, alerts, groupMap, onContext]);
 
   const hostEntries = (host: HostView): MenuEntry[] => {
     const r = readouts[host.id];
     const included = shownOnDashboard(host, groupMap);
+    const toggle = dashboardSwitch(host, groupMap);
     return [
       { label: t("dashboard.openTerminal"), icon: "terminal-window", onSelect: () => openTerminal(host.id) },
-      { label: t("hosts.menu.edit"), icon: "pencil-simple", onSelect: () => navigate({ kind: "host-edit", hostId: host.id, groupId: null, back: { kind: "all" } }) },
+      {
+        label: t("hosts.menu.edit"),
+        icon: "pencil-simple",
+        onSelect: () => navigate({ kind: "host-edit", hostId: host.id, groupId: null, back: filter, fromDashboard: true }),
+      },
       ...((canRetry(r) || r?.phase === "offline") && included ? [{ label: t("btn.retry"), icon: "arrow-clockwise", onSelect: () => retryHost(host.id) }] : []),
       { kind: "separator" },
-      host.dashboard
-        ? { label: t("dashboard.leaveOut"), icon: "eye-slash", onSelect: () => void setShownOnDashboard(host.id, false) }
-        : { label: t("dashboard.include"), icon: "eye", onSelect: () => void setShownOnDashboard(host.id, true) },
+      { label: t(toggle.key), icon: toggle.icon, onSelect: toggle.run },
     ];
   };
 
@@ -216,7 +222,7 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
         title={t("dashboard.empty.title")}
         body={t("dashboard.empty.body")}
         actions={
-          <Button variant="primary" icon="plus" onClick={() => navigate({ kind: "host-edit", hostId: null, groupId: null, back: { kind: "all" } })}>
+          <Button variant="primary" icon="plus" onClick={() => navigate({ kind: "host-edit", hostId: null, groupId: null, back: filter, fromDashboard: true })}>
             {t("hosts.newHost")}
           </Button>
         }
@@ -240,7 +246,6 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
       />
     );
   } else {
-    const columns = DASHBOARD_COLUMNS.filter((c) => !hidden.includes(c));
     body = (
       <div className={s.scroll}>
         {layout === "table" && <TableHead columns={columns} t={t} />}
@@ -266,13 +271,13 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
             {layout === "cards" ? (
               <div className={s.cards}>
                 {section.hosts.map((h) => (
-                  <HostCard key={h.id} host={h} readout={readouts[h.id]} leftOut={!shownOnDashboard(h, groupMap)} view={view} />
+                  <HostCard key={h.id} host={h} readout={readouts[h.id]} leftOut={leftOutBy(h, groupMap)} view={view} />
                 ))}
               </div>
             ) : (
               <div className={s.rows} role="list">
                 {section.hosts.map((h) => (
-                  <HostRow key={h.id} host={h} readout={readouts[h.id]} leftOut={!shownOnDashboard(h, groupMap)} columns={columns} view={view} />
+                  <HostRow key={h.id} host={h} readout={readouts[h.id]} leftOut={leftOutBy(h, groupMap)} columns={columns} view={view} />
                 ))}
               </div>
             )}
@@ -333,6 +338,7 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
           host={detailHost}
           readout={readouts[detailHost.id]}
           shown={shownOnDashboard(detailHost, groupMap)}
+          groups={groupMap}
           interval={interval}
           alerts={alerts}
           onClose={() => setDetail(null)}
@@ -349,26 +355,57 @@ function canRetry(readout: HostReadout | undefined): boolean {
   return readout?.phase === "failed" || (readout?.phase === "held" && readout.hold !== "password");
 }
 
-/** **Connect** for a host that needs the user, **Retry** for one that failed or is held. A table row has room for **Retry** only. */
+/** **Connect** for a host that needs the user, **Retry** for one that failed or is held; icons in a table row. */
 function StatusActions({ host, readout, t, compact }: { host: HostView; readout: HostReadout | undefined; t: T; compact?: boolean }) {
   const held = readout?.phase === "held";
   const retry = canRetry(readout);
-  if (!retry && !(held && !compact)) return null;
+  if (!retry && !held) return null;
   return (
     <span className={s.actions} onClick={(e) => e.stopPropagation()}>
-      {held && !compact && (
-        <Button size="xs" variant="primary" onClick={() => void connectHost(host.id)}>
-          {t("hosts.connect")}
-        </Button>
-      )}
+      {held &&
+        (compact ? (
+          <IconButton icon="plugs-connected" label={t("hosts.connect")} className={s.rowAction} onClick={() => void connectHost(host.id)} />
+        ) : (
+          <Button size="xs" variant="primary" onClick={() => void connectHost(host.id)}>
+            {t("hosts.connect")}
+          </Button>
+        ))}
       {retry &&
         (compact ? (
-          <IconButton icon="arrow-clockwise" label={t("btn.retry")} className={s.rowRetry} onClick={() => retryHost(host.id)} />
+          <IconButton icon="arrow-clockwise" label={t("btn.retry")} className={s.rowAction} onClick={() => retryHost(host.id)} />
         ) : (
           <Button size="xs" onClick={() => retryHost(host.id)}>
             {t("btn.retry")}
           </Button>
         ))}
+    </span>
+  );
+}
+
+/** The host's name as the button that opens its detail; the rest of the card or row opens it on a click too. */
+function NameButton({ host, onOpen }: { host: HostView; onOpen(id: string): void }) {
+  return (
+    <button
+      type="button"
+      className={s.nameButton}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(host.id);
+      }}
+    >
+      {host.name}
+    </button>
+  );
+}
+
+/** **Include in Dashboard**, or **Include Group in Dashboard** for a host whose group is left out. */
+function IncludeButton({ host, groups, t }: { host: HostView; groups: ReadonlyMap<string, GroupView>; t: T }) {
+  const toggle = dashboardSwitch(host, groups);
+  return (
+    <span className={s.actions} onClick={(e) => e.stopPropagation()}>
+      <Button size="xs" onClick={toggle.run}>
+        {t(toggle.key)}
+      </Button>
     </span>
   );
 }
@@ -403,15 +440,18 @@ function Meter({ label, sub, percent, alert, alertLabel }: { label: string; sub?
 
 function rates(r: StatsReading): string | null {
   if (r.net_rx_rate == null && r.net_tx_rate == null) return null;
-  return `↓ ${r.net_rx_rate != null ? formatRate(r.net_rx_rate) : "—"}  ↑ ${r.net_tx_rate != null ? formatRate(r.net_tx_rate) : "—"}`;
+  return `↓ ${r.net_rx_rate != null ? formatRate(r.net_rx_rate) : "—"} ↑ ${r.net_tx_rate != null ? formatRate(r.net_tx_rate) : "—"}`;
 }
 
 /** CPU, memory and the root filesystem as meters, then the rates, load and uptime. */
 function Readings({ reading, alerts, t }: { reading: StatsReading; alerts: Alerts; t: T }) {
   const mem = memPercent(reading);
   const root = rootPercent(reading);
-  const fullest = fullestMount(reading);
-  const otherFull = fullest && fullest.mount !== "/" && pastThreshold(fullest.percent, alerts.disk) ? fullest : null;
+  // Every other filesystem over the threshold, beside the root filesystem's bar.
+  const overs = reading.mounts
+    .filter((m) => m.mount_point !== "/")
+    .map((m) => ({ mount: m.mount_point, percent: mountPercent(m) }))
+    .filter((m) => pastThreshold(m.percent, alerts.disk));
   const load = formatLoad(reading.load);
   const net = rates(reading);
   const details = [
@@ -434,9 +474,9 @@ function Readings({ reading, alerts, t }: { reading: StatsReading; alerts: Alert
         alert={pastThreshold(root, alerts.disk)}
         alertLabel={t("dashboard.alert", { n: alerts.disk })}
       />
-      {otherFull && (
-        <div className={cx(s.detail, s.alertText)}>
-          <Icon name="warning" fill /> {otherFull.mount} {formatPercent(otherFull.percent)}
+      {overs.length > 0 && (
+        <div className={cx(s.detail, s.alertText)} title={overs.map((m) => `${m.mount} ${formatPercent(m.percent!)}`).join("\n")}>
+          <Icon name="warning" fill /> {overs.map((m) => `${m.mount} ${formatPercent(m.percent!)}`).join(" · ")}
         </div>
       )}
       {net && <div className={s.detail}>{net}</div>}
@@ -448,16 +488,9 @@ function Readings({ reading, alerts, t }: { reading: StatsReading; alerts: Alert
 interface ItemProps {
   host: HostView;
   readout: HostReadout | undefined;
-  leftOut: boolean;
+  /** What left the host out of the dashboard, if anything. */
+  leftOut: "host" | "group" | null;
   view: View;
-}
-
-function activate(e: KeyboardEvent, open: () => void) {
-  if (e.target !== e.currentTarget) return;
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    open();
-  }
 }
 
 const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemProps) {
@@ -468,17 +501,13 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
   const target = `${host.username ? `${host.username}@` : ""}${host.address}:${host.port}`;
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={host.name}
       className={cx(s.card, leftOut && s.cardLeftOut)}
       onClick={() => view.onOpen(host.id)}
-      onKeyDown={(e) => activate(e, () => view.onOpen(host.id))}
       onContextMenu={(e) => view.onContext(e, host)}
     >
       <div className={s.cardHead}>
-        <OsIcon os={readout?.os ?? host.os} badge={statusColor(readout, leftOut)} />
-        <span className={s.cardName}>{host.name}</span>
+        <OsIcon os={readout?.os ?? host.os} badge={statusColor(readout, !!leftOut)} />
+        <NameButton host={host} onOpen={view.onOpen} />
         {host.favorite && <Icon name="star" fill className={s.fav} />}
       </div>
       <div className={s.target}>{target}</div>
@@ -492,11 +521,7 @@ const HostCard = memo(function HostCard({ host, readout, leftOut, view }: ItemPr
       {leftOut ? (
         <div className={s.status}>
           <span className={s.badge}>{t("dashboard.leftOutBadge")}</span>
-          <span className={s.actions} onClick={(e) => e.stopPropagation()}>
-            <Button size="xs" onClick={() => void setShownOnDashboard(host.id, true)}>
-              {t("dashboard.include")}
-            </Button>
-          </span>
+          <IncludeButton host={host} groups={view.groups} t={t} />
         </div>
       ) : (
         <>
@@ -595,7 +620,7 @@ const HostRow = memo(function HostRow({ host, readout, leftOut, columns, view }:
         return (
           <span className={s.cellStatus}>
             <span className={cx(s.statusText, s[status.tone])} title={status.full}>
-              {status.text}
+              {status.full}
             </span>
             <StatusActions host={host} readout={readout} t={t} compact />
           </span>
@@ -629,21 +654,18 @@ const HostRow = memo(function HostRow({ host, readout, leftOut, columns, view }:
   return (
     <div
       role="listitem"
-      tabIndex={0}
-      aria-label={host.name}
       className={cx(s.row, s.grid, leftOut && s.cardLeftOut, stale && s.staleRow)}
       style={gridOf(columns)}
       onClick={() => view.onOpen(host.id)}
-      onKeyDown={(e) => activate(e, () => view.onOpen(host.id))}
       onContextMenu={(e) => view.onContext(e, host)}
     >
       <span className={s.rowName}>
-        <OsIcon os={readout?.os ?? host.os} badge={statusColor(readout, leftOut)} />
-        <span className={s.cardName}>{host.name}</span>
+        <OsIcon os={readout?.os ?? host.os} badge={statusColor(readout, !!leftOut)} />
+        <NameButton host={host} onOpen={view.onOpen} />
         {host.favorite && <Icon name="star" fill className={s.fav} />}
       </span>
       {columns.map((c) => (
-        <span key={c} className={s.cell}>
+        <span key={c} className={cx(s.cell, c !== "status" && s.valueCell)}>
           {cell(c)}
         </span>
       ))}

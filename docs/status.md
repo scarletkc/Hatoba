@@ -49,7 +49,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | HOST-01…10 | Host management, search, online probing | ✅ | |
 | HOST-11 | Server OS icon | ✅ | |
 | HOST-12 | Quick connect | 🟡 | Covered by tests against an in-process SSH server; needs a try in the app against a real server |
-| HOST-13 | Dashboard | 🟡 | First version. Unit tests cover the filesystem and traffic parsing, holds, versions, the probe key, and the limit of 8 setups; the page runs against the mock backend. Needs a try in the app against real servers, including 30 hosts behind one jump host. The later items of [#172](https://github.com/scarletkc/Hatoba/issues/172) (the assistant's `host_status` tool, billing, traffic per cycle, notifications, more readings, custom readings, this computer, one connection per jump host) ⬜ |
+| HOST-13 | Dashboard | 🟡 | First version. Unit tests cover the filesystem and traffic parsing, holds, versions, the probe key, and the limit of 8 setups, and an integration test reads the filesystems from OpenSSH on Linux; the page runs against the mock backend. Needs a try in the app against real servers, including 30 hosts behind one jump host. The later items of [#172](https://github.com/scarletkc/Hatoba/issues/172) (the assistant's `host_status` tool, billing, traffic per cycle, notifications, more readings, custom readings, this computer, one connection per jump host) ⬜ |
 | KEY-01…06 | Import, generation, list, public key deployment | ✅ | |
 | KEY-07 | View private key | ⬜ | P2 |
 

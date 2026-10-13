@@ -38,8 +38,11 @@ export function statusText(t: T, readout: HostReadout | undefined): { text: stri
         text: r?.system ? t("dashboard.state.unsupported", { system: r.system }) : t("dashboard.state.unsupportedUnknown"),
         tone: "dim",
       };
-    case "held":
-      return { text: t(`dashboard.hold.${r!.hold ?? "sign_in_failed"}` as MessageKey), tone: "warn" };
+    case "held": {
+      const text = t(`dashboard.hold.${r!.hold ?? "sign_in_failed"}` as MessageKey);
+      // The server's answer to a sign-in that failed, when there was one.
+      return { text: r?.error ? `${text}: ${errorMessage(t, r.error)}` : text, tone: "warn" };
+    }
     case "failed":
       return { text: t("dashboard.failed", { error: r?.error ? errorMessage(t, r.error) : "" }), tone: "error" };
   }

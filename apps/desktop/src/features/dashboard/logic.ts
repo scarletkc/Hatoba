@@ -10,10 +10,15 @@ export const DASHBOARD_SORTS: DashboardSort[] = ["list", "name", "status", "cpu"
 export type DashboardColumn = "status" | "cpu" | "memory" | "disk" | "network" | "load" | "uptime";
 export const DASHBOARD_COLUMNS: DashboardColumn[] = ["status", "cpu", "memory", "disk", "network", "load", "uptime"];
 
+/** What left a host out of the dashboard on this device: its own switch, its group's, or nothing. */
+export function leftOutBy(host: HostView, groups: ReadonlyMap<string, GroupView>): "host" | "group" | null {
+  if (!host.dashboard) return "host";
+  return host.group_id !== null && groups.get(host.group_id)?.dashboard === false ? "group" : null;
+}
+
 /** Whether the dashboard shows a host: neither it nor its group was left out on this device. */
 export function shownOnDashboard(host: HostView, groups: ReadonlyMap<string, GroupView>): boolean {
-  if (!host.dashboard) return false;
-  return host.group_id === null || groups.get(host.group_id)?.dashboard !== false;
+  return leftOutBy(host, groups) === null;
 }
 
 export interface DashboardSection {
@@ -72,16 +77,24 @@ export function netRate(r: StatsReading | undefined): number | null {
   return (r.net_rx_rate ?? 0) + (r.net_tx_rate ?? 0);
 }
 
-/** A value past the threshold stands out; a threshold of 0 is off. */
+/** A value over the threshold stands out; a threshold of 0 is off. */
 export function pastThreshold(percent: number | null, threshold: number): boolean {
-  return threshold > 0 && percent != null && percent >= threshold;
+  return threshold > 0 && percent != null && percent > threshold;
 }
 
-/** The readings are old: the host stopped answering, or none came for three intervals. */
+/**
+ * How long readings can be apart and still count as one run: three intervals, and room for the filesystem list,
+ * which a network filesystem that stopped answering can hold up for 5 s every fifth reading.
+ */
+export function readingGapMs(intervalSecs: number): number {
+  return intervalSecs * 3000 + 8000;
+}
+
+/** The readings are old: the host stopped answering, or none came for longer than {@link readingGapMs}. */
 export function isStale(readout: HostReadout | undefined, now: number, intervalSecs: number): boolean {
   const last = latestReading(readout);
   if (!readout || !last) return false;
-  return readout.phase !== "reading" || now - last.at > intervalSecs * 3000 + 2000;
+  return readout.phase !== "reading" || now - last.at > readingGapMs(intervalSecs);
 }
 
 /** Problems first when sorting by status. */

@@ -606,13 +606,30 @@ impl SshSession {
         &self,
         interval: Duration,
     ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
+        self.sample(interval, false).await
+    }
+
+    /// Like [`open_stats`](Self::open_stats), with every mounted filesystem in
+    /// [`ServerStats::mounts`] as well, read every fifth reading (the dashboard, HOST-13).
+    pub async fn open_dashboard_stats(
+        &self,
+        interval: Duration,
+    ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
+        self.sample(interval, true).await
+    }
+
+    async fn sample(
+        &self,
+        interval: Duration,
+        mounts: bool,
+    ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
         match self.server_os() {
             Some(os @ (ServerOs::FreeBsd | ServerOs::NetBsd | ServerOs::Windows)) => {
                 Ok(stats::unsupported(os.name()))
             }
             _ => {
                 let channel = self.open_channel().await?;
-                stats::start(self, channel, interval).await
+                stats::start(self, channel, interval, mounts).await
             }
         }
     }

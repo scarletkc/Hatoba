@@ -502,7 +502,11 @@ impl KeyboardInteractive for Interactive {
 #[derive(Default)]
 pub struct Unattended {
     host_key: Mutex<Option<HostKeyPromptKind>>,
+    /// A hop's host key was trusted, so signing in to it began.
+    signing_in: AtomicBool,
     prompted: AtomicBool,
+    /// One of the prompts was a lone password prompt.
+    password_prompted: AtomicBool,
 }
 
 impl Unattended {
@@ -514,6 +518,27 @@ impl Unattended {
     /// The server asked for keyboard-interactive answers beyond the saved password (2FA).
     pub fn prompted(&self) -> bool {
         self.prompted.load(Ordering::Relaxed)
+    }
+
+    /// One of those was a lone password prompt: the saved password, which answers the first
+    /// one itself, was rejected (a PAM server asks again).
+    pub fn password_prompted(&self) -> bool {
+        self.password_prompted.load(Ordering::Relaxed)
+    }
+
+    /// A hop's host key checked out, so a failure after it may come from signing in.
+    pub fn signing_in(&self) -> bool {
+        self.signing_in.load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    pub fn for_tests(signing_in: bool, prompted: bool, password_prompted: bool) -> Self {
+        Self {
+            host_key: Mutex::new(None),
+            signing_in: AtomicBool::new(signing_in),
+            prompted: AtomicBool::new(prompted),
+            password_prompted: AtomicBool::new(password_prompted),
+        }
     }
 }
 
@@ -550,6 +575,7 @@ impl HostKeyVerifier for UnattendedVerifier {
             .iter()
             .any(|(_, k)| k.key_type == key.key_type && k.public_key == key.public_key)
         {
+            self.outcome.signing_in.store(true, Ordering::Relaxed);
             return true;
         }
         let (kind, _) = host_key_status(&known, key);
@@ -563,8 +589,13 @@ struct UnattendedPrompts(Arc<Unattended>);
 
 #[async_trait]
 impl KeyboardInteractive for UnattendedPrompts {
-    async fn respond(&self, _request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
+    async fn respond(&self, request: PromptRequest) -> Option<Vec<Zeroizing<String>>> {
         self.0.prompted.store(true, Ordering::Relaxed);
+        let lone_password = matches!(request.prompts.as_slice(), [p]
+            if !p.echo && p.text.to_ascii_lowercase().contains("password"));
+        if request.password || lone_password {
+            self.0.password_prompted.store(true, Ordering::Relaxed);
+        }
         None
     }
 }

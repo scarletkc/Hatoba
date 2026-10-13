@@ -5,11 +5,11 @@ import { OsIcon } from "@/features/hosts/OsIcon";
 import { Sparkline } from "@/features/terminal/Sparkline";
 import { formatLoad, formatPercent, formatRate, formatUptime, percentOf, type StatsReading } from "@/features/terminal/stats";
 import { formatBytes, formatMessageTime, useT } from "@/i18n";
-import type { HostView } from "@/ipc/types";
+import type { GroupView, HostView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
-import { openTerminal, retryHost, setShownOnDashboard } from "./actions";
+import { dashboardSwitch, openTerminal, retryHost } from "./actions";
 import { statusColor, statusText } from "./status";
-import { isStale, memPercent, mountPercent, pastThreshold, rootPercent } from "./logic";
+import { isStale, memPercent, readingGapMs, mountPercent, pastThreshold, rootPercent } from "./logic";
 import type { HostReadout } from "./readings";
 import s from "./HostDetail.module.css";
 
@@ -32,6 +32,7 @@ export function HostDetail({
   host,
   readout,
   shown,
+  groups,
   interval,
   alerts,
   onClose,
@@ -40,6 +41,7 @@ export function HostDetail({
   readout: HostReadout | undefined;
   /** Not left out of the dashboard. */
   shown: boolean;
+  groups: ReadonlyMap<string, GroupView>;
   interval: number;
   alerts: { cpu: number; mem: number; disk: number };
   onClose(): void;
@@ -54,23 +56,24 @@ export function HostDetail({
   const stale = shown && isStale(readout, now, interval);
   const status = statusText(t, readout);
   const target = `${host.username ? `${host.username}@` : ""}${host.address}:${host.port}`;
-  const gap = interval * 3000;
+  const gap = readingGapMs(interval);
   const times = history.map((r) => r.at);
   const phase = readout?.phase;
+  const toggle = dashboardSwitch(host, groups);
 
   const footer = (
     <>
       <Button
-        icon={shown ? "eye-slash" : "eye"}
+        icon={toggle.icon}
         onClick={() => {
-          void setShownOnDashboard(host.id, !host.dashboard);
+          toggle.run();
           if (shown) onClose();
         }}
       >
-        {host.dashboard ? t("dashboard.leaveOut") : t("dashboard.include")}
+        {t(toggle.key)}
       </Button>
       <FooterSpacer />
-      {shown && (phase === "failed" || (phase === "held" && readout?.hold !== "password")) && (
+      {shown && (phase === "failed" || phase === "offline" || (phase === "held" && readout?.hold !== "password")) && (
         <Button onClick={() => retryHost(host.id)}>{t("btn.retry")}</Button>
       )}
       <Button onClick={onClose}>{t("btn.close")}</Button>

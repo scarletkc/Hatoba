@@ -379,10 +379,11 @@ pub struct ServerStatsView {
     /// Space left for unprivileged users, as `df` counts it.
     pub disk_available: Option<u64>,
     pub uptime_secs: Option<u64>,
-    /// Bytes received and sent since the server booted, over `net_interfaces`.
+    /// Bytes received and sent over `net_interfaces` since each came up, usually at boot.
     pub net_rx_total: Option<u64>,
     pub net_tx_total: Option<u64>,
-    /// Every mounted filesystem that stores files, each device once, at most 32 (HOST-13).
+    /// Every mounted filesystem that stores files, each device once, at most 32; only on the
+    /// dashboard (HOST-13), refreshed every fifth reading.
     pub mounts: Vec<MountView>,
 }
 

@@ -1688,10 +1688,13 @@ export type ServerStatsView = {
 	/**  Space left for unprivileged users, as `df` counts it. */
 	disk_available: number | null,
 	uptime_secs: number | null,
-	/**  Bytes received and sent since the server booted, over `net_interfaces`. */
+	/**  Bytes received and sent over `net_interfaces` since each came up, usually at boot. */
 	net_rx_total: number | null,
 	net_tx_total: number | null,
-	/**  Every mounted filesystem that stores files, each device once, at most 32 (HOST-13). */
+	/**
+	 *  Every mounted filesystem that stores files, each device once, at most 32; only on the
+	 *  dashboard (HOST-13), refreshed every fifth reading.
+	 */
 	mounts: MountView[],
 };
 

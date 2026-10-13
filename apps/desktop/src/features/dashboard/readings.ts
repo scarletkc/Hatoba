@@ -59,18 +59,34 @@ export function applyEvent(prev: HostReadout | undefined, event: DashboardEvent,
 /** The readings stay in memory on this device; they are never stored or synced. */
 const useReadouts = create<{ hosts: Record<string, HostReadout> }>(() => ({ hosts: {} }));
 
+/** Events waiting for the next batch, so many hosts reading at once re-render the page once. */
+let queued: [DashboardEvent, number][] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+const BATCH_MS = 50;
+
+function flush() {
+  flushTimer = null;
+  const events = queued;
+  queued = [];
+  useReadouts.setState((st) => {
+    const hosts = { ...st.hosts };
+    for (const [event, at] of events) hosts[event.host_id] = applyEvent(hosts[event.host_id], event, at);
+    return { hosts };
+  });
+}
+
 export function dispatchDashboardEvent(event: DashboardEvent, now = Date.now()) {
-  useReadouts.setState((st) => ({ hosts: { ...st.hosts, [event.host_id]: applyEvent(st.hosts[event.host_id], event, now) } }));
+  queued.push([event, now]);
+  flushTimer ??= setTimeout(flush, BATCH_MS);
 }
 
 /** Forgets every reading, when the vault locks. */
 export function clearReadouts() {
   generation++;
+  queued = [];
+  if (flushTimer !== null) clearTimeout(flushTimer);
+  flushTimer = null;
   useReadouts.setState({ hosts: {} });
-}
-
-export function useReadout(hostId: string): HostReadout | undefined {
-  return useReadouts((st) => st.hosts[hostId]);
 }
 
 export function useReadoutMap(): Record<string, HostReadout> {
@@ -87,7 +103,8 @@ let generation = 0;
  */
 export function useDashboardWatch(hostIds: string[], intervalSecs: number, active: boolean) {
   const latest = useRef<Promise<number | null> | null>(null);
-  const key = hostIds.join("\n");
+  // In a fixed order, so a reload that reorders the same hosts keeps the watch.
+  const key = [...hostIds].sort().join("\n");
 
   useEffect(() => {
     if (!active) return;

@@ -18,6 +18,8 @@ export type Page =
       hostId: string | null;
       groupId: string | null;
       back: HostFilter;
+      /** The editor was opened from the dashboard, which Back and Save return to with the `back` filter (HOST-13). */
+      fromDashboard?: boolean;
       /** A new host starts from this quick-connect target (HOST-12). */
       prefill?: QuickTarget;
     }

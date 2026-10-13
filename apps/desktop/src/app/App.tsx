@@ -159,6 +159,7 @@ function HomePage({ page }: { page: Page }) {
           hostId={page.hostId}
           groupId={page.groupId}
           back={page.back}
+          fromDashboard={page.fromDashboard}
           prefill={page.prefill}
         />
       );

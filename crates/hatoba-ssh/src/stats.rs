@@ -30,8 +30,16 @@ const MAX_STDERR: usize = 2048;
 const EXIT_NOT_FOUND: u32 = 127;
 /// The most filesystems a reading lists; a server with more lists the first ones `df` printed.
 const MAX_MOUNTS: usize = 32;
-/// Filesystems `df` lists that hold no files of their own on disk: memory-backed ones, the
-/// kernel's, and the layers of containers.
+/// The most `@mounts` lines a block keeps, so output without an `@end` cannot grow it for good.
+const MAX_MOUNT_LINES: usize = 256;
+/// Filesystem types that hold no files of their own on a disk with room to fill: memory-backed
+/// ones, the kernel's, the layers of containers, and read-only images (always full).
+const PSEUDO_TYPES: &[&str] = &[
+    "tmpfs", "devtmpfs", "ramfs", "overlay", "squashfs", "erofs", "iso9660", "cramfs", "romfs",
+    "efivarfs", "autofs", "proc", "sysfs", "devpts", "nsfs",
+];
+/// The same, by the name `df` gives the filesystem, for a mount point the mount table does not
+/// list.
 const PSEUDO_SOURCES: &[&str] = &[
     "tmpfs",
     "devtmpfs",
@@ -43,6 +51,8 @@ const PSEUDO_SOURCES: &[&str] = &[
     "efivarfs",
     "ramfs",
 ];
+/// Single files a container runtime mounts from the host's disk, which `/` already covers.
+const FILE_MOUNTS: &[&str] = &["/etc/hosts", "/etc/hostname", "/etc/resolv.conf"];
 
 /// One reading of a server's resource usage. Sizes are in bytes and rates in bytes per second.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -66,10 +76,10 @@ pub struct ServerStats {
     pub net_rx_rate: Option<u64>,
     /// Send rate since the previous reading.
     pub net_tx_rate: Option<u64>,
-    /// Bytes received since the server booted, summed over
-    /// [`net_interfaces`](Self::net_interfaces).
+    /// Bytes received over [`net_interfaces`](Self::net_interfaces) since each came up, which
+    /// is usually when the server booted.
     pub net_rx_total: Option<u64>,
-    /// Bytes sent since the server booted.
+    /// Bytes sent, counted the same way.
     pub net_tx_total: Option<u64>,
     /// The interfaces counted: those of the default routes, or else all but loopback.
     pub net_interfaces: Vec<String>,
@@ -82,9 +92,11 @@ pub struct ServerStats {
     pub disk_available: Option<u64>,
     /// Time since the server booted, in seconds.
     pub uptime_secs: Option<u64>,
-    /// Every mounted filesystem that stores files, in the order `df` lists them: not the
-    /// memory-backed or kernel ones, the layers of containers, or loop devices (such as snap
-    /// packages), and each device once. At most 32.
+    /// Every mounted filesystem that stores files, in the order `df` lists them, when sampling
+    /// asked for them ([`SshSession::open_dashboard_stats`]): not the memory-backed or kernel
+    /// ones, the layers of containers, read-only images, or the files a container runtime
+    /// mounts, and each device (each ZFS pool) once; `/` always. At most 32. They are read
+    /// every fifth reading, and the readings between repeat the last list.
     pub mounts: Vec<MountStats>,
 }
 
@@ -148,14 +160,19 @@ pub(crate) fn unsupported(system: &str) -> (StatsHandle, mpsc::Receiver<StatsEve
     (StatsHandle { cancel }, rx)
 }
 
+/// Runs the script every `interval`; with `mounts`, it also lists every filesystem now and then
+/// (the dashboard, HOST-13), which the terminal's readout leaves out so that a network
+/// filesystem that stopped answering cannot slow it down.
 pub(crate) async fn start(
     session: &SshSession,
     mut channel: Channel<Msg>,
     interval: Duration,
+    mounts: bool,
 ) -> Result<(StatsHandle, mpsc::Receiver<StatsEvent>), SshError> {
     let secs = interval.as_secs().clamp(1, 60);
+    let extra = if mounts { " mounts" } else { "" };
     channel
-        .exec(true, format!("sh -s -- {secs}"))
+        .exec(true, format!("sh -s -- {secs}{extra}"))
         .await
         .map_err(SshError::from)?;
     wait_request_reply(&mut channel, "exec").await?;
@@ -319,9 +336,10 @@ struct Disk {
     available: u64,
 }
 
-/// One line of `df -kP` with its filesystem and mount point.
+/// One line of `df -kP` with its filesystem, its type (`-` when unknown) and its mount point.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Mount {
+    fstype: String,
     source: String,
     mount_point: String,
     disk: Disk,
@@ -350,6 +368,10 @@ struct Parser {
     section: Section,
     current: Sample,
     cpus: Option<u32>,
+    /// The filesystems of the block being read, once it has an `@mounts` section.
+    block_mounts: Option<Vec<Mount>>,
+    /// The filesystems the last block with an `@mounts` section listed.
+    mounts: Vec<Mount>,
 }
 
 impl Parser {
@@ -382,10 +404,17 @@ impl Parser {
                 "load" => self.section = Section::Load,
                 "uptime" => self.section = Section::Uptime,
                 "disk" => self.section = Section::Disk,
-                "mounts" => self.section = Section::Mounts,
+                "mounts" => {
+                    self.section = Section::Mounts;
+                    self.block_mounts = Some(Vec::new());
+                }
                 "end" => {
                     let mut sample = Box::new(std::mem::take(&mut self.current));
                     sample.cpus = self.cpus;
+                    if let Some(mounts) = self.block_mounts.take() {
+                        self.mounts = mounts;
+                    }
+                    sample.mounts = self.mounts.clone();
                     return Some(Parsed::Sample(sample));
                 }
                 _ => {}
@@ -408,7 +437,13 @@ impl Parser {
             Section::Uptime => sample.uptime = parse_uptime(line),
             // The header line does not parse, the filesystem's line does.
             Section::Disk => sample.disk = parse_df(line).or(sample.disk),
-            Section::Mounts => sample.mounts.extend(parse_mount(line)),
+            Section::Mounts => {
+                if let Some(mounts) = &mut self.block_mounts
+                    && mounts.len() < MAX_MOUNT_LINES
+                {
+                    mounts.extend(parse_mount(line));
+                }
+            }
         }
         None
     }
@@ -496,17 +531,18 @@ fn parse_df(line: &str) -> Option<Disk> {
     })
 }
 
-/// `nas:/export/media 1024 512 512 50% /mnt/media`: the filesystem, its sizes and its mount
-/// point. Both names may hold spaces, so the sizes are found as the first three numbers followed
-/// by the use percentage.
+/// `nfs4 nas:/export/media 1024 512 512 50% /mnt/media`: the type, then the line `df -kP`
+/// printed for the filesystem: its name, sizes and mount point. Both names may hold spaces, so
+/// the sizes are found as the first three numbers followed by the use percentage.
 fn parse_mount(line: &str) -> Option<Mount> {
     let fields: Vec<&str> = line.split_whitespace().collect();
-    let i = (4..fields.len().saturating_sub(1)).find(|&i| {
+    let i = (5..fields.len().saturating_sub(1)).find(|&i| {
         fields[i].ends_with('%') && fields[i - 3..i].iter().all(|f| f.parse::<u64>().is_ok())
     })?;
     let number = |f: &str| f.parse::<u64>().ok();
     Some(Mount {
-        source: fields[..i - 3].join(" "),
+        fstype: fields[0].to_owned(),
+        source: fields[1..i - 3].join(" "),
         mount_point: fields[i + 1..].join(" "),
         disk: Disk {
             total: number(fields[i - 3])?,
@@ -517,12 +553,34 @@ fn parse_mount(line: &str) -> Option<Mount> {
 }
 
 /// Whether a filesystem `df` listed stores files: the root filesystem always does, whatever is
-/// mounted there (a container's layers, say).
+/// mounted there (a container's layers, say). Without its type, its name decides, and loop
+/// devices (such as snap packages) are taken for read-only images.
 fn stores_files(mount: &Mount) -> bool {
-    mount.mount_point == "/"
-        || (mount.disk.total > 0
-            && !PSEUDO_SOURCES.contains(&mount.source.as_str())
-            && !mount.source.starts_with("/dev/loop"))
+    if mount.mount_point == "/" {
+        return true;
+    }
+    if mount.disk.total == 0 || FILE_MOUNTS.contains(&mount.mount_point.as_str()) {
+        return false;
+    }
+    if mount.fstype == "-" {
+        !PSEUDO_SOURCES.contains(&mount.source.as_str()) && !mount.source.starts_with("/dev/loop")
+    } else {
+        !PSEUDO_TYPES.contains(&mount.fstype.as_str())
+    }
+}
+
+/// What makes two filesystems the same space: a device once whatever it is mounted on (a bind
+/// mount, a btrfs subvolume), a ZFS pool once for all its datasets, and anything else (network
+/// and FUSE filesystems, whose names need not be unique) by its name and mount point.
+fn space_of(mount: &Mount) -> String {
+    if mount.fstype == "zfs" {
+        let pool = mount.source.split('/').next().unwrap_or_default();
+        format!("zfs:{pool}")
+    } else if mount.source.starts_with('/') {
+        mount.source.clone()
+    } else {
+        format!("{}\0{}", mount.source, mount.mount_point)
+    }
 }
 
 const KB: u64 = 1024;
@@ -597,13 +655,12 @@ impl Sample {
         stats
     }
 
-    /// The filesystems that store files, each device once (a bind mount or a btrfs subvolume
-    /// shows the same space again under another mount point).
+    /// The filesystems that store files, each space once ([`space_of`]).
     fn mount_stats(&self) -> Vec<MountStats> {
         let mut seen = std::collections::HashSet::new();
         self.mounts
             .iter()
-            .filter(|m| stores_files(m) && seen.insert(m.source.as_str()))
+            .filter(|m| stores_files(m) && seen.insert(space_of(m)))
             .take(MAX_MOUNTS)
             .map(|m| MountStats {
                 source: m.source.clone(),
@@ -850,22 +907,39 @@ Filesystem     1024-blocks     Used Available Capacity Mounted on
     fn every_filesystem_that_stores_files_is_listed_once() {
         let samples = samples(
             "@mounts
-Filesystem     1024-blocks     Used Available Capacity Mounted on
-overlay           30000000 10000000  18500000      36% /
-udev               4000000        0   4000000       0% /dev
-tmpfs               800000     1500    798500       1% /run
-/dev/sda1         30000000 10000000  18500000      36% /var/lib/docker
-/dev/loop3           65536    65536         0     100% /snap/core20/2318
-/dev/sdb1        500000000 450000000 25000000     95% /data
-/dev/sdb1        500000000 450000000 25000000     95% /srv/data
-nas:/export/my media 1000 400   600      40% /mnt/my media
-cgroup2                  0        0         0        - /sys/fs/cgroup
+- Filesystem     1024-blocks     Used Available Capacity Mounted on
+overlay overlay           30000000 10000000  18500000      36% /
+devtmpfs udev               4000000        0   4000000       0% /dev
+tmpfs run               800000     1500    798500       1% /run
+ext4 /dev/sda1         30000000 10000000  18500000      36% /etc/hosts
+ext4 /dev/sda1         30000000 10000000  18500000      36% /var/lib/docker
+squashfs /dev/loop3           65536    65536         0     100% /snap/core20/2318
+squashfs /dev/root           4096    4096         0     100% /rom
+ext4 /dev/sdb1        500000000 450000000 25000000     95% /data
+ext4 /dev/sdb1        500000000 450000000 25000000     95% /srv/data
+nfs4 nas:/export/my media 1000 400   600      40% /mnt/my media
+fuse.s3fs s3fs 9000 100 8900 2% /mnt/a
+fuse.s3fs s3fs 9000 200 8800 3% /mnt/b
+zfs rpool/ROOT/ubuntu 900 100 800 12% /srv
+zfs rpool/var/log 900 50 800 6% /var/log
+cgroup2 cgroup2                  0        0         0        - /sys/fs/cgroup
 @end
 ",
         );
         let mounts = samples[0].stats(None).mounts;
         let points: Vec<&str> = mounts.iter().map(|m| m.mount_point.as_str()).collect();
-        assert_eq!(points, ["/", "/var/lib/docker", "/data", "/mnt/my media"]);
+        assert_eq!(
+            points,
+            [
+                "/",
+                "/var/lib/docker",
+                "/data",
+                "/mnt/my media",
+                "/mnt/a",
+                "/mnt/b",
+                "/srv"
+            ]
+        );
         assert_eq!(mounts[3].source, "nas:/export/my media");
         assert_eq!(
             mounts[2],
@@ -880,18 +954,67 @@ cgroup2                  0        0         0        - /sys/fs/cgroup
     }
 
     #[test]
+    fn without_a_type_the_name_decides() {
+        let samples = samples(
+            "@mounts
+- tmpfs 800000 1500 798500 1% /run
+- /dev/loop3 65536 65536 0 100% /snap/core20/2318
+- /dev/sdb1 500 400 100 80% /data
+@end
+",
+        );
+        let points: Vec<String> = samples[0]
+            .stats(None)
+            .mounts
+            .into_iter()
+            .map(|m| m.mount_point)
+            .collect();
+        assert_eq!(points, ["/data"]);
+    }
+
+    #[test]
+    fn the_last_list_of_filesystems_stands_until_the_next() {
+        let samples = samples(
+            "@mounts
+ext4 /dev/sdb1 500 400 100 80% /data
+@end
+@end
+@mounts
+@end
+",
+        );
+        let count = |i: usize| samples[i].stats(None).mounts.len();
+        // The block without a list repeats the last one; an empty list replaces it.
+        assert_eq!((count(0), count(1), count(2)), (1, 1, 0));
+    }
+
+    #[test]
     fn mount_lines_that_do_not_parse_are_skipped() {
         assert_eq!(
-            parse_mount("Filesystem 1024-blocks Used Available Capacity Mounted on"),
+            parse_mount("- Filesystem 1024-blocks Used Available Capacity Mounted on"),
             None
         );
-        assert_eq!(parse_mount("/dev/sda1 100 40 50 45%"), None);
-        assert_eq!(parse_mount("100 40 50 45% /"), None);
+        assert_eq!(parse_mount("ext4 /dev/sda1 100 40 50 45%"), None);
+        assert_eq!(parse_mount("ext4 100 40 50 45% /"), None);
         let many: String = (0..40)
-            .map(|i| format!("/dev/sd{i} 100 40 60 40% /m{i}\n"))
+            .map(|i| format!("ext4 /dev/sd{i} 100 40 60 40% /m{i}\n"))
             .collect();
         let samples = samples(&format!("@mounts\n{many}@end\n"));
         assert_eq!(samples[0].stats(None).mounts.len(), MAX_MOUNTS);
+        // Lines past the cap, with no end in sight, are not kept.
+        let mut parser = Parser::default();
+        let mut out = Vec::new();
+        parser.feed(b"@mounts\n", &mut out);
+        for i in 0..1000 {
+            parser.feed(
+                format!("ext4 /dev/x{i} 1 1 0 100% /x{i}\n").as_bytes(),
+                &mut out,
+            );
+        }
+        assert_eq!(
+            parser.block_mounts.as_ref().map(Vec::len),
+            Some(MAX_MOUNT_LINES)
+        );
     }
 
     #[test]

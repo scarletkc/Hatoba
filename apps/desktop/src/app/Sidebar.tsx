@@ -23,6 +23,7 @@ function pageKey(page: Page): Key | null {
   switch (page.kind) {
     case "hosts":
     case "host-edit": {
+      if (page.kind === "host-edit" && page.fromDashboard) return "dashboard";
       const f: HostFilter = page.kind === "hosts" ? page.filter : page.back;
       if (f.kind === "group") return `group:${f.id}`;
       if (f.kind === "tag") return `tag:${f.name}`;

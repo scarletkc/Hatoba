@@ -16,18 +16,20 @@
 ## The page
 
 - The header has a filter (All Hosts, Favorites, a group or a tag, as in the sidebar), the sort order, and **Cards** or **Table**. The page shows a section per group, in the sidebar's order, then the hosts without a group.
-- A card shows the name, `user@address:port`, tags, the OS icon with a status badge, and CPU, memory and the root filesystem as bars, then the network rates, the load averages and the uptime. Another filesystem past the disk threshold shows under the bars.
-- The table has a row per host. **Columns** turns each column (status, CPU, memory, disk, network, load, uptime) on or off. Pointing at the disk cell lists every mounted filesystem.
+- A card shows the name, `user@address:port`, tags, the OS icon with a status badge, and CPU, memory and the root filesystem as bars, then the network rates, the load averages and the uptime. Every other filesystem over the disk threshold is named under the bars.
+- The table has a row per host. **Columns** turns each column (status, CPU, memory, disk, network, load, uptime) on or off. Pointing at the disk cell lists the filesystems.
 - Sort by the host list's order (**Host List Order**), name, status (problems first), CPU, memory, disk (the fullest filesystem), network or uptime. Values sort highest first.
-- A value past its threshold shows in red. The thresholds are in Settings → General (90% by default; **Off** turns one off).
+- A value over its threshold shows in red. The thresholds are in Settings → General (90% by default; **Off** turns one off).
 - A host that stops answering keeps its last readings, dimmed, with the time they were read.
-- Click a card or row for the host's detail: CPU and network over the last 3 minutes, memory and swap, every filesystem, the traffic since the server booted, the load and uptime. **Open Terminal** brings the host's tab to the front or opens one. Right-click a card or row for the same and **Edit**.
+- Click a card or row (or Tab to its name and press Enter) for the host's detail: CPU and network over the last 3 minutes, memory and swap, the filesystems, the total traffic of the counted interfaces (since each came up, usually at boot), the load and uptime. **Open Terminal** brings the host's tab to the front or opens one. Right-click a card or row for the same and **Edit**, which returns to the dashboard.
+- The filesystems are those that store files, at most 32: not memory-backed or kernel ones, container layers, read-only images such as snap packages, or the files a container runtime mounts, and each disk and each ZFS pool once. They are read every fifth reading.
 
 ## How hosts are read
 
 - Hosts are read only while the page is shown, the window is visible and the vault is unlocked. Leaving the page stops reading, and the connections close a minute later, so a look at a tab and back does not sign in again. Locking closes them at once.
-- Each host gets a background SSH connection, every 3 seconds by default (**Refresh interval** in Settings → General). A host with a connected tab is read over that tab's connection. At most 8 connections are being set up at once, which keeps many hosts behind one jump host under OpenSSH's default `MaxStartups`.
-- A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute.
+- Each host is read every 3 seconds by default (**Refresh interval** in Settings → General), over a connected tab's connection or else over a background SSH connection of its own. At most 8 connections are being set up at once, which keeps many hosts behind one jump host under OpenSSH's default `MaxStartups`.
+- A host whose first hop (the host, or its outermost jump host) does not answer the online probe is shown **Offline** and is not signed in to until it answers; it is checked again every minute, or at once with **Retry** in its menu.
+- When a host's connection settings change (on another device, say), the dashboard connects again with the new ones.
 - **Opening a tab** on a host the dashboard is connected to takes over that connection: the tab opens its shell without signing in again, then sets the environment variables and starts the forwards set to start with the connection. Closing the tab closes the connection, and the dashboard connects again.
 - Servers that do not run Linux show their online status only.
 
@@ -45,7 +47,7 @@
 
 ## Hosts that need the user
 
-The background never shows a prompt. A host that cannot sign in on its own says why, with **Connect**, which opens a tab where the prompt can be answered. Once a tab is connected, the dashboard reads over it.
+The background never shows a prompt. A host that cannot sign in on its own says why, with **Connect**, which opens a tab where the prompt can be answered. Once the tab is connected, the dashboard reads over it at once.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -58,12 +60,12 @@ The background never shows a prompt. A host that cannot sign in on its own says 
 | Connect | 连接 | 接続 |
 | Retry | 重试 | 再試行 |
 
-- A failed sign-in is not tried again on its own, so tools like fail2ban do not ban this computer. **Retry** tries once more. Editing the host (a new password, say) or confirming its host key in a tab also lets the dashboard try again.
+- A failed sign-in, with the server's answer, is not tried again on its own, so tools like fail2ban do not ban this computer. That includes a server that hangs up during sign-in, as one does after too many keys from the agent. **Retry** tries once more. Changing how the host connects (a new password, key, user, address or jump host, say) or confirming its host key in a tab also lets the dashboard try again; renaming it or marking it a favorite does not.
 - Other failures, such as a timeout or a lost connection, show the error and are tried again after a minute; **Retry** tries at once.
 
 ## Leaving hosts out
 
-Right-click a card for **Leave Out of Dashboard**, or use the **…** menu of a group's section for **Leave Group Out of Dashboard**. A host left out is not shown or signed in to. The note at the bottom of the page counts the hosts left out; **Show** lists them dimmed, with **Include in Dashboard**. The choice is kept on this device only and is not synced.
+Right-click a card for **Leave Out of Dashboard**, or use the **…** menu of a group's section for **Leave Group Out of Dashboard**. A host left out is not shown or signed in to. The note at the bottom of the page counts the hosts left out; **Show** lists them dimmed, with **Include in Dashboard**, or **Include Group in Dashboard** for a host whose group is left out. The choice is kept on this device only and is not synced.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -76,4 +78,4 @@ Right-click a card for **Leave Out of Dashboard**, or use the **…** menu of a 
 
 ## Not on the dashboard yet
 
-History beyond the last few minutes, alerts or notifications, billing and traffic per billing cycle, temperatures, GPUs, Docker containers, custom commands per host, and a card for this computer. Readings stop when Hatoba is closed: nothing runs on the server.
+History beyond the last few minutes, notifications, billing and traffic per billing cycle, temperatures, GPUs, Docker containers, custom commands per host, and a card for this computer. Readings stop when Hatoba is closed or the page is left: nothing is left running on the server.

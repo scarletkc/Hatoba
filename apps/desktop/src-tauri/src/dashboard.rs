@@ -12,6 +12,7 @@
 //! terminal tab took one over in the meantime ([`Dashboard::take_connection`]).
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -36,12 +37,13 @@ pub const MAX_SETUPS: usize = 8;
 const LINGER: Duration = Duration::from_secs(60);
 /// How long a host that is offline, failed or held waits before it is looked at again.
 const RECHECK: Duration = Duration::from_secs(60);
+/// How often a reader checks that the host its connection was made for has not changed (a
+/// sync pull, say), while it reads.
+const CONFIG_CHECK: Duration = Duration::from_secs(10);
 /// A probe answer is shared by every host with the same first hop for this long, so 30 hosts
 /// behind one jump host probe it once.
 const PROBE_FRESH: Duration = Duration::from_secs(30);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
-/// The most hosts one watch reads.
-const MAX_HOSTS: usize = 500;
 /// The systems (HOST-11 ids) whose servers have no `/proc` to read, with their names.
 const NO_PROC: &[(&str, &str)] = &[
     ("freebsd", "FreeBSD"),
@@ -69,6 +71,9 @@ impl Default for Dashboard {
 #[derive(Default)]
 struct Inner {
     next_watch: u64,
+    next_reader: u64,
+    /// Numbers every release, so a linger that a later one replaced leaves the connection.
+    next_release: u64,
     /// The page's watch, while it shows.
     watch: Option<Watch>,
     hosts: HashMap<String, HostEntry>,
@@ -90,11 +95,14 @@ struct HostEntry {
     hold: Option<Held>,
     /// A server found not to run Linux, for the host's configuration then.
     unsupported: Option<(String, String)>,
-    /// Bumped by every release, so a linger that a later one replaced leaves the connection.
+    /// The last release's number.
     released: u64,
+    /// **Retry** asks the probe again rather than taking a recent answer.
+    reprobe: bool,
 }
 
 struct Reader {
+    id: u64,
     cancel: CancellationToken,
     retry: Arc<Notify>,
 }
@@ -138,41 +146,34 @@ impl Dashboard {
         sink: Sink,
     ) -> u64 {
         let interval = Duration::from_secs(u64::from(interval_secs.clamp(1, 60)));
-        let wanted: Vec<&String> = {
-            let mut seen = HashSet::new();
-            host_ids
-                .iter()
-                .filter(|id| seen.insert(id.as_str()))
-                .take(MAX_HOSTS)
-                .collect()
-        };
+        let wanted: HashSet<&str> = host_ids.iter().map(String::as_str).collect();
         let mut inner = lock(&self.inner);
         inner.next_watch += 1;
         let id = inner.next_watch;
         let restart = inner.watch.as_ref().is_some_and(|w| w.interval != interval);
         inner.watch = Some(Watch { id, interval, sink });
-        let mut released = Vec::new();
+        // A stopped reader lets its connection linger as it ends.
         for (host_id, entry) in &mut inner.hosts {
-            let kept = wanted.contains(&host_id);
-            if (restart || !kept)
+            if (restart || !wanted.contains(host_id.as_str()))
                 && let Some(reader) = entry.reader.take()
             {
                 reader.cancel.cancel();
-                if !kept {
-                    released.push(host_id.clone());
-                }
             }
         }
         for host_id in wanted {
-            let entry = inner.hosts.entry(host_id.clone()).or_default();
+            inner.next_reader += 1;
+            let reader_id = inner.next_reader;
+            let entry = inner.hosts.entry(host_id.to_owned()).or_default();
             if entry.reader.is_none() {
                 let reader = Reader {
+                    id: reader_id,
                     cancel: CancellationToken::new(),
                     retry: Arc::new(Notify::new()),
                 };
                 tauri::async_runtime::spawn(read_host(
                     app.clone(),
-                    host_id.clone(),
+                    host_id.to_owned(),
+                    reader_id,
                     interval,
                     reader.cancel.clone(),
                     Arc::clone(&reader.retry),
@@ -184,33 +185,32 @@ impl Dashboard {
         inner
             .hosts
             .retain(|_, e| e.reader.is_some() || e.own.is_some() || e.hold.is_some());
-        drop(inner);
-        for host_id in released {
-            self.release(&host_id);
-        }
         id
     }
 
     /// Stops the watch `id`: every reader stops, and the connections close a minute later.
     pub fn unwatch(&self, id: u64) {
-        let released: Vec<String> = {
-            let mut inner = lock(&self.inner);
-            if inner.watch.as_ref().is_none_or(|w| w.id != id) {
-                return;
+        let mut inner = lock(&self.inner);
+        if inner.watch.as_ref().is_none_or(|w| w.id != id) {
+            return;
+        }
+        inner.watch = None;
+        for entry in inner.hosts.values_mut() {
+            if let Some(reader) = entry.reader.take() {
+                reader.cancel.cancel();
             }
-            inner.watch = None;
-            inner
-                .hosts
-                .iter_mut()
-                .filter_map(|(host_id, entry)| {
-                    let reader = entry.reader.take()?;
-                    reader.cancel.cancel();
-                    Some(host_id.clone())
-                })
-                .collect()
-        };
-        for host_id in released {
-            self.release(&host_id);
+        }
+    }
+
+    /// A terminal tab on the host connected: its reader looks at once, so a held host is read
+    /// over the tab without waiting for the next minute.
+    pub fn wake(&self, host_id: &str) {
+        if let Some(reader) = lock(&self.inner)
+            .hosts
+            .get(host_id)
+            .and_then(|e| e.reader.as_ref())
+        {
+            reader.retry.notify_one();
         }
     }
 
@@ -219,6 +219,7 @@ impl Dashboard {
         let mut inner = lock(&self.inner);
         if let Some(entry) = inner.hosts.get_mut(host_id) {
             entry.hold = None;
+            entry.reprobe = true;
             if let Some(reader) = &entry.reader {
                 reader.retry.notify_one();
             }
@@ -293,12 +294,48 @@ impl Dashboard {
         None
     }
 
-    fn keep(&self, host_id: &str, session: SshSession, config: String) {
+    /// Keeps the connection a reader made, unless the reader was stopped meanwhile (the page
+    /// went away, or the lock), when it closes at once. Returns whether it was kept.
+    fn keep(
+        &self,
+        host_id: &str,
+        session: SshSession,
+        config: String,
+        cancel: &CancellationToken,
+    ) -> bool {
         let mut inner = lock(&self.inner);
+        // Checked under the lock that `unwatch` and `stop_all` cancel under.
+        if cancel.is_cancelled() {
+            close(session);
+            return false;
+        }
         let entry = inner.hosts.entry(host_id.to_owned()).or_default();
         if let Some(old) = entry.own.replace(Own { session, config }) {
             close(old.session);
         }
+        true
+    }
+
+    /// Closes the dashboard's own connection to the host, now that a tab's serves it.
+    fn drop_own(&self, host_id: &str) {
+        let own = lock(&self.inner)
+            .hosts
+            .get_mut(host_id)
+            .and_then(|e| e.own.take());
+        if let Some(own) = own {
+            close(own.session);
+        }
+    }
+
+    /// The reader `reader_id` of the host ended: it is forgotten, so a later watch starts
+    /// another, and the connection lingers.
+    fn reader_ended(&self, host_id: &str, reader_id: u64) {
+        if let Some(entry) = lock(&self.inner).hosts.get_mut(host_id)
+            && entry.reader.as_ref().is_some_and(|r| r.id == reader_id)
+        {
+            entry.reader = None;
+        }
+        self.release(host_id);
     }
 
     /// Closes the dashboard's connection to the host a minute from now, unless the host is read
@@ -306,14 +343,16 @@ impl Dashboard {
     fn release(&self, host_id: &str) {
         let generation = {
             let mut inner = lock(&self.inner);
+            inner.next_release += 1;
+            let generation = inner.next_release;
             let Some(entry) = inner.hosts.get_mut(host_id) else {
                 return;
             };
-            entry.released += 1;
+            entry.released = generation;
             if entry.own.is_none() {
                 return;
             }
-            entry.released
+            generation
         };
         let inner = Arc::clone(&self.inner);
         let host_id = host_id.to_owned();
@@ -373,14 +412,18 @@ impl Dashboard {
         }
     }
 
-    /// Whether `target` answers the HOST-10 probe, asked once per [`PROBE_FRESH`] for every
-    /// host it is the first hop of.
-    async fn probe(&self, target: &ProbeTarget) -> bool {
+    /// Whether `target`, the first hop of `host_id`, answers the HOST-10 probe, asked once per
+    /// [`PROBE_FRESH`] for every host it is the first hop of, and again after **Retry**.
+    async fn probe(&self, host_id: &str, target: &ProbeTarget) -> bool {
         let probe = {
             let mut inner = lock(&self.inner);
+            let reprobe = inner
+                .hosts
+                .get_mut(host_id)
+                .is_some_and(|e| std::mem::take(&mut e.reprobe));
             let key = target.key();
             match inner.probes.get(&key) {
-                Some(p) if p.at.elapsed() < PROBE_FRESH => Arc::clone(p),
+                Some(p) if !reprobe && p.at.elapsed() < PROBE_FRESH => Arc::clone(p),
                 _ => {
                     let p = Arc::new(Probe {
                         at: Instant::now(),
@@ -417,13 +460,47 @@ struct Versions {
 }
 
 impl Versions {
+    /// Only what the connection is made from counts, so starring a host or a sync pull that
+    /// changes its notes neither ends a hold nor closes a connection.
     fn of(vault: &Vault, host: &Host) -> Self {
+        let hops = hops(vault, host);
         let mut config = Vec::new();
         let mut trust = Vec::new();
-        for hop in hops(vault, host) {
+        for (i, hop) in hops.iter().enumerate() {
+            let auth = match &hop.auth {
+                HostAuth::Password { password } => {
+                    format!("password#{:x}", secret_hash(&[password]))
+                }
+                HostAuth::Key { key_id } => {
+                    let key = vault.get(key_id).and_then(Item::as_key).map(|k| {
+                        let passphrase = k.passphrase.as_deref().map_or("", |p| p.as_str());
+                        secret_hash(&[&k.private_key, passphrase])
+                    });
+                    format!("key:{key_id}#{:x}", key.unwrap_or(0))
+                }
+                HostAuth::Agent => "agent".to_owned(),
+                HostAuth::Ask => "ask".to_owned(),
+            };
+            // The proxy only matters on the first hop, the outermost one.
+            let proxy = if i + 1 == hops.len() {
+                match crate::ssh::resolve_proxy(vault, &hop.proxy) {
+                    Ok(Some(p)) => format!(
+                        "{:?} {}@{}:{}#{:x}",
+                        p.kind,
+                        p.username,
+                        p.host,
+                        p.port,
+                        secret_hash(&[&p.password])
+                    ),
+                    Ok(None) => "direct".to_owned(),
+                    Err(_) => "missing".to_owned(),
+                }
+            } else {
+                String::new()
+            };
             config.push(format!(
-                "{}@{}:{}#{}",
-                hop.username, hop.address, hop.port, hop.updated_at
+                "{}@{}:{} {auth} {proxy}",
+                hop.username, hop.address, hop.port
             ));
             let mut keys: Vec<String> = known_host_keys(vault, &hop.address, hop.port)
                 .into_iter()
@@ -441,6 +518,18 @@ impl Versions {
     fn all(&self) -> String {
         format!("{}|{}", self.config, self.trust)
     }
+}
+
+/// A hash of secrets under a key drawn once per run, so a version can tell a changed password
+/// from the old one without holding either, or copying it.
+fn secret_hash(parts: &[&str]) -> u64 {
+    static KEY: std::sync::OnceLock<std::collections::hash_map::RandomState> =
+        std::sync::OnceLock::new();
+    let mut hasher = KEY.get_or_init(Default::default).build_hasher();
+    for part in parts {
+        part.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 /// The host, then its jump hosts outwards, as far as the chain goes without looping.
@@ -537,15 +626,34 @@ fn hold_for(err: &AppError, outcome: &Unattended) -> Option<DashboardHold> {
         });
     }
     if outcome.prompted() {
-        return Some(DashboardHold::Prompt);
+        // The saved password answers the first lone password prompt itself, so another one
+        // means it was rejected.
+        return Some(if outcome.password_prompted() {
+            DashboardHold::SignInFailed
+        } else {
+            DashboardHold::Prompt
+        });
     }
-    if matches!(
-        err.key_kind,
-        Some(KeyParseErrorKind::PassphraseRequired | KeyParseErrorKind::WrongPassphrase)
-    ) {
+    if err.ssh_kind == Some(SshErrorKind::KeyParse)
+        || matches!(
+            err.key_kind,
+            Some(KeyParseErrorKind::PassphraseRequired | KeyParseErrorKind::WrongPassphrase)
+        )
+    {
         return Some(DashboardHold::Passphrase);
     }
-    (err.ssh_kind == Some(SshErrorKind::AuthFailed)).then_some(DashboardHold::SignInFailed)
+    match err.ssh_kind {
+        Some(SshErrorKind::AuthFailed) => Some(DashboardHold::SignInFailed),
+        // A server that hangs up once sign-in began (too many keys from the agent, or one
+        // rejected password on a device that allows one) failed the sign-in as much as one
+        // that says no, and tools like fail2ban count it the same.
+        Some(SshErrorKind::Disconnected | SshErrorKind::Protocol | SshErrorKind::Other)
+            if outcome.signing_in() =>
+        {
+            Some(DashboardHold::SignInFailed)
+        }
+        _ => None,
+    }
 }
 
 /// What the reader does after a step: read over a connection, or wait (`None`: not at all).
@@ -555,10 +663,11 @@ enum Next {
 }
 
 /// Reads one host until it is cancelled, the vault locks or the host is deleted, then lets its
-/// connection linger: one kept just as the page went away would otherwise stay open.
+/// connection linger.
 async fn read_host(
     app: AppHandle,
     host_id: String,
+    reader_id: u64,
     interval: Duration,
     cancel: CancellationToken,
     retry: Arc<Notify>,
@@ -572,7 +681,7 @@ async fn read_host(
         let next = tokio::select! {
             biased;
             () = cancel.cancelled() => break,
-            next = connect_step(&app, &host_id, plan) => next,
+            next = connect_step(&app, &host_id, plan, &cancel) => next,
         };
         let wait = match next {
             Next::Wait(wait) => wait,
@@ -591,13 +700,16 @@ async fn read_host(
             }
         }
     }
-    if cancel.is_cancelled() {
-        state.dashboard.release(&host_id);
-    }
+    state.dashboard.reader_ended(&host_id, reader_id);
 }
 
 /// Finds or makes a connection to read the host over.
-async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
+async fn connect_step(
+    app: &AppHandle,
+    host_id: &str,
+    plan: Plan,
+    cancel: &CancellationToken,
+) -> Next {
     let state = state(app);
     let dash = &state.dashboard;
     let host = host_id.to_owned();
@@ -610,7 +722,7 @@ async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
         // Online status only, as in the host list; nothing to read, even over a tab.
         let online = match (&tab, &plan.probe) {
             (Some(_), _) => true,
-            (None, Ok(target)) => dash.probe(target).await,
+            (None, Ok(target)) => dash.probe(host_id, target).await,
             (None, Err(_)) => false,
         };
         dash.emit(DashboardEvent::Probe {
@@ -624,6 +736,7 @@ async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
         return Next::Wait(Some(RECHECK));
     }
     if let Some(session) = tab {
+        dash.drop_own(host_id);
         return Next::Read { session, tab: true };
     }
     if let Some(session) = dash.own(host_id, &plan.versions.config) {
@@ -655,7 +768,7 @@ async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
     let cfg = match plan.connect {
         Ok(cfg) => cfg,
         Err(Stop::Hold(hold)) => {
-            let online = dash.probe(&probe).await;
+            let online = dash.probe(host_id, &probe).await;
             dash.emit(DashboardEvent::Probe {
                 host_id: host.clone(),
                 online,
@@ -676,7 +789,7 @@ async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
         }
     };
     // A dead host would hold a slot until its connection timed out.
-    let online = dash.probe(&probe).await;
+    let online = dash.probe(host_id, &probe).await;
     dash.emit(DashboardEvent::Probe {
         host_id: host.clone(),
         online,
@@ -720,11 +833,13 @@ async fn connect_step(app: &AppHandle, host_id: &str, plan: Plan) -> Next {
             tab: true,
         };
     }
+    if !dash.keep(host_id, session.clone(), plan.versions.config, cancel) {
+        return Next::Wait(None);
+    }
     let os = session.server_os().map(hatoba_ssh::ServerOs::as_str);
     if let Err(e) = state.with_unlocked(|v| Ok(v.set_host_os(host_id, os)?)) {
         tracing::debug!("server OS not recorded: {}", e.detail);
     }
-    dash.keep(host_id, session.clone(), plan.versions.config);
     Next::Read {
         session,
         tab: false,
@@ -741,9 +856,10 @@ async fn read_step(
     interval: Duration,
     config: String,
 ) -> Option<Duration> {
-    let dash = &state(app).dashboard;
+    let state = state(app);
+    let dash = &state.dashboard;
     let host = host_id.to_owned();
-    let (handle, mut events) = match session.open_stats(interval).await {
+    let (handle, mut events) = match session.open_dashboard_stats(interval).await {
         Ok(started) => started,
         Err(error) => {
             if session.is_closed() {
@@ -763,12 +879,27 @@ async fn read_step(
             .map(|os| hatoba_ssh::ServerOs::as_str(os).to_owned()),
         tab,
     });
+    let mut checked = tokio::time::Instant::now();
     let wait = loop {
         match events.recv().await {
-            Some(hatoba_ssh::StatsEvent::Stats(stats)) => dash.emit(DashboardEvent::Stats {
-                host_id: host.clone(),
-                stats: Box::new(stats_view(*stats)),
-            }),
+            Some(hatoba_ssh::StatsEvent::Stats(stats)) => {
+                dash.emit(DashboardEvent::Stats {
+                    host_id: host.clone(),
+                    stats: Box::new(stats_view(*stats)),
+                });
+                // The dashboard's own connection serves the host as it was when it connected.
+                if !tab && checked.elapsed() >= CONFIG_CHECK {
+                    checked = tokio::time::Instant::now();
+                    let current = state.with_unlocked(|v| {
+                        Ok(v.get(host_id)
+                            .and_then(Item::as_host)
+                            .map(|h| Versions::of(v, h).config))
+                    });
+                    if !matches!(current, Ok(Some(c)) if c == config) {
+                        break Some(Duration::ZERO);
+                    }
+                }
+            }
             Some(hatoba_ssh::StatsEvent::Unsupported(system)) => {
                 dash.set_unsupported(host_id, config, system);
                 break Some(Duration::ZERO);
@@ -913,13 +1044,26 @@ mod tests {
         assert_ne!(trusted.trust, before.trust);
         assert!(trusted.trust.contains("SHA256:a,SHA256:b"));
 
-        // Editing the jump host changes the configuration.
+        // Starring or renaming a host changes nothing a connection is made from.
+        let mut starred = get(&v, &id);
+        starred.favorite = true;
+        starred.name = "renamed".to_owned();
+        v.put(Some(&id), Item::Host(starred)).unwrap();
+        assert_eq!(Versions::of(&v, &get(&v, &id)), trusted);
+
+        // A new password does, as does editing the jump host.
+        let mut repassed = get(&v, &id);
+        repassed.auth = password("new");
+        v.put(Some(&id), Item::Host(repassed)).unwrap();
+        let repassed = Versions::of(&v, &get(&v, &id));
+        assert_ne!(repassed.config, trusted.config);
+        assert!(!repassed.config.contains("new"));
         let mut jump = get(&v, &bastion);
         jump.port = 2222;
         v.put(Some(&bastion), Item::Host(jump)).unwrap();
         let edited = Versions::of(&v, &get(&v, &id));
-        assert_ne!(edited.config, trusted.config);
-        assert_ne!(edited.all(), trusted.all());
+        assert_ne!(edited.config, repassed.config);
+        assert_ne!(edited.all(), repassed.all());
     }
 
     #[test]
@@ -938,15 +1082,46 @@ mod tests {
     #[test]
     fn failures_that_need_the_user_hold_the_host() {
         let quiet = Unattended::default();
-        let auth = AppError::ssh(crate::error::SshErrorKind::AuthFailed, "denied");
-        assert_eq!(hold_for(&auth, &quiet), Some(DashboardHold::SignInFailed));
-        let timeout = AppError::ssh(crate::error::SshErrorKind::Timeout, "timed out");
-        assert_eq!(hold_for(&timeout, &quiet), None);
+        let ssh = |kind| AppError::ssh(kind, "detail");
+        assert_eq!(
+            hold_for(&ssh(SshErrorKind::AuthFailed), &quiet),
+            Some(DashboardHold::SignInFailed)
+        );
+        assert_eq!(hold_for(&ssh(SshErrorKind::Timeout), &quiet), None);
+        // An encrypted key without its passphrase fails as the connection reports it.
+        assert_eq!(
+            hold_for(&ssh(SshErrorKind::KeyParse), &quiet),
+            Some(DashboardHold::Passphrase)
+        );
         let mut passphrase = AppError::new(crate::error::ErrorCode::KeyParse, "encrypted");
         passphrase.key_kind = Some(KeyParseErrorKind::PassphraseRequired);
         assert_eq!(
             hold_for(&passphrase, &quiet),
             Some(DashboardHold::Passphrase)
+        );
+    }
+
+    #[test]
+    fn a_server_that_hangs_up_during_sign_in_failed_it() {
+        let lost = AppError::ssh(SshErrorKind::Disconnected, "connection lost");
+        // Before any host key checked out, a lost connection is the network's.
+        assert_eq!(hold_for(&lost, &Unattended::default()), None);
+        let signing_in = Unattended::for_tests(true, false, false);
+        assert_eq!(
+            hold_for(&lost, &signing_in),
+            Some(DashboardHold::SignInFailed)
+        );
+        let timeout = AppError::ssh(SshErrorKind::Timeout, "timed out");
+        assert_eq!(hold_for(&timeout, &signing_in), None);
+        let cancelled = AppError::ssh(SshErrorKind::Cancelled, "cancelled");
+        // A verification code, and a password asked again because the saved one was wrong.
+        assert_eq!(
+            hold_for(&cancelled, &Unattended::for_tests(true, true, false)),
+            Some(DashboardHold::Prompt)
+        );
+        assert_eq!(
+            hold_for(&cancelled, &Unattended::for_tests(true, true, true)),
+            Some(DashboardHold::SignInFailed)
         );
     }
 

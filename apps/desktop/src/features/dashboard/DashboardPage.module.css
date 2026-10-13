@@ -55,7 +55,7 @@
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -76,8 +76,25 @@
   background: var(--fill);
 }
 
-.card:focus-visible,
-.row:focus-visible {
+/* The name opens the host's detail from the keyboard; a click anywhere on the card or row does too. */
+.nameButton {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.nameButton:focus-visible {
+  outline: none;
   box-shadow: var(--focus-ring);
 }
 
@@ -90,14 +107,6 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-
-.cardName {
-  min-width: 0;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .fav {
@@ -288,8 +297,9 @@
   color: var(--fg2);
 }
 
+/* Lines up with the names after the 16px OS icon and the 8px gap. */
 .headName {
-  padding-left: 30px;
+  padding-left: 24px;
 }
 
 .rows {
@@ -310,7 +320,7 @@
   background: var(--fill);
 }
 
-.staleRow > :not(:first-child, :nth-child(2)) {
+.staleRow > .valueCell {
   opacity: 0.45;
 }
 
@@ -349,7 +359,7 @@
   font-weight: 600;
 }
 
-.rowRetry {
+.rowAction {
   flex: none;
 }
 

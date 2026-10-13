@@ -242,6 +242,10 @@ async fn open_terminal(
         host_id.map(str::to_owned),
     ));
     state.ssh.insert(session_id.to_owned(), live.clone());
+    // HOST-13: the dashboard reads the host over this tab from now on.
+    if let Some(host_id) = host_id {
+        state.dashboard.wake(host_id);
+    }
     // HOST-06, HOST-11: device-local, never synced. A quick connection has no host to record on.
     if let Some(host_id) = host_id {
         let os = session.server_os().map(hatoba_ssh::ServerOs::as_str);

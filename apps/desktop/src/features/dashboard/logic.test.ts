@@ -5,6 +5,7 @@ import {
   fullestMount,
   groupSections,
   isStale,
+  leftOutBy,
   netRate,
   pastThreshold,
   rootPercent,
@@ -134,6 +135,10 @@ describe("dashboard view", () => {
     expect(shownOnDashboard(host("d", { group_id: "off" }), groups)).toBe(false);
     // A group that is gone does not hide its former hosts.
     expect(shownOnDashboard(host("e", { group_id: "gone" }), groups)).toBe(true);
+    // Including a host whose group is left out is the group's switch, not the host's.
+    expect(leftOutBy(host("d", { group_id: "off" }), groups)).toBe("group");
+    expect(leftOutBy(host("f", { group_id: "off", dashboard: false }), groups)).toBe("host");
+    expect(leftOutBy(host("c", { group_id: "on" }), groups)).toBeNull();
   });
 
   it("puts each group's hosts in a section, in the sidebar's order, then the rest", () => {
@@ -179,17 +184,17 @@ describe("dashboard view", () => {
 
   it("applies the thresholds, with 0 turning one off", () => {
     expect(pastThreshold(91, 90)).toBe(true);
-    expect(pastThreshold(90, 90)).toBe(true);
-    expect(pastThreshold(89.9, 90)).toBe(false);
+    expect(pastThreshold(90.1, 90)).toBe(true);
+    expect(pastThreshold(90, 90)).toBe(false);
     expect(pastThreshold(100, 0)).toBe(false);
     expect(pastThreshold(null, 90)).toBe(false);
   });
 
-  it("dims readings once three intervals pass without one, or the host stops answering", () => {
+  it("dims readings once three intervals and the filesystems' 8 s pass without one, or the host stops answering", () => {
     const at = 1_000_000;
     const live = reads(reading(at));
-    expect(isStale(live, at + 5_000, 3)).toBe(false);
-    expect(isStale(live, at + 12_000, 3)).toBe(true);
+    expect(isStale(live, at + 12_000, 3)).toBe(false);
+    expect(isStale(live, at + 18_000, 3)).toBe(true);
     expect(isStale({ ...live, phase: "failed" }, at + 1_000, 3)).toBe(true);
     expect(isStale({ ...NO_READOUT, phase: "offline" }, at, 3)).toBe(false);
   });
