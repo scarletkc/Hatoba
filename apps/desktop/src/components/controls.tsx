@@ -191,7 +191,7 @@ export interface SegmentOption<V extends string> {
   value: V;
   label: string;
   icon?: string;
-  /** Names the segment where a narrow page shows only its icon. */
+  /** Names the segment, also to assistive technology, where a narrow page shows only its icon. */
   title?: string;
   /** Not offered now; the selected option stays selected. */
   disabled?: boolean;
@@ -221,6 +221,7 @@ export function Segmented<V extends string>({
           disabled={o.disabled}
           className={cx(s.segment, o.value === value && s.segmentOn)}
           title={o.title}
+          aria-label={o.title && o.label}
           onClick={() => onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} />}

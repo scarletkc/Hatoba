@@ -204,6 +204,7 @@ export function DashboardPage({ filter }: { filter: HostFilter }) {
           icon="columns"
           className={s.columnsButton}
           title={t("dashboard.columns")}
+          aria-label={t("dashboard.columns")}
           aria-haspopup="menu"
           aria-expanded={!!columnsMenu.anchor}
           onClick={() => columnsButton.current && columnsMenu.openBelow(columnsButton.current, true)}
