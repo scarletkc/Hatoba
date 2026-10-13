@@ -51,7 +51,7 @@ import {
 import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowances } from "./allowances";
 import { hardRule, type HardRule } from "./autoRules";
 import { JUDGE_ERROR } from "./autoText";
-import { nextBatch, runConcurrently } from "./batches";
+import { CallRoom, nextBatch, runConcurrently } from "./batches";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
@@ -271,6 +271,19 @@ function noteChange(slotId: string) {
 const terminalHolders = new Map<string, TurnRunner>();
 
 /**
+ * §13.1, AI-07: the room each tab has for the calls that open an exec channel on its SSH connection or search the
+ * web, by tab. Its conversations, also those in its background, share the connection, so its limits hold for all
+ * of their calls together.
+ */
+const rooms = new Map<string, CallRoom>();
+
+function roomOf(tab: string): CallRoom {
+  let room = rooms.get(tab);
+  if (!room) rooms.set(tab, (room = new CallRoom()));
+  return room;
+}
+
+/**
  * Drives one turn (§13.1) for the slot it belongs to: applies the streamed events, then handles the
  * tool calls of each response in order, applying the permission mode (§13.5): a run of calls that only
  * read and need no approval card runs together, and every other call runs alone (`nextBatch`).
@@ -298,6 +311,8 @@ class TurnRunner {
   private rejected = false;
   /** §13.1: what frees the exec channel of a call that runs with others, by call id, once its tool ended (`tool_ran`). */
   private readonly releases = new Map<string, () => void>();
+  /** §13.1: the room of the turn's tab, which its calls share with the tab's other conversations (AI-07). */
+  private readonly room: CallRoom;
   private readonly abort = new AbortController();
   private readonly ready: Promise<string | null>;
   private resolveReady!: (id: string | null) => void;
@@ -305,6 +320,7 @@ class TurnRunner {
   constructor(slotId: string, convId: string | null, mode: AiPermissionMode) {
     this.slotId = slotId;
     this.tab = tabOf(slotId);
+    this.room = roomOf(this.tab);
     noteChange(slotId);
     this.convId = convId;
     this.mode = mode;
@@ -434,6 +450,8 @@ class TurnRunner {
     this.decide({ kind: "stop" });
     this.abort.abort();
     if (terminalHolders.get(this.tab) === this) terminalHolders.delete(this.tab);
+    // Calls of the turn that wait for room give up.
+    this.room.wake();
   }
 
   private finish(reason: AiTurnEndReason) {
@@ -497,7 +515,7 @@ class TurnRunner {
           // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
           // applies to the turn's next call (§13.5), and the calls left run as the next batches.
           const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
-          done = await runConcurrently(batch, limit, (call, release) => this.runAlongside(convId, call, release), starts);
+          done = await runConcurrently(batch, limit, (call, release) => this.runAlongside(convId, call, release), starts, this.room);
         }
         if (done === 0) {
           if (!this.acting) return;
@@ -629,8 +647,27 @@ class TurnRunner {
       }
     }
     if (!this.acting) return;
+    const leave = await this.enterRoom(call.id, kind);
+    if (!leave) return;
     this.setCall({ id: call.id, state: "running" });
-    await this.execute(convId, call, kind, edited, judged);
+    try {
+      await this.execute(convId, call, kind, edited, judged);
+    } finally {
+      leave();
+    }
+  }
+
+  /**
+   * §13.1: room on the tab for a call that runs alone, when it opens an exec channel or searches the web. The tab's
+   * other conversations may hold all of it with their own calls (AI-07); the call then waits, queued, and no longer
+   * shows the card it was approved on. Resolves with what gives the room back once the call ends, or null when the
+   * turn stopped meanwhile.
+   */
+  private async enterRoom(callId: string, kind: ToolKind): Promise<(() => void) | null> {
+    const limit = limitOf(kind);
+    if (!limit) return () => {};
+    if (this.room.full(limit)) this.endCall(callId);
+    return this.room.enter(limit, () => this.acting);
   }
 
   /**
@@ -1630,6 +1667,8 @@ export function detachSlot(slotId: string) {
     stopSlot(id);
     dropBackground(id);
   }
+  // Its stopped turns keep their own room until their calls settle.
+  rooms.delete(slotId);
   useAi.setState((st) => {
     if (!st.selections[slotId] && !st.diagnostics[slotId]) return {};
     const selections = { ...st.selections };

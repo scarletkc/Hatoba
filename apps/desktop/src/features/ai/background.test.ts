@@ -448,6 +448,92 @@ describe("the marks of a tab whose conversations run several calls at once (AI-0
   });
 });
 
+describe("the exec channels of a tab's connection, shared by its conversations (§13.1, AI-07)", () => {
+  /** The `ai_tool_run` calls of `channels` that have not ended. */
+  const open = new Map<string, () => void>();
+  // Rust ends every running call when the turns stop, as on the lock after each test.
+  afterEach(() => [...open.values()].forEach((end) => end()));
+
+  /** `ai_tool_run` calls that end when the test says, counting how many run at once. */
+  function channels() {
+    open.clear();
+    let most = 0;
+    ipc.run.mockImplementation(
+      (_conv, callId) =>
+        new Promise((done) => {
+          open.set(callId, () => {
+            open.delete(callId);
+            done({ entry: toolEntry(callId), dropped_file_changes: false });
+          });
+          most = Math.max(most, open.size);
+        }),
+    );
+    return { open, most: () => most, end: (...ids: string[]) => ids.forEach((id) => open.get(id)!()) };
+  }
+  const reads = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => call(`${prefix}${i}`, "read_file", { path: `/etc/file${i}` }));
+  const ran = () => ipc.run.mock.calls.map(([, callId]) => callId);
+
+  it("run at most four at once across the tab's conversations, a batch's calls and a call that runs alone", async () => {
+    const ch = channels();
+    const sent = turns();
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "check the configs");
+    answer(sent[0].emit, "a1", reads("a", 4));
+    await until(() => ch.open.size === 4);
+
+    // The tab's other conversation runs a command alone: it waits, queued, while the batch holds every channel.
+    newConversation(TAB);
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "free some space");
+    answer(sent[1].emit, "b1", [call("b_rm", "run_command", { command: "rm -rf /var/cache/apt/archives" })]);
+    await flush();
+    expect(ran()).toEqual(["a0", "a1", "a2", "a3"]);
+    expect(getSlot(TAB).turn?.calls).toEqual([]);
+
+    ch.end("a0");
+    await until(() => ch.open.has("b_rm"));
+    expect(getSlot(TAB).turn?.calls).toEqual([{ id: "b_rm", state: "running" }]);
+
+    // The background conversation's next batch gets the three channels the command leaves.
+    ch.end("a1", "a2", "a3");
+    await until(() => nginxSlot().turn?.calls.length === 0);
+    await flush();
+    answer(sent[0].emit, "a2", reads("c", 4));
+    await until(() => ch.open.size === 4);
+    await flush();
+    expect(ran().slice(5)).toEqual(["c0", "c1", "c2"]);
+    ch.end("b_rm");
+    await until(() => ch.open.has("c3"));
+    expect(ch.most()).toBe(4);
+  });
+
+  it("let a call that waits for a channel give up when its turn stops", async () => {
+    const ch = channels();
+    const sent = turns();
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "check the configs");
+    answer(sent[0].emit, "a1", reads("a", 4));
+    await until(() => ch.open.size === 4);
+
+    newConversation(TAB);
+    patchSlot(TAB, { mode: "bypass" });
+    await sendMessage(TAB, "free some space");
+    answer(sent[1].emit, "b1", [call("b_rm", "run_command", { command: "rm -rf /var/cache/apt/archives" })]);
+    await flush();
+    await stopTurn(TAB);
+    expect(ipc.stop).toHaveBeenCalledWith(disk.id);
+    sent[1].emit({ kind: "turn_ended", reason: "stopped" });
+
+    ch.end("a0", "a1", "a2", "a3");
+    await until(() => nginxSlot().turn?.calls.length === 0);
+    await flush();
+    expect(ran()).toEqual(["a0", "a1", "a2", "a3"]);
+    // Nothing kept the channel it waited for.
+    answer(sent[0].emit, "a2", reads("c", 4));
+    await until(() => ch.open.size === 4);
+  });
+});
+
 describe("a tab's terminal shared by its conversations (AI-07)", () => {
   it("is not held by a send_input call that typed nothing", async () => {
     const sent = turns();
