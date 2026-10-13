@@ -1,7 +1,12 @@
 //! The text side of the search tools (spec §13.4, AI-48, AI-49): the glob that `glob` matches and
-//! `grep` picks files by, the regular expression `grep` hands to the host's `grep -E`, and the
-//! results, built from what `find` and `grep` printed. Running them on the host is the desktop
-//! shell's part, with the scripts in `hatoba_ssh::remote_search`.
+//! `grep` picks files by, the pattern `grep` hands to the host's `rg`, or to its `grep -E` as
+//! translated here, and the results, built from what `find`, `rg` and `grep` printed. Running them
+//! on the host is the desktop shell's part, with the scripts in `hatoba_ssh::remote_search`.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
+
+use regex_syntax::ast::{self, Ast};
 
 use crate::tools::{GrepArgs, GrepOutput, MAX_RESULT_CHARS};
 
@@ -13,28 +18,30 @@ pub const DEFAULT_GREP_LIMIT: u64 = 250;
 pub const MAX_CONTEXT: u64 = 100;
 /// Characters of a line a `grep` result shows; the rest is cut.
 pub const MAX_LINE_CHARS: usize = 500;
-/// Bytes of `find` and `grep` output read from the host; a search stops there.
+/// Bytes of `find`, `rg` and `grep` output read from the host; a search stops there.
 pub const MAX_OUTPUT_BYTES: u64 = 4 * 1024 * 1024;
 /// Alternatives the braces of a glob may expand to.
 const MAX_ALTERNATIVES: usize = 64;
-/// Distinct error lines of `find` and `grep` a result quotes.
+/// Distinct error lines of `find`, `rg` and `grep` a result quotes.
 const MAX_ERRORS: usize = 3;
 
 /// Where a search starts and which files it looks at.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Search {
-    /// The path the host searches: the path the model gave, the home directory (`~`) without one,
-    /// or `/` for a glob that starts with `/`, followed by the directories the glob starts with.
+    /// The path the model gave, the home directory (`~`) without one, or `/` for a glob that
+    /// starts with `/`.
     pub path: String,
+    /// The directories the glob starts with, as `a/b`, which the host searches below `path` when
+    /// that is a directory; empty for none.
+    pub below: String,
     /// `find -maxdepth`, when no alternative of the glob has `**`.
     pub max_depth: Option<u32>,
-    /// `find -name` patterns, one of which a file's name matches; empty for any name. With
-    /// `max_depth` they narrow what the host prints to a superset of what [`Search::matches`]
-    /// keeps.
+    /// Name patterns, one of which a file's name matches; empty for any name. Each means the same
+    /// to `find -name` and `rg --glob`, or more. With `max_depth` they narrow what the host prints
+    /// to a superset of what [`Search::matches`] keeps.
     pub names: Vec<String>,
-    /// The directories of the glob that `path` ends with, as `a/b`; empty for none.
-    moved: String,
-    /// The glob's alternatives, each a path below `path` by component; empty without a glob.
+    /// The glob's alternatives, each a path below `path` and `below` by component; empty without a
+    /// glob.
     globs: Vec<Vec<Part>>,
 }
 
@@ -43,7 +50,7 @@ enum Part {
     /// `**`: any number of directories.
     Dirs,
     /// One name, matched as `fnmatch` matches it.
-    Name(String),
+    Name(Vec<char>),
 }
 
 impl Search {
@@ -52,12 +59,12 @@ impl Search {
     /// one with `/` matches paths below `path`, and one that starts with `/` paths below `/`.
     /// An error is the message for the model.
     pub fn new(path: Option<&str>, glob: Option<&str>) -> Result<Self, String> {
-        let mut path = path.filter(|p| !p.is_empty()).unwrap_or("~").to_owned();
+        let path = path.filter(|p| !p.is_empty()).unwrap_or("~").to_owned();
         let none = Self {
             path: String::new(),
+            below: String::new(),
             max_depth: None,
             names: Vec::new(),
-            moved: String::new(),
             globs: Vec::new(),
         };
         let Some(given) = glob.map(str::trim).filter(|g| !g.is_empty()) else {
@@ -67,9 +74,7 @@ impl Search {
             return Err("The glob has a line break, so nothing was searched.".to_owned());
         }
         let absolute = given.starts_with('/');
-        if absolute {
-            path = "/".to_owned();
-        }
+        let path = if absolute { "/".to_owned() } else { path };
         let mut rest = given.trim_start_matches('/');
         while let Some(after) = rest.strip_prefix("./") {
             rest = after.trim_start_matches('/');
@@ -85,7 +90,7 @@ impl Search {
                 .filter(|n| !n.is_empty() && *n != ".")
             {
                 if name != "**" {
-                    parts.push(Part::Name(name.to_owned()));
+                    parts.push(Part::Name(name.chars().collect()));
                 } else if parts.last() != Some(&Part::Dirs) {
                     parts.push(Part::Dirs);
                 }
@@ -100,21 +105,15 @@ impl Search {
             ));
         }
         // A glob that starts with directories searches them, rather than all of `path`.
-        let mut moved = Vec::new();
+        let mut below = Vec::new();
         if let [parts] = globs.as_mut_slice() {
             while parts.len() > 1
                 && let Part::Name(name) = &parts[0]
-                && !name.contains(['*', '?', '[', '\\'])
+                && !name.iter().any(|c| matches!(c, '*' | '?' | '[' | '\\'))
             {
-                moved.push(name.clone());
+                below.push(name.iter().collect::<String>());
                 parts.remove(0);
             }
-        }
-        for name in &moved {
-            if !path.ends_with('/') {
-                path.push('/');
-            }
-            path.push_str(name);
         }
         let max_depth = globs
             .iter()
@@ -125,7 +124,7 @@ impl Search {
         for parts in &globs {
             match parts.last() {
                 Some(Part::Name(name)) => {
-                    let name = find_name(name);
+                    let name = host_name(name);
                     if !names.contains(&name) {
                         names.push(name);
                     }
@@ -138,9 +137,9 @@ impl Search {
         }
         Ok(Self {
             path,
+            below: below.join("/"),
             max_depth,
             names,
-            moved: moved.join("/"),
             globs,
         })
     }
@@ -158,24 +157,40 @@ impl Search {
         Self::new(path, Some(pattern))
     }
 
-    /// Whether the glob matches a file at `relative`, its path below [`Search::path`]; every file
-    /// matches without a glob.
+    /// The path with the directories below it that the host searches when `path` is a
+    /// directory, for messages.
+    #[must_use]
+    pub fn shown(&self) -> String {
+        if self.below.is_empty() {
+            self.path.clone()
+        } else if self.path.ends_with('/') {
+            format!("{}{}", self.path, self.below)
+        } else {
+            format!("{}/{}", self.path, self.below)
+        }
+    }
+
+    /// Whether the glob matches a file at `relative`, its path below the directory searched; every
+    /// file matches without a glob.
     #[must_use]
     pub fn matches(&self, relative: &str) -> bool {
-        if self.globs.is_empty() {
-            return true;
-        }
-        let names: Vec<&str> = relative.split('/').collect();
-        self.globs.iter().any(|parts| matches_parts(parts, &names))
+        self.globs.is_empty()
+            || self
+                .globs
+                .iter()
+                .any(|parts| matches_parts(parts, relative.split('/')))
     }
 
     /// The directory the model asked to search, from `root`, the directory searched as the host
     /// resolved it: without the directories the glob started with.
     fn base(&self, root: &str) -> String {
-        if self.moved.is_empty() {
+        if self.below.is_empty() {
             return root.to_owned();
         }
-        match root.strip_suffix(&format!("/{}", self.moved)) {
+        match root
+            .strip_suffix(self.below.as_str())
+            .and_then(|r| r.strip_suffix('/'))
+        {
             Some("") => "/".to_owned(),
             Some(base) => base.to_owned(),
             None => root.to_owned(),
@@ -245,57 +260,124 @@ fn first_group(glob: &str) -> Option<(usize, usize, Vec<usize>)> {
     None
 }
 
-/// A name of a glob as `find -name` reads it everywhere: `[^…]` as `[!…]`.
-fn find_name(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut chars = name.chars().peekable();
-    while let Some(c) = chars.next() {
-        out.push(c);
+/// A name of a glob as both `find -name` and `rg --glob` read it: braces, and a `!` or `#` that
+/// starts it or spaces that end it, which `rg` reads as its own syntax, escaped; `[^…]` as `[!…]`,
+/// which every `find` reads; a `[` without `]` escaped, and `**` as `*`, which `rg` refuses; and a
+/// bracket expression with a class such as `[:digit:]`, which `rg` does not know, as `?`, any
+/// character, which [`Search::matches`] then narrows.
+fn host_name(name: &[char]) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    let trailing = name.len() - name.iter().rev().take_while(|&&c| c == ' ').count();
+    let mut i = 0;
+    while i < name.len() {
+        let c = name[i];
         match c {
-            '\\' => out.extend(chars.next()),
-            '[' if chars.peek() == Some(&'^') => {
-                chars.next();
-                out.push('!');
+            '\\' if i + 1 < name.len() => {
+                out.push('\\');
+                out.push(name[i + 1]);
+                i += 2;
+                continue;
             }
-            _ => {}
+            '\\' => out.push_str("\\\\"),
+            '[' => match bracket_end(name, i) {
+                Some(end) if name[i..end].windows(2).any(|w| w == ['[', ':']) && i + 1 < end => {
+                    out.push('?');
+                    i = end;
+                    continue;
+                }
+                Some(end) => {
+                    out.push('[');
+                    let mut j = i + 1;
+                    if name[j] == '^' {
+                        out.push('!');
+                        j += 1;
+                    }
+                    out.extend(&name[j..end]);
+                    i = end;
+                    continue;
+                }
+                None => out.push_str("\\["),
+            },
+            '{' | '}' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '!' | '#' if i == 0 => {
+                out.push('\\');
+                out.push(c);
+            }
+            ' ' if i >= trailing => out.push_str("\\ "),
+            '*' if out.ends_with('*') && !out.ends_with("\\*") => {}
+            _ => out.push(c),
         }
+        i += 1;
     }
     out
 }
 
-fn matches_parts(parts: &[Part], names: &[&str]) -> bool {
+/// Where the bracket expression that opens at `name[open]` ends, after its `]`; `None` without
+/// one.
+fn bracket_end(name: &[char], open: usize) -> Option<usize> {
+    let mut i = open + 1;
+    if matches!(name.get(i), Some('!' | '^')) {
+        i += 1;
+    }
+    let start = i;
+    while let Some(&c) = name.get(i) {
+        match c {
+            ']' if i > start => return Some(i + 1),
+            '[' if name.get(i + 1) == Some(&':') => {
+                let len = name[i + 2..].windows(2).position(|w| w == [':', ']'])?;
+                i += len + 4;
+                continue;
+            }
+            '\\' => i += 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn matches_parts(parts: &[Part], mut names: std::str::Split<'_, char>) -> bool {
     match parts.split_first() {
-        None => names.is_empty(),
+        None => names.next().is_none(),
         // A glob that ends with `**` matches what is inside, not the directory itself.
-        Some((Part::Dirs, [])) => !names.is_empty(),
-        Some((Part::Dirs, rest)) => (0..=names.len()).any(|i| matches_parts(rest, &names[i..])),
+        Some((Part::Dirs, [])) => names.next().is_some(),
+        Some((Part::Dirs, rest)) => loop {
+            if matches_parts(rest, names.clone()) {
+                return true;
+            }
+            if names.next().is_none() {
+                return false;
+            }
+        },
         Some((Part::Name(pattern), rest)) => names
-            .split_first()
-            .is_some_and(|(name, more)| fnmatch(pattern, name) && matches_parts(rest, more)),
+            .next()
+            .is_some_and(|name| fnmatch(pattern, name) && matches_parts(rest, names)),
     }
 }
 
 /// Whether `name` matches `pattern` as `fnmatch` without flags matches it: `*`, `?`, `[…]` with
 /// `!` or `^` to negate, ranges and `[:class:]`, and `\` to take the next character as it is. A
 /// leading dot needs no dot in the pattern, as with `find -name`.
-fn fnmatch(pattern: &str, name: &str) -> bool {
-    let p: Vec<char> = pattern.chars().collect();
-    let s: Vec<char> = name.chars().collect();
+fn fnmatch(p: &[char], name: &str) -> bool {
     let (mut pi, mut si) = (0, 0);
     let mut star = None;
-    while si < s.len() {
+    while let Some(c) = name[si..].chars().next() {
         if p.get(pi) == Some(&'*') {
             star = Some((pi, si));
             pi += 1;
         } else if pi < p.len()
-            && let Some(next) = step(&p, pi, s[si])
+            && let Some(next) = step(p, pi, c)
         {
             pi = next;
-            si += 1;
+            si += c.len_utf8();
         } else if let Some((at, from)) = star {
+            let skipped = name[from..].chars().next().map_or(1, char::len_utf8);
             pi = at + 1;
-            si = from + 1;
-            star = Some((at, from + 1));
+            si = from + skipped;
+            star = Some((at, si));
         } else {
             return false;
         }
@@ -335,8 +417,7 @@ fn bracket(p: &[char], mut i: usize, c: char) -> Option<(bool, usize)> {
             && p.get(i + 1) == Some(&':')
             && let Some(len) = p[i + 2..].windows(2).position(|w| w == [':', ']'])
         {
-            let class: String = p[i + 2..i + 2 + len].iter().collect();
-            found |= in_class(&class, c);
+            found |= in_class(&p[i + 2..i + 2 + len], c);
             i += len + 4;
             continue;
         }
@@ -360,138 +441,398 @@ fn bracket(p: &[char], mut i: usize, c: char) -> Option<(bool, usize)> {
     }
 }
 
-fn in_class(class: &str, c: char) -> bool {
-    match class {
-        "alpha" => c.is_alphabetic(),
-        "digit" => c.is_ascii_digit(),
-        "alnum" => c.is_alphanumeric(),
-        "upper" => c.is_uppercase(),
-        "lower" => c.is_lowercase(),
-        "space" => c.is_whitespace(),
-        "punct" => c.is_ascii_punctuation(),
-        "xdigit" => c.is_ascii_hexdigit(),
+fn in_class(class: &[char], c: char) -> bool {
+    let is = |name: &str| class.iter().copied().eq(name.chars());
+    if is("alpha") {
+        c.is_alphabetic()
+    } else if is("digit") {
+        c.is_ascii_digit()
+    } else if is("alnum") {
+        c.is_alphanumeric()
+    } else if is("upper") {
+        c.is_uppercase()
+    } else if is("lower") {
+        c.is_lowercase()
+    } else if is("space") {
+        c.is_whitespace()
+    } else if is("punct") {
+        c.is_ascii_punctuation()
+    } else if is("xdigit") {
+        c.is_ascii_hexdigit()
+    } else {
+        false
+    }
+}
+
+/// AI-48: a pattern as the host's `rg` and `grep -E` get it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pattern {
+    /// The pattern as the model wrote it, which `rg` reads.
+    pub rg: String,
+    /// The same pattern for `grep -E`, where the host has no `rg`; `Err` says what in it only
+    /// `rg` can run.
+    pub extended: Result<String, &'static str>,
+    /// Letter case is ignored: asked for, or by a `(?i)` that starts the pattern, which `grep -E`
+    /// gets as `-i`.
+    pub ignore_case: bool,
+}
+
+/// What only `rg` can run, for the message where the host has none.
+const MULTILINE: &str = "a search across lines (multiline)";
+const UNICODE_CLASS: &str = "Unicode classes such as \\p{L}";
+const FLAGS: &str = "inline flags other than a (?i) that starts the pattern";
+const TEXT_ANCHOR: &str = "\\A and \\z";
+const HALF_BOUNDARY: &str = "\\b{start-half} and \\b{end-half}";
+const CLASS_OPERATION: &str = "class operations such as [a-z&&[^aeiou]]";
+const NEGATED_IN_CLASS: &str = "negated classes such as \\D or [:^alpha:] inside brackets";
+const ASCII_CLASS: &str = "[:ascii:]";
+const SPECIAL_RANGE: &str = "a range that starts or ends with ] - ^ or [";
+const CONTROL: &str = "a carriage return or NUL";
+
+/// AI-48: `pattern`, a regular expression as `rg` reads it (Rust's `regex` syntax), checked as
+/// `rg` checks it, and translated for `grep -E` where the host has no `rg`, for the same lines:
+/// `\d`, `\s` and `\w` and their negations as POSIX classes, `(?:…)` and named groups as plain
+/// ones, lazy repetitions as greedy ones, which match the same lines, a leading `(?i)` as `-i`,
+/// and escapes as `grep -E` reads them. An error is the message for the model.
+pub fn pattern(given: &str, ignore_case: bool, multiline: bool) -> Result<Pattern, String> {
+    if given.is_empty() {
+        return Err("The pattern is empty, so nothing was searched.".to_owned());
+    }
+    if given.contains(['\n', '\r', '\0']) {
+        return Err(
+            "The pattern has a line break, so nothing was searched. Write a line break as \\n, \
+             with multiline set to true."
+                .to_owned(),
+        );
+    }
+    let ast = ast::parse::Parser::new()
+        .parse(given)
+        .map_err(|e| invalid(e.kind(), e.span()))?;
+    regex_syntax::hir::translate::TranslatorBuilder::new()
+        .utf8(false)
+        .build()
+        .translate(given, &ast)
+        .map_err(|e| invalid(e.kind(), e.span()))?;
+    if !multiline && has_line_feed(&ast) {
+        return Err(
+            "The pattern matches a line break (\\n), and a search reads one line at a time unless \
+             multiline is true, so nothing was searched. Set multiline to true to match across \
+             lines."
+                .to_owned(),
+        );
+    }
+    let mut body = ast.clone();
+    let leading_i = strip_case_flag(&mut body);
+    let extended = if multiline {
+        Err(MULTILINE)
+    } else {
+        let mut out = String::new();
+        extended(&body, &mut out).map(|()| if out.is_empty() { "^".to_owned() } else { out })
+    };
+    Ok(Pattern {
+        rg: given.to_owned(),
+        extended,
+        ignore_case: ignore_case || leading_i,
+    })
+}
+
+fn invalid(kind: &impl Display, span: &ast::Span) -> String {
+    format!(
+        "The pattern is not a valid regular expression ({kind}, at character {}), so nothing was \
+         searched. Escape ( ) [ ] {{ }} . * + ? | ^ $ and \\ with a backslash to match them as \
+         they are.",
+        span.start.column
+    )
+}
+
+/// Takes out a `(?i)` that starts the pattern, also when it starts the first of its alternatives,
+/// which it covers too: whether there was one. One inside a group covers only the group.
+fn strip_case_flag(ast: &mut Ast) -> bool {
+    match ast {
+        Ast::Flags(set) if is_case_flag(&set.flags) => {
+            *ast = Ast::empty(set.span);
+            true
+        }
+        Ast::Concat(concat) => concat.asts.first_mut().is_some_and(strip_case_flag),
+        Ast::Alternation(alternation) => alternation.asts.first_mut().is_some_and(strip_case_flag),
         _ => false,
     }
 }
 
-/// AI-48: `pattern` as every host's `grep -E` reads it: `\d`, `\s` and `\w`, which only some
-/// greps know, and their negations become POSIX classes, and `\t` a tab, also inside a bracket
-/// expression. An empty pattern, or one with a line break, which grep would take for several, is
-/// refused with the message for the model.
-pub fn extended_regex(pattern: &str) -> Result<String, String> {
-    if pattern.is_empty() {
-        return Err("The pattern is empty, so nothing was searched.".to_owned());
+fn is_case_flag(flags: &ast::Flags) -> bool {
+    matches!(
+        &flags.items[..],
+        [ast::FlagsItem {
+            kind: ast::FlagsItemKind::Flag(ast::Flag::CaseInsensitive),
+            ..
+        }]
+    )
+}
+
+/// Whether `ast` has a `\n` outside brackets, which `rg` refuses unless the search is multiline.
+fn has_line_feed(ast: &Ast) -> bool {
+    match ast {
+        Ast::Literal(literal) => literal.c == '\n',
+        Ast::Repetition(repetition) => has_line_feed(&repetition.ast),
+        Ast::Group(group) => has_line_feed(&group.ast),
+        Ast::Alternation(alternation) => alternation.asts.iter().any(has_line_feed),
+        Ast::Concat(concat) => concat.asts.iter().any(has_line_feed),
+        _ => false,
     }
-    if pattern.contains(['\n', '\r', '\0']) {
-        return Err(
-            "The pattern has a line break, and grep matches one line at a time, so nothing was \
-             searched. Search for one of its lines."
-                .to_owned(),
-        );
-    }
-    let chars: Vec<char> = pattern.chars().collect();
-    let mut out = String::with_capacity(pattern.len() + 16);
-    let mut in_bracket = false;
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        let next = chars.get(i + 1).copied();
-        if in_bracket {
-            // `[:class:]`, `[.x.]` and `[=x=]` go through whole.
-            if c == '['
-                && let Some(delimiter @ (':' | '.' | '=')) = next
-                && let Some(end) =
-                    (i + 2..chars.len() - 1).find(|&j| chars[j] == delimiter && chars[j + 1] == ']')
-            {
-                out.extend(&chars[i..end + 2]);
-                i = end + 2;
-                continue;
-            }
-            match (c, next.and_then(bracket_shorthand)) {
-                ('\\', Some(class)) => {
-                    out.push_str(class);
-                    i += 2;
-                }
-                (']', _) => {
-                    in_bracket = false;
-                    out.push(c);
-                    i += 1;
-                }
-                _ => {
-                    out.push(c);
-                    i += 1;
-                }
-            }
-            continue;
-        }
-        match c {
-            '\\' => {
-                match next {
-                    Some(n) => match shorthand(n) {
-                        Some(class) => out.push_str(class),
-                        None => {
-                            out.push('\\');
-                            out.push(n);
-                        }
-                    },
-                    None => out.push('\\'),
-                }
-                i += 2;
-            }
-            '[' => {
-                in_bracket = true;
-                out.push('[');
-                i += 1;
-                if chars.get(i) == Some(&'^') {
-                    out.push('^');
-                    i += 1;
-                }
-                // A `]` first in the expression stands for itself.
-                if chars.get(i) == Some(&']') {
-                    out.push(']');
-                    i += 1;
-                }
-            }
-            _ => {
+}
+
+/// Appends `ast` as `grep -E` reads it.
+fn extended(ast: &Ast, out: &mut String) -> Result<(), &'static str> {
+    match ast {
+        Ast::Empty(_) => {}
+        Ast::Flags(_) => return Err(FLAGS),
+        Ast::Literal(literal) => match literal.c {
+            '\r' | '\0' => return Err(CONTROL),
+            c @ ('.' | '[' | '\\' | '(' | ')' | '*' | '+' | '?' | '{' | '|' | '^' | '$') => {
+                out.push('\\');
                 out.push(c);
-                i += 1;
+            }
+            c => out.push(c),
+        },
+        Ast::Dot(_) => out.push('.'),
+        Ast::Assertion(assertion) => out.push_str(match assertion.kind {
+            ast::AssertionKind::StartLine => "^",
+            ast::AssertionKind::EndLine => "$",
+            ast::AssertionKind::WordBoundary => "\\b",
+            ast::AssertionKind::NotWordBoundary => "\\B",
+            ast::AssertionKind::WordBoundaryStart | ast::AssertionKind::WordBoundaryStartAngle => {
+                "\\<"
+            }
+            ast::AssertionKind::WordBoundaryEnd | ast::AssertionKind::WordBoundaryEndAngle => "\\>",
+            ast::AssertionKind::StartText | ast::AssertionKind::EndText => {
+                return Err(TEXT_ANCHOR);
+            }
+            ast::AssertionKind::WordBoundaryStartHalf | ast::AssertionKind::WordBoundaryEndHalf => {
+                return Err(HALF_BOUNDARY);
+            }
+        }),
+        Ast::ClassUnicode(_) => return Err(UNICODE_CLASS),
+        Ast::ClassPerl(class) => out.push_str(match (&class.kind, class.negated) {
+            (ast::ClassPerlKind::Digit, false) => "[0-9]",
+            (ast::ClassPerlKind::Digit, true) => "[^0-9]",
+            (ast::ClassPerlKind::Space, false) => "[[:space:]]",
+            (ast::ClassPerlKind::Space, true) => "[^[:space:]]",
+            (ast::ClassPerlKind::Word, false) => "[[:alnum:]_]",
+            (ast::ClassPerlKind::Word, true) => "[^[:alnum:]_]",
+        }),
+        Ast::ClassBracketed(class) => {
+            let mut set = Bracket {
+                negated: class.negated,
+                ..Bracket::default()
+            };
+            match &class.kind {
+                ast::ClassSet::Item(item) => set.add(item)?,
+                ast::ClassSet::BinaryOp(_) => return Err(CLASS_OPERATION),
+            }
+            set.write(out)?;
+        }
+        Ast::Repetition(repetition) => {
+            // A lazy repetition matches the same lines as a greedy one.
+            extended(&repetition.ast, out)?;
+            match &repetition.op.kind {
+                ast::RepetitionKind::ZeroOrOne => out.push('?'),
+                ast::RepetitionKind::ZeroOrMore => out.push('*'),
+                ast::RepetitionKind::OneOrMore => out.push('+'),
+                ast::RepetitionKind::Range(ast::RepetitionRange::Exactly(n)) => {
+                    out.push_str(&format!("{{{n}}}"));
+                }
+                ast::RepetitionKind::Range(ast::RepetitionRange::AtLeast(n)) => {
+                    out.push_str(&format!("{{{n},}}"));
+                }
+                ast::RepetitionKind::Range(ast::RepetitionRange::Bounded(m, n)) => {
+                    out.push_str(&format!("{{{m},{n}}}"));
+                }
+            }
+        }
+        Ast::Group(group) => {
+            if group.flags().is_some_and(|flags| !flags.items.is_empty()) {
+                return Err(FLAGS);
+            }
+            out.push('(');
+            extended(&group.ast, out)?;
+            out.push(')');
+        }
+        Ast::Alternation(alternation) => {
+            for (i, ast) in alternation.asts.iter().enumerate() {
+                if i > 0 {
+                    out.push('|');
+                }
+                extended(ast, out)?;
+            }
+        }
+        Ast::Concat(concat) => {
+            for ast in &concat.asts {
+                extended(ast, out)?;
             }
         }
     }
-    Ok(out)
+    Ok(())
 }
 
-fn shorthand(c: char) -> Option<&'static str> {
-    Some(match c {
-        'd' => "[0-9]",
-        'D' => "[^0-9]",
-        's' => "[[:space:]]",
-        'S' => "[^[:space:]]",
-        'w' => "[[:alnum:]_]",
-        'W' => "[^[:alnum:]_]",
-        't' => "\t",
-        _ => return None,
-    })
+/// The members of a bracket expression, gathered to be written as POSIX reads them.
+#[derive(Default)]
+struct Bracket {
+    negated: bool,
+    chars: BTreeSet<char>,
+    ranges: Vec<(char, char)>,
+    classes: Vec<&'static str>,
 }
 
-fn bracket_shorthand(c: char) -> Option<&'static str> {
-    Some(match c {
-        'd' => "0-9",
-        's' => "[:space:]",
-        'w' => "[:alnum:]_",
-        't' => "\t",
-        _ => return None,
-    })
+impl Bracket {
+    fn add(&mut self, item: &ast::ClassSetItem) -> Result<(), &'static str> {
+        match item {
+            ast::ClassSetItem::Empty(_) => {}
+            // A line break is never part of a line, as `rg` takes it out of a class.
+            ast::ClassSetItem::Literal(literal) if literal.c == '\n' => {}
+            ast::ClassSetItem::Literal(literal) => {
+                if matches!(literal.c, '\r' | '\0') {
+                    return Err(CONTROL);
+                }
+                self.chars.insert(literal.c);
+            }
+            ast::ClassSetItem::Range(range) => {
+                let ends = [range.start.c, range.end.c];
+                if ends.iter().any(|c| matches!(c, ']' | '-' | '^' | '[')) {
+                    return Err(SPECIAL_RANGE);
+                }
+                if ends.iter().any(|c| matches!(c, '\n' | '\r' | '\0')) {
+                    return Err(CONTROL);
+                }
+                self.ranges.push((range.start.c, range.end.c));
+            }
+            ast::ClassSetItem::Ascii(class) => {
+                if class.negated {
+                    return Err(NEGATED_IN_CLASS);
+                }
+                self.classes.push(match class.kind {
+                    ast::ClassAsciiKind::Alnum => "alnum",
+                    ast::ClassAsciiKind::Alpha => "alpha",
+                    ast::ClassAsciiKind::Blank => "blank",
+                    ast::ClassAsciiKind::Cntrl => "cntrl",
+                    ast::ClassAsciiKind::Digit => "digit",
+                    ast::ClassAsciiKind::Graph => "graph",
+                    ast::ClassAsciiKind::Lower => "lower",
+                    ast::ClassAsciiKind::Print => "print",
+                    ast::ClassAsciiKind::Punct => "punct",
+                    ast::ClassAsciiKind::Space => "space",
+                    ast::ClassAsciiKind::Upper => "upper",
+                    ast::ClassAsciiKind::Xdigit => "xdigit",
+                    ast::ClassAsciiKind::Word => {
+                        self.chars.insert('_');
+                        "alnum"
+                    }
+                    ast::ClassAsciiKind::Ascii => return Err(ASCII_CLASS),
+                });
+            }
+            ast::ClassSetItem::Unicode(_) => return Err(UNICODE_CLASS),
+            ast::ClassSetItem::Perl(class) => {
+                if class.negated {
+                    return Err(NEGATED_IN_CLASS);
+                }
+                match class.kind {
+                    ast::ClassPerlKind::Digit => self.ranges.push(('0', '9')),
+                    ast::ClassPerlKind::Space => self.classes.push("space"),
+                    ast::ClassPerlKind::Word => {
+                        self.classes.push("alnum");
+                        self.chars.insert('_');
+                    }
+                }
+            }
+            ast::ClassSetItem::Bracketed(inner) => match &inner.kind {
+                _ if inner.negated => return Err(NEGATED_IN_CLASS),
+                ast::ClassSet::Item(item) => self.add(item)?,
+                ast::ClassSet::BinaryOp(_) => return Err(CLASS_OPERATION),
+            },
+            ast::ClassSetItem::Union(union) => {
+                for item in &union.items {
+                    self.add(item)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// POSIX gives `]` a place first, `-` last and `^` anywhere but first; `\` stands for itself,
+    /// and `[` for itself unless `:`, `.` or `=` follows.
+    fn write(&self, out: &mut String) -> Result<(), &'static str> {
+        let has = |c| self.chars.contains(&c);
+        let mut body = String::new();
+        if has(']') {
+            body.push(']');
+        }
+        for &c in &self.chars {
+            if !matches!(c, ']' | '-' | '^' | '[') {
+                body.push(c);
+            }
+        }
+        for &(low, high) in &self.ranges {
+            body.extend([low, '-', high]);
+        }
+        for class in &self.classes {
+            body.push_str(&format!("[:{class}:]"));
+        }
+        if has('[') {
+            body.push('[');
+        }
+        let mut dash = has('-');
+        if has('^') {
+            if !body.is_empty() || self.negated {
+                body.push('^');
+            } else if dash {
+                body.push_str("-^");
+                dash = false;
+            } else {
+                // `[^]` would be a negation.
+                out.push_str("\\^");
+                return Ok(());
+            }
+        }
+        if dash {
+            body.push('-');
+        }
+        if body.is_empty() {
+            // Only line breaks, which no line has: negated, any character of the line.
+            if self.negated {
+                out.push('.');
+                return Ok(());
+            }
+            return Err(CONTROL);
+        }
+        out.push('[');
+        if self.negated {
+            out.push('^');
+        }
+        out.push_str(&body);
+        out.push(']');
+        Ok(())
+    }
 }
 
-/// What `find` and `grep` printed on the host, as the desktop shell read it.
+/// The lines of context before and after each matching line that `args` ask for: `-B` and `-A`,
+/// or `context` for either, at most [`MAX_CONTEXT`] each.
+#[must_use]
+pub fn context(args: &GrepArgs) -> (u32, u32) {
+    let lines = |side: Option<u64>| {
+        u32::try_from(side.or(args.context).unwrap_or(0).min(MAX_CONTEXT)).unwrap_or_default()
+    };
+    (lines(args.before_context), lines(args.after_context))
+}
+
+/// What `find`, `rg` and `grep` printed on the host, as the desktop shell read it.
 #[derive(Clone, Copy, Debug)]
 pub struct Found<'a> {
     /// Where `find` started, as the script resolved it: a directory with `/.` after it, or a
     /// file.
     pub start: &'a str,
-    /// A path per line for `glob`, the lines of `grep` for `grep`.
+    /// A path per line for `glob`, the lines of `rg` or `grep` for `grep`.
     pub stdout: &'a [u8],
+    /// Each line of a file's content follows the file and a NUL, rather than `:` or `-`.
+    pub nul: bool,
     /// More output followed [`MAX_OUTPUT_BYTES`]; it was not read.
     pub cut: bool,
     pub stderr: &'a [u8],
@@ -548,22 +889,27 @@ impl Root {
     }
 }
 
-/// The output's lines, without a last one that the cap cut short or any with a NUL byte, which
-/// a grep that cannot skip binary files prints.
-fn lines(found: &Found<'_>) -> Vec<String> {
+/// The output's lines, without a last one that the cap cut short.
+fn raw_lines<'a>(found: &Found<'a>) -> Vec<&'a [u8]> {
     let mut lines: Vec<&[u8]> = found.stdout.split(|&b| b == b'\n').collect();
     if found.cut || lines.last().is_some_and(|l| l.is_empty()) {
         lines.pop();
     }
     lines
+}
+
+/// The output's lines, without any with a NUL byte, which a grep that cannot skip binary files
+/// prints.
+fn lines(found: &Found<'_>) -> Vec<String> {
+    raw_lines(found)
         .into_iter()
         .filter(|l| !l.contains(&0))
         .map(|l| String::from_utf8_lossy(l).into_owned())
         .collect()
 }
 
-/// What `find` and `grep` reported: how many files or directories they could not read, and the
-/// other errors worth naming.
+/// What `find`, `rg` and `grep` reported: how many files or directories they could not read, and
+/// the other errors worth naming.
 #[derive(Default)]
 struct Problems {
     denied: usize,
@@ -572,27 +918,36 @@ struct Problems {
 
 fn problems(stderr: &[u8]) -> Problems {
     let mut problems = Problems::default();
+    // `find` and `rg` may both report a directory.
+    let mut denied = BTreeSet::new();
     let text = String::from_utf8_lossy(stderr);
     for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
-        if line.ends_with("Permission denied") {
-            problems.denied += 1;
-        } else if !passed_over(line)
+        // `rg` adds the error's number.
+        let message = match line.rsplit_once(" (os error ") {
+            Some((message, number)) if number.ends_with(')') => message,
+            _ => line,
+        };
+        if let Some(rest) = message.strip_suffix(": Permission denied") {
+            let path = rest.split_once(": ").map_or(rest, |(_, path)| path);
+            denied.insert(path.trim_matches(['\'', '‘', '’', '"']));
+        } else if !passed_over(message)
             && problems.other.len() < MAX_ERRORS
             && !problems.other.iter().any(|o| o == line)
         {
             problems.other.push(line.to_owned());
         }
     }
+    problems.denied = denied.len();
     problems
 }
 
-/// Errors about files gone, or replaced by directories, while the search ran, which a result
-/// leaves out.
-fn passed_over(line: &str) -> bool {
-    line.ends_with("Is a directory") || line.ends_with("No such file or directory")
+/// Errors about files gone, or replaced by directories, while the search ran, and links to
+/// nothing, which a result leaves out.
+fn passed_over(message: &str) -> bool {
+    message.ends_with("Is a directory") || message.ends_with("No such file or directory")
 }
 
-/// The notes after a result: output past the cap, and what `find` and `grep` reported.
+/// The notes after a result: output past the cap, and what `find`, `rg` and `grep` reported.
 fn notes(out: &mut String, found: &Found<'_>, tool: &str) {
     if found.cut {
         out.push_str(&format!(
@@ -690,26 +1045,32 @@ enum Row {
     Gap,
 }
 
-/// A line `grep -n` printed for the file `printed`: `printed:N:text` for a matching line, or
-/// `printed-N-text` for a line of context.
-fn row_of(line: &str, printed: &str) -> Option<Row> {
-    let rest = line.strip_prefix(printed)?;
-    let separator = rest.chars().next().filter(|&c| c == ':' || c == '-')?;
-    let rest = &rest[1..];
+/// A line after its file: `N:text` for a matching line, or `N-text` for a line of context.
+fn numbered(rest: &str) -> Option<Row> {
     let digits = rest.find(|c: char| !c.is_ascii_digit())?;
-    if digits == 0 || !rest[digits..].starts_with(separator) {
-        return None;
-    }
-    Some(Row::Line {
-        number: rest[..digits].parse().ok()?,
-        matched: separator == ':',
+    let matched = match rest[digits..].chars().next() {
+        Some(':') => true,
+        Some('-') => false,
+        _ => return None,
+    };
+    (digits > 0).then(|| Row::Line {
+        number: rest[..digits].parse().unwrap_or_default(),
+        matched,
         text: rest[digits + 1..].to_owned(),
     })
 }
 
-/// A matching line of a file below `root`: the file as printed, and the line. The file is what
-/// comes before the first `:N:`, so a name with `:N:` in it is read wrong; `grep` has no way to
-/// mark where a name ends that every host knows.
+/// A line `grep -n` printed for the file `printed` without `--null`: `printed:N:text` for a
+/// matching line, or `printed-N-text` for a line of context.
+fn row_of(line: &str, printed: &str) -> Option<Row> {
+    let rest = line.strip_prefix(printed)?;
+    let separator = rest.chars().next().filter(|&c| c == ':' || c == '-')?;
+    let row = numbered(&rest[1..])?;
+    matches!(row, Row::Line { matched, .. } if matched == (separator == ':')).then_some(row)
+}
+
+/// A matching line of a file below `root` without `--null`: the file as printed, and the line.
+/// The file is what comes before the first `:N:`, so a name with `:N:` in it is read wrong.
 fn matching_line<'a>(line: &'a str, root: &Root) -> Option<(&'a str, Row)> {
     let start = root.prefix.as_deref().unwrap_or(&root.shown);
     let from = line.starts_with(start).then_some(start.len())?;
@@ -722,8 +1083,9 @@ fn matching_line<'a>(line: &'a str, root: &Root) -> Option<(&'a str, Row)> {
     })
 }
 
-/// The files and lines of `grep -n` output, in its order. The lines of context before a group's
-/// first matching line are read once that line names the file.
+/// The files and lines of `grep -n` output without `--null`, in its order. The lines of context
+/// before a group's first matching line are read once that line names the file; where two runs of
+/// grep meet, a line of a file named like the one before plus `-N-` can be read as that file's.
 fn content(lines: &[String], root: &Root) -> Vec<Hits> {
     let mut files: Vec<Hits> = Vec::new();
     let mut current: Option<String> = None;
@@ -770,6 +1132,39 @@ fn content(lines: &[String], root: &Root) -> Vec<Hits> {
     files
 }
 
+/// The files and lines of output where each line follows its file and a NUL, as `rg --null` and
+/// `grep --null` print it: by file, with a gap where the line numbers skip.
+fn content_nul(found: &Found<'_>) -> Vec<Hits> {
+    let mut files: BTreeMap<String, Vec<Row>> = BTreeMap::new();
+    for line in raw_lines(found) {
+        let Some(at) = line.iter().position(|&b| b == 0) else {
+            // `--`, or what `rg` says of a binary file.
+            continue;
+        };
+        let (path, rest) = (&line[..at], &line[at + 1..]);
+        if rest.contains(&0) {
+            continue;
+        }
+        let Some(row) = numbered(&String::from_utf8_lossy(rest)) else {
+            continue;
+        };
+        let rows = files
+            .entry(String::from_utf8_lossy(path).into_owned())
+            .or_default();
+        if let (Some(Row::Line { number: last, .. }), Row::Line { number, .. }) =
+            (rows.last(), &row)
+            && *number != last + 1
+        {
+            rows.push(Row::Gap);
+        }
+        rows.push(row);
+    }
+    files
+        .into_iter()
+        .map(|(path, rows)| Hits { path, rows })
+        .collect()
+}
+
 /// A line's text as a result shows it, cut to [`MAX_LINE_CHARS`]; the flag says it was cut.
 fn shown_text(text: &str) -> (String, bool) {
     let text = text.strip_suffix('\r').unwrap_or(text);
@@ -809,19 +1204,18 @@ fn page(entries: &[Entry], offset: usize, limit: usize, budget: usize) -> (Strin
     (body, shown)
 }
 
-/// AI-48: the `grep` result for `args` from what `find` and `grep` printed: the files, the counts
-/// or the lines, sorted by path, a page of them as `limit` and `offset` ask, with how to read on.
+/// AI-48: the `grep` result for `args` from what `rg` or `grep` printed: the files, the counts or
+/// the lines, sorted by path, a page of them as `limit` and `offset` ask, with how to read on.
 #[must_use]
 pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> String {
     let root = Root::of(found.start);
-    let lines = lines(found);
     let mode = args.output_mode.unwrap_or_default();
     let place = root.place(search);
     let mut cut = false;
     // The entries, the summary of what matched, and what an entry is.
     let (entries, summary, kind) = match mode {
         GrepOutput::FilesWithMatches => {
-            let mut paths: Vec<String> = lines
+            let mut paths: Vec<String> = lines(found)
                 .iter()
                 .filter_map(|line| root.kept(line, search))
                 .collect();
@@ -841,7 +1235,7 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
             (entries, summary, "files")
         }
         GrepOutput::Count => {
-            let mut counts: Vec<(String, u64)> = lines
+            let mut counts: Vec<(String, u64)> = lines(found)
                 .iter()
                 .filter_map(|line| {
                     let (printed, n) = line.rsplit_once(':')?;
@@ -869,7 +1263,12 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
             (entries, summary, "files")
         }
         GrepOutput::Content => {
-            let mut files: Vec<Hits> = content(&lines, &root)
+            let hits = if found.nul {
+                content_nul(found)
+            } else {
+                content(&lines(found), &root)
+            };
+            let mut files: Vec<Hits> = hits
                 .into_iter()
                 .filter_map(|hits| {
                     Some(Hits {
@@ -889,7 +1288,8 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
                 count(matched, "matching line", "matching lines"),
                 count(files.len(), "file", "files")
             );
-            let context = args.context.unwrap_or(0) > 0;
+            let context = context(args) != (0, 0);
+            let numbers = args.line_numbers.unwrap_or(true);
             let mut entries = Vec::new();
             for (i, file) in files.iter().enumerate() {
                 for (j, row) in file.rows.iter().enumerate() {
@@ -913,8 +1313,13 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
                             let (text, was_cut) = shown_text(text);
                             cut |= was_cut;
                             let separator = if *matched { ':' } else { '-' };
+                            let text = if numbers {
+                                format!("{}{separator}{number}{separator}{text}", file.path)
+                            } else {
+                                format!("{}{separator}{text}", file.path)
+                            };
                             entries.push(Entry {
-                                text: format!("{}{separator}{number}{separator}{text}", file.path),
+                                text,
                                 counted: true,
                             });
                         }
@@ -926,8 +1331,10 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
     };
     let total = entries.iter().filter(|e| e.counted).count();
     let offset = usize::try_from(args.offset.unwrap_or(0)).unwrap_or(usize::MAX);
-    let limit =
-        usize::try_from(args.limit.unwrap_or(DEFAULT_GREP_LIMIT).max(1)).unwrap_or(usize::MAX);
+    let limit = match args.limit.unwrap_or(DEFAULT_GREP_LIMIT) {
+        0 => usize::MAX,
+        limit => usize::try_from(limit).unwrap_or(usize::MAX),
+    };
     let mut out = String::new();
     if total == 0 {
         out.push_str(&format!("No lines match the pattern {place}.\n"));
@@ -973,13 +1380,21 @@ mod tests {
         Search::new(path, Some(glob)).unwrap()
     }
 
+    fn chars(s: &str) -> Vec<char> {
+        s.chars().collect()
+    }
+
+    fn fnm(pattern: &str, name: &str) -> bool {
+        fnmatch(&chars(pattern), name)
+    }
+
     #[test]
     fn globs_match_names_at_any_depth_and_paths_from_the_start() {
         // No `/`: a name at any depth, as with rg's --glob and find -name.
         let s = search(Some("/etc/nginx"), "*.conf");
         assert_eq!(
-            (s.path.as_str(), s.max_depth, &s.names[..]),
-            ("/etc/nginx", None, &["*.conf".to_owned()][..])
+            (s.path.as_str(), s.below.as_str(), s.max_depth, &s.names[..]),
+            ("/etc/nginx", "", None, &["*.conf".to_owned()][..])
         );
         for yes in ["nginx.conf", "conf.d/app.conf", "a/b/.hidden.conf"] {
             assert!(s.matches(yes), "{yes}");
@@ -997,7 +1412,10 @@ mod tests {
 
         // ** is any number of directories, none included, and at the end only what is inside.
         let s = search(Some("/srv"), "app/**/*.env");
-        assert_eq!((s.path.as_str(), s.max_depth), ("/srv/app", None));
+        assert_eq!(
+            (s.path.as_str(), s.below.as_str(), s.max_depth),
+            ("/srv", "app", None)
+        );
         for yes in [".env", "x.env", "config/prod/x.env"] {
             assert!(s.matches(yes), "{yes}");
         }
@@ -1007,28 +1425,36 @@ mod tests {
 
     #[test]
     fn globs_start_where_they_name_directories() {
-        // The directories a glob starts with are searched directly, and the result names the
-        // directory the model gave.
+        // The directories a glob starts with are searched below the path, and the result names
+        // the directory the model gave.
         let s = search(Some("/etc/"), "nginx/sites-enabled/*");
         assert_eq!(
-            (s.path.as_str(), s.max_depth),
-            ("/etc/nginx/sites-enabled", Some(1))
+            (s.path.as_str(), s.below.as_str(), s.max_depth),
+            ("/etc/", "nginx/sites-enabled", Some(1))
         );
+        assert_eq!(s.shown(), "/etc/nginx/sites-enabled");
         assert!(s.matches("api") && !s.matches("a/b"));
         assert_eq!(s.base("/etc/nginx/sites-enabled"), "/etc");
         // An absolute glob searches from /, whatever the path.
         let s = search(Some("/home/ops"), "/etc/nginx/**/*.conf");
-        assert_eq!((s.path.as_str(), s.max_depth), ("/etc/nginx", None));
+        assert_eq!(
+            (s.path.as_str(), s.below.as_str(), s.max_depth),
+            ("/", "etc/nginx", None)
+        );
         assert!(s.matches("nginx.conf") && s.matches("conf.d/a.conf"));
-        assert_eq!(s.base("/etc/nginx"), "/");
+        assert_eq!(
+            (s.shown(), s.base("/etc/nginx")),
+            ("/etc/nginx".into(), "/".into())
+        );
         let s = search(None, "/*.conf");
         assert_eq!((s.path.as_str(), s.max_depth), ("/", Some(1)));
         assert!(s.matches("x.conf") && !s.matches("etc/x.conf"));
         // `./` and a trailing `/` change nothing; a directory that is a pattern stays in it.
-        assert_eq!(search(None, "./a/b/").path, "~/a");
-        assert_eq!(search(Some("/"), "{etc,opt}/*.conf").path, "/");
-        // A path the base cannot be found in is shown as resolved.
-        assert_eq!(search(None, "a/b").base("/elsewhere"), "/elsewhere");
+        assert_eq!(search(None, "./a/b/").shown(), "~/a");
+        assert_eq!(search(Some("/"), "{etc,opt}/*.conf").shown(), "/");
+        // A file given as the path is searched itself, and a path the base cannot be found in is
+        // shown as resolved.
+        assert_eq!(search(None, "a/b").base("/srv/notes.txt"), "/srv/notes.txt");
     }
 
     #[test]
@@ -1048,15 +1474,13 @@ mod tests {
         assert_eq!(expand_braces("{x}.{y").unwrap(), ["{x}.{y"]);
         assert!(expand_braces(&"{a,b}".repeat(7)).is_err());
 
-        assert!(fnmatch("[a-c]?.log", "b1.log") && !fnmatch("[a-c]?.log", "d1.log"));
-        assert!(fnmatch("[!.]*", "x") && !fnmatch("[^.]*", ".x"));
-        assert!(fnmatch("[[:digit:]]*", "9x") && fnmatch("[]x]", "]"));
-        assert!(fnmatch(r"\*.txt", "*.txt") && !fnmatch(r"\*.txt", "a.txt"));
-        assert!(fnmatch("[", "[") && fnmatch("*", ".bashrc") && fnmatch("a*b*c", "aXbYbc"));
-        assert!(!fnmatch("a*b", "acb/") && fnmatch("日*", "日本"));
-        // find reads [! everywhere; [^ only some find do.
-        assert_eq!(find_name("[^.]*"), "[!.]*");
-        assert_eq!(find_name(r"\[^x]"), r"\[^x]");
+        assert!(fnm("[a-c]?.log", "b1.log") && !fnm("[a-c]?.log", "d1.log"));
+        assert!(fnm("[!.]*", "x") && !fnm("[^.]*", ".x"));
+        assert!(fnm("[[:digit:]]*", "9x") && fnm("[]x]", "]"));
+        assert!(fnm(r"\*.txt", "*.txt") && !fnm(r"\*.txt", "a.txt"));
+        assert!(fnm("[", "[") && fnm("*", ".bashrc") && fnm("a*b*c", "aXbYbc"));
+        assert!(!fnm("a*b", "acb/") && fnm("日*", "日本") && fnm("*本", "日本"));
+        assert!(fnm("?本", "日本") && !fnm("[[:alpha:]]x", "1x"));
 
         assert!(Search::new(None, Some("a\nb")).is_err());
         assert!(Search::new(None, Some("/")).is_err());
@@ -1071,30 +1495,140 @@ mod tests {
     }
 
     #[test]
-    fn patterns_read_alike_on_every_grep() {
-        let ere = |p: &str| extended_regex(p).unwrap();
+    fn names_mean_the_same_to_find_and_rg() {
+        let host = |name: &str| host_name(&chars(name));
+        // find reads [! everywhere; [^ only some find do.
+        assert_eq!(host("[^.]*"), "[!.]*");
+        assert_eq!(host(r"\[^x]"), r"\[^x]");
+        // What rg reads as its own: braces, a leading ! or #, spaces at the end; ** it refuses.
+        assert_eq!(host("{x}.conf"), r"\{x\}.conf");
+        assert_eq!(host("!x"), r"\!x");
+        assert_eq!(host("#x#"), r"\#x#");
+        assert_eq!(host("a b  "), r"a b\ \ ");
+        assert_eq!(host("a**b"), "a*b");
+        assert_eq!(host(r"a\**"), r"a\**");
+        // A class rg does not know widens to any character; a lone [ or \ is escaped.
+        assert_eq!(host("[[:digit:]]*.log"), "?*.log");
+        assert_eq!(host("x[ab"), r"x\[ab");
+        assert_eq!(host(r"end\"), r"end\\");
+        assert_eq!(host("[]x]"), "[]x]");
+        let s = search(None, "[[:digit:]]*.{log,txt}");
+        assert_eq!(s.names, ["?*.log", "?*.txt"]);
+        assert!(s.matches("9.log") && !s.matches("x.log"));
+    }
+
+    fn ere(p: &str) -> String {
+        pattern(p, false, false).unwrap().extended.unwrap()
+    }
+
+    #[test]
+    fn patterns_read_alike_on_rg_and_grep() {
         assert_eq!(ere(r"listen\s+\d+;"), "listen[[:space:]]+[0-9]+;");
         assert_eq!(
             ere(r"\w+\W\S\D"),
             "[[:alnum:]_]+[^[:alnum:]_][^[:space:]][^0-9]"
         );
-        assert_eq!(ere(r"[\d.]+:[\w-]"), "[0-9.]+:[[:alnum:]_-]");
-        assert_eq!(ere(r"a\tb"), "a\tb");
-        // Other escapes, an escaped backslash and POSIX classes stay as written.
-        assert_eq!(ere(r"\.\bx\\d"), r"\.\bx\\d");
-        assert_eq!(ere(r"[[:digit:]\d]"), "[[:digit:]0-9]");
-        assert_eq!(ere(r"[]\d]"), "[]0-9]");
-        assert_eq!(ere(r"[^]x]\d"), "[^]x][0-9]");
-        assert_eq!(ere(r"end\"), r"end\");
-        assert_eq!(ere("日本\\s"), "日本[[:space:]]");
-        assert!(extended_regex("").is_err());
-        assert!(extended_regex("a\nb").is_err());
+        assert_eq!(ere(r"[\d.]+:[\w-]"), "[.0-9]+:[_[:alnum:]-]");
+        assert_eq!(ere(r"a\tb\x41\u{e9}"), "a\tbAé");
+        // Escapes as grep -E reads them; ], } and other punctuation need none.
+        assert_eq!(
+            ere(r"\.\(\)\[\]\{\}\|\^\$\*\+\?\\"),
+            r"\.\(\)\[]\{}\|\^\$\*\+\?\\"
+        );
+        assert_eq!(ere(r"a\/b\-c\#d\:e\ f\<"), r"a/b-c#d:e f\<");
+        assert_eq!(ere(r"\bx\B\b{start}y\b{end}"), r"\bx\B\<y\>");
+        // Groups, lazy repetitions, counted repetitions and a leading (?i).
+        assert_eq!(
+            ere(r"(?:a|b)(?P<n>c)+?x{2}y{1,}z{0,3}?"),
+            "(a|b)(c)+x{2}y{1,}z{0,3}"
+        );
+        // A leading (?i) covers every alternative, as rg reads it; one later covers only the rest.
+        let p = pattern("(?i)error|warn", false, false).unwrap();
+        assert_eq!(
+            (p.extended, p.ignore_case),
+            (Ok("error|warn".to_owned()), true)
+        );
+        assert!(
+            regex_syntax::parse("(?i)a|b")
+                .unwrap()
+                .to_string()
+                .contains('B')
+        );
+        for later in ["a|(?i)b", "((?i)a)b"] {
+            assert_eq!(pattern(later, false, false).unwrap().extended, Err(FLAGS));
+        }
+        let p = pattern("(?i)error", false, false).unwrap();
+        assert_eq!(
+            (p.extended.unwrap(), p.ignore_case, p.rg.as_str()),
+            ("error".to_owned(), true, "(?i)error")
+        );
+        // Brackets as POSIX reads them: ] first, - last, ^ not first, [ and \ as they are.
+        assert_eq!(ere(r"[\]\-a\^]"), "[]a^-]");
+        assert_eq!(ere(r"[\^\-]"), "[-^]");
+        assert_eq!(ere(r"[\^]"), r"\^");
+        assert_eq!(ere(r"[^\^]"), "[^^]");
+        assert_eq!(ere(r"[\[:]"), "[:[]");
+        assert_eq!(ere(r"[\\a]"), r"[\a]");
+        assert_eq!(ere("[[:alpha:][:word:]x]"), "[_x[:alpha:][:alnum:]]");
+        assert_eq!(ere(r"[a-z[0-9]]"), "[a-z0-9]");
+        assert_eq!(ere("日本"), "日本");
+        // What only rg can run.
+        for (p, why) in [
+            (r"\p{L}+", UNICODE_CLASS),
+            (r"a(?s:.)b", FLAGS),
+            (r"(?-i)x", FLAGS),
+            (r"\Ax", TEXT_ANCHOR),
+            (r"[a-z&&[^aeiou]]", CLASS_OPERATION),
+            (r"[\D]", NEGATED_IN_CLASS),
+            (r"[[:ascii:]]", ASCII_CLASS),
+            (r"\r", CONTROL),
+        ] {
+            assert_eq!(pattern(p, false, false).unwrap().extended, Err(why), "{p}");
+        }
+        assert_eq!(pattern("x", false, true).unwrap().extended, Err(MULTILINE));
+    }
+
+    #[test]
+    fn patterns_are_checked_as_rg_checks_them() {
+        for (p, message) in [
+            ("(", "unclosed group"),
+            (r"\1", "backreferences are not supported"),
+            ("(?=x)", "look-around"),
+            (r"\p{Nope}", "Unicode property not found"),
+            ("a{", "repetition"),
+        ] {
+            let error = pattern(p, false, false).unwrap_err();
+            assert!(error.contains(message), "{p}: {error}");
+            assert!(error.starts_with("The pattern is not a valid regular expression"));
+        }
+        assert!(pattern("", false, false).unwrap_err().contains("empty"));
+        assert!(
+            pattern("a\nb", false, true)
+                .unwrap_err()
+                .contains("line break")
+        );
+        // \n matches across lines only with multiline, as with rg.
+        assert!(
+            pattern(r"a\nb", false, false)
+                .unwrap_err()
+                .contains("multiline")
+        );
+        let p = pattern(r"struct \{[\s\S]*?field", false, true).unwrap();
+        assert_eq!(p.rg, r"struct \{[\s\S]*?field");
+        // A class with \n leaves it out, as rg does: a negated one of \n alone is any character.
+        assert_eq!(ere(r"[\na]"), "[a]");
+        assert_eq!(ere(r"a[^\n]*b"), "a.*b");
+        assert_eq!(
+            pattern(r"[\n]", false, false).unwrap().extended,
+            Err(CONTROL)
+        );
     }
 
     fn found<'a>(start: &'a str, stdout: &'a str, stderr: &'a str) -> Found<'a> {
         Found {
             start,
             stdout: stdout.as_bytes(),
+            nul: false,
             cut: false,
             stderr: stderr.as_bytes(),
         }
@@ -1139,6 +1673,22 @@ mod tests {
     }
 
     #[test]
+    fn denials_are_counted_once_whoever_reports_them() {
+        let stderr = "find: ‘/x/./locked’: Permission denied\n\n\
+                      rg: /x/./locked: Permission denied (os error 13)\n\
+                      rg: /x/./locked: Permission denied (os error 13)\n\
+                      grep: /x/./key: Permission denied\n\
+                      rg: /x/./gone.conf: No such file or directory (os error 2)\n\
+                      rg: /x/./loop: File system loop found (os error 40)\n";
+        let problems = problems(stderr.as_bytes());
+        assert_eq!(problems.denied, 2);
+        assert_eq!(
+            problems.other,
+            ["rg: /x/./loop: File system loop found (os error 40)"]
+        );
+    }
+
+    #[test]
     fn grep_lists_files_and_counts() {
         let s = search(Some("/etc"), "*.conf");
         let args = grep(r#"{"pattern":"8080"}"#);
@@ -1178,6 +1728,20 @@ mod tests {
         assert!(out.starts_with("2 matching lines in 1 file in /etc/hosts"));
         let none = grep_result(&args, &search(None, ""), &found("/root/.", "", ""));
         assert_eq!(none, "No lines match the pattern under /root.\n");
+        // head_limit, Claude Code's name for limit, with 0 for no limit.
+        let many: String = (0..300).map(|i| format!("/x/./f{i:03}\n")).collect();
+        let all = grep_result(
+            &grep(r#"{"pattern":"x","head_limit":0}"#),
+            &search(Some("/x"), ""),
+            &found("/x/.", &many, ""),
+        );
+        assert!(all.starts_with("300 files with a matching line under /x, sorted by path:\n"));
+        let some = grep_result(
+            &grep(r#"{"pattern":"x","head_limit":2}"#),
+            &search(Some("/x"), ""),
+            &found("/x/.", &many, ""),
+        );
+        assert!(some.contains("; files 1–2:\n"), "{some}");
     }
 
     #[test]
@@ -1191,12 +1755,34 @@ mod tests {
             &s,
             &found("/etc/nginx/.", stdout, ""),
         );
-        assert_eq!(
-            out,
-            "4 matching lines in 2 files under /etc/nginx, sorted by path:\n\
-             /etc/nginx/a-2:3:x\n/etc/nginx/a-2:4:8080\n--\n/etc/nginx/sites/b-1-server {\n\
-             /etc/nginx/sites/b:2:  listen 8080;\n/etc/nginx/sites/b-3-}\n--\n\
-             /etc/nginx/sites/b-9-x\n/etc/nginx/sites/b:10:  listen 8080;\n"
+        let expected = "4 matching lines in 2 files under /etc/nginx, sorted by path:\n\
+                        /etc/nginx/a-2:3:x\n/etc/nginx/a-2:4:8080\n--\n/etc/nginx/sites/b-1-server \
+                        {\n/etc/nginx/sites/b:2:  listen 8080;\n/etc/nginx/sites/b-3-}\n--\n\
+                        /etc/nginx/sites/b-9-x\n/etc/nginx/sites/b:10:  listen 8080;\n";
+        assert_eq!(out, expected);
+        // The same from rg or grep --null, and with Claude Code's -C, -B and -A.
+        let nul = stdout
+            .replace("/b-", "/b\0")
+            .replace("/b:", "/b\0")
+            .replace("a-2:", "a-2\0");
+        let mut with_nul = found("/etc/nginx/.", &nul, "");
+        with_nul.nul = true;
+        for args in [
+            r#"{"pattern":"8080","output_mode":"content","-C":1}"#,
+            r#"{"pattern":"8080","output_mode":"content","-B":1,"-A":1}"#,
+            r#"{"pattern":"8080","output_mode":"content","-B":1}"#,
+        ] {
+            assert_eq!(grep_result(&grep(args), &s, &with_nul), expected, "{args}");
+        }
+        // Without line numbers, as Claude Code's -n false asks.
+        let out = grep_result(
+            &grep(r#"{"pattern":"8080","output_mode":"content","-n":false,"context":1}"#),
+            &s,
+            &with_nul,
+        );
+        assert!(
+            out.contains("\n/etc/nginx/a-2:x\n/etc/nginx/a-2:8080\n--\n"),
+            "{out}"
         );
         // Pages count lines, not separators, and say where to read on.
         let out = grep_result(
@@ -1217,6 +1803,25 @@ mod tests {
             &found("/etc/nginx/.", stdout, ""),
         );
         assert!(past.contains("offset 9 is past the last of them"));
+    }
+
+    #[test]
+    fn names_with_line_numbers_in_them_are_read_whole_with_nul() {
+        // `b:2:c` is a file, and `a-2` follows `a` where two runs of grep meet.
+        let stdout = "/s/./b:2:c\x001:x\n/s/./a\x001:x\n/s/./a\x002-y\n/s/./a-2\x001:x\n\
+                      /s/./bin: binary file matches (found \"\\0\" byte around offset 3)\n--\n";
+        let mut out = found("/s/.", stdout, "");
+        out.nul = true;
+        let text = grep_result(
+            &grep(r#"{"pattern":"x","output_mode":"content","-A":1}"#),
+            &search(Some("/s"), ""),
+            &out,
+        );
+        assert_eq!(
+            text,
+            "3 matching lines in 3 files under /s, sorted by path:\n/s/a:1:x\n/s/a-2-y\n--\n\
+             /s/a-2:1:x\n--\n/s/b:2:c:1:x\n"
+        );
     }
 
     #[test]
@@ -1261,6 +1866,18 @@ mod tests {
         assert_eq!(
             out,
             "1 matching line in 1 file in /etc/hosts, sorted by path:\n/etc/hosts:3:x\n"
+        );
+        // A multiline match is its lines, each a matching one.
+        let mut lines = found("/s/a", "/s/a\x001:x\n/s/a\x002:y\n", "");
+        lines.nul = true;
+        let out = grep_result(
+            &grep(r#"{"pattern":"x\\ny","output_mode":"content","multiline":true}"#),
+            &Search::new(Some("/s/a"), None).unwrap(),
+            &lines,
+        );
+        assert_eq!(
+            out,
+            "2 matching lines in 1 file in /s/a, sorted by path:\n/s/a:1:x\n/s/a:2:y\n"
         );
     }
 }

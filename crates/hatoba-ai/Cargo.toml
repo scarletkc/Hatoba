@@ -33,6 +33,9 @@ rmcp = { version = "3.5", default-features = false, features = ["client", "trans
 # (Unix) so shutdown kills the whole tree. No `tracing` feature: it would log the command's env.
 which = "8"
 process-wrap = { version = "10", default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
+# grep (AI-48): patterns checked as rg checks them, and translated for grep -E. Already in the
+# desktop app through `regex`, with the same features.
+regex-syntax = "0.8"
 # Skills (spec §13.8): SKILL.md frontmatter and .zip import / export.
 serde_yaml_ng = "0.10"
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }

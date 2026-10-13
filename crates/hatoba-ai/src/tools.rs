@@ -254,27 +254,31 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         ));
         tools.push(tool(
             GREP,
-            "Search text files on the tab's host for lines that match a regular expression, with \
-             find and grep on a separate exec channel. `path` is a file, or a directory searched \
-             with its subdirectories; a relative path or `~/` starts at the user's home \
-             directory. `pattern` is a POSIX extended regular expression, as grep -E reads it, \
-             where \\d, \\s and \\w work too. `glob` limits a directory's search to the files glob \
-             would find; a file given as `path` is searched whatever its name, as with rg. \
-             output_mode files_with_matches (the default) returns the paths of the files \
-             with a matching line, count the number of matching lines in each, and content the \
-             lines as path:line:text, with `context` lines around each as path-line-text. \
-             Results are sorted by path, at most `limit` entries (files, or lines for content; \
-             default 250) from `offset` (default 0) and 30,000 characters; lines are cut at 500 \
-             characters. Binary files and .git directories are skipped, and so are /proc, /sys, \
-             /dev and /run when it searches /. It runs without asking, and without sudo. A search \
-             stops after 30 seconds."
+            "Search text files on the tab's host for lines that match a regular expression, on a \
+             separate exec channel: with rg where the host has it, and with find and grep -E \
+             otherwise. `path` is a file, or a directory searched with its subdirectories; a \
+             relative path or `~/` starts at the user's home directory. `pattern` is a regular \
+             expression as rg reads it (Rust regex syntax), so literal braces need a backslash, \
+             as in interface\\{\\}; for grep -E, Hatoba translates it. `multiline` lets a match \
+             span lines, with . matching line breaks, as in struct \\{[\\s\\S]*?field; it needs \
+             rg, and so do Unicode classes such as \\p{L} and inline flags other than a leading \
+             (?i). `glob` limits a directory's search to the files glob would find; a file given \
+             as `path` is searched whatever its name, as with rg. output_mode files_with_matches \
+             (the default) returns the paths of the files with a matching line, count the number \
+             of matching lines in each, and content the lines as path:line:text, with lines of \
+             context as path-line-text: `before_context` lines before each matching line, \
+             `after_context` after, `context` both. Results are sorted by path, at most `limit` \
+             entries (files, or lines for content; default 250, 0 for no limit) from `offset` \
+             (default 0) and 30,000 characters; lines are cut at 500 characters. Binary files \
+             and .git are skipped, and so are /proc, /sys, /dev and /run when it searches /. It \
+             runs without asking, and without sudo. A search stops after 30 seconds."
                 .to_owned(),
             json!({
                 "type": "object",
                 "properties": {
                     "pattern": {
                         "type": "string",
-                        "description": "The regular expression to search for."
+                        "description": "The regular expression to search for, as rg reads it."
                     },
                     "path": {
                         "type": "string",
@@ -301,9 +305,25 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "description": "Lines to show before and after each matching line in \
                                         content mode (default 0, at most 100)."
                     },
+                    "before_context": {
+                        "type": "integer",
+                        "description": "Lines to show before each matching line in content \
+                                        mode, in place of context's (at most 100)."
+                    },
+                    "after_context": {
+                        "type": "integer",
+                        "description": "Lines to show after each matching line in content mode, \
+                                        in place of context's (at most 100)."
+                    },
+                    "multiline": {
+                        "type": "boolean",
+                        "description": "Let a match span lines, with . matching line breaks \
+                                        (default false). Needs rg on the host."
+                    },
                     "limit": {
                         "type": "integer",
-                        "description": "The most entries to return (default 250)."
+                        "description": "The most entries to return (default 250; 0 for no \
+                                        limit)."
                     },
                     "offset": {
                         "type": "integer",
@@ -1184,14 +1204,29 @@ pub struct GrepArgs {
     /// What the result lists; [`GrepOutput::FilesWithMatches`] by default.
     #[serde(default)]
     pub output_mode: Option<GrepOutput>,
-    /// Match regardless of letter case; `false` by default.
-    #[serde(default)]
+    /// Match regardless of letter case; `false` by default. Claude Code's `-i` too.
+    #[serde(default, alias = "-i")]
     pub ignore_case: Option<bool>,
-    /// Lines around each matching line in content mode; 0 by default.
-    #[serde(default)]
+    /// Lines before and after each matching line in content mode; 0 by default. Claude Code's
+    /// `-C` too.
+    #[serde(default, alias = "-C")]
     pub context: Option<u64>,
-    /// The most entries to return; 250 by default.
+    /// Lines before each matching line, in place of `context`'s. Claude Code's `-B` too.
+    #[serde(default, alias = "-B")]
+    pub before_context: Option<u64>,
+    /// Lines after each matching line, in place of `context`'s. Claude Code's `-A` too.
+    #[serde(default, alias = "-A")]
+    pub after_context: Option<u64>,
+    /// A match may span lines, and `.` matches a line break; `false` by default.
     #[serde(default)]
+    pub multiline: Option<bool>,
+    /// Content mode numbers its lines; `true` by default. Claude Code's `-n`, which the schema
+    /// leaves out.
+    #[serde(default, alias = "-n")]
+    pub line_numbers: Option<bool>,
+    /// The most entries to return, 0 for no limit; 250 by default. Claude Code's `head_limit`
+    /// too.
+    #[serde(default, alias = "head_limit")]
     pub limit: Option<u64>,
     /// Entries to skip; 0 by default.
     #[serde(default)]
@@ -1516,6 +1551,34 @@ mod tests {
         assert!(
             serde_json::from_str::<GrepArgs>(r#"{"pattern":"x","output_mode":"all"}"#).is_err()
         );
+        // Claude Code's names for the same arguments.
+        let args: GrepArgs = serde_json::from_str(
+            r#"{"pattern":"x","-i":true,"-C":1,"-B":2,"-A":3,"-n":false,"head_limit":0,
+                "multiline":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                args.ignore_case,
+                args.context,
+                args.before_context,
+                args.after_context,
+                args.line_numbers,
+                args.limit,
+                args.multiline
+            ),
+            (
+                Some(true),
+                Some(1),
+                Some(2),
+                Some(3),
+                Some(false),
+                Some(0),
+                Some(true)
+            )
+        );
+        let properties = grep.input_schema["properties"].as_object().unwrap();
+        assert!(properties.keys().all(|k| !k.starts_with('-')));
         let args: GlobArgs = serde_json::from_str(r#"{"pattern":"*.conf"}"#).unwrap();
         assert_eq!(args.path, None);
         let args: EditFileArgs =

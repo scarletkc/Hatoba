@@ -657,36 +657,14 @@ mod tests {
     }
 
     /// The scripts against the local `sh`, `wc`, `cksum` and `dirname` (GNU on Linux, BSD on
-    /// macOS), started the way a login shell would start them. They run in `/`, so relative paths
-    /// show that they are taken from `$HOME`.
+    /// macOS), as [`crate::local_sh`] starts them.
     #[cfg(unix)]
     mod local_sh {
-        use std::io::Write;
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         use std::path::Path;
-        use std::process::{Command, Stdio};
 
         use super::super::*;
-
-        fn run(home: &Path, command: &str, stdin: &[u8]) -> ExecOutput {
-            let mut child = Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .current_dir("/")
-                .env("HOME", home)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            child.stdin.take().unwrap().write_all(stdin).unwrap();
-            let out = child.wait_with_output().unwrap();
-            ExecOutput {
-                exit_status: out.status.code().map(|c| c as u32),
-                stdout: out.stdout,
-                stderr: out.stderr,
-            }
-        }
+        use crate::local_sh::{is_root, run, run_with};
 
         fn read_file(home: &Path, path: &str, max: u64) -> Result<RemoteFile, RemoteFileError> {
             let (command, stdin) = read_request(path, max)?;
@@ -734,13 +712,6 @@ mod tests {
         fn delete_file(home: &Path, path: &str, expect: &[u8]) -> Result<String, RemoteFileError> {
             let (command, stdin) = delete_request(path, expect)?;
             parse_delete(&run(home, &command, &stdin))
-        }
-
-        fn is_root() -> bool {
-            Command::new("id")
-                .arg("-u")
-                .output()
-                .is_ok_and(|o| o.stdout.starts_with(b"0\n"))
         }
 
         #[test]
@@ -863,21 +834,11 @@ mod tests {
             let (command, stdin) =
                 write_request("app.conf", content, Expect::Content(b"old\n"), None).unwrap();
             let tmp = tempfile::tempdir().unwrap();
+            let vars = [("TMPDIR", tmp.path().to_str().unwrap())];
             for cut in [1, 10, content.len() - 1] {
                 let sent = &stdin[..stdin.len() - cut];
-                let mut child = Command::new("sh")
-                    .arg("-c")
-                    .arg(&command)
-                    .env("HOME", home)
-                    .env("TMPDIR", tmp.path())
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
-                child.stdin.take().unwrap().write_all(sent).unwrap();
-                let out = child.wait_with_output().unwrap();
-                assert_eq!(out.status.code(), Some(11));
+                let out = run_with(home, &command, sent, &vars);
+                assert_eq!(out.exit_status, Some(11));
                 assert_eq!(std::fs::read(&path).unwrap(), b"old\n");
                 assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 0);
             }

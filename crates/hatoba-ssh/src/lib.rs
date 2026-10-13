@@ -20,6 +20,8 @@ mod handler;
 pub mod hostkey;
 pub mod interactive;
 pub mod keys;
+#[cfg(all(test, unix))]
+mod local_sh;
 mod net;
 mod ppk;
 pub mod probe;
