@@ -30,7 +30,7 @@ const t = messages(locale);
       {
         LOCALES.map((other) => (
           <li>
-            <a href={localePath(other)} hreflang={LANG[other]} lang={LANG[other]} aria-current={other === locale ? "true" : undefined}>
+            <a href={localePath(other)} hreflang={LANG[other]} lang={LANG[other]} data-locale={other} aria-current={other === locale ? "true" : undefined}>
               {LANGUAGE_NAME[other]}
             </a>
           </li>

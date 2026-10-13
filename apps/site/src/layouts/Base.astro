@@ -27,12 +27,41 @@ const { locale, title, description, path, translated = true, jsonLd, heroHeader 
 const t = messages(locale);
 const url = new URL(localePath(locale, path), SITE_URL).href;
 const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_URL).href;
+
+/**
+ * Sends a visitor whose browser prefers Chinese or Japanese from an English page to the same page in
+ * that language, until they pick a language in a menu (LOCALE_KEY). It runs first in <head>, so the
+ * English page doesn't show before the other one; crawlers ask for English, and hreflang links the
+ * languages for them.
+ */
+const LOCALE_KEY = "hatoba.locale";
+const paths = JSON.stringify({ zh: localePath("zh", path), ja: localePath("ja", path) });
+const redirect =
+  locale === "en" && translated
+    ? `try {
+        if (!localStorage.getItem("${LOCALE_KEY}")) {
+          const paths = ${paths};
+          for (const language of navigator.languages || [navigator.language]) {
+            const tag = language.toLowerCase();
+            if (tag.startsWith("en")) break;
+            const target = tag.startsWith("zh") ? paths.zh : tag.startsWith("ja") ? paths.ja : "";
+            if (target) {
+              location.replace(target + location.search + location.hash);
+              break;
+            }
+          }
+        }
+      } catch {
+        // Without storage a choice of English could not be kept, so stay.
+      }`
+    : null;
 ---
 
 <!doctype html>
 <html lang={LANG[locale]}>
   <head>
     <meta charset="utf-8" />
+    {redirect && <script is:inline set:html={redirect} />}
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -82,5 +111,13 @@ const image = new URL(localePath(translated ? locale : "en", "/og.png"), SITE_UR
       <slot />
     </main>
     <Footer locale={locale} />
+    <script is:inline set:html={`document.addEventListener("click", (event) => {
+      // A language picked in a menu stops the redirect above.
+      const link = event.target instanceof Element && event.target.closest("a[data-locale]");
+      if (!link) return;
+      try {
+        localStorage.setItem("${LOCALE_KEY}", link.dataset.locale);
+      } catch {}
+    });`} />
   </body>
 </html>

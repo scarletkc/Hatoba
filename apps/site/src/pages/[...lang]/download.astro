@@ -30,7 +30,7 @@ const description =
 >
   <section class="night head">
     <div class="container">
-      <h1 class="wide">{t.meta.downloadTitle}</h1>
+      <h1>{t.meta.downloadTitle}</h1>
       <p class="released">
         {t.download.released(release.version, formatDate(locale, release.publishedAt))}
         <a href={release.url}>{t.download.notes}</a>
@@ -52,7 +52,7 @@ const description =
         <section id={platform} class="platform" aria-labelledby={`${platform}-title`}>
           <div class="about">
             <div class="title">
-              <h2 id={`${platform}-title`} class="wide">
+              <h2 id={`${platform}-title`}>
                 {t.platforms[platform]}
               </h2>
               <span class="this-device">{t.download.thisDevice}</span>
@@ -138,9 +138,6 @@ const description =
 
   h1 {
     font-size: clamp(40px, 7vw, 76px);
-    font-weight: 800;
-    font-stretch: 125%;
-    letter-spacing: -0.03em;
   }
 
   .released,

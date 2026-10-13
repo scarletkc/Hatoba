@@ -16,8 +16,6 @@
 
 <img src="docs/media/hatoba-demo.webp" alt="The AI assistant finds and fixes an nginx 502 on a server, then Hatoba deploys its sync Worker to Cloudflare" width="880" />
 
-[Watch the demo with sound (MP4)](docs/media/hatoba-demo.mp4)
-
 </div>
 
 Hatoba keeps your hosts, keys, and terminal sessions in one place, syncs them

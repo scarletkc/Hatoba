@@ -45,7 +45,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   <section id="features" class="feature">
     <div class="container split">
       <div class="text">
-        <h2 class="wide">{t.ai.title}</h2>
+        <h2>{t.ai.title}</h2>
         <p class="body">{t.ai.body}</p>
         <ul class="points">{t.ai.points.map((point) => <li>{point}</li>)}</ul>
       </div>
@@ -60,7 +60,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   <section class="feature reverse">
     <div class="container split">
       <div class="text">
-        <h2 class="wide">{t.sync.title}</h2>
+        <h2>{t.sync.title}</h2>
         <p class="body">{t.sync.body}</p>
         <ul class="points">{t.sync.points.map((point) => <li>{point}</li>)}</ul>
       </div>
@@ -74,7 +74,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   <section class="essentials">
     <div class="container">
-      <h2 class="wide">{t.essentials.title}</h2>
+      <h2>{t.essentials.title}</h2>
       <div class="window">
         <Shot src={screenshot(locale, "dashboard")} alt={t.essentials.alt} width="min(1180px, 100vw - 32px)" />
       </div>
@@ -93,7 +93,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   <section class="security">
     <div class="container columns">
-      <h2 class="wide">{t.security.title}</h2>
+      <h2>{t.security.title}</h2>
       <div class="text">
         <p>{t.security.body}</p>
         <p>{t.security.openSource}</p>
@@ -104,7 +104,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   <section class="cta night">
     <div class="container">
-      <h2 class="wide">{t.cta.title}</h2>
+      <h2>{t.cta.title}</h2>
       <p>{t.cta.body}</p>
       <div class="actions">
         <DownloadButton locale={locale} release={release} />
@@ -208,7 +208,6 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   h2 {
     font-size: clamp(30px, 4vw, 44px);
-    line-height: 1.1;
   }
 
   .body {

@@ -10,7 +10,7 @@ import { LANG, LOCALES, localePath, messages } from "../i18n";
         const t = messages(locale);
         return (
           <section lang={LANG[locale]}>
-            <h1 class="wide">{t.notFound.title}</h1>
+            <h1>{t.notFound.title}</h1>
             <p>{t.notFound.body}</p>
             <a href={localePath(locale)}>{t.notFound.home}</a>
           </section>

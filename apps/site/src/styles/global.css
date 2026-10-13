@@ -28,18 +28,13 @@
   --gutter: 24px;
   --max: 1180px;
   --radius: 12px;
-  --body-leading: 1.6;
+  --body-leading: 1.7;
 
   color-scheme: light;
 }
 
 :root:lang(ja) {
   --cjk: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Source Han Sans JP";
-}
-
-:root:lang(zh),
-:root:lang(ja) {
-  --body-leading: 1.85;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -121,7 +116,8 @@ h2,
 h3 {
   margin: 0;
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.25;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
@@ -159,15 +155,13 @@ p {
   top: 12px;
 }
 
-/* Headings set wide, like the name on a harbor sign; CJK text has no width axis, so it keeps its own. */
+/*
+ * The name Hatoba set wide, like the name on a harbor sign, in the wordmark and the logo. Headings
+ * keep the normal width, so they look the same in every language: CJK fonts have no width axis.
+ */
 .wide {
   font-stretch: 118%;
   letter-spacing: -0.01em;
-}
-
-:lang(zh) .wide,
-:lang(ja) .wide {
-  letter-spacing: 0.01em;
 }
 
 /* Buttons: the white of the pier on the night sea, or the deep blue of the water on paper. */

@@ -41,7 +41,7 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
       </details>
     </nav>
     <article>
-      <h1 class="wide">{heading}</h1>
+      <h1>{heading}</h1>
       <p class="version">{version ? `Describes Hatoba ${version}.` : "Describes the development version of Hatoba."}</p>
       <div class="prose">
         <Content />
@@ -152,7 +152,6 @@ const heading = doc.id === OVERVIEW ? "Hatoba documentation" : title;
   .prose :global(h2) {
     margin: 48px 0 12px;
     font-size: 26px;
-    font-stretch: 110%;
   }
 
   .prose :global(h3) {
