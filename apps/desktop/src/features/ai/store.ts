@@ -11,7 +11,8 @@ export const HOME_SLOT = "home";
 
 /**
  * The conversation a tab shows in the panel (AI-07). Slots are keyed by tab id ("home" for the home
- * tab) and a conversation lives in at most one slot.
+ * tab), or by a background id for a conversation the tab no longer shows (`AiState.background`), and a
+ * conversation lives in at most one slot.
  */
 export interface Slot {
   /** null: a new conversation, stored when its first message is sent. */
@@ -94,6 +95,12 @@ export interface Catalog {
 
 interface AiState {
   slots: Record<string, Slot>;
+  /**
+   * AI-07: the slots of conversations a tab no longer shows that were busy when it left them, by
+   * background id, with the tab each belongs to. They go on there, and stay until the conversation is
+   * shown again, deleted, or the tab closes.
+   */
+  background: Record<string, string>;
   catalog: Catalog;
   /** AI-16: the mode picked in the panel per conversation, kept until the app quits. */
   modes: Record<string, AiPermissionMode>;
@@ -120,6 +127,7 @@ interface AiState {
 
 export const useAi = create<AiState>(() => ({
   slots: {},
+  background: {},
   catalog: { providers: [], settings: null, loaded: false },
   modes: {},
   mcpOff: {},
@@ -193,9 +201,19 @@ export function setSlot(id: string, slot: Slot | null) {
   });
 }
 
-/** The slot that shows a conversation. */
+/** The slot that holds a conversation: the tab's that shows it, or a background one (AI-07). */
 export function slotOf(conversationId: string): string | undefined {
   return Object.entries(useAi.getState().slots).find(([, s]) => s.conversationId === conversationId)?.[0];
+}
+
+/** The tab a slot belongs to: its own, or for a background slot the tab that left its conversation (AI-07). */
+export function tabOf(slotId: string): string {
+  return useAi.getState().background[slotId] ?? slotId;
+}
+
+/** Whether a slot holds a conversation its tab no longer shows (AI-07). */
+export function inBackground(slotId: string): boolean {
+  return slotId in useAi.getState().background;
 }
 
 export type Activity = "idle" | "running" | "waiting";
@@ -205,6 +223,19 @@ export function slotActivity(slot: Slot | undefined): Activity {
   if (!slot) return "idle";
   if (approvalOf(slot.turn)) return "waiting";
   return slot.turn || slot.remoteRunning ? "running" : "idle";
+}
+
+/** AI-07: what the tab bar shows for a tab, counting the conversations it left in the background; waiting wins. */
+export function tabActivity(st: Pick<AiState, "slots" | "background">, tabId: string): Activity {
+  const left = Object.keys(st.background).filter((id) => st.background[id] === tabId);
+  const all = [tabId, ...left].map((id) => slotActivity(st.slots[id]));
+  return all.includes("waiting") ? "waiting" : all.includes("running") ? "running" : "idle";
+}
+
+/** AI-23: what History shows for a conversation: its turn running or waiting, in a tab or in the background. */
+export function conversationActivity(st: Pick<AiState, "slots">, conversationId: string): Activity {
+  for (const s of Object.values(st.slots)) if (s.conversationId === conversationId) return slotActivity(s);
+  return "idle";
 }
 
 /**
