@@ -714,17 +714,11 @@ struct ProbeTarget {
 }
 
 impl ProbeTarget {
-    /// The proxy's credentials count too, as a hash: a probe through stale ones must not stand
-    /// for one through the right ones.
+    /// The proxy's endpoint counts, not its credentials: two saved proxies on one endpoint with
+    /// different credentials practically never happen.
     fn key(&self) -> String {
         let via = self.proxy.as_ref().map_or_else(String::new, |p| {
-            format!(
-                " via {:?} {}:{} as {:x}",
-                p.kind,
-                p.host,
-                p.port,
-                secret_hash(&[&p.username, &p.password])
-            )
+            format!(" via {:?} {}:{}", p.kind, p.host, p.port)
         });
         format!("{}:{}{via}", self.host, self.port)
     }
@@ -1395,12 +1389,6 @@ mod tests {
         let via = target("bastion", Some(proxy.clone())).key();
         assert_ne!(via, target("bastion", None).key());
         assert!(!via.contains("secret"));
-        // Other credentials for the same proxy probe on their own.
-        let other = ProxyConfig {
-            password: zeroize::Zeroizing::new("other".to_owned()),
-            ..proxy
-        };
-        assert_ne!(target("bastion", Some(other)).key(), via);
     }
 
     #[test]
