@@ -307,7 +307,8 @@ pub fn run() {
             // without a StatusNotifier — the close button quits as before.
             #[cfg(not(target_os = "macos"))]
             tauri::WindowEvent::CloseRequested { api, .. }
-                if window.label() == platform::window::MAIN && tray::close_to_tray(window.app_handle()) =>
+                if window.label() == platform::window::MAIN
+                    && tray::close_to_tray(window.app_handle()) =>
             {
                 api.prevent_close();
                 let _ = window.hide();

@@ -48,12 +48,15 @@ fn menu_text(language: Language) -> MenuText {
 }
 
 /// Whether the tray was created. Without one there is nothing to bring a hidden window back.
+/// macOS needs no close-to-tray decision (its red button already hides), so it never asks.
+#[cfg(not(target_os = "macos"))]
 pub fn present(app: &AppHandle) -> bool {
     app.try_state::<TrayPresent>().is_some()
 }
 
 /// Whether the window's close button should hide it instead of quitting (device pref, off by
 /// default), which needs a tray to reopen from.
+#[cfg(not(target_os = "macos"))]
 pub fn close_to_tray(app: &AppHandle) -> bool {
     let Some(state) = app.try_state::<state::AppState>() else {
         return false;
@@ -80,12 +83,9 @@ pub fn init(app: &AppHandle) {
     let menu = Menu::with_items(
         app,
         &[
-            &MenuItem::with_id(app, "open", text.open, true, None::<&str>)
-                .expect("tray menu item"),
-            &MenuItem::with_id(app, "lock", text.lock, true, None::<&str>)
-                .expect("tray menu item"),
-            &MenuItem::with_id(app, "quit", text.quit, true, None::<&str>)
-                .expect("tray menu item"),
+            &MenuItem::with_id(app, "open", text.open, true, None::<&str>).expect("tray menu item"),
+            &MenuItem::with_id(app, "lock", text.lock, true, None::<&str>).expect("tray menu item"),
+            &MenuItem::with_id(app, "quit", text.quit, true, None::<&str>).expect("tray menu item"),
         ],
     )
     .expect("tray menu");
