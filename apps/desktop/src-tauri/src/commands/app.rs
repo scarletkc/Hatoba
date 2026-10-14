@@ -3,11 +3,11 @@
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
-use crate::dto::{AppInfo, TrayMenuInput, UpdateCheck, UpdateProgress};
+use crate::dto::{AppInfo, NotificationInput, TrayMenuInput, UpdateCheck, UpdateProgress};
 use crate::error::{AppError, AppResult};
 use crate::platform;
 use crate::state::AppState;
-use crate::{tray, update};
+use crate::{notification, tray, update};
 
 #[tauri::command]
 #[specta::specta]
@@ -70,6 +70,14 @@ pub fn app_quit(app: AppHandle) {
 #[specta::specta]
 pub fn tray_set_menu(app: AppHandle, menu: TrayMenuInput) {
     tray::set_menu(&app, &menu);
+}
+
+/// Shows a system notification (AI-07). The WebView sends one only while the window is not
+/// focused.
+#[tauri::command]
+#[specta::specta]
+pub fn notification_show(app: AppHandle, notification: NotificationInput) {
+    notification::show(&app, notification);
 }
 
 /// The extensions `save_text_file` writes: the recovery code (.txt), a conversation export (.md,

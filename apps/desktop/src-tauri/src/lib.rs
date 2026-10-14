@@ -13,6 +13,7 @@ mod launch;
 mod lock;
 mod logging;
 mod mcp;
+mod notification;
 mod platform;
 mod ssh;
 mod state;
@@ -41,6 +42,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             app::window_hide_to_tray,
             app::app_quit,
             app::tray_set_menu,
+            app::notification_show,
             app::save_text_file,
             app::activity_ping,
             app::update_check,
@@ -228,6 +230,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::WindowChromeEvent,
             dto::LaunchEvent,
             dto::ClosePromptEvent,
+            dto::NotificationTarget,
         ])
 }
 
@@ -254,6 +257,7 @@ pub fn run() {
     app.plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
@@ -280,6 +284,7 @@ pub fn run() {
             launch::queue_startup(&data_dir);
             cli::restore(&app.state::<state::AppState>());
 
+            notification::init(&handle);
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());
             #[cfg(not(target_os = "macos"))]

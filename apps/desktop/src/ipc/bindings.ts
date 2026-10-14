@@ -22,6 +22,11 @@ export const commands = {
 	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
 	/**  The tray menu's labels in the app's language, and whether **Lock** is enabled (WIN-10). */
 	traySetMenu: (menu: TrayMenuInput) => __TAURI_INVOKE<void>("tray_set_menu", { menu }),
+	/**
+	 *  Shows a system notification (AI-07). The WebView sends one only while the window is not
+	 *  focused.
+	 */
+	notificationShow: (notification: NotificationInput) => __TAURI_INVOKE<void>("notification_show", { notification }),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -490,6 +495,7 @@ export const commands = {
 export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
+	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
@@ -1581,6 +1587,11 @@ export type LocalPrefs = {
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
 	ai_bypass_confirmed: boolean,
+	/**
+	 *  AI-07: a system notification when a conversation finishes a turn or waits for approval
+	 *  while the window is not focused.
+	 */
+	ai_notifications: boolean,
 	/**  The AI panel is open (§9). */
 	ai_panel_open: boolean,
 	/**  The AI panel's width in CSS pixels. */
@@ -1766,6 +1777,22 @@ export type MountView = {
 	used: number,
 	/**  Space left for unprivileged users. */
 	available: number,
+};
+
+/**  A system notification (AI-07). The WebView sends one only while the window is not focused. */
+export type NotificationInput = {
+	title: string,
+	body: string,
+	target: NotificationTarget,
+};
+
+/**
+ *  What a notification is about, which a click on it shows: a tab, and in it a conversation
+ *  (AI-07). The click brings the window back and sends this to the WebView.
+ */
+export type NotificationTarget = {
+	tab: string | null,
+	conversation_id: string | null,
 };
 
 export type Platform = "windows" | "macos" | "linux";

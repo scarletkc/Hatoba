@@ -11,6 +11,7 @@ import type {
   AiToolResultInput,
   AiToolRun,
   AiTurnEvent,
+  NotificationInput,
 } from "@/ipc/types";
 import type { ToolOutcome } from "./terminalTools";
 import { approvalOf } from "./turn";
@@ -24,6 +25,7 @@ const ipc = vi.hoisted(() => ({
   result: vi.fn<(conversationId: string, toolCallId: string, result: AiToolResultInput) => Promise<AiEntryView>>(),
   sideStop: vi.fn<(conversationId: string, questionId: number) => Promise<void>>(),
   remove: vi.fn<(conversationId: string) => Promise<void>>(),
+  notify: vi.fn<(notification: NotificationInput) => Promise<void>>(),
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -36,8 +38,13 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_side_stop: ipc.sideStop,
     ai_conversation_delete: ipc.remove,
     ai_allowances_list: () => Promise.resolve([]),
+    notification_show: ipc.notify,
+    prefs_save: () => Promise.resolve(),
   },
 }));
+/** AI-07: whether the window has the focus, which decides whether a notification goes. */
+const focus = vi.hoisted(() => ({ focused: false }));
+vi.mock("@/lib/native", async (importActual) => ({ ...(await importActual<typeof import("@/lib/native")>()), windowFocused: () => Promise.resolve(focus.focused) }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
 // The tabs' terminals: connected, with an empty screen.
@@ -63,11 +70,25 @@ vi.mock("./terminalTools", async (importActual) => ({
   },
 }));
 
-const { decideCall, deleteConversation, detachSlot, newConversation, noteSelection, openConversation, queueMessage, resetForLock, selectionAttachment, sendMessage, stopTurn, tabSelection } =
-  await import("./actions");
+const {
+  decideCall,
+  deleteConversation,
+  detachSlot,
+  newConversation,
+  noteSelection,
+  openConversation,
+  openNotified,
+  queueMessage,
+  resetForLock,
+  selectionAttachment,
+  sendMessage,
+  stopTurn,
+  tabSelection,
+} = await import("./actions");
 const { blankSlot, conversationActivity, getSlot, patchSlot, slotOf, tabActivity, useAi } = await import("./store");
 const { newSideQuestion } = await import("./side");
 const { useTabs } = await import("@/app/tabs");
+const { DEFAULT_PREFS, useApp } = await import("@/app/store");
 
 const TAB = "tab-1";
 const OTHER = "tab-2";
@@ -145,6 +166,9 @@ beforeEach(() => {
   ipc.result.mockReset().mockImplementation(async (_conv, callId) => toolEntry(callId));
   ipc.sideStop.mockReset().mockResolvedValue(undefined);
   ipc.remove.mockReset().mockResolvedValue(undefined);
+  ipc.notify.mockReset().mockResolvedValue(undefined);
+  focus.focused = false;
+  useApp.setState({ prefs: DEFAULT_PREFS });
   typing.calls = [];
   useTabs.setState({ tabs: [tab(TAB), tab(OTHER)], active: TAB });
   useAi.setState({
@@ -608,5 +632,102 @@ describe("a tab's terminal shared by its conversations (AI-07)", () => {
     answer(sent[1].emit, "b2", [call("call_4", "send_input", { text: "df -h", key: "enter" })]);
     await until(() => typing.calls.length === 2);
     expect(typing.calls[1].args).toContain("df -h");
+  });
+});
+
+describe("system notifications (AI-07)", () => {
+  const bodies = () => ipc.notify.mock.calls.map(([n]) => n.body);
+
+  it("tell when a conversation in the background waits for approval, then when its turn ends, naming its tab", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "restart nginx");
+    newConversation(TAB);
+    answer(sent[0].emit, "a1", [call("call_1", "run_command", { command: "sudo systemctl restart nginx" })]);
+    await until(() => ipc.notify.mock.calls.length === 1);
+    expect(ipc.notify).toHaveBeenCalledWith({
+      title: "root@10.0.0.8",
+      body: "Waiting for your approval: nginx 502",
+      target: { tab: TAB, conversation_id: nginx.id },
+    });
+
+    decideCall(held()!, { kind: "run", edited: null });
+    await until(() => ipc.run.mock.calls.length === 1);
+    sent[0].emit({ kind: "turn_ended", reason: "completed" });
+    await until(() => ipc.notify.mock.calls.length === 2);
+    expect(bodies()).toEqual(["Waiting for your approval: nginx 502", "Finished: nginx 502"]);
+  });
+
+  it("name the home tab's conversation without a host, and a turn that ended on an error", async () => {
+    useAi.setState({ slots: { home: { ...blankSlot("manual"), conversationId: nginx.id, conversation: nginx } } });
+    const sent = turns();
+    await sendMessage("home", "why 502?");
+    sent[0].emit({ kind: "error", status: 529, message: "overloaded" });
+    sent[0].emit({ kind: "turn_ended", reason: "error" });
+    await until(() => ipc.notify.mock.calls.length === 1);
+    expect(ipc.notify).toHaveBeenCalledWith({ title: "AI Assistant", body: "Stopped on an error: nginx 502", target: { tab: "home", conversation_id: nginx.id } });
+  });
+
+  it("send nothing while the window has the focus, or with the setting off", async () => {
+    const sent = turns();
+    focus.focused = true;
+    await sendMessage(TAB, "restart nginx");
+    answer(sent[0].emit, "a1", [call("call_1", "run_command", { command: "sudo systemctl restart nginx" })]);
+    await until(() => !!approvalOf(getSlot(TAB).turn));
+    decideCall(TAB, { kind: "run", edited: null });
+    await until(() => ipc.run.mock.calls.length === 1);
+    sent[0].emit({ kind: "turn_ended", reason: "completed" });
+    await flush();
+
+    focus.focused = false;
+    useApp.setState({ prefs: { ...DEFAULT_PREFS, ai_notifications: false } });
+    await sendMessage(TAB, "and the logs?");
+    answer(sent[1].emit, "a2", [call("call_2", "run_command", { command: "sudo journalctl -u nginx" })]);
+    await until(() => !!approvalOf(getSlot(TAB).turn));
+    decideCall(TAB, { kind: "run", edited: null });
+    await until(() => ipc.run.mock.calls.length === 2);
+    sent[1].emit({ kind: "turn_ended", reason: "completed" });
+    await flush();
+    expect(ipc.notify).not.toHaveBeenCalled();
+  });
+
+  it("send nothing for a turn the user stopped, or one whose queued message goes on", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "check the logs");
+    sent[0].emit({ kind: "request_started" });
+    void stopTurn(TAB);
+    sent[0].emit({ kind: "turn_ended", reason: "stopped" });
+    await flush();
+
+    await sendMessage(TAB, "check the logs again");
+    sent[1].emit({ kind: "request_started" });
+    queueMessage(TAB, "then restart it");
+    sent[1].emit({ kind: "turn_ended", reason: "completed" });
+    await until(() => sent.length === 3);
+    expect(ipc.notify).not.toHaveBeenCalled();
+    sent[2].emit({ kind: "turn_ended", reason: "completed" });
+    await until(() => ipc.notify.mock.calls.length === 1);
+    expect(bodies()).toEqual(["Finished: nginx 502"]);
+  });
+
+  it("show the conversation a click was about in the tab that holds it, with the panel open", async () => {
+    const sent = turns();
+    await sendMessage(TAB, "restart nginx");
+    newConversation(TAB);
+    answer(sent[0].emit, "a1", [call("call_1", "run_command", { command: "sudo systemctl restart nginx" })]);
+    await until(() => ipc.notify.mock.calls.length === 1);
+    useTabs.setState({ active: OTHER });
+
+    openNotified(ipc.notify.mock.calls[0][0].target);
+    await until(() => held() === TAB);
+    expect(useTabs.getState().active).toBe(TAB);
+    expect(approvalOf(getSlot(TAB).turn)).toMatchObject({ id: "call_1" });
+    expect(useApp.getState().prefs.ai_panel_open).toBe(true);
+
+    // A conversation no tab holds any more: its tab, while open, comes to the front.
+    useTabs.setState({ active: TAB });
+    openNotified({ tab: OTHER, conversation_id: "gone" });
+    expect(useTabs.getState().active).toBe(OTHER);
+    openNotified({ tab: "tab-closed", conversation_id: null });
+    expect(useTabs.getState().active).toBe(OTHER);
   });
 });

@@ -24,6 +24,8 @@ tauri = { version = "2.12", features = ["tray-icon"] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-opener = "2.7"
+# AI-07: system notifications, and clicks on them, on every desktop platform.
+tauri-plugin-notification = "2.6"
 # HOST-13: another launch hands `hatoba …` arguments to the running app.
 tauri-plugin-single-instance = "2.5"
 # Signed updates (spec §11). Same TLS stack as the update check below; no v1 .zip bundles.

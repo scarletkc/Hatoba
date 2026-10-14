@@ -251,6 +251,7 @@ export function createTauriApi(): HatobaApi {
     window_hide_to_tray: () => call("window_hide_to_tray"),
     app_quit: () => call("app_quit"),
     tray_set_menu: (menu) => call("tray_set_menu", { menu }),
+    notification_show: (notification) => call("notification_show", { notification }),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),

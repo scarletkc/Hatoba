@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { api } from "@/ipc/api";
-import { detachSlot, loadCatalog, refreshAfterSync, reloadAll, reloadSlot, resetForLock } from "./actions";
+import { detachSlot, loadCatalog, openNotified, refreshAfterSync, reloadAll, reloadSlot, resetForLock } from "./actions";
 import { applyMcpStatus, loadMcp, resetMcp, useMcp } from "./mcp";
 import { useAi } from "./store";
 
@@ -41,6 +41,10 @@ export function useAiLifecycle() {
       // AI-32: servers start, stop and fail on their own; the tools menu shows it live.
       api.listen("ai://mcp-status", (status) => {
         if (useApp.getState().phase === "unlocked") applyMcpStatus(status);
+      }),
+      // AI-07: a click on a notification shows what it was about; Rust brought the window back.
+      api.listen("app://notification-click", (target) => {
+        if (useApp.getState().phase === "unlocked") openNotified(target);
       }),
     ];
     return () => subs.forEach((p) => void p.then((un) => un()));

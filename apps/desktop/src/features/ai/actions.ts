@@ -24,6 +24,7 @@ import type {
   AiTurnEvent,
   DroppedFile,
   McpToolInfo,
+  NotificationTarget,
 } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
 import {
@@ -58,6 +59,7 @@ import { chosenEffort } from "./effort";
 import { conversationMarkdown, exportFileName } from "./exportMarkdown";
 import { forkModel, forkTitle } from "./fork";
 import { conversationModel, judgeChosen, sameModel } from "./models";
+import { notifyAi } from "./notify";
 import { joinMessages, messageAttachments, messageBack, messageText, pickInput, sendsQueued, withinCap } from "./queue";
 import { menuSources, useMcp } from "./mcp";
 import { approvalCall, canAskSide, newSideQuestion, reduceSideEvent, sideRunning, type SideQuestion } from "./side";
@@ -482,6 +484,7 @@ class TurnRunner {
   private wait(callId: string, state: CallState, mcp?: McpToolInfo | null, auto?: AutoAsk | null): Promise<Decision> {
     if (!this.acting) return Promise.resolve({ kind: "stop" });
     this.setCall({ id: callId, state, mcp, auto });
+    if (state === "approval") void notifyAi(this.slotId, "approval");
     return new Promise((resolve) => (this.waiter = resolve));
   }
 
@@ -824,6 +827,9 @@ async function afterTurn(slotId: string, reason: AiTurnEndReason, stoppedByUser:
   if (reason === "stopped") await reloadSlot(slotId);
   // The conversation may have moved meanwhile (Connect to host); its queued message moved with it.
   const target = (convId && slotOf(convId)) || slotId;
+  const continues = sendsQueued(reason, stoppedByUser) && !!getSlot(target).queued;
+  // AI-07: the conversation waits for the user now, unless its queued message goes on. A stop was the user's own.
+  if (reason !== "stopped" && !continues) void notifyAi(target, reason === "error" ? "failed" : "done");
   if (sendsQueued(reason, stoppedByUser)) void sendQueued(target);
   else giveBackQueued(target);
 }
@@ -1653,6 +1659,24 @@ export async function openConversation(slotId: string, id: string, reveal: strin
     reveal,
   });
   await reloadSlot(slotId);
+}
+
+/**
+ * AI-07: a click on a notification brought the window back. Its conversation shows in the tab that holds it, with
+ * the panel open, also one that went on in the tab's background; with the conversation no longer held there (its
+ * tab closed), its tab comes to the front if it is still open.
+ */
+export function openNotified({ tab, conversation_id }: NotificationTarget) {
+  const tabs = useTabs.getState();
+  const from = conversation_id ? slotOf(conversation_id) : undefined;
+  if (from && conversation_id) {
+    const owner = tabOf(from);
+    tabs.activate(owner);
+    if (from !== owner) void openConversation(owner, conversation_id);
+    toggleAiPanel(true);
+  } else if (tab && (tab === HOME_SLOT || tabs.tabs.some((x) => x.id === tab))) {
+    tabs.activate(tab);
+  }
 }
 
 /** AI-09 "Connect to host": opens a tab on the host or quick-connect target (HOST-12) and attaches the home tab's conversation to it. */

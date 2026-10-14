@@ -29,7 +29,8 @@ function withCurrent(choices: number[], current: number): number[] {
 
 /**
  * Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the close
- * button (WIN-10), the `hatoba` command (HOST-13), the dashboard (HOST-14), backup (VAULT-07).
+ * button (WIN-10), AI notifications (AI-07), the `hatoba` command (HOST-13), the dashboard
+ * (HOST-14), backup (VAULT-07).
  */
 export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
@@ -95,6 +96,9 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
             />
           </SettingRow>
         )}
+        <SettingRow label={t("settings.aiNotifications")} hint={t("settings.aiNotifications.hint")}>
+          <Switch label={t("settings.aiNotifications")} checked={prefs.ai_notifications} onChange={(ai_notifications) => setPrefs({ ai_notifications })} />
+        </SettingRow>
       </Group>
 
       <Group>

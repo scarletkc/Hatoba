@@ -1024,6 +1024,7 @@ export function createMockApi(): HatobaApi {
     window_hide_to_tray: async () => {},
     app_quit: async () => {},
     tray_set_menu: async () => {},
+    notification_show: async () => {},
     save_text_file: async (path, contents) => {
       // Browser fallback: download the text instead of writing to `path`.
       const a = document.createElement("a");

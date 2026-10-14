@@ -62,6 +62,7 @@ import type {
   McpServerView,
   McpToolInfo,
   McpProxyInfo,
+  NotificationInput,
   ProbeResult,
   ProxyInput,
   ProxyView,
@@ -467,6 +468,8 @@ export interface HatobaApi {
   window_hide_to_tray(): Promise<void>;
   app_quit(): Promise<void>;
   tray_set_menu(menu: TrayMenuInput): Promise<void>;
+  /** AI-07: a system notification; a click on it sends `app://notification-click`. */
+  notification_show(notification: NotificationInput): Promise<void>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 
