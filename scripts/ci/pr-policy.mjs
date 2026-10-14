@@ -31,7 +31,17 @@ const CHECKLIST = [
 /** A pull request without an issue may fix documentation in at most this many changed lines. */
 const SMALL_FIX_LINES = 20;
 
-const stripComments = (text) => text.replace(/<!--[\s\S]*?-->/g, "");
+/**
+ * `text` without HTML comments, as GitHub shows it: a comment left open hides the rest. Runs until
+ * nothing changes, so removing one comment cannot leave another behind, as `<!<!-- -->--` would.
+ */
+function stripComments(text) {
+  for (;;) {
+    const stripped = text.replace(/<!--[\s\S]*?(?:-->|$)/g, "");
+    if (stripped === text) return text;
+    text = stripped;
+  }
+}
 /** "A", "A and B", "A, B and C". */
 const list = (items) => (items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0]);
 

@@ -48,6 +48,9 @@ test("template comments do not count as content", () => {
   assert.equal(sections(TEMPLATE).get("context"), "");
   assert.deepEqual(ticked("<!-- - [x] I have read the contribution guide -->"), new Set());
   assert.deepEqual(linkedIssues("<!-- Closes #1 -->", REPO), []);
+  // GitHub hides the rest of a comment left open, and what one removal leaves behind.
+  assert.deepEqual(linkedIssues("Text <!-- Closes #2", REPO), []);
+  assert.deepEqual(linkedIssues("<!<!-- -->-- Closes #3 -->", REPO), []);
 });
 
 test("issues are linked with a closing keyword or Refs, in any form GitHub links", () => {
@@ -128,21 +131,21 @@ test("images come as Markdown, as img tags, or as attachment links", () => {
  */
 async function runAgainst({ pr, comments = [], events = [], closedBy = null }) {
   const writes = [];
-  const routes = {
-    "/repos/o/r/pulls/7": () => pr,
-    "/repos/o/r/pulls/7/files": () => [code("apps/desktop/src/app/App.tsx")],
-    "/repos/o/r/issues/7/comments": () => comments,
-    "/repos/o/r/issues/7/events": () => events,
-    "/repos/o/r/issues/7": () => ({ closed_by: closedBy && { login: closedBy } }),
-    "/repos/o/r/issues/42": () => ({ labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] }),
-  };
+  const routes = new Map([
+    ["/repos/o/r/pulls/7", pr],
+    ["/repos/o/r/pulls/7/files", [code("apps/desktop/src/app/App.tsx")]],
+    ["/repos/o/r/issues/7/comments", comments],
+    ["/repos/o/r/issues/7/events", events],
+    ["/repos/o/r/issues/7", { closed_by: closedBy && { login: closedBy } }],
+    ["/repos/o/r/issues/42", { labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] }],
+  ]);
   const server = createServer((req, res) => {
     let data = "";
     req.on("data", (chunk) => (data += chunk));
     req.on("end", () => {
       const path = req.url.split("?")[0];
       if (req.method !== "GET") writes.push([`${req.method} ${path}`, JSON.parse(data)]);
-      const body = req.method === "GET" ? routes[path]?.() : {};
+      const body = req.method === "GET" ? routes.get(path) : {};
       res.writeHead(body === undefined ? 404 : 200, { "content-type": "application/json" });
       res.end(JSON.stringify(body ?? { message: "Not Found" }));
     });
