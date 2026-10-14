@@ -193,7 +193,10 @@ fn chatgpt_model(item: &Value) -> Option<ModelInfo> {
         .map(|levels| {
             let named: Vec<&str> = levels
                 .iter()
-                .filter_map(|l| l.as_str().or_else(|| l.get("effort").and_then(Value::as_str)))
+                .filter_map(|l| {
+                    l.as_str()
+                        .or_else(|| l.get("effort").and_then(Value::as_str))
+                })
                 .collect();
             Effort::ALL
                 .into_iter()

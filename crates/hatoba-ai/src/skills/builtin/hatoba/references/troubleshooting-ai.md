@@ -42,6 +42,8 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 - "The model ended its reply without an answer." under the last reply, with **Retry**: the model sent neither text nor tool calls, at most its reasoning. **Retry** asks again and leaves the empty reply out of the request; if it keeps happening, switch model or choose another **Thinking Level**. Earlier replies without an answer, and a side question's, say "The model gave no answer."
 - Models that do not support tool calls cannot work as the assistant: the provider answers with an error as soon as a request carries tools.
 
+Errors of a provider that signs in with a ChatGPT account (usage limits, an ended sign-in) are in `references/ai-chatgpt.md`.
+
 ## Thinking level and reasoning
 
 | en | zh-CN | ja |

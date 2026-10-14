@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock, Weak};
 
 use hatoba_ai::AiError;
 use hatoba_ai::chatgpt::{
-    self, Credentials, CredentialStore, Endpoints, SessionStatus, Sessions,
+    self, CredentialStore, Credentials, Endpoints, SessionStatus, Sessions,
     oauth::{self, Account, SignInRequest},
 };
 use hatoba_core::Vault;
@@ -110,7 +110,9 @@ impl CredentialStore for VaultStore {
             return Err(locked());
         }
         let mut sessions = read(&v).map_err(|_| locked())?;
-        sessions.sessions.retain(|id, _| is_chatgpt_provider(&v, id));
+        sessions
+            .sessions
+            .retain(|id, _| is_chatgpt_provider(&v, id));
         match credentials {
             // A provider deleted meanwhile gets no session.
             Some(credentials) if is_chatgpt_provider(&v, id) => {
@@ -144,7 +146,10 @@ fn store() -> &'static Arc<VaultStore> {
 
 /// Binds the sessions to the app's vault (once, at startup; a later call rebinds them).
 pub fn install(vault: &SharedVault) {
-    *store().vault.write().unwrap_or_else(PoisonError::into_inner) = Arc::downgrade(vault);
+    *store()
+        .vault
+        .write()
+        .unwrap_or_else(PoisonError::into_inner) = Arc::downgrade(vault);
 }
 
 /// This device's ChatGPT sessions.
@@ -181,9 +186,7 @@ pub fn sign_in_request(v: &mut Vault, provider_id: Option<&str>) -> AppResult<Si
             client_id: account.client_id,
             subject: account.subject,
             email: account.email,
-            id_token_hint: local
-                .map(|c| c.id_token)
-                .filter(|token| !token.is_empty()),
+            id_token_hint: local.map(|c| c.id_token).filter(|token| !token.is_empty()),
         }),
         consent,
     })
@@ -269,7 +272,10 @@ mod tests {
         assert_eq!(store.load(&id).unwrap(), None);
         store.store(&id, Some(&signed_in())).unwrap();
         assert_eq!(store.load(&id).unwrap(), Some(signed_in()));
-        assert_eq!(status(&shared.lock().unwrap(), &id), SessionStatus::SignedIn);
+        assert_eq!(
+            status(&shared.lock().unwrap(), &id),
+            SessionStatus::SignedIn
+        );
         // Nothing for a provider that does not exist.
         store.store("gone", Some(&signed_in())).unwrap();
         assert_eq!(store.load("gone").unwrap(), None);
@@ -279,7 +285,10 @@ mod tests {
         assert!(host.starts_with("urn:uuid:"));
         store.store(&id, None).unwrap();
         assert_eq!(host_id(&mut shared.lock().unwrap()).unwrap(), host);
-        assert_eq!(status(&shared.lock().unwrap(), &id), SessionStatus::SignedOut);
+        assert_eq!(
+            status(&shared.lock().unwrap(), &id),
+            SessionStatus::SignedOut
+        );
 
         // A deleted provider's session goes with the next write.
         store.store(&id, Some(&signed_in())).unwrap();
@@ -321,7 +330,12 @@ mod tests {
         let again = sign_in_request(&mut v, Some(&id)).unwrap();
         assert!(again.consent);
         assert_eq!(
-            again.account.unwrap().id_token_hint.as_deref().map(String::as_str),
+            again
+                .account
+                .unwrap()
+                .id_token_hint
+                .as_deref()
+                .map(String::as_str),
             Some("id-token")
         );
 

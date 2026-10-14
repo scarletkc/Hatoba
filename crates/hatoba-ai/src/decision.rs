@@ -51,8 +51,8 @@ use url::Url;
 
 use crate::error::AiError;
 use crate::provider::{ModelSpec, Protocol, ProviderConfig, validate_base_url};
-use crate::{chat, chatgpt, net};
 use crate::tools::escape_closing_tag;
+use crate::{chat, chatgpt, net};
 
 /// The id a question may not have: the chat-model backend's `notes` property.
 pub const RESERVED_ID: &str = "notes";

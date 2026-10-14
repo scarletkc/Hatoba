@@ -296,8 +296,12 @@ async fn mount_exchange(server: &MockServer, verifier_check: String, claims: Val
         .and(body_string_contains("grant_type=authorization_code"))
         .and(body_string_contains(format!("client_id={CLIENT}")))
         .and(body_string_contains("code=the-code"))
-        .and(body_string_contains("resource=https%3A%2F%2Fapi.openai.com%2Fv1"))
-        .and(body_string_contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A"))
+        .and(body_string_contains(
+            "resource=https%3A%2F%2Fapi.openai.com%2Fv1",
+        ))
+        .and(body_string_contains(
+            "redirect_uri=http%3A%2F%2F127.0.0.1%3A",
+        ))
         .and(move |request: &Request| {
             let body = String::from_utf8_lossy(&request.body);
             let verifier = url::form_urlencoded::parse(body.as_bytes())
@@ -402,7 +406,10 @@ async fn first_sign_in_registers_hatoba_and_exchanges_the_code() {
     assert!(signed_in.expires_at > now_ms() + 3_500_000);
     assert!(signed_in.refresh_after.unwrap() > now_ms());
     let debug = format!("{signed_in:?}");
-    assert!(!debug.contains("access-1") && !debug.contains("refresh-1"), "{debug}");
+    assert!(
+        !debug.contains("access-1") && !debug.contains("refresh-1"),
+        "{debug}"
+    );
 }
 
 #[tokio::test]
@@ -598,7 +605,10 @@ async fn concurrent_requests_share_one_refresh_and_the_replacement_token_is_kept
     }
     let stored = setup.store.get(PROVIDER).unwrap();
     assert_eq!(&*stored.refresh_token, "refresh-2");
-    assert_eq!(&*stored.id_token, "old-id-token", "kept when the refresh has none");
+    assert_eq!(
+        &*stored.id_token, "old-id-token",
+        "kept when the refresh has none"
+    );
     assert!(stored.expires_at > now_ms() + 3_500_000);
 
     // Fresh now: no request to the token endpoint (the mock expects one in all).
@@ -683,7 +693,11 @@ async fn a_refresh_that_lands_while_the_vault_is_locked_is_stored_after_it_unloc
 
 #[tokio::test]
 async fn a_revoked_or_reused_refresh_token_ends_the_session() {
-    for code in ["invalid_grant", "refresh_token_reused", "refresh_token_expired"] {
+    for code in [
+        "invalid_grant",
+        "refresh_token_reused",
+        "refresh_token_expired",
+    ] {
         let setup = setup(Some(credentials("access-1", "refresh-1", -1000))).await;
         Mock::given(method("POST"))
             .and(path("/api/accounts/oauth/token"))
@@ -968,9 +982,17 @@ async fn a_usage_limit_after_the_stream_opened_is_an_error() {
 
     // The other codes of the route, mid-stream too.
     for (code, status, words) in [
-        ("subscription_sharing_user_not_eligible", 403, "cannot use its plan"),
+        (
+            "subscription_sharing_user_not_eligible",
+            403,
+            "cannot use its plan",
+        ),
         ("subscription_sharing_usage_unavailable", 503, "Try again"),
-        ("subscription_sharing_unsupported_capability", 400, "`tools`"),
+        (
+            "subscription_sharing_unsupported_capability",
+            400,
+            "`tools`",
+        ),
         ("chatpass_v2_scope_not_authorized", 403, "Sign in again"),
     ] {
         let err = crate::chat::tests_support::responses_error(&json!({
@@ -1249,7 +1271,13 @@ fn credentials_round_trip_without_printing_tokens() {
     let back: Credentials = serde_json::from_str(&json).unwrap();
     assert_eq!(back, c);
     let debug = format!("{c:?}");
-    for secret in ["access-secret", "refresh-secret", "old-id-token", SUBJECT, "user@example"] {
+    for secret in [
+        "access-secret",
+        "refresh-secret",
+        "old-id-token",
+        SUBJECT,
+        "user@example",
+    ] {
         assert!(!debug.contains(secret), "{debug}");
     }
     let ended = c.without_tokens();

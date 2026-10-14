@@ -50,7 +50,11 @@ enum SealedLocal {
 }
 
 impl SealedLocal {
-    const ALL: [Self; 3] = [Self::RecentTargets, Self::AiAllowances, Self::ChatgptSessions];
+    const ALL: [Self; 3] = [
+        Self::RecentTargets,
+        Self::AiAllowances,
+        Self::ChatgptSessions,
+    ];
 
     const fn meta_key(self) -> &'static str {
         match self {
@@ -2283,14 +2287,21 @@ mod tests {
         vault.set_chatgpt_sessions(json).unwrap();
         let read = vault.chatgpt_sessions().unwrap().unwrap();
         assert_eq!(read.as_str(), json);
-        let raw = vault.store.get_meta(meta::CHATGPT_SESSIONS).unwrap().unwrap();
+        let raw = vault
+            .store
+            .get_meta(meta::CHATGPT_SESSIONS)
+            .unwrap()
+            .unwrap();
         assert!(!raw.contains("tok-secret"), "{raw}");
         // Device-local: nothing to push.
         assert_eq!(vault.pending_count(), 1);
 
         vault.lock();
         assert!(matches!(vault.chatgpt_sessions(), Err(Error::Locked)));
-        assert!(matches!(vault.set_chatgpt_sessions("{}"), Err(Error::Locked)));
+        assert!(matches!(
+            vault.set_chatgpt_sessions("{}"),
+            Err(Error::Locked)
+        ));
         vault.unlock(PW).unwrap();
         assert_eq!(vault.chatgpt_sessions().unwrap().unwrap().as_str(), json);
     }

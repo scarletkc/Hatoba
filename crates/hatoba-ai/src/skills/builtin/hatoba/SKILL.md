@@ -88,6 +88,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/ai-side-questions.md` | Asking the assistant something while it works or an approval card waits, without stopping it: **Ask a Side Question**, Alt+Enter, **Ask About This** on an approval card, what is not saved, stopping a side question |
 | `references/ai-instructions.md` | Custom Instructions in Settings → AI and a host's AI Notes: what they are for, limits, saving and sync, how the assistant follows them |
 | `references/ai-settings.md` | Settings → AI: providers and models (including each model's thinking levels and System One providers), web search, default model and thinking level, the terminal screen switch, Auto mode's judge and its Test, permission mode, saved approvals, skills (including the built-in `hatoba` skill) |
+| `references/ai-chatgpt.md` | Sign in with ChatGPT: **Continue with ChatGPT**, a ChatGPT provider's account and models, signing in on each device, Sign Out, usage limits and sign-in errors |
 | `references/ai-mcp.md` | MCP servers in Settings → AI: adding a Command or HTTP server, templates, Always ask, import and export, a server's state, tools and Always allow |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
 | `references/settings.md` | General, Appearance, Proxies, Security and About settings, language, checking for and installing updates, Report a Problem, and which settings sync |

@@ -199,14 +199,17 @@ impl Sessions {
                 return Err(AiError::SignIn(sign_in_needed(status)));
             }
             let now = now_ms();
-            if let Some(token) = usable(&credentials, failed.as_deref().map(String::as_str), now)
-            {
+            if let Some(token) = usable(&credentials, failed.as_deref().map(String::as_str), now) {
                 return Ok(token);
             }
             // Not cancellable: a refresh that was sent must be stored.
-            let refreshed =
-                oauth::refresh(&inner.http, &inner.endpoints, &credentials, &CancellationToken::new())
-                    .await;
+            let refreshed = oauth::refresh(
+                &inner.http,
+                &inner.endpoints,
+                &credentials,
+                &CancellationToken::new(),
+            )
+            .await;
             match refreshed {
                 Ok(next) => {
                     let token = next.access_token.clone();
@@ -238,15 +241,26 @@ impl Sessions {
     }
 
     /// Stores the session of a finished sign-in, after any refresh of the provider's previous
-    /// session in flight.
+    /// session in flight. The session it replaces is revoked at OpenAI in the background.
     ///
     /// # Errors
     /// The store cannot be written.
     pub async fn signed_in(&self, id: &str, credentials: &Credentials) -> Result<(), AiError> {
         let lock = self.lock_for(id);
         let _held = lock.lock().await;
+        self.0.flush_pending(id);
+        let replaced = self.0.load(id).ok().flatten();
+        self.0.store.store(id, Some(credentials))?;
         guard(&self.0.pending).remove(id);
-        self.0.store.store(id, Some(credentials))
+        if let Some(replaced) = replaced
+            .filter(|r| !r.refresh_token.is_empty() && r.refresh_token != credentials.refresh_token)
+        {
+            let (http, endpoints) = (self.0.http.clone(), self.0.endpoints.clone());
+            tokio::spawn(async move {
+                oauth::revoke(&http, &endpoints, &replaced, &CancellationToken::new()).await;
+            });
+        }
+        Ok(())
     }
 
     /// Signs provider `id` out on this device: once any refresh in flight has ended, removes the

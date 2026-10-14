@@ -379,7 +379,9 @@ async fn post(
         .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
     let request_chars = body.chars().count();
     let response = provider
-        .send(cancel, |headers| json_post(http, url, headers, body.clone()))
+        .send(cancel, |headers| {
+            json_post(http, url, headers, body.clone())
+        })
         .await?;
     Ok((response, request_chars))
 }
@@ -429,7 +431,9 @@ pub(crate) async fn responses_body(
     cancel: &CancellationToken,
 ) -> Result<serde_json::Value, AiError> {
     let response = provider
-        .send(cancel, |headers| json_post(http, url, headers, body.clone()))
+        .send(cancel, |headers| {
+            json_post(http, url, headers, body.clone())
+        })
         .await?;
     if !response.status().is_success() {
         return Err(provider.error(response, cancel).await);

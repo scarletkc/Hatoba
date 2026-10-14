@@ -124,7 +124,13 @@ pub struct Credentials {
 
 impl fmt::Debug for Credentials {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let redacted = |s: &str| if s.is_empty() { "<empty>" } else { "<redacted>" };
+        let redacted = |s: &str| {
+            if s.is_empty() {
+                "<empty>"
+            } else {
+                "<redacted>"
+            }
+        };
         f.debug_struct("Credentials")
             .field("client_id", &self.client_id)
             .field("subject", &"<redacted>")

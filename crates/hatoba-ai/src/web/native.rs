@@ -29,8 +29,8 @@ use super::search::{
     MAX_RESULTS, SearchResult, cut_snippet, format_search_results, key_header, send_retrying,
 };
 use crate::error::AiError;
-use crate::{chat, net};
 use crate::provider::{ModelSpec, Protocol, ProviderConfig, validate_base_url};
+use crate::{chat, net};
 
 /// How a chat provider searches the web itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 use zeroize::Zeroizing;
 
-use super::{Credentials, Endpoints, PLAN_SCOPE, now_ms};
+use super::{Credentials, Endpoints, now_ms};
 use crate::error::AiError;
 use crate::net;
 
@@ -69,7 +69,10 @@ fn random_b64(count: usize) -> Result<String, AiError> {
 
 /// PKCE S256: base64url of the verifier's SHA-256, without padding.
 pub(crate) fn code_challenge(verifier: &str) -> String {
-    URL_SAFE_NO_PAD.encode(ring::digest::digest(&ring::digest::SHA256, verifier.as_bytes()))
+    URL_SAFE_NO_PAD.encode(ring::digest::digest(
+        &ring::digest::SHA256,
+        verifier.as_bytes(),
+    ))
 }
 
 /// A new `ext_agent_host_id`: a UUID v4 URN, generated once for a device and kept.
@@ -78,7 +81,11 @@ pub fn new_host_id() -> String {
     let mut bytes = [0u8; 16];
     // Without a random generator the id is still unique enough to tell hosts apart.
     if SystemRandom::new().fill(&mut bytes).is_err() {
-        bytes = now_ms().to_le_bytes().repeat(2).try_into().unwrap_or([7; 16]);
+        bytes = now_ms()
+            .to_le_bytes()
+            .repeat(2)
+            .try_into()
+            .unwrap_or([7; 16]);
     }
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -478,9 +485,8 @@ impl TokenResponse {
                 .filter(|s| !s.is_empty())
                 .map(|s| Zeroizing::new(s.to_owned()))
         };
-        let access_token = text("access_token").ok_or_else(|| {
-            AiError::Protocol("the token response has no access token".into())
-        })?;
+        let access_token = text("access_token")
+            .ok_or_else(|| AiError::Protocol("the token response has no access token".into()))?;
         Ok(Self {
             access_token,
             refresh_token: text("refresh_token"),
@@ -807,10 +813,4 @@ pub async fn revoke(
         }
     }
     false
-}
-
-/// Whether `scopes` (space-separated) grant the plan's use.
-#[must_use]
-pub fn grants_plan(scopes: &str) -> bool {
-    scopes.split_whitespace().any(|s| s == PLAN_SCOPE)
 }

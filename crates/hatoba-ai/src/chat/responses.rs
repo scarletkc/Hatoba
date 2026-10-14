@@ -88,9 +88,12 @@ pub(crate) fn error_of(error: &Value) -> AiError {
         .filter(|s| (400..600).contains(s))
         .and_then(|s| u16::try_from(s).ok())
         .unwrap_or_else(|| status_of(str_at(error, "code")));
-    let message = crate::chatgpt::explain(str_at(error, "code"), error.get("param").and_then(Value::as_str))
-        .or_else(|| message_of(&json!({ "error": error })))
-        .unwrap_or_else(|| "the provider reported an error".into());
+    let message = crate::chatgpt::explain(
+        str_at(error, "code"),
+        error.get("param").and_then(Value::as_str),
+    )
+    .or_else(|| message_of(&json!({ "error": error })))
+    .unwrap_or_else(|| "the provider reported an error".into());
     AiError::Http { status, message }
 }
 

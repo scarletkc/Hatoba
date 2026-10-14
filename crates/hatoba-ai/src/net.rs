@@ -293,8 +293,8 @@ pub(crate) async fn read_http_error(
             .map(clean_message)
             .filter(|v| !v.is_empty())
     };
-    let is_json = header(CONTENT_TYPE.as_str())
-        .is_some_and(|v| v.to_ascii_lowercase().contains("json"));
+    let is_json =
+        header(CONTENT_TYPE.as_str()).is_some_and(|v| v.to_ascii_lowercase().contains("json"));
     let request_id = header("x-request-id");
     let body = match read_capped(response, MAX_ERROR_BODY, cancel).await {
         Ok((body, _)) => body,

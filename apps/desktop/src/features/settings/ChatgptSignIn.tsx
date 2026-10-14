@@ -51,7 +51,7 @@ export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: Ai
         if (!live) return;
         done.current(result.provider);
         if (result.provider.chatgpt?.status === "plan_disabled") {
-          toast(t("aiSettings.chatgpt.planDisabled"), "error", 6000);
+          toast(t("aiSettings.chatgpt.status.plan_disabled"), "error", 6000);
           close.current();
         } else if (result.first_sign_in) {
           setPhase({ state: "welcome", provider: result.provider });

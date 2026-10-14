@@ -27,12 +27,13 @@ use crate::ai::{
     search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView, AiConversationDetail, AiConversationView, AiEntryView,
-    AiFileChange, AiFilePreview, AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome,
-    AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
-    AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput,
-    AiSkillCommand, AiTestFailure, AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext,
-    AiTurnEvent, Clearable, DroppedFile, SearchKind, SearchProviderInput, SearchProviderView,
+    AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
+    AiConversationDetail, AiConversationView, AiEntryView, AiFileChange, AiFilePreview,
+    AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome, AiModel, AiModelRef, AiProtocol,
+    AiProviderInput, AiProviderView, AiSearchHit, AiSendInput, AiSendStarted, AiSettingsPatch,
+    AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiTestFailure,
+    AiTestResult, AiToolResultInput, AiToolRun, AiTurnContext, AiTurnEvent, Clearable, DroppedFile,
+    SearchKind, SearchProviderInput, SearchProviderView,
 };
 use crate::error::{AppError, AppResult};
 use crate::state::{AppState, blocking, state};
@@ -474,7 +475,8 @@ pub async fn ai_chatgpt_sign_in(
     sessions.signed_in(&id, &credentials).await?;
     // A new provider starts with the account's models.
     if first_sign_in && credentials.plan_enabled() {
-        let config = state.with_unlocked(|v| Ok(crate::ai::provider_config(&id, &find_provider(v, &id)?)))?;
+        let config = state
+            .with_unlocked(|v| Ok(crate::ai::provider_config(&id, &find_provider(v, &id)?)))?;
         match hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel).await {
             Ok(models) => {
                 state.with_unlocked(|v| {
@@ -487,7 +489,11 @@ pub async fn ai_chatgpt_sign_in(
                             context_window: m.context_window,
                             max_output_tokens: m.max_output_tokens,
                             efforts: m.efforts.map(|levels| {
-                                levels.into_iter().map(listed_effort).map(core_effort).collect()
+                                levels
+                                    .into_iter()
+                                    .map(listed_effort)
+                                    .map(core_effort)
+                                    .collect()
                             }),
                             adaptive_thinking: m.adaptive_thinking,
                         })
@@ -1554,6 +1560,54 @@ mod tests {
             provider_id: provider_id.into(),
             model_id: model_id.into(),
         }
+    }
+
+    #[test]
+    fn a_chatgpt_provider_keeps_its_account_and_shows_its_sign_in_here() {
+        use hatoba_core::model::AiChatgptAccount;
+
+        let mut v = vault();
+        let id = v
+            .put(
+                None,
+                Item::AiProvider(AiProvider {
+                    name: "ChatGPT".into(),
+                    protocol: CoreProtocol::Responses,
+                    base_url: chatgpt::BASE_URL.into(),
+                    chatgpt: Some(AiChatgptAccount {
+                        client_id: "oaiapp_1".into(),
+                        subject: "user-1".into(),
+                        email: "user@example.com".into(),
+                    }),
+                    ..AiProvider::default()
+                }),
+            )
+            .unwrap();
+        let view = provider_view(&v, &id, &find_provider(&v, &id).unwrap());
+        let account = view.chatgpt.unwrap();
+        assert_eq!(account.email, "user@example.com");
+        // Signed in on another device at most: this one has no session.
+        assert_eq!(account.status, AiChatgptStatus::SignedOut);
+
+        // The form edits the name and the models; the account, protocol and URL stay, keyless.
+        let mut input = provider_input(Some(id.clone()), Some(KEY));
+        input.name = "Work".into();
+        input.base_url = "https://example.com".into();
+        let saved = save_provider(&mut v, &input, input.base_url.clone()).unwrap();
+        assert_eq!(saved.name, "Work");
+        assert_eq!(saved.protocol, AiProtocol::Responses);
+        assert_eq!(saved.base_url, chatgpt::BASE_URL);
+        assert!(!saved.has_api_key);
+        assert_eq!(saved.models.len(), 1);
+        let stored = find_provider(&v, &id).unwrap();
+        assert_eq!(stored.chatgpt.unwrap().client_id, "oaiapp_1");
+        assert!(stored.api_key.is_empty());
+
+        // Its requests carry this device's session, never a key from the form.
+        let config = provider_config_for(&v, &input).unwrap();
+        assert!(config.is_chatgpt());
+        assert!(config.api_key.is_empty());
+        assert_eq!(config.base_url, chatgpt::BASE_URL);
     }
 
     #[test]

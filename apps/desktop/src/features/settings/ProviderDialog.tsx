@@ -223,7 +223,7 @@ export function ProviderDialog({
       setTest(IDLE);
       onSaved({ ...result.provider, name: provider.name, models: provider.models });
       toast(
-        result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.planDisabled") : t("aiSettings.chatgpt.signedIn"),
+        result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.status.plan_disabled") : t("aiSettings.chatgpt.signedIn"),
         result.provider.chatgpt?.status === "plan_disabled" ? "error" : "success",
       );
     } catch (err) {
