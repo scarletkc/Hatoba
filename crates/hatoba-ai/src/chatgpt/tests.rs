@@ -976,7 +976,8 @@ async fn a_usage_limit_after_the_stream_opened_is_an_error() {
                     "code": "subscription_sharing_usage_limit_exceeded", "message": "limit"
                 }}}),
             ),
-        ]))
+        ])
+        .insert_header("x-request-id", "req_stream"))
         .mount(&setup.server)
         .await;
     let (result, _) = chat(
@@ -990,6 +991,7 @@ async fn a_usage_limit_after_the_stream_opened_is_an_error() {
         AiError::Http { status, message } => {
             assert_eq!(status, 429);
             assert!(message.contains(USAGE_URL), "{message}");
+            assert!(message.contains("req_stream"), "{message}");
         }
         other => panic!("{other:?}"),
     }

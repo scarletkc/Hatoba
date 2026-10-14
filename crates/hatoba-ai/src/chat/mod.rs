@@ -268,7 +268,7 @@ pub async fn stream_chat(
                     }
                     return Err(err);
                 }
-                let assembled = consume(response, ResponsesStream::new(), cancel, on_event).await?;
+                let assembled = consume_responses(provider, response, cancel, on_event).await?;
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }
@@ -441,7 +441,7 @@ pub(crate) async fn responses_body(
     if !stream {
         return net::read_json(response, cancel).await;
     }
-    let assembled = consume(response, ResponsesStream::new(), cancel, &mut |_| {}).await?;
+    let assembled = consume_responses(provider, response, cancel, &mut |_| {}).await?;
     let mut whole = serde_json::json!({
         "status": if assembled.finish == Finish::Length { "incomplete" } else { "completed" },
         "output": assembled.raw,
@@ -453,6 +453,32 @@ pub(crate) async fn responses_body(
         });
     }
     Ok(whole)
+}
+
+/// [`consume`] for a Responses stream. On the ChatGPT route an error the stream reports carries
+/// the response's request ID, like one refused before the stream.
+async fn consume_responses(
+    provider: &ProviderConfig,
+    response: reqwest::Response,
+    cancel: &CancellationToken,
+    on_event: &mut (dyn FnMut(StreamEvent) + Send),
+) -> Result<Assembled, AiError> {
+    let request_id = provider
+        .is_chatgpt()
+        .then(|| {
+            response
+                .headers()
+                .get("x-request-id")?
+                .to_str()
+                .ok()
+                .map(str::to_owned)
+        })
+        .flatten();
+    let mut result = consume(response, ResponsesStream::new(), cancel, on_event).await;
+    if let (Err(AiError::Http { message, .. }), Some(id)) = (&mut result, request_id) {
+        message.push_str(&format!(" (request ID {id})"));
+    }
+    result
 }
 
 /// Reads a successful response through an assembler, observing `cancel` between chunks.

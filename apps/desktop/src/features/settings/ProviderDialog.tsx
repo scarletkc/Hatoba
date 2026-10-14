@@ -565,11 +565,10 @@ function ChatgptAccount({
         </span>
       ) : (
         <span className={s.accountActions}>
-          {account.status !== "signed_in" && (
-            <Button size="sm" variant="primary" disabled={!!busy} onClick={onSignIn}>
-              {t("aiSettings.chatgpt.continue")}
-            </Button>
-          )}
+          {/* Signed in too: a refusal from the route can say to sign in again. */}
+          <Button size="sm" variant={signedIn ? undefined : "primary"} disabled={!!busy} onClick={onSignIn}>
+            {t("aiSettings.chatgpt.continue")}
+          </Button>
           {account.status !== "signed_out" && account.status !== "ended" && (
             <Button size="sm" busy={busy === "sign_out"} disabled={!!busy} onClick={onSignOut}>
               {t("aiSettings.chatgpt.signOut")}
