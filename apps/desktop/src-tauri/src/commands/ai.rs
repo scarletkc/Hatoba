@@ -495,6 +495,10 @@ pub async fn ai_chatgpt_sign_in(
             Ok(models) => {
                 state.with_unlocked(|v| {
                     let mut provider = find_provider(v, &id)?;
+                    // Models saved or synced meanwhile stay.
+                    if !provider.models.is_empty() {
+                        return Ok(());
+                    }
                     provider.models = models
                         .into_iter()
                         .map(|m| CoreModel {
