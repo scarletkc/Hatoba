@@ -18,6 +18,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding**, **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
 - Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
+- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock** and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
 Labels (the exact strings in each language):
@@ -45,6 +46,9 @@ Labels (the exact strings in each language):
 | Maximize | 最大化 | 最大化 |
 | Restore Down | 向下还原 | 元に戻す（縮小） |
 | Close | 关闭 | 閉じる |
+| Open Hatoba | 打开 Hatoba | Hatoba を開く |
+| Minimize to Tray | 最小化到托盘 | トレイに最小化 |
+| Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
 | Connected | 已连接 | 接続済み |
 | Connecting… | 正在连接… | 接続中… |
 | Connection failed | 连接失败 | 接続に失敗 |

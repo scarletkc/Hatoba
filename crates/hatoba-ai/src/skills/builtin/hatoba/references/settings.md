@@ -22,6 +22,10 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Show context menu | 弹出菜单 | コンテキストメニューを表示 |
 | Confirm before pasting multiple lines | 粘贴多行文本前确认 | 複数行を貼り付ける前に確認 |
 | Show host reachability | 显示主机在线状态 | ホストの接続状態を表示 |
+| Close Button | 关闭窗口时 | ウィンドウを閉じるとき |
+| Ask every time | 每次询问 | 毎回確認する |
+| Minimize to tray | 最小化到托盘 | トレイに最小化 |
+| Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
 | Refresh interval | 刷新间隔 | 更新間隔 |
 | Export Encrypted Backup | 导出加密备份 | 暗号化バックアップをエクスポート |
 | Export… | 导出… | エクスポート… |
@@ -29,6 +33,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 - **Right-Click in Terminal**: **Copy if selected, otherwise paste** (default, except on macOS) or **Show context menu** (default on macOS).
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
+- **Close Button** (Windows and Linux only): what the window's close button, Alt+F4 and the taskbar's Close do. **Ask every time** (default) asks whether to minimize Hatoba to the system tray or quit, and the question's **Remember my choice** sets this row. **Minimize to tray** hides the window while SSH sessions, port forwards and sync keep running; the tray icon brings it back. **Quit Hatoba** quits. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, closing always quits. macOS has no such row: its red button hides the window, the Dock icon brings it back, and ⌘Q quits.
 - **Refresh interval** (3 s by default) and the three thresholds below it (CPU, memory and disk use, 90% by default, or **Off**) belong to the dashboard; see `references/dashboard.md`.
 - **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.
 
