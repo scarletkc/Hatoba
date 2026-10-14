@@ -1508,7 +1508,10 @@ impl Vault {
         })?;
         // The join has committed: the old key and cache must not stay in use, or new edits would
         // be sealed under a key the vault no longer opens. Unlocking again with the remote's
-        // password reloads them.
+        // password reloads them. The PIN's copy of the old key goes even if that reload fails.
+        if rekey {
+            self.pin_wrapped = None;
+        }
         if let Err(e) = self.finish_unlock(vault_key) {
             tracing::warn!("could not reload the vault after joining: {e}");
             self.lock();
