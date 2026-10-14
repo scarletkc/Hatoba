@@ -1087,7 +1087,9 @@ pub struct WindowChromeEvent {
 pub struct ClosePromptEvent;
 
 /// WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked.
+/// macOS has no tray, so nothing reads them there.
 #[derive(Debug, Clone, Deserialize, Type)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub struct TrayMenuInput {
     pub open: String,
     pub lock: String,
