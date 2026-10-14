@@ -44,6 +44,7 @@ export default defineMessages({
     "tray.open": "打开 Hatoba",
     "tray.lock": "锁定",
     "tray.quit": "退出 Hatoba",
+    "tray.update": "更新到 v{version}",
 
     "sidebar.all": "全部主机",
     "sidebar.favorites": "收藏",
@@ -202,6 +203,7 @@ export default defineMessages({
     "tray.open": "Open Hatoba",
     "tray.lock": "Lock",
     "tray.quit": "Quit Hatoba",
+    "tray.update": "Update to v{version}",
 
     "sidebar.all": "All Hosts",
     "sidebar.favorites": "Favorites",
@@ -365,6 +367,7 @@ export default defineMessages({
     "tray.open": "Hatoba を開く",
     "tray.lock": "ロック",
     "tray.quit": "Hatoba を終了",
+    "tray.update": "v{version} にアップデート",
 
     "sidebar.all": "すべてのホスト",
     "sidebar.favorites": "お気に入り",

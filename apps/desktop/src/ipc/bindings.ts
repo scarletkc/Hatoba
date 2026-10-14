@@ -496,6 +496,7 @@ export const events = {
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
+	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
@@ -2130,7 +2131,16 @@ export type TrayMenuInput = {
 	lock: string,
 	quit: string,
 	can_lock: boolean,
+	/**
+	 *  **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+	 *  such item.
+	 */
+	update: string | null,
+	can_update: boolean,
 };
+
+/**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+export type TrayUpdateEvent = null;
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {

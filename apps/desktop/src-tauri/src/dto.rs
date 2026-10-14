@@ -1086,6 +1086,11 @@ pub struct WindowChromeEvent {
 #[tauri_specta(event_name = "window://close-prompt")]
 pub struct ClosePromptEvent;
 
+/// WIN-10: the tray menu's **Update to vX.Y.Z** was clicked.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "tray://update")]
+pub struct TrayUpdateEvent;
+
 /// WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked.
 #[derive(Debug, Clone, Deserialize, Type)]
 // macOS has no tray, so nothing reads them there.
@@ -1095,6 +1100,10 @@ pub struct TrayMenuInput {
     pub lock: String,
     pub quit: String,
     pub can_lock: bool,
+    /// **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+    /// such item.
+    pub update: Option<String>,
+    pub can_update: bool,
 }
 
 /// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.

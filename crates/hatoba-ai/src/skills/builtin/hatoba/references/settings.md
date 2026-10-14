@@ -106,7 +106,7 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 | Download and Install | 下载并安装 | ダウンロードしてインストール |
 | Install and Restart | 安装并重启 | インストールして再起動 |
 | View on GitHub | 在 GitHub 上查看 | GitHub で見る |
-| Automatically check for updates at startup | 启动时自动检查更新 | 起動時にアップデートを自動で確認 |
+| Automatically check for updates | 自动检查更新 | アップデートを自動で確認 |
 | Checking… | 正在检查… | 確認しています… |
 | Hatoba is up to date. | 已是最新版本。 | 最新バージョンです。 |
 | Copy version | 复制版本号 | バージョンをコピー |
@@ -121,8 +121,8 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 - The page shows the version; click it to copy.
 - **Software Update** → **Check for Updates** asks GitHub whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available.", or an offline or failure message. A newer version's release notes show below the setting, with **View on GitHub** for its release page.
 - **Download and Install** asks first only when SSH sessions are open or file transfers are running, and says how many closing Hatoba will end. After **Install and Restart** (or right away when nothing would end), Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run. Update error messages are in `references/troubleshooting.md`.
-- **Automatically check for updates at startup** is on by default. When on, Hatoba asks GitHub once after the first unlock of each launch; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
-- When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
+- **Automatically check for updates** is on by default. When on, Hatoba asks GitHub after the first unlock of each launch and then once a day while it keeps running, including hidden in the tray; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
+- When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab. On Windows and Linux the tray menu also shows **Update to vX.Y.Z**, which opens the About tab and starts **Download and Install**.
 - **Website** opens https://hatoba.fog.moe, with downloads and these docs. **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
 - A card in the sidebar (**Enjoying Hatoba?**) asks once for a GitHub star, a day after first use and after a session has connected. **Star** opens the repository, **Report a Problem** opens the bug form, and the × closes it for good.
 
