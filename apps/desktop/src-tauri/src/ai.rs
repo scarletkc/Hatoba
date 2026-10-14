@@ -244,6 +244,10 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+    /// What `web_search` returned when a provider of no known search turned its native search
+    /// away (AI-14), by base URL and model: later calls get it without asking the provider again,
+    /// until the app quits. The tool stays offered, so a conversation's tools never change.
+    native_misses: Mutex<HashMap<(String, String), String>>,
 }
 
 /// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
@@ -1953,6 +1957,11 @@ impl AiManager {
                 self.search_tools(vault, conversation_id, &args, &op.cancel)
                     .await
             }
+            Job::NativeSearch(native, query) => {
+                let (provider, model) = *native;
+                self.native_search(&provider, &model, &query, &op.cancel)
+                    .await
+            }
             job => {
                 job.run(
                     &self.http(),
@@ -2083,6 +2092,39 @@ impl AiManager {
                 () = cancel.cancelled() => {}
                 () = waiting => {}
             }
+        }
+    }
+
+    /// `web_search` with the search of the model's own provider (AI-14). A provider of no known
+    /// search ([`NativeSearch::Other`]) that turns it away gets the same result for later calls
+    /// with its base URL and model, without a request, until the app quits.
+    async fn native_search(
+        &self,
+        provider: &ProviderConfig,
+        model: &ModelSpec,
+        query: &str,
+        cancel: &CancellationToken,
+    ) -> (ToolStatus, String) {
+        let tried = NativeSearch::of(provider) == Some(NativeSearch::Other);
+        let key = (provider.base_url.trim().to_owned(), model.id.clone());
+        if tried && let Some(miss) = guard(&self.0.native_misses).get(&key) {
+            return (ToolStatus::Error, miss.clone());
+        }
+        match web::native_search(&self.http(), provider, model, query, cancel).await {
+            Ok(found) => (
+                ToolStatus::Ok,
+                tools::truncate_result(&web::format_native_results(&found)),
+            ),
+            Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
+            Err(e) if tried && web::turned_away(&e) => {
+                let miss = format!(
+                    "The search failed: {e}. The model's provider does not seem to offer web \
+                     search; a search provider chosen in Settings → AI works with any model."
+                );
+                guard(&self.0.native_misses).insert(key, miss.clone());
+                (ToolStatus::Error, miss)
+            }
+            Err(e) => (ToolStatus::Error, format!("The search failed: {e}")),
         }
     }
 
@@ -4141,7 +4183,9 @@ enum WebSearch {
 
 /// What runs `web_search` for model `model_id` of `provider_id` (AI-14): the search provider
 /// `Settings.ai` chose, when it exists, or else, unless native search is off, the model's provider
-/// with its own search, when it has one.
+/// with its own search. Every provider that chats has one; one Hatoba does not know is tried as
+/// OpenAI is ([`NativeSearch::Other`]), so the tools a conversation is offered do not depend on
+/// how a search went.
 fn web_search_for(v: &Vault, provider_id: &str, model_id: &str) -> Option<WebSearch> {
     let settings = v.settings().ai;
     let chosen = settings
@@ -4163,8 +4207,8 @@ fn web_search_for(v: &Vault, provider_id: &str, model_id: &str) -> Option<WebSea
 /// Why a `web_search` call cannot run (AI-14).
 fn no_web_search(v: &Vault) -> &'static str {
     if v.settings().ai.native_search {
-        "No search provider is chosen in Settings → AI, and the model's provider has no web \
-         search of its own, so web_search cannot run."
+        "No search provider is chosen in Settings → AI, and the model that made the call is no \
+         longer in its provider's model list, so web_search cannot run."
     } else {
         "No search provider is chosen in Settings → AI, so web_search cannot run."
     }
@@ -4197,7 +4241,11 @@ enum Job {
     File(FileJob, Option<files::Base>),
     /// `grep` or `glob`.
     Search(SearchJob),
-    WebSearch(WebSearch, String),
+    /// `web_search` through the search provider `Settings.ai` chose.
+    WebSearch(SearchConfig, String),
+    /// `web_search` with the search of the model's own provider (AI-14), which
+    /// [`AiManager::native_search`] runs, since it keeps the providers that turned it away.
+    NativeSearch(Box<(ProviderConfig, ModelSpec)>, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
     /// `call_mcp_tool` (AI-45).
@@ -4253,9 +4301,12 @@ impl Job {
             },
             tools::WEB_SEARCH => match web_search_for(v, caller.0, caller.1) {
                 None => Self::error(no_web_search(v)),
-                Some(search) => match parse::<WebSearchArgs>(arguments) {
-                    Ok(args) => Self::WebSearch(search, args.query),
-                    Err(message) => Self::error(message),
+                Some(search) => match (parse::<WebSearchArgs>(arguments), search) {
+                    (Ok(args), WebSearch::Service(config)) => Self::WebSearch(config, args.query),
+                    (Ok(args), WebSearch::Native(provider, model)) => {
+                        Self::NativeSearch(Box::new((provider, model)), args.query)
+                    }
+                    (Err(message), _) => Self::error(message),
                 },
             },
             tools::FETCH_URL => match parse::<FetchUrlArgs>(arguments) {
@@ -4294,29 +4345,24 @@ impl Job {
         match self {
             Self::Ready(status, content) => (status, content),
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
-            // `tool_run` runs it with the conversation's MCP tools.
+            // `tool_run` runs them: with the conversation's MCP tools, and with what the manager
+            // keeps of native searches.
             Self::SearchTools(_) => (
                 ToolStatus::Error,
                 "search_tools cannot run here.".to_owned(),
             ),
+            Self::NativeSearch(..) => (ToolStatus::Error, "web_search cannot run here.".to_owned()),
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
             Self::File(job, base) => {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
             }
             Self::Search(job) => search::run(live_session(env, session_id), job, cancel).await,
-            Self::WebSearch(search, query) => {
-                let found = match &search {
-                    WebSearch::Service(config) => web::web_search(http, config, &query, cancel)
-                        .await
-                        .map(|results| web::format_search_results(&results)),
-                    WebSearch::Native(provider, model) => {
-                        web::native_search(http, provider, model, &query, cancel)
-                            .await
-                            .map(|found| web::format_native_results(&found))
-                    }
-                };
-                match found {
-                    Ok(text) => (ToolStatus::Ok, tools::truncate_result(&text)),
+            Self::WebSearch(config, query) => {
+                match web::web_search(http, &config, &query, cancel).await {
+                    Ok(results) => (
+                        ToolStatus::Ok,
+                        tools::truncate_result(&web::format_search_results(&results)),
+                    ),
                     Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
                     Err(e) => (ToolStatus::Error, format!("The search failed: {e}")),
                 }

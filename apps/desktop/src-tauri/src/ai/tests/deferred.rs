@@ -940,10 +940,7 @@ async fn deferred_mcp_tools_keep_the_anthropic_prefix() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    // An Anthropic provider searches the web itself (AI-14), so web_search is offered too.
-    let mut expected = deferred_tools();
-    expected.insert(8, "web_search".to_owned());
-    assert_eq!(names, expected);
+    assert_eq!(names, deferred_tools());
     for request in &requests {
         assert_eq!(prefix(request), prefix(&requests[0]));
         assert!(request.get("cache_control").is_some());

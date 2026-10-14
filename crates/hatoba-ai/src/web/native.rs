@@ -10,9 +10,11 @@
 //!   the model's own provider where it has a search and with Exa elsewhere.
 //! - OpenAI and xAI: the Responses API (`POST {base_url}/responses`) with the `web_search` tool.
 //! - Gemini: `generateContent` with the `google_search` tool, the key in `x-goog-api-key`.
+//! - Any other Chat Completions provider, which may relay OpenAI: tried as OpenAI is.
+//!   [`turned_away`] tells an error that says it has no such search from one that may pass.
 //!
-//! Other Chat Completions providers have no search Hatoba knows of. A response in which no search
-//! ran is an error, so an answer from the model's memory never passes for search results.
+//! A response in which no search ran is an error, so an answer from the model's memory never
+//! passes for search results.
 
 use std::time::Duration;
 
@@ -41,30 +43,47 @@ pub enum NativeSearch {
     Xai,
     /// Gemini's `generateContent` with the `google_search` tool.
     Gemini,
+    /// Another Chat Completions provider, such as a relay of OpenAI's API, tried with the
+    /// Responses API's `web_search` tool as OpenAI is.
+    Other,
 }
 
 impl NativeSearch {
-    /// The search `provider` runs itself, when Hatoba knows one: every Anthropic Messages
-    /// provider, and the Chat Completions providers whose base URL is OpenRouter's, OpenAI's,
-    /// xAI's or Gemini's.
+    /// How `provider` searches the web itself: every Anthropic Messages provider with Anthropic's
+    /// server tool, and a Chat Completions provider by its base URL's host, [`Self::Other`] when
+    /// the host is none Hatoba knows. A System One provider (AI-47) cannot chat, so it has none.
     #[must_use]
     pub fn of(provider: &ProviderConfig) -> Option<Self> {
         match provider.protocol {
             Protocol::Anthropic => Some(Self::Anthropic),
             Protocol::SystemOne => None,
             Protocol::ChatCompletions => {
-                let url = validate_base_url(&provider.base_url).ok()?;
-                let host = url.host_str()?.trim_end_matches('.').to_ascii_lowercase();
-                match host.as_str() {
-                    "api.openai.com" => Some(Self::OpenAi),
-                    "api.x.ai" => Some(Self::Xai),
-                    "generativelanguage.googleapis.com" => Some(Self::Gemini),
-                    "openrouter.ai" => Some(Self::OpenRouter),
-                    _ if host.ends_with(".openrouter.ai") => Some(Self::OpenRouter),
-                    _ => None,
-                }
+                let host = validate_base_url(&provider.base_url)
+                    .ok()
+                    .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
+                    .unwrap_or_default();
+                Some(match host.trim_end_matches('.') {
+                    "api.openai.com" => Self::OpenAi,
+                    "api.x.ai" => Self::Xai,
+                    "generativelanguage.googleapis.com" => Self::Gemini,
+                    "openrouter.ai" => Self::OpenRouter,
+                    host if host.ends_with(".openrouter.ai") => Self::OpenRouter,
+                    _ => Self::Other,
+                })
             }
         }
+    }
+}
+
+/// Whether `err`, from a search of [`NativeSearch::Other`], says that the provider has no such
+/// search rather than that this one failed: the Responses API refused the request (400, 404, 405,
+/// 415, 422 or 501), or the answer was no search (not JSON, or no search ran in it).
+#[must_use]
+pub fn turned_away(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, .. } => matches!(status, 400 | 404 | 405 | 415 | 422 | 501),
+        AiError::Protocol(_) => true,
+        _ => false,
     }
 }
 
@@ -106,7 +125,7 @@ pub async fn native_search(
 ) -> Result<NativeResults, AiError> {
     let Some(kind) = NativeSearch::of(provider) else {
         return Err(AiError::Config(
-            "the model's provider has no web search of its own".into(),
+            "a System One provider cannot search the web".into(),
         ));
     };
     search_with(http, kind, provider, model, query, cancel).await
@@ -134,10 +153,17 @@ pub(crate) async fn search_with(
             NativeSearch::OpenRouter => {
                 openrouter(http, &base, provider, model, query, cancel, &mut found).await?;
             }
-            NativeSearch::OpenAi | NativeSearch::Xai => {
-                let openai = kind == NativeSearch::OpenAi;
+            NativeSearch::OpenAi | NativeSearch::Xai | NativeSearch::Other => {
+                let openai_options = kind != NativeSearch::Xai;
                 responses(
-                    http, &base, provider, model, query, openai, cancel, &mut found,
+                    http,
+                    &base,
+                    provider,
+                    model,
+                    query,
+                    openai_options,
+                    cancel,
+                    &mut found,
                 )
                 .await?;
             }
@@ -267,7 +293,7 @@ async fn openrouter(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "a search's request, with whether it goes to OpenAI"
+    reason = "a search's request, with whether it takes OpenAI's options"
 )]
 async fn responses(
     http: &reqwest::Client,
@@ -275,7 +301,7 @@ async fn responses(
     provider: &ProviderConfig,
     model: &ModelSpec,
     query: &str,
-    openai: bool,
+    openai_options: bool,
     cancel: &CancellationToken,
     found: &mut Found,
 ) -> Result<(), AiError> {
@@ -286,7 +312,7 @@ async fn responses(
         "tools": [{"type": "web_search"}],
         "store": false,
     });
-    if openai {
+    if openai_options {
         // Every page the search read, not only the cited ones, and a search before the answer.
         body["include"] = json!(["web_search_call.action.sources"]);
         body["tool_choice"] = json!("required");
@@ -608,13 +634,70 @@ mod tests {
             ),
             Some(N::Gemini)
         );
-        assert_eq!(of(ChatCompletions, "https://api.deepseek.com/v1"), None);
-        assert_eq!(of(ChatCompletions, "http://localhost:11434/v1"), None);
-        assert_eq!(
-            of(ChatCompletions, "https://openrouter.ai.example.com/v1"),
-            None
-        );
+        // Any other host is tried as OpenAI is.
+        for url in [
+            "https://api.deepseek.com/v1",
+            "http://localhost:11434/v1",
+            "https://openrouter.ai.example.com/v1",
+            "not a url",
+        ] {
+            assert_eq!(of(ChatCompletions, url), Some(N::Other), "{url}");
+        }
         assert_eq!(of(SystemOne, "https://openrouter.ai/api/v1"), None);
+    }
+
+    #[tokio::test]
+    async fn other_providers_are_tried_as_openai_is() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/relay/v1/responses"))
+            .and(header("authorization", "Bearer sk-test"))
+            .and(body_partial_json(json!({
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "required",
+                "include": ["web_search_call.action.sources"],
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "output": [
+                    {"type": "web_search_call", "status": "completed", "action": {"type": "search", "query": "q"}},
+                    {"type": "message", "content": [{"type": "output_text", "text": "Found it.", "annotations": []}]}
+                ]
+            })))
+            .mount(&server)
+            .await;
+        let found = run(
+            NativeSearch::Other,
+            Protocol::ChatCompletions,
+            &format!("{}/relay/v1", server.uri()),
+            "gpt-x",
+        )
+        .await
+        .unwrap();
+        assert_eq!(found.answer, "Found it.");
+    }
+
+    #[test]
+    fn a_refused_request_or_no_search_turns_the_search_away() {
+        let http = |status| AiError::Http {
+            status,
+            message: String::new(),
+        };
+        for status in [400, 404, 405, 415, 422, 501] {
+            assert!(turned_away(&http(status)), "{status}");
+        }
+        assert!(turned_away(&AiError::Protocol(
+            "the model ran no web search".into()
+        )));
+        for passing in [
+            http(401),
+            http(429),
+            http(500),
+            http(503),
+            AiError::Network("timed out".into()),
+            AiError::Cancelled,
+        ] {
+            assert!(!turned_away(&passing), "{passing}");
+        }
     }
 
     #[tokio::test]
@@ -924,9 +1007,9 @@ mod tests {
         );
         let http = http_client();
         let cancel = CancellationToken::new();
-        let local = provider(Protocol::ChatCompletions, "http://localhost:11434/v1");
+        let judge = provider(Protocol::SystemOne, &server.uri());
         assert!(matches!(
-            native_search(&http, &local, &ModelSpec::new("m"), "q", &cancel).await,
+            native_search(&http, &judge, &ModelSpec::new("m"), "q", &cancel).await,
             Err(AiError::Config(_))
         ));
         let anthropic = provider(Protocol::Anthropic, &server.uri());
