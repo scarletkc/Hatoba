@@ -473,10 +473,14 @@ pub async fn ai_chatgpt_sign_in(
         }
     })?;
     sessions.signed_in(&id, &credentials).await?;
-    // A new provider starts with the account's models.
-    if first_sign_in && credentials.plan_enabled() {
-        let config = state
-            .with_unlocked(|v| Ok(crate::ai::provider_config(&id, &find_provider(v, &id)?)))?;
+    // A provider without models, such as a new one or one whose earlier sign-in did not allow
+    // plan use, gets the account's models.
+    let config = state.with_unlocked(|v| {
+        let provider = find_provider(v, &id)?;
+        Ok((credentials.plan_enabled() && provider.models.is_empty())
+            .then(|| crate::ai::provider_config(&id, &provider)))
+    })?;
+    if let Some(config) = config {
         match hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel).await {
             Ok(models) => {
                 state.with_unlocked(|v| {
