@@ -17,7 +17,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | 🟡 | Needs verification on a real Windows machine |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2, with the macOS version |
+| SEC-10 | Touch ID | ⬜ | P2 |
 | SEC-11 | PIN unlock | 🟡 | Keeping the PIN after a restart needs verification with the credential store on each platform |
 
 ## SSH, terminal, SFTP, and forwarding (§7)
