@@ -72,7 +72,14 @@ pub fn close_to_tray(app: &AppHandle) -> bool {
 }
 
 /// Builds the tray. Called once from `setup`, after the app state exists (the language pref).
+/// Any failure — no tray host, or the menu would not build — only costs the tray; Hatoba runs on.
 pub fn init(app: &AppHandle) {
+    if let Err(e) = build(app) {
+        tracing::warn!("no system tray, closing the window quits: {e}");
+    }
+}
+
+fn build(app: &AppHandle) -> tauri::Result<()> {
     let language = app
         .try_state::<state::AppState>()
         .and_then(|state| state.vault().local_prefs().ok().flatten())
@@ -83,12 +90,11 @@ pub fn init(app: &AppHandle) {
     let menu = Menu::with_items(
         app,
         &[
-            &MenuItem::with_id(app, "open", text.open, true, None::<&str>).expect("tray menu item"),
-            &MenuItem::with_id(app, "lock", text.lock, true, None::<&str>).expect("tray menu item"),
-            &MenuItem::with_id(app, "quit", text.quit, true, None::<&str>).expect("tray menu item"),
+            &MenuItem::with_id(app, "open", text.open, true, None::<&str>)?,
+            &MenuItem::with_id(app, "lock", text.lock, true, None::<&str>)?,
+            &MenuItem::with_id(app, "quit", text.quit, true, None::<&str>)?,
         ],
-    )
-    .expect("tray menu");
+    )?;
 
     let tray = TrayIconBuilder::with_id("hatoba")
         .tooltip("Hatoba")
@@ -123,13 +129,10 @@ pub fn init(app: &AppHandle) {
         None => tray,
     };
 
-    match tray.build(app) {
-        Ok(_) => {
-            app.manage(TrayPresent);
-            tracing::info!("system tray created");
-        }
-        Err(e) => tracing::warn!("no system tray, closing the window quits: {e}"),
-    }
+    tray.build(app)?;
+    app.manage(TrayPresent);
+    tracing::info!("system tray created");
+    Ok(())
 }
 
 /// A left click shows a hidden or minimized window, and hides a visible one (macOS's red button
