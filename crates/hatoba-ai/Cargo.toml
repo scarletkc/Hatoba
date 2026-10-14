@@ -27,6 +27,12 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 # (encoding_rs is already in the tree through reqwest's `charset` feature).
 htmd = "0.5"
 encoding_rs = "0.8"
+# fetch_url: the title, base URL and links of the tree htmd converts (the version htmd uses).
+markup5ever_rcdom = "0.38"
+# fetch_url: where a page's main content is (a port of Mozilla's Readability), and the page's own
+# HTML of it. dom_query is the DOM dom_smoothie works on.
+dom_smoothie = "0.18"
+dom_query = "0.28"
 # MCP client (spec §13.9): client features only, JSON-RPC over a child's pipes and Streamable HTTP.
 rmcp = { version = "3.5", default-features = false, features = ["client", "transport-async-rw", "transport-streamable-http-client-reqwest", "reqwest-tls-no-provider"] }
 # MCP stdio servers: PATH/PATHEXT lookup, and spawning in a Job Object (Windows) or process group

@@ -389,10 +389,11 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         "Fetch an http or https URL with GET, without cookies or credentials, following at \
          most 5 redirects on the same host (a redirect to another host is returned instead: \
          fetch that URL with a new call), and return up to 30,000 characters of its content \
-         starting at `offset` (default 0), with the total length; HTML is converted to \
-         Markdown. To read on, call it again with the offset the result names. Only text, \
-         HTML, JSON and XML are returned, and addresses on loopback, private or link-local \
-         networks are refused. Keep passwords, keys and tokens out of the URL."
+         starting at `offset` (default 0), with the total length. HTML is converted to \
+         Markdown: the page's main content without navigation, sidebars and footers, or the \
+         whole page with `full_page`. To read on, call it again with the offset the result \
+         names. Only text, HTML, JSON and XML are returned, and addresses on loopback, private \
+         or link-local networks are refused. Keep passwords, keys and tokens out of the URL."
             .to_owned(),
         json!({
             "type": "object",
@@ -401,6 +402,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "offset": {
                     "type": "integer",
                     "description": "Character offset to start from (default 0)."
+                },
+                "full_page": {
+                    "type": "boolean",
+                    "description": "Return the whole HTML page instead of its main content \
+                                    (default false), such as when the main content looks \
+                                    incomplete or you need the page's navigation."
                 }
             },
             "required": ["url"]
@@ -1282,6 +1289,9 @@ pub struct FetchUrlArgs {
     /// Character offset, 0 by default.
     #[serde(default)]
     pub offset: Option<u64>,
+    /// The whole HTML page instead of its main content, false by default.
+    #[serde(default)]
+    pub full_page: Option<bool>,
 }
 
 /// `read_skill` arguments.

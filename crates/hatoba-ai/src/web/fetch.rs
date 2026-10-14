@@ -12,14 +12,20 @@
 //! the proxy's to make; the names the resolver sees that no hop requests are the proxy's own,
 //! which may well be local, and resolve unchecked.
 //!
-//! Text, HTML, JSON and XML are accepted; HTML becomes Markdown. The download is capped at 5 MB
-//! and the whole fetch at 90 s. The result is up to 30,000 characters from `offset`.
+//! Text, HTML, JSON and XML are accepted. HTML becomes Markdown: the page's main content, or the
+//! whole page when the call asks for it or no main content is found ([`extract`]), with links
+//! made absolute. The download is capped at 5 MB and the whole fetch at 90 s. The result is up to
+//! 30,000 characters from `offset`.
+
+mod extract;
 
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use markup5ever_rcdom::{Node, NodeData};
 use reqwest::StatusCode;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, LOCATION};
 use serde::{Deserialize, Serialize};
@@ -42,6 +48,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_REDIRECTS: usize = 5;
 /// DOM depth above which HTML is reduced to text instead of Markdown.
 const MAX_DOM_DEPTH: usize = 2_000;
+/// Main content shorter than this, in characters of Markdown, gives way to the whole page.
+const MIN_MAIN_CHARS: usize = 500;
+/// Characters of a page title kept.
+const MAX_TITLE_CHARS: usize = 300;
 /// Stack of the thread that converts HTML (the converter recurses once per nesting level).
 const CONVERT_STACK: usize = 64 * 1024 * 1024;
 const ACCEPT_VALUE: &str = "text/html, application/xhtml+xml, text/markdown, text/plain, \
@@ -60,6 +70,12 @@ pub struct FetchResult {
     pub redirect: Option<String>,
     /// The media type, e.g. `text/html` (without parameters).
     pub content_type: String,
+    /// The `<title>` of an HTML page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Which part of an HTML page `content` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<PagePart>,
     /// Character offset of `content`.
     pub offset: u64,
     /// Characters in the whole converted content.
@@ -70,18 +86,33 @@ pub struct FetchResult {
     pub truncated: bool,
 }
 
+/// Which part of an HTML page a [`FetchResult`] holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PagePart {
+    /// The main content, without navigation, sidebars and footers.
+    Main,
+    /// The whole page: the call asked for it, or no main content was found.
+    Whole,
+}
+
 /// Fetches `url` and returns up to 30,000 characters from `offset` (characters, not bytes) of
-/// its content, HTML converted to Markdown (AI-15). Refuses non-public addresses at every hop.
+/// its content, HTML converted to Markdown: the main content, or with `full_page` the whole page
+/// (AI-15). Refuses non-public addresses at every hop.
 pub async fn fetch_url(
     url: &str,
     offset: u64,
+    full_page: bool,
     cancel: &CancellationToken,
 ) -> Result<FetchResult, AiError> {
-    Fetcher::public().fetch(url, offset, cancel).await
+    Fetcher::public()
+        .fetch(url, offset, full_page, cancel)
+        .await
 }
 
-/// The `fetch_url` result text: a header line with the URL, the content type and the character
-/// range, a line on how to read on when more remains, then the content.
+/// The `fetch_url` result text: a header line with the URL, the content type, the part of an
+/// HTML page and the character range, the page title, a line on how to read on when more remains,
+/// then the content.
 #[must_use]
 pub fn format_fetch_result(r: &FetchResult) -> String {
     if let Some(to) = &r.redirect {
@@ -94,9 +125,14 @@ pub fn format_fetch_result(r: &FetchResult) -> String {
     }
     let end = r.offset + r.content.chars().count() as u64;
     let mut out = format!(
-        "URL: {} | Content type: {} | Characters {}-{} of {}{}\n",
+        "URL: {} | Content type: {}{} | Characters {}-{} of {}{}\n",
         r.url,
         r.content_type,
+        match r.part {
+            Some(PagePart::Main) => " | Main content",
+            Some(PagePart::Whole) => " | Whole page",
+            None => "",
+        },
         r.offset.min(r.total_length),
         end,
         r.total_length,
@@ -106,9 +142,24 @@ pub fn format_fetch_result(r: &FetchResult) -> String {
             ""
         }
     );
+    if let Some(title) = &r.title {
+        out.push_str(&format!("Title: {title}\n"));
+    }
+    if r.part == Some(PagePart::Main) {
+        out.push_str(
+            "Navigation, sidebars and footers are left out. For the whole page, call fetch_url \
+             with full_page true.\n",
+        );
+    }
     if end < r.total_length {
+        // The whole page reads the same with full_page, which skips looking for main content.
+        let whole = if r.part == Some(PagePart::Whole) {
+            " and full_page true"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "More content follows: call fetch_url again with offset {end} to read on.\n"
+            "More content follows: call fetch_url again with offset {end}{whole} to read on.\n"
         ));
     } else if r.content.is_empty() {
         out.push_str("No content at this offset.\n");
@@ -235,6 +286,7 @@ impl Fetcher {
         &self,
         url: &str,
         offset: u64,
+        full_page: bool,
         cancel: &CancellationToken,
     ) -> Result<FetchResult, AiError> {
         let url = parse_url(url)?;
@@ -258,22 +310,27 @@ impl Fetcher {
             "text/html" | "application/xhtml+xml"
         );
         let text = decode(&fetched.body, fetched.charset.as_deref(), is_html);
-        let content = if is_html {
-            tokio::select! {
+        let (content, title, part) = if is_html {
+            let converted = tokio::select! {
                 biased;
                 () = cancel.cancelled() => return Err(AiError::Cancelled),
-                markdown = html_to_markdown(text) => markdown,
-            }
+                converted = html_to_markdown(text, fetched.url.clone(), full_page) => converted,
+            };
+            (converted.markdown, converted.title, Some(converted.part))
         } else {
-            text
+            (text, None, None)
         };
-        Ok(page(
-            fetched.url.to_string(),
-            fetched.media_type,
-            &content,
-            offset,
-            fetched.truncated,
-        ))
+        Ok(FetchResult {
+            title,
+            part,
+            ..page(
+                fetched.url.to_string(),
+                fetched.media_type,
+                &content,
+                offset,
+                fetched.truncated,
+            )
+        })
     }
 
     async fn follow(
@@ -458,9 +515,16 @@ fn decode(body: &[u8], charset: Option<&str>, html: bool) -> String {
     text.into_owned()
 }
 
+/// An HTML page as Markdown.
+struct Converted {
+    markdown: String,
+    title: Option<String>,
+    part: PagePart,
+}
+
 /// Converts HTML to Markdown on a thread with a large stack (the converter recurses once per
 /// nesting level). Pages nested deeper than 2,000 levels are reduced to plain text.
-async fn html_to_markdown(html: String) -> String {
+async fn html_to_markdown(html: String, url: Url, full_page: bool) -> Converted {
     let html = Arc::new(html);
     let (tx, rx) = tokio::sync::oneshot::channel();
     let input = Arc::clone(&html);
@@ -468,23 +532,72 @@ async fn html_to_markdown(html: String) -> String {
         .name("hatoba-ai-html".into())
         .stack_size(CONVERT_STACK)
         .spawn(move || {
-            let _ = tx.send(convert_html(&input));
+            let _ = tx.send(convert_html(&input, &url, full_page));
         });
     let converted = match spawned {
         Ok(_) => rx.await.ok(),
         Err(_) => None,
     };
     // The thread could not start, or the converter panicked: plain text still serves the model.
-    converted.unwrap_or_else(|| document_text(&html))
+    converted.unwrap_or_else(|| Converted {
+        markdown: document_text(&html),
+        title: None,
+        part: PagePart::Whole,
+    })
 }
 
-fn convert_html(html: &str) -> String {
+/// The main content of the page at `url` as Markdown, or the whole page with `full_page`, when
+/// it has too many elements to search, or when its main content is missing or short.
+fn convert_html(html: &str, url: &Url, full_page: bool) -> Converted {
+    let converter = markdown_converter();
+    let Ok(tree) = converter.html_to_tree(html) else {
+        return Converted {
+            markdown: document_text(html),
+            title: None,
+            part: PagePart::Whole,
+        };
+    };
+    let title = page_title(&tree);
+    let (depth, elements) = dom_size(&tree);
+    if depth > MAX_DOM_DEPTH {
+        return Converted {
+            markdown: document_text(html),
+            title,
+            part: PagePart::Whole,
+        };
+    }
+    let base = base_url(&tree, url);
+    let main = (!full_page && elements <= extract::MAX_ELEMENTS)
+        .then(|| extract::main_content(html, url.as_str()))
+        .flatten()
+        .and_then(|main| converter.html_to_tree(&main).ok())
+        .map(|main| {
+            absolute_links(&main, &base);
+            converter.tree_to_markdown(&main)
+        })
+        .filter(|markdown| markdown.chars().count() >= MIN_MAIN_CHARS);
+    let (markdown, part) = match main {
+        Some(markdown) => (markdown, PagePart::Main),
+        None => {
+            absolute_links(&tree, &base);
+            (converter.tree_to_markdown(&tree), PagePart::Whole)
+        }
+    };
+    Converted {
+        markdown,
+        title,
+        part,
+    }
+}
+
+fn markdown_converter() -> htmd::HtmlToMarkdown {
     use htmd::element_handler::Handlers;
 
-    let converter = htmd::HtmlToMarkdown::builder()
+    htmd::HtmlToMarkdown::builder()
+        // The title is in the result's header.
         .skip_tags(vec![
-            "script", "style", "noscript", "template", "svg", "canvas", "iframe", "object",
-            "embed", "link", "meta",
+            "title", "script", "style", "noscript", "template", "svg", "canvas", "iframe",
+            "object", "embed", "link", "meta",
         ])
         // Inline `data:` images would flood the page with base64; keep their alt text only.
         .add_handler(
@@ -504,27 +617,160 @@ fn convert_html(html: &str) -> String {
                 }
             },
         )
-        .build();
-    let Ok(tree) = converter.html_to_tree(html) else {
-        return document_text(html);
-    };
-    if dom_depth(&tree) > MAX_DOM_DEPTH {
-        return document_text(html);
-    }
-    converter.tree_to_markdown(&tree)
+        // htmd drops the line breaks that end the per-line `<span>`s highlighters wrap code in.
+        .add_handler(vec!["pre"], |_: &dyn Handlers, element: htmd::Element| {
+            Some(code_block(element.node).into())
+        })
+        .build()
 }
 
-/// The deepest nesting level of a DOM, counted without recursion.
-fn dom_depth(root: &std::rc::Rc<htmd::Node>) -> usize {
-    let mut deepest = 0;
-    let mut stack = vec![(std::rc::Rc::clone(root), 1usize)];
-    while let Some((node, depth)) = stack.pop() {
-        deepest = deepest.max(depth);
-        for child in node.children.borrow().iter() {
-            stack.push((std::rc::Rc::clone(child), depth + 1));
+/// A `<pre>` as a fenced code block: its text as written, without buttons, in the language its
+/// own or its `<code>`'s class names (`language-x` or `lang-x`).
+fn code_block(pre: &Rc<Node>) -> String {
+    let mut text = String::new();
+    let mut language = None;
+    let mut stack = vec![Rc::clone(pre)];
+    while let Some(node) = stack.pop() {
+        match &node.data {
+            NodeData::Text { contents } => text.push_str(&contents.borrow()),
+            NodeData::Element { name, attrs, .. } => {
+                match &*name.local {
+                    "button" | "script" | "style" | "template" => continue,
+                    "br" => text.push('\n'),
+                    _ => {}
+                }
+                if language.is_none() {
+                    language = attrs
+                        .borrow()
+                        .iter()
+                        .find(|a| &*a.name.local == "class")
+                        .and_then(|a| class_language(&a.value));
+                }
+                stack.extend(node.children.borrow().iter().rev().cloned());
+            }
+            _ => {}
         }
     }
-    deepest
+    let code = text.strip_suffix('\n').unwrap_or(&text);
+    let longest = code.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat(longest.max(2) + 1);
+    format!(
+        "\n\n{fence}{}\n{code}\n{fence}\n\n",
+        language.unwrap_or_default()
+    )
+}
+
+/// The language a class attribute names with `language-x` or `lang-x`.
+fn class_language(class: &str) -> Option<String> {
+    class
+        .split_whitespace()
+        .find_map(|c| {
+            c.strip_prefix("language-")
+                .or_else(|| c.strip_prefix("lang-"))
+        })
+        .filter(|l| {
+            !l.is_empty()
+                && l.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '_' | '#' | '.'))
+        })
+        .map(str::to_owned)
+}
+
+/// The deepest nesting level of a DOM and its number of elements, counted without recursion.
+fn dom_size(root: &Rc<Node>) -> (usize, usize) {
+    let (mut deepest, mut elements) = (0, 0);
+    let mut stack = vec![(Rc::clone(root), 1usize)];
+    while let Some((node, depth)) = stack.pop() {
+        deepest = deepest.max(depth);
+        if matches!(node.data, NodeData::Element { .. }) {
+            elements += 1;
+        }
+        for child in node.children.borrow().iter() {
+            stack.push((Rc::clone(child), depth + 1));
+        }
+    }
+    (deepest, elements)
+}
+
+/// The first child element of `node` named `name`.
+fn child_element(node: &Node, name: &str) -> Option<Rc<Node>> {
+    node.children
+        .borrow()
+        .iter()
+        .find(|c| matches!(&c.data, NodeData::Element { name: n, .. } if &*n.local == name))
+        .cloned()
+}
+
+fn attribute(node: &Node, name: &str) -> Option<String> {
+    let NodeData::Element { attrs, .. } = &node.data else {
+        return None;
+    };
+    attrs
+        .borrow()
+        .iter()
+        .find(|a| &*a.name.local == name)
+        .map(|a| a.value.to_string())
+}
+
+/// The page's `<head>`.
+fn head(root: &Node) -> Option<Rc<Node>> {
+    let html = child_element(root, "html")?;
+    child_element(&html, "head")
+}
+
+/// The text of the page's `<title>`, on one line, at most 300 characters.
+fn page_title(root: &Node) -> Option<String> {
+    let head = head(root)?;
+    let title = child_element(&head, "title")?;
+    let mut text = String::new();
+    for child in title.children.borrow().iter() {
+        if let NodeData::Text { contents } = &child.data {
+            text.push_str(&contents.borrow());
+        }
+    }
+    let title: String = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(MAX_TITLE_CHARS)
+        .collect();
+    (!title.is_empty()).then_some(title)
+}
+
+/// What the page's relative links resolve against: its `<base href>` resolved against `url`, or
+/// `url`.
+fn base_url(root: &Node, url: &Url) -> Url {
+    head(root)
+        .and_then(|head| child_element(&head, "base"))
+        .and_then(|base| attribute(&base, "href"))
+        .and_then(|href| url.join(href.trim()).ok())
+        .filter(|base| matches!(base.scheme(), "http" | "https"))
+        .unwrap_or_else(|| url.clone())
+}
+
+/// Makes the link targets and image sources in a DOM absolute.
+fn absolute_links(root: &Rc<Node>, base: &Url) {
+    let mut stack = vec![Rc::clone(root)];
+    while let Some(node) = stack.pop() {
+        if let NodeData::Element { name, attrs, .. } = &node.data {
+            let key = match &*name.local {
+                "a" => "href",
+                "img" => "src",
+                _ => "",
+            };
+            for attr in attrs
+                .borrow_mut()
+                .iter_mut()
+                .filter(|a| !key.is_empty() && &*a.name.local == key)
+            {
+                if let Ok(absolute) = base.join(attr.value.trim()) {
+                    attr.value = absolute.as_str().into();
+                }
+            }
+        }
+        stack.extend(node.children.borrow().iter().cloned());
+    }
 }
 
 /// Up to 30,000 characters of `content` from `offset`.
@@ -548,12 +794,12 @@ fn page(
         .map_or(rest.len(), |(i, _)| i);
     FetchResult {
         url,
-        redirect: None,
         content_type,
         offset: start as u64,
         total_length: total as u64,
         content: rest[..byte_end].to_owned(),
         truncated,
+        ..FetchResult::default()
     }
 }
 

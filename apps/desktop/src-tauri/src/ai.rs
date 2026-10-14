@@ -4246,7 +4246,8 @@ enum Job {
     /// `web_search` with the search of the model's own provider (AI-14), which
     /// [`AiManager::native_search`] runs, since it keeps the providers that turned it away.
     NativeSearch(Box<(ProviderConfig, ModelSpec)>, String),
-    FetchUrl(String, u64),
+    /// `fetch_url`: the URL, the offset, and whether the whole page is asked for.
+    FetchUrl(String, u64, bool),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
     /// `call_mcp_tool` (AI-45).
     Mcp(Box<OfferedTool>, Map<String, Value>),
@@ -4310,7 +4311,11 @@ impl Job {
                 },
             },
             tools::FETCH_URL => match parse::<FetchUrlArgs>(arguments) {
-                Ok(args) => Self::FetchUrl(args.url, args.offset.unwrap_or(0)),
+                Ok(args) => Self::FetchUrl(
+                    args.url,
+                    args.offset.unwrap_or(0),
+                    args.full_page.unwrap_or(false),
+                ),
                 Err(message) => Self::error(message),
             },
             tools::READ_SKILL => match parse::<ReadSkillArgs>(arguments) {
@@ -4368,14 +4373,16 @@ impl Job {
                 }
             }
             // Pages through long content instead of being shortened (§13.4).
-            Self::FetchUrl(url, offset) => match web::fetch_url(&url, offset, cancel).await {
-                Ok(page) => (ToolStatus::Ok, web::format_fetch_result(&page)),
-                Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
-                Err(e) => (
-                    ToolStatus::Error,
-                    format!("The page could not be fetched: {e}"),
-                ),
-            },
+            Self::FetchUrl(url, offset, full_page) => {
+                match web::fetch_url(&url, offset, full_page, cancel).await {
+                    Ok(page) => (ToolStatus::Ok, web::format_fetch_result(&page)),
+                    Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
+                    Err(e) => (
+                        ToolStatus::Error,
+                        format!("The page could not be fetched: {e}"),
+                    ),
+                }
+            }
         }
     }
 }
