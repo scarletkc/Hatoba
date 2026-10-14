@@ -259,6 +259,21 @@
   font-size: 13px;
 }
 
+/* Each label is as wide as its selected weight, so selecting a segment never resizes the control. */
+.segment span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.segment span::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 500;
+}
+
 .segmentOn {
   font-weight: 500;
   color: var(--fg);
@@ -331,9 +346,15 @@
   box-shadow: none;
 }
 
+/* The check stays in the box while hidden: the box's baseline, and so the line it sits on, stay put. */
 .checkboxBox i {
   font-size: 10px;
   color: #ffffff;
+  visibility: hidden;
+}
+
+.checkboxOn .checkboxBox i {
+  visibility: visible;
 }
 
 /* Popup button (design: button with caret-up-down) */

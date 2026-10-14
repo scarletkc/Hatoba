@@ -225,7 +225,7 @@ export function Segmented<V extends string>({
           onClick={() => onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} />}
-          <span>{o.label}</span>
+          <span data-label={o.label}>{o.label}</span>
         </button>
       ))}
     </div>
@@ -275,7 +275,9 @@ export function Checkbox({
       className={cx(s.checkbox, checked && s.checkboxOn)}
       onClick={() => onChange(!checked)}
     >
-      <span className={s.checkboxBox}>{checked && <Icon name="check" />}</span>
+      <span className={s.checkboxBox}>
+        <Icon name="check" />
+      </span>
       <span>{children}</span>
     </button>
   );

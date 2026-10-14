@@ -55,10 +55,12 @@
   color: var(--term-dim);
 }
 
+/* Every style fills the same box, one line tall, so switching styles keeps the preview's height. */
 .cursor {
   display: inline-block;
   width: 0.6em;
-  vertical-align: text-bottom;
+  height: 1.5em;
+  vertical-align: top;
 }
 
 .block {
@@ -66,11 +68,9 @@
 }
 
 .bar {
-  width: 0;
   border-left: 2px solid var(--term-fg);
 }
 
 .underline {
   border-bottom: 2px solid var(--term-fg);
-  height: 1.1em;
 }
