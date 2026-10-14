@@ -247,6 +247,7 @@ impl From<hatoba_ai::AiError> for AppError {
                 ..Self::new(ErrorCode::Ai, message)
             },
             E::Config(message)
+            | E::SignIn(message)
             | E::Network(message)
             | E::Protocol(message)
             | E::Blocked(message)

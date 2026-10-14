@@ -62,6 +62,9 @@ pub mod meta {
     /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
     /// vault key because they name hosts. Device-local, never synced.
     pub const AI_ALLOWANCES: &str = "ai_allowances";
+    /// Envelope JSON: this device's ChatGPT sessions and its `ext_agent_host_id` (AI-52), sealed
+    /// under the vault key because they hold tokens. Device-local, never synced.
+    pub const CHATGPT_SESSIONS: &str = "chatgpt_sessions";
 }
 
 /// One row of the `items` table.

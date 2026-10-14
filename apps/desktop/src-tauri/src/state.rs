@@ -46,8 +46,11 @@ pub struct AppState {
 impl AppState {
     pub fn new(vault: Vault, mica: bool) -> Self {
         let mcp = McpManager::default();
+        let vault = Arc::new(Mutex::new(vault));
+        // AI-52: this device's ChatGPT sessions live in the vault.
+        crate::ai::chatgpt::install(&vault);
         Self {
-            vault: Arc::new(Mutex::new(vault)),
+            vault,
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
             dashboard: Dashboard::default(),

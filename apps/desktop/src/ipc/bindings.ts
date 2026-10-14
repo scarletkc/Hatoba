@@ -273,6 +273,21 @@ export const commands = {
 	aiProviderModels: (input: AiProviderInput) => __TAURI_INVOKE<AiModel[]>("ai_provider_models", { input }),
 	/**  AI-04: a minimal request to the first model, or the model list when there is none. */
 	aiProviderTest: (input: AiProviderInput) => __TAURI_INVOKE<AiTestResult>("ai_provider_test", { input }),
+	/**
+	 *  AI-52: signs in with ChatGPT in the system browser: a new account (`provider_id` `None`), which
+	 *  adds a ChatGPT provider with the account's models, or provider `provider_id`'s account again.
+	 *  Waits until the browser comes back (at most 15 minutes), `ai_chatgpt_sign_in_cancel` cancels
+	 *  it, or the vault locks.
+	 */
+	aiChatgptSignIn: (providerId: string | null) => __TAURI_INVOKE<AiChatgptSignIn>("ai_chatgpt_sign_in", { providerId }),
+	/**  AI-52: cancels the sign-in that waits for the browser. */
+	aiChatgptSignInCancel: () => __TAURI_INVOKE<void>("ai_chatgpt_sign_in_cancel"),
+	/**
+	 *  AI-52: signs provider `provider_id` out on this device and revokes the session at OpenAI.
+	 *  Returns whether OpenAI confirmed the revocation; the session is gone from this device either
+	 *  way, and the provider keeps its account for the next sign-in.
+	 */
+	aiChatgptSignOut: (providerId: string) => __TAURI_INVOKE<boolean>("ai_chatgpt_sign_out", { providerId }),
 	searchProvidersList: () => __TAURI_INVOKE<SearchProviderView[]>("search_providers_list"),
 	searchProviderSave: (input: SearchProviderInput) => __TAURI_INVOKE<SearchProviderView>("search_provider_save", { input }),
 	searchProviderDelete: (id: string) => __TAURI_INVOKE<null>("search_provider_delete", { id }),
@@ -553,6 +568,36 @@ export type AiAutoVerdict = {
 	failure: string | null,
 };
 
+/**  AI-52: a finished sign-in. */
+export type AiChatgptSignIn = {
+	provider: AiProviderView,
+	/**
+	 *  The sign-in registered Hatoba for a new account, so the panel says once that requests
+	 *  now use the ChatGPT plan.
+	 */
+	first_sign_in: boolean,
+};
+
+/**
+ *  AI-52: where a ChatGPT provider's sign-in stands on this device. Its tokens never reach the
+ *  WebView.
+ */
+export type AiChatgptStatus = 
+/**  Signed in, with plan use allowed. */
+"signed_in" | 
+/**  Signed in, but plan use was not allowed. */
+"plan_disabled" | 
+/**  The session ended (expired, revoked, or signed out in ChatGPT): sign in again. */
+"ended" | 
+/**  Not signed in on this device (signed out here, or signed in on another device only). */
+"signed_out";
+
+/**  AI-52: the ChatGPT account of a provider. */
+export type AiChatgptView = {
+	email: string,
+	status: AiChatgptStatus,
+};
+
 export type AiConversationDetail = {
 	conversation: AiConversationView,
 	entries: AiEntryView[],
@@ -808,6 +853,8 @@ export type AiProviderView = {
 	/**  Only used by `anthropic`. */
 	auth_header: AiAuthHeader,
 	models: AiModel[],
+	/**  Set for a provider that signs in with a ChatGPT account instead of a key (AI-52). */
+	chatgpt: AiChatgptView | null,
 	updated_at: number,
 };
 

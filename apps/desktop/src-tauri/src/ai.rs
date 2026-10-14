@@ -248,6 +248,8 @@ struct Inner {
     /// away (AI-14), by base URL and model: later calls get it without asking the provider again,
     /// until the app quits. The tool stays offered, so a conversation's tools never change.
     native_misses: Mutex<HashMap<(String, String), String>>,
+    /// Cancels the ChatGPT sign-in that waits for the browser (AI-52); one at a time.
+    chatgpt_sign_in: Mutex<Option<CancellationToken>>,
 }
 
 /// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
@@ -504,6 +506,23 @@ impl AiManager {
             mcp,
             ..Inner::default()
         }))
+    }
+
+    /// A ChatGPT sign-in starts (AI-52): returns the token that cancels it, which `parent` (the
+    /// sign-in's op, which the lock cancels) cancels too. A sign-in still waiting is cancelled.
+    pub fn chatgpt_sign_in_started(&self, parent: &CancellationToken) -> CancellationToken {
+        let cancel = parent.child_token();
+        if let Some(previous) = guard(&self.0.chatgpt_sign_in).replace(cancel.clone()) {
+            previous.cancel();
+        }
+        cancel
+    }
+
+    /// Cancels the ChatGPT sign-in that waits for the browser, if any.
+    pub fn chatgpt_sign_in_cancel(&self) {
+        if let Some(cancel) = guard(&self.0.chatgpt_sign_in).take() {
+            cancel.cancel();
+        }
     }
 
     /// The shared client for provider and search requests.
@@ -4085,7 +4104,7 @@ fn resolve_model(
             format!("The model \"{model_id}\" is not in its provider's model list. Choose another model.")
         })?;
     Ok((
-        provider_config(provider),
+        provider_config(provider_id, provider),
         ModelSpec {
             id: model.id.clone(),
             context_window: model.context_window,
@@ -4099,13 +4118,27 @@ fn resolve_model(
     ))
 }
 
-/// What a request needs to reach a saved provider.
-pub fn provider_config(p: &AiProvider) -> ProviderConfig {
+/// What a request needs to reach saved provider `id`. A ChatGPT provider (AI-52) is a Responses
+/// provider at OpenAI's API, whose requests carry an access token of this device's session.
+pub fn provider_config(id: &str, p: &AiProvider) -> ProviderConfig {
+    if p.chatgpt.is_some() {
+        return ProviderConfig {
+            protocol: Protocol::Responses,
+            base_url: chatgpt::BASE_URL.to_owned(),
+            api_key: Zeroizing::default(),
+            auth_header: AuthHeader::Authorization,
+            chatgpt: Some(hatoba_ai::chatgpt::ChatgptAuth {
+                sessions: chatgpt::sessions().clone(),
+                id: id.to_owned(),
+            }),
+        };
+    }
     ProviderConfig {
         protocol: protocol(p.protocol),
         base_url: p.base_url.clone(),
         api_key: p.api_key.clone(),
         auth_header: auth_header(p.auth_header),
+        chatgpt: None,
     }
 }
 
@@ -6112,10 +6145,12 @@ pub fn error_kind(e: &AiError) -> &'static str {
         AiError::Protocol(_) => "protocol",
         AiError::Blocked(_) => "blocked",
         AiError::UnsupportedContentType(_) => "content_type",
+        AiError::SignIn(_) => "sign_in",
         AiError::Cancelled => "cancelled",
     }
 }
 
+pub mod chatgpt;
 mod files;
 pub mod mentions;
 mod search;

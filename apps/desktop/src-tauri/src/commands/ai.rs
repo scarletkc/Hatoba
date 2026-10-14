@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use hatoba_ai::AiError;
+use hatoba_ai::chatgpt::SessionStatus;
 use hatoba_ai::models::{TestFailure, TestOutcome};
 use hatoba_ai::provider::{ProviderConfig, validate_base_url};
 use hatoba_ai::web::SearchConfig;
@@ -21,11 +22,12 @@ use tauri::{AppHandle, State};
 use zeroize::Zeroizing;
 
 use crate::ai::{
-    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, conversation_view, conversation_view_at,
-    core_effort, effort_view, find_conversation, listed_effort, protocol, search_kind,
+    AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
+    conversation_view_at, core_effort, effort_view, find_conversation, listed_effort, protocol,
+    search_kind,
 };
 use crate::dto::{
-    AiAuthHeader, AiAutoVerdict, AiConversationDetail, AiConversationView, AiEntryView,
+    AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView, AiConversationDetail, AiConversationView, AiEntryView,
     AiFileChange, AiFilePreview, AiFileRevert, AiHostFile, AiHostListing, AiJudgeSampleOutcome,
     AiModel, AiModelRef, AiProtocol, AiProviderInput, AiProviderView, AiSearchHit, AiSendInput,
     AiSendStarted, AiSettingsPatch, AiSettingsView, AiSideAnswer, AiSideEvent, AiSideQuestionInput,
@@ -86,7 +88,7 @@ fn core_search_kind(kind: SearchKind) -> CoreSearchKind {
     }
 }
 
-pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
+pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderView {
     AiProviderView {
         id: id.to_owned(),
         name: p.name.clone(),
@@ -117,6 +119,15 @@ pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
                 adaptive_thinking: m.adaptive_thinking,
             })
             .collect(),
+        chatgpt: p.chatgpt.as_ref().map(|account| AiChatgptView {
+            email: account.email.clone(),
+            status: match chatgpt::status(v, id) {
+                SessionStatus::SignedIn => AiChatgptStatus::SignedIn,
+                SessionStatus::PlanDisabled => AiChatgptStatus::PlanDisabled,
+                SessionStatus::Ended => AiChatgptStatus::Ended,
+                SessionStatus::SignedOut => AiChatgptStatus::SignedOut,
+            },
+        }),
         updated_at: p.updated_at,
     }
 }
@@ -276,24 +287,46 @@ pub(crate) fn save_provider(
         Some(id) => Some(find_provider(v, id)?),
         None => None,
     };
-    let provider = AiProvider {
-        name: name.to_owned(),
-        protocol: core_protocol(input.protocol),
-        base_url,
-        api_key: api_key(
-            input.api_key.as_deref(),
-            existing.as_ref().map(|p| &p.api_key),
-        ),
-        auth_header: core_auth_header(input.auth_header),
-        models: models_from(&input.models)?,
-        updated_at: 0,
+    let chatgpt = existing.as_ref().and_then(|p| p.chatgpt.clone());
+    let provider = if chatgpt.is_some() {
+        // AI-52: a ChatGPT provider keeps its account, protocol and URL; the form edits the
+        // name and the models.
+        AiProvider {
+            name: name.to_owned(),
+            protocol: CoreProtocol::Responses,
+            base_url: chatgpt::BASE_URL.to_owned(),
+            models: models_from(&input.models)?,
+            chatgpt,
+            ..AiProvider::default()
+        }
+    } else {
+        AiProvider {
+            name: name.to_owned(),
+            protocol: core_protocol(input.protocol),
+            base_url,
+            api_key: api_key(
+                input.api_key.as_deref(),
+                existing.as_ref().map(|p| &p.api_key),
+            ),
+            auth_header: core_auth_header(input.auth_header),
+            models: models_from(&input.models)?,
+            chatgpt: None,
+            updated_at: 0,
+        }
     };
     let id = v.put(input.id.as_deref(), Item::AiProvider(provider))?;
-    Ok(provider_view(&id, &find_provider(v, &id)?))
+    Ok(provider_view(v, &id, &find_provider(v, &id)?))
 }
 
-/// The connection of a possibly unsaved provider. With an id, a `None` key is the saved key.
+/// The connection of a possibly unsaved provider. With an id, a `None` key is the saved key,
+/// and a ChatGPT provider (AI-52) is what its saved item says.
 pub(crate) fn provider_config_for(v: &Vault, input: &AiProviderInput) -> AppResult<ProviderConfig> {
+    if let Some(id) = &input.id {
+        let saved = find_provider(v, id)?;
+        if saved.chatgpt.is_some() {
+            return Ok(crate::ai::provider_config(id, &saved));
+        }
+    }
     let saved = match (&input.api_key, &input.id) {
         (None, Some(id)) => Some(find_provider(v, id)?.api_key),
         _ => None,
@@ -303,6 +336,7 @@ pub(crate) fn provider_config_for(v: &Vault, input: &AiProviderInput) -> AppResu
         base_url: input.base_url.trim().to_owned(),
         api_key: api_key(input.api_key.as_deref(), saved.as_ref()),
         auth_header: auth_header(core_auth_header(input.auth_header)),
+        chatgpt: None,
     })
 }
 
@@ -332,7 +366,7 @@ pub fn ai_providers_list(state: State<'_, AppState>) -> AppResult<Vec<AiProvider
         let mut list: Vec<AiProviderView> = v
             .ai_providers()
             .iter()
-            .map(|(id, p)| provider_view(id, p))
+            .map(|(id, p)| provider_view(v, id, p))
             .collect();
         list.sort_by_cached_key(|p| p.name.to_lowercase());
         Ok(list)
@@ -355,9 +389,155 @@ pub async fn ai_provider_save(
 #[tauri::command]
 #[specta::specta]
 pub fn ai_provider_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
-    state.with_unlocked(|v| delete_provider(v, &id))?;
+    let signed_in = state.with_unlocked(|v| {
+        let signed_in = chatgpt::credentials(v, &id).is_some();
+        delete_provider(v, &id)?;
+        Ok(signed_in)
+    })?;
     sync::local_change(&app);
+    // AI-52: this device's session of a ChatGPT provider goes with it, revoked at OpenAI.
+    if signed_in {
+        tauri::async_runtime::spawn(async move {
+            let revoked = chatgpt::sessions()
+                .sign_out(&id, &tokio_util::sync::CancellationToken::new())
+                .await;
+            tracing::info!(revoked = ?revoked.ok(), "ChatGPT session of a deleted provider ended");
+        });
+    }
     Ok(())
+}
+
+// ───────────────────────── Sign in with ChatGPT (AI-52) ─────────────────────────
+
+/// AI-52: signs in with ChatGPT in the system browser: a new account (`provider_id` `None`), which
+/// adds a ChatGPT provider with the account's models, or provider `provider_id`'s account again.
+/// Waits until the browser comes back (at most 15 minutes), `ai_chatgpt_sign_in_cancel` cancels
+/// it, or the vault locks.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_chatgpt_sign_in(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+) -> AppResult<AiChatgptSignIn> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let sessions = chatgpt::sessions();
+    // Registered with the read, so a lock either came first or cancels the sign-in.
+    let (request, op) = state.with_unlocked(|v| {
+        Ok((
+            chatgpt::sign_in_request(v, provider_id.as_deref())?,
+            state.ai.background_op(),
+        ))
+    })?;
+    let cancel = state.ai.chatgpt_sign_in_started(op.token());
+    let sign_in = hatoba_ai::chatgpt::oauth::SignIn::start(sessions.endpoints(), &request).await?;
+    app.opener()
+        .open_url(sign_in.url().as_str(), None::<&str>)
+        .map_err(|_| {
+            AppError::new(
+                crate::error::ErrorCode::Ai,
+                "Hatoba could not open the browser for the sign-in.",
+            )
+        })?;
+    let credentials = sign_in
+        .finish(&state.ai.http(), &cancel)
+        .await
+        .map_err(|e| {
+            tracing::info!(kind = crate::ai::error_kind(&e), "ChatGPT sign-in failed");
+            AppError::from(e)
+        })?;
+    let first_sign_in = provider_id.is_none();
+    let id = state.with_unlocked(|v| {
+        let account = chatgpt::account_of(&credentials);
+        match &provider_id {
+            Some(id) => {
+                let mut provider = find_provider(v, id)?;
+                if provider.chatgpt.as_ref() != Some(&account) {
+                    provider.chatgpt = Some(account);
+                    v.put(Some(id), Item::AiProvider(provider))?;
+                }
+                Ok(id.clone())
+            }
+            None => Ok(v.put(
+                None,
+                Item::AiProvider(AiProvider {
+                    name: chatgpt::PROVIDER_NAME.to_owned(),
+                    protocol: CoreProtocol::Responses,
+                    base_url: chatgpt::BASE_URL.to_owned(),
+                    chatgpt: Some(account),
+                    ..AiProvider::default()
+                }),
+            )?),
+        }
+    })?;
+    sessions.signed_in(&id, &credentials).await?;
+    // A new provider starts with the account's models.
+    if first_sign_in && credentials.plan_enabled() {
+        let config = state.with_unlocked(|v| Ok(crate::ai::provider_config(&id, &find_provider(v, &id)?)))?;
+        match hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel).await {
+            Ok(models) => {
+                state.with_unlocked(|v| {
+                    let mut provider = find_provider(v, &id)?;
+                    provider.models = models
+                        .into_iter()
+                        .map(|m| CoreModel {
+                            id: m.id,
+                            name: m.name,
+                            context_window: m.context_window,
+                            max_output_tokens: m.max_output_tokens,
+                            efforts: m.efforts.map(|levels| {
+                                levels.into_iter().map(listed_effort).map(core_effort).collect()
+                            }),
+                            adaptive_thinking: m.adaptive_thinking,
+                        })
+                        .collect();
+                    v.put(Some(&id), Item::AiProvider(provider))?;
+                    Ok(())
+                })?;
+            }
+            Err(e) => tracing::info!(
+                kind = crate::ai::error_kind(&e),
+                status = ?e.status(),
+                "ChatGPT model list failed after the sign-in"
+            ),
+        }
+    }
+    drop(op);
+    sync::local_change(&app);
+    let provider = state.with_unlocked(|v| Ok(provider_view(v, &id, &find_provider(v, &id)?)))?;
+    tracing::info!(first_sign_in, "signed in with ChatGPT");
+    Ok(AiChatgptSignIn {
+        provider,
+        first_sign_in,
+    })
+}
+
+/// AI-52: cancels the sign-in that waits for the browser.
+#[tauri::command]
+#[specta::specta]
+pub fn ai_chatgpt_sign_in_cancel(state: State<'_, AppState>) {
+    state.ai.chatgpt_sign_in_cancel();
+}
+
+/// AI-52: signs provider `provider_id` out on this device and revokes the session at OpenAI.
+/// Returns whether OpenAI confirmed the revocation; the session is gone from this device either
+/// way, and the provider keeps its account for the next sign-in.
+#[tauri::command]
+#[specta::specta]
+pub async fn ai_chatgpt_sign_out(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> AppResult<bool> {
+    let op = state.with_unlocked(|v| {
+        chatgpt::chatgpt_account(v, &provider_id)?;
+        Ok(state.ai.background_op())
+    })?;
+    let revoked = chatgpt::sessions()
+        .sign_out(&provider_id, op.token())
+        .await?;
+    tracing::info!(revoked, "signed out of ChatGPT");
+    Ok(revoked)
 }
 
 /// AI-03: the model list of a saved or unsaved provider.

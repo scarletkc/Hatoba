@@ -1265,7 +1265,40 @@ pub struct AiProviderView {
     /// Only used by `anthropic`.
     pub auth_header: AiAuthHeader,
     pub models: Vec<AiModel>,
+    /// Set for a provider that signs in with a ChatGPT account instead of a key (AI-52).
+    pub chatgpt: Option<AiChatgptView>,
     pub updated_at: i64,
+}
+
+/// AI-52: where a ChatGPT provider's sign-in stands on this device. Its tokens never reach the
+/// WebView.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiChatgptStatus {
+    /// Signed in, with plan use allowed.
+    SignedIn,
+    /// Signed in, but plan use was not allowed.
+    PlanDisabled,
+    /// The session ended (expired, revoked, or signed out in ChatGPT): sign in again.
+    Ended,
+    /// Not signed in on this device (signed out here, or signed in on another device only).
+    SignedOut,
+}
+
+/// AI-52: the ChatGPT account of a provider.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiChatgptView {
+    pub email: String,
+    pub status: AiChatgptStatus,
+}
+
+/// AI-52: a finished sign-in.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiChatgptSignIn {
+    pub provider: AiProviderView,
+    /// The sign-in registered Hatoba for a new account, so the panel says once that requests
+    /// now use the ChatGPT plan.
+    pub first_sign_in: bool,
 }
 
 #[derive(Clone, Deserialize, Type)]

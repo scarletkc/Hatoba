@@ -697,8 +697,35 @@ pub struct AiProvider {
     pub auth_header: AiAuthHeader,
     /// Models the user can pick.
     pub models: Vec<AiModel>,
+    /// The ChatGPT account the provider signs in with instead of a key (AI-52), absent for a key
+    /// provider. Its tokens never sync: each device signs in itself and keeps its session
+    /// sealed in its own vault.
+    #[zeroize(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chatgpt: Option<AiChatgptAccount>,
     /// Last modification, Unix ms.
     pub updated_at: i64,
+}
+
+/// The ChatGPT account of an [`AiProvider`] (AI-52): which registration of Hatoba a sign-in on
+/// any device reuses. No secrets.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AiChatgptAccount {
+    /// The client id OpenAI issued at the first sign-in (`oaiapp_…`).
+    pub client_id: String,
+    /// The account's verified `sub`.
+    pub subject: String,
+    /// The account's email, shown in the settings and sent as a sign-in hint.
+    pub email: String,
+}
+
+impl fmt::Debug for AiChatgptAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiChatgptAccount")
+            .field("client_id", &self.client_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl fmt::Debug for AiProvider {
@@ -710,6 +737,7 @@ impl fmt::Debug for AiProvider {
             .field("api_key", &"<redacted>")
             .field("auth_header", &self.auth_header)
             .field("models", &self.models)
+            .field("chatgpt", &self.chatgpt)
             .field("updated_at", &self.updated_at)
             .finish()
     }
@@ -1918,6 +1946,7 @@ mod tests {
                 },
                 AiModel::default(),
             ],
+            chatgpt: None,
             updated_at: 7,
         });
         assert_eq!(
@@ -1948,6 +1977,25 @@ mod tests {
                 "models": [], "updated_at": 0
             })
         );
+        // AI-52: the account a ChatGPT provider signs in with syncs; its tokens do not.
+        let chatgpt = Item::AiProvider(AiProvider {
+            name: "ChatGPT".into(),
+            protocol: AiProtocol::Responses,
+            base_url: "https://api.openai.com/v1".into(),
+            chatgpt: Some(AiChatgptAccount {
+                client_id: "oaiapp_1".into(),
+                subject: "user-1".into(),
+                email: "user@example.com".into(),
+            }),
+            ..AiProvider::default()
+        });
+        let value = serde_json::to_value(&chatgpt).unwrap();
+        assert_eq!(
+            value["chatgpt"],
+            json!({"client_id": "oaiapp_1", "subject": "user-1", "email": "user@example.com"})
+        );
+        assert_eq!(serde_json::from_value::<Item>(value).unwrap(), chatgpt);
+        assert!(!format!("{chatgpt:?}").contains("user@example.com"));
 
         let search = Item::SearchProvider(SearchProvider {
             kind: SearchKind::Searxng,

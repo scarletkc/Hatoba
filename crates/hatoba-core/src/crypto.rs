@@ -55,6 +55,8 @@ pub const AAD_VAULT_CHECK: &str = "hatoba/vault-check/v1";
 pub const AAD_RECENT_TARGETS: &str = "hatoba/recent-targets/v1";
 /// AAD of the local-only `ai_allowances` meta value (the AI approvals saved on this device).
 pub const AAD_AI_ALLOWANCES: &str = "hatoba/ai-allowances/v1";
+/// AAD of the local-only `chatgpt_sessions` meta value (this device's ChatGPT sessions, AI-52).
+pub const AAD_CHATGPT_SESSIONS: &str = "hatoba/chatgpt-sessions/v1";
 /// Prefix of the AAD of a local-only file snapshot's envelopes (AI-41):
 /// `hatoba/ai-file-snapshot/v1/{part}/{key}`, with the part (`meta` or `content`) and the row's
 /// key as a JSON array, so an envelope opens only in its own row and column.
