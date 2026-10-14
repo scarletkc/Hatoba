@@ -96,15 +96,17 @@ pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
     let vault = state.vault();
     let info = vault.status();
     let pin = vault.pin_status();
-    // After a restart, a PIN kept for that unlocks with its copy in the OS credential store.
-    let pin_unlock = pin.armed
-        || (pin.persist
-            && state
-                .secrets
-                .get(secret_keys::PIN_VAULT_KEY)
-                .ok()
-                .flatten()
-                .is_some());
+    // After a restart, a PIN kept for that unlocks with its copy in the OS credential store. A PIN
+    // out of attempts does not, even when that copy is still there.
+    let pin_unlock = !pin.exhausted
+        && (pin.armed
+            || (pin.persist
+                && state
+                    .secrets
+                    .get(secret_keys::PIN_VAULT_KEY)
+                    .ok()
+                    .flatten()
+                    .is_some()));
     let sync_kind = match vault.sync_config().ok().flatten() {
         None => SyncKind::None,
         Some(SyncConfig::Worker { .. }) => SyncKind::Worker,
@@ -205,9 +207,10 @@ pub async fn vault_unlock_pin(
             .unlock_with_pin(&pin, stored.as_deref().map(String::as_str))?)
     })
     .await;
+    // The copy goes with the last wrong PIN, or later if removing it failed then.
     if let Err(e) = &result
-        && e.code == ErrorCode::WrongPin
-        && e.attempts_left == Some(0)
+        && (e.code == ErrorCode::PinUnavailable
+            || (e.code == ErrorCode::WrongPin && e.attempts_left == Some(0)))
     {
         forget_stored_pin(&state);
     }

@@ -41,6 +41,9 @@ pub struct PinStatus {
     pub persist: bool,
     /// The wrapped vault key is in memory, so the PIN can unlock without the OS store.
     pub armed: bool,
+    /// The PIN ran out of attempts: it unlocks nothing until a full unlock, even with a copy
+    /// still in the OS store.
+    pub exhausted: bool,
 }
 
 /// The `pin` meta value. Holds no secret in the clear: the PIN key is sealed under the vault key.
@@ -83,6 +86,7 @@ impl Vault {
                 enabled: true,
                 persist: record.persist,
                 armed: self.pin_wrapped.is_some(),
+                exhausted: record.failures >= MAX_PIN_ATTEMPTS,
             },
             _ => PinStatus::default(),
         }
@@ -258,7 +262,8 @@ mod tests {
             PinStatus {
                 enabled: true,
                 persist: false,
-                armed: true
+                armed: true,
+                exhausted: false,
             }
         );
         vault.unlock_with_pin("2468", None).unwrap();
@@ -314,7 +319,7 @@ mod tests {
             vault.unlock_with_pin("1357", Some(&stored)),
             Err(Error::WrongPin { attempts_left: 0 })
         ));
-        assert!(!vault.pin_status().armed);
+        assert!(!vault.pin_status().armed && vault.pin_status().exhausted);
         // Neither the right PIN nor the stored key gets in now.
         assert!(matches!(
             vault.unlock_with_pin("2468", Some(&stored)),
@@ -323,6 +328,7 @@ mod tests {
         assert!(!vault.is_unlocked());
 
         vault.unlock(PW).unwrap();
+        assert!(!vault.pin_status().exhausted);
         vault.lock();
         vault.unlock_with_pin("2468", None).unwrap();
     }
