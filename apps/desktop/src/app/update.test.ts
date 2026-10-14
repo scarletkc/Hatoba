@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppError, UpdateCheck, UpdateProgress } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({
@@ -36,7 +36,7 @@ const found = (version: string | null): UpdateCheck => ({
 const offline: AppError = { code: "sync_offline", detail: "GitHub could not be reached" };
 const badSignature: AppError = { code: "update_signature", detail: "Minisign error" };
 
-// Each test gets fresh module state: the store and the once-per-launch flag.
+// Each test gets fresh module state: the store and the automatic check's once-per-launch start.
 async function load() {
   vi.resetModules();
   return import("./update");
@@ -136,20 +136,92 @@ describe("update install", () => {
   });
 });
 
-describe("checkOnFirstUnlock", () => {
+describe("startAutoCheck", () => {
+  const HOUR = 60 * 60 * 1000;
+  // Lets the clock run, and the checks it starts finish.
+  const pass = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   it("does nothing while the automatic check is off", async () => {
-    const { checkOnFirstUnlock, useUpdate } = await load();
-    checkOnFirstUnlock();
+    const { startAutoCheck, useUpdate } = await load();
+    startAutoCheck();
+    await pass(48 * HOUR);
     expect(backend.calls).toBe(0);
     expect(useUpdate.getState().result).toBeNull();
   });
 
-  it("checks once per launch when the automatic check is on", async () => {
+  it("checks after the first unlock, once however often it is asked", async () => {
     backend.autoCheck = true;
-    const { checkOnFirstUnlock, useUpdate } = await load();
-    checkOnFirstUnlock();
-    await vi.waitFor(() => expect(useUpdate.getState().result).not.toBeNull());
-    checkOnFirstUnlock();
+    const { startAutoCheck, useUpdate } = await load();
+    startAutoCheck();
+    await pass(0);
+    expect(useUpdate.getState().result).not.toBeNull();
+    startAutoCheck();
+    await pass(HOUR);
+    expect(backend.calls).toBe(1);
+  });
+
+  it("checks again a day after the last check while Hatoba runs", async () => {
+    backend.autoCheck = true;
+    const { startAutoCheck } = await load();
+    startAutoCheck();
+    await pass(0);
+    await pass(23 * HOUR);
+    expect(backend.calls).toBe(1);
+    await pass(HOUR);
+    expect(backend.calls).toBe(2);
+    await pass(24 * HOUR);
+    expect(backend.calls).toBe(3);
+  });
+
+  it("counts the day from a check the user ran", async () => {
+    backend.autoCheck = true;
+    const { startAutoCheck, useUpdate } = await load();
+    startAutoCheck();
+    await pass(0);
+    await pass(12 * HOUR);
+    await useUpdate.getState().check();
+    await pass(12 * HOUR);
+    expect(backend.calls).toBe(2);
+    await pass(12 * HOUR);
+    expect(backend.calls).toBe(3);
+  });
+
+  it("tries a failed check again an hour later", async () => {
+    backend.autoCheck = true;
+    backend.answer = () => Promise.reject(offline);
+    const { startAutoCheck, useUpdate } = await load();
+    startAutoCheck();
+    await pass(0);
+    expect(useUpdate.getState().error).toEqual(offline);
+    backend.answer = async () => found("0.2.0");
+    await pass(HOUR);
+    expect(backend.calls).toBe(2);
+    expect(useUpdate.getState().result).toEqual(found("0.2.0"));
+  });
+
+  it("starts checking once the user turns the automatic check on", async () => {
+    const { startAutoCheck } = await load();
+    startAutoCheck();
+    await pass(HOUR);
+    expect(backend.calls).toBe(0);
+    backend.autoCheck = true;
+    await pass(HOUR);
+    expect(backend.calls).toBe(1);
+  });
+
+  it("does not check while an update installs", async () => {
+    backend.autoCheck = true;
+    const { startAutoCheck, useUpdate } = await load();
+    startAutoCheck();
+    await pass(0);
+    void useUpdate.getState().installUpdate();
+    await pass(48 * HOUR);
     expect(backend.calls).toBe(1);
   });
 });

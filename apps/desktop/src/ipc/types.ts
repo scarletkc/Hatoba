@@ -801,6 +801,9 @@ export interface TrayMenuInput {
   lock: string;
   quit: string;
   can_lock: boolean;
+  /** **Update to vX.Y.Z** while a check has found a newer release; null leaves the item out. */
+  update: string | null;
+  can_update: boolean;
 }
 
 /** AI-07: a system notification, sent only while the window is not focused. */
@@ -1548,4 +1551,6 @@ export interface EventMap {
   "window://close-prompt": null;
   /** AI-07: a click on a notification brought the window back; this is what the notification was about. */
   "app://notification-click": NotificationTarget;
+  /** WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+  "tray://update": null;
 }

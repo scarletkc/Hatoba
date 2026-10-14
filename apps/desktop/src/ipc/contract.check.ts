@@ -46,6 +46,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.LaunchEvent, Ui.EventMap["app://launch"]>>,
   Check<Assignable<Rust.ClosePromptEvent, Ui.EventMap["window://close-prompt"]>>,
   Check<Assignable<Rust.NotificationTarget, Ui.EventMap["app://notification-click"]>>,
+  Check<Assignable<Rust.TrayUpdateEvent, Ui.EventMap["tray://update"]>>,
   Check<Assignable<Rust.CliCommandView, Ui.CliCommandView>>,
   Check<Assignable<Rust.ForwardView, Ui.ForwardView>>,
   Check<Assignable<Rust.ForwardStatusEvent, Ui.ForwardStatusEvent>>,
