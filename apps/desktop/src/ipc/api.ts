@@ -63,6 +63,7 @@ import type {
   McpServerView,
   McpToolInfo,
   McpProxyInfo,
+  NotificationInput,
   ProbeResult,
   ProxyInput,
   ProxyView,
@@ -121,6 +122,8 @@ export interface HatobaApi {
   vault_create(password: string): Promise<string>;
   vault_unlock(password: string): Promise<void>;
   vault_unlock_biometric(): Promise<void>;
+  /** SEC-11: unlock with the PIN. */
+  vault_unlock_pin(pin: string): Promise<void>;
   vault_lock(): Promise<void>;
   vault_verify_password(password: string): Promise<boolean>;
   vault_change_password(current: string, next: string): Promise<void>;
@@ -134,6 +137,10 @@ export interface HatobaApi {
   vault_rotate_recovery(password: string): Promise<string>;
   biometric_enable(password: string): Promise<void>;
   biometric_disable(): Promise<void>;
+  /** SEC-11: set or replace the PIN after checking the master password. It needs the master password after a restart until `pin_set_persist`. */
+  pin_enable(password: string, pin: string): Promise<void>;
+  pin_disable(): Promise<void>;
+  pin_set_persist(persist: boolean): Promise<void>;
   /** Resets the idle auto-lock timer (SEC-02). Called on user activity, throttled by the UI. */
   activity_ping(): Promise<void>;
 
@@ -481,6 +488,8 @@ export interface HatobaApi {
   window_hide_to_tray(): Promise<void>;
   app_quit(): Promise<void>;
   tray_set_menu(menu: TrayMenuInput): Promise<void>;
+  /** AI-07: a system notification; a click on it sends `app://notification-click`. */
+  notification_show(notification: NotificationInput): Promise<void>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 

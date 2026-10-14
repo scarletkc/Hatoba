@@ -26,6 +26,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Ask every time | 每次询问 | 毎回確認する |
 | Minimize to tray | 最小化到托盘 | トレイに最小化 |
 | Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
+| Notify when the AI assistant finishes or needs approval | AI 助手完成或需要确认时通知 | AI アシスタントの完了や確認待ちを通知 |
 | Refresh interval | 刷新间隔 | 更新間隔 |
 | Export Encrypted Backup | 导出加密备份 | 暗号化バックアップをエクスポート |
 | Export… | 导出… | エクスポート… |
@@ -34,6 +35,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Close Button** (Windows and Linux only): what the window's close button, Alt+F4 and the taskbar's Close do. **Ask every time** (default) asks whether to minimize Hatoba to the system tray or quit, and the question's **Remember my choice** sets this row. **Minimize to tray** hides the window while SSH sessions, port forwards and sync keep running; the tray icon brings it back. **Quit Hatoba** quits. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, closing always quits. macOS has no such row: its red button hides the window, the Dock icon brings it back, and ⌘Q quits.
+- **Notify when the AI assistant finishes or needs approval**: on by default. While Hatoba is not the active window, also while it is minimized or in the tray, a conversation that finishes a turn, stops on an error, or waits for approval of a tool call shows a system notification, also one in a tab's background. Its title is the tab's name (**AI Assistant** for the home tab), and its text says what happened and names the conversation. Clicking it brings the window back and shows the conversation with the AI panel open. The system's own notification settings for Hatoba, and Do Not Disturb, can still hide them.
 - **Refresh interval** (3 s by default) and the three thresholds below it (CPU, memory and disk use, 90% by default, or **Off**) belong to the dashboard; see `references/dashboard.md`.
 - **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.
 
@@ -88,6 +90,8 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
 | Clear Clipboard | 清除剪贴板 | クリップボードの消去 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 | Windows Hello でロック解除 |
+| Unlock with PIN | 使用 PIN 解锁 | PIN でロック解除 |
+| Require the master password after a restart | 重启后需要输入主密码 | 再起動後はマスターパスワードを要求 |
 | Master Password | 主密码 | マスターパスワード |
 | Change… | 更改主密码… | 変更… |
 | Recovery Code | 恢复码 | リカバリーコード |
@@ -95,7 +99,7 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | Lock Now | 立即锁定 | 今すぐロック |
 | Lock | 锁定 | ロック |
 
-Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
+Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
 
 ## About
 
@@ -106,7 +110,7 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 | Download and Install | 下载并安装 | ダウンロードしてインストール |
 | Install and Restart | 安装并重启 | インストールして再起動 |
 | View on GitHub | 在 GitHub 上查看 | GitHub で見る |
-| Automatically check for updates at startup | 启动时自动检查更新 | 起動時にアップデートを自動で確認 |
+| Automatically check for updates | 自动检查更新 | アップデートを自動で確認 |
 | Checking… | 正在检查… | 確認しています… |
 | Hatoba is up to date. | 已是最新版本。 | 最新バージョンです。 |
 | Copy version | 复制版本号 | バージョンをコピー |
@@ -121,8 +125,8 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 - The page shows the version; click it to copy.
 - **Software Update** → **Check for Updates** asks GitHub whether a newer version exists. The result is "Checking…", "Hatoba is up to date.", "Hatoba vX is available.", or an offline or failure message. A newer version's release notes show below the setting, with **View on GitHub** for its release page.
 - **Download and Install** asks first only when SSH sessions are open or file transfers are running, and says how many closing Hatoba will end. After **Install and Restart** (or right away when nothing would end), Hatoba downloads the installer and checks its signature, then closes, which disconnects every session, and opens again once the installer finishes. An installer without a valid signature from Hatoba is refused and not run. Update error messages are in `references/troubleshooting.md`.
-- **Automatically check for updates at startup** is on by default. When on, Hatoba asks GitHub once after the first unlock of each launch; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
-- When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab.
+- **Automatically check for updates** is on by default. When on, Hatoba asks GitHub after the first unlock of each launch and then once a day while it keeps running, including hidden in the tray; when off, it contacts GitHub only when **Check for Updates** or **Download and Install** is pressed.
+- When a newer release is found, the sidebar gear shows a dot, its tooltip becomes **Settings (update available)**, and it opens the About tab. On Windows and Linux the tray menu also shows **Update to vX.Y.Z**, which opens the About tab and starts **Download and Install**.
 - **Website** opens https://hatoba.fog.moe, with downloads and these docs. **Source Code** and **MIT License** open the GitHub repository and the license. **Report a Problem** opens GitHub's bug report form with the Hatoba version and the operating system filled in; the user reviews and submits it.
 - A card in the sidebar (**Enjoying Hatoba?**) asks once for a GitHub star, a day after first use and after a session has connected. **Star** opens the repository, **Report a Problem** opens the bug form, and the × closes it for good.
 
@@ -130,4 +134,4 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |

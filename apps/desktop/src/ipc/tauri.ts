@@ -26,6 +26,7 @@ export function createTauriApi(): HatobaApi {
     vault_create: (password) => call("vault_create", { password }),
     vault_unlock: (password) => call("vault_unlock", { password }),
     vault_unlock_biometric: () => call("vault_unlock_biometric"),
+    vault_unlock_pin: (pin) => call("vault_unlock_pin", { pin }),
     vault_lock: () => call("vault_lock"),
     vault_verify_password: (password) => call("vault_verify_password", { password }),
     vault_change_password: (current, next) => call("vault_change_password", { current, next }),
@@ -35,6 +36,9 @@ export function createTauriApi(): HatobaApi {
     vault_rotate_recovery: (password) => call("vault_rotate_recovery", { password }),
     biometric_enable: (password) => call("biometric_enable", { password }),
     biometric_disable: () => call("biometric_disable"),
+    pin_enable: (password, pin) => call("pin_enable", { password, pin }),
+    pin_disable: () => call("pin_disable"),
+    pin_set_persist: (persist) => call("pin_set_persist", { persist }),
     activity_ping: () => call("activity_ping"),
 
     hosts_list: () => call("hosts_list"),
@@ -254,6 +258,7 @@ export function createTauriApi(): HatobaApi {
     window_hide_to_tray: () => call("window_hide_to_tray"),
     app_quit: () => call("app_quit"),
     tray_set_menu: (menu) => call("tray_set_menu", { menu }),
+    notification_show: (notification) => call("notification_show", { notification }),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),

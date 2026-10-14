@@ -172,6 +172,134 @@ export function ChangePasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** SEC-11: a PIN has at least this many characters, of any kind (as the backend checks). */
+const MIN_PIN_CHARS = 4;
+
+/** SEC-11: turns on the PIN after the master password. It starts asking for the master password after a restart. */
+export function SetPinDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const [password, setPassword] = useState("");
+  const [pin, setPin] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const pinLength = [...pin].length;
+  const tooShort = pinLength > 0 && pinLength < MIN_PIN_CHARS;
+  const mismatch = confirm.length > 0 && confirm !== pin;
+  const canSubmit = !!password && pinLength >= MIN_PIN_CHARS && confirm === pin && !busy;
+
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault();
+    if (!canSubmit) return;
+    setBusy(true);
+    setPasswordError(null);
+    setError(null);
+    try {
+      await api.pin_enable(password, pin);
+      await useApp.getState().refreshVault();
+      onClose();
+    } catch (err) {
+      const code = toAppError(err).code;
+      if (code === "wrong_password" || code === "throttled") setPasswordError(errorMessage(t, err));
+      else setError(errorMessage(t, err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      width={420}
+      onClose={busy ? undefined : onClose}
+      closeOnBackdrop={false}
+      footer={
+        <>
+          <FooterSpacer />
+          <Button onClick={onClose} disabled={busy}>
+            {t("btn.cancel")}
+          </Button>
+          <Button variant="primary" busy={busy} disabled={!canSubmit} onClick={() => void submit()}>
+            {t("settings.pin.submit")}
+          </Button>
+        </>
+      }
+    >
+      <SheetHeader title={t("settings.pin.title")} subtitle={t("settings.pin.body")} />
+      <form className={s.form} onSubmit={(e) => void submit(e)}>
+        <div className={s.field}>
+          <label className={s.label} htmlFor="pin-master-password">
+            {t("vault.field.master")}
+          </label>
+          <TextField
+            id="pin-master-password"
+            large
+            secret
+            autoFocus
+            autoComplete="current-password"
+            invalid={!!passwordError}
+            readOnly={busy}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError(null);
+            }}
+          />
+          {passwordError && (
+            <div className={s.error} role="alert">
+              {passwordError}
+            </div>
+          )}
+        </div>
+        <div className={s.field}>
+          <label className={s.label} htmlFor="pin-new">
+            {t("settings.pin.pin")}
+          </label>
+          <TextField
+            id="pin-new"
+            large
+            secret
+            autoComplete="off"
+            invalid={tooShort}
+            readOnly={busy}
+            value={pin}
+            onChange={(e) => {
+              setPin(e.target.value);
+              setError(null);
+            }}
+          />
+          {tooShort && <div className={s.error}>{t("settings.pin.tooShort")}</div>}
+        </div>
+        <div className={s.field}>
+          <label className={s.label} htmlFor="pin-confirm">
+            {t("settings.pin.confirm")}
+          </label>
+          <TextField
+            id="pin-confirm"
+            large
+            secret
+            autoComplete="off"
+            invalid={mismatch}
+            readOnly={busy}
+            value={confirm}
+            onChange={(e) => {
+              setConfirm(e.target.value);
+              setError(null);
+            }}
+          />
+          {mismatch && <div className={s.error}>{t("settings.pin.mismatch")}</div>}
+        </div>
+        {error && (
+          <div className={s.error} role="alert">
+            {error}
+          </div>
+        )}
+        <button type="submit" hidden />
+      </form>
+    </Sheet>
+  );
+}
+
 /** Shows a freshly rotated recovery code. The old one is already void, so leaving needs the same confirmation as setup. */
 export function NewRecoveryDialog({ code, onClose }: { code: string; onClose: () => void }) {
   const t = useT();

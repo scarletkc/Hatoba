@@ -467,6 +467,7 @@ async fn join_merges_another_vault_into_the_cloud() {
     c.v().delete(&gone).unwrap();
     c.v().set_recent_targets("[\"root@local\"]").unwrap();
     c.v().set_ai_allowances("[\"allowed\"]").unwrap();
+    c.v().set_pin("2468", true).unwrap();
     let chat = c.put(conversation("local-chat"));
     let response = c
         .v()
@@ -495,6 +496,8 @@ async fn join_merges_another_vault_into_the_cloud() {
     assert_eq!(c.pending(), 4, "local host, key, chat and message");
     c.sync().await;
     assert!(joined.rekeyed);
+    // The PIN wrapped the old vault key, so the join turned it off.
+    assert_eq!(c.v().pin_status(), crate::PinStatus::default());
     assert!(!joined.session.token.is_empty());
     assert_eq!(c.v().device_id(), device_id, "the device keeps its id");
     assert_eq!(c.v().sync_config().unwrap(), Some(config()));
@@ -730,9 +733,13 @@ async fn join_reconnects_a_device_that_synced_before() {
     a.rename(&shared, "renamed-on-a");
     a.sync().await;
     b.put(host("added-while-disconnected"));
+    b.v().set_pin("2468", false).unwrap();
 
     let joined = join(&b).await;
     assert!(!joined.rekeyed);
+    // The same vault key: the PIN stays and still unlocks.
+    b.v().lock();
+    b.v().unlock_with_pin("2468", None).unwrap();
     converge(&a, &b).await;
     assert_eq!(b.names(), ["added-while-disconnected", "renamed-on-a"]);
     // Only the item that changed elsewhere is logged; unchanged ones converge silently.

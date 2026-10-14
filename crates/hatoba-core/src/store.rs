@@ -65,6 +65,9 @@ pub mod meta {
     /// Envelope JSON: this device's ChatGPT sessions and its `ext_agent_host_id` (AI-52), sealed
     /// under the vault key because they hold tokens. Device-local, never synced.
     pub const CHATGPT_SESSIONS: &str = "chatgpt_sessions";
+    /// JSON of this device's PIN unlock (SEC-11): the KDF salt and parameters, the PIN key
+    /// sealed under the vault key, and the failure count. Device-local, never synced.
+    pub const PIN: &str = "pin";
 }
 
 /// One row of the `items` table.

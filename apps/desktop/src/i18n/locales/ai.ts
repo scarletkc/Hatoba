@@ -17,6 +17,10 @@ export default defineMessages({
     "ai.loadFailed": "无法打开这个对话。",
     "ai.tabRunning": "AI 助手正在工作",
     "ai.tabWaiting": "AI 助手在等你确认",
+    // system notifications (AI-07)
+    "ai.notify.done": "已完成：{title}",
+    "ai.notify.failed": "出错停止：{title}",
+    "ai.notify.approval": "等你确认：{title}",
 
     // permission mode (AI-16)
     "ai.mode": "权限模式",
@@ -499,6 +503,9 @@ export default defineMessages({
     "ai.loadFailed": "This conversation can’t be opened.",
     "ai.tabRunning": "The assistant is working",
     "ai.tabWaiting": "The assistant is waiting for you",
+    "ai.notify.done": "Finished: {title}",
+    "ai.notify.failed": "Stopped on an error: {title}",
+    "ai.notify.approval": "Waiting for your approval: {title}",
 
     "ai.mode": "Permission mode",
     "ai.mode.menuTitle": "Permission mode for this conversation",
@@ -975,6 +982,9 @@ export default defineMessages({
     "ai.loadFailed": "この会話を開けません。",
     "ai.tabRunning": "アシスタントが作業中です",
     "ai.tabWaiting": "アシスタントが確認を待っています",
+    "ai.notify.done": "完了しました：{title}",
+    "ai.notify.failed": "エラーで停止しました：{title}",
+    "ai.notify.approval": "確認を待っています：{title}",
 
     "ai.mode": "権限モード",
     "ai.mode.menuTitle": "この会話の権限モード",

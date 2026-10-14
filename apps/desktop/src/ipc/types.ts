@@ -17,6 +17,10 @@ export type ErrorCode =
   | "wrong_password"
   | "wrong_recovery_code"
   | "throttled"
+  /** SEC-11: wrong PIN; `attempts_left` says how many more it takes. */
+  | "wrong_pin"
+  /** SEC-11: no PIN unlock is possible now; the master password unlocks. */
+  | "pin_unavailable"
   | "not_found"
   | "invalid_input"
   | "key_parse"
@@ -97,6 +101,8 @@ export interface AppError {
   cf_code?: number | null;
   /** `ai`: the HTTP status the provider answered with, when it answered. */
   http_status?: number | null;
+  /** `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks. */
+  attempts_left?: number | null;
 }
 
 export type CloudflarePermission = "workers_scripts" | "d1";
@@ -116,6 +122,12 @@ export interface VaultStatus {
   biometric_available: boolean;
   /** Biometric unlock has been enrolled for this vault (P1). */
   biometric_enabled: boolean;
+  /** SEC-11: a PIN is set on this device. */
+  pin_enabled: boolean;
+  /** The PIN also works after the app restarts. */
+  pin_persist: boolean;
+  /** The PIN can unlock now, so the lock screen asks for it instead of the master password. */
+  pin_unlock: boolean;
 }
 
 // ───────────────────────── Hosts ─────────────────────────
@@ -762,6 +774,8 @@ export interface LocalPrefs {
   ai_permission_mode: AiPermissionMode;
   /** AI-16: the user confirmed the first switch to bypass on this device. */
   ai_bypass_confirmed: boolean;
+  /** AI-07: a system notification when a conversation finishes a turn or waits for approval while the window is not focused. */
+  ai_notifications: boolean;
   /** The AI panel is open (§9). */
   ai_panel_open: boolean;
   /** The AI panel's width in CSS pixels. */
@@ -799,6 +813,22 @@ export interface TrayMenuInput {
   lock: string;
   quit: string;
   can_lock: boolean;
+  /** **Update to vX.Y.Z** while a check has found a newer release; null leaves the item out. */
+  update: string | null;
+  can_update: boolean;
+}
+
+/** AI-07: a system notification, sent only while the window is not focused. */
+export interface NotificationInput {
+  title: string;
+  body: string;
+  target: NotificationTarget;
+}
+
+/** AI-07: what a notification is about, which a click on it shows: a tab, and in it a conversation. */
+export interface NotificationTarget {
+  tab: string | null;
+  conversation_id: string | null;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -1549,4 +1579,8 @@ export interface EventMap {
   "app://launch": null;
   /** WIN-10: the close button asks whether to hide the window to the tray or quit. */
   "window://close-prompt": null;
+  /** AI-07: a click on a notification brought the window back; this is what the notification was about. */
+  "app://notification-click": NotificationTarget;
+  /** WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+  "tray://update": null;
 }

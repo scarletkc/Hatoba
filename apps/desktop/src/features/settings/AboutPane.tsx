@@ -70,6 +70,31 @@ function downloadPercent(install: Install): number | null {
 }
 
 /**
+ * Installs the update the last check found: **Download and Install** here, and the tray menu's
+ * **Update to vX.Y.Z** (WIN-10). Asks first when closing Hatoba would end sessions or transfers.
+ */
+export async function confirmInstall(t: T, target: AvailableUpdate) {
+  // One line per count, so that each picks its own plural form.
+  const sessions = useTabs.getState().tabs.filter((tab) => tab.status === "connected").length;
+  const transfers = useTransfers.getState().items.filter((item) => item.state === "running").length;
+  // With nothing to interrupt, it installs without asking.
+  const ok =
+    (sessions === 0 && transfers === 0) ||
+    (await confirm({
+      title: t("settings.about.install.title", { version: target.version }),
+      body: (
+        <>
+          {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
+          {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
+        </>
+      ),
+      confirmLabel: t("settings.about.install.confirm"),
+      icon: "arrow-circle-up",
+    }));
+  if (ok) await useUpdate.getState().installUpdate();
+}
+
+/**
  * Settings → About: the version, signed updates (spec §11), and links to the source, license, and
  * bug report form.
  */
@@ -78,7 +103,7 @@ export function AboutPane() {
   const version = useApp((st) => st.info.version);
   const platform = useApp((st) => st.info.platform);
   const [prefs, setPrefs] = usePrefs();
-  const { checking, result, error, install, installError, check, installUpdate } = useUpdate();
+  const { checking, result, error, install, installError, check } = useUpdate();
   const update = !checking && !error ? (result?.update ?? null) : null;
 
   const copyVersion = async () => {
@@ -88,27 +113,6 @@ export function AboutPane() {
     } catch {
       toast(t("err.internal"), "error");
     }
-  };
-
-  const confirmInstall = async (target: AvailableUpdate) => {
-    // One line per count, so that each picks its own plural form.
-    const sessions = useTabs.getState().tabs.filter((tab) => tab.status === "connected").length;
-    const transfers = useTransfers.getState().items.filter((item) => item.state === "running").length;
-    // With nothing to interrupt, it installs without asking.
-    const ok =
-      (sessions === 0 && transfers === 0) ||
-      (await confirm({
-        title: t("settings.about.install.title", { version: target.version }),
-        body: (
-          <>
-            {sessions > 0 && <span className={s.consequence}>{t("settings.about.install.sessions", { n: sessions })}</span>}
-            {transfers > 0 && <span className={s.consequence}>{t("settings.about.install.transfers", { n: transfers })}</span>}
-          </>
-        ),
-        confirmLabel: t("settings.about.install.confirm"),
-        icon: "arrow-circle-up",
-      }));
-    if (ok) await installUpdate();
   };
 
   const spinning = checking || install !== null;
@@ -145,7 +149,7 @@ export function AboutPane() {
           }
         >
           {update && !install && (
-            <Button variant="primary" onClick={() => void confirmInstall(update)}>
+            <Button variant="primary" onClick={() => void confirmInstall(t, update)}>
               {t("settings.about.install")}
             </Button>
           )}

@@ -45,6 +45,17 @@ pub enum Error {
     /// The vault key supplied for a biometric unlock does not match this vault.
     #[error("the supplied vault key does not match this vault")]
     WrongVaultKey,
+    /// The PIN is wrong (SEC-11). At 0 attempts left, the PIN works again only after an unlock
+    /// with the master password.
+    #[error("wrong PIN, {attempts_left} attempts left")]
+    WrongPin {
+        /// Wrong PINs still allowed before the PIN stops working.
+        attempts_left: u32,
+    },
+    /// No PIN unlock is possible now: none is set, it ran out of attempts, or the app restarted
+    /// while it lives only in memory. The master password unlocks.
+    #[error("PIN unlock is not available; use the master password")]
+    PinUnavailable,
     /// The remote vault is not the vault stored on this device.
     #[error("the remote vault is not the vault stored on this device")]
     VaultMismatch,
@@ -179,6 +190,8 @@ impl Error {
             Self::InvalidItem(_) => "invalid_item",
             Self::EmptyPassword => "empty_password",
             Self::WrongVaultKey => "wrong_vault_key",
+            Self::WrongPin { .. } => "wrong_pin",
+            Self::PinUnavailable => "pin_unavailable",
             Self::VaultMismatch => "vault_mismatch",
             Self::RecoveryMaterialMissing => "recovery_material_missing",
             Self::Decrypt => "decrypt_failed",

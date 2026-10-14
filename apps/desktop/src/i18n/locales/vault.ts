@@ -22,6 +22,10 @@ export default defineMessages({
     "vault.unlock.hello": "使用 Windows Hello 解锁",
     "vault.unlock.touchId": "使用 Touch ID 解锁",
     "vault.unlock.forgot": "忘记主密码？使用恢复码",
+    "vault.unlock.subtitlePin": "输入 PIN 以解锁保险库",
+    "vault.unlock.pinField": "PIN",
+    "vault.unlock.usePassword": "使用主密码",
+    "vault.unlock.usePin": "使用 PIN",
     "vault.unlock.footer": "本地保险库 · 云同步：Cloudflare D1",
     "vault.unlock.footerOff": "本地保险库 · 云同步未开启",
 
@@ -99,6 +103,10 @@ export default defineMessages({
     "vault.unlock.hello": "Unlock with Windows Hello",
     "vault.unlock.touchId": "Unlock with Touch ID",
     "vault.unlock.forgot": "Forgot it? Use your recovery code",
+    "vault.unlock.subtitlePin": "Enter your PIN to unlock the vault",
+    "vault.unlock.pinField": "PIN",
+    "vault.unlock.usePassword": "Use master password",
+    "vault.unlock.usePin": "Use PIN",
     "vault.unlock.footer": "Local vault · Sync: Cloudflare D1",
     "vault.unlock.footerOff": "Local vault · Sync is off",
 
@@ -176,6 +184,10 @@ export default defineMessages({
     "vault.unlock.hello": "Windows Hello でロック解除",
     "vault.unlock.touchId": "Touch ID でロック解除",
     "vault.unlock.forgot": "マスターパスワードをお忘れですか？ リカバリーコードを使う",
+    "vault.unlock.subtitlePin": "PIN を入力して保管庫のロックを解除",
+    "vault.unlock.pinField": "PIN",
+    "vault.unlock.usePassword": "マスターパスワードを使う",
+    "vault.unlock.usePin": "PIN を使う",
     "vault.unlock.footer": "ローカル保管庫 · クラウド同期: Cloudflare D1",
     "vault.unlock.footerOff": "ローカル保管庫 · クラウド同期はオフ",
 

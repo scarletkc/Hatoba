@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultStatus } from "@/ipc/types";
+import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 
 export type HostFilter =
@@ -40,6 +40,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
+  ai_notifications: true,
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
@@ -63,11 +64,13 @@ interface AppState {
   floating: boolean;
   prefs: LocalPrefs;
   vault: VaultStatus | null;
+  /** Why the vault last locked while the app ran; null when it started locked. */
+  lockReason: VaultLockedEvent["reason"] | null;
   sync: SyncStatus | null;
   page: Page;
   sidebarCollapsed: boolean;
   settingsOpen: boolean;
-  /** The tab the settings window opens on; null reopens the last one. */
+  /** The tab the settings window opens on or switches to; null keeps the last one. The window clears it once taken. */
   settingsTab: SettingsTab | null;
   /** Bumped to ask the hosts page to focus its search field (Ctrl+Shift+K). */
   searchFocusTick: number;
@@ -94,6 +97,7 @@ export const useApp = create<AppState>((set, get) => ({
   floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,
+  lockReason: null,
   sync: null,
   page: { kind: "hosts", filter: { kind: "all" } },
   sidebarCollapsed: false,
@@ -122,7 +126,7 @@ export const useApp = create<AppState>((set, get) => ({
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {
     await api.vault_lock();
-    set({ phase: "locked", settingsOpen: false });
+    set({ phase: "locked", lockReason: "manual", settingsOpen: false });
   },
 }));
 

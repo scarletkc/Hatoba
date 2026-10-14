@@ -22,6 +22,11 @@ export const commands = {
 	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
 	/**  The tray menu's labels in the app's language, and whether **Lock** is enabled (WIN-10). */
 	traySetMenu: (menu: TrayMenuInput) => __TAURI_INVOKE<void>("tray_set_menu", { menu }),
+	/**
+	 *  Shows a system notification (AI-07). The WebView sends one only while the window is not
+	 *  focused.
+	 */
+	notificationShow: (notification: NotificationInput) => __TAURI_INVOKE<void>("notification_show", { notification }),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -51,6 +56,11 @@ export const commands = {
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
 	/**  SEC-07 (P1): Windows Hello. */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
+	/**
+	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
+	 *  credential store, which the last wrong PIN removes.
+	 */
+	vaultUnlockPin: (pin: string) => __TAURI_INVOKE<null>("vault_unlock_pin", { pin }),
 	vaultLock: () => __TAURI_INVOKE<void>("vault_lock"),
 	vaultVerifyPassword: (password: string) => __TAURI_INVOKE<boolean>("vault_verify_password", { password }),
 	/**
@@ -69,6 +79,18 @@ export const commands = {
 	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
+	/**
+	 *  SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
+	 *  Windows Hello. A new PIN needs the master password after a restart until [`pin_set_persist`]
+	 *  says otherwise, so setting it needs nothing from the OS credential store.
+	 */
+	pinEnable: (password: string, pin: string) => __TAURI_INVOKE<null>("pin_enable", { password, pin }),
+	pinDisable: () => __TAURI_INVOKE<null>("pin_disable"),
+	/**
+	 *  SEC-11: whether the PIN also works after a restart. On, the vault key it wraps goes to the OS
+	 *  credential store; off, it is removed there.
+	 */
+	pinSetPersist: (persist: boolean) => __TAURI_INVOKE<null>("pin_set_persist", { persist }),
 	hostsList: () => __TAURI_INVOKE<HostView[]>("hosts_list"),
 	hostGet: (id: string) => __TAURI_INVOKE<HostView>("host_get", { id }),
 	hostSave: (input: HostInput) => __TAURI_INVOKE<HostView>("host_save", { input }),
@@ -505,12 +527,14 @@ export const commands = {
 export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
+	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
+	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
@@ -1124,6 +1148,8 @@ export type AppError = {
 	cf_code: number | null,
 	/**  `ai`: the HTTP status the provider answered with. */
 	http_status: number | null,
+	/**  `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks. */
+	attempts_left: number | null,
 };
 
 export type AppInfo = {
@@ -1394,7 +1420,11 @@ export type DroppedFileRefusal =
 /**  Not a file, gone, or not readable. */
 "unreadable";
 
-export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | 
+/**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
+"wrong_pin" | 
+/**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
+"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -1628,6 +1658,11 @@ export type LocalPrefs = {
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
 	ai_bypass_confirmed: boolean,
+	/**
+	 *  AI-07: a system notification when a conversation finishes a turn or waits for approval
+	 *  while the window is not focused.
+	 */
+	ai_notifications: boolean,
 	/**  The AI panel is open (§9). */
 	ai_panel_open: boolean,
 	/**  The AI panel's width in CSS pixels. */
@@ -1813,6 +1848,22 @@ export type MountView = {
 	used: number,
 	/**  Space left for unprivileged users. */
 	available: number,
+};
+
+/**  A system notification (AI-07). The WebView sends one only while the window is not focused. */
+export type NotificationInput = {
+	title: string,
+	body: string,
+	target: NotificationTarget,
+};
+
+/**
+ *  What a notification is about, which a click on it shows: a tab, and in it a conversation
+ *  (AI-07). The click brings the window back and sends this to the WebView.
+ */
+export type NotificationTarget = {
+	tab: string | null,
+	conversation_id: string | null,
 };
 
 export type Platform = "windows" | "macos" | "linux";
@@ -2177,7 +2228,16 @@ export type TrayMenuInput = {
 	lock: string,
 	quit: string,
 	can_lock: boolean,
+	/**
+	 *  **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+	 *  such item.
+	 */
+	update: string | null,
+	can_update: boolean,
 };
+
+/**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+export type TrayUpdateEvent = null;
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {
@@ -2254,6 +2314,12 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+	/**  SEC-11: a PIN is set on this device. */
+	pin_enabled: boolean,
+	/**  The PIN also works after the app restarts. */
+	pin_persist: boolean,
+	/**  The PIN can unlock now (the lock screen asks for it instead of the master password). */
+	pin_unlock: boolean,
 };
 
 /**

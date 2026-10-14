@@ -334,6 +334,9 @@ pub struct Vault {
     pub(crate) store: Store,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) unlocked: Option<Unlocked>,
+    /// The vault key wrapped by the PIN key (SEC-11, `vault_pin`). Kept across [`Vault::lock`]
+    /// and never written to the database.
+    pub(crate) pin_wrapped: Option<Zeroizing<String>>,
     /// Message parts read back from the store ([`Vault::ai_parts_read`]).
     #[cfg(any(test, feature = "test-util"))]
     pub(crate) ai_parts_read: std::sync::atomic::AtomicUsize,
@@ -361,6 +364,7 @@ impl Vault {
             store,
             clock: Arc::new(SystemClock),
             unlocked: None,
+            pin_wrapped: None,
             #[cfg(any(test, feature = "test-util"))]
             ai_parts_read: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -521,7 +525,7 @@ impl Vault {
 
     // ---- unlocking ----
 
-    fn load_kdf(&self) -> Result<([u8; crypto::SALT_LEN], KdfParams)> {
+    pub(crate) fn load_kdf(&self) -> Result<([u8; crypto::SALT_LEN], KdfParams)> {
         let salt = self
             .store
             .get_meta(meta::KDF_SALT)?
@@ -647,6 +651,7 @@ impl Vault {
                 .set_meta(meta::VAULT_CHECK, &seal_vault_check(&vault_key)?)?;
         }
         let items = self.load_items(&vault_key)?;
+        self.arm_pin(&vault_key);
         // Replacing `Some(old)` drops it, which wipes it.
         self.unlocked = Some(Unlocked { vault_key, items });
         Ok(())
@@ -679,7 +684,8 @@ impl Vault {
         Ok(Zeroizing::new(*unlocked.vault_key))
     }
 
-    /// Locks: wipes the vault key and every decrypted item.
+    /// Locks: wipes the vault key and every decrypted item. The vault key wrapped by the PIN
+    /// stays, so the PIN can unlock again (SEC-11).
     pub fn lock(&mut self) {
         self.unlocked = None;
     }
@@ -1427,8 +1433,9 @@ impl Vault {
     /// epoch, older than any settings of the remote's own devices, which therefore replace it
     /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones,
     /// items that cannot be decrypted, and the conflict log are dropped, and every
-    /// [`SealedLocal`] is sealed again. Returns whether the vault key changed, so the caller can
-    /// drop what still holds the old one (biometric unlock).
+    /// [`SealedLocal`] is sealed again, and the PIN unlock is turned off. Returns whether the
+    /// vault key changed, so the caller can drop what still holds the old one (biometric unlock,
+    /// the PIN's copy in the OS credential store).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
     /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
@@ -1498,6 +1505,8 @@ impl Vault {
                 }
                 tx.clear_conflicts()?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
+                // The PIN wraps the old key, like the biometric unlock, and is turned off with it.
+                tx.delete_meta(meta::PIN)?;
                 for (key, resealed) in &local {
                     match resealed {
                         Some(sealed) => tx.set_meta(key, sealed)?,
@@ -1527,7 +1536,10 @@ impl Vault {
         })?;
         // The join has committed: the old key and cache must not stay in use, or new edits would
         // be sealed under a key the vault no longer opens. Unlocking again with the remote's
-        // password reloads them.
+        // password reloads them. The PIN's copy of the old key goes even if that reload fails.
+        if rekey {
+            self.pin_wrapped = None;
+        }
         if let Err(e) = self.finish_unlock(vault_key) {
             tracing::warn!("could not reload the vault after joining: {e}");
             self.lock();

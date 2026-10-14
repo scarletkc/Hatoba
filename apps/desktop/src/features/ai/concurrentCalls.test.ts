@@ -36,6 +36,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_allowances_list: ipc.allowances,
     ai_settings_get: () => Promise.resolve(settings),
     ai_providers_list: () => Promise.resolve([provider]),
+    notification_show: () => Promise.resolve(),
   },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
