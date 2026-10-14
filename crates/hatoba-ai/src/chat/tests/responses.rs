@@ -223,7 +223,7 @@ fn responses_rebuilds_after_a_switch_and_leaves_out_reasoning_it_cannot_send() {
     ];
 
     let same = ModelSpec::new("gpt-oss-120b");
-    let built = request::responses(&request(&same, &entries, &tools), true, true);
+    let built = request::responses(&request(&same, &entries, &tools), true, true, None);
     assert!(built.used_raw);
     assert_eq!(
         built.body["input"],
@@ -238,7 +238,7 @@ fn responses_rebuilds_after_a_switch_and_leaves_out_reasoning_it_cannot_send() {
 
     // Another model: rebuilt from the fields, so no reasoning goes along.
     let other = ModelSpec::new("gpt-5-mini");
-    let built = request::responses(&request(&other, &entries, &tools), true, true);
+    let built = request::responses(&request(&other, &entries, &tools), true, true, None);
     assert!(!built.used_raw);
     assert_eq!(
         built.body["input"],
@@ -257,7 +257,7 @@ fn responses_with_tools_keep_function_calls_and_rebuild_cut_off_arguments() {
     let tools = terminal_tools();
     let model = ModelSpec::new("gpt-5.1");
     let entries = tool_history(Protocol::Responses, &model.id);
-    let built = request::responses(&request(&model, &entries, &tools), true, true);
+    let built = request::responses(&request(&model, &entries, &tools), true, true, None);
     let output = |id: &str, text: &str| json!({"type": "function_call_output", "call_id": id, "output": text});
     let mut expected = vec![json!({"type": "message", "role": "user",
                                    "content": "check the disk and restart nginx"})];
@@ -289,7 +289,7 @@ fn responses_with_tools_keep_function_calls_and_rebuild_cut_off_arguments() {
 fn responses_without_tools_sends_calls_and_results_as_text() {
     let model = ModelSpec::new("gpt-5.1");
     let entries = tool_history(Protocol::Responses, &model.id);
-    let built = request::responses(&request(&model, &entries, &[]), true, true);
+    let built = request::responses(&request(&model, &entries, &[]), true, true, None);
     let user = |text: &str| json!({"type": "message", "role": "user", "content": text});
     let assistant = |text: &str| json!({"type": "message", "role": "assistant", "content": text});
     let mut expected = vec![
@@ -324,7 +324,7 @@ fn raw_of_another_protocol_is_rebuilt() {
     let model = ModelSpec::new("relay-model");
     // Anthropic content blocks to a provider that now speaks Responses.
     let entries = tool_history(Protocol::Anthropic, &model.id);
-    let built = request::responses(&request(&model, &entries, &tools), true, true);
+    let built = request::responses(&request(&model, &entries, &tools), true, true, None);
     assert!(!built.used_raw);
     assert!(
         input_types(&built.body)
@@ -337,7 +337,7 @@ fn raw_of_another_protocol_is_rebuilt() {
     assert!(!built.used_raw);
     // A Chat Completions message object is no item array either.
     let entries = tool_history(Protocol::ChatCompletions, &model.id);
-    let built = request::responses(&request(&model, &entries, &tools), true, true);
+    let built = request::responses(&request(&model, &entries, &tools), true, true, None);
     assert!(!built.used_raw);
 }
 
@@ -380,6 +380,7 @@ fn responses_sends_reasoning_within_the_models_levels() {
             &with_effort(request(model, &entries, &[]), effort),
             fields,
             summary,
+            None,
         )
     };
     let plain = ModelSpec::new("gpt-4.1");

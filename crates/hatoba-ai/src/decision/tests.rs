@@ -16,6 +16,7 @@ fn provider(base_url: String, protocol: Protocol) -> ProviderConfig {
         base_url,
         api_key: Zeroizing::new(KEY.into()),
         auth_header: AuthHeader::XApiKey,
+        chatgpt: None,
     }
 }
 

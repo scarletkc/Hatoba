@@ -2271,6 +2271,7 @@ dependencies = [
 name = "hatoba-ai"
 version = "0.2.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "dom_query",
  "dom_smoothie",
@@ -2281,6 +2282,7 @@ dependencies = [
  "process-wrap",
  "regex-syntax",
  "reqwest",
+ "ring",
  "rmcp",
  "rustls",
  "serde",

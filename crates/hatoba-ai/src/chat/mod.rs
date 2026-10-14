@@ -34,6 +34,11 @@
 //!   such blocks without `tools`, and so do several Chat Completions servers. Responses requests
 //!   likewise carry no `function_call` or `function_call_output` items then.
 //!
+//! - A ChatGPT provider (AI-52) is a Responses provider whose requests carry an access token of
+//!   the account's session on this device (see [`chatgpt`](crate::chatgpt)): a 401 refreshes the
+//!   session once and sends the request again. Its function tools go in one namespace,
+//!   [`chatgpt::NAMESPACE`](crate::chatgpt::NAMESPACE), which the route requires; the calls come
+//!   back with their own names and that `namespace`, which a rebuilt call sends back too.
 //! - A System One provider answers decision questions for the judge of Auto mode (AI-47) and
 //!   cannot chat: [`stream_chat`] refuses it with [`AiError::Config`].
 //!
@@ -48,6 +53,15 @@ mod sse;
 #[cfg(test)]
 mod tests;
 
+/// What tests elsewhere in the crate need of the adapters.
+#[cfg(test)]
+pub(crate) mod tests_support {
+    /// The error a Responses `error` event or `response.error` object stands for.
+    pub(crate) fn responses_error(value: &serde_json::Value) -> crate::error::AiError {
+        super::responses::error_of(value)
+    }
+}
+
 use futures::StreamExt;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -57,6 +71,7 @@ use self::anthropic::AnthropicStream;
 use self::openai::ChatCompletionsStream;
 use self::responses::ResponsesStream;
 use self::sse::{SseEvent, SseParser};
+use crate::chatgpt;
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
@@ -176,7 +191,6 @@ pub async fn stream_chat(
         return Err(AiError::Config(CANNOT_CHAT.into()));
     }
     let base = validate_base_url(&provider.base_url)?;
-    let headers = provider.headers()?;
     match provider.protocol {
         Protocol::ChatCompletions => {
             let url = net::endpoint(&base, "/chat/completions");
@@ -184,9 +198,9 @@ pub async fn stream_chat(
             let mut with_effort = true;
             loop {
                 let built = request::chat_completions(req, stream_options, with_effort);
-                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
-                    let err = net::http_error(response, cancel).await;
+                    let err = provider.error(response, cancel).await;
                     if built.sent_effort && rejects_effort(&err) {
                         with_effort = false;
                         if built.effort.is_some() {
@@ -211,9 +225,9 @@ pub async fn stream_chat(
             let mut with_effort = true;
             loop {
                 let built = request::anthropic(req, allow_raw, with_effort);
-                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
-                    let err = net::http_error(response, cancel).await;
+                    let err = provider.error(response, cancel).await;
                     if built.sent_effort && rejects_effort(&err) {
                         with_effort = false;
                         if built.effort.is_some() {
@@ -236,10 +250,11 @@ pub async fn stream_chat(
             let mut with_summary = true;
             let mut with_effort = true;
             loop {
-                let built = request::responses(req, with_effort, with_summary);
-                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                let namespace = provider.is_chatgpt().then_some(chatgpt::NAMESPACE);
+                let built = request::responses(req, with_effort, with_summary, namespace);
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
-                    let err = net::http_error(response, cancel).await;
+                    let err = provider.error(response, cancel).await;
                     if built.sent_summary && rejects_summary(&err) {
                         with_summary = false;
                         continue;
@@ -355,20 +370,85 @@ pub(crate) fn rejects_replayed_raw(err: &AiError) -> bool {
 
 async fn post(
     http: &reqwest::Client,
+    provider: &ProviderConfig,
     url: &url::Url,
-    headers: &HeaderMap,
     built: &request::Built,
     cancel: &CancellationToken,
 ) -> Result<(reqwest::Response, usize), AiError> {
     let body = serde_json::to_string(&built.body)
         .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
     let request_chars = body.chars().count();
-    let request = http
-        .post(url.clone())
-        .headers(headers.clone())
+    let response = provider
+        .send(cancel, |headers| json_post(http, url, headers, body.clone()))
+        .await?;
+    Ok((response, request_chars))
+}
+
+/// A JSON `POST` with `headers`.
+fn json_post(
+    http: &reqwest::Client,
+    url: &url::Url,
+    headers: HeaderMap,
+    body: String,
+) -> reqwest::RequestBuilder {
+    http.post(url.clone())
+        .headers(headers)
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .body(body);
-    Ok((net::send(request, cancel).await?, request_chars))
+        .body(body)
+}
+
+/// Sends a Responses request that is not a conversation (the judge of Auto mode, the provider's
+/// own web search, Test Connection) and returns the response as one JSON object. Other providers
+/// get `body` as it is, without `stream`, and answer with JSON. A ChatGPT provider (AI-52) only
+/// streams, so `stream: true` is added and the stream assembled into what a whole response
+/// holds: `output` (every item as its `response.output_item.done` sent it), `usage` and
+/// `status`.
+pub(crate) async fn responses_json(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    url: &url::Url,
+    mut body: serde_json::Map<String, serde_json::Value>,
+    cancel: &CancellationToken,
+) -> Result<serde_json::Value, AiError> {
+    let stream = provider.is_chatgpt();
+    if stream {
+        body.insert("stream".into(), serde_json::Value::Bool(true));
+    }
+    let encoded = serde_json::to_string(&body)
+        .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
+    responses_body(http, provider, url, encoded, stream, cancel).await
+}
+
+/// [`responses_json`] for a body already encoded, which has `stream: true` when `stream` is.
+pub(crate) async fn responses_body(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    url: &url::Url,
+    body: String,
+    stream: bool,
+    cancel: &CancellationToken,
+) -> Result<serde_json::Value, AiError> {
+    let response = provider
+        .send(cancel, |headers| json_post(http, url, headers, body.clone()))
+        .await?;
+    if !response.status().is_success() {
+        return Err(provider.error(response, cancel).await);
+    }
+    if !stream {
+        return net::read_json(response, cancel).await;
+    }
+    let assembled = consume(response, ResponsesStream::new(), cancel, &mut |_| {}).await?;
+    let mut whole = serde_json::json!({
+        "status": if assembled.finish == Finish::Length { "incomplete" } else { "completed" },
+        "output": assembled.raw,
+    });
+    if let Some(usage) = assembled.usage {
+        whole["usage"] = serde_json::json!({
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+        });
+    }
+    Ok(whole)
 }
 
 /// Reads a successful response through an assembler, observing `cancel` between chunks.

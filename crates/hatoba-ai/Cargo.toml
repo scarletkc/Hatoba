@@ -16,13 +16,17 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-zeroize.workspace = true
+zeroize = { workspace = true, features = ["serde"] }
 futures.workspace = true
 bytes.workspace = true
 url = "2.5"
 # Same TLS stack as hatoba-core's sync transport: rustls with the `ring` provider, no native-tls.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "system-proxy", "stream", "json"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+# Sign in with ChatGPT (AI-52): PKCE's SHA-256, random state, nonce and verifier, and the RS256
+# check of OpenAI's ID token. The same ring that rustls uses.
+ring = "0.17"
+base64.workspace = true
 # fetch_url: HTML to Markdown (pure Rust, html5ever based), and charset decoding of fetched pages
 # (encoding_rs is already in the tree through reqwest's `charset` feature).
 htmd = "0.5"

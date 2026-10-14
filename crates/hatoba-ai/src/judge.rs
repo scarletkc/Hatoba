@@ -670,7 +670,7 @@ impl JudgeFailure {
         match err {
             AiError::Cancelled => Self::Cancelled,
             AiError::Network(_) | AiError::InvalidUrl(_) | AiError::Blocked(_) => Self::Unreachable,
-            AiError::Http { .. } | AiError::Config(_) => Self::Refused,
+            AiError::Http { .. } | AiError::Config(_) | AiError::SignIn(_) => Self::Refused,
             AiError::Protocol(_) | AiError::UnsupportedContentType(_) => Self::Malformed,
         }
     }

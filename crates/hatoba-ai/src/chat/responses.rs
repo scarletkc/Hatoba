@@ -64,6 +64,9 @@ fn str_at<'a>(value: &'a Value, key: &str) -> &'a str {
 
 /// The HTTP status an error `code` stands for.
 fn status_of(code: &str) -> u16 {
+    if let Some(status) = crate::chatgpt::status_of(code) {
+        return status;
+    }
     match code {
         "rate_limit_exceeded" | "insufficient_quota" => 429,
         "server_overloaded" | "overloaded" | "service_unavailable" => 503,
@@ -74,7 +77,7 @@ fn status_of(code: &str) -> u16 {
 }
 
 /// [`AiError::Http`] for an `error` object: an `error` event's own fields, or `response.error`.
-fn error_of(error: &Value) -> AiError {
+pub(crate) fn error_of(error: &Value) -> AiError {
     let error = error
         .get("error")
         .filter(|e| e.is_object())
@@ -85,7 +88,8 @@ fn error_of(error: &Value) -> AiError {
         .filter(|s| (400..600).contains(s))
         .and_then(|s| u16::try_from(s).ok())
         .unwrap_or_else(|| status_of(str_at(error, "code")));
-    let message = message_of(&json!({ "error": error }))
+    let message = crate::chatgpt::explain(str_at(error, "code"), error.get("param").and_then(Value::as_str))
+        .or_else(|| message_of(&json!({ "error": error })))
         .unwrap_or_else(|| "the provider reported an error".into());
     AiError::Http { status, message }
 }
@@ -288,13 +292,22 @@ impl ResponsesStream {
                 id
             }
         };
+        // A call of a namespaced tool (the ChatGPT route, AI-52) names the tool by its own name
+        // and the namespace apart; a name that comes qualified loses the namespace.
+        let name = value
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let name = match value.get("namespace").and_then(Value::as_str) {
+            Some(namespace) if !namespace.is_empty() => name
+                .strip_prefix(namespace)
+                .and_then(|rest| rest.strip_prefix('.'))
+                .unwrap_or(name),
+            _ => name,
+        };
         let call = ToolCall {
             id,
-            name: value
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
+            name: name.to_owned(),
             arguments,
         };
         emit(StreamEvent::ToolCall(call.clone()));

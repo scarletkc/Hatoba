@@ -9,6 +9,7 @@
 //! - OpenRouter: the `openrouter:web_search` server tool on Chat Completions, which searches with
 //!   the model's own provider where it has a search and with Exa elsewhere.
 //! - OpenAI and xAI: the Responses API (`POST {base_url}/responses`) with the `web_search` tool.
+//!   A ChatGPT provider (AI-52) is OpenAI too; its request streams, as that route requires.
 //! - Gemini: `generateContent` with the `google_search` tool, the key in `x-goog-api-key`.
 //! - Any other Chat Completions or Responses provider, which may relay OpenAI: tried as OpenAI
 //!   is.
@@ -28,7 +29,7 @@ use super::search::{
     MAX_RESULTS, SearchResult, cut_snippet, format_search_results, key_header, send_retrying,
 };
 use crate::error::AiError;
-use crate::net;
+use crate::{chat, net};
 use crate::provider::{ModelSpec, Protocol, ProviderConfig, validate_base_url};
 
 /// How a chat provider searches the web itself.
@@ -320,7 +321,16 @@ async fn responses(
         body["tool_choice"] = json!("required");
     }
     let url = net::endpoint(base, "/responses");
-    let response = post(http, url, provider.headers()?, &body, cancel).await?;
+    let response = if provider.is_chatgpt() {
+        // The ChatGPT route (AI-52) takes `input` as a list of items, and only streams.
+        body["input"] = json!([{"type": "message", "role": "user", "content": prompt(query)}]);
+        let Value::Object(body) = body else {
+            unreachable!("the body is an object");
+        };
+        chat::responses_json(http, provider, &url, body, cancel).await?
+    } else {
+        post(http, url, provider.headers()?, &body, cancel).await?
+    };
     for item in array_at(&response, "/output") {
         match str_at(item, "type") {
             "web_search_call" => {
@@ -583,6 +593,7 @@ mod tests {
             base_url: base_url.into(),
             api_key: Zeroizing::new("sk-test".into()),
             auth_header: AuthHeader::XApiKey,
+            chatgpt: None,
         }
     }
 

@@ -51,6 +51,7 @@ fn provider(server: &MockServer, protocol: Protocol) -> ProviderConfig {
         },
         api_key: Zeroizing::new(KEY.into()),
         auth_header: AuthHeader::XApiKey,
+        chatgpt: None,
     }
 }
 
@@ -1027,6 +1028,7 @@ async fn cancellation_in_the_middle_of_a_stream() {
         base_url: stalling_server().await,
         api_key: Zeroizing::new(KEY.into()),
         auth_header: AuthHeader::XApiKey,
+        chatgpt: None,
     };
     let model = ModelSpec::new("m");
     let entries = vec![AiEntry::user(1, "hi")];
@@ -1457,7 +1459,7 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
                 match protocol {
                     Protocol::Anthropic => request::anthropic(&req, true, true),
                     Protocol::ChatCompletions => request::chat_completions(&req, true, true),
-                    Protocol::Responses => request::responses(&req, true, true),
+                    Protocol::Responses => request::responses(&req, true, true, None),
                     Protocol::SystemOne => unreachable!("System One does not chat"),
                 }
             };

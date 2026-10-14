@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
 use url::Url;
 use zeroize::Zeroizing;
 
+use crate::chatgpt::{self, ChatgptAuth};
 use crate::error::AiError;
 use crate::net;
 
@@ -52,6 +54,10 @@ pub struct ProviderConfig {
     pub api_key: Zeroizing<String>,
     /// Header for the key (`anthropic` only).
     pub auth_header: AuthHeader,
+    /// Signed in with a ChatGPT account instead of a key (AI-52): `responses` at
+    /// [`chatgpt::BASE_URL`], with an access token of the account's session on this device.
+    /// Its requests always stream and group function tools in [`chatgpt::NAMESPACE`].
+    pub chatgpt: Option<ChatgptAuth>,
 }
 
 impl fmt::Debug for ProviderConfig {
@@ -68,8 +74,99 @@ impl fmt::Debug for ProviderConfig {
                 },
             )
             .field("auth_header", &self.auth_header)
+            .field("chatgpt", &self.chatgpt.as_ref().map(|c| &c.id))
             .finish()
     }
+}
+
+/// How often a ChatGPT request refused with 503 before it streams is sent again, and the wait
+/// before the first retry (doubled for the next).
+const CHATGPT_503_RETRIES: u32 = 2;
+const CHATGPT_503_WAIT: Duration = Duration::from_secs(1);
+
+impl ProviderConfig {
+    /// Whether the provider signs in with a ChatGPT account (AI-52).
+    #[must_use]
+    pub fn is_chatgpt(&self) -> bool {
+        self.chatgpt.is_some()
+    }
+
+    /// Sends the request `build` makes from the authentication headers, and returns its response,
+    /// successful or not. A ChatGPT provider's headers carry an access token of its session,
+    /// refreshed first when due; a 401 refreshes the session once and sends the request again,
+    /// and a 503 is sent again twice, after 1 and 2 seconds.
+    pub(crate) async fn send(
+        &self,
+        cancel: &CancellationToken,
+        build: impl Fn(HeaderMap) -> reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, AiError> {
+        let Some(auth) = &self.chatgpt else {
+            return net::send(build(self.headers()?), cancel).await;
+        };
+        let mut token = auth.access_token(None, cancel).await?;
+        let mut refreshed = false;
+        let mut retries = 0;
+        loop {
+            let response = net::send(build(bearer(&token)?), cancel).await?;
+            match response.status().as_u16() {
+                401 if !refreshed => {
+                    refreshed = true;
+                    token = auth.access_token(Some(&token), cancel).await?;
+                }
+                503 if retries < CHATGPT_503_RETRIES => {
+                    let wait = CHATGPT_503_WAIT * 2u32.pow(retries);
+                    retries += 1;
+                    tokio::select! {
+                        biased;
+                        () = cancel.cancelled() => return Err(AiError::Cancelled),
+                        () = tokio::time::sleep(wait) => {}
+                    }
+                }
+                _ => return Ok(response),
+            }
+        }
+    }
+
+    /// The error of a failed response: the provider's message, and on the ChatGPT route a message
+    /// that says what to do and the request ID.
+    pub(crate) async fn error(
+        &self,
+        response: reqwest::Response,
+        cancel: &CancellationToken,
+    ) -> AiError {
+        let failure = match net::read_http_error(response, cancel).await {
+            Ok(failure) => failure,
+            Err(err) => return err,
+        };
+        if !self.is_chatgpt() {
+            return failure.into_error();
+        }
+        let request_id = failure.request_id.clone();
+        let known = failure
+            .code
+            .as_deref()
+            .is_some_and(|code| chatgpt::explain(code, None).is_some());
+        let mut err = failure.into_error();
+        if let AiError::Http { status, message } = &mut err {
+            if !known && let Some(text) = chatgpt::admission_message(*status, message) {
+                *message = text;
+            }
+            if let Some(id) = request_id {
+                message.push_str(&format!(" (request ID {id})"));
+            }
+        }
+        err
+    }
+}
+
+/// `Authorization: Bearer <token>`, marked sensitive.
+fn bearer(token: &str) -> Result<HeaderMap, AiError> {
+    let mut value = HeaderValue::from_str(&Zeroizing::new(format!("Bearer {}", token.trim())))
+        .map_err(|_| AiError::Config("the access token cannot be sent in a header".into()))?;
+    value.set_sensitive(true);
+    let mut headers = HeaderMap::new();
+    headers.insert(AUTHORIZATION, value);
+    Ok(headers)
 }
 
 impl ProviderConfig {
@@ -273,6 +370,7 @@ mod tests {
             base_url: "https://example.com".into(),
             api_key: Zeroizing::new(key.into()),
             auth_header,
+            chatgpt: None,
         }
     }
 

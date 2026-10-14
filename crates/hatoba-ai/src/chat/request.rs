@@ -554,7 +554,16 @@ fn responses_items(raw: &Value) -> impl Iterator<Item = Value> + '_ {
 /// `function_call` or `function_call_output` items in it: calls and results are sent as text
 /// (see the module docs). With `with_effort` false there is no `reasoning` and no `include`,
 /// and with `with_summary` false no `reasoning.summary`.
-pub(crate) fn responses(req: &ChatRequest<'_>, with_effort: bool, with_summary: bool) -> Built {
+///
+/// With a `namespace` (a ChatGPT provider, AI-52) the function tools go in one `namespace` tool
+/// of that name, and a call rebuilt from its fields names it as its `namespace`, as the calls the
+/// model makes do; a replayed `raw` item already does.
+pub(crate) fn responses(
+    req: &ChatRequest<'_>,
+    with_effort: bool,
+    with_summary: bool,
+    namespace: Option<&str>,
+) -> Built {
     let (turns, used_raw) = plan(req, Protocol::Responses, true);
     let mut input = Vec::with_capacity(turns.len());
     for turn in turns {
@@ -572,12 +581,16 @@ pub(crate) fn responses(req: &ChatRequest<'_>, with_effort: bool, with_summary: 
                     );
                 }
                 for call in &entry.tool_calls {
-                    input.push(json!({
+                    let mut item = json!({
                         "type": "function_call",
                         "call_id": call.id,
                         "name": call.name,
                         "arguments": chat_arguments(&call.arguments),
-                    }));
+                    });
+                    if let Some(namespace) = namespace {
+                        item["namespace"] = json!(namespace);
+                    }
+                    input.push(item);
                 }
             }
             Turn::AssistantText(text) => {
@@ -623,6 +636,15 @@ pub(crate) fn responses(req: &ChatRequest<'_>, with_effort: bool, with_summary: 
                 })
             })
             .collect();
+        let tools = match namespace {
+            Some(namespace) => vec![json!({
+                "type": "namespace",
+                "name": namespace,
+                "description": crate::chatgpt::NAMESPACE_DESCRIPTION,
+                "tools": tools,
+            })],
+            None => tools,
+        };
         body.insert("tools".into(), Value::Array(tools));
     }
     if reasoning {
