@@ -88,6 +88,8 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
 | Clear Clipboard | 清除剪贴板 | クリップボードの消去 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 | Windows Hello でロック解除 |
+| Unlock with PIN | 使用 PIN 解锁 | PIN でロック解除 |
+| Require the master password after a restart | 重启后需要输入主密码 | 再起動後はマスターパスワードを要求 |
 | Master Password | 主密码 | マスターパスワード |
 | Change… | 更改主密码… | 変更… |
 | Recovery Code | 恢复码 | リカバリーコード |
@@ -95,7 +97,7 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 | Lock Now | 立即锁定 | 今すぐロック |
 | Lock | 锁定 | ロック |
 
-Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
+Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows only), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
 
 ## About
 
@@ -130,4 +132,4 @@ Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, saved proxies | Language, appearance, list density, host reachability, the default proxy, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |

@@ -240,7 +240,9 @@ mod tests {
         let mut vault = Vault::open_in_memory()
             .unwrap()
             .with_clock(Arc::new(ManualClock::new(1_700_000_000_000)));
-        vault.create_with_params(PW, KdfParams::for_tests()).unwrap();
+        vault
+            .create_with_params(PW, KdfParams::for_tests())
+            .unwrap();
         vault
     }
 
@@ -290,7 +292,9 @@ mod tests {
         let stored = vault.set_pin("pin-with-letters", true).unwrap();
         vault.lock();
         vault.pin_wrapped = None;
-        vault.unlock_with_pin("pin-with-letters", Some(&stored)).unwrap();
+        vault
+            .unlock_with_pin("pin-with-letters", Some(&stored))
+            .unwrap();
         assert!(vault.is_unlocked() && vault.pin_status().armed);
     }
 
@@ -381,7 +385,10 @@ mod tests {
     #[test]
     fn setting_a_pin_needs_the_vault_unlocked_and_a_pin() {
         let mut vault = unlocked();
-        assert!(matches!(vault.set_pin("", false), Err(Error::EmptyPassword)));
+        assert!(matches!(
+            vault.set_pin("", false),
+            Err(Error::EmptyPassword)
+        ));
         vault.lock();
         assert!(matches!(vault.set_pin("2468", false), Err(Error::Locked)));
     }

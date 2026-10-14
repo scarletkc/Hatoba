@@ -73,7 +73,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 |---|---|
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing an SSH config, host key prompts, connecting and reconnecting |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
-| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the encrypted backup, and the Keys page (import, generate, deploy) |
+| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
