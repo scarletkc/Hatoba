@@ -607,6 +607,110 @@ async fn an_anthropic_request_caches_the_state_up_to_the_key_given() {
     );
 }
 
+fn responses_reply(arguments: &Value) -> Value {
+    json!({
+        "id": "resp_1", "object": "response", "status": "completed",
+        "output": [
+            {"id": "rs_1", "type": "reasoning", "summary": []},
+            {"id": "fc_1", "type": "function_call", "status": "completed", "call_id": "call_1",
+             "name": "answer", "arguments": arguments.to_string()}
+        ],
+        "usage": {"input_tokens": 350, "input_tokens_details": {"cached_tokens": 0},
+                  "output_tokens": 70, "total_tokens": 420}
+    })
+}
+
+#[tokio::test]
+async fn a_responses_model_answers_through_one_forced_tool_without_storing_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .and(body_partial_json(
+            json!({"tool_choice": {"type": "function", "name": "answer"}}),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(responses_reply(&model_arguments())))
+        .mount(&server)
+        .await;
+    let p = provider(format!("{}/v1", server.uri()), Protocol::Responses);
+    let evaluation = ask(&p, "gpt-5-mini").await.unwrap();
+    assert_answered(&evaluation);
+    assert_eq!(
+        evaluation.usage,
+        Some(DecisionUsage {
+            input_tokens: 350,
+            output_tokens: 70
+        })
+    );
+
+    let raw = raw_bodies(&server).await;
+    assert_eq!(raw.len(), 1);
+    assert_eq!(property_order(&raw[0])[0], "notes");
+    let body: Value = serde_json::from_str(&raw[0]).unwrap();
+    assert_eq!(body["model"], "gpt-5-mini");
+    assert_eq!(body["store"], false);
+    for absent in [
+        "stream",
+        "max_output_tokens",
+        "temperature",
+        "reasoning",
+        "include",
+        "messages",
+    ] {
+        assert!(body.get(absent).is_none(), "{absent}");
+    }
+    let tools = body["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0]["type"], "function");
+    assert_eq!(tools[0]["name"], "answer");
+    assert_eq!(tools[0]["strict"], false);
+    assert_eq!(
+        tools[0]["parameters"]["required"],
+        json!(["notes", "angry", "urgent"])
+    );
+    let instructions = body["instructions"].as_str().unwrap();
+    assert!(instructions.contains("yes-or-no questions"));
+    let input = body["input"].as_array().unwrap();
+    assert_eq!(input.len(), 1);
+    assert_eq!(input[0]["role"], "user");
+    assert!(
+        input[0]["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("<state>\n{\n  \"message\": \"I was charged twice!\"\n}\n</state>")
+    );
+
+    // A server that does not take a named tool gets auto, and an answer in text still counts.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            json!({"tool_choice": {"type": "function"}}),
+        ))
+        .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+            "error": {"message": "tool_choice must be \"auto\"", "code": "invalid_value"}
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"tool_choice": "auto"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "status": "completed",
+            "output": [{"type": "message", "role": "assistant", "content": [
+                {"type": "output_text", "text": format!("Answers: {}", model_arguments())}
+            ]}]
+        })))
+        .mount(&server)
+        .await;
+    let p = provider(server.uri(), Protocol::Responses);
+    let evaluation = ask(&p, "local-model").await.unwrap();
+    assert_answered(&evaluation);
+    assert_eq!(evaluation.usage, None);
+    let sent = bodies(&server).await;
+    assert_eq!(sent.len(), 2);
+    let user = sent[1]["input"][0]["content"].as_str().unwrap();
+    assert!(user.ends_with("\n\nAnswer by calling the answer tool."));
+}
+
 #[tokio::test]
 async fn a_provider_that_refuses_a_forced_tool_gets_auto_and_a_request_to_call_it() {
     // Anthropic: thinking does not allow a forced tool.

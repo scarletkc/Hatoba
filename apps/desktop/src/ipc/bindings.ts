@@ -513,6 +513,7 @@ export const events = {
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
+	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
 	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
@@ -801,7 +802,7 @@ export type AiPermissionMode = "manual" |
  *  A provider's protocol (spec §13.2). A `system_one` provider answers decision questions for
  *  the judge of Auto mode (AI-47) and cannot chat.
  */
-export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
+export type AiProtocol = "chat_completions" | "anthropic" | "responses" | "system_one";
 
 export type AiProviderInput = {
 	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */
@@ -2153,7 +2154,16 @@ export type TrayMenuInput = {
 	lock: string,
 	quit: string,
 	can_lock: boolean,
+	/**
+	 *  **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+	 *  such item.
+	 */
+	update: string | null,
+	can_update: boolean,
 };
+
+/**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+export type TrayUpdateEvent = null;
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {

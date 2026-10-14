@@ -811,6 +811,9 @@ export interface TrayMenuInput {
   lock: string;
   quit: string;
   can_lock: boolean;
+  /** **Update to vX.Y.Z** while a check has found a newer release; null leaves the item out. */
+  update: string | null;
+  can_update: boolean;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -868,7 +871,7 @@ export type UpdateProgress =
 // ───────────────────────── AI assistant (§13) ─────────────────────────
 
 /** `system_one` answers decision questions for the judge of Auto mode (AI-47) and cannot chat. */
-export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
+export type AiProtocol = "chat_completions" | "responses" | "anthropic" | "system_one";
 export type AiAuthHeader = "x-api-key" | "authorization";
 
 /** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
@@ -1543,4 +1546,6 @@ export interface EventMap {
   "app://launch": null;
   /** WIN-10: the close button asks whether to hide the window to the tray or quit. */
   "window://close-prompt": null;
+  /** WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+  "tray://update": null;
 }

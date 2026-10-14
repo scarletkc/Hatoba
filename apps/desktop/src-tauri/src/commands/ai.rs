@@ -66,6 +66,7 @@ fn core_protocol(p: AiProtocol) -> CoreProtocol {
     match p {
         AiProtocol::ChatCompletions => CoreProtocol::ChatCompletions,
         AiProtocol::Anthropic => CoreProtocol::Anthropic,
+        AiProtocol::Responses => CoreProtocol::Responses,
         AiProtocol::SystemOne => CoreProtocol::SystemOne,
     }
 }
@@ -92,6 +93,7 @@ pub(crate) fn provider_view(id: &str, p: &AiProvider) -> AiProviderView {
         protocol: match p.protocol {
             CoreProtocol::ChatCompletions => AiProtocol::ChatCompletions,
             CoreProtocol::Anthropic => AiProtocol::Anthropic,
+            CoreProtocol::Responses => AiProtocol::Responses,
             CoreProtocol::SystemOne => AiProtocol::SystemOne,
         },
         base_url: p.base_url.clone(),

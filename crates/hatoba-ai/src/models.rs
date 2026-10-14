@@ -167,11 +167,11 @@ fn anthropic_model(item: &Value) -> Option<ModelInfo> {
     })
 }
 
-/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions,
-/// `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`,
-/// or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System One, next to
-/// the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped; the
-/// provider's order is kept.
+/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions and
+/// Responses, `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with
+/// `after_id`, or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System
+/// One, next to the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped;
+/// the provider's order is kept.
 ///
 /// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
 /// is dropped, so a lock does not leave the key in use).
@@ -199,7 +199,7 @@ async fn list_models_inner(
         }
     };
     match provider.protocol {
-        Protocol::ChatCompletions => {
+        Protocol::ChatCompletions | Protocol::Responses => {
             let url = net::endpoint(&base, "/models");
             let response = net::send(http.get(url).headers(headers), cancel).await?;
             if !response.status().is_success() {
@@ -416,6 +416,11 @@ async fn probe_model(
         Protocol::Anthropic => (
             net::endpoint(&base, "/v1/messages"),
             json!({"model": model, "max_tokens": 16, "messages": messages}),
+        ),
+        // No token limit, as for Chat Completions.
+        Protocol::Responses => (
+            net::endpoint(&base, "/responses"),
+            json!({"model": model, "input": messages, "store": false}),
         ),
         Protocol::SystemOne => return probe_decision(http, provider, model, cancel).await,
     };

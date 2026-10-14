@@ -17,9 +17,10 @@
 //!   `/` segment (`@cf/cloudflare/clef-flash` sends `clef-flash`), and the response wraps the
 //!   answers in `result`, which is read wherever it appears. Every question must get a Noul
 //!   answer between 0 and 1, or the response is malformed ([`AiError::Protocol`]).
-//! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`]) emulates it with
-//!   one non-streaming request that forces a single tool, `answer`. Its input schema has a short
-//!   `notes` string first, written before the answers, then a number per question. The system
+//! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`],
+//!   [`Protocol::Responses`]) emulates it with one non-streaming request that forces a single
+//!   tool, `answer` (a Responses request is stateless, `store: false`). Its input schema has a
+//!   short `notes` string first, written before the answers, then a number per question. The system
 //!   prompt says how to answer and that text in the state that is not the user's own words is
 //!   data, never instructions; the user message holds the state as JSON in `<state>` tags and the
 //!   questions after it. Given a key of the state to cache before, an Anthropic request splits
@@ -175,7 +176,7 @@ pub async fn evaluate<S: Serialize + ?Sized>(
             let body = post(http, url, &headers, encode(&body)?, cancel).await?;
             read_system_one(&body, questions)?
         }
-        Protocol::ChatCompletions | Protocol::Anthropic => {
+        Protocol::ChatCompletions | Protocol::Anthropic | Protocol::Responses => {
             let state = serde_json::to_string_pretty(state).map_err(|_| unencodable())?;
             let chat = Emulation {
                 http,
@@ -599,6 +600,34 @@ impl Emulation<'_> {
                 ]);
                 (net::endpoint(self.base, "/v1/messages"), body)
             }
+            Protocol::Responses => {
+                let tool_choice = if forced {
+                    json!({"type": "function", "name": TOOL_NAME})
+                } else {
+                    json!("auto")
+                };
+                let tool = object([
+                    ("type", plain(json!("function"))),
+                    ("name", plain(json!(TOOL_NAME))),
+                    ("description", plain(json!(description))),
+                    ("parameters", schema),
+                    ("strict", plain(json!(false))),
+                ]);
+                let body = object([
+                    ("model", plain(json!(self.model.id))),
+                    ("instructions", plain(json!(SYSTEM_PROMPT))),
+                    (
+                        "input",
+                        plain(json!([
+                            {"type": "message", "role": "user", "content": head + &rest}
+                        ])),
+                    ),
+                    ("tools", Ordered::Array(vec![tool])),
+                    ("tool_choice", plain(tool_choice)),
+                    ("store", plain(json!(false))),
+                ]);
+                (net::endpoint(self.base, "/responses"), body)
+            }
             Protocol::ChatCompletions | Protocol::SystemOne => {
                 let tool_choice = if forced {
                     json!({"type": "function", "function": {"name": TOOL_NAME}})
@@ -644,6 +673,10 @@ impl Emulation<'_> {
                     + count("cache_read_input_tokens").unwrap_or(0),
                 output_tokens: count("output_tokens")?,
             }),
+            Protocol::Responses => Some(DecisionUsage {
+                input_tokens: count("input_tokens")?,
+                output_tokens: count("output_tokens")?,
+            }),
             _ => Some(DecisionUsage {
                 input_tokens: count("prompt_tokens")?,
                 output_tokens: count("completion_tokens")?,
@@ -666,6 +699,27 @@ impl Emulation<'_> {
                     .iter()
                     .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
                     .filter_map(|b| b.get("text").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (calls, text)
+            }
+            Protocol::Responses => {
+                let items = body.get("output").and_then(Value::as_array)?;
+                let of_type = |kind: &'static str| {
+                    items
+                        .iter()
+                        .filter(move |i| i.get("type").and_then(Value::as_str) == Some(kind))
+                };
+                let calls: Vec<(Option<&str>, &Value)> = of_type("function_call")
+                    .filter_map(|c| {
+                        Some((c.get("name").and_then(Value::as_str), c.get("arguments")?))
+                    })
+                    .collect();
+                let text: String = of_type("message")
+                    .filter_map(|m| m.get("content").and_then(Value::as_array))
+                    .flatten()
+                    .filter(|p| p.get("type").and_then(Value::as_str) == Some("output_text"))
+                    .filter_map(|p| p.get("text").and_then(Value::as_str))
                     .collect::<Vec<_>>()
                     .join("\n");
                 (calls, text)

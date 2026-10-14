@@ -85,9 +85,15 @@ describe("suggestProtocol", () => {
     expect(suggestProtocol("https://example.com/ai/running")).toBe("chat_completions");
   });
 
+  it("picks responses for api.openai.com", () => {
+    expect(suggestProtocol("https://api.openai.com/v1")).toBe("responses");
+    expect(suggestProtocol("api.openai.com/v1/")).toBe("responses");
+    // Other OpenAI-compatible services keep Chat Completions.
+    expect(suggestProtocol("https://api.deepseek.com/v1")).toBe("chat_completions");
+  });
+
   it("keeps chat_completions for everything else", () => {
     expect(suggestProtocol("")).toBe("chat_completions");
-    expect(suggestProtocol("https://api.openai.com/v1")).toBe("chat_completions");
     expect(suggestProtocol("http://localhost:11434/v1")).toBe("chat_completions");
     expect(suggestProtocol("https://example.com/anthropic/v1")).toBe("chat_completions");
     expect(suggestProtocol("https://notanthropic.example/foo")).toBe("chat_completions");

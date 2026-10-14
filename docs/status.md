@@ -110,7 +110,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | macOS app bundle and DMG | 🟡 | Built by the `macos-bundle` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests), for Apple Silicon, and published as an experimental build in each release by the [Release workflow](../.github/workflows/release.yml). The CI build also signs its updater archive with a throwaway key and checks it with the release script. Ad-hoc signed (`signingIdentity` `-`), not notarized. Opening a downloaded DMG through Gatekeeper not yet tried |
 | GitHub Releases | 🟡 | The [Release workflow](../.github/workflows/release.yml) publishes the installers after approval; [Release Hatoba](releasing.md) has the steps |
 | Authenticode code signing | Not planned | A certificate is impractical to obtain ([§11](hatoba-spec.md#11-non-functional-requirements)), so SmartScreen warns on the first install |
-| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. Not yet tried against a published release |
+| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. The automatic check runs after the first unlock and again a day later while Hatoba runs, and the tray menu offers the update (unit tests). Not yet tried against a published release |
 | Star prompt and **Report a Problem** (§9) | 🟡 | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form not yet tried on GitHub |
 | Signed updates through the Tauri updater | 🟡 | **Download and Install** in Settings → About. Tried end to end on Windows with a local endpoint ([Signed updates](development.md#signed-updates)), not yet on Linux or macOS. Needs the update signing key and its public key ([Set up update signing](releasing.md#set-up-update-signing)), then a stable release to try it against |
 
@@ -118,7 +118,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 
 | ID | Name | Status | Notes |
 |---|---|---|---|
-| AI-01…06 | Providers, models, Test Connection, model selector and thinking level, reasoning | 🟡 | Adapter tests replay recorded Chat Completions and Anthropic Messages streams from a mock server, and check the thinking level's fields for each protocol, model, and level, and the retry without them. Not yet tried against the real providers |
+| AI-01…06 | Providers, models, Test Connection, model selector and thinking level, reasoning | 🟡 | Adapter tests replay recorded Chat Completions, Anthropic Messages, and Responses streams from a mock server, and check the thinking level's fields for each protocol, model, and level, and the retry without them. Not yet tried against the real providers |
 | AI-07…09 | One conversation per tab, attaching conversations | ✅ | A conversation with no connected tab is offered every tool but the terminal ones |
 | AI-10 | Terminal selection and connection diagnostics as attachments, **Ask AI** | ✅ | |
 | AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |

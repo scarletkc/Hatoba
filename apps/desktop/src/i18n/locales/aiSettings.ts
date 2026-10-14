@@ -10,7 +10,7 @@ export default defineMessages({
     "aiSettings.providers": "服务商",
     "aiSettings.providers.add": "添加服务商",
     "aiSettings.providers.empty.title": "还没有服务商",
-    "aiSettings.providers.empty.body": "添加 OpenAI Chat Completions 或 Anthropic Messages 服务商后，就能使用 AI 助手。Ollama、LM Studio 等本地服务器也可以。",
+    "aiSettings.providers.empty.body": "添加 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 服务商后，就能使用 AI 助手。Ollama、LM Studio 等本地服务器也可以。",
     "aiSettings.provider.models": "{n} 个模型",
     "aiSettings.provider.noModels": "没有模型",
     "aiSettings.provider.edit": "编辑 {name}",
@@ -20,6 +20,7 @@ export default defineMessages({
     "aiSettings.provider.deleted": "已删除“{name}”",
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
+    "aiSettings.protocol.responses": "OpenAI Responses",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
     "aiSettings.protocol.system_one": "System One",
 
@@ -30,6 +31,7 @@ export default defineMessages({
     "aiSettings.f.protocol": "协议",
     "aiSettings.f.baseUrl": "基础 URL",
     "aiSettings.f.baseUrl.chat_completions": "地址要包含 API 版本，例如 https://api.openai.com/v1。",
+    "aiSettings.f.baseUrl.responses": "地址要包含 API 版本，例如 https://api.openai.com/v1。",
     "aiSettings.f.baseUrl.anthropic": "填服务商为 Anthropic SDK 提供的地址，例如 https://api.anthropic.com。",
     "aiSettings.f.protocol.system_one": "仅用于自动批准模式的判定模型：这类模型回答判定问题，不能用来对话。",
     "aiSettings.f.baseUrl.system_one": "支持 TypeSafe、OpenRouter 和 Cloudflare Workers AI，例如 https://api.typesafe.ai/v1。",
@@ -400,7 +402,7 @@ export default defineMessages({
     "aiSettings.providers": "Providers",
     "aiSettings.providers.add": "Add Provider",
     "aiSettings.providers.empty.title": "No Providers Yet",
-    "aiSettings.providers.empty.body": "Add an OpenAI Chat Completions or Anthropic Messages provider to use the assistant. Local servers such as Ollama and LM Studio work too.",
+    "aiSettings.providers.empty.body": "Add an OpenAI Chat Completions, OpenAI Responses or Anthropic Messages provider to use the assistant. Local servers such as Ollama and LM Studio work too.",
     "aiSettings.provider.models": "{n} models",
     "aiSettings.provider.models_one": "1 model",
     "aiSettings.provider.noModels": "No models",
@@ -411,6 +413,7 @@ export default defineMessages({
     "aiSettings.provider.deleted": "Deleted “{name}”",
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
+    "aiSettings.protocol.responses": "OpenAI Responses",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
     "aiSettings.protocol.system_one": "System One",
 
@@ -421,6 +424,7 @@ export default defineMessages({
     "aiSettings.f.protocol": "Protocol",
     "aiSettings.f.baseUrl": "Base URL",
     "aiSettings.f.baseUrl.chat_completions": "Include the API version, such as https://api.openai.com/v1.",
+    "aiSettings.f.baseUrl.responses": "Include the API version, such as https://api.openai.com/v1.",
     "aiSettings.f.baseUrl.anthropic": "Use the address the provider documents for Anthropic SDKs, such as https://api.anthropic.com.",
     "aiSettings.f.protocol.system_one": "Only for the judge of Auto mode: these models answer its questions and can’t hold conversations.",
     "aiSettings.f.baseUrl.system_one": "Works with TypeSafe, OpenRouter and Cloudflare Workers AI, such as https://api.typesafe.ai/v1.",
@@ -796,7 +800,7 @@ export default defineMessages({
     "aiSettings.providers": "プロバイダー",
     "aiSettings.providers.add": "プロバイダーを追加",
     "aiSettings.providers.empty.title": "プロバイダーがありません",
-    "aiSettings.providers.empty.body": "OpenAI Chat Completions または Anthropic Messages のプロバイダーを追加すると、アシスタントを使えます。Ollama や LM Studio などのローカルサーバーも使えます。",
+    "aiSettings.providers.empty.body": "OpenAI Chat Completions、OpenAI Responses、Anthropic Messages のいずれかのプロバイダーを追加すると、アシスタントを使えます。Ollama や LM Studio などのローカルサーバーも使えます。",
     "aiSettings.provider.models": "{n} 個のモデル",
     "aiSettings.provider.noModels": "モデルなし",
     "aiSettings.provider.edit": "{name} を編集",
@@ -806,6 +810,7 @@ export default defineMessages({
     "aiSettings.provider.deleted": "「{name}」を削除しました",
 
     "aiSettings.protocol.chat_completions": "OpenAI Chat Completions",
+    "aiSettings.protocol.responses": "OpenAI Responses",
     "aiSettings.protocol.anthropic": "Anthropic Messages",
     "aiSettings.protocol.system_one": "System One",
 
@@ -816,6 +821,7 @@ export default defineMessages({
     "aiSettings.f.protocol": "プロトコル",
     "aiSettings.f.baseUrl": "ベース URL",
     "aiSettings.f.baseUrl.chat_completions": "API バージョンを含めます。例: https://api.openai.com/v1",
+    "aiSettings.f.baseUrl.responses": "API バージョンを含めます。例: https://api.openai.com/v1",
     "aiSettings.f.baseUrl.anthropic": "プロバイダーが Anthropic SDK 向けに案内している URL を入力します。例: https://api.anthropic.com",
     "aiSettings.f.protocol.system_one": "自動承認モードの判定モデル専用です。判定の質問に答えるモデルで、会話には使えません。",
     "aiSettings.f.baseUrl.system_one": "TypeSafe、OpenRouter、Cloudflare Workers AI に対応しています。例: https://api.typesafe.ai/v1",

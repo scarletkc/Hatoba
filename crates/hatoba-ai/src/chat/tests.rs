@@ -1,5 +1,8 @@
 //! Adapter tests: recorded-style Chat Completions and Anthropic streams replayed by a mock
 //! server (spec §12, AI assistant), plus request building and stream assembly without HTTP.
+//! Responses has its own module, which shares these helpers.
+
+mod responses;
 
 use std::time::{Duration, Instant};
 
@@ -43,7 +46,7 @@ fn provider(server: &MockServer, protocol: Protocol) -> ProviderConfig {
     ProviderConfig {
         protocol,
         base_url: match protocol {
-            Protocol::ChatCompletions => format!("{}/v1", server.uri()),
+            Protocol::ChatCompletions | Protocol::Responses => format!("{}/v1", server.uri()),
             Protocol::Anthropic | Protocol::SystemOne => server.uri(),
         },
         api_key: Zeroizing::new(KEY.into()),
@@ -1406,7 +1409,17 @@ fn a_summary_goes_in_a_block_that_the_system_prompt_overrides() {
 
 /// Every block of a body's messages in order, with its message's role: what a prompt cache
 /// matches. Anthropic merges consecutive user content into one message, so a message can grow.
+/// A Responses body's `input` items are blocks of their own, with their role or their type.
 fn message_blocks(body: &Value) -> Vec<(String, Value)> {
+    if let Some(items) = body["input"].as_array() {
+        return items
+            .iter()
+            .map(|item| {
+                let role = item.get("role").unwrap_or(&item["type"]);
+                (role.as_str().unwrap().to_owned(), item.clone())
+            })
+            .collect();
+    }
     let mut blocks = Vec::new();
     for message in body["messages"].as_array().unwrap() {
         let role = message["role"].as_str().unwrap().to_owned();
@@ -1421,14 +1434,19 @@ fn message_blocks(body: &Value) -> Vec<(String, Value)> {
 }
 
 /// AI-21: a Compact request is the conversation's next request with the instruction after it, so
-/// both protocols render the next request's body as its prefix (Anthropic: tools, system,
-/// thinking, then every message block; Chat Completions: tools and every message).
+/// every protocol renders the next request's body as its prefix (Anthropic: tools, system,
+/// thinking, then every message block; Chat Completions: tools and every message; Responses:
+/// instructions, tools and every input item).
 #[test]
 fn a_compact_request_keeps_the_next_requests_prefix() {
     const INSTRUCTION: &str = "Respond with text only. Do not call any tools. Summarize.";
     let tools = terminal_tools();
     let model = listed("claude-opus-5-5", &[Low, Medium, High], true, Some(64_000));
-    for protocol in [Protocol::Anthropic, Protocol::ChatCompletions] {
+    for protocol in [
+        Protocol::Anthropic,
+        Protocol::ChatCompletions,
+        Protocol::Responses,
+    ] {
         let history = tool_history(protocol, &model.id);
         // After the user's message, and between tool calls (the context ends with results).
         for next in [&history[..], &history[..7]] {
@@ -1439,6 +1457,7 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
                 match protocol {
                     Protocol::Anthropic => request::anthropic(&req, true, true),
                     Protocol::ChatCompletions => request::chat_completions(&req, true, true),
+                    Protocol::Responses => request::responses(&req, true, true),
                     Protocol::SystemOne => unreachable!("System One does not chat"),
                 }
             };
@@ -1447,8 +1466,11 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
             let (mut normal, mut forked) = (normal.body, forked.body);
             let normal_blocks = message_blocks(&normal);
             let forked_blocks = message_blocks(&forked);
-            normal.as_object_mut().unwrap().remove("messages");
-            forked.as_object_mut().unwrap().remove("messages");
+            for body in [&mut normal, &mut forked] {
+                let body = body.as_object_mut().unwrap();
+                body.remove("messages");
+                body.remove("input");
+            }
             assert_eq!(forked, normal, "{protocol:?}: everything but the messages");
             assert_eq!(
                 forked_blocks[..normal_blocks.len()],
@@ -1465,6 +1487,9 @@ fn a_compact_request_keeps_the_next_requests_prefix() {
             let expected = match protocol {
                 Protocol::Anthropic => json!({"type": "text", "text": INSTRUCTION}),
                 Protocol::ChatCompletions => json!({"role": "user", "content": INSTRUCTION}),
+                Protocol::Responses => {
+                    json!({"type": "message", "role": "user", "content": INSTRUCTION})
+                }
                 Protocol::SystemOne => unreachable!("System One does not chat"),
             };
             assert_eq!(added, [&expected], "{protocol:?}");
@@ -1563,6 +1588,36 @@ fn tool_history(protocol: Protocol, model: &str) -> Vec<AiEntry> {
                 json!({"role": "assistant", "content": null, "tool_calls": wire(&b_calls)}),
                 json!({"role": "assistant", "content": "We checked the disk.",
                        "reasoning_content": "Done thinking."}),
+            )
+        }
+        Protocol::Responses => {
+            let wire = |calls: &[ToolCall]| -> Vec<Value> {
+                calls
+                    .iter()
+                    .map(|c| {
+                        json!({"id": format!("fc_{}", c.id), "type": "function_call",
+                               "status": "completed", "call_id": c.id, "name": c.name,
+                               "arguments": c.arguments})
+                    })
+                    .collect()
+            };
+            let reasoning = |id: &str, text: &str| {
+                json!({"id": id, "type": "reasoning", "encrypted_content": format!("enc-{id}"),
+                       "summary": [{"type": "summary_text", "text": text}]})
+            };
+            let message = |id: &str, text: &str| {
+                json!({"id": id, "type": "message", "status": "completed", "role": "assistant",
+                       "content": [{"type": "output_text", "text": text, "annotations": []}]})
+            };
+            let mut a = vec![reasoning("rs_a", "Plan."), message("msg_a", "Checking.")];
+            a.extend(wire(&a_calls));
+            (
+                Value::Array(a),
+                Value::Array(wire(&b_calls)),
+                json!([
+                    reasoning("rs_c", "Done thinking."),
+                    message("msg_c", "We checked the disk.")
+                ]),
             )
         }
         Protocol::SystemOne => unreachable!("System One does not chat"),

@@ -1,0 +1,87 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_0a1","object":"response","created_at":1760500000,"status":"in_progress","model":"gpt-5.1-2025-11-13","output":[],"reasoning":{"effort":"medium","summary":"auto"},"store":false,"usage":null}}
+
+event: response.in_progress
+data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_0a1","object":"response","created_at":1760500000,"status":"in_progress","model":"gpt-5.1-2025-11-13","output":[],"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_0a1","type":"reasoning","encrypted_content":null,"summary":[]}}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","sequence_number":3,"item_id":"rs_0a1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":""}}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":4,"item_id":"rs_0a1","output_index":0,"summary_index":0,"delta":"**Checking uptime**","obfuscation":"k2"}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","sequence_number":5,"item_id":"rs_0a1","output_index":0,"summary_index":0,"text":"**Checking uptime**"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","sequence_number":6,"item_id":"rs_0a1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":"**Checking uptime**"}}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","sequence_number":7,"item_id":"rs_0a1","output_index":0,"summary_index":1,"part":{"type":"summary_text","text":""}}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":8,"item_id":"rs_0a1","output_index":0,"summary_index":1,"delta":"The user wants","obfuscation":"a"}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":9,"item_id":"rs_0a1","output_index":0,"summary_index":1,"delta":" the uptime.","obfuscation":"bc"}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","sequence_number":10,"item_id":"rs_0a1","output_index":0,"summary_index":1,"text":"The user wants the uptime."}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","sequence_number":11,"item_id":"rs_0a1","output_index":0,"summary_index":1,"part":{"type":"summary_text","text":"The user wants the uptime."}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":12,"output_index":0,"item":{"id":"rs_0a1","type":"reasoning","encrypted_content":"gAAAAABo-enc-0a1","summary":[{"type":"summary_text","text":"**Checking uptime**"},{"type":"summary_text","text":"The user wants the uptime."}]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":13,"output_index":1,"item":{"id":"msg_0a1","type":"message","status":"in_progress","content":[],"role":"assistant"}}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","sequence_number":14,"item_id":"msg_0a1","output_index":1,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":15,"item_id":"msg_0a1","output_index":1,"content_index":0,"delta":"Checking.","logprobs":[],"obfuscation":"Qx"}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","sequence_number":16,"item_id":"msg_0a1","output_index":1,"content_index":0,"text":"Checking.","logprobs":[]}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","sequence_number":17,"item_id":"msg_0a1","output_index":1,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"Checking."}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":18,"output_index":1,"item":{"id":"msg_0a1","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"Checking."}],"role":"assistant"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":19,"output_index":2,"item":{"id":"fc_0a1","type":"function_call","status":"in_progress","arguments":"","call_id":"call_kX1","name":"run_command"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":20,"item_id":"fc_0a1","output_index":2,"delta":"{\"command\":","obfuscation":"m"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":21,"item_id":"fc_0a1","output_index":2,"delta":"\"uptime\"}","obfuscation":"n"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":22,"item_id":"fc_0a1","output_index":2,"arguments":"{\"command\":\"uptime\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":23,"output_index":2,"item":{"id":"fc_0a1","type":"function_call","status":"completed","arguments":"{\"command\":\"uptime\"}","call_id":"call_kX1","name":"run_command"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":24,"output_index":3,"item":{"id":"fc_0a2","type":"function_call","status":"in_progress","arguments":"","call_id":"call_pQ2","name":"read_terminal"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":25,"item_id":"fc_0a2","output_index":3,"delta":"{}","obfuscation":"zz"}
+
+event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","sequence_number":26,"item_id":"fc_0a2","output_index":3,"arguments":"{}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":27,"output_index":3,"item":{"id":"fc_0a2","type":"function_call","status":"completed","arguments":"{}","call_id":"call_pQ2","name":"read_terminal"}}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":28,"response":{"id":"resp_0a1","object":"response","created_at":1760500000,"status":"completed","model":"gpt-5.1-2025-11-13","output":[{"id":"rs_0a1","type":"reasoning","encrypted_content":"gAAAAABo-enc-0a1","summary":[{"type":"summary_text","text":"**Checking uptime**"},{"type":"summary_text","text":"The user wants the uptime."}]},{"id":"msg_0a1","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"Checking."}],"role":"assistant"},{"id":"fc_0a1","type":"function_call","status":"completed","arguments":"{\"command\":\"uptime\"}","call_id":"call_kX1","name":"run_command"},{"id":"fc_0a2","type":"function_call","status":"completed","arguments":"{}","call_id":"call_pQ2","name":"read_terminal"}],"usage":{"input_tokens":1200,"input_tokens_details":{"cached_tokens":1152},"output_tokens":85,"output_tokens_details":{"reasoning_tokens":40},"total_tokens":1285}}}
+

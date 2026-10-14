@@ -1,4 +1,4 @@
-//! The two protocol adapters (spec §13.2): requests built from stored entries, streamed
+//! The three protocol adapters (spec §13.2): requests built from stored entries, streamed
 //! responses turned into the same [`StreamEvent`]s and the same [`AssistantEntry`].
 //!
 //! - Chat Completions: `POST {base_url}/chat/completions` with `Authorization: Bearer` (none when
@@ -14,23 +14,35 @@
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
 //!   every assistant entry rebuilt from its fields.
+//! - Responses: `POST {base_url}/responses` with `Authorization: Bearer` (none when the key is
+//!   empty), the system prompt as `instructions` and the conversation as `input` items, rebuilt
+//!   in full each time with `store: false` (no `previous_response_id`, nothing kept on the
+//!   provider), and `stream: true`. Function tools are sent with `strict: false`. A chosen
+//!   thinking level, and a model that reasons by default, add `reasoning` and
+//!   `include: ["reasoning.encrypted_content"]` (see `request`). Only `response.completed` and
+//!   `response.incomplete` end a response; `response.failed` and `error` events are errors. A
+//!   request refused with a 4xx about reasoning summaries is sent once more without
+//!   `reasoning.summary`, keeping the level.
 //! - A request refused with a 4xx that names its thinking or effort fields (`reasoning_effort`,
-//!   `output_config`, `effort`, adaptive thinking, `display`) is sent once more without any of
-//!   them, and when it carried a level, [`StreamEvent::EffortIgnored`] says so.
+//!   `output_config`, `effort`, adaptive thinking, `display`; for Responses also `reasoning` and
+//!   encrypted reasoning) is sent once more without any of them, and when it carried a level,
+//!   [`StreamEvent::EffortIgnored`] says so.
 //! - A request that offers no tools (such as the fallback of Compact, AI-21) contains no
 //!   `tool_use` / `tool_result` blocks, `tool_calls` or `tool` messages, whatever the history
 //!   holds: calls and results are sent as text, an assistant entry's calls after its text and
 //!   each result as a `user` message that names its call (see `request`). Anthropic refuses
-//!   such blocks without `tools`, and so do several Chat Completions servers.
+//!   such blocks without `tools`, and so do several Chat Completions servers. Responses requests
+//!   likewise carry no `function_call` or `function_call_output` items then.
 //!
 //! - A System One provider answers decision questions for the judge of Auto mode (AI-47) and
 //!   cannot chat: [`stream_chat`] refuses it with [`AiError::Config`].
 //!
-//! Neither adapter logs a request, a response or the key (SEC-04).
+//! No adapter logs a request, a response or the key (SEC-04).
 
 mod anthropic;
 mod openai;
 mod request;
+mod responses;
 mod sse;
 
 #[cfg(test)]
@@ -43,6 +55,7 @@ use tokio_util::sync::CancellationToken;
 
 use self::anthropic::AnthropicStream;
 use self::openai::ChatCompletionsStream;
+use self::responses::ResponsesStream;
 use self::sse::{SseEvent, SseParser};
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
@@ -96,7 +109,7 @@ impl std::fmt::Debug for ChatRequest<'_> {
     }
 }
 
-/// A streamed piece of a response, the same for both protocols (spec §13.1).
+/// A streamed piece of a response, the same for every protocol (spec §13.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StreamEvent {
     /// Answer text to append.
@@ -138,7 +151,8 @@ pub(crate) trait Assembler {
         body: serde_json::Value,
         emit: &mut (dyn FnMut(StreamEvent) + Send),
     ) -> Result<(), AiError>;
-    /// The response is complete (`[DONE]`, `message_stop`); the rest of the stream is ignored.
+    /// The response is complete (`[DONE]`, `message_stop`, `response.completed`); the rest of
+    /// the stream is ignored.
     fn is_done(&self) -> bool;
     /// Ends the response.
     fn finish(self, emit: &mut (dyn FnMut(StreamEvent) + Send)) -> Result<Assembled, AiError>;
@@ -217,6 +231,32 @@ pub async fn stream_chat(
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }
+        Protocol::Responses => {
+            let url = net::endpoint(&base, "/responses");
+            let mut with_summary = true;
+            let mut with_effort = true;
+            loop {
+                let built = request::responses(req, with_effort, with_summary);
+                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                if !response.status().is_success() {
+                    let err = net::http_error(response, cancel).await;
+                    if built.sent_summary && rejects_summary(&err) {
+                        with_summary = false;
+                        continue;
+                    }
+                    if built.sent_effort && rejects_reasoning(&err) {
+                        with_effort = false;
+                        if built.effort.is_some() {
+                            on_event(StreamEvent::EffortIgnored);
+                        }
+                        continue;
+                    }
+                    return Err(err);
+                }
+                let assembled = consume(response, ResponsesStream::new(), cancel, on_event).await?;
+                return Ok(into_entry(req, assembled, request_chars, on_event));
+            }
+        }
         Protocol::SystemOne => Err(AiError::Config(CANNOT_CHAT.into())),
     }
 }
@@ -261,6 +301,35 @@ pub(crate) fn rejects_effort(err: &AiError) -> bool {
             ["effort", "output_config", "adaptive", "display"]
                 .iter()
                 .any(|word| message.contains(word))
+        }
+        _ => false,
+    }
+}
+
+/// Whether a Responses error is a 4xx about the request's thinking fields: [`rejects_effort`]'s
+/// words, `reasoning` (refused by models without reasoning) or encrypted reasoning (`include`,
+/// which such models refuse too). The request is then retried once without `reasoning` and
+/// `include`.
+pub(crate) fn rejects_reasoning(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            let message = message.to_ascii_lowercase();
+            rejects_effort(err)
+                || ["reasoning", "encrypted"]
+                    .iter()
+                    .any(|word| message.contains(word))
+        }
+        _ => false,
+    }
+}
+
+/// Whether a Responses error is a 4xx about reasoning summaries, which OpenAI refuses for an
+/// organization it has not verified and some servers do not support. The request is then
+/// retried once without `reasoning.summary`, keeping the level.
+pub(crate) fn rejects_summary(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            message.to_ascii_lowercase().contains("summar")
         }
         _ => false,
     }

@@ -232,6 +232,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::WindowChromeEvent,
             dto::LaunchEvent,
             dto::ClosePromptEvent,
+            dto::TrayUpdateEvent,
         ])
 }
 

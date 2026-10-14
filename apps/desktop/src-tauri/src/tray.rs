@@ -4,7 +4,9 @@
 //! it to the tray instead of quitting. The device pref `close_action` asks each time (the
 //! default), hides or quits; without a tray it always quits. The tray menu opens the window,
 //! locks the vault and quits, and a left click opens the window (Linux shows the menu instead).
-//! The WebView sets the menu's labels, so they follow the app's language.
+//! While a check has found a newer release, it also offers **Update to vX.Y.Z**, which opens the
+//! window to install it from Settings → About. The WebView sets the menu's labels, so they follow
+//! the app's language.
 //!
 //! macOS keeps its own close button, which hides the window (MAC-06), and the Dock, so it has no
 //! tray.
@@ -22,7 +24,9 @@ mod imp {
     use tauri::{AppHandle, CloseRequestApi, Manager, Window, Wry};
     use tauri_specta::Event;
 
-    use crate::dto::{CloseAction, ClosePromptEvent, LocalPrefs, LockReason, TrayMenuInput};
+    use crate::dto::{
+        CloseAction, ClosePromptEvent, LocalPrefs, LockReason, TrayMenuInput, TrayUpdateEvent,
+    };
     use crate::state::AppState;
     use crate::{lock, platform};
 
@@ -34,10 +38,16 @@ mod imp {
 
     /// The menu items whose labels and state the WebView sets. Managed once the tray exists.
     struct Tray {
+        menu: Menu<Wry>,
         open: MenuItem<Wry>,
         lock: MenuItem<Wry>,
+        /// In the menu, after **Lock**, only while the WebView names a newer release.
+        update: MenuItem<Wry>,
         quit: MenuItem<Wry>,
     }
+
+    const UPDATE: &str = "update";
+    const UPDATE_POSITION: usize = 2;
 
     /// The pref, copied out of the device-local prefs so that the close button reads it without
     /// the vault's mutex.
@@ -76,6 +86,7 @@ mod imp {
     fn build(app: &AppHandle) -> tauri::Result<()> {
         let open = MenuItem::with_id(app, "open", "Open Hatoba", true, None::<&str>)?;
         let lock = MenuItem::with_id(app, "lock", "Lock", false, None::<&str>)?;
+        let update = MenuItem::with_id(app, UPDATE, "Update", true, None::<&str>)?;
         let quit = MenuItem::with_id(app, "quit", "Quit Hatoba", true, None::<&str>)?;
         let menu = Menu::with_items(
             app,
@@ -94,6 +105,10 @@ mod imp {
                         lock::lock_vault(&app, LockReason::Manual).await;
                     });
                 }
+                UPDATE => {
+                    platform::window::reopen_main(app);
+                    let _ = TrayUpdateEvent.emit(app);
+                }
                 "quit" => app.exit(0),
                 _ => {}
             })
@@ -108,14 +123,21 @@ mod imp {
                 }
             })
             .build(app)?;
-        app.manage(Tray { open, lock, quit });
+        app.manage(Tray {
+            menu,
+            open,
+            lock,
+            update,
+            quit,
+        });
         #[cfg(target_os = "linux")]
         refresh_host();
         Ok(())
     }
 
-    /// Sets the menu's labels and whether **Lock** is enabled: the WebView calls this when the
-    /// language changes and when the vault locks or unlocks.
+    /// Sets the menu's labels, whether **Lock** is enabled, and **Update to vX.Y.Z**: the WebView
+    /// calls this when the language changes, when the vault locks or unlocks, and when an update
+    /// check or install changes what the menu offers.
     pub fn set_menu(app: &AppHandle, menu: &TrayMenuInput) {
         let Some(tray) = app.try_state::<Tray>() else {
             return;
@@ -124,6 +146,20 @@ mod imp {
         let _ = tray.lock.set_text(&menu.lock);
         let _ = tray.lock.set_enabled(menu.can_lock);
         let _ = tray.quit.set_text(&menu.quit);
+        let shown = tray.menu.get(UPDATE).is_some();
+        match &menu.update {
+            Some(label) => {
+                let _ = tray.update.set_text(label);
+                let _ = tray.update.set_enabled(menu.can_update);
+                if !shown {
+                    let _ = tray.menu.insert(&tray.update, UPDATE_POSITION);
+                }
+            }
+            None if shown => {
+                let _ = tray.menu.remove(&tray.update);
+            }
+            None => {}
+        }
     }
 
     /// Whether a hidden window can come back from the tray.

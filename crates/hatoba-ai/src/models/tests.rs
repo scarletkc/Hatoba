@@ -297,6 +297,51 @@ async fn test_connection_with_a_model_sends_a_minimal_request() {
     assert!(bodies[1].get("stream").is_none());
 }
 
+#[tokio::test]
+async fn responses_lists_models_like_chat_completions_and_tests_with_one_input() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .and(header("authorization", format!("Bearer {KEY}").as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": "list",
+            "data": [{"id": "gpt-5.1", "object": "model"}, {"id": "o4-mini", "object": "model"}]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "status": "completed",
+            "output": [{"type": "message", "content": [{"type": "output_text", "text": "Hi!"}]}]
+        })))
+        .mount(&server)
+        .await;
+    let http = http_client();
+    let responses = provider(format!("{}/v1", server.uri()), Protocol::Responses);
+    let models = list_models(&http, &responses, &CancellationToken::new())
+        .await
+        .unwrap();
+    let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(ids, ["gpt-5.1", "o4-mini"]);
+    assert!(
+        test_connection(
+            &http,
+            &responses,
+            Some("gpt-5.1"),
+            &CancellationToken::new()
+        )
+        .await
+        .ok
+    );
+    let requests = server.received_requests().await.unwrap();
+    let body: Value = serde_json::from_slice(&requests[1].body).unwrap();
+    assert_eq!(
+        body,
+        json!({"model": "gpt-5.1", "input": [{"role": "user", "content": "Hi"}], "store": false})
+    );
+}
+
 async fn outcome_for(status: u16, body: Value, model: Option<&str>) -> TestOutcome {
     let server = MockServer::start().await;
     Mock::given(wiremock::matchers::any())

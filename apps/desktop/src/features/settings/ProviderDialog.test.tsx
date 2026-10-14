@@ -37,7 +37,13 @@ function type(field: HTMLInputElement, text: string) {
 }
 
 const byLabel = (label: string) => document.querySelector(`[aria-label="${label}"]`);
-const radio = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("[role=radio]")].find((b) => b.textContent === label);
+/** The protocol the popup shows, and choosing one from its menu. */
+const protocol = () => byLabel(t("aiSettings.f.protocol"))?.textContent;
+function pickProtocol(label: string) {
+  act(() => (byLabel(t("aiSettings.f.protocol")) as HTMLButtonElement).click());
+  const item = [...document.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]")].find((b) => b.textContent === label);
+  act(() => item?.click());
+}
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === label);
 const shown = (text: string) => document.body.textContent?.includes(text) ?? false;
 
@@ -46,19 +52,23 @@ describe("ProviderDialog", () => {
     render(null);
     const url = document.querySelector<HTMLInputElement>('input[placeholder="https://api.openai.com/v1"]')!;
     type(url, "https://api.typesafe.ai/v1");
-    expect(radio(t("aiSettings.protocol.system_one"))?.getAttribute("aria-checked")).toBe("true");
+    expect(protocol()).toBe(t("aiSettings.protocol.system_one"));
     expect(shown(t("aiSettings.f.protocol.system_one"))).toBe(true);
     expect(shown(t("aiSettings.f.baseUrl.system_one"))).toBe(true);
     type(url, "https://api.cloudflare.com/client/v4/accounts/abc123/ai/run");
-    expect(radio(t("aiSettings.protocol.system_one"))?.getAttribute("aria-checked")).toBe("true");
+    expect(protocol()).toBe(t("aiSettings.protocol.system_one"));
     type(url, "https://openrouter.ai/api/v1");
-    expect(radio(t("aiSettings.protocol.chat_completions"))?.getAttribute("aria-checked")).toBe("true");
+    expect(protocol()).toBe(t("aiSettings.protocol.chat_completions"));
     expect(shown(t("aiSettings.f.protocol.system_one"))).toBe(false);
 
-    // A protocol the user picks stays.
-    act(() => radio(t("aiSettings.protocol.system_one"))?.click());
     type(url, "https://api.openai.com/v1");
-    expect(radio(t("aiSettings.protocol.system_one"))?.getAttribute("aria-checked")).toBe("true");
+    expect(protocol()).toBe(t("aiSettings.protocol.responses"));
+    expect(shown(t("aiSettings.f.baseUrl.responses"))).toBe(true);
+
+    // A protocol the user picks stays.
+    pickProtocol(t("aiSettings.protocol.system_one"));
+    type(url, "https://api.openai.com/v1");
+    expect(protocol()).toBe(t("aiSettings.protocol.system_one"));
   });
 
   it("hides what a decision model does not have, and saves its models without it (AI-47)", async () => {
@@ -80,7 +90,7 @@ describe("ProviderDialog", () => {
     for (const label of columns) expect(byLabel(label)).not.toBeNull();
     expect(byLabel(t("aiSettings.f.authHeader"))).not.toBeNull();
 
-    act(() => radio(t("aiSettings.protocol.system_one"))?.click());
+    pickProtocol(t("aiSettings.protocol.system_one"));
     for (const label of columns) expect(byLabel(label)).toBeNull();
     expect(byLabel(t("aiSettings.f.authHeader"))).toBeNull();
     expect(shown(t("aiSettings.models.col.context"))).toBe(false);

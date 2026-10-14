@@ -528,6 +528,9 @@ pub struct Snippet {
 pub enum AiProtocol {
     /// Anthropic Messages (`/v1/messages`).
     Anthropic,
+    /// OpenAI Responses (`/responses`). A version without it reads such a provider as Chat
+    /// Completions, which the same base URL also serves at OpenAI.
+    Responses,
     /// TypeSafe's System One decision format, which the judge of Auto mode can use (AI-47). Such
     /// a provider answers decision questions and cannot chat: `base_url` is the endpoint's base,
     /// such as `https://api.typesafe.ai/v1`, and `models` are its model ids, such as `jev-latest`
@@ -546,6 +549,7 @@ impl AiProtocol {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Anthropic => "anthropic",
+            Self::Responses => "responses",
             Self::SystemOne => "system_one",
             Self::ChatCompletions => "chat_completions",
         }
@@ -2242,6 +2246,12 @@ mod tests {
             AiProtocol::SystemOne
         );
         assert_eq!(AiProtocol::SystemOne.as_str(), "system_one");
+        let responses = read(json!({"type": "ai_provider", "protocol": "responses"}));
+        assert_eq!(
+            responses.as_ai_provider().unwrap().protocol,
+            AiProtocol::Responses
+        );
+        assert_eq!(AiProtocol::Responses.as_str(), "responses");
 
         // A missing or unknown protocol / auth header reads as the default.
         let provider = read(json!({

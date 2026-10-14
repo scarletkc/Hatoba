@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { Button, Icon, IconButton, Segmented, TextField, controlStyles } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Menu, Sheet, SheetHeader, useMenu } from "@/components/overlay";
+import { FooterSpacer, Menu, PopupSelect, Sheet, SheetHeader, useMenu } from "@/components/overlay";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -55,6 +55,7 @@ type Fetched =
 const PICKER_LIMIT = 100;
 const PLACEHOLDER_URL: Record<AiProtocol, string> = {
   chat_completions: "https://api.openai.com/v1",
+  responses: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
   system_one: "https://api.typesafe.ai/v1",
 };
@@ -231,6 +232,7 @@ export function ProviderDialog({
 
   const protocolOptions = [
     { value: "chat_completions" as const, label: t("aiSettings.protocol.chat_completions") },
+    { value: "responses" as const, label: t("aiSettings.protocol.responses") },
     { value: "anthropic" as const, label: t("aiSettings.protocol.anthropic") },
     { value: "system_one" as const, label: t("aiSettings.protocol.system_one") },
   ];
@@ -282,7 +284,7 @@ export function ProviderDialog({
           </FormRow>
           <FormRow label={t("aiSettings.f.protocol")} top={decision}>
             <div className={s.protocol}>
-              <Segmented<AiProtocol>
+              <PopupSelect<AiProtocol>
                 ariaLabel={t("aiSettings.f.protocol")}
                 value={form.protocol}
                 options={protocolOptions}

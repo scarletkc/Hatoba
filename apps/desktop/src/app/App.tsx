@@ -29,7 +29,7 @@ import { Sidebar } from "./Sidebar";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
-import { useStartupUpdateCheck } from "./update";
+import { useAutoUpdateCheck } from "./update";
 import s from "./App.module.css";
 
 // Synchronous with the phase change, so no dialog shows above the lock screen for a frame.
@@ -45,7 +45,7 @@ export function App() {
   useWindowChrome();
   useAiLifecycle();
   useActivityPing(phase === "unlocked");
-  useStartupUpdateCheck(phase === "unlocked");
+  useAutoUpdateCheck(phase === "unlocked");
   useLaunches(phase === "unlocked");
   useTrayMenu();
 
