@@ -137,16 +137,27 @@ async function runAgainst({ pr, comments = [], events = [], closedBy = null }) {
   let prReads = 0;
   let nextId = 100;
   const stored = comments.map((c) => ({ ...c }));
-  const routes = new Map([
-    ["/repos/o/r/pulls/7", () => (prReads++, reads.length > 1 ? reads.shift() : reads[0])],
-    ["/repos/o/r/pulls/7/files", () => [code("apps/desktop/src/app/App.tsx")]],
-    ["/repos/o/r/issues/7/comments", () => stored],
-    ["/repos/o/r/issues/7/events", () => events],
-    ["/repos/o/r/issues/7", () => ({ closed_by: closedBy && { login: closedBy } })],
-    ["/repos/o/r/issues/42", () => ({ labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] })],
-  ]);
+  const get = (path) => {
+    switch (path) {
+      case "/repos/o/r/pulls/7":
+        prReads++;
+        return reads.length > 1 ? reads.shift() : reads[0];
+      case "/repos/o/r/pulls/7/files":
+        return [code("apps/desktop/src/app/App.tsx")];
+      case "/repos/o/r/issues/7/comments":
+        return stored;
+      case "/repos/o/r/issues/7/events":
+        return events;
+      case "/repos/o/r/issues/7":
+        return { closed_by: closedBy && { login: closedBy } };
+      case "/repos/o/r/issues/42":
+        return { labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] };
+      default:
+        return undefined;
+    }
+  };
   const answer = (method, path, body) => {
-    if (method === "GET") return routes.get(path)?.();
+    if (method === "GET") return get(path);
     if (method === "POST" && path === "/repos/o/r/issues/7/comments") {
       const comment = { id: nextId++, user: { login: "github-actions[bot]" }, body: body.body };
       stored.push(comment);
