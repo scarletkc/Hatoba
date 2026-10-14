@@ -1,4 +1,5 @@
-<!-- Use a Conventional Commits title, such as fix(desktop): keep IME input when switching tabs. -->
+<!-- Use a Conventional Commits title, such as fix(desktop): keep IME input when switching tabs.
+A check closes a pull request whose checklist or sections are left unfinished, and reopens it once the description is complete. -->
 
 - [ ] I have read the [contribution guide](https://github.com/scarletkc/Hatoba/blob/main/CONTRIBUTING.md).
 - [ ] The linked issue is labeled `good first issue` or `help wanted`, was opened by me, or is assigned to me.

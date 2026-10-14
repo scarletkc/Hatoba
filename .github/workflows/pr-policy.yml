@@ -1,0 +1,38 @@
+name: PR policy
+
+# Closes a pull request from outside the project that skips what CONTRIBUTING.md asks of it, with a
+# comment that lists what is missing, and reopens it once the author fixes that. Drafts wait until
+# they are ready for review, and a pull request a maintainer reopened is left alone.
+# pull_request_target gives the token write access to pull requests from forks, so the job runs the
+# script from main and never checks out or runs the pull request's code.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+  # The author may post the screenshots in a comment.
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-policy:
+    name: PR policy
+    if: github.event_name == 'pull_request_target' || (github.event.issue.pull_request && github.event.comment.user.login == github.event.issue.user.login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The base branch: on pull_request_target and issue_comment, the checkout is main.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node scripts/ci/pr-policy.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

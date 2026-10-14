@@ -16,7 +16,8 @@ counts as one.
 ## Start with an issue
 
 Open or find an issue before writing code. A pull request without an issue is
-acceptable only for a small, self-evident fix, such as a typo or a broken link.
+acceptable only for a small, self-evident fix to the documentation, such as a
+typo or a broken link, that changes at most 20 lines of Markdown files.
 For anything larger, agree on the direction with a maintainer in the issue
 before starting the work. Keep each pull request to one issue. When an issue
 needs a large change, agree in the issue on how to split it into pull requests
@@ -27,7 +28,8 @@ issues you opened yourself. Comment on the issue when you start, so that nobody
 else duplicates the work. Other issues often wait on a design decision or touch
 the security model. For those, ask in the issue and wait until a maintainer
 assigns it to you. A pull request for an issue that is neither open to you nor
-assigned to you may be closed.
+assigned to you is closed automatically, as
+[Open a pull request](#open-a-pull-request) describes.
 
 Search existing issues first. Title the issue with a one-line summary of the
 problem rather than the solution, for example
@@ -153,6 +155,17 @@ The description gives a reviewer the context that the diff cannot:
 Link the issue with a closing keyword such as `Closes #42`, or with `Refs #42`
 when the pull request addresses only part of it.
 
+The [PR policy workflow](.github/workflows/pr-policy.yml) checks pull requests
+from outside the project when they are opened, edited, updated, or marked ready
+for review; drafts wait. It closes a pull request, with a comment that lists
+what is missing, when the template's checklist is not ticked, a section other
+than Screenshots is missing or empty, no linked issue is open to you as
+[Start with an issue](#start-with-an-issue) describes, or the pull request
+changes the UI without screenshots. Editing the description, or posting the
+screenshots in a comment, runs the check again, and it reopens the pull request
+once nothing is missing. A pull request that a maintainer reopens is not
+checked again.
+
 Before requesting review:
 
 - Run the tests and checks in the [development guide](docs/development.md).
@@ -186,7 +199,7 @@ unrelated to the issue, may be closed without a detailed review.
 ## Add screenshots for UI changes
 
 **Every pull request that changes the UI must include screenshots in its
-description or in a review comment, and is not ready to merge until they have
+description or in a comment, and is not ready to merge until they have
 been checked visually. Passing tests do not replace them.** This covers changes
 to layout, styling, components, visible text, and interaction states.
 
