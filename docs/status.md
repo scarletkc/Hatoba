@@ -83,6 +83,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | WIN-07 | Mica backdrop | 🟡 | Needs verification on a real machine |
 | WIN-08 | Follow the system light or dark mode | ✅ | |
 | WIN-09 | PuTTY `.ppk` | ✅ | |
+| WIN-10 | System tray and the close button | 🟡 | Tried on Windows 11; not yet on a Linux desktop |
 
 ## macOS (§9.2)
 
