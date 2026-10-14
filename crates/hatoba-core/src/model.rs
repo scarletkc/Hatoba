@@ -700,7 +700,6 @@ pub struct AiProvider {
     /// The ChatGPT account the provider signs in with instead of a key (AI-52), absent for a key
     /// provider. Its tokens never sync: each device signs in itself and keeps its session
     /// sealed in its own vault.
-    #[zeroize(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chatgpt: Option<AiChatgptAccount>,
     /// Last modification, Unix ms.
@@ -708,8 +707,8 @@ pub struct AiProvider {
 }
 
 /// The ChatGPT account of an [`AiProvider`] (AI-52): which registration of Hatoba a sign-in on
-/// any device reuses. No secrets.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// any device reuses. No secrets, but wiped with the provider like the rest of the item.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct AiChatgptAccount {
     /// The client id OpenAI issued at the first sign-in (`oaiapp_…`).
@@ -1996,6 +1995,11 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<Item>(value).unwrap(), chatgpt);
         assert!(!format!("{chatgpt:?}").contains("user@example.com"));
+        let Item::AiProvider(mut wiped) = chatgpt else {
+            unreachable!()
+        };
+        wiped.zeroize();
+        assert_eq!(wiped.chatgpt, None);
 
         let search = Item::SearchProvider(SearchProvider {
             kind: SearchKind::Searxng,

@@ -221,7 +221,10 @@ export function ProviderDialog({
       if (!live.current) return;
       setAccount(result.provider.chatgpt ?? null);
       setTest(IDLE);
-      onSaved({ ...result.provider, name: provider.name, models: provider.models });
+      // A provider without models gets the account's models with the sign-in.
+      const models = provider.models.length ? provider.models : result.provider.models;
+      if (models !== provider.models) setForm((f) => ({ ...f, models: addModels(f.models, models) }));
+      onSaved({ ...result.provider, name: provider.name, models });
       toast(
         result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.status.plan_disabled") : t("aiSettings.chatgpt.signedIn"),
         result.provider.chatgpt?.status === "plan_disabled" ? "error" : "success",

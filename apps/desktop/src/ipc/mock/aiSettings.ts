@@ -361,7 +361,11 @@ export function createAiSettingsMock(): AiSettingsApi {
         throw err;
       }
       const view: AiProviderView = old
-        ? { ...old, chatgpt: { email: old.chatgpt?.email ?? "you@example.com", status: "signed_in" } }
+        ? {
+            ...old,
+            models: old.models.length ? old.models : chatgptModels(),
+            chatgpt: { email: old.chatgpt?.email ?? "you@example.com", status: "signed_in" },
+          }
         : {
             id: id("p"),
             name: "ChatGPT",
