@@ -2367,6 +2367,7 @@ dependencies = [
  "windows",
  "winreg",
  "wiremock",
+ "zbus 5.19.0",
  "zeroize",
 ]
 

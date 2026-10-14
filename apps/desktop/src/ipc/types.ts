@@ -786,6 +786,19 @@ export interface LocalPrefs {
   dashboard_cpu_alert: number;
   dashboard_mem_alert: number;
   dashboard_disk_alert: number;
+  /** WIN-10: what the window's close button does on Windows and Linux. */
+  close_action: CloseAction;
+}
+
+/** WIN-10: the close button asks, hides the window to the system tray, or quits. Without a tray it quits. */
+export type CloseAction = "ask" | "tray" | "quit";
+
+/** WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked. */
+export interface TrayMenuInput {
+  open: string;
+  lock: string;
+  quit: string;
+  can_lock: boolean;
 }
 
 /** Device-local state of the sidebar's GitHub star prompt (spec §9). */
@@ -1516,4 +1529,6 @@ export interface EventMap {
   "window://chrome": WindowChromeEvent;
   /** Another launch handed its command line to this window (HOST-13); `launch_take` returns it. */
   "app://launch": null;
+  /** WIN-10: the close button asks whether to hide the window to the tray or quit. */
+  "window://close-prompt": null;
 }

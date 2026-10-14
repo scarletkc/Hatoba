@@ -53,6 +53,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
+ *   ?close=prompt
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -67,6 +68,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * command starts off; with `?cli=offpath`, its folder is not on the PATH, as on Linux before the
  * next sign-in.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
+ * With `?close=prompt`, the window's close button asks whether to minimize to the tray (WIN-10),
+ * once the window listens for it.
  * `?worker` shows a Worker update notice (§6.7, Upgrades): `available` on a Worker the app
  * deployed, `required` on one deployed another way (sync paused), `custom` on a custom domain,
  * and `app` for a Worker that needs a newer Hatoba. "Update Worker" honours `?deploy=fail`,
@@ -84,6 +87,7 @@ export function createMockApi(): HatobaApi {
   const deployDemo = q.get("deploy");
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
+  let closeDemo = q.get("close") === "prompt";
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
   const BUNDLED_WORKER = "0.2.0";
@@ -1017,6 +1021,9 @@ export function createMockApi(): HatobaApi {
 
     window_snap_overlay: async () => {},
     window_floating: async () => false,
+    window_hide_to_tray: async () => {},
+    app_quit: async () => {},
+    tray_set_menu: async () => {},
     save_text_file: async (path, contents) => {
       // Browser fallback: download the text instead of writing to `path`.
       const a = document.createElement("a");
@@ -1031,6 +1038,10 @@ export function createMockApi(): HatobaApi {
       if (!set) listeners.set(event, (set = new Set()));
       const h = handler as (p: unknown) => void;
       set.add(h);
+      if (event === "window://close-prompt" && closeDemo) {
+        closeDemo = false;
+        setTimeout(() => emit("window://close-prompt", null), 500);
+      }
       return () => set.delete(h);
     },
   };

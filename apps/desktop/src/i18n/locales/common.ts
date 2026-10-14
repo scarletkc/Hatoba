@@ -35,6 +35,15 @@ export default defineMessages({
     "window.restore": "向下还原",
     "window.close": "关闭",
     "window.toggleSidebar": "显示或隐藏侧边栏",
+    // WIN-10
+    "close.title": "将 Hatoba 最小化到托盘？",
+    "close.body": "最小化到托盘后，会话和端口转发在后台继续运行，点击托盘图标即可重新打开窗口。",
+    "close.remember": "记住我的选择，可在设置 → 通用中更改",
+    "close.tray": "最小化到托盘",
+    "close.quit": "退出 Hatoba",
+    "tray.open": "打开 Hatoba",
+    "tray.lock": "锁定",
+    "tray.quit": "退出 Hatoba",
 
     "sidebar.all": "全部主机",
     "sidebar.favorites": "收藏",
@@ -184,6 +193,15 @@ export default defineMessages({
     "window.restore": "Restore Down",
     "window.close": "Close",
     "window.toggleSidebar": "Show or hide the sidebar",
+    // WIN-10
+    "close.title": "Minimize Hatoba to the tray?",
+    "close.body": "In the tray, sessions and port forwards keep running, and the tray icon opens the window again.",
+    "close.remember": "Remember my choice (change it in Settings → General)",
+    "close.tray": "Minimize to Tray",
+    "close.quit": "Quit Hatoba",
+    "tray.open": "Open Hatoba",
+    "tray.lock": "Lock",
+    "tray.quit": "Quit Hatoba",
 
     "sidebar.all": "All Hosts",
     "sidebar.favorites": "Favorites",
@@ -338,6 +356,15 @@ export default defineMessages({
     "window.restore": "元に戻す（縮小）",
     "window.close": "閉じる",
     "window.toggleSidebar": "サイドバーの表示／非表示",
+    // WIN-10
+    "close.title": "Hatoba をトレイに最小化しますか？",
+    "close.body": "トレイに最小化すると、セッションとポート転送はバックグラウンドで動き続け、トレイアイコンからウィンドウを再び開けます。",
+    "close.remember": "選択を記憶する（設定 → 一般 で変更できます）",
+    "close.tray": "トレイに最小化",
+    "close.quit": "Hatoba を終了",
+    "tray.open": "Hatoba を開く",
+    "tray.lock": "ロック",
+    "tray.quit": "Hatoba を終了",
 
     "sidebar.all": "すべてのホスト",
     "sidebar.favorites": "お気に入り",

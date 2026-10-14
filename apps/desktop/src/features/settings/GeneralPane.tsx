@@ -6,7 +6,7 @@ import { Group } from "@/components/layout";
 import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { CliCommandView, TerminalSettings } from "@/ipc/types";
+import type { CliCommandView, CloseAction, TerminalSettings } from "@/ipc/types";
 import { pickSavePath } from "@/lib/native";
 import { defaultRightClick } from "@/lib/platform";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
@@ -28,8 +28,8 @@ function withCurrent(choices: number[], current: number): number[] {
 }
 
 /**
- * Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the `hatoba`
- * command (HOST-13), the dashboard (HOST-14), backup (VAULT-07).
+ * Settings → General: terminal mouse behaviour (WIN-05), reachability dots (HOST-10), the close
+ * button (WIN-10), the `hatoba` command (HOST-13), the dashboard (HOST-14), backup (VAULT-07).
  */
 export function GeneralPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
@@ -79,6 +79,22 @@ export function GeneralPane({ settings, updateTerminal }: PaneProps) {
         <SettingRow label={t("settings.probe")} hint={t("settings.probe.hint")}>
           <Switch label={t("settings.probe")} checked={prefs.host_probe} onChange={(host_probe) => setPrefs({ host_probe })} />
         </SettingRow>
+        {/* WIN-10: macOS's close button hides the window (MAC-06). */}
+        {platform !== "macos" && (
+          <SettingRow label={t("settings.closeAction")} hint={t("settings.closeAction.hint")}>
+            <PopupSelect<CloseAction>
+              ariaLabel={t("settings.closeAction")}
+              value={prefs.close_action}
+              minWidth={150}
+              options={[
+                { value: "ask", label: t("settings.closeAction.ask") },
+                { value: "tray", label: t("settings.closeAction.tray") },
+                { value: "quit", label: t("settings.closeAction.quit") },
+              ]}
+              onChange={(close_action) => setPrefs({ close_action })}
+            />
+          </SettingRow>
+        )}
       </Group>
 
       <Group>

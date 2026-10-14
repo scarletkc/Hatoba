@@ -16,6 +16,12 @@ export const commands = {
 	 *  or tiled, false without a compositor, and false on other platforms.
 	 */
 	windowFloating: () => __TAURI_INVOKE<boolean>("window_floating"),
+	/**  The close prompt's **Minimize to Tray** (WIN-10). */
+	windowHideToTray: () => __TAURI_INVOKE<void>("window_hide_to_tray"),
+	/**  The close prompt's **Quit Hatoba** (WIN-10). */
+	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
+	/**  The tray menu's labels in the app's language, and whether **Lock** is enabled (WIN-10). */
+	traySetMenu: (menu: TrayMenuInput) => __TAURI_INVOKE<void>("tray_set_menu", { menu }),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -492,6 +498,7 @@ export const events = {
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
+	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
 };
 
 /* Types */
@@ -1146,6 +1153,15 @@ export type CliCommandView = {
 	on_path: boolean,
 };
 
+/**
+ *  WIN-10: the window's close button asks, hides the window to the system tray, or quits.
+ *  Without a tray it always quits.
+ */
+export type CloseAction = "ask" | "tray" | "quit";
+
+/**  WIN-10: the close button asks whether to hide the window to the tray or quit. */
+export type ClosePromptEvent = null;
+
 export type CloudflareAccount = {
 	id: string,
 	name: string,
@@ -1592,6 +1608,8 @@ export type LocalPrefs = {
 	dashboard_cpu_alert: number,
 	dashboard_mem_alert: number,
 	dashboard_disk_alert: number,
+	/**  WIN-10: what the window's close button does on Windows and Linux. */
+	close_action: CloseAction,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -2105,6 +2123,14 @@ export type TransferProgressEvent = {
 };
 
 export type TransferState = "running" | "done" | "failed" | "cancelled";
+
+/**  WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked. */
+export type TrayMenuInput = {
+	open: string,
+	lock: string,
+	quit: string,
+	can_lock: boolean,
+};
 
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {

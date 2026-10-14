@@ -3,11 +3,11 @@
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
 
-use crate::dto::{AppInfo, UpdateCheck, UpdateProgress};
+use crate::dto::{AppInfo, TrayMenuInput, UpdateCheck, UpdateProgress};
 use crate::error::{AppError, AppResult};
 use crate::platform;
 use crate::state::AppState;
-use crate::update;
+use crate::{tray, update};
 
 #[tauri::command]
 #[specta::specta]
@@ -49,6 +49,27 @@ pub fn window_snap_overlay() {
 #[specta::specta]
 pub fn window_floating() -> bool {
     platform::window::floating()
+}
+
+/// The close prompt's **Minimize to Tray** (WIN-10).
+#[tauri::command]
+#[specta::specta]
+pub fn window_hide_to_tray(app: AppHandle) {
+    tray::hide_to_tray(&app);
+}
+
+/// The close prompt's **Quit Hatoba** (WIN-10).
+#[tauri::command]
+#[specta::specta]
+pub fn app_quit(app: AppHandle) {
+    app.exit(0);
+}
+
+/// The tray menu's labels in the app's language, and whether **Lock** is enabled (WIN-10).
+#[tauri::command]
+#[specta::specta]
+pub fn tray_set_menu(app: AppHandle, menu: TrayMenuInput) {
+    tray::set_menu(&app, &menu);
 }
 
 /// The extensions `save_text_file` writes: the recovery code (.txt), a conversation export (.md,

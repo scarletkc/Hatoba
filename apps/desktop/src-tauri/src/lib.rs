@@ -17,6 +17,7 @@ mod platform;
 mod ssh;
 mod state;
 mod sync;
+mod tray;
 mod update;
 
 use commands::{
@@ -37,6 +38,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             app::app_info,
             app::window_snap_overlay,
             app::window_floating,
+            app::window_hide_to_tray,
+            app::app_quit,
+            app::tray_set_menu,
             app::save_text_file,
             app::activity_ping,
             app::update_check,
@@ -223,6 +227,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::McpServerStatus,
             dto::WindowChromeEvent,
             dto::LaunchEvent,
+            dto::ClosePromptEvent,
         ])
 }
 
@@ -277,6 +282,11 @@ pub fn run() {
 
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());
+            #[cfg(not(target_os = "macos"))]
+            {
+                tray::refresh_close_action(&app.state::<state::AppState>());
+                tray::init(&handle);
+            }
             platform::window::show_main(&handle);
             Ok(())
         })
@@ -300,6 +310,13 @@ pub fn run() {
             {
                 api.prevent_close();
                 platform::window::hide_main(window.clone());
+            }
+            // WIN-10: Windows and Linux ask, hide the window to the tray, or quit.
+            #[cfg(not(target_os = "macos"))]
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if window.label() == platform::window::MAIN =>
+            {
+                tray::close_requested(window, api);
             }
             _ => {}
         })

@@ -1,7 +1,7 @@
 import type { LocalPrefs } from "../types";
 import { PREFS } from "./data";
 
-type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode" | "dashboard_layout";
+type ChoicePref = "language" | "appearance" | "density" | "ai_permission_mode" | "dashboard_layout" | "close_action";
 
 /** The values this build knows for each pref that is one of a set; the record keys keep them complete. */
 const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
@@ -10,6 +10,7 @@ const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
   density: { regular: true, compact: true },
   ai_permission_mode: { manual: true, auto: true, bypass: true },
   dashboard_layout: { cards: true, table: true },
+  close_action: { ask: true, tray: true, quit: true },
 };
 
 /** Whether `value` reads as the pref `key`, as serde reads Rust's `LocalPrefs`. */

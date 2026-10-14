@@ -448,6 +448,7 @@ export function Dialog({
   onClose,
   children,
   width,
+  whileLocked,
 }: {
   title: string;
   body?: ReactNode;
@@ -457,9 +458,11 @@ export function Dialog({
   onClose?: () => void;
   children?: ReactNode;
   width?: number;
+  /** Also shows over the lock screen: only for a dialog that shows nothing from the vault. */
+  whileLocked?: boolean;
 }) {
   return (
-    <Modal onClose={onClose} center>
+    <Modal onClose={onClose} center whileLocked={whileLocked}>
       <div role="alertdialog" aria-modal className={o.dialog} style={width ? { width } : undefined}>
         <div className={o.dialogHead}>
           {icon && <Icon name={icon} size={20} color={iconColor ?? "var(--accent)"} />}

@@ -972,6 +972,8 @@ pub struct LocalPrefs {
     pub dashboard_cpu_alert: u32,
     pub dashboard_mem_alert: u32,
     pub dashboard_disk_alert: u32,
+    /// WIN-10: what the window's close button does on Windows and Linux.
+    pub close_action: CloseAction,
 }
 
 impl Default for LocalPrefs {
@@ -997,8 +999,19 @@ impl Default for LocalPrefs {
             dashboard_cpu_alert: 90,
             dashboard_mem_alert: 90,
             dashboard_disk_alert: 90,
+            close_action: CloseAction::Ask,
         }
     }
+}
+
+/// WIN-10: the window's close button asks, hides the window to the system tray, or quits.
+/// Without a tray it always quits.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseAction {
+    Ask,
+    Tray,
+    Quit,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1066,6 +1079,20 @@ pub struct AppInfo {
 #[tauri_specta(event_name = "window://chrome")]
 pub struct WindowChromeEvent {
     pub floating: bool,
+}
+
+/// WIN-10: the close button asks whether to hide the window to the tray or quit.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://close-prompt")]
+pub struct ClosePromptEvent;
+
+/// WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked.
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct TrayMenuInput {
+    pub open: String,
+    pub lock: String,
+    pub quit: String,
+    pub can_lock: bool,
 }
 
 /// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.

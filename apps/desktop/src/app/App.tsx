@@ -19,6 +19,7 @@ import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
@@ -46,6 +47,7 @@ export function App() {
   useActivityPing(phase === "unlocked");
   useStartupUpdateCheck(phase === "unlocked");
   useLaunches(phase === "unlocked");
+  useTrayMenu();
 
   if (phase === "boot") return null;
   if (phase === "onboarding")
@@ -53,6 +55,7 @@ export function App() {
       <>
         <Onboarding />
         <ConfirmHost />
+        <ClosePrompt />
         <ToastHost />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
@@ -73,6 +76,7 @@ export function App() {
       {!locked && <SessionDialogs />}
       <EditFilesHost />
       <ConfirmHost />
+      <ClosePrompt />
       <ToastHost />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />

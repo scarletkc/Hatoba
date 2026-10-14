@@ -82,6 +82,7 @@ import type {
   SyncTestResult,
   TagCount,
   TestResult,
+  TrayMenuInput,
   UpdateCheck,
   UpdateProgress,
   UpgradeDefaults,
@@ -462,6 +463,10 @@ export interface HatobaApi {
    * or tiled, without a compositor, and on other platforms.
    */
   window_floating(): Promise<boolean>;
+  /** WIN-10: the close prompt's choices, and the tray menu in the app's language. */
+  window_hide_to_tray(): Promise<void>;
+  app_quit(): Promise<void>;
+  tray_set_menu(menu: TrayMenuInput): Promise<void>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 

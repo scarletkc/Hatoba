@@ -294,6 +294,7 @@ export const PREFS: LocalPrefs = {
   dashboard_cpu_alert: 90,
   dashboard_mem_alert: 90,
   dashboard_disk_alert: 90,
+  close_action: "ask",
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

@@ -53,6 +53,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   dashboard_cpu_alert: 90,
   dashboard_mem_alert: 90,
   dashboard_disk_alert: 90,
+  close_action: "ask",
 };
 
 interface AppState {

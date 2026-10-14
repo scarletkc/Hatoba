@@ -19,7 +19,8 @@ tauri-build = { version = "2.7", features = [] }
 hatoba-ai.workspace = true
 hatoba-core.workspace = true
 hatoba-ssh.workspace = true
-tauri = { version = "2.12", features = [] }
+# WIN-10: the system tray on Windows and Linux.
+tauri = { version = "2.12", features = ["tray-icon"] }
 tauri-plugin-dialog = "2.8"
 tauri-plugin-clipboard-manager = "2.4"
 tauri-plugin-opener = "2.7"
@@ -80,6 +81,9 @@ windows = { version = "0.62", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 # Painted window chrome (linux_chrome.rs): window-state signals, shadow width, input shape.
 gtk = "0.18"
+# WIN-10: whether a StatusNotifier host shows the tray icon. The opener and single-instance
+# plugins already build it.
+zbus = "5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # `killpg` for the login shell that resolves the MCP servers' PATH.

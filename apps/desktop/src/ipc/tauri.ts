@@ -248,6 +248,9 @@ export function createTauriApi(): HatobaApi {
 
     window_snap_overlay: () => call("window_snap_overlay"),
     window_floating: () => call("window_floating"),
+    window_hide_to_tray: () => call("window_hide_to_tray"),
+    app_quit: () => call("app_quit"),
+    tray_set_menu: (menu) => call("tray_set_menu", { menu }),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),
