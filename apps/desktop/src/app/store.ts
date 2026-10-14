@@ -67,7 +67,7 @@ interface AppState {
   page: Page;
   sidebarCollapsed: boolean;
   settingsOpen: boolean;
-  /** The tab the settings window opens on; null reopens the last one. */
+  /** The tab the settings window opens on or switches to; null keeps the last one. The window clears it once taken. */
   settingsTab: SettingsTab | null;
   /** Bumped to ask the hosts page to focus its search field (Ctrl+Shift+K). */
   searchFocusTick: number;

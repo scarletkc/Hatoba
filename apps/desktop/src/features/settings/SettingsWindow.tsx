@@ -51,6 +51,16 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
     setTabState(next);
   };
 
+  // A tab asked for while the window is open, such as About from the tray's update item (WIN-10).
+  // Taking the request clears it, so asking for the same tab again switches back to it.
+  const requested = useApp((st) => st.settingsTab);
+  useEffect(() => {
+    if (!requested) return;
+    lastTab = requested;
+    setTabState(requested);
+    useApp.setState({ settingsTab: null });
+  }, [requested]);
+
   const reads = useFreshReads(
     api.settings_get,
     (v) => {
