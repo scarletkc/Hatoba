@@ -86,6 +86,7 @@ export function createTauriApi(): HatobaApi {
     recent_targets_list: () => call("recent_targets_list"),
     recent_target_remove: (target) => call("recent_target_remove", { target }),
     ssh_write: (sessionId, data) => call("ssh_write", { sessionId, data }),
+    ssh_write_bytes: (sessionId, data) => call("ssh_write_bytes", { sessionId, data }),
     ssh_resize: (sessionId, cols, rows) => call("ssh_resize", { sessionId, cols, rows }),
     ssh_disconnect: (sessionId) => call("ssh_disconnect", { sessionId }),
     ssh_stats_start: (sessionId, onEvent) => {

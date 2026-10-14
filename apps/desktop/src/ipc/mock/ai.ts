@@ -126,8 +126,8 @@ const MAINTENANCE = "/srv/app/public/maintenance.html";
  * Chinese or Japanese). Without a connected terminal tab it calls only the tools that need none (AI-09):
  *   "disk"            run_command `df -h /`          "fail"     run_command that exits with 5
  *   "screen"          read_terminal                  "type" / "send"   send_input `uptime` + Enter
- *   "search"          web_search                     "fetch" / "url"   fetch_url
- *   "mcp"             a tool of the first running (or startable) MCP server the conversation uses,
+ *   "search"          web_search                     "fetch" / "url"   fetch_url ("whole": the whole page)
+ *   "mcp"          a tool of the first running (or startable) MCP server the conversation uses,
  *                     from the extensions mock (`?mcp=demo`), preferring a server named in the message
  *                     ("mcp filesystem"); without one, a tool no server offers
  *   "unknown"         a tool that does not exist     "sleep"    run_command `sleep 8`, to see Stop
@@ -525,7 +525,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (want("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
-      if (want("fetch", "url", "网页", "ページ")) calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html" }));
+      if (want("fetch", "url", "网页", "ページ"))
+        calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html", ...(want("whole", "整页", "全体") ? { full_page: true } : {}) }));
       if (want("mcp")) {
         const mcp = await mcpCall(turn, words);
         // AI-45: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
@@ -1322,7 +1323,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         await wait(900);
         return {
           status: "ok",
-          content: `URL: ${String(args.url ?? "")} (characters 0–1,180 of 1,180, text/html)\n\n# Module ngx_http_upstream_module\n\nThe ngx_http_upstream_module module is used to define groups of servers that can be referenced by the proxy_pass directive.\n\n## keepalive\n\nActivates the cache for connections to upstream servers.`,
+          content: `URL: ${String(args.url ?? "")} | Content type: text/html | ${args.full_page === true ? "Whole page" : "Main content"} | Characters 0-230 of 230\nTitle: Module ngx_http_upstream_module\n${args.full_page === true ? "" : "Navigation, sidebars and footers are left out. For the whole page, call fetch_url with full_page true.\n"}\n# Module ngx_http_upstream_module\n\nThe ngx_http_upstream_module module is used to define groups of servers that can be referenced by the proxy_pass directive.\n\n## keepalive\n\nActivates the cache for connections to upstream servers.`,
         };
       case "read_skill":
         await wait(200);

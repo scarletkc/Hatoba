@@ -223,7 +223,8 @@ export function AiPane() {
           <SearchSection
             providers={data.search}
             chosenId={data.settings.search_provider_id}
-            onChoose={(id) => void saveSettings({ search_provider_id: id })}
+            native={data.settings.native_search}
+            onChoose={(choice) => void saveSettings(choice)}
             onSaved={(view) => {
               const cur = dataRef.current;
               if (!cur) return;

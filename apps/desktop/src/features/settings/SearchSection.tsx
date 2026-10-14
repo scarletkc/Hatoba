@@ -4,7 +4,7 @@ import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { PopupSelect, confirm, toast } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
+import type { AiSettingsPatch, SearchKind, SearchProviderInput, SearchProviderView } from "@/ipc/types";
 import { SEARCH_KINDS, keyForInput, normalizeBaseUrl, parseBaseUrl, searchNeedsUrl, searchProviderFor, type KeyDraft } from "./aiLogic";
 import { IDLE, SavedKeyField, TestConnection, aiErrorDetail, aiErrorMessage, type TestState } from "./aiShared";
 import { SettingRow } from "./shared";
@@ -12,26 +12,37 @@ import s from "./AiPane.module.css";
 
 const KEEP: KeyDraft = { mode: "keep", value: "" };
 
+/** What runs `web_search`: a search provider, the chat provider's own search (`native`), or nothing (null). */
+type Choice = SearchKind | "native" | null;
+
+const chosenOf = (providers: SearchProviderView[], chosenId: string | null, native: boolean): Choice =>
+  providers.find((p) => p.id === chosenId)?.kind ?? (native ? "native" : null);
+
 /**
  * Web search (AI-14): the backend of `web_search`. Settings hold one provider per kind and choose
- * at most one of them, so switching the kind switches to that kind's saved settings.
+ * at most one of them, so switching the kind switches to that kind's saved settings. Without one,
+ * the chat provider's own search runs it, unless the user picks None.
  */
 export function SearchSection({
   providers,
   chosenId,
+  native,
   onChoose,
   onSaved,
   onRemoved,
 }: {
   providers: SearchProviderView[];
   chosenId: string | null;
-  /** The search provider to use, or null for none. */
-  onChoose: (id: string | null) => void;
+  /** `Settings.ai.native_search`. */
+  native: boolean;
+  /** The search provider to use, or none and whether the chat provider's own search runs instead. */
+  onChoose: (choice: Pick<AiSettingsPatch, "search_provider_id" | "native_search">) => void;
   onSaved: (saved: SearchProviderView) => void;
   onRemoved: (id: string) => void;
 }) {
   const t = useT();
-  const [kind, setKind] = useState<SearchKind | null>(() => providers.find((p) => p.id === chosenId)?.kind ?? null);
+  const [choice, setChoice] = useState<Choice>(() => chosenOf(providers, chosenId, native));
+  const kind = choice === "native" ? null : choice;
   /** The saved provider that a typed address or key is for, null for a new one; undefined while nothing is typed. */
   const draftFor = useRef<string | null | undefined>(undefined);
   const current = kind ? searchProviderFor(providers, kind, chosenId) : null;
@@ -49,9 +60,9 @@ export function SearchSection({
   const needsUrl = kind ? searchNeedsUrl(kind) : false;
   const hasSavedKey = !!saved?.has_api_key;
 
-  const reset = (next: SearchKind | null) => {
-    const found = next ? searchProviderFor(providers, next, chosenId) : null;
-    setKind(next);
+  const reset = (next: Choice) => {
+    const found = next && next !== "native" ? searchProviderFor(providers, next, chosenId) : null;
+    setChoice(next);
     setBaseUrl(found?.base_url ?? "");
     setKey(KEEP);
     setError(null);
@@ -62,23 +73,27 @@ export function SearchSection({
 
   // A choice or address changed on another device shows, unless the form holds an edit of the user's:
   // an address or key typed, or a kind picked that is not saved yet.
-  const chosenKind = providers.find((p) => p.id === chosenId)?.kind ?? null;
+  const chosen = chosenOf(providers, chosenId, native);
   const savedUrl = saved?.base_url ?? null;
-  const synced = useRef({ chosenKind, savedUrl });
+  const synced = useRef({ chosen, savedUrl });
   useEffect(() => {
     const before = synced.current;
-    if (before.chosenKind === chosenKind && before.savedUrl === savedUrl) return;
-    synced.current = { chosenKind, savedUrl };
-    if (draftFor.current === undefined && !saving && kind === before.chosenKind) reset(chosenKind);
+    if (before.chosen === chosen && before.savedUrl === savedUrl) return;
+    synced.current = { chosen, savedUrl };
+    if (draftFor.current === undefined && !saving && choice === before.chosen) reset(chosen);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the synced values change, not on edits
-  }, [chosenKind, savedUrl]);
+  }, [chosen, savedUrl]);
 
-  const choose = (next: SearchKind | null) => {
-    if (next === kind) return;
+  const choose = (next: Choice) => {
+    if (next === choice) return;
     reset(next);
+    if (next === "native" || next === null) {
+      onChoose({ search_provider_id: null, native_search: next === "native" });
+      return;
+    }
     // A kind that is already saved takes effect at once; a new one waits for Save.
-    const found = next ? searchProviderFor(providers, next, chosenId) : null;
-    if (!next || found) onChoose(found?.id ?? null);
+    const found = searchProviderFor(providers, next, chosenId);
+    if (found) onChoose({ search_provider_id: found.id });
   };
 
   const edit = (patch: { baseUrl?: string; key?: KeyDraft }) => {
@@ -164,15 +179,16 @@ export function SearchSection({
     try {
       await api.search_provider_delete(saved.id);
       onRemoved(saved.id);
-      reset(null);
+      reset(native ? "native" : null);
     } catch (err) {
       toast(aiErrorMessage(t, err), "error");
     }
   };
 
-  const options: { value: SearchKind | null; label: string }[] = [
-    { value: null, label: t("aiSettings.search.none") },
+  const options: { value: Choice; label: string }[] = [
+    { value: "native", label: t("aiSettings.search.native") },
     ...SEARCH_KINDS.map((k) => ({ value: k, label: t(`aiSettings.search.${k}` as MessageKey) })),
+    { value: null, label: t("aiSettings.search.none") },
   ];
 
   return (
@@ -180,9 +196,9 @@ export function SearchSection({
       <div className={layoutStyles.sectionTitle}>{t("aiSettings.search")}</div>
       <Group>
         <SettingRow label={t("aiSettings.search.row")} hint={t("aiSettings.search.hint")}>
-          <PopupSelect<SearchKind | null>
+          <PopupSelect<Choice>
             ariaLabel={t("aiSettings.search.row")}
-            value={kind}
+            value={choice}
             minWidth={180}
             options={options}
             onChange={choose}

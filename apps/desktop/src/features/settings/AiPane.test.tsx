@@ -101,7 +101,7 @@ describe("AiPane", () => {
   it("follows a search provider chosen on another device, but not over a kind the user picked", async () => {
     render();
     const search = await until(() => byLabel<HTMLButtonElement>(t("aiSettings.search.row")));
-    expect(search.textContent).toBe(t("aiSettings.search.none"));
+    expect(search.textContent).toBe(t("aiSettings.search.native"));
     let tavily!: SearchProviderView;
     await act(async () => {
       tavily = await api.search_provider_save({ id: null, kind: "tavily", base_url: null, api_key: "tvly-test" });
@@ -116,6 +116,23 @@ describe("AiPane", () => {
     act(() => useApp.getState().refreshSynced());
     await until(() => instructions()?.value === "Search less.");
     expect(search.textContent).toBe(t("aiSettings.search.brave"));
+  });
+
+  it("searches with the model's provider by default, and None turns web search off (AI-14)", async () => {
+    render();
+    const search = await until(() => byLabel<HTMLButtonElement>(t("aiSettings.search.row")));
+    expect(search.textContent).toBe(t("aiSettings.search.native"));
+
+    pick(search, t("aiSettings.search.none"));
+    await until(async () => !(await api.ai_settings_get()).native_search);
+    expect(document.querySelector("#ai-search-key")).toBeNull();
+
+    pick(search, t("aiSettings.search.native"));
+    const stored = await until(async () => {
+      const settings = await api.ai_settings_get();
+      return settings.native_search && settings;
+    });
+    expect(stored.search_provider_id).toBeNull();
   });
 
   it("saves an address to the search provider it was typed for, after a sync chose another one", async () => {

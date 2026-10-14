@@ -117,6 +117,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     default_model: providers.length ? { provider_id: "p-anthropic", model_id: "claude-sonnet-5-5" } : null,
     default_effort: null,
     search_provider_id: flags.has("search") ? "s-brave" : null,
+    native_search: true,
     builtin_skill_enabled: true,
     custom_instructions: flags.has("instructions") ? INSTRUCTIONS_DEMO : "",
     send_terminal_screen: true,

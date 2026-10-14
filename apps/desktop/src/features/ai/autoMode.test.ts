@@ -102,6 +102,7 @@ const settings = (judge: AiSettingsView["judge_model"] = { provider_id: "p1", mo
   default_model: null,
   default_effort: null,
   search_provider_id: null,
+  native_search: true,
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,

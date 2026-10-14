@@ -105,7 +105,8 @@ export default defineMessages({
 
     "aiSettings.search": "网页搜索",
     "aiSettings.search.row": "搜索服务",
-    "aiSettings.search.hint": "让助手可以搜索网页。",
+    "aiSettings.search.hint": "让助手可以搜索网页。原生搜索由当前模型的服务商执行。",
+    "aiSettings.search.native": "原生搜索",
     "aiSettings.search.none": "无",
     "aiSettings.search.brave": "Brave Search API",
     "aiSettings.search.tavily": "Tavily",
@@ -495,7 +496,8 @@ export default defineMessages({
 
     "aiSettings.search": "Web Search",
     "aiSettings.search.row": "Search provider",
-    "aiSettings.search.hint": "Lets the assistant search the web.",
+    "aiSettings.search.hint": "Lets the assistant search the web. Native Search is run by the current model’s provider.",
+    "aiSettings.search.native": "Native Search",
     "aiSettings.search.none": "None",
     "aiSettings.search.brave": "Brave Search API",
     "aiSettings.search.tavily": "Tavily",
@@ -889,7 +891,8 @@ export default defineMessages({
 
     "aiSettings.search": "Web 検索",
     "aiSettings.search.row": "検索プロバイダー",
-    "aiSettings.search.hint": "アシスタントが Web を検索できるようにします。",
+    "aiSettings.search.hint": "アシスタントが Web を検索できるようにします。ネイティブ検索は、使用中のモデルのプロバイダーが行います。",
+    "aiSettings.search.native": "ネイティブ検索",
     "aiSettings.search.none": "なし",
     "aiSettings.search.brave": "Brave Search API",
     "aiSettings.search.tavily": "Tavily",

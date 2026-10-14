@@ -62,6 +62,7 @@ The assistant calls the providers added here directly from the device, with the 
 | Model for new conversations | 新对话使用的模型 | 新しい会話で使うモデル |
 | Thinking level for new conversations | 新对话的思考程度 | 新しい会話の思考レベル |
 | Search provider | 搜索服务 | 検索プロバイダー |
+| Native Search | 原生搜索 | ネイティブ検索 |
 | Brave Search API | Brave Search API | Brave Search API |
 | Tavily | Tavily | Tavily |
 | SearXNG | SearXNG | SearXNG |
@@ -70,7 +71,7 @@ The assistant calls the providers added here directly from the device, with the 
 
 - **Model for new conversations** is the model a new conversation starts with. It lists the models of every provider but System One ones, and it syncs. Each conversation then keeps the model it used last.
 - **Thinking level for new conversations** is the level a new conversation starts at: Default, Low, Medium, High, Extra High or Max (see `references/ai-models.md`). It syncs. A model that does not offer that level uses the highest lower level it has. Each conversation then keeps the level it used last. What is sent: for OpenAI Chat Completions a `reasoning_effort` of low, medium or high (xhigh or max only for a model whose levels include them); for Anthropic Messages an `output_config` effort, with adaptive thinking switched on for models that support it. Default sends none of these.
-- **Search provider** is the backend of the assistant's web search. Choose **Brave Search API** or **Tavily** (enter the **API Key**) or **SearXNG** (enter the **Instance URL** of your own instance, which must have the JSON format enabled), then **Test Connection** and **Save**. **None** (the default) means the assistant has no web search tool. Search terms go to the chosen service. **Remove Configuration** deletes the saved settings and key.
+- **Search provider** is the backend of the assistant's web search. **Native Search** (the default) has the current model search with its own provider's search, which costs what that provider charges for a search and for the model's tokens: Anthropic's web search on any Anthropic-protocol provider, OpenRouter's web search server tool (the model's own provider's search where it has one, Exa otherwise), OpenAI's and xAI's web search through their Responses API, and Grounding with Google Search on Gemini. Any other OpenAI-compatible provider, such as a relay of OpenAI's API, is tried with OpenAI's web search; one that turns it away is not asked again until Hatoba restarts, and the assistant's searches then report that it has no native search. Or choose **Brave Search API** or **Tavily** (enter the **API Key**) or **SearXNG** (enter the **Instance URL** of your own instance, which must have the JSON format enabled), then **Test Connection** and **Save**. **None** means the assistant has no web search tool. Search terms go to the chosen service, or with Native Search to the model's provider. **Remove Configuration** deletes the saved settings and key.
 
 ## Terminal Screen
 

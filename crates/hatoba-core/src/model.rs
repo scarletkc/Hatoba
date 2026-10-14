@@ -1180,6 +1180,9 @@ pub struct AiSettings {
     pub default_effort: Option<AiEffort>,
     /// Id of the [`SearchProvider`] item behind `web_search`.
     pub search_provider_id: Option<String>,
+    /// While no search provider is chosen, `web_search` uses the chat provider's own search
+    /// (AI-14). On by default, also for settings written before it existed.
+    pub native_search: bool,
     /// The built-in `hatoba` skill is offered (AI-34). On by default, also for settings written
     /// before it existed.
     pub builtin_skill_enabled: bool,
@@ -1207,6 +1210,7 @@ impl Default for AiSettings {
             default_model: None,
             default_effort: None,
             search_provider_id: None,
+            native_search: true,
             builtin_skill_enabled: true,
             custom_instructions: String::new(),
             send_terminal_screen: true,
@@ -2119,6 +2123,7 @@ mod tests {
                 "default_model": {"provider_id": "p1", "model_id": "m1"},
                 "default_effort": "medium",
                 "search_provider_id": "sp1",
+                "native_search": true,
                 "builtin_skill_enabled": true,
                 "custom_instructions": "Answer in English.",
                 "send_terminal_screen": true,
@@ -2130,6 +2135,7 @@ mod tests {
             json!({
                 "default_model": null,
                 "search_provider_id": null,
+                "native_search": true,
                 "builtin_skill_enabled": true,
                 "send_terminal_screen": true
             })
@@ -2165,6 +2171,10 @@ mod tests {
         assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
         let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
         assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
+        // Those written before native search (AI-14) search with the chat provider.
+        assert!(ai.native_search);
+        let none = read(json!({"type": "settings", "ai": {"native_search": false}}));
+        assert!(!none.as_settings().unwrap().ai.native_search);
         // And those written before the screen note (AI-46) send the screen.
         assert!(ai.send_terminal_screen);
         let quiet = read(json!({"type": "settings", "ai": {"send_terminal_screen": false}}));

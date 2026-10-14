@@ -85,7 +85,7 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 
 ## Web search
 
-Without a search provider the assistant has no web search tool. In Settings → AI → **Web Search**:
+With **Native Search**, the current model searches with its provider's own search: an Anthropic-protocol provider, OpenRouter, OpenAI, xAI or Gemini. Any other OpenAI-compatible provider is tried with OpenAI's web search, and when it turns that away, the assistant's searches report that the provider does not seem to offer web search, without asking it again until Hatoba restarts. With **None** the assistant has no web search tool. A native search that fails reports the provider's error to the assistant: for example, an Anthropic organization whose admin turned web search off in the Claude Console, a model the provider has no search for, or an Anthropic-compatible service that does not run web search ("the model ran no web search"). Choosing Brave Search API, Tavily or SearXNG instead works with every model. In Settings → AI → **Web Search**:
 
 | en | zh-CN | ja |
 |---|---|---|

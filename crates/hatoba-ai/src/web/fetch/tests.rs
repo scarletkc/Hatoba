@@ -79,7 +79,7 @@ async fn html_becomes_markdown() {
     mount(&server, "/page", body("text/html; charset=utf-8", PAGE)).await;
     let cancel = CancellationToken::new();
     let result = fetcher()
-        .fetch(&public_url(&server, "/page#section"), 0, &cancel)
+        .fetch(&public_url(&server, "/page#section"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(result.url, public_url(&server, "/page"));
@@ -104,7 +104,7 @@ async fn html_becomes_markdown() {
 
     // The same page through its IP literal.
     let direct = fetcher()
-        .fetch(&format!("{}/page", server.uri()), 0, &cancel)
+        .fetch(&format!("{}/page", server.uri()), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(direct.content, result.content);
@@ -130,7 +130,7 @@ async fn text_json_and_xml_pass_through() {
         ("/problem", "application/problem+json", "{}"),
     ] {
         let result = fetcher()
-            .fetch(&public_url(&server, at), 0, &cancel)
+            .fetch(&public_url(&server, at), 0, false, &cancel)
             .await
             .unwrap();
         assert_eq!(
@@ -159,7 +159,7 @@ async fn other_content_types_are_refused() {
     let cancel = CancellationToken::new();
     for at in ["/img", "/zip", "/none"] {
         let err = fetcher()
-            .fetch(&public_url(&server, at), 0, &cancel)
+            .fetch(&public_url(&server, at), 0, false, &cancel)
             .await
             .unwrap_err();
         assert!(
@@ -185,7 +185,7 @@ async fn long_content_pages_by_characters() {
     let fetch = |offset| {
         let url = url.clone();
         let cancel = cancel.clone();
-        async move { fetcher().fetch(&url, offset, &cancel).await.unwrap() }
+        async move { fetcher().fetch(&url, offset, false, &cancel).await.unwrap() }
     };
     let first = fetch(0).await;
     assert_eq!(first.total_length, 40_000);
@@ -241,7 +241,7 @@ async fn private_addresses_are_refused_including_after_a_redirect() {
     let cancel = CancellationToken::new();
     for at in ["/to-ip", "/to-v6", "/to-metadata"] {
         let err = fetcher()
-            .fetch(&public_url(&server, at), 0, &cancel)
+            .fetch(&public_url(&server, at), 0, false, &cancel)
             .await
             .unwrap_err();
         assert_eq!(err, AiError::Blocked(REDIRECT_BLOCKED.into()), "{at}");
@@ -250,7 +250,7 @@ async fn private_addresses_are_refused_including_after_a_redirect() {
     // call of its own, refused below.
     for (at, to) in [("/to-name", "rebind.test"), ("/to-mixed", "mixed.test")] {
         let result = fetcher()
-            .fetch(&public_url(&server, at), 0, &cancel)
+            .fetch(&public_url(&server, at), 0, false, &cancel)
             .await
             .unwrap();
         assert_eq!(
@@ -266,7 +266,7 @@ async fn private_addresses_are_refused_including_after_a_redirect() {
         "http://192.168.1.1/".to_owned(),
         "http://[fd00::1]/".to_owned(),
     ] {
-        let err = fetcher().fetch(&url, 0, &cancel).await.unwrap_err();
+        let err = fetcher().fetch(&url, 0, false, &cancel).await.unwrap_err();
         assert_eq!(err, AiError::Blocked(BLOCKED_MESSAGE.into()), "{url}");
     }
     // Only the page itself was ever requested from the mock server's own routes.
@@ -295,7 +295,7 @@ async fn the_public_fetch_refuses_loopback() {
         format!("http://[::ffff:127.0.0.1]:{port}/page"),
         format!("http://0.0.0.0:{port}/page"),
     ] {
-        let err = fetch_url(&url, 0, &cancel).await.unwrap_err();
+        let err = fetch_url(&url, 0, false, &cancel).await.unwrap_err();
         assert!(matches!(err, AiError::Blocked(_)), "{url}: {err:?}");
     }
     assert!(server.received_requests().await.unwrap().is_empty());
@@ -313,7 +313,7 @@ async fn behind_a_local_proxy_the_targets_are_still_checked() {
     };
     let cancel = CancellationToken::new();
     let page = fetcher
-        .fetch("http://docs.example.test/page", 0, &cancel)
+        .fetch("http://docs.example.test/page", 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(page.content, "through the proxy");
@@ -326,7 +326,7 @@ async fn behind_a_local_proxy_the_targets_are_still_checked() {
         "http://10.1.2.3/page",
         "http://[::1]/page",
     ] {
-        let err = fetcher.fetch(url, 0, &cancel).await.unwrap_err();
+        let err = fetcher.fetch(url, 0, false, &cancel).await.unwrap_err();
         assert!(matches!(err, AiError::Blocked(_)), "{url}: {err:?}");
     }
     assert_eq!(proxy.received_requests().await.unwrap().len(), 1);
@@ -362,7 +362,7 @@ async fn redirects_to_another_host_are_returned_not_followed() {
     let cancel = CancellationToken::new();
 
     let away = fetcher()
-        .fetch(&public_url(&server, "/away"), 0, &cancel)
+        .fetch(&public_url(&server, "/away"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(
@@ -384,7 +384,7 @@ async fn redirects_to_another_host_are_returned_not_followed() {
     );
 
     let ported = fetcher()
-        .fetch(&public_url(&server, "/port"), 0, &cancel)
+        .fetch(&public_url(&server, "/port"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(
@@ -392,7 +392,7 @@ async fn redirects_to_another_host_are_returned_not_followed() {
         (None, "other port")
     );
     let cased = fetcher()
-        .fetch(&public_url(&server, "/case"), 0, &cancel)
+        .fetch(&public_url(&server, "/case"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!((cased.redirect, cased.content.as_str()), (None, "here"));
@@ -410,14 +410,14 @@ async fn redirects_are_followed_up_to_five() {
     mount(&server, "/gone", ResponseTemplate::new(404)).await;
     let cancel = CancellationToken::new();
     let result = fetcher()
-        .fetch(&public_url(&server, "/r1"), 0, &cancel)
+        .fetch(&public_url(&server, "/r1"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(result.url, public_url(&server, "/page"));
     assert_eq!(result.content, "landed");
 
     let err = fetcher()
-        .fetch(&public_url(&server, "/loop"), 0, &cancel)
+        .fetch(&public_url(&server, "/loop"), 0, false, &cancel)
         .await
         .unwrap_err();
     assert_eq!(
@@ -435,13 +435,13 @@ async fn redirects_are_followed_up_to_five() {
 
     assert!(matches!(
         fetcher()
-            .fetch(&public_url(&server, "/nowhere"), 0, &cancel)
+            .fetch(&public_url(&server, "/nowhere"), 0, false, &cancel)
             .await,
         Err(AiError::Protocol(_))
     ));
     assert_eq!(
         fetcher()
-            .fetch(&public_url(&server, "/gone"), 0, &cancel)
+            .fetch(&public_url(&server, "/gone"), 0, false, &cancel)
             .await
             .unwrap_err(),
         AiError::Http {
@@ -464,7 +464,7 @@ async fn bad_urls_are_refused_before_any_request() {
     ] {
         assert!(
             matches!(
-                fetcher().fetch(url, 0, &cancel).await,
+                fetcher().fetch(url, 0, false, &cancel).await,
                 Err(AiError::InvalidUrl(_))
             ),
             "{url}"
@@ -491,7 +491,7 @@ async fn downloads_are_capped_and_charsets_decoded() {
     mount(&server, "/meta", body("text/html", meta)).await;
     let cancel = CancellationToken::new();
     let capped = fetcher_with(1_000, FETCH_TIMEOUT)
-        .fetch(&public_url(&server, "/big"), 0, &cancel)
+        .fetch(&public_url(&server, "/big"), 0, false, &cancel)
         .await
         .unwrap();
     assert!(capped.truncated);
@@ -499,12 +499,12 @@ async fn downloads_are_capped_and_charsets_decoded() {
     assert!(format_fetch_result(&capped).contains("longer than 5 MB"));
 
     let latin1 = fetcher()
-        .fetch(&public_url(&server, "/latin1"), 0, &cancel)
+        .fetch(&public_url(&server, "/latin1"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(latin1.content, "café");
     let meta = fetcher()
-        .fetch(&public_url(&server, "/meta"), 0, &cancel)
+        .fetch(&public_url(&server, "/meta"), 0, false, &cancel)
         .await
         .unwrap();
     assert_eq!(meta.content, "naïve");
@@ -521,7 +521,12 @@ async fn deeply_nested_html_falls_back_to_text() {
     );
     mount(&server, "/deep", body("text/html", html)).await;
     let result = fetcher()
-        .fetch(&public_url(&server, "/deep"), 0, &CancellationToken::new())
+        .fetch(
+            &public_url(&server, "/deep"),
+            0,
+            false,
+            &CancellationToken::new(),
+        )
         .await
         .unwrap();
     assert_eq!(result.content, "deep text");
@@ -544,12 +549,17 @@ async fn cancellation_and_the_time_limit() {
     });
     let started = std::time::Instant::now();
     let err = fetcher()
-        .fetch(&public_url(&server, "/slow"), 0, &cancel)
+        .fetch(&public_url(&server, "/slow"), 0, false, &cancel)
         .await
         .unwrap_err();
     assert_eq!(err, AiError::Cancelled);
     let err = fetcher_with(MAX_DOWNLOAD_BYTES, Duration::from_millis(300))
-        .fetch(&public_url(&server, "/slow"), 0, &CancellationToken::new())
+        .fetch(
+            &public_url(&server, "/slow"),
+            0,
+            false,
+            &CancellationToken::new(),
+        )
         .await
         .unwrap_err();
     assert_eq!(err, AiError::Network("fetching the page timed out".into()));
@@ -602,20 +612,245 @@ fn content_types_and_charsets_parse() {
 }
 
 #[test]
-fn dom_depth_is_measured_without_recursion() {
+fn dom_size_is_measured_without_recursion() {
     let tree = htmd::HtmlToMarkdown::new()
         .html_to_tree("<html><body><div><p>x</p></div></body></html>")
         .unwrap();
-    // document > html > body > div > p > text
-    assert_eq!(dom_depth(&tree), 6);
+    // document > html > body > div > p > text, and html, head, body, div and p.
+    assert_eq!(dom_size(&tree), (6, 5));
 }
 
 #[test]
 fn markdown_keeps_structure() {
+    let url = Url::parse("https://docs.example.test/nginx").unwrap();
+    let converted = convert_html(PAGE, &url, false);
     assert_eq!(
-        convert_html(PAGE),
-        "Nginx reload\n\n# Reloading nginx\n\nRun `nginx -s reload`, see \
+        converted.markdown,
+        "# Reloading nginx\n\nRun `nginx -s reload`, see \
          [the docs](https://nginx.org/en/docs/).\n\ndiagram ![logo](https://example.com/logo.png)\
          \n\n*   one\n*   two"
     );
+    // Too short to have main content.
+    assert_eq!(converted.part, PagePart::Whole);
+    assert_eq!(converted.title.as_deref(), Some("Nginx reload"));
+}
+
+/// An article of `steps` paragraphs with a site header, a sidebar, breadcrumbs, a footer, a code
+/// block in a wrapper whose class reads as clutter to Readability, and relative links.
+fn article(title: &str, steps: usize) -> String {
+    let paragraphs: String = (1..=steps)
+        .map(|i| {
+            format!(
+                "<p>Step {i} of setting up the server, with enough words in it, commas, \
+                 clauses, and details that it reads as the text of an article, as the \
+                 <a href=\"../reference/#step-{i}\">reference</a> explains.</p>"
+            )
+        })
+        .collect();
+    format!(
+        r#"<!doctype html><html><head><title>  {title}
+        </title></head><body>
+        <header class="site-header"><a href="/">Example Docs</a></header>
+        <div class="layout">
+          <aside class="sidebar"><ul><li><a href="/a">Sidebar link A</a></li>
+            <li><a href="/b">Sidebar link B</a></li></ul></aside>
+          <main>
+            <nav class="breadcrumbs"><a href="/">Docs</a> / <a href="./">Guide</a></nav>
+            <h1>{title}</h1>
+            {paragraphs}
+            <div class="scroll-mt-2 group"><button>Copy</button><div class="highlight">
+              <pre><code>$ sudo systemctl restart sshd</code></pre></div></div>
+            <p><img src="img/diagram.png" alt="diagram"> <a href="setup">Next: setup</a></p>
+          </main>
+        </div>
+        <footer>Copyright Example</footer></body></html>"#
+    )
+}
+
+#[tokio::test]
+async fn articles_come_back_as_their_main_content() {
+    let server = MockServer::start().await;
+    mount(&server, "/old", redirect(301, "/docs/guide/")).await;
+    mount(
+        &server,
+        "/docs/guide/",
+        body("text/html", article("Restarting sshd", 6)),
+    )
+    .await;
+    let cancel = CancellationToken::new();
+    let at = |path: &str| public_url(&server, path);
+
+    // After a redirect, so links resolve against the page's final URL.
+    let main = fetcher()
+        .fetch(&at("/old"), 0, false, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(main.url, at("/docs/guide/"));
+    assert_eq!(main.part, Some(PagePart::Main));
+    assert_eq!(main.title.as_deref(), Some("Restarting sshd"));
+    for kept in [
+        "# Restarting sshd",
+        "Step 6 of setting up the server",
+        "$ sudo systemctl restart sshd",
+        &format!("[reference]({}#step-1)", at("/docs/reference/")),
+        &format!("![diagram]({})", at("/docs/guide/img/diagram.png")),
+        &format!("[Next: setup]({})", at("/docs/guide/setup")),
+    ] {
+        assert!(
+            main.content.contains(kept),
+            "missing {kept:?} in:\n{}",
+            main.content
+        );
+    }
+    for left_out in [
+        "Sidebar link",
+        "Example Docs",
+        "Guide](",
+        "Copyright",
+        "Copy\n",
+    ] {
+        assert!(
+            !main.content.contains(left_out),
+            "{left_out:?} must not appear in:\n{}",
+            main.content
+        );
+    }
+    let text = format_fetch_result(&main);
+    assert!(text.starts_with(&format!(
+        "URL: {} | Content type: text/html | Main content | Characters 0-{len} of {len}\n\
+         Title: Restarting sshd\n\
+         Navigation, sidebars and footers are left out. For the whole page, call fetch_url with \
+         full_page true.\n\n",
+        at("/docs/guide/"),
+        len = main.total_length
+    )));
+
+    // The whole page on request, its links absolute too.
+    let whole = fetcher()
+        .fetch(&at("/docs/guide/"), 0, true, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(whole.part, Some(PagePart::Whole));
+    assert!(whole.total_length > main.total_length);
+    for kept in [
+        "Sidebar link A",
+        "Copyright Example",
+        "$ sudo systemctl restart sshd",
+        &format!("[Sidebar link A]({})", at("/a")),
+    ] {
+        assert!(
+            whole.content.contains(kept),
+            "missing {kept:?} in:\n{}",
+            whole.content
+        );
+    }
+    assert!(format_fetch_result(&whole).contains("| Whole page |"));
+    assert!(!format_fetch_result(&whole).contains("are left out"));
+}
+
+#[tokio::test]
+async fn pages_without_main_content_come_back_whole() {
+    let server = MockServer::start().await;
+    let listing = format!(
+        "<html><head><title>Releases</title></head><body><ul>{}</ul></body></html>",
+        (0..40)
+            .map(|i| format!("<li><a href=\"/v{i}\">Version {i}</a></li>"))
+            .collect::<String>()
+    );
+    mount(&server, "/releases", body("text/html", listing)).await;
+    mount(
+        &server,
+        "/app",
+        body(
+            "text/html",
+            "<html><head><title>App</title></head><body><div id=\"root\"></div>\
+             <script src=\"/app.js\"></script></body></html>",
+        ),
+    )
+    .await;
+    let cancel = CancellationToken::new();
+    let releases = fetcher()
+        .fetch(&public_url(&server, "/releases"), 0, false, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(releases.part, Some(PagePart::Whole));
+    assert!(releases.content.contains("Version 39"));
+    let app = fetcher()
+        .fetch(&public_url(&server, "/app"), 0, false, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(
+        (app.part, app.title.as_deref(), app.content.as_str()),
+        (Some(PagePart::Whole), Some("App"), "")
+    );
+}
+
+#[tokio::test]
+async fn reading_on_keeps_the_part() {
+    let server = MockServer::start().await;
+    let long: String = (0..2_000)
+        .map(|i| format!("<p>Paragraph {i}, a line of the long page.</p>"))
+        .collect();
+    mount(
+        &server,
+        "/long",
+        body("text/html", format!("<html><body>{long}</body></html>")),
+    )
+    .await;
+    mount(&server, "/article", body("text/html", article("Long", 300))).await;
+    let cancel = CancellationToken::new();
+    let whole = fetcher()
+        .fetch(&public_url(&server, "/long"), 0, false, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(whole.part, Some(PagePart::Whole));
+    assert!(format_fetch_result(&whole).contains(
+        "More content follows: call fetch_url again with offset 30000 and full_page true to \
+         read on.\n"
+    ));
+    let main = fetcher()
+        .fetch(&public_url(&server, "/article"), 0, false, &cancel)
+        .await
+        .unwrap();
+    assert_eq!(main.part, Some(PagePart::Main));
+    assert!(
+        format_fetch_result(&main)
+            .contains("More content follows: call fetch_url again with offset 30000 to read on.\n")
+    );
+}
+
+#[test]
+fn code_blocks_keep_their_lines() {
+    let url = Url::parse("https://docs.example.test/").unwrap();
+    let code = |html: &str| convert_html(html, &url, true).markdown;
+    // A highlighter's per-line spans, each ending in its line break, and a copy button.
+    assert_eq!(
+        code(
+            "<pre><code class=\"language-bash\"><span class=\"line\"><span class=\"cl\">sudo apt \
+             update\n</span></span><span class=\"line\"><span class=\"cl\">sudo apt install \
+             <span class=\"m\">curl</span>\n</span></span></code><button>Copy</button></pre>"
+        ),
+        "```bash\nsudo apt update\nsudo apt install curl\n```"
+    );
+    assert_eq!(code("<pre>a<br>b &lt;c&gt;</pre>"), "```\na\nb <c>\n```");
+    // A fence longer than any backtick run inside.
+    assert_eq!(
+        code("<pre class=\"lang-md\">```\nx\n```</pre>"),
+        "````md\n```\nx\n```\n````"
+    );
+}
+
+#[test]
+fn links_resolve_against_the_base_element() {
+    let url = Url::parse("https://example.test/a/page").unwrap();
+    let html = "<html><head><base href=\"/static/\"></head><body>\
+                <a href=\"guide.html\">guide</a> <a href=\"mailto:x@example.test\">mail</a> \
+                <a href=\"https://other.test/\">other</a></body></html>";
+    let converted = convert_html(html, &url, true);
+    assert_eq!(
+        converted.markdown,
+        "[guide](https://example.test/static/guide.html) [mail](mailto:x@example.test) \
+         [other](https://other.test/)"
+    );
+    assert_eq!(converted.title, None);
 }

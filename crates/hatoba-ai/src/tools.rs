@@ -52,7 +52,8 @@ pub struct ToolSet {
     /// The terminal tab's tools, when a connected tab is attached: `read_terminal`,
     /// `run_command`, `send_input`, the file tools and the search tools.
     pub terminal: bool,
-    /// `web_search`, when a search provider is chosen.
+    /// `web_search`, when a search provider is chosen or the chat provider has a search of its own
+    /// (AI-14).
     pub web_search: bool,
     /// `read_skill`, when an enabled skill exists.
     pub read_skill: bool,
@@ -369,11 +370,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     if set.web_search {
         tools.push(tool(
             WEB_SEARCH,
-            "Search the web with the search service the user chose and return up to 10 \
-             results, each with a title, URL and snippet. Use it for documentation, error \
-             messages, versions and facts you are not sure of, then fetch_url a result to read \
-             it. The query is sent to a third-party service, so keep passwords, keys and tokens \
-             out of it."
+            "Search the web and return up to 10 results with their titles and URLs, and \
+             snippets or a summary of what they say. Use it for documentation, error messages, \
+             versions and facts you are not sure of, then fetch_url a result to read it. The \
+             query is sent to a search service, so keep passwords, keys and tokens out of it."
                 .to_owned(),
             json!({
                 "type": "object",
@@ -389,10 +389,11 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         "Fetch an http or https URL with GET, without cookies or credentials, following at \
          most 5 redirects on the same host (a redirect to another host is returned instead: \
          fetch that URL with a new call), and return up to 30,000 characters of its content \
-         starting at `offset` (default 0), with the total length; HTML is converted to \
-         Markdown. To read on, call it again with the offset the result names. Only text, \
-         HTML, JSON and XML are returned, and addresses on loopback, private or link-local \
-         networks are refused. Keep passwords, keys and tokens out of the URL."
+         starting at `offset` (default 0), with the total length. HTML is converted to \
+         Markdown: the page's main content without navigation, sidebars and footers, or the \
+         whole page with `full_page`. To read on, call it again with the offset the result \
+         names. Only text, HTML, JSON and XML are returned, and addresses on loopback, private \
+         or link-local networks are refused. Keep passwords, keys and tokens out of the URL."
             .to_owned(),
         json!({
             "type": "object",
@@ -401,6 +402,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "offset": {
                     "type": "integer",
                     "description": "Character offset to start from (default 0)."
+                },
+                "full_page": {
+                    "type": "boolean",
+                    "description": "Return the whole HTML page instead of its main content \
+                                    (default false), such as when the main content looks \
+                                    incomplete or you need the page's navigation."
                 }
             },
             "required": ["url"]
@@ -1282,6 +1289,9 @@ pub struct FetchUrlArgs {
     /// Character offset, 0 by default.
     #[serde(default)]
     pub offset: Option<u64>,
+    /// The whole HTML page instead of its main content, false by default.
+    #[serde(default)]
+    pub full_page: Option<bool>,
 }
 
 /// `read_skill` arguments.

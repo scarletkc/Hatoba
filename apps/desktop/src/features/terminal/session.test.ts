@@ -13,12 +13,21 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon = vi.fn();
     attachCustomKeyEventHandler = vi.fn();
     onData = vi.fn();
+    onBinary = vi.fn();
     onResize = vi.fn();
     paste = vi.fn();
     focus = vi.fn();
   },
 }));
 vi.mock("./paste", () => ({ confirmMultilinePaste: vi.fn(async () => true) }));
+const writeBytes = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("@/ipc/api", async (importActual) => {
+  const actual = await importActual<typeof import("@/ipc/api")>();
+  return {
+    ...actual,
+    api: new Proxy(actual.api, { get: (target, prop) => (prop === "ssh_write_bytes" ? writeBytes : Reflect.get(target, prop)) }),
+  };
+});
 
 let session: LiveSession;
 beforeEach(() => {
@@ -86,5 +95,23 @@ describe("terminal paste", () => {
     });
     await session.paste("echo one\necho two");
     expect(session.term.paste).not.toHaveBeenCalled();
+  });
+});
+
+describe("terminal binary input", () => {
+  const binaryInput = () => vi.mocked(session.term.onBinary).mock.calls[0]![0];
+
+  it("sends a legacy mouse report as its bytes, not UTF-8", () => {
+    session.sessionId = "sid";
+    // A left-button press at column 101, row 10: the column byte is 32 + 101 = 133.
+    binaryInput()("[M *");
+    expect(writeBytes).toHaveBeenCalledWith("sid", [27, 91, 77, 32, 133, 42]);
+  });
+
+  it("sends nothing while not connected", () => {
+    session.sessionId = "sid";
+    session.status = "disconnected";
+    binaryInput()("[M *");
+    expect(writeBytes).not.toHaveBeenCalled();
   });
 });

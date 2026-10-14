@@ -145,6 +145,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         default_model: s.default_model.as_ref().map(model_ref_view),
         default_effort: s.default_effort.map(effort_view),
         search_provider_id: s.search_provider_id.clone(),
+        native_search: s.native_search,
         builtin_skill_enabled: s.builtin_skill_enabled,
         custom_instructions: s.custom_instructions.clone(),
         send_terminal_screen: s.send_terminal_screen,
@@ -648,6 +649,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
             Clearable::Set(effort) => Some(core_effort(effort)),
         },
         search_provider_id,
+        native_search: patch.native_search.unwrap_or(current.native_search),
         builtin_skill_enabled: patch
             .builtin_skill_enabled
             .unwrap_or(current.builtin_skill_enabled),
@@ -1415,6 +1417,16 @@ mod tests {
         assert!(!ai_settings_view(&v.settings().ai).send_terminal_screen);
         assert!(!v.settings().ai.builtin_skill_enabled);
 
+        // AI-14: and so is native search, on until turned off.
+        assert!(ai_settings_view(&v.settings().ai).native_search);
+        let no_search = patch(|p| p.native_search = Some(false));
+        save_ai_settings(&mut v, &no_search).unwrap();
+        assert!(!ai_settings_view(&v.settings().ai).native_search);
+        assert_eq!(
+            v.settings().ai.search_provider_id.as_ref(),
+            Some(&search.id)
+        );
+
         // AI-05: the default thinking level is stored with them, and Default is `None`.
         let level = patch(|p| p.default_effort = Clearable::Set(AiEffort::Xhigh));
         save_ai_settings(&mut v, &level).unwrap();
@@ -1571,6 +1583,7 @@ mod tests {
         assert_eq!(empty.default_effort, Clearable::Keep);
         assert_eq!(empty.search_provider_id, Clearable::Keep);
         assert!(empty.builtin_skill_enabled.is_none() && empty.custom_instructions.is_none());
+        assert!(empty.native_search.is_none());
         assert_eq!(empty.judge_model, Clearable::Keep);
         let cleared = read(serde_json::json!({
             "default_model": null,
