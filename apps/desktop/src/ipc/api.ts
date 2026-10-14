@@ -1,6 +1,7 @@
 import type {
   AiAllowance,
   AiAutoVerdict,
+  AiChatgptSignIn,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
@@ -295,6 +296,19 @@ export interface HatobaApi {
   ai_provider_models(input: AiProviderInput): Promise<AiModel[]>;
   /** AI-04: a minimal request to the first model, or the model list when there is none. */
   ai_provider_test(input: AiProviderInput): Promise<AiTestResult>;
+  /**
+   * AI-52: signs in with ChatGPT in the system browser: a new account (`null`), which adds a ChatGPT
+   * provider with its models, or a ChatGPT provider's account again. Resolves once the browser comes
+   * back; rejects with `cancelled` after `ai_chatgpt_sign_in_cancel` or the lock, and with `ai` otherwise.
+   */
+  ai_chatgpt_sign_in(providerId: string | null): Promise<AiChatgptSignIn>;
+  /** AI-52: cancels the sign-in that waits for the browser. */
+  ai_chatgpt_sign_in_cancel(): Promise<void>;
+  /**
+   * AI-52: signs a ChatGPT provider out on this device. Resolves to whether OpenAI confirmed revoking the
+   * session; the session is gone from this device either way.
+   */
+  ai_chatgpt_sign_out(providerId: string): Promise<boolean>;
   /** AI-14: the search providers behind `web_search`. */
   search_providers_list(): Promise<SearchProviderView[]>;
   search_provider_save(input: SearchProviderInput): Promise<SearchProviderView>;

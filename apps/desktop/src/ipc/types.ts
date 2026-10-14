@@ -884,7 +884,25 @@ export interface AiProviderView {
   /** Only used by `anthropic`. */
   auth_header: AiAuthHeader;
   models: AiModel[];
+  /** Set for a provider that signs in with a ChatGPT account instead of a key (AI-52). */
+  chatgpt?: AiChatgptView | null;
   updated_at: number;
+}
+
+/** AI-52: where a ChatGPT provider's sign-in stands on this device. Its tokens never reach the WebView. */
+export type AiChatgptStatus = "signed_in" | "plan_disabled" | "ended" | "signed_out";
+
+/** AI-52: the ChatGPT account of a provider. */
+export interface AiChatgptView {
+  email: string;
+  status: AiChatgptStatus;
+}
+
+/** AI-52: a finished sign-in. */
+export interface AiChatgptSignIn {
+  provider: AiProviderView;
+  /** The sign-in registered Hatoba for a new account: the panel says once that requests now use the ChatGPT plan. */
+  first_sign_in: boolean;
 }
 
 export interface AiProviderInput {

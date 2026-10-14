@@ -55,6 +55,7 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.UpgradeDefaults, Ui.UpgradeDefaults>>,
   Check<Assignable<Rust.UpgradePlan, Ui.UpgradePlan>>,
   Check<Assignable<Rust.AiProviderView, Ui.AiProviderView>>,
+  Check<Assignable<Rust.AiChatgptSignIn, Ui.AiChatgptSignIn>>,
   Check<Assignable<Rust.AiModel, Ui.AiModel>>,
   Check<Assignable<Rust.AiTestResult, Ui.AiTestResult>>,
   Check<Assignable<Rust.SearchProviderView, Ui.SearchProviderView>>,

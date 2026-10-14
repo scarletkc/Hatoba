@@ -4,6 +4,7 @@ import { applyPatch } from "./patch";
 import type {
   AiAllowance,
   AiAutoVerdict,
+  AiChatgptStatus,
   AiEffort,
   AiJudgeDecision,
   AiJudgeSampleOutcome,
@@ -24,6 +25,27 @@ const ALL_LEVELS: readonly AiEffort[] = ["low", "medium", "high", "xhigh", "max"
 const INSTRUCTIONS_DEMO =
   "Answer in the language I write in.\nI use Debian 12 and zsh, and manage services with systemctl.\nWrite <placeholders> for values I need to fill in.";
 
+/** What a ChatGPT account lists for pickers (AI-52). */
+function chatgptModels(): AiModel[] {
+  const gpt = (id: string, name: string): AiModel => ({
+    id,
+    name,
+    context_window: 400_000,
+    max_output_tokens: 128_000,
+    efforts: ["low", "medium", "high", "xhigh"],
+    adaptive_thinking: null,
+  });
+  return [gpt("gpt-6.1-sol", "GPT-6.1 Sol"), gpt("gpt-6.1-sol-mini", "GPT-6.1 Sol mini"), gpt("gpt-6.1-codex", "GPT-6.1 Codex")];
+}
+
+/** The error of a request to a ChatGPT provider that is not signed in here. */
+function notSignedIn(): AppError {
+  return {
+    code: "ai",
+    detail: "This ChatGPT provider is not signed in on this device. Choose Continue with ChatGPT in Settings → AI.",
+  };
+}
+
 type AiSettingsApi = Pick<
   HatobaApi,
   | "ai_providers_list"
@@ -31,6 +53,9 @@ type AiSettingsApi = Pick<
   | "ai_provider_delete"
   | "ai_provider_models"
   | "ai_provider_test"
+  | "ai_chatgpt_sign_in"
+  | "ai_chatgpt_sign_in_cancel"
+  | "ai_chatgpt_sign_out"
   | "search_providers_list"
   | "search_provider_save"
   | "search_provider_delete"
@@ -53,6 +78,9 @@ type AiSettingsApi = Pick<
  *   ?ai=instructions custom instructions are saved (AI-36)
  *   ?ai=nojudge      no judge is chosen, so Auto mode is unavailable (AI-47)
  *   ?ai=judgeslow    Test beside the judge takes 4 seconds; ?ai=judgefail makes every sample time out
+ *   ?ai=chatgpt      a ChatGPT provider (AI-52) signed in on this device; ?ai=chatgptelsewhere has it
+ *                    signed in on another device only, so it needs a sign-in here
+ *   ?ai=signinfail   Continue with ChatGPT fails after the browser comes back
  * Without parameters there are three providers (Anthropic, Ollama on localhost, and TypeSafe, a
  * System One provider that only the judge picker offers), so the default model selector shows two
  * groups. Test beside the judge takes 1.2 seconds, and its outcomes match but one (AI-47). Inside
@@ -62,7 +90,8 @@ type AiSettingsApi = Pick<
  *   a URL with a user name or password      Test Connection reports an invalid URL, and saving is rejected
  *   a non-local provider with no API key    Test Connection fails with an authentication error
  *   a base URL containing `openrouter`      Fetch Models returns 150 models, to try the picker's filter
- * Fetch Models takes half a second and Test Connection 700 ms, so the busy states can be seen.
+ * Fetch Models takes half a second and Test Connection 700 ms, so the busy states can be seen. Continue
+ * with ChatGPT waits 2 seconds for the "browser", then signs in as you@example.com.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createAiSettingsMock(): AiSettingsApi {
@@ -110,6 +139,27 @@ export function createAiSettingsMock(): AiSettingsApi {
           updated_at: Date.now() - 1_800_000,
         },
       ];
+  const chatgptStatus: AiChatgptStatus | null = flags.has("chatgpt")
+    ? "signed_in"
+    : flags.has("chatgptelsewhere")
+      ? "signed_out"
+      : null;
+  if (chatgptStatus) {
+    providers = [
+      ...providers,
+      {
+        id: "p-chatgpt",
+        name: "ChatGPT",
+        protocol: "responses",
+        base_url: "https://api.openai.com/v1",
+        has_api_key: false,
+        auth_header: "x-api-key",
+        models: chatgptModels(),
+        chatgpt: { email: "you@example.com", status: chatgptStatus },
+        updated_at: Date.now() - 600_000,
+      },
+    ];
+  }
   let search: SearchProviderView[] = flags.has("search")
     ? [{ id: "s-brave", kind: "brave", base_url: null, has_api_key: true, updated_at: Date.now() - 7_200_000 }]
     : [];
@@ -130,7 +180,13 @@ export function createAiSettingsMock(): AiSettingsApi {
   const id = (p: string) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
   const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const copyModel = (m: AiModel): AiModel => ({ ...m, efforts: m.efforts ? [...m.efforts] : null });
-  const clone = (p: AiProviderView): AiProviderView => ({ ...p, models: p.models.map(copyModel) });
+  const clone = (p: AiProviderView): AiProviderView => ({
+    ...p,
+    models: p.models.map(copyModel),
+    chatgpt: p.chatgpt ? { ...p.chatgpt } : null,
+  });
+  /** Settles the sign-in that waits for the "browser" with a cancellation. */
+  let cancelSignIn: (() => void) | null = null;
 
   const hostOf = (url: string): string | null => {
     try {
@@ -218,16 +274,19 @@ export function createAiSettingsMock(): AiSettingsApi {
       }
       await wait(150);
       const old = providers.find((p) => p.id === input.id);
-      const view: AiProviderView = {
-        id: old?.id ?? id("p"),
-        name: input.name,
-        protocol: input.protocol,
-        base_url: input.base_url,
-        has_api_key: savedKey(input, providers),
-        auth_header: input.auth_header,
-        models: input.models.map(copyModel),
-        updated_at: Date.now(),
-      };
+      const view: AiProviderView = old?.chatgpt
+        ? { ...old, name: input.name, models: input.models.map(copyModel), updated_at: Date.now() }
+        : {
+            id: old?.id ?? id("p"),
+            name: input.name,
+            protocol: input.protocol,
+            base_url: input.base_url,
+            has_api_key: savedKey(input, providers),
+            auth_header: input.auth_header,
+            models: input.models.map(copyModel),
+            chatgpt: null,
+            updated_at: Date.now(),
+          };
       providers = old ? providers.map((p) => (p.id === old.id ? view : p)) : [...providers, view];
       return clone(view);
     },
@@ -242,10 +301,20 @@ export function createAiSettingsMock(): AiSettingsApi {
         const err: AppError = { code: "ai", detail: "404 page not found", http_status: 404 };
         throw err;
       }
+      const chatgpt = providers.find((p) => p.id === input.id)?.chatgpt;
+      if (chatgpt) {
+        if (chatgpt.status !== "signed_in") throw notSignedIn();
+        return chatgptModels();
+      }
       return modelsFor(input).map(copyModel);
     },
     ai_provider_test: async (input) => {
       await wait(700);
+      const chatgpt = providers.find((p) => p.id === input.id)?.chatgpt;
+      if (chatgpt && chatgpt.status !== "signed_in") {
+        return { ok: false, failure: "auth", status: null, message: notSignedIn().detail };
+      }
+      if (chatgpt) return { ok: true, failure: null, status: 200, message: null };
       if (flags.has("testfail")) return authFail(input.protocol);
       if (urlProblem(input.base_url)) return { ok: false, failure: "invalid_url", status: null, message: null };
       const host = hostOf(input.base_url) ?? "";
@@ -261,6 +330,61 @@ export function createAiSettingsMock(): AiSettingsApi {
         return { ok: false, failure: "unknown_model", status: 404, message: `The model \`${first}\` does not exist or you do not have access to it.` };
       }
       return { ok: true, failure: null, status: 200, message: null };
+    },
+    ai_chatgpt_sign_in: async (providerId) => {
+      cancelSignIn?.();
+      const cancelled = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          cancelSignIn = null;
+          resolve(false);
+        }, 2000);
+        cancelSignIn = () => {
+          clearTimeout(timer);
+          cancelSignIn = null;
+          resolve(true);
+        };
+      });
+      if (cancelled) {
+        const err: AppError = { code: "cancelled", detail: "cancelled" };
+        throw err;
+      }
+      if (flags.has("signinfail")) {
+        const err: AppError = {
+          code: "ai",
+          detail: "ChatGPT's ID token is not valid: it has expired; check this device's clock.",
+        };
+        throw err;
+      }
+      const old = providers.find((p) => p.id === providerId);
+      if (providerId && !old?.chatgpt) {
+        const err: AppError = { code: "not_found", detail: "provider not found" };
+        throw err;
+      }
+      const view: AiProviderView = old
+        ? { ...old, chatgpt: { email: old.chatgpt?.email ?? "you@example.com", status: "signed_in" } }
+        : {
+            id: id("p"),
+            name: "ChatGPT",
+            protocol: "responses",
+            base_url: "https://api.openai.com/v1",
+            has_api_key: false,
+            auth_header: "x-api-key",
+            models: chatgptModels(),
+            chatgpt: { email: "you@example.com", status: "signed_in" },
+            updated_at: Date.now(),
+          };
+      providers = old ? providers.map((p) => (p.id === old.id ? view : p)) : [...providers, view];
+      return { provider: clone(view), first_sign_in: !old };
+    },
+    ai_chatgpt_sign_in_cancel: async () => {
+      cancelSignIn?.();
+    },
+    ai_chatgpt_sign_out: async (providerId) => {
+      await wait(300);
+      providers = providers.map((p) =>
+        p.id === providerId && p.chatgpt ? { ...p, chatgpt: { ...p.chatgpt, status: "signed_out" } } : p,
+      );
+      return true;
     },
     search_providers_list: async () => search.map((s) => ({ ...s })),
     search_provider_save: async (input: SearchProviderInput) => {

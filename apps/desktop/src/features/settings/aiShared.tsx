@@ -138,11 +138,14 @@ export function TestConnection({
   scope,
   state,
   disabled,
+  chatgpt,
   onRun,
 }: {
   scope: "provider" | "search";
   state: TestState;
   disabled?: boolean;
+  /** A ChatGPT provider (AI-52), which signs in instead of having a key. */
+  chatgpt?: boolean;
   onRun: () => void;
 }) {
   const t = useT();
@@ -167,6 +170,8 @@ export function TestConnection({
       if (scope === "search") {
         const kind = failure === "unknown_model" ? "other" : failure;
         line = t(`aiSettings.search.test.fail.${kind}` as MessageKey);
+      } else if (chatgpt && failure === "auth") {
+        line = t("aiSettings.chatgpt.test.auth");
       } else {
         line = t(`aiSettings.test.fail.${failure}` as MessageKey, { model: state.model ?? "" });
       }

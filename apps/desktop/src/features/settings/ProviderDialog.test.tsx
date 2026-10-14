@@ -6,6 +6,8 @@ import type { AiProviderView } from "@/ipc/types";
 // No Tauri here, so the dialog talks to the mock backend. The app store follows the system theme from
 // its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
+// The mock backend has a ChatGPT provider that is signed in on another device only (AI-52).
+history.replaceState(null, "", "/?ai=chatgptelsewhere");
 
 const { t } = await import("@/i18n");
 const { ProviderDialog } = await import("./ProviderDialog");
@@ -103,5 +105,46 @@ describe("ProviderDialog", () => {
     expect(view?.models).toEqual([
       { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", context_window: null, max_output_tokens: null, efforts: null, adaptive_thinking: null },
     ]);
+  });
+
+  it("shows a ChatGPT provider's account and signs it in and out on this device (AI-52)", async () => {
+    const views: AiProviderView[] = [];
+    const chatgpt: AiProviderView = {
+      id: "p-chatgpt",
+      name: "ChatGPT",
+      protocol: "responses",
+      base_url: "https://api.openai.com/v1",
+      has_api_key: false,
+      auth_header: "x-api-key",
+      models: [],
+      chatgpt: { email: "you@example.com", status: "signed_out" },
+      updated_at: 1,
+    };
+    render(chatgpt, (view) => views.push(view));
+    // No protocol, base URL or key: the account signs in instead.
+    expect(byLabel(t("aiSettings.f.protocol"))).toBeNull();
+    expect(shown(t("aiSettings.f.baseUrl"))).toBe(false);
+    expect(shown(t("aiSettings.f.apiKey"))).toBe(false);
+    expect(shown("you@example.com")).toBe(true);
+    expect(shown(t("aiSettings.chatgpt.status.signed_out"))).toBe(true);
+    expect(button(t("aiSettings.chatgpt.signOut"))).toBeUndefined();
+
+    // Cancelling the wait for the browser leaves it signed out.
+    act(() => button(t("aiSettings.chatgpt.continue"))?.click());
+    expect(shown(t("aiSettings.chatgpt.waiting.inline"))).toBe(true);
+    act(() => button(t("btn.cancel"))?.click());
+    for (let i = 0; i < 100 && shown(t("aiSettings.chatgpt.waiting.inline")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(button(t("aiSettings.chatgpt.continue"))).toBeDefined();
+
+    act(() => button(t("aiSettings.chatgpt.continue"))?.click());
+    for (let i = 0; i < 400 && !shown(t("aiSettings.chatgpt.status.signed_in")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(shown(t("aiSettings.chatgpt.status.signed_in"))).toBe(true);
+    expect(views.at(-1)?.id).toBe("p-chatgpt");
+    expect(views.at(-1)?.chatgpt?.status).toBe("signed_in");
+
+    act(() => button(t("aiSettings.chatgpt.signOut"))?.click());
+    for (let i = 0; i < 100 && !shown(t("aiSettings.chatgpt.status.signed_out")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(shown(t("aiSettings.chatgpt.status.signed_out"))).toBe(true);
+    expect(views.at(-1)?.chatgpt?.status).toBe("signed_out");
   });
 });

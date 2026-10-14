@@ -36,6 +36,7 @@ import {
   type ModelChoice,
 } from "./aiLogic";
 import { aiErrorMessage } from "./aiShared";
+import { ChatgptSignInDialog, chatgptRowKey } from "./ChatgptSignIn";
 import { useFreshReads } from "./freshReads";
 import { McpSection } from "./McpSection";
 import { ProviderDialog } from "./ProviderDialog";
@@ -57,7 +58,7 @@ function upsert<T extends { id: string }>(list: T[], item: T): T[] {
 }
 
 /**
- * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), the default model (AI-05),
+ * Settings → AI (spec §13): providers and their models (AI-01 to AI-04), Continue with ChatGPT (AI-52), the default model (AI-05),
  * web search (AI-14), custom instructions (AI-36), whether messages send the terminal screen by
  * default (AI-46), the judge of Auto mode (AI-47), and the permission mode and saved approvals of this
  * device (AI-16, AI-19).
@@ -67,6 +68,7 @@ export function AiPane() {
   const [data, setData] = useState<Data | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [dialog, setDialog] = useState<{ provider: AiProviderView | null } | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const dataRef = useRef<Data | null>(null);
   const live = useRef(true);
 
@@ -151,9 +153,14 @@ export function AiPane() {
         <div className={s.sectionHead}>
           <span className={layoutStyles.sectionTitle}>{t("aiSettings.providers")}</span>
           {loaded && providers.length > 0 && (
-            <Button size="sm" icon="plus" onClick={() => setDialog({ provider: null })}>
-              {t("aiSettings.providers.add")}
-            </Button>
+            <span className={s.headActions}>
+              <Button size="sm" onClick={() => setSigningIn(true)}>
+                {t("aiSettings.chatgpt.continue")}
+              </Button>
+              <Button size="sm" icon="plus" onClick={() => setDialog({ provider: null })}>
+                {t("aiSettings.providers.add")}
+              </Button>
+            </span>
           )}
         </div>
         <div className={cx(layoutStyles.group, s.clip)}>
@@ -183,6 +190,7 @@ export function AiPane() {
               <Button variant="primary" icon="plus" onClick={() => setDialog({ provider: null })}>
                 {t("aiSettings.providers.add")}
               </Button>
+              <Button onClick={() => setSigningIn(true)}>{t("aiSettings.chatgpt.continue")}</Button>
             </EmptyBlock>
           )}
           {providers.map((p) => (
@@ -290,6 +298,12 @@ export function AiPane() {
           onSaved={(saved) => setProviders(upsert(dataRef.current?.providers ?? [], saved))}
         />
       )}
+      {signingIn && (
+        <ChatgptSignInDialog
+          onDone={(saved) => setProviders(upsert(dataRef.current?.providers ?? [], saved))}
+          onClose={() => setSigningIn(false)}
+        />
+      )}
     </Pane>
   );
 }
@@ -297,6 +311,7 @@ export function AiPane() {
 function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderView; onEdit: () => void; onDelete: () => void }) {
   const t = useT();
   const host = parseBaseUrl(p.base_url)?.host ?? p.base_url;
+  const signIn = p.chatgpt ? chatgptRowKey(p.chatgpt.status) : null;
   return (
     <div className={s.provider}>
       <button type="button" className={s.providerMain} title={t("aiSettings.provider.edit", { name: p.name })} onClick={onEdit}>
@@ -306,10 +321,30 @@ function ProviderRow({ provider: p, onEdit, onDelete }: { provider: AiProviderVi
         <span className={s.providerText}>
           <span className={s.providerName}>{p.name}</span>
           <span className={s.providerMeta}>
-            <span>{t(`aiSettings.protocol.${p.protocol}`)}</span>
+            {p.chatgpt ? (
+              <>
+                <span>{t("aiSettings.chatgpt.kind")}</span>
+                {p.chatgpt.email && (
+                  <>
+                    <span className={s.dot}>·</span>
+                    <span className={s.providerAccount}>{p.chatgpt.email}</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <span>{t(`aiSettings.protocol.${p.protocol}`)}</span>
+                <span className={s.dot}>·</span>
+                <span className={s.providerHost}>{host}</span>
+              </>
+            )}
             <span className={s.dot}>·</span>
-            <span className={s.providerHost}>{host}</span>
-            <span className={s.dot}>·</span>
+            {signIn && (
+              <>
+                <span className={s.warn}>{t(signIn)}</span>
+                <span className={s.dot}>·</span>
+              </>
+            )}
             <span className={p.models.length === 0 ? s.warn : undefined}>
               {p.models.length === 0 ? t("aiSettings.provider.noModels") : t("aiSettings.provider.models", { n: p.models.length })}
             </span>
