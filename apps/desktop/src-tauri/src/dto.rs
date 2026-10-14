@@ -953,6 +953,9 @@ pub struct LocalPrefs {
     pub ai_permission_mode: AiPermissionMode,
     /// AI-16: the user confirmed the first switch to bypass on this device.
     pub ai_bypass_confirmed: bool,
+    /// AI-07: a system notification when a conversation finishes a turn or waits for approval
+    /// while the window is not focused.
+    pub ai_notifications: bool,
     /// The AI panel is open (§9).
     pub ai_panel_open: bool,
     /// The AI panel's width in CSS pixels.
@@ -992,6 +995,7 @@ impl Default for LocalPrefs {
             auto_update_check: true,
             ai_permission_mode: AiPermissionMode::Manual,
             ai_bypass_confirmed: false,
+            ai_notifications: true,
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
@@ -1110,6 +1114,23 @@ pub struct TrayMenuInput {
     /// such item.
     pub update: Option<String>,
     pub can_update: bool,
+}
+
+/// A system notification (AI-07). The WebView sends one only while the window is not focused.
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct NotificationInput {
+    pub title: String,
+    pub body: String,
+    pub target: NotificationTarget,
+}
+
+/// What a notification is about, which a click on it shows: a tab, and in it a conversation
+/// (AI-07). The click brings the window back and sends this to the WebView.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "app://notification-click")]
+pub struct NotificationTarget {
+    pub tab: Option<String>,
+    pub conversation_id: Option<String>,
 }
 
 /// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
@@ -2534,15 +2555,17 @@ mod tests {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
         assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
+        assert!(prefs.ai_notifications);
         assert_eq!(prefs.ai_panel_width, 380);
 
         // The tool call limit an older version stored is ignored.
         let prefs = LocalPrefs::from_stored(
             r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
-                "ai_panel_open":true,"ai_panel_width":520}"#,
+                "ai_panel_open":true,"ai_panel_width":520,"ai_notifications":false}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
         assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
+        assert!(!prefs.ai_notifications);
         assert_eq!(prefs.ai_panel_width, 520);
 
         // AI-47: Auto is a mode of its own.

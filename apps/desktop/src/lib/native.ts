@@ -19,3 +19,12 @@ export async function pickSavePath(defaultName: string, filter: { name: string; 
   const { save } = await import("@tauri-apps/plugin-dialog");
   return save({ defaultPath: defaultName, filters: [{ name: filter.name, extensions: [filter.extension] }] });
 }
+
+/** Whether the window has the focus; hidden to the tray (WIN-10) or minimized, it does not. A plain browser asks the page. */
+export async function windowFocused(): Promise<boolean> {
+  if (!isTauri()) return document.hasFocus();
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+  return getCurrentWindow()
+    .isFocused()
+    .catch(() => true);
+}

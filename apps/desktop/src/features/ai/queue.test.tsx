@@ -12,7 +12,7 @@ const ipc = vi.hoisted(() => ({
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
-  api: { ai_send: ipc.send, ai_stop: ipc.stop, ai_conversation_get: ipc.get },
+  api: { ai_send: ipc.send, ai_stop: ipc.stop, ai_conversation_get: ipc.get, notification_show: () => Promise.resolve() },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
 vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));

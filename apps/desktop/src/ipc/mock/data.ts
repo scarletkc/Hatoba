@@ -281,6 +281,7 @@ export const PREFS: LocalPrefs = {
   auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
+  ai_notifications: true,
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
