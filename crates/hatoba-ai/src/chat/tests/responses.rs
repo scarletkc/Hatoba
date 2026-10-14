@@ -684,6 +684,33 @@ fn items_without_item_events_come_from_the_terminal_event() {
 }
 
 #[test]
+fn text_deltas_without_item_events_make_a_message_item() {
+    let stream = [
+        event(
+            "response.output_text.delta",
+            &json!({"type": "response.output_text.delta", "delta": "Hel"}),
+        ),
+        event(
+            "response.output_text.delta",
+            &json!({"type": "response.output_text.delta", "delta": "lo."}),
+        ),
+        event(
+            "response.completed",
+            &json!({"type": "response.completed", "response": {"status": "completed"}}),
+        ),
+    ]
+    .concat();
+    let (result, events) = assemble(ResponsesStream::new(), &stream, 4096);
+    let assembled = result.unwrap();
+    assert_eq!(events, vec![text("Hel"), text("lo.")]);
+    assert_eq!(
+        assembled.raw,
+        json!([{"type": "message", "role": "assistant",
+                "content": [{"type": "output_text", "text": "Hello.", "annotations": []}]}])
+    );
+}
+
+#[test]
 fn a_call_whose_done_never_came_keeps_its_streamed_arguments() {
     let stream = [
         event(

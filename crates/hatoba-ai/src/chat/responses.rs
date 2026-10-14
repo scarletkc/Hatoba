@@ -503,8 +503,10 @@ impl Assembler for ResponsesStream {
             self.items
                 .into_values()
                 .map(|mut item| {
+                    // A message whose `done` never came, or whose text came without an
+                    // `added` (some servers send only the deltas).
                     if !item.done
-                        && item.kind() == "message"
+                        && matches!(item.kind(), "message" | "")
                         && !item.text.is_empty()
                         && item
                             .value
@@ -512,6 +514,10 @@ impl Assembler for ResponsesStream {
                             .and_then(Value::as_array)
                             .is_none_or(Vec::is_empty)
                     {
+                        item.value.insert("type".into(), json!("message"));
+                        item.value
+                            .entry("role")
+                            .or_insert_with(|| json!("assistant"));
                         item.value.insert(
                             "content".into(),
                             json!([{"type": "output_text", "text": item.text, "annotations": []}]),
