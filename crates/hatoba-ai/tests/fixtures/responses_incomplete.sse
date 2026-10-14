@@ -1,0 +1,15 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_9c3","object":"response","status":"in_progress","output":[],"usage":null}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"msg_9c3","type":"message","status":"in_progress","content":[],"role":"assistant"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"item_id":"msg_9c3","output_index":0,"content_index":0,"delta":"The log shows","logprobs":[]}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"id":"msg_9c3","type":"message","status":"incomplete","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"The log shows"}],"role":"assistant"}}
+
+event: response.incomplete
+data: {"type":"response.incomplete","sequence_number":4,"response":{"id":"resp_9c3","object":"response","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"id":"msg_9c3","type":"message","status":"incomplete","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"The log shows"}],"role":"assistant"}],"usage":{"input_tokens":300,"input_tokens_details":{"cached_tokens":0},"output_tokens":4000,"output_tokens_details":{"reasoning_tokens":3996},"total_tokens":4300}}}
+

@@ -20,14 +20,16 @@ pub enum Protocol {
     ChatCompletions,
     /// Anthropic Messages: `POST {base_url}/v1/messages`.
     Anthropic,
+    /// OpenAI Responses: `POST {base_url}/responses`, stateless (`store: false`).
+    Responses,
     /// TypeSafe's System One decision format: `POST {base_url}/systemone`, or the model's own URL
     /// on Workers AI (see [`decision`](crate::decision)). Such a provider answers decision
     /// questions for the judge of Auto mode (AI-47) and cannot chat.
     SystemOne,
 }
 
-/// Which header carries the key for the `anthropic` protocol (Chat Completions and System One
-/// always use `Authorization: Bearer`).
+/// Which header carries the key for the `anthropic` protocol (Chat Completions, Responses and
+/// System One always use `Authorization: Bearer`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AuthHeader {
     /// `x-api-key: <key>`.
@@ -127,8 +129,8 @@ impl Effort {
     /// The levels a model offers while what it supports is unknown.
     pub const UNKNOWN_MODEL: [Self; 3] = [Self::Low, Self::Medium, Self::High];
 
-    /// The value of Anthropic's `output_config.effort` and of Chat Completions'
-    /// `reasoning_effort`.
+    /// The value of Anthropic's `output_config.effort`, of Chat Completions' `reasoning_effort`
+    /// and of Responses' `reasoning.effort`.
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -315,6 +317,13 @@ mod tests {
             .unwrap();
         assert!(h.is_empty(), "an empty key sends no auth header");
 
+        // Responses: a bearer token whatever the auth header says.
+        let h = config(Protocol::Responses, "k5", AuthHeader::XApiKey)
+            .headers()
+            .unwrap();
+        assert_eq!(h[AUTHORIZATION], "Bearer k5");
+        assert_eq!(h.len(), 1);
+
         // System One: always a bearer token, and nothing when the key is empty.
         let h = config(Protocol::SystemOne, "k4", AuthHeader::XApiKey)
             .headers()
@@ -369,6 +378,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&Protocol::Anthropic).unwrap(),
             "\"anthropic\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Protocol::Responses).unwrap(),
+            "\"responses\""
         );
         assert_eq!(
             serde_json::to_string(&Protocol::SystemOne).unwrap(),

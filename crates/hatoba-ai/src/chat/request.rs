@@ -1,20 +1,24 @@
 //! Request bodies built from stored entries (spec §13.7, the entry-to-message table).
 //!
-//! Both protocols share one plan: the entries in order, each assistant entry followed by the
+//! Every protocol shares one plan: the entries in order, each assistant entry followed by the
 //! results of its calls, so every request is valid even when results were stored out of order,
 //! twice, or not at all. Then each protocol renders the plan into its own message format.
 //!
 //! - An assistant entry is sent as its `raw` message when its provider and model are the
 //!   request's (and `raw` has the protocol's shape); otherwise it is rebuilt from `text` and
 //!   `tool_calls`, which leaves out whatever only `raw` held (reasoning, signatures).
-//! - Chat Completions tool-call arguments are always a JSON object in what is sent: a call cut off
-//!   mid-stream (`finish: length`) stores text such as `{"command":"ls`, and servers that parse
-//!   assistant tool-call arguments (vLLM does) refuse every later request that carries it. A
-//!   `raw` message holding such arguments is not replayed, and a rebuilt call sends `{}` for them
-//!   ([`chat_arguments`]).
+//! - Responses requests are stateless (`store: false`), so a replayed `raw` item array goes back
+//!   without the items' `id`s, which would name items the provider never stored, and without
+//!   reasoning items that have neither `encrypted_content` nor reasoning text to stand for
+//!   themselves ([`responses_items`]).
+//! - Chat Completions and Responses tool-call arguments are always a JSON object in what is sent:
+//!   a call cut off mid-stream (`finish: length`) stores text such as `{"command":"ls`, and
+//!   servers that parse assistant tool-call arguments (vLLM does) refuse every later request that
+//!   carries it. A `raw` message holding such arguments is not replayed, and a rebuilt call sends
+//!   `{}` for them ([`chat_arguments`]).
 //! - An assistant entry with blank text and no tool calls (e.g. a response that was only
-//!   reasoning, or an empty refusal) is skipped: neither protocol accepts an empty assistant
-//!   message, and it carries nothing the model needs.
+//!   reasoning, or an empty refusal) is skipped: no protocol accepts an empty assistant message,
+//!   and it carries nothing the model needs.
 //! - A call whose result is missing gets a `cancelled` result; a result whose call is not in the
 //!   context (e.g. before `context_start`) is dropped.
 //! - Tool results carry wording for `rejected` and `cancelled` so the model knows what happened
@@ -30,8 +34,8 @@
 //!   results merge with the user content around them like any other user text. Assistant entries
 //!   without calls still replay `raw`, unless it holds tool blocks (`tool_use`, `tool_result`
 //!   and variants such as `server_tool_use` for Anthropic; `tool_calls` or `function_call` for
-//!   Chat Completions), in which case they are rebuilt from `text`. With tools offered nothing
-//!   changes.
+//!   Chat Completions; `function_call` and other `*_call` items for Responses), in which case
+//!   they are rebuilt from `text`. With tools offered nothing changes.
 //!
 //! **Thinking level (AI-05).** [`ChatRequest::effort`] is clamped to the levels the model offers
 //! ([`ModelSpec::effort_for`]); with `with_effort` false (the retry after a 400 that named these
@@ -39,6 +43,14 @@
 //!
 //! - Chat Completions: a level is `reasoning_effort` (`low`, `medium`, `high`, and `xhigh` or
 //!   `max` only for a model whose levels include them); Default sends nothing.
+//! - Responses: a level is `reasoning: {effort, summary: "auto"}`, so the reasoning comes back
+//!   summarized for the panel, with `include: ["reasoning.encrypted_content"]`, so the reasoning
+//!   items in `raw` can go back to the model in a stateless request. At Default only a model
+//!   that reasons anyway ([`reasons_by_default`]: OpenAI's o-series, GPT-5 and later, Codex and
+//!   gpt-oss models) gets them, without `effort`; other models get none, since providers refuse
+//!   `reasoning` and encrypted reasoning for models without it. With `with_summary` false (the
+//!   retry after a 4xx about summaries, which an unverified OpenAI organization gets) `summary`
+//!   is left out and the level stays.
 //! - Anthropic: a level is `output_config: {effort}`, and on a model with adaptive thinking also
 //!   `thinking: {type: "adaptive", display: "summarized"}`, which turns thinking on for models
 //!   that otherwise answer without it (Opus 4.8 and 4.7). At Default only a model that thinks
@@ -74,9 +86,12 @@ pub(crate) const MAX_TOKENS_CAP: u64 = 128_000;
 pub(crate) struct Built {
     pub body: Value,
     pub used_raw: bool,
-    /// The body has thinking or effort fields (`reasoning_effort`, `thinking`, `output_config`),
-    /// so a 400 that names them can be retried without.
+    /// The body has thinking or effort fields (`reasoning_effort`, `thinking`, `output_config`;
+    /// for Responses `reasoning` or `include`), so a 400 that names them can be retried without.
     pub sent_effort: bool,
+    /// The body asks for summarized reasoning (Responses' `reasoning.summary`), so a 400 about
+    /// summaries can be retried without it.
+    pub sent_summary: bool,
     /// The level the body asks for; `None` at Default.
     pub effort: Option<Effort>,
 }
@@ -107,6 +122,29 @@ fn adaptive_thinking(model: &ModelSpec) -> bool {
         .unwrap_or_else(|| thinks_by_default(model))
 }
 
+/// Whether a Responses model reasons when a request leaves `reasoning` out, by its id (the part
+/// after the last `/`, as OpenRouter's `openai/gpt-5` names it): OpenAI's o-series (`o3`,
+/// `o4-mini`), GPT-5 and later except the `-chat` models, Codex models, and gpt-oss.
+pub(crate) fn reasons_by_default(model: &ModelSpec) -> bool {
+    let id = model.id.trim().to_ascii_lowercase();
+    let id = id.rsplit('/').next().unwrap_or_default();
+    let o_series = id
+        .strip_prefix('o')
+        .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+    let gpt_generation = id
+        .strip_prefix("gpt-")
+        .map(|rest| {
+            rest.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+        })
+        .and_then(|digits| digits.parse::<u32>().ok());
+    o_series
+        || gpt_generation.is_some_and(|generation| generation >= 5 && !id.contains("-chat"))
+        || id.contains("codex")
+        || id.starts_with("gpt-oss")
+}
+
 enum Turn<'a> {
     User(Cow<'a, str>),
     Assistant {
@@ -125,11 +163,37 @@ enum Turn<'a> {
 fn raw_usable(protocol: Protocol, raw: &Value, tools_offered: bool) -> bool {
     let shaped = match protocol {
         Protocol::ChatCompletions => raw.is_object() && raw_arguments_are_objects(raw),
-        Protocol::Anthropic => raw.as_array().is_some_and(|blocks| !blocks.is_empty()),
+        // Responses items, from before the provider's protocol changed, are no content blocks.
+        Protocol::Anthropic => raw
+            .as_array()
+            .is_some_and(|blocks| !blocks.is_empty() && !blocks.iter().any(is_responses_item)),
+        Protocol::Responses => raw.as_array().is_some_and(|items| {
+            !items.is_empty()
+                && items.iter().all(is_responses_item)
+                && items.iter().all(|item| {
+                    item_type(item) != "function_call"
+                        || match item.get("arguments") {
+                            Some(Value::String(text)) => is_json_object(text),
+                            Some(Value::Object(_)) => true,
+                            _ => false,
+                        }
+                })
+        }),
         // Never the protocol of a chat request (AI-47).
         Protocol::SystemOne => false,
     };
     shaped && (tools_offered || !raw_has_tool_blocks(protocol, raw))
+}
+
+fn item_type(item: &Value) -> &str {
+    item.get("type").and_then(Value::as_str).unwrap_or_default()
+}
+
+/// Whether `item` is a Responses output item: a message, reasoning, or a call (`function_call`,
+/// and the `*_call` items of hosted tools). No Anthropic content block type is one of these.
+fn is_responses_item(item: &Value) -> bool {
+    let kind = item_type(item);
+    item.is_object() && (matches!(kind, "message" | "reasoning") || kind.ends_with("_call"))
 }
 
 /// Whether every tool call in a Chat Completions `raw` message carries arguments that are a JSON
@@ -173,6 +237,13 @@ fn raw_has_tool_blocks(protocol: Protocol, raw: &Value) -> bool {
                             || kind.ends_with("_tool_use")
                             || kind.ends_with("_tool_result")
                     })
+            })
+        }),
+        // `function_call`, `custom_tool_call`, `web_search_call`, …
+        Protocol::Responses => raw.as_array().is_some_and(|items| {
+            items.iter().any(|item| {
+                let kind = item_type(item);
+                kind.ends_with("_call") || kind.ends_with("_call_output")
             })
         }),
         Protocol::SystemOne => false,
@@ -447,6 +518,133 @@ pub(crate) fn chat_completions(
         body: Value::Object(body),
         used_raw,
         sent_effort: effort.is_some(),
+        sent_summary: false,
+        effort,
+    }
+}
+
+/// A replayed Responses `raw` array as input items: each item without its `id` (a stateless
+/// request cannot refer to stored items), and without reasoning items that carry neither
+/// `encrypted_content` nor reasoning text, which the provider could only look up by `id`.
+fn responses_items(raw: &Value) -> impl Iterator<Item = Value> + '_ {
+    let filled = |item: &Value, key: &str| match item.get(key) {
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Array(parts)) => !parts.is_empty(),
+        _ => false,
+    };
+    raw.as_array()
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter(move |item| {
+            item_type(item) != "reasoning"
+                || filled(item, "encrypted_content")
+                || filled(item, "content")
+        })
+        .map(|item| {
+            let mut item = item.clone();
+            if let Value::Object(map) = &mut item {
+                map.remove("id");
+            }
+            item
+        })
+}
+
+/// `POST {base}/responses` body: the system prompt as `instructions`, the conversation as `input`
+/// items, `store: false` and `stream: true`. When the request offers no tools there are no
+/// `function_call` or `function_call_output` items in it: calls and results are sent as text
+/// (see the module docs). With `with_effort` false there is no `reasoning` and no `include`,
+/// and with `with_summary` false no `reasoning.summary`.
+pub(crate) fn responses(req: &ChatRequest<'_>, with_effort: bool, with_summary: bool) -> Built {
+    let (turns, used_raw) = plan(req, Protocol::Responses, true);
+    let mut input = Vec::with_capacity(turns.len());
+    for turn in turns {
+        match turn {
+            Turn::User(text) => {
+                if !text.trim().is_empty() {
+                    input.push(json!({"type": "message", "role": "user", "content": text}));
+                }
+            }
+            Turn::Assistant { entry, raw: true } => input.extend(responses_items(&entry.raw)),
+            Turn::Assistant { entry, raw: false } => {
+                if !entry.text.trim().is_empty() {
+                    input.push(
+                        json!({"type": "message", "role": "assistant", "content": entry.text}),
+                    );
+                }
+                for call in &entry.tool_calls {
+                    input.push(json!({
+                        "type": "function_call",
+                        "call_id": call.id,
+                        "name": call.name,
+                        "arguments": chat_arguments(&call.arguments),
+                    }));
+                }
+            }
+            Turn::AssistantText(text) => {
+                input.push(json!({"type": "message", "role": "assistant", "content": text}));
+            }
+            Turn::ToolResult {
+                id,
+                status,
+                content,
+            } => input.push(json!({
+                "type": "function_call_output",
+                "call_id": id,
+                "output": tool_result_text(status, content),
+            })),
+        }
+    }
+    let effort = if with_effort {
+        req.model.effort_for(req.effort)
+    } else {
+        None
+    };
+    let reasoning = with_effort && (effort.is_some() || reasons_by_default(req.model));
+
+    let mut body = Map::new();
+    body.insert("model".into(), json!(req.model.id));
+    if !req.system.is_empty() {
+        body.insert("instructions".into(), json!(req.system));
+    }
+    body.insert("input".into(), Value::Array(input));
+    if !req.tools.is_empty() {
+        let tools: Vec<Value> = req
+            .tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.input_schema,
+                    // Strict mode, which the Responses API assumes otherwise, needs every
+                    // property required and `additionalProperties: false`.
+                    "strict": false,
+                })
+            })
+            .collect();
+        body.insert("tools".into(), Value::Array(tools));
+    }
+    if reasoning {
+        let mut fields = Map::new();
+        if let Some(effort) = effort {
+            fields.insert("effort".into(), json!(effort.as_str()));
+        }
+        if with_summary {
+            fields.insert("summary".into(), json!("auto"));
+        }
+        if !fields.is_empty() {
+            body.insert("reasoning".into(), Value::Object(fields));
+        }
+        body.insert("include".into(), json!(["reasoning.encrypted_content"]));
+    }
+    body.insert("store".into(), json!(false));
+    body.insert("stream".into(), json!(true));
+    Built {
+        body: Value::Object(body),
+        used_raw,
+        sent_effort: reasoning,
+        sent_summary: reasoning && with_summary,
         effort,
     }
 }
@@ -600,6 +798,7 @@ pub(crate) fn anthropic(req: &ChatRequest<'_>, allow_raw: bool, with_effort: boo
         body: Value::Object(body),
         used_raw,
         sent_effort: thinking || effort.is_some(),
+        sent_summary: false,
         effort,
     }
 }

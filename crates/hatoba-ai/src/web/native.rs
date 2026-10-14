@@ -10,7 +10,8 @@
 //!   the model's own provider where it has a search and with Exa elsewhere.
 //! - OpenAI and xAI: the Responses API (`POST {base_url}/responses`) with the `web_search` tool.
 //! - Gemini: `generateContent` with the `google_search` tool, the key in `x-goog-api-key`.
-//! - Any other Chat Completions provider, which may relay OpenAI: tried as OpenAI is.
+//! - Any other Chat Completions or Responses provider, which may relay OpenAI: tried as OpenAI
+//!   is.
 //!   [`turned_away`] tells an error that says it has no such search from one that may pass.
 //!
 //! A response in which no search ran is an error, so an answer from the model's memory never
@@ -50,14 +51,15 @@ pub enum NativeSearch {
 
 impl NativeSearch {
     /// How `provider` searches the web itself: every Anthropic Messages provider with Anthropic's
-    /// server tool, and a Chat Completions provider by its base URL's host, [`Self::Other`] when
-    /// the host is none Hatoba knows. A System One provider (AI-47) cannot chat, so it has none.
+    /// server tool, and a Chat Completions or Responses provider by its base URL's host,
+    /// [`Self::Other`] when the host is none Hatoba knows. A System One provider (AI-47) cannot
+    /// chat, so it has none.
     #[must_use]
     pub fn of(provider: &ProviderConfig) -> Option<Self> {
         match provider.protocol {
             Protocol::Anthropic => Some(Self::Anthropic),
             Protocol::SystemOne => None,
-            Protocol::ChatCompletions => {
+            Protocol::ChatCompletions | Protocol::Responses => {
                 let host = validate_base_url(&provider.base_url)
                     .ok()
                     .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
