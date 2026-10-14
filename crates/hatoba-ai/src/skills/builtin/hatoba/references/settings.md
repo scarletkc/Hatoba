@@ -26,6 +26,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Ask every time | 每次询问 | 毎回確認する |
 | Minimize to tray | 最小化到托盘 | トレイに最小化 |
 | Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
+| Notify when the AI assistant finishes or needs approval | AI 助手完成或需要确认时通知 | AI アシスタントの完了や確認待ちを通知 |
 | Refresh interval | 刷新间隔 | 更新間隔 |
 | Export Encrypted Backup | 导出加密备份 | 暗号化バックアップをエクスポート |
 | Export… | 导出… | エクスポート… |
@@ -34,6 +35,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 - **Confirm before pasting multiple lines**: on by default. Pasting text that contains line breaks shows a preview first.
 - **Show host reachability**: on by default. Every 60 seconds Hatoba tries a TCP connection to the hosts in the list (no login) and colors the dot. A host with a proxy is tried through it, and counts as reachable once its SSH server answers.
 - **Close Button** (Windows and Linux only): what the window's close button, Alt+F4 and the taskbar's Close do. **Ask every time** (default) asks whether to minimize Hatoba to the system tray or quit, and the question's **Remember my choice** sets this row. **Minimize to tray** hides the window while SSH sessions, port forwards and sync keep running; the tray icon brings it back. **Quit Hatoba** quits. Without a tray, on a Linux desktop with no StatusNotifier host such as GNOME without an extension, closing always quits. macOS has no such row: its red button hides the window, the Dock icon brings it back, and ⌘Q quits.
+- **Notify when the AI assistant finishes or needs approval**: on by default. While Hatoba is not the active window, also while it is minimized or in the tray, a conversation that finishes a turn, stops on an error, or waits for approval of a tool call shows a system notification, also one in a tab's background. Its title is the tab's name (**AI Assistant** for the home tab), and its text says what happened and names the conversation. Clicking it brings the window back and shows the conversation with the AI panel open. The system's own notification settings for Hatoba, and Do Not Disturb, can still hide them.
 - **Refresh interval** (3 s by default) and the three thresholds below it (CPU, memory and disk use, 90% by default, or **Off**) belong to the dashboard; see `references/dashboard.md`.
 - **Export Encrypted Backup** → **Export…**: saves the vault as one file that only the master password opens. There is no import in the app.
 
