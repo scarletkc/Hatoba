@@ -294,6 +294,9 @@ pub fn run() {
             // §6.3: sync when the window regains focus.
             tauri::WindowEvent::Focused(true) => {
                 sync::trigger(window.app_handle(), sync::Trigger::Focus);
+                // WIN-10: whether a tray shows when the close button is clicked.
+                #[cfg(target_os = "linux")]
+                tray::refresh_host();
             }
             // AI-35: the AI panel may read the files of the last drop, and no others.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {

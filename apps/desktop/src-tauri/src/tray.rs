@@ -109,6 +109,8 @@ mod imp {
             })
             .build(app)?;
         app.manage(Tray { open, lock, quit });
+        #[cfg(target_os = "linux")]
+        refresh_host();
         Ok(())
     }
 
@@ -135,20 +137,43 @@ mod imp {
     }
 
     /// A Linux tray icon shows only where a StatusNotifier host runs, which GNOME lacks without
-    /// an extension. The icon is created either way, so this asks the session bus each time.
+    /// an extension, and the icon is created either way. [`refresh_host`] asks the session bus
+    /// off the main thread, so the close button never waits on it.
+    #[cfg(target_os = "linux")]
+    static HOST_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
     #[cfg(target_os = "linux")]
     fn host_running() -> bool {
-        let registered = || -> zbus::Result<bool> {
-            let bus = zbus::blocking::Connection::session()?;
-            let watcher = zbus::blocking::Proxy::new(
-                &bus,
-                "org.kde.StatusNotifierWatcher",
-                "/StatusNotifierWatcher",
-                "org.kde.StatusNotifierWatcher",
-            )?;
-            watcher.get_property("IsStatusNotifierHostRegistered")
+        HOST_RUNNING.load(Ordering::Relaxed)
+    }
+
+    /// Asks again at startup and whenever the window gains focus, which comes before a click on
+    /// its close button.
+    #[cfg(target_os = "linux")]
+    pub fn refresh_host() {
+        tauri::async_runtime::spawn_blocking(|| {
+            let running = host_registered().unwrap_or(false);
+            HOST_RUNNING.store(running, Ordering::Relaxed);
+        });
+    }
+
+    #[cfg(target_os = "linux")]
+    fn host_registered() -> zbus::Result<bool> {
+        use std::sync::OnceLock;
+        use zbus::blocking::{Connection, Proxy, proxy::Builder};
+
+        // One connection for the life of the app; without a session bus there is no tray.
+        static BUS: OnceLock<Option<Connection>> = OnceLock::new();
+        let Some(bus) = BUS.get_or_init(|| Connection::session().ok()) else {
+            return Ok(false);
         };
-        registered().unwrap_or(false)
+        let watcher: Proxy<'_> = Builder::new(bus)
+            .destination("org.kde.StatusNotifierWatcher")?
+            .path("/StatusNotifierWatcher")?
+            .interface("org.kde.StatusNotifierWatcher")?
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()?;
+        watcher.get_property("IsStatusNotifierHostRegistered")
     }
 
     /// The main window's close button, Alt+F4 and the taskbar's Close: asks, hides the window,
