@@ -170,13 +170,14 @@ impl Vault {
             (None, Some(stored)) if record.persist => Zeroizing::new(stored.to_owned()),
             _ => return Err(Error::PinUnavailable),
         };
+        // Counted before Argon2 runs, so an attempt cut short still counts.
+        record.failures += 1;
+        self.save_pin_record(&record)?;
         let key = pin_key(pin, &decode_salt(&record.salt)?, &record.kdf_params);
         match unwrap_key(&key, AAD_PIN_VAULT_KEY, &wrapped) {
             // A full unlock resets the failures and wraps the key again.
             Ok(vault_key) => self.unlock_with_vault_key(vault_key),
             Err(Error::Decrypt) => {
-                record.failures += 1;
-                self.save_pin_record(&record)?;
                 let attempts_left = MAX_PIN_ATTEMPTS.saturating_sub(record.failures);
                 if attempts_left == 0 {
                     self.pin_wrapped = None;

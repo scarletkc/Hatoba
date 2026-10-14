@@ -370,11 +370,11 @@ export function createMockApi(): HatobaApi {
     biometric_disable: async () => {
       biometric = false;
     },
-    pin_enable: async (password, pin, persist) => {
+    pin_enable: async (password, pin) => {
       if (pin.length < 4) fail("invalid_input", "the PIN must have at least 4 characters", { field: "pin" });
       await delay(400);
       if (password.length < 4) fail("wrong_password");
-      Object.assign(pinState, { pin, persist, armed: true, failures: 0 });
+      Object.assign(pinState, { pin, persist: false, armed: true, failures: 0 });
     },
     pin_disable: async () => {
       Object.assign(pinState, { pin: null, persist: false, armed: false, failures: 0 });

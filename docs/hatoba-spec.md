@@ -427,7 +427,7 @@ The database holds device-local data (the device ID, the sync cursor, the local 
 - `conflict_log`: conflicts resolved automatically under §6.4, kept for item-by-item review and restore.
 - `ai_file_snapshots`: what each `edit_file` or `write_file` call changed on a host, kept so the user can revert it (AI-41). Each row names its conversation, response, and call, seals the server, the path, and the file's content under the vault key, and says where the change stands: unfinished, written, reverted, or dropped by the size limit. Not synced.
 
-The sync session token and the Cloudflare API token of D1 direct mode live in the system credential store (Windows Credential Manager), and so does vault_key wrapped by the PIN key while the PIN works after a restart (SEC-11). They are never written to SQLite and never synced. The API token for in-app deployment and the setup token the app generates are not stored anywhere (§6.7). For a Worker the app deployed, the sync backend setting in `meta` also records the account ID and the Worker name, which are not secrets and only fill in the upgrade form.
+The sync session token and the Cloudflare API token of D1 direct mode live in the system credential store (Windows Credential Manager, the macOS Keychain, or the Secret Service on Linux), and so does vault_key wrapped by the PIN key while the PIN works after a restart (SEC-11). They are never written to SQLite and never synced. The API token for in-app deployment and the setup token the app generates are not stored anywhere (§6.7). For a Worker the app deployed, the sync backend setting in `meta` also records the account ID and the Worker name, which are not secrets and only fill in the upgrade form.
 
 ### 5.3 D1 schema
 

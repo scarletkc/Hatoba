@@ -76,9 +76,10 @@ export const commands = {
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
 	/**
 	 *  SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
-	 *  Windows Hello. With `persist`, the PIN also works after a restart.
+	 *  Windows Hello. A new PIN needs the master password after a restart until [`pin_set_persist`]
+	 *  says otherwise, so setting it needs nothing from the OS credential store.
 	 */
-	pinEnable: (password: string, pin: string, persist: boolean) => __TAURI_INVOKE<null>("pin_enable", { password, pin, persist }),
+	pinEnable: (password: string, pin: string) => __TAURI_INVOKE<null>("pin_enable", { password, pin }),
 	pinDisable: () => __TAURI_INVOKE<null>("pin_disable"),
 	/**
 	 *  SEC-11: whether the PIN also works after a restart. On, the vault key it wraps goes to the OS

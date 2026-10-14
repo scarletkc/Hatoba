@@ -60,6 +60,14 @@ fn keep_pin_for_restart(state: &AppState) {
     }
 }
 
+/// Removes the PIN's copy in the OS credential store. A copy left behind is harmless: it is read
+/// only while the PIN is kept for after a restart, and setting that writes it again.
+fn forget_stored_pin(state: &AppState) {
+    if let Err(e) = state.secrets.delete(secret_keys::PIN_VAULT_KEY) {
+        tracing::warn!("could not remove the PIN kept for after a restart: {e}");
+    }
+}
+
 /// Common work after any successful unlock (password, recovery code, biometrics, PIN, restore).
 fn after_unlock(app: &AppHandle, state: &AppState) {
     // Only when sync is off; otherwise `sync::run_round` does it after pulling.
@@ -200,9 +208,8 @@ pub async fn vault_unlock_pin(
     if let Err(e) = &result
         && e.code == ErrorCode::WrongPin
         && e.attempts_left == Some(0)
-        && let Err(e) = state.secrets.delete(secret_keys::PIN_VAULT_KEY)
     {
-        tracing::warn!("could not remove the PIN kept for after a restart: {e}");
+        forget_stored_pin(&state);
     }
     result?;
     after_unlock(&app, &state);
@@ -404,14 +411,14 @@ pub fn biometric_disable(state: State<'_, AppState>) -> AppResult<()> {
 }
 
 /// SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
-/// Windows Hello. With `persist`, the PIN also works after a restart.
+/// Windows Hello. A new PIN needs the master password after a restart until [`pin_set_persist`]
+/// says otherwise, so setting it needs nothing from the OS credential store.
 #[tauri::command]
 #[specta::specta]
 pub async fn pin_enable(
     state: State<'_, AppState>,
     password: String,
     pin: String,
-    persist: bool,
 ) -> AppResult<()> {
     check_new_pin(&pin)?;
     if !vault_verify_password(state.clone(), password).await? {
@@ -422,23 +429,16 @@ pub async fn pin_enable(
     }
     let pin = Zeroizing::new(pin);
     let vault = state.vault.clone();
-    let wrapped = blocking(move || {
-        Ok(vault
+    blocking(move || {
+        vault
             .lock()
             .map_err(|_| AppError::internal("vault poisoned"))?
-            .set_pin(&pin, persist)?)
+            .set_pin(&pin, false)?;
+        Ok(())
     })
     .await?;
-    let kept = if persist {
-        state.secrets.set(secret_keys::PIN_VAULT_KEY, &wrapped)
-    } else {
-        state.secrets.delete(secret_keys::PIN_VAULT_KEY)
-    };
-    if let Err(e) = kept {
-        // A PIN that cannot be kept as asked is not set at all.
-        let _ = state.vault().clear_pin();
-        return Err(e.into());
-    }
+    // A copy kept for an earlier PIN no longer opens.
+    forget_stored_pin(&state);
     Ok(())
 }
 
@@ -446,7 +446,7 @@ pub async fn pin_enable(
 #[specta::specta]
 pub fn pin_disable(state: State<'_, AppState>) -> AppResult<()> {
     state.vault().clear_pin()?;
-    state.secrets.delete(secret_keys::PIN_VAULT_KEY)?;
+    forget_stored_pin(&state);
     Ok(())
 }
 
@@ -459,11 +459,15 @@ pub fn pin_set_persist(state: State<'_, AppState>, persist: bool) -> AppResult<(
     match wrapped {
         Some(wrapped) => {
             if let Err(e) = state.secrets.set(secret_keys::PIN_VAULT_KEY, &wrapped) {
-                let _ = state.vault().set_pin_persist(false);
+                if let Err(undo) = state.vault().set_pin_persist(false) {
+                    tracing::warn!(
+                        "could not record that the PIN needs the master password after a restart: {undo}"
+                    );
+                }
                 return Err(e.into());
             }
         }
-        None => state.secrets.delete(secret_keys::PIN_VAULT_KEY)?,
+        None => forget_stored_pin(&state),
     }
     Ok(())
 }

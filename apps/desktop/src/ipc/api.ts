@@ -135,8 +135,8 @@ export interface HatobaApi {
   vault_rotate_recovery(password: string): Promise<string>;
   biometric_enable(password: string): Promise<void>;
   biometric_disable(): Promise<void>;
-  /** SEC-11: set or replace the PIN after checking the master password. With `persist`, it also works after a restart. */
-  pin_enable(password: string, pin: string, persist: boolean): Promise<void>;
+  /** SEC-11: set or replace the PIN after checking the master password. It needs the master password after a restart until `pin_set_persist`. */
+  pin_enable(password: string, pin: string): Promise<void>;
   pin_disable(): Promise<void>;
   pin_set_persist(persist: boolean): Promise<void>;
   /** Resets the idle auto-lock timer (SEC-02). Called on user activity, throttled by the UI. */

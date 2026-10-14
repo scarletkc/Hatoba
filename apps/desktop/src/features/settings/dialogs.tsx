@@ -197,7 +197,7 @@ export function SetPinDialog({ onClose }: { onClose: () => void }) {
     setPasswordError(null);
     setError(null);
     try {
-      await api.pin_enable(password, pin, false);
+      await api.pin_enable(password, pin);
       await useApp.getState().refreshVault();
       onClose();
     } catch (err) {
