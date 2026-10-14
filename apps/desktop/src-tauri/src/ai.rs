@@ -4113,6 +4113,7 @@ pub fn protocol(p: CoreProtocol) -> Protocol {
     match p {
         CoreProtocol::ChatCompletions => Protocol::ChatCompletions,
         CoreProtocol::Anthropic => Protocol::Anthropic,
+        CoreProtocol::Responses => Protocol::Responses,
         CoreProtocol::SystemOne => Protocol::SystemOne,
     }
 }

@@ -1217,6 +1217,7 @@ pub struct ForwardStatusEvent {
 pub enum AiProtocol {
     ChatCompletions,
     Anthropic,
+    Responses,
     SystemOne,
 }
 

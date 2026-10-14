@@ -856,7 +856,7 @@ export type UpdateProgress =
 // ───────────────────────── AI assistant (§13) ─────────────────────────
 
 /** `system_one` answers decision questions for the judge of Auto mode (AI-47) and cannot chat. */
-export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
+export type AiProtocol = "chat_completions" | "responses" | "anthropic" | "system_one";
 export type AiAuthHeader = "x-api-key" | "authorization";
 
 /** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
