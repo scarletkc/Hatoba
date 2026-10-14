@@ -214,9 +214,10 @@ function useGlobalEvents() {
     // The state of the last sync status, to tell when a round ends.
     let lastSync: SyncState | null = null;
     const subs = [
-      api.listen("vault://locked", () => {
+      api.listen("vault://locked", ({ reason }) => {
         // HOST-14: the readings are not kept behind the lock screen.
         clearReadouts();
+        useApp.setState({ lockReason: reason });
         useApp.getState().setPhase("locked");
         useApp.getState().openSettings(false);
         void useApp.getState().refreshVault();

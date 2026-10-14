@@ -7,7 +7,7 @@ import { PopupSelect, toast } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { shortcutLabel } from "@/lib/platform";
-import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "./dialogs";
+import { ChangePasswordDialog, NewRecoveryDialog, SetPinDialog, VerifyPasswordDialog } from "./dialogs";
 import { durationLabel } from "./durations";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./SecurityPane.module.css";
@@ -15,14 +15,14 @@ import s from "./SecurityPane.module.css";
 const AUTO_LOCK_MINUTES = [1, 5, 15, 30, 60, 240, 480, 0];
 const CLIPBOARD_CLEAR_SECS = [30, 60, 90, 120, 300, 0];
 
-type Dialog = null | "hello" | "recovery" | "password";
+type Dialog = null | "hello" | "pin" | "recovery" | "password";
 
 /** The choices, plus the stored value when it is none of them. */
 const withValue = (choices: number[], value: number) => (choices.includes(value) ? choices : [...choices, value]);
 
 /**
  * Settings → Security: auto-lock (SEC-02/03) and clipboard clearing (SEC-08), kept per device, Windows Hello
- * (SEC-07), password (VAULT-05), recovery code, lock.
+ * (SEC-07), PIN (SEC-11), password (VAULT-05), recovery code, lock.
  */
 export function SecurityPane() {
   const t = useT();
@@ -39,6 +39,25 @@ export function SecurityPane() {
     if (on) return setDialog("hello");
     try {
       await api.biometric_disable();
+      await useApp.getState().refreshVault();
+    } catch (e) {
+      toast(errorMessage(t, e), "error");
+    }
+  };
+
+  const setPin = async (on: boolean) => {
+    if (on) return setDialog("pin");
+    try {
+      await api.pin_disable();
+      await useApp.getState().refreshVault();
+    } catch (e) {
+      toast(errorMessage(t, e), "error");
+    }
+  };
+
+  const setPinPersist = async (persist: boolean) => {
+    try {
+      await api.pin_set_persist(persist);
       await useApp.getState().refreshVault();
     } catch (e) {
       toast(errorMessage(t, e), "error");
@@ -81,6 +100,18 @@ export function SecurityPane() {
             <Switch label={biometricLabel} checked={vault.biometric_enabled} onChange={(on) => void setBiometric(on)} />
           </SettingRow>
         )}
+        <SettingRow label={t("settings.sec.pin")}>
+          <Switch label={t("settings.sec.pin")} checked={!!vault?.pin_enabled} onChange={(on) => void setPin(on)} />
+        </SettingRow>
+        {vault?.pin_enabled && (
+          <SettingRow label={t("settings.sec.pinRestart")} hint={t("settings.sec.pinRestart.hint")}>
+            <Switch
+              label={t("settings.sec.pinRestart")}
+              checked={!vault.pin_persist}
+              onChange={(requirePassword) => void setPinPersist(!requirePassword)}
+            />
+          </SettingRow>
+        )}
       </Group>
 
       <Group>
@@ -115,6 +146,7 @@ export function SecurityPane() {
           }}
         />
       )}
+      {dialog === "pin" && <SetPinDialog onClose={() => setDialog(null)} />}
       {dialog === "recovery" && (
         <VerifyPasswordDialog
           body={t("settings.verify.recovery")}

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { api } from "@/ipc/api";
-import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultStatus } from "@/ipc/types";
+import type { AppInfo, LocalPrefs, QuickTarget, SyncStatus, VaultLockedEvent, VaultStatus } from "@/ipc/types";
 import { detectLocale, setLocale, type Locale } from "@/i18n";
 
 export type HostFilter =
@@ -63,6 +63,8 @@ interface AppState {
   floating: boolean;
   prefs: LocalPrefs;
   vault: VaultStatus | null;
+  /** Why the vault last locked while the app ran; null when it started locked. */
+  lockReason: VaultLockedEvent["reason"] | null;
   sync: SyncStatus | null;
   page: Page;
   sidebarCollapsed: boolean;
@@ -94,6 +96,7 @@ export const useApp = create<AppState>((set, get) => ({
   floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,
+  lockReason: null,
   sync: null,
   page: { kind: "hosts", filter: { kind: "all" } },
   sidebarCollapsed: false,
@@ -122,7 +125,7 @@ export const useApp = create<AppState>((set, get) => ({
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {
     await api.vault_lock();
-    set({ phase: "locked", settingsOpen: false });
+    set({ phase: "locked", lockReason: "manual", settingsOpen: false });
   },
 }));
 
