@@ -86,6 +86,7 @@ const settings: AiSettingsView = {
   default_model: null,
   default_effort: null,
   search_provider_id: null,
+  native_search: true,
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,

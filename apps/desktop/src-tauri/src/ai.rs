@@ -56,7 +56,7 @@ use hatoba_ai::tools::{
     self, CommandStop, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools,
     ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolSet, WebSearchArgs, escape_closing_tag,
 };
-use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
+use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModelRef as CoreModelRef,
     AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
@@ -1901,7 +1901,14 @@ impl AiManager {
                     Err(refusal) => Job::error(refusal),
                 }
             } else {
-                Job::new(&v, &call.name, arguments, &env.app_version())
+                let (at, _) = open_call_at(&entries, tool_call_id)?;
+                let caller = match &entries.list[at].body {
+                    EntryBody::Assistant(response) => {
+                        (response.provider_id.as_str(), response.model_id.as_str())
+                    }
+                    _ => ("", ""),
+                };
+                Job::new(&v, &call.name, arguments, &env.app_version(), caller)
             };
             let kind = if matches!(job, Job::RunCommand(_)) {
                 OpKind::Command
@@ -3919,7 +3926,7 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
 }
 
 /// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
-/// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
+/// connected tab (AI-09), `web_search` when it can run (AI-14), `fetch_url` always, and
 /// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `fallback` is
 /// `None` but for the request without tools that a Compact request (AI-21) or a side question
 /// (AI-42) falls back to, whose `PromptTools` says what it asks for. `server_id` is the tab's SSH
@@ -3985,12 +3992,13 @@ fn prompt(
 }
 
 /// The built-in tools of a request (§13.4): the terminal tools only with a connected tab (AI-09),
-/// `web_search` when a search provider is chosen, `fetch_url` always, and `read_skill` when an
-/// enabled skill exists, the built-in one included (AI-34).
+/// `web_search` when a search provider is chosen or the model's provider has a search of its own
+/// (AI-14), `fetch_url` always, and `read_skill` when an enabled skill exists, the built-in one
+/// included (AI-34).
 fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
     tools::builtin_tools(&ToolSet {
         terminal: context.tab,
-        web_search: chosen_search(v).is_some(),
+        web_search: web_search_for(v, &context.provider_id, &context.model_id).is_some(),
         read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
     })
 }
@@ -4123,12 +4131,43 @@ pub fn listed_effort(e: Effort) -> AiEffort {
     }
 }
 
-/// The search provider `Settings.ai` chose, when it exists.
-fn chosen_search(v: &Vault) -> Option<SearchConfig> {
-    let id = v.settings().ai.search_provider_id?;
-    v.get(&id)
-        .and_then(Item::as_search_provider)
-        .map(search_config)
+/// What runs `web_search` (AI-14).
+enum WebSearch {
+    /// The search provider `Settings.ai` chose.
+    Service(SearchConfig),
+    /// The search of the model's own provider.
+    Native(ProviderConfig, ModelSpec),
+}
+
+/// What runs `web_search` for model `model_id` of `provider_id` (AI-14): the search provider
+/// `Settings.ai` chose, when it exists, or else, unless native search is off, the model's provider
+/// with its own search, when it has one.
+fn web_search_for(v: &Vault, provider_id: &str, model_id: &str) -> Option<WebSearch> {
+    let settings = v.settings().ai;
+    let chosen = settings
+        .search_provider_id
+        .as_deref()
+        .and_then(|id| v.get(id))
+        .and_then(Item::as_search_provider);
+    if let Some(chosen) = chosen {
+        return Some(WebSearch::Service(search_config(chosen)));
+    }
+    if !settings.native_search {
+        return None;
+    }
+    let (provider, model) = resolve_model(v, provider_id, model_id).ok()?;
+    NativeSearch::of(&provider)?;
+    Some(WebSearch::Native(provider, model))
+}
+
+/// Why a `web_search` call cannot run (AI-14).
+fn no_web_search(v: &Vault) -> &'static str {
+    if v.settings().ai.native_search {
+        "No search provider is chosen in Settings → AI, and the model's provider has no web \
+         search of its own, so web_search cannot run."
+    } else {
+        "No search provider is chosen in Settings → AI, so web_search cannot run."
+    }
 }
 
 pub fn search_config(p: &SearchProvider) -> SearchConfig {
@@ -4158,7 +4197,7 @@ enum Job {
     File(FileJob, Option<files::Base>),
     /// `grep` or `glob`.
     Search(SearchJob),
-    WebSearch(SearchConfig, String),
+    WebSearch(WebSearch, String),
     FetchUrl(String, u64),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
     /// `call_mcp_tool` (AI-45).
@@ -4191,8 +4230,9 @@ impl Job {
         }
     }
 
-    /// `version`: the app's, for the built-in skill (AI-34).
-    fn new(v: &Vault, name: &str, arguments: &str, version: &str) -> Self {
+    /// `version`: the app's, for the built-in skill (AI-34). `caller`: the provider and model of
+    /// the response that made the call, whose own search `web_search` may use (AI-14).
+    fn new(v: &Vault, name: &str, arguments: &str, version: &str, caller: (&str, &str)) -> Self {
         if let Some(parsed) = FileJob::parse(name, arguments) {
             return match parsed {
                 Ok(job) => Self::File(job, None),
@@ -4211,12 +4251,10 @@ impl Job {
                 Ok(args) => Self::RunCommand(args),
                 Err(message) => Self::error(message),
             },
-            tools::WEB_SEARCH => match chosen_search(v) {
-                None => Self::error(
-                    "No search provider is chosen in Settings → AI, so web_search cannot run.",
-                ),
-                Some(config) => match parse::<WebSearchArgs>(arguments) {
-                    Ok(args) => Self::WebSearch(config, args.query),
+            tools::WEB_SEARCH => match web_search_for(v, caller.0, caller.1) {
+                None => Self::error(no_web_search(v)),
+                Some(search) => match parse::<WebSearchArgs>(arguments) {
+                    Ok(args) => Self::WebSearch(search, args.query),
                     Err(message) => Self::error(message),
                 },
             },
@@ -4266,12 +4304,19 @@ impl Job {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
             }
             Self::Search(job) => search::run(live_session(env, session_id), job, cancel).await,
-            Self::WebSearch(config, query) => {
-                match web::web_search(http, &config, &query, cancel).await {
-                    Ok(results) => (
-                        ToolStatus::Ok,
-                        tools::truncate_result(&web::format_search_results(&results)),
-                    ),
+            Self::WebSearch(search, query) => {
+                let found = match &search {
+                    WebSearch::Service(config) => web::web_search(http, config, &query, cancel)
+                        .await
+                        .map(|results| web::format_search_results(&results)),
+                    WebSearch::Native(provider, model) => {
+                        web::native_search(http, provider, model, &query, cancel)
+                            .await
+                            .map(|found| web::format_native_results(&found))
+                    }
+                };
+                match found {
+                    Ok(text) => (ToolStatus::Ok, tools::truncate_result(&text)),
                     Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
                     Err(e) => (ToolStatus::Error, format!("The search failed: {e}")),
                 }

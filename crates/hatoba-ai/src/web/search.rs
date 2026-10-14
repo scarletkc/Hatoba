@@ -1,4 +1,4 @@
-//! `web_search` (AI-14): Brave Search API, Tavily or a SearXNG instance.
+//! `web_search` (AI-14) through a search service: Brave Search API, Tavily or a SearXNG instance.
 
 use std::fmt;
 use std::time::Duration;
@@ -68,7 +68,7 @@ pub struct SearchResult {
 }
 
 /// Results returned at most.
-const MAX_RESULTS: usize = 10;
+pub(super) const MAX_RESULTS: usize = 10;
 /// Longest snippet kept, in characters.
 const MAX_SNIPPET_CHARS: usize = 1_000;
 /// Overall limit of a search.
@@ -123,7 +123,7 @@ pub(crate) async fn search_at(
         .unwrap_or_else(|_| Err(AiError::Network("the search timed out".into())))
 }
 
-fn key_header(value: &str) -> Result<HeaderValue, AiError> {
+pub(super) fn key_header(value: &str) -> Result<HeaderValue, AiError> {
     let mut value = HeaderValue::from_str(value).map_err(|_| {
         AiError::Config("the API key contains characters an HTTP header cannot carry".into())
     })?;
@@ -204,7 +204,7 @@ async fn search(
 /// Sends `request`, and after a 429 sends it again, up to [`RATE_LIMIT_RETRIES`] times: after as
 /// many seconds as `Retry-After` says, at most [`MAX_RETRY_AFTER`], or else a second longer each
 /// time.
-async fn send_retrying(
+pub(super) async fn send_retrying(
     request: reqwest::RequestBuilder,
     cancel: &CancellationToken,
 ) -> Result<reqwest::Response, AiError> {
@@ -251,19 +251,23 @@ fn parse_results(body: &Value, list_pointer: &str, snippet_key: &str) -> Vec<Sea
                 return None;
             }
             let text = |key: &str| plain_text(item.get(key).and_then(Value::as_str).unwrap_or(""));
-            let mut snippet = text(snippet_key);
-            if let Some((cut, _)) = snippet.char_indices().nth(MAX_SNIPPET_CHARS) {
-                snippet.truncate(cut);
-                snippet.push('…');
-            }
             Some(SearchResult {
                 title: text("title"),
                 url: url.to_owned(),
-                snippet,
+                snippet: cut_snippet(text(snippet_key)),
             })
         })
         .take(MAX_RESULTS)
         .collect()
+}
+
+/// `snippet` cut to [`MAX_SNIPPET_CHARS`], with an ellipsis where it was cut.
+pub(super) fn cut_snippet(mut snippet: String) -> String {
+    if let Some((cut, _)) = snippet.char_indices().nth(MAX_SNIPPET_CHARS) {
+        snippet.truncate(cut);
+        snippet.push('…');
+    }
+    snippet
 }
 
 /// The `web_search` result text: numbered results with title, URL and snippet, or a line

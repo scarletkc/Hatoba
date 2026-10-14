@@ -99,6 +99,7 @@ import {
   needsSession,
   parseArgs,
   savedFor,
+  searchesNatively,
   shownCall,
   toolKind,
   type HostRef,
@@ -512,7 +513,8 @@ class TurnRunner {
         const batch = nextBatch(rest, joins);
         let done = 0;
         if (batch.length > 1) {
-          const limit = (call: AiToolCall) => limitOf(toolKind(call.name));
+          const native = searchesNatively(useAi.getState().catalog.settings);
+          const limit = (call: AiToolCall) => limitOf(toolKind(call.name), native);
           // A call that waited for room starts only while it still needs no card: a switch to a stricter mode
           // applies to the turn's next call (§13.5), and the calls left run as the next batches.
           const starts = (call: AiToolCall) => this.acting && this.joinsNow(convId)(call);
@@ -665,7 +667,7 @@ class TurnRunner {
    * turn stopped meanwhile.
    */
   private async enterRoom(callId: string, kind: ToolKind): Promise<(() => void) | null> {
-    const limit = limitOf(kind);
+    const limit = limitOf(kind, searchesNatively(useAi.getState().catalog.settings));
     if (!limit) return () => {};
     if (this.room.full(limit)) this.endCall(callId);
     return this.room.enter(limit, () => this.acting);

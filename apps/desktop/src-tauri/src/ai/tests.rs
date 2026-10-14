@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_partial_json, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use zeroize::Zeroizing;
 
@@ -2747,6 +2747,99 @@ async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
     assert_eq!(requests.len(), 2);
     assert_eq!(tool_message(&requests[1], "c4")["content"], "hi");
     f.mcp.shutdown().await;
+}
+
+/// AI-14: with no search provider chosen, `web_search` is offered where the model's provider has
+/// a search of its own, and the model that made the call searches with it.
+#[tokio::test]
+async fn without_a_search_provider_the_model_searches_with_its_own_provider() {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "web_search", json!({"query": "zfs"})),
+            ("c2", "web_search", json!({"query": "btrfs"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let (started, sink) = f.send(None, "look it up").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // A Chat Completions server with no search Hatoba knows of.
+    assert!(!tool_names(&f.requests().await[0]).contains(&"web_search".to_owned()));
+
+    let native = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .and(body_partial_json(json!({
+            "model": "m1",
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            "messages": [{"role": "user", "content": "Search the web for: zfs"}],
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "content": [
+                {"type": "server_tool_use", "id": "s1", "name": "web_search", "input": {"query": "zfs"}},
+                {"type": "web_search_tool_result", "tool_use_id": "s1", "content": [
+                    {"type": "web_search_result", "url": "https://openzfs.org", "title": "OpenZFS", "encrypted_content": "e"}
+                ]},
+                {"type": "text", "text": "ZFS is a file system."}
+            ],
+            "stop_reason": "end_turn"
+        })))
+        .mount(&native)
+        .await;
+    let (protocol, base_url) = {
+        let mut v = lock(&f.vault);
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .unwrap()
+            .clone();
+        let before = (provider.protocol, provider.base_url.clone());
+        provider.protocol = AiProtocol::Anthropic;
+        provider.base_url = native.uri();
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+        let offered = super::builtin_tools(&v, &f.context());
+        assert!(offered.iter().any(|t| t.name == "web_search"));
+        before
+    };
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c1),
+        (
+            "c1",
+            AiToolStatus::Ok,
+            "1. OpenZFS\n   https://openzfs.org\n\nWhat the results say:\nZFS is a file system.\n"
+        )
+    );
+
+    // Turned off, nothing searches.
+    {
+        let mut v = lock(&f.vault);
+        let mut settings = v.settings();
+        settings.ai.native_search = false;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+        let offered = super::builtin_tools(&v, &f.context());
+        assert!(offered.iter().all(|t| t.name != "web_search"));
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .unwrap()
+            .clone();
+        (provider.protocol, provider.base_url) = (protocol, base_url);
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c2),
+        (
+            "c2",
+            AiToolStatus::Error,
+            "No search provider is chosen in Settings → AI, so web_search cannot run."
+        )
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
 }
 
 // ───────────────────────── phase 2: MCP, AI-22, AI-26, AI-24 ─────────────────────────

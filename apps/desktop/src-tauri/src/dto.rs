@@ -1358,6 +1358,9 @@ pub struct AiSettingsView {
     /// The thinking level new conversations start with (AI-05); `None` is Default.
     pub default_effort: Option<AiEffort>,
     pub search_provider_id: Option<String>,
+    /// While no search provider is chosen, `web_search` uses the chat provider's own search
+    /// (AI-14).
+    pub native_search: bool,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
     /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
@@ -1382,6 +1385,7 @@ pub struct AiSettingsPatch {
     pub default_effort: Clearable<AiEffort>,
     #[specta(type = Option<String>)]
     pub search_provider_id: Clearable<String>,
+    pub native_search: Option<bool>,
     pub builtin_skill_enabled: Option<bool>,
     pub custom_instructions: Option<String>,
     pub send_terminal_screen: Option<bool>,

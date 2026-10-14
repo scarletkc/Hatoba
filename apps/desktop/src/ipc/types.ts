@@ -928,6 +928,8 @@ export interface AiSettingsView {
   /** The thinking level new conversations start with (AI-05); null is Default. */
   default_effort: AiEffort | null;
   search_provider_id: string | null;
+  /** While no search provider is chosen, `web_search` uses the chat provider's own search (AI-14). */
+  native_search: boolean;
   /** The built-in `hatoba` skill is offered (AI-34). */
   builtin_skill_enabled: boolean;
   /** Sent with every request, at most 32 KB of UTF-8 (AI-36). */

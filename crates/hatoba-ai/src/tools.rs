@@ -52,7 +52,8 @@ pub struct ToolSet {
     /// The terminal tab's tools, when a connected tab is attached: `read_terminal`,
     /// `run_command`, `send_input`, the file tools and the search tools.
     pub terminal: bool,
-    /// `web_search`, when a search provider is chosen.
+    /// `web_search`, when a search provider is chosen or the chat provider has a search of its own
+    /// (AI-14).
     pub web_search: bool,
     /// `read_skill`, when an enabled skill exists.
     pub read_skill: bool,
@@ -369,11 +370,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     if set.web_search {
         tools.push(tool(
             WEB_SEARCH,
-            "Search the web with the search service the user chose and return up to 10 \
-             results, each with a title, URL and snippet. Use it for documentation, error \
-             messages, versions and facts you are not sure of, then fetch_url a result to read \
-             it. The query is sent to a third-party service, so keep passwords, keys and tokens \
-             out of it."
+            "Search the web and return up to 10 results with their titles and URLs, and \
+             snippets or a summary of what they say. Use it for documentation, error messages, \
+             versions and facts you are not sure of, then fetch_url a result to read it. The \
+             query is sent to a search service, so keep passwords, keys and tokens out of it."
                 .to_owned(),
             json!({
                 "type": "object",

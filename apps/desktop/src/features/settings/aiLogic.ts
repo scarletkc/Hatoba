@@ -322,6 +322,7 @@ export function sanitizeSettings(
     default_model: defaultModel,
     default_effort: settings.default_effort,
     search_provider_id: searchId,
+    native_search: settings.native_search,
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
@@ -353,6 +354,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (!sameRef(prev.default_model, next.default_model)) patch.default_model = next.default_model;
   if (prev.default_effort !== next.default_effort) patch.default_effort = next.default_effort;
   if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;
+  if (prev.native_search !== next.native_search) patch.native_search = next.native_search;
   if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;

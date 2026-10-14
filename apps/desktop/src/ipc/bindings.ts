@@ -867,6 +867,7 @@ export type AiSettingsPatch = {
 	default_model?: AiModelRef | null,
 	default_effort?: AiEffort | null,
 	search_provider_id?: string | null,
+	native_search?: boolean | null,
 	builtin_skill_enabled?: boolean | null,
 	custom_instructions?: string | null,
 	send_terminal_screen?: boolean | null,
@@ -879,6 +880,11 @@ export type AiSettingsView = {
 	/**  The thinking level new conversations start with (AI-05); `None` is Default. */
 	default_effort: AiEffort | null,
 	search_provider_id: string | null,
+	/**
+	 *  While no search provider is chosen, `web_search` uses the chat provider's own search
+	 *  (AI-14).
+	 */
+	native_search: boolean,
 	/**  The built-in `hatoba` skill is offered (AI-34). */
 	builtin_skill_enabled: boolean,
 	/**  Sent with every request, at most 32 KB of UTF-8 (AI-36). */
