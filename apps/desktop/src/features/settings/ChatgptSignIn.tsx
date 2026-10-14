@@ -4,7 +4,7 @@ import { Dialog, toast } from "@/components/overlay";
 import { openExternal } from "@/features/sync/external";
 import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AiChatgptStatus, AiProviderView } from "@/ipc/types";
+import type { AiChatgptSignIn, AiChatgptStatus, AiProviderView } from "@/ipc/types";
 import { aiErrorMessage } from "./aiShared";
 import s from "./AiPane.module.css";
 
@@ -44,14 +44,19 @@ export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: Ai
   close.current = onClose;
   const tr = useRef(t);
   tr.current = t;
+  /** The sign-in of the current attempt: StrictMode runs the effect twice, and the second run waits for
+   * the same sign-in instead of opening the browser again. */
+  const pending = useRef<{ attempt: number; result: Promise<AiChatgptSignIn> } | null>(null);
 
   useEffect(() => {
-    // Per run: a sign-in that a newer one replaced (StrictMode runs the effect twice) settles unseen,
-    // apart from a provider it added.
+    // Per run: a run that ended (StrictMode's first, or the dialog closed) settles unseen, apart from a
+    // provider the sign-in added.
     let live = true;
+    if (pending.current?.attempt !== attempt) pending.current = { attempt, result: api.ai_chatgpt_sign_in(null) };
+    const signIn = pending.current.result;
     void (async () => {
       try {
-        const result = await api.ai_chatgpt_sign_in(null);
+        const result = await signIn;
         // The provider exists now, also when the dialog closed first (Cancel after the browser came back).
         done.current(result.provider);
         if (!live) return;
