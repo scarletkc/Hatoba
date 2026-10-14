@@ -51,6 +51,11 @@ export const commands = {
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
 	/**  SEC-07 (P1): Windows Hello. */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
+	/**
+	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
+	 *  credential store, which the last wrong PIN removes.
+	 */
+	vaultUnlockPin: (pin: string) => __TAURI_INVOKE<null>("vault_unlock_pin", { pin }),
 	vaultLock: () => __TAURI_INVOKE<void>("vault_lock"),
 	vaultVerifyPassword: (password: string) => __TAURI_INVOKE<boolean>("vault_verify_password", { password }),
 	/**
@@ -69,6 +74,17 @@ export const commands = {
 	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
+	/**
+	 *  SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
+	 *  Windows Hello. With `persist`, the PIN also works after a restart.
+	 */
+	pinEnable: (password: string, pin: string, persist: boolean) => __TAURI_INVOKE<null>("pin_enable", { password, pin, persist }),
+	pinDisable: () => __TAURI_INVOKE<null>("pin_disable"),
+	/**
+	 *  SEC-11: whether the PIN also works after a restart. On, the vault key it wraps goes to the OS
+	 *  credential store; off, it is removed there.
+	 */
+	pinSetPersist: (persist: boolean) => __TAURI_INVOKE<null>("pin_set_persist", { persist }),
 	hostsList: () => __TAURI_INVOKE<HostView[]>("hosts_list"),
 	hostGet: (id: string) => __TAURI_INVOKE<HostView>("host_get", { id }),
 	hostSave: (input: HostInput) => __TAURI_INVOKE<HostView>("host_save", { input }),
@@ -1077,6 +1093,8 @@ export type AppError = {
 	cf_code: number | null,
 	/**  `ai`: the HTTP status the provider answered with. */
 	http_status: number | null,
+	/**  `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks. */
+	attempts_left: number | null,
 };
 
 export type AppInfo = {
@@ -1347,7 +1365,11 @@ export type DroppedFileRefusal =
 /**  Not a file, gone, or not readable. */
 "unreadable";
 
-export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | 
+/**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
+"wrong_pin" | 
+/**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
+"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -2207,6 +2229,12 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+	/**  SEC-11: a PIN is set on this device. */
+	pin_enabled: boolean,
+	/**  The PIN also works after the app restarts. */
+	pin_persist: boolean,
+	/**  The PIN can unlock now (the lock screen asks for it instead of the master password). */
+	pin_unlock: boolean,
 };
 
 /**

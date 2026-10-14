@@ -29,6 +29,12 @@ pub struct VaultStatus {
     pub sync_kind: SyncKind,
     pub biometric_available: bool,
     pub biometric_enabled: bool,
+    /// SEC-11: a PIN is set on this device.
+    pub pin_enabled: bool,
+    /// The PIN also works after the app restarts.
+    pub pin_persist: bool,
+    /// The PIN can unlock now (the lock screen asks for it instead of the master password).
+    pub pin_unlock: bool,
 }
 
 // ───────────────────────── Hosts ─────────────────────────

@@ -62,6 +62,9 @@ pub mod meta {
     /// Envelope JSON: the shell's AI approvals saved on this device (AI-19), sealed under the
     /// vault key because they name hosts. Device-local, never synced.
     pub const AI_ALLOWANCES: &str = "ai_allowances";
+    /// JSON of this device's PIN unlock (SEC-11): the KDF salt and parameters, the PIN key
+    /// sealed under the vault key, and the failure count. Device-local, never synced.
+    pub const PIN: &str = "pin";
 }
 
 /// One row of the `items` table.

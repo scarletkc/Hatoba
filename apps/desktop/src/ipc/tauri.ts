@@ -26,6 +26,7 @@ export function createTauriApi(): HatobaApi {
     vault_create: (password) => call("vault_create", { password }),
     vault_unlock: (password) => call("vault_unlock", { password }),
     vault_unlock_biometric: () => call("vault_unlock_biometric"),
+    vault_unlock_pin: (pin) => call("vault_unlock_pin", { pin }),
     vault_lock: () => call("vault_lock"),
     vault_verify_password: (password) => call("vault_verify_password", { password }),
     vault_change_password: (current, next) => call("vault_change_password", { current, next }),
@@ -35,6 +36,9 @@ export function createTauriApi(): HatobaApi {
     vault_rotate_recovery: (password) => call("vault_rotate_recovery", { password }),
     biometric_enable: (password) => call("biometric_enable", { password }),
     biometric_disable: () => call("biometric_disable"),
+    pin_enable: (password, pin, persist) => call("pin_enable", { password, pin, persist }),
+    pin_disable: () => call("pin_disable"),
+    pin_set_persist: (persist) => call("pin_set_persist", { persist }),
     activity_ping: () => call("activity_ping"),
 
     hosts_list: () => call("hosts_list"),

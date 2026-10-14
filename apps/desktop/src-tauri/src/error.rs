@@ -13,6 +13,10 @@ pub enum ErrorCode {
     WrongPassword,
     WrongRecoveryCode,
     Throttled,
+    /// SEC-11: `attempts_left` says how many more wrong PINs the PIN takes.
+    WrongPin,
+    /// SEC-11: no PIN unlock is possible now; the master password unlocks.
+    PinUnavailable,
     NotFound,
     InvalidInput,
     KeyParse,
@@ -109,6 +113,8 @@ pub struct AppError {
     pub cf_code: Option<u32>,
     /// `ai`: the HTTP status the provider answered with.
     pub http_status: Option<u16>,
+    /// `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks.
+    pub attempts_left: Option<u32>,
 }
 
 pub type AppResult<T> = Result<T, AppError>;
@@ -125,6 +131,7 @@ impl AppError {
             permission: None,
             cf_code: None,
             http_status: None,
+            attempts_left: None,
         }
     }
 
@@ -192,6 +199,11 @@ impl From<hatoba_core::Error> for AppError {
                 retry_at: Some(retry_at),
                 ..Self::new(ErrorCode::Throttled, detail)
             },
+            E::WrongPin { attempts_left } => Self {
+                attempts_left: Some(attempts_left),
+                ..Self::new(ErrorCode::WrongPin, detail)
+            },
+            E::PinUnavailable => Self::new(ErrorCode::PinUnavailable, detail),
             E::ItemNotFound(_) => Self::new(ErrorCode::NotFound, detail),
             E::InvalidItem(_) => Self::new(ErrorCode::InvalidInput, detail),
             E::EmptyPassword => Self::invalid("password", detail),

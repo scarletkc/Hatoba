@@ -19,6 +19,9 @@ pub mod secret_keys {
     pub const D1_API_TOKEN: &str = "sync/d1-api-token";
     /// The vault key wrapped for biometric unlock (P1).
     pub const BIOMETRIC_VAULT_KEY: &str = "vault/biometric-key";
+    /// The vault key wrapped by the PIN key, kept only while the PIN works after a restart
+    /// (SEC-11).
+    pub const PIN_VAULT_KEY: &str = "vault/pin-key";
 }
 
 /// A secret store backed by the OS credential manager (Windows Credential Manager, macOS

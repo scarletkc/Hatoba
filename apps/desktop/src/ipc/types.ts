@@ -17,6 +17,10 @@ export type ErrorCode =
   | "wrong_password"
   | "wrong_recovery_code"
   | "throttled"
+  /** SEC-11: wrong PIN; `attempts_left` says how many more it takes. */
+  | "wrong_pin"
+  /** SEC-11: no PIN unlock is possible now; the master password unlocks. */
+  | "pin_unavailable"
   | "not_found"
   | "invalid_input"
   | "key_parse"
@@ -97,6 +101,8 @@ export interface AppError {
   cf_code?: number | null;
   /** `ai`: the HTTP status the provider answered with, when it answered. */
   http_status?: number | null;
+  /** `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks. */
+  attempts_left?: number | null;
 }
 
 export type CloudflarePermission = "workers_scripts" | "d1";
@@ -116,6 +122,12 @@ export interface VaultStatus {
   biometric_available: boolean;
   /** Biometric unlock has been enrolled for this vault (P1). */
   biometric_enabled: boolean;
+  /** SEC-11: a PIN is set on this device. */
+  pin_enabled: boolean;
+  /** The PIN also works after the app restarts. */
+  pin_persist: boolean;
+  /** The PIN can unlock now, so the lock screen asks for it instead of the master password. */
+  pin_unlock: boolean;
 }
 
 // ───────────────────────── Hosts ─────────────────────────
