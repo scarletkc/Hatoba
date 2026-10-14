@@ -18,14 +18,23 @@ permissions:
   issues: write
   pull-requests: write
 
-concurrency:
-  group: pr-policy-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
+# No concurrency group: GitHub cancels a queued run when a newer one joins its group, and the
+# cancelled run shows as a failed check. Runs may overlap instead, which the script allows for.
 
 jobs:
   pr-policy:
     name: PR policy
-    if: github.event_name == 'pull_request_target' || (github.event.issue.pull_request && github.event.comment.user.login == github.event.issue.user.login)
+    # Skipped, rather than run, for pull requests by maintainers and bots, which the check leaves
+    # alone, and for comments by anyone but the author, which cannot change the result.
+    if: >-
+      (github.event_name == 'pull_request_target'
+        && !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+        && github.event.pull_request.user.type != 'Bot')
+      || (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.login == github.event.issue.user.login
+        && !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)
+        && github.event.issue.user.type != 'Bot')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

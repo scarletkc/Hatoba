@@ -206,16 +206,45 @@ function eventTarget(name, event) {
   return event.pull_request.number;
 }
 
-/** Checks pull request `number`, then comments on it and closes or reopens it; `dryRun` only prints. */
+/** How many times a run reads the pull request, at most, while it keeps changing under the run. */
+const ROUNDS = 3;
+
+const isOurs = (comment) => comment.user.login === BOT && comment.body.includes(MARKER);
+
+/**
+ * Checks pull request `number`, then comments on it and closes or reopens it; `dryRun` only prints.
+ *
+ * Runs are not queued one after another: GitHub cancels a queued run when a newer one joins the
+ * queue, and the cancelled run shows as a failed check. Runs of two events can therefore overlap,
+ * so every write here can be repeated, and a run reads the pull request again after acting. When
+ * what the check reads changed meanwhile, as when the author edited it again, the run checks it
+ * again, so the run that finishes last acts on what the pull request is now.
+ */
 export async function run({ repo, number, token, dryRun }) {
-  const { request, all } = client(token);
+  const api = client(token);
+  let checked = null;
+  for (let round = 0; round < ROUNDS; round++) {
+    const state = await read(api, repo, number);
+    if (state === null) return;
+    const inputs = JSON.stringify([state.pr.body, state.pr.head.sha, state.pr.draft, state.comments.map((c) => [c.id, c.body])]);
+    if (inputs === checked) return;
+    checked = inputs;
+    const found = problems(state);
+    console.log(found.length === 0 ? `#${number} follows the contribution guide.` : `#${number} is missing:\n${found.map((p) => `  - ${p}`).join("\n")}`);
+    if (dryRun) return;
+    await act(api, repo, number, state, found);
+  }
+}
+
+/** What the check reads of the pull request, or null when the check leaves it alone. */
+async function read({ request, all }, repo, number) {
   const pr = await request("GET", `/repos/${repo}/pulls/${number}`);
   const author = pr.user.login;
-  if (pr.merged || pr.base.ref !== "main") return console.log(`#${number} is merged or not for main; nothing to check.`);
+  if (pr.merged || pr.base.ref !== "main") return skip(`#${number} is merged or not for main; nothing to check.`);
   if (MAINTAINERS.has(pr.author_association) || pr.user.type === "Bot") {
-    return console.log(`#${number} is by ${author} (${pr.author_association}); the check leaves it alone.`);
+    return skip(`#${number} is by ${author} (${pr.author_association}); the check leaves it alone.`);
   }
-  if (pr.draft) return console.log(`#${number} is a draft; it is checked once it is ready for review.`);
+  if (pr.draft) return skip(`#${number} is a draft; it is checked once it is ready for review.`);
 
   const [files, comments, events] = await Promise.all([
     all(`/repos/${repo}/pulls/${number}/files`),
@@ -224,7 +253,7 @@ export async function run({ repo, number, token, dryRun }) {
   ]);
   // Only a maintainer can reopen someone else's pull request, and doing so decides to keep it.
   if (events.some((e) => e.event === "reopened" && e.actor && e.actor.login !== author && e.actor.login !== BOT)) {
-    return console.log(`#${number} was reopened by a maintainer; the check leaves it alone.`);
+    return skip(`#${number} was reopened by a maintainer; the check leaves it alone.`);
   }
   const issues = new Map();
   for (const n of linkedIssues(pr.body ?? "", repo)) {
@@ -239,24 +268,47 @@ export async function run({ repo, number, token, dryRun }) {
       },
     );
   }
-  const found = problems({ body: pr.body, author, files, issues, comments: comments.filter((c) => c.user.login === author) });
-  const ours = comments.find((c) => c.user.login === BOT && c.body.includes(MARKER));
+  const authorComments = comments.filter((c) => c.user.login === author);
+  return { pr, body: pr.body, author, files, issues, comments: authorComments, ours: comments.filter(isOurs) };
+}
 
-  console.log(found.length === 0 ? `#${number} follows the contribution guide.` : `#${number} is missing:\n${found.map((p) => `  - ${p}`).join("\n")}`);
-  if (dryRun) return;
+function skip(reason) {
+  console.log(reason);
+  return null;
+}
 
+async function act(api, repo, number, { pr, ours }, found) {
+  const { request } = api;
   if (found.length > 0) {
-    const body = failureComment(found);
-    if (ours) await request("PATCH", `/repos/${repo}/issues/comments/${ours.id}`, { body });
-    else await request("POST", `/repos/${repo}/issues/${number}/comments`, { body });
+    await settleComment(api, repo, number, ours, failureComment(found));
     if (pr.state === "open") await request("PATCH", `/repos/${repo}/pulls/${number}`, { state: "closed" });
     return;
   }
-  if (!ours) return;
+  if (ours.length === 0) return;
   // Reopens only what this check closed, not a pull request its author or a maintainer closed.
   const closedByCheck = pr.state === "closed" && (await request("GET", `/repos/${repo}/issues/${number}`)).closed_by?.login === BOT;
   if (closedByCheck) await request("PATCH", `/repos/${repo}/pulls/${number}`, { state: "open" });
-  if (ours.body.startsWith(FAILED)) await request("PATCH", `/repos/${repo}/issues/comments/${ours.id}`, { body: passComment(closedByCheck) });
+  const kept = oldest(ours);
+  await settleComment(api, repo, number, ours, kept.body.startsWith(FAILED) ? passComment(closedByCheck) : kept.body);
+}
+
+const oldest = (comments) => comments.reduce((a, b) => (b.id < a.id ? b : a));
+
+/**
+ * Leaves one comment of this check, with `body`: edits the oldest, or adds one when there is none,
+ * and deletes the copies that a run alongside this one added. Every run keeps the same oldest one.
+ */
+async function settleComment({ request, all }, repo, number, ours, body) {
+  if (ours.length === 0) {
+    await request("POST", `/repos/${repo}/issues/${number}/comments`, { body });
+    ours = (await all(`/repos/${repo}/issues/${number}/comments`)).filter(isOurs);
+    if (ours.length === 0) return;
+  }
+  const kept = oldest(ours);
+  for (const copy of ours) {
+    if (copy !== kept) await request("DELETE", `/repos/${repo}/issues/comments/${copy.id}`, undefined, { missingOk: true });
+  }
+  if (kept.body !== body) await request("PATCH", `/repos/${repo}/issues/comments/${kept.id}`, { body }, { missingOk: true });
 }
 
 async function main(argv) {

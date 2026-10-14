@@ -126,28 +126,51 @@ test("images come as Markdown, as img tags, or as attachment links", () => {
 });
 
 /**
- * Runs the check against a stand-in for the GitHub API that serves pull request 7 as `pr` with
- * `comments` and `events`, and returns the writes it received as "METHOD path" with their bodies.
+ * Runs the check against a stand-in for the GitHub API that serves pull request 7 with `comments`
+ * and `events`. `pr` is the pull request, or a list of what each read of it returns in turn, the
+ * last one staying. Comments can be added, edited and deleted. Returns the writes it received as
+ * "METHOD path" with their bodies, the comments it ends with, and how often the pull request was read.
  */
 async function runAgainst({ pr, comments = [], events = [], closedBy = null }) {
   const writes = [];
+  const reads = Array.isArray(pr) ? [...pr] : [pr];
+  let prReads = 0;
+  let nextId = 100;
+  const stored = comments.map((c) => ({ ...c }));
   const routes = new Map([
-    ["/repos/o/r/pulls/7", pr],
-    ["/repos/o/r/pulls/7/files", [code("apps/desktop/src/app/App.tsx")]],
-    ["/repos/o/r/issues/7/comments", comments],
-    ["/repos/o/r/issues/7/events", events],
-    ["/repos/o/r/issues/7", { closed_by: closedBy && { login: closedBy } }],
-    ["/repos/o/r/issues/42", { labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] }],
+    ["/repos/o/r/pulls/7", () => (prReads++, reads.length > 1 ? reads.shift() : reads[0])],
+    ["/repos/o/r/pulls/7/files", () => [code("apps/desktop/src/app/App.tsx")]],
+    ["/repos/o/r/issues/7/comments", () => stored],
+    ["/repos/o/r/issues/7/events", () => events],
+    ["/repos/o/r/issues/7", () => ({ closed_by: closedBy && { login: closedBy } })],
+    ["/repos/o/r/issues/42", () => ({ labels: [{ name: "help wanted" }], user: { login: "maintainer" }, assignees: [] })],
   ]);
+  const answer = (method, path, body) => {
+    if (method === "GET") return routes.get(path)?.();
+    if (method === "POST" && path === "/repos/o/r/issues/7/comments") {
+      const comment = { id: nextId++, user: { login: "github-actions[bot]" }, body: body.body };
+      stored.push(comment);
+      return comment;
+    }
+    const id = /^\/repos\/o\/r\/issues\/comments\/(\d+)$/.exec(path)?.[1];
+    if (id === undefined) return {};
+    const at = stored.findIndex((c) => String(c.id) === id);
+    if (at < 0) return undefined;
+    if (method === "DELETE") return stored.splice(at, 1) && null;
+    stored[at].body = body.body;
+    return stored[at];
+  };
   const server = createServer((req, res) => {
     let data = "";
     req.on("data", (chunk) => (data += chunk));
     req.on("end", () => {
       const path = req.url.split("?")[0];
-      if (req.method !== "GET") writes.push([`${req.method} ${path}`, JSON.parse(data)]);
-      const body = req.method === "GET" ? routes.get(path) : {};
-      res.writeHead(body === undefined ? 404 : 200, { "content-type": "application/json" });
-      res.end(JSON.stringify(body ?? { message: "Not Found" }));
+      const body = data ? JSON.parse(data) : undefined;
+      if (req.method !== "GET") writes.push([`${req.method} ${path}`, body]);
+      const result = answer(req.method, path, body);
+      if (result === null) return res.writeHead(204).end();
+      res.writeHead(result === undefined ? 404 : 200, { "content-type": "application/json" });
+      res.end(JSON.stringify(result ?? { message: "Not Found" }));
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -158,7 +181,7 @@ async function runAgainst({ pr, comments = [], events = [], closedBy = null }) {
     server.close();
     delete process.env.GITHUB_API_URL;
   }
-  return writes;
+  return { writes, comments: stored, prReads };
 }
 
 const pull = (fields = {}) => ({
@@ -166,6 +189,7 @@ const pull = (fields = {}) => ({
   state: "open",
   draft: false,
   merged: false,
+  head: { sha: "c0ffee" },
   base: { ref: "main" },
   user: { login: "alice", type: "User" },
   author_association: "FIRST_TIME_CONTRIBUTOR",
@@ -176,7 +200,7 @@ const shot = "![Settings](https://github.com/user-attachments/assets/0f6e)";
 const failed = { id: 9, user: { login: "github-actions[bot]" }, body: "<!-- pr-policy: failed -->\nThis pull request was closed" };
 
 test("a pull request that misses something gets a comment and is closed", async () => {
-  const writes = await runAgainst({ pr: pull() });
+  const { writes } = await runAgainst({ pr: pull() });
   assert.deepEqual(writes.map(([what]) => what), ["POST /repos/o/r/issues/7/comments", "PATCH /repos/o/r/pulls/7"]);
   assert.match(writes[0][1].body, /^<!-- pr-policy: failed -->\n/);
   assert.match(writes[0][1].body, /This changes the UI/);
@@ -184,13 +208,13 @@ test("a pull request that misses something gets a comment and is closed", async 
 });
 
 test("a later run edits its comment instead of adding another", async () => {
-  const writes = await runAgainst({ pr: pull({ state: "closed" }), comments: [failed], closedBy: "github-actions[bot]" });
+  const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments: [failed], closedBy: "github-actions[bot]" });
   assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/issues/comments/9"]);
 });
 
 test("a pull request the check closed reopens once the author adds what was missing", async () => {
   const comments = [failed, { user: { login: "alice" }, body: shot }];
-  const writes = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "github-actions[bot]" });
+  const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "github-actions[bot]" });
   assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/pulls/7", "PATCH /repos/o/r/issues/comments/9"]);
   assert.deepEqual(writes[0][1], { state: "open" });
   assert.match(writes[1][1].body, /^<!-- pr-policy: passed -->\n.*so it is open again\.$/);
@@ -198,23 +222,59 @@ test("a pull request the check closed reopens once the author adds what was miss
 
 test("a pull request its author closed stays closed", async () => {
   const comments = [failed, { user: { login: "alice" }, body: shot }];
-  const writes = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "alice" });
+  const { writes } = await runAgainst({ pr: pull({ state: "closed" }), comments, closedBy: "alice" });
   assert.deepEqual(writes.map(([what]) => what), ["PATCH /repos/o/r/issues/comments/9"]);
   assert.doesNotMatch(writes[0][1].body, /open again/);
 });
 
 test("a screenshot from someone else does not count", async () => {
-  const writes = await runAgainst({ pr: pull(), comments: [{ user: { login: "bob" }, body: shot }] });
+  const { writes } = await runAgainst({ pr: pull(), comments: [{ user: { login: "bob" }, body: shot }] });
   assert.deepEqual(writes.at(-1), ["PATCH /repos/o/r/pulls/7", { state: "closed" }]);
 });
 
 test("maintainers, bots, drafts, and pull requests a maintainer reopened are left alone", async () => {
   for (const pr of [pull({ author_association: "OWNER" }), pull({ author_association: "COLLABORATOR" }), pull({ user: { login: "dependabot[bot]", type: "Bot" } }), pull({ draft: true })]) {
-    assert.deepEqual(await runAgainst({ pr }), [], JSON.stringify(pr));
+    assert.deepEqual((await runAgainst({ pr })).writes, [], JSON.stringify(pr));
   }
   const events = [{ event: "closed", actor: { login: "github-actions[bot]" } }, { event: "reopened", actor: { login: "scarletkc" } }];
-  assert.deepEqual(await runAgainst({ pr: pull(), events }), []);
+  assert.deepEqual((await runAgainst({ pr: pull(), events })).writes, []);
   // The author reopening their own pull request is checked as usual.
   const own = [{ event: "reopened", actor: { login: "alice" } }];
-  assert.equal((await runAgainst({ pr: pull(), events: own })).length, 2);
+  assert.equal((await runAgainst({ pr: pull(), events: own })).writes.length, 2);
+});
+
+test("a run reads the pull request again after acting, and stops when nothing changed", async () => {
+  const { writes, prReads } = await runAgainst({ pr: pull() });
+  assert.equal(writes.length, 2);
+  assert.equal(prReads, 2);
+});
+
+test("a run checks again when the pull request changed while it acted", async () => {
+  // Another run's event: the author added the screenshots after this run read the pull request.
+  const fixed = pull({ state: "closed", body: FILLED.replace("## Screenshots\n", `## Screenshots\n\n${shot}\n`) });
+  const { writes, comments } = await runAgainst({ pr: [pull(), fixed], closedBy: "github-actions[bot]" });
+  assert.deepEqual(
+    writes.map(([what, body]) => `${what} ${body?.state ?? ""}`.trim()),
+    ["POST /repos/o/r/issues/7/comments", "PATCH /repos/o/r/pulls/7 closed", "PATCH /repos/o/r/pulls/7 open", "PATCH /repos/o/r/issues/comments/100"],
+  );
+  assert.equal(comments.length, 1);
+  assert.match(comments[0].body, /^<!-- pr-policy: passed -->\n.*so it is open again\.$/);
+});
+
+test("copies of the comment that runs alongside added are deleted, and the oldest stays", async () => {
+  const copy = { ...failed, id: 12 };
+  const { writes, comments } = await runAgainst({ pr: pull({ state: "closed" }), comments: [copy, failed], closedBy: "github-actions[bot]" });
+  assert.deepEqual(writes.map(([what]) => what), ["DELETE /repos/o/r/issues/comments/12", "PATCH /repos/o/r/issues/comments/9"]);
+  assert.deepEqual(comments.map((c) => c.id), [9]);
+  assert.match(comments[0].body, /This changes the UI/);
+});
+
+test("the workflow does not queue runs, and skips pull requests the check leaves alone", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/pr-policy.yml", import.meta.url), "utf8");
+  // A run that a newer one replaced in the queue would show as a failed check.
+  assert.doesNotMatch(workflow, /^\s*concurrency:/m);
+  for (const event of ["github.event.pull_request", "github.event.issue"]) {
+    assert.ok(workflow.includes(`!contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), ${event}.author_association)`), event);
+    assert.ok(workflow.includes(`${event}.user.type != 'Bot'`), event);
+  }
 });
