@@ -102,6 +102,8 @@ export function ProviderDialog({
   const live = useRef(true);
   /** A sign-in waits for the browser. */
   const signingInRef = useRef(false);
+  /** The provider as the pane last learned of it from here: a sign-in can change its models. */
+  const latest = useRef(provider);
   useEffect(() => {
     live.current = true;
     return () => {
@@ -221,7 +223,8 @@ export function ProviderDialog({
       // A provider without models gets the account's models with the sign-in. The pane learns of
       // the sign-in also when the editor closed after the browser came back.
       const models = provider.models.length ? provider.models : result.provider.models;
-      onSaved({ ...result.provider, name: provider.name, models });
+      latest.current = { ...result.provider, name: provider.name, models };
+      onSaved(latest.current);
       if (!live.current) return;
       setAccount(result.provider.chatgpt ?? null);
       setTest(IDLE);
@@ -244,7 +247,8 @@ export function ProviderDialog({
     try {
       const revoked = await api.ai_chatgpt_sign_out(provider.id);
       const next: AiChatgptView = { ...account, status: "signed_out" };
-      onSaved({ ...provider, chatgpt: next });
+      latest.current = { ...(latest.current ?? provider), chatgpt: next };
+      onSaved(latest.current);
       if (!live.current) return;
       setAccount(next);
       setTest(IDLE);

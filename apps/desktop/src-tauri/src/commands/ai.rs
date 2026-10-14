@@ -448,7 +448,6 @@ pub async fn ai_chatgpt_sign_in(
             tracing::info!(kind = crate::ai::error_kind(&e), "ChatGPT sign-in failed");
             AppError::from(e)
         })?;
-    let first_sign_in = provider_id.is_none();
     let stored = state.with_unlocked(|v| {
         let account = chatgpt::account_of(&credentials);
         match &provider_id {
@@ -458,30 +457,48 @@ pub async fn ai_chatgpt_sign_in(
                     provider.chatgpt = Some(account);
                     v.put(Some(id), Item::AiProvider(provider))?;
                 }
-                Ok(id.clone())
+                Ok((id.clone(), false))
             }
-            None => Ok(v.put(
-                None,
-                Item::AiProvider(AiProvider {
-                    name: chatgpt::PROVIDER_NAME.to_owned(),
-                    protocol: CoreProtocol::Responses,
-                    base_url: chatgpt::BASE_URL.to_owned(),
-                    chatgpt: Some(account),
-                    ..AiProvider::default()
-                }),
-            )?),
+            // An account that has a provider already, such as one synced from another device,
+            // signs in to it instead of adding another; the provider keeps its client id.
+            None => match chatgpt::provider_of_account(v, &account.subject) {
+                Some((id, mut provider)) => {
+                    if let Some(kept) = provider
+                        .chatgpt
+                        .as_mut()
+                        .filter(|kept| kept.email != account.email)
+                    {
+                        kept.email = account.email;
+                        v.put(Some(&id), Item::AiProvider(provider))?;
+                    }
+                    Ok((id, false))
+                }
+                None => Ok((
+                    v.put(
+                        None,
+                        Item::AiProvider(AiProvider {
+                            name: chatgpt::PROVIDER_NAME.to_owned(),
+                            protocol: CoreProtocol::Responses,
+                            base_url: chatgpt::BASE_URL.to_owned(),
+                            chatgpt: Some(account),
+                            ..AiProvider::default()
+                        }),
+                    )?,
+                    true,
+                )),
+            },
         }
     });
     let stored = match stored {
-        Ok(id) => match sessions.signed_in(&id, &credentials).await {
-            Ok(()) => Ok(id),
+        Ok(stored) => match sessions.signed_in(&stored.0, &credentials).await {
+            Ok(()) => Ok(stored),
             Err(e) => Err(e.into()),
         },
         Err(e) => Err(e),
     };
     // A session this device cannot keep, for example because the vault locked meanwhile, is
     // ended at OpenAI.
-    let id = stored.inspect_err(|_| sessions.revoke_later(credentials.clone()))?;
+    let (id, first_sign_in) = stored.inspect_err(|_| sessions.revoke_later(credentials.clone()))?;
     // A provider without models, such as a new one or one whose earlier sign-in did not allow
     // plan use, gets the account's models.
     let config = state.with_unlocked(|v| {

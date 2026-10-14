@@ -36,11 +36,14 @@ export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: Ai
   const t = useT();
   const [phase, setPhase] = useState<Phase>({ state: "waiting" });
   const [attempt, setAttempt] = useState(0);
-  // Read through refs, so a parent that passes new functions on each render does not restart the sign-in.
+  // Read through refs, so new functions on each render (from the parent, and `t`) do not restart the
+  // sign-in, which would open the browser again.
   const done = useRef(onDone);
   done.current = onDone;
   const close = useRef(onClose);
   close.current = onClose;
+  const tr = useRef(t);
+  tr.current = t;
 
   useEffect(() => {
     // Per run: a sign-in that a newer one replaced (StrictMode runs the effect twice) settles unseen,
@@ -53,24 +56,24 @@ export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: Ai
         done.current(result.provider);
         if (!live) return;
         if (result.provider.chatgpt?.status === "plan_disabled") {
-          toast(t("aiSettings.chatgpt.status.plan_disabled"), "error", 6000);
+          toast(tr.current("aiSettings.chatgpt.status.plan_disabled"), "error", 6000);
           close.current();
         } else if (result.first_sign_in) {
           setPhase({ state: "welcome", provider: result.provider });
         } else {
-          toast(t("aiSettings.chatgpt.signedIn"), "success");
+          toast(tr.current("aiSettings.chatgpt.signedIn"), "success");
           close.current();
         }
       } catch (e) {
         if (!live) return;
         if (toAppError(e).code === "cancelled") close.current();
-        else setPhase({ state: "failed", message: aiErrorMessage(t, e) });
+        else setPhase({ state: "failed", message: aiErrorMessage(tr.current, e) });
       }
     })();
     return () => {
       live = false;
     };
-  }, [attempt, t]);
+  }, [attempt]);
 
   const cancel = () => {
     void api.ai_chatgpt_sign_in_cancel();

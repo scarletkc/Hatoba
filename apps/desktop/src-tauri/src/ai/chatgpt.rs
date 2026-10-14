@@ -21,7 +21,7 @@ use hatoba_ai::chatgpt::{
     oauth::{self, Account, SignInRequest},
 };
 use hatoba_core::Vault;
-use hatoba_core::model::{AiChatgptAccount, Item};
+use hatoba_core::model::{AiChatgptAccount, AiProvider, Item};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -229,15 +229,29 @@ pub fn sign_in_request(v: &mut Vault, provider_id: Option<&str>) -> AppResult<Si
     let consent = local
         .as_ref()
         .is_some_and(|c| c.status() == SessionStatus::PlanDisabled);
+    // A session of another registration, such as one made by Continue with ChatGPT for an
+    // account that had a provider already, has an ID token for another client.
+    let id_token_hint = local
+        .filter(|c| c.client_id == account.client_id)
+        .map(|c| c.id_token)
+        .filter(|token| !token.is_empty());
     Ok(SignInRequest {
         host_id,
         account: Some(Account {
             client_id: account.client_id,
             subject: account.subject,
             email: account.email,
-            id_token_hint: local.map(|c| c.id_token).filter(|token| !token.is_empty()),
+            id_token_hint,
         }),
         consent,
+    })
+}
+
+/// The ChatGPT provider of the account `subject`, if there is one.
+pub fn provider_of_account(v: &Vault, subject: &str) -> Option<(String, AiProvider)> {
+    v.items().find_map(|(id, item)| {
+        let provider = item.as_ai_provider()?;
+        (provider.chatgpt.as_ref()?.subject == subject).then(|| (id.to_owned(), provider.clone()))
     })
 }
 
@@ -399,6 +413,20 @@ mod tests {
                 .map(String::as_str),
             Some("id-token")
         );
+
+        // A session of another registration of Hatoba gives no hint.
+        let mut sessions = read(&v).unwrap();
+        sessions.sessions.get_mut(&id).unwrap().client_id = "oaiapp_2".into();
+        write(&mut v, &sessions).unwrap();
+        let again = sign_in_request(&mut v, Some(&id)).unwrap();
+        assert!(again.account.unwrap().id_token_hint.is_none());
+
+        // The account's provider is found by its subject.
+        assert_eq!(
+            provider_of_account(&v, "user-1").map(|(found, _)| found),
+            Some(id.clone())
+        );
+        assert!(provider_of_account(&v, "someone-else").is_none());
 
         let key = v
             .put(

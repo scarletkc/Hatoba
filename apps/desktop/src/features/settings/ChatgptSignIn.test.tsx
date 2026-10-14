@@ -36,7 +36,7 @@ function render(onDone: (p: AiProviderView) => void, onClose: () => void) {
 }
 
 describe("ChatgptSignInDialog (AI-52)", () => {
-  it("waits for the browser, then says once that requests use the ChatGPT plan", async () => {
+  it("waits for the browser, then says once that requests use the ChatGPT plan", { timeout: 10_000 }, async () => {
     const done: AiProviderView[] = [];
     let closed = 0;
     render((p) => done.push(p), () => closed++);
@@ -46,6 +46,9 @@ describe("ChatgptSignInDialog (AI-52)", () => {
     expect(done[0].models.length).toBeGreaterThan(0);
     expect(shown(t("aiSettings.chatgpt.welcome.title"))).toBe(true);
     expect(button(t("aiSettings.chatgpt.manageUsage"))).toBeDefined();
+    // Re-rendering does not start another sign-in, which would open the browser again.
+    await act(() => new Promise((r) => setTimeout(r, 2500)));
+    expect(done.length).toBe(1);
     act(() => button(t("aiSettings.chatgpt.welcome.ok"))?.click());
     expect(closed).toBe(1);
   });

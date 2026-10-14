@@ -355,7 +355,8 @@ export function createAiSettingsMock(): AiSettingsApi {
         };
         throw err;
       }
-      const old = providers.find((p) => p.id === providerId);
+      // A new sign-in of an account that has a provider signs in to it (the mock's account is one email).
+      const old = providers.find((p) => (providerId ? p.id === providerId : p.chatgpt?.email === "you@example.com"));
       if (providerId && !old?.chatgpt) {
         const err: AppError = { code: "not_found", detail: "provider not found" };
         throw err;

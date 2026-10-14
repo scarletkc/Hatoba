@@ -21,7 +21,7 @@ A provider can sign in with a ChatGPT account instead of an API key. Its request
 - **Continue with ChatGPT** in Settings → AI → Providers (next to **Add Provider**, or in the empty state) opens OpenAI's sign-in page in the system browser and shows "Continue in Your Browser" until it comes back. Sign in, allow Hatoba to use the plan, and the browser says it can be closed. A provider named ChatGPT then appears with the models the account may use.
 - The first sign-in of an account shows "You’re Using Your ChatGPT Plan". **Manage Usage** opens ChatGPT's usage settings (chatgpt.com/settings/usage), where usage is shown and Hatoba's own limit can be set.
 - A ChatGPT provider has no protocol, base URL or key: it uses OpenAI's API at `api.openai.com`. Its row reads "ChatGPT Account" with the account's email. Its editor shows the **Account**, where the sign-in stands on this device, **Continue with ChatGPT** to sign in again, **Sign Out** and **Manage Usage**. The name and models are edited like any provider's; **Fetch Models** lists the models the account may use.
-- To use another ChatGPT account or workspace, use **Continue with ChatGPT** next to **Add Provider** again: each account gets its own provider.
+- To use another ChatGPT account or workspace, use **Continue with ChatGPT** next to **Add Provider** again: each account gets its own provider. Signing in there with an account that has a provider already, such as one synced from another device, signs in to that provider.
 
 ## On several devices
 
