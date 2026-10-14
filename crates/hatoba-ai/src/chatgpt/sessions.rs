@@ -255,12 +255,15 @@ impl Sessions {
         if let Some(replaced) = replaced
             .filter(|r| !r.refresh_token.is_empty() && r.refresh_token != credentials.refresh_token)
         {
-            let (http, endpoints) = (self.0.http.clone(), self.0.endpoints.clone());
-            tokio::spawn(async move {
-                oauth::revoke(&http, &endpoints, &replaced, &CancellationToken::new()).await;
-            });
+            self.0.revoke_later(replaced);
         }
         Ok(())
+    }
+
+    /// Revokes the refresh token of a session this device no longer keeps, at OpenAI in the
+    /// background (retrying failures with backoff).
+    pub fn revoke_later(&self, credentials: Credentials) {
+        self.0.revoke_later(credentials);
     }
 
     /// Signs provider `id` out on this device: once any refresh in flight has ended, removes the
@@ -291,6 +294,13 @@ impl Sessions {
 }
 
 impl Inner {
+    fn revoke_later(&self, credentials: Credentials) {
+        let (http, endpoints) = (self.http.clone(), self.endpoints.clone());
+        tokio::spawn(async move {
+            oauth::revoke(&http, &endpoints, &credentials, &CancellationToken::new()).await;
+        });
+    }
+
     fn load(&self, id: &str) -> Result<Option<Credentials>, AiError> {
         if let Some(pending) = guard(&self.pending).get(id) {
             return Ok(Some(pending.next.clone()));
@@ -324,13 +334,7 @@ impl Inner {
                 }
             }
             // Signed out or signed in again meanwhile: the kept tokens are of no use.
-            Ok(_) => {
-                let (http, endpoints) = (self.http.clone(), self.endpoints.clone());
-                tokio::spawn(async move {
-                    oauth::revoke(&http, &endpoints, &pending.next, &CancellationToken::new())
-                        .await;
-                });
-            }
+            Ok(_) => self.revoke_later(pending.next),
             Err(_) => {
                 guard(&self.pending).insert(id.to_owned(), pending);
             }

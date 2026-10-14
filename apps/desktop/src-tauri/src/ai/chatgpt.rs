@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::error::{AppError, AppResult};
-use crate::state::SharedVault;
+use crate::state::{AppState, SharedVault};
 
 /// This device's sessions and host id, as the vault keeps them (sealed, never synced).
 #[derive(Default, Serialize, Deserialize)]
@@ -60,6 +60,39 @@ pub fn status(v: &Vault, id: &str) -> SessionStatus {
     credentials(v, id).map_or(SessionStatus::SignedOut, |c| c.status())
 }
 
+/// The providers this device keeps a session of that no longer exist, such as one deleted on
+/// another device.
+fn orphaned(v: &Vault) -> Vec<String> {
+    read(v).map_or_else(
+        |_| Vec::new(),
+        |s| {
+            s.sessions
+                .into_keys()
+                .filter(|id| !is_chatgpt_provider(v, id))
+                .collect()
+        },
+    )
+}
+
+/// Ends this device's sessions of providers that no longer exist, such as after sync pulled a
+/// deletion from another device: removes them and revokes them at OpenAI.
+pub fn end_orphaned(state: &AppState) {
+    let Ok(ids) = state.with_unlocked(|v| Ok(orphaned(v))) else {
+        return;
+    };
+    if ids.is_empty() {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        for id in ids {
+            let revoked = sessions()
+                .sign_out(&id, &tokio_util::sync::CancellationToken::new())
+                .await;
+            tracing::info!(revoked = ?revoked.ok(), "ChatGPT session of a deleted provider ended");
+        }
+    });
+}
+
 /// This device's `ext_agent_host_id`, made and kept the first time it is asked for.
 pub fn host_id(v: &mut Vault) -> AppResult<String> {
     let mut sessions = read(v)?;
@@ -70,10 +103,13 @@ pub fn host_id(v: &mut Vault) -> AppResult<String> {
     Ok(sessions.host_id)
 }
 
-/// The sessions in the app's vault. A session whose provider no longer exists is dropped when
-/// the sessions are next written.
+/// The sessions in the app's vault. A session whose provider no longer exists, such as one
+/// deleted on another device, is dropped when the sessions are next written, and revoked at
+/// OpenAI.
 struct VaultStore {
     vault: RwLock<Weak<Mutex<Vault>>>,
+    /// Ends a session the store dropped.
+    revoke: Box<dyn Fn(Credentials) + Send + Sync>,
 }
 
 impl VaultStore {
@@ -105,25 +141,37 @@ impl CredentialStore for VaultStore {
         let Some(vault) = self.vault() else {
             return Err(locked());
         };
-        let mut v = vault.lock().unwrap_or_else(PoisonError::into_inner);
-        if !v.is_unlocked() {
-            return Err(locked());
-        }
-        let mut sessions = read(&v).map_err(|_| locked())?;
-        sessions
-            .sessions
-            .retain(|id, _| is_chatgpt_provider(&v, id));
-        match credentials {
-            // A provider deleted meanwhile gets no session.
-            Some(credentials) if is_chatgpt_provider(&v, id) => {
-                sessions.sessions.insert(id.to_owned(), credentials.clone());
+        let mut dropped = Vec::new();
+        {
+            let mut v = vault.lock().unwrap_or_else(PoisonError::into_inner);
+            if !v.is_unlocked() {
+                return Err(locked());
             }
-            Some(_) => {}
-            None => {
-                sessions.sessions.remove(id);
+            let mut sessions = read(&v).map_err(|_| locked())?;
+            sessions.sessions.retain(|key, session| {
+                let keep = is_chatgpt_provider(&v, key);
+                // A session removed here is revoked by the caller.
+                if !keep && (credentials.is_some() || key != id) {
+                    dropped.push(session.clone());
+                }
+                keep
+            });
+            match credentials {
+                // A provider deleted meanwhile gets no session.
+                Some(credentials) if is_chatgpt_provider(&v, id) => {
+                    sessions.sessions.insert(id.to_owned(), credentials.clone());
+                }
+                Some(credentials) => dropped.push(credentials.clone()),
+                None => {
+                    sessions.sessions.remove(id);
+                }
             }
+            write(&mut v, &sessions).map_err(|_| locked())?;
         }
-        write(&mut v, &sessions).map_err(|_| locked())
+        for session in dropped {
+            (self.revoke)(session);
+        }
+        Ok(())
     }
 }
 
@@ -140,6 +188,7 @@ fn store() -> &'static Arc<VaultStore> {
     STORE.get_or_init(|| {
         Arc::new(VaultStore {
             vault: RwLock::new(Weak::new()),
+            revoke: Box::new(|session| sessions().revoke_later(session)),
         })
     })
 }
@@ -261,8 +310,13 @@ mod tests {
     #[test]
     fn sessions_live_in_the_vault_for_providers_that_exist() {
         let shared: SharedVault = Arc::new(Mutex::new(vault()));
+        let revoked = Arc::new(Mutex::new(0));
         let store = VaultStore {
             vault: RwLock::new(Arc::downgrade(&shared)),
+            revoke: Box::new({
+                let revoked = Arc::clone(&revoked);
+                move |_| *revoked.lock().unwrap() += 1
+            }),
         };
         let id = shared
             .lock()
@@ -276,9 +330,10 @@ mod tests {
             status(&shared.lock().unwrap(), &id),
             SessionStatus::SignedIn
         );
-        // Nothing for a provider that does not exist.
+        // Nothing for a provider that does not exist: the session is revoked instead.
         store.store("gone", Some(&signed_in())).unwrap();
         assert_eq!(store.load("gone").unwrap(), None);
+        assert_eq!(*revoked.lock().unwrap(), 1);
 
         // The host id is made once and kept, also across a sign-out.
         let host = host_id(&mut shared.lock().unwrap()).unwrap();
@@ -289,10 +344,14 @@ mod tests {
             status(&shared.lock().unwrap(), &id),
             SessionStatus::SignedOut
         );
+        // The sign-out revokes the session it removes itself.
+        assert_eq!(*revoked.lock().unwrap(), 1);
 
-        // A deleted provider's session goes with the next write.
+        // A deleted provider's session, such as one deleted on another device, goes with the
+        // next write and is revoked.
         store.store(&id, Some(&signed_in())).unwrap();
         shared.lock().unwrap().delete(&id).unwrap();
+        assert_eq!(orphaned(&shared.lock().unwrap()), vec![id.clone()]);
         let other = shared
             .lock()
             .unwrap()
@@ -300,6 +359,8 @@ mod tests {
             .unwrap();
         store.store(&other, Some(&signed_in())).unwrap();
         assert_eq!(read(&shared.lock().unwrap()).unwrap().sessions.len(), 1);
+        assert_eq!(*revoked.lock().unwrap(), 2);
+        assert!(orphaned(&shared.lock().unwrap()).is_empty());
 
         // Locked: nothing is read or written.
         shared.lock().unwrap().lock();

@@ -449,7 +449,7 @@ pub async fn ai_chatgpt_sign_in(
             AppError::from(e)
         })?;
     let first_sign_in = provider_id.is_none();
-    let id = state.with_unlocked(|v| {
+    let stored = state.with_unlocked(|v| {
         let account = chatgpt::account_of(&credentials);
         match &provider_id {
             Some(id) => {
@@ -471,8 +471,17 @@ pub async fn ai_chatgpt_sign_in(
                 }),
             )?),
         }
-    })?;
-    sessions.signed_in(&id, &credentials).await?;
+    });
+    let stored = match stored {
+        Ok(id) => match sessions.signed_in(&id, &credentials).await {
+            Ok(()) => Ok(id),
+            Err(e) => Err(e.into()),
+        },
+        Err(e) => Err(e),
+    };
+    // A session this device cannot keep, for example because the vault locked meanwhile, is
+    // ended at OpenAI.
+    let id = stored.inspect_err(|_| sessions.revoke_later(credentials.clone()))?;
     // A provider without models, such as a new one or one whose earlier sign-in did not allow
     // plan use, gets the account's models.
     let config = state.with_unlocked(|v| {

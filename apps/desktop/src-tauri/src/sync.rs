@@ -564,6 +564,10 @@ pub async fn run_round(app: &AppHandle) -> AppResult<()> {
             });
             if current {
                 adopt_legacy_prefs(app);
+                // AI-52: a ChatGPT provider deleted on another device ends its session here.
+                if report.pulled > 0 {
+                    crate::ai::chatgpt::end_orphaned(&st);
+                }
             }
             Ok(())
         }

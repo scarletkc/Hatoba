@@ -29,7 +29,7 @@ The provider and its account sync; the sign-in does not. Each device keeps its o
 
 ## Signing out
 
-**Sign Out** ends the sign-in on this device and asks OpenAI to end the session; deleting the provider does the same. The provider keeps its account for the next sign-in. To stop Hatoba from using the plan on every device, disconnect Hatoba in ChatGPT's settings.
+**Sign Out** ends the sign-in on this device and asks OpenAI to end the session; deleting the provider does the same, on every device signed in to it once the deletion syncs there. The provider keeps its account for the next sign-in. To stop Hatoba from using the plan on every device, disconnect Hatoba in ChatGPT's settings.
 
 ## Problems
 
