@@ -15,7 +15,7 @@ export const DOC_GROUPS: { title: string; slugs: string[] }[] = [
   { title: "Sync", slugs: ["sync", "sync-worker"] },
   {
     title: "AI assistant",
-    slugs: ["ai-panel", "ai-tools", "ai-file-changes", "ai-attachments", "ai-history", "ai-side-questions", "ai-models", "ai-settings", "ai-instructions", "ai-mcp"],
+    slugs: ["ai-panel", "ai-tools", "ai-file-changes", "ai-attachments", "ai-history", "ai-side-questions", "ai-models", "ai-settings", "ai-chatgpt", "ai-instructions", "ai-mcp"],
   },
   { title: "Troubleshooting", slugs: ["troubleshooting", "troubleshooting-connections", "troubleshooting-sync", "troubleshooting-ai"] },
 ];
