@@ -701,6 +701,8 @@ export function createMockApi(): HatobaApi {
     ssh_write: async (sid, data) => {
       shells.get(sid)?.input(data);
     },
+    // The sample shell never turns on mouse reporting, so no binary input reaches it.
+    ssh_write_bytes: async () => {},
     ssh_resize: async () => {},
     ssh_disconnect: async (sid) => {
       shells.get(sid)?.stop();

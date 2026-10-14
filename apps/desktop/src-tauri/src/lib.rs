@@ -91,6 +91,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             quick::recent_targets_list,
             quick::recent_target_remove,
             ssh_cmd::ssh_write,
+            ssh_cmd::ssh_write_bytes,
             ssh_cmd::ssh_resize,
             ssh_cmd::ssh_disconnect,
             ssh_cmd::ssh_stats_start,

@@ -333,12 +333,28 @@ pub async fn ssh_write(
     session_id: String,
     data: String,
 ) -> AppResult<()> {
+    write_shell(&state, &session_id, data.into_bytes()).await
+}
+
+/// Writes bytes to the shell as they are. xterm sends legacy mouse reports as binary, one byte per
+/// character, and their coordinates go above 0x7F, which `ssh_write`'s UTF-8 would re-encode.
+#[tauri::command]
+#[specta::specta]
+pub async fn ssh_write_bytes(
+    state: State<'_, AppState>,
+    session_id: String,
+    data: Vec<u8>,
+) -> AppResult<()> {
+    write_shell(&state, &session_id, data).await
+}
+
+async fn write_shell(state: &AppState, session_id: &str, data: Vec<u8>) -> AppResult<()> {
     // SEC-03: sessions stay connected behind the lock screen, but take no input until unlocked.
     if !state.vault().is_unlocked() {
         return Err(AppError::locked());
     }
-    let live = state.ssh.get(&session_id)?;
-    live.shell.write(data.into_bytes()).await?;
+    let live = state.ssh.get(session_id)?;
+    live.shell.write(data).await?;
     Ok(())
 }
 

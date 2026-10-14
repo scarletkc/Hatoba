@@ -137,6 +137,11 @@ export const commands = {
 	/**  Forgets one recent target and returns what is left. */
 	recentTargetRemove: (target: QuickTarget) => __TAURI_INVOKE<QuickTarget[]>("recent_target_remove", { target }),
 	sshWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("ssh_write", { sessionId, data }),
+	/**
+	 *  Writes bytes to the shell as they are. xterm sends legacy mouse reports as binary, one byte per
+	 *  character, and their coordinates go above 0x7F, which `ssh_write`'s UTF-8 would re-encode.
+	 */
+	sshWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("ssh_write_bytes", { sessionId, data }),
 	sshResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("ssh_resize", { sessionId, cols, rows }),
 	sshDisconnect: (sessionId: string) => __TAURI_INVOKE<null>("ssh_disconnect", { sessionId }),
 	/**

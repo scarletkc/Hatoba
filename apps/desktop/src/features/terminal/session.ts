@@ -133,6 +133,7 @@ export class LiveSession {
     );
     this.term.attachCustomKeyEventHandler(this.handleKey);
     this.term.onData((data) => this.write(data));
+    this.term.onBinary((data) => this.writeBinary(data));
     this.term.onResize(() => this.sendResize());
   }
 
@@ -466,6 +467,17 @@ export class LiveSession {
   private write(data: string) {
     const sid = this.sessionId;
     if (sid && this.status === "connected") void api.ssh_write(sid, data).catch(() => {});
+  }
+
+  /**
+   * xterm's binary input: legacy mouse reports, one character per byte. Their coordinates go above
+   * 0x7F, so they are sent as bytes rather than as text, which would be UTF-8 encoded.
+   */
+  private writeBinary(data: string) {
+    const sid = this.sessionId;
+    if (!sid || this.status !== "connected") return;
+    const bytes = Array.from({ length: data.length }, (_, i) => data.charCodeAt(i) & 0xff);
+    void api.ssh_write_bytes(sid, bytes).catch(() => {});
   }
 
   /** Types `data` into the shell through the same path as the keyboard (AI-13). Rejects when not connected. */

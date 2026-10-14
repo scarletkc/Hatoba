@@ -192,6 +192,8 @@ export interface HatobaApi {
   /** Forgets a recent target; resolves to what is left. */
   recent_target_remove(target: QuickTarget): Promise<QuickTarget[]>;
   ssh_write(session_id: string, data: string): Promise<void>;
+  /** Bytes written as they are, for the legacy mouse reports xterm sends as binary. */
+  ssh_write_bytes(session_id: string, data: number[]): Promise<void>;
   ssh_resize(session_id: string, cols: number, rows: number): Promise<void>;
   ssh_disconnect(session_id: string): Promise<void>;
   /**
