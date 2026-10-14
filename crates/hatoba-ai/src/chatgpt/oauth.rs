@@ -303,28 +303,24 @@ impl SignIn {
             Err(failure) => return Err(failure.into_error("the sign-in")),
         };
         let tokens = TokenResponse::parse(&body)?;
-        let id_token = tokens.id_token.clone().ok_or_else(|| {
-            AiError::SignIn("ChatGPT's answer to the sign-in has no ID token.".into())
-        })?;
-        let jwks = get_json(http, &self.endpoints.jwks, cancel).await?;
-        let claims = verify_id_token(
-            &id_token,
-            &jwks,
-            &self.endpoints.issuer,
-            &client_id,
-            &self.nonce,
-            now_ms() / 1000,
-        )?;
-        if let Some(account) = &self.account
-            && !account.subject.is_empty()
-            && account.subject != claims.subject
-        {
-            return Err(AiError::SignIn(
-                "You signed in with another ChatGPT account than this provider's. Sign in with \
-                 the same account, or add a provider for the other one."
-                    .into(),
-            ));
-        }
+        let claims = match self.verify(http, &tokens, &client_id, cancel).await {
+            Ok(claims) => claims,
+            Err(err) => {
+                // The tokens were issued but are not kept: end them at OpenAI.
+                if let Some(refresh_token) = tokens.refresh_token {
+                    let issued = Credentials {
+                        client_id,
+                        refresh_token,
+                        ..Credentials::default()
+                    };
+                    let (http, endpoints) = (http.clone(), self.endpoints.clone());
+                    tokio::spawn(async move {
+                        revoke(&http, &endpoints, &issued, &CancellationToken::new()).await;
+                    });
+                }
+                return Err(err);
+            }
+        };
         if tokens.refresh_token.is_none() {
             return Err(AiError::SignIn(
                 "ChatGPT's answer to the sign-in has no refresh token.".into(),
@@ -340,6 +336,40 @@ impl SignIn {
             },
             now,
         ))
+    }
+
+    /// Checks the ID token of the code exchange's answer, and that it names the provider's
+    /// account on a sign-in again.
+    async fn verify(
+        &self,
+        http: &reqwest::Client,
+        tokens: &TokenResponse,
+        client_id: &str,
+        cancel: &CancellationToken,
+    ) -> Result<IdClaims, AiError> {
+        let id_token = tokens.id_token.as_ref().ok_or_else(|| {
+            AiError::SignIn("ChatGPT's answer to the sign-in has no ID token.".into())
+        })?;
+        let jwks = get_json(http, &self.endpoints.jwks, cancel).await?;
+        let claims = verify_id_token(
+            id_token,
+            &jwks,
+            &self.endpoints.issuer,
+            client_id,
+            &self.nonce,
+            now_ms() / 1000,
+        )?;
+        if let Some(account) = &self.account
+            && !account.subject.is_empty()
+            && account.subject != claims.subject
+        {
+            return Err(AiError::SignIn(
+                "You signed in with another ChatGPT account than this provider's. Sign in with \
+                 the same account, or add a provider for the other one."
+                    .into(),
+            ));
+        }
+        Ok(claims)
     }
 
     /// Accepts connections until one carries this sign-in's callback.

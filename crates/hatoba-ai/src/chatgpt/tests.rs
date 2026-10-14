@@ -458,6 +458,20 @@ async fn signing_in_again_reuses_the_client_and_refuses_another_account() {
         matches!(&err, AiError::SignIn(m) if m.contains("another ChatGPT account")),
         "{err:?}"
     );
+    // The tokens issued for that account are not kept, so they are revoked.
+    let revoked = || async {
+        server.received_requests().await.unwrap().iter().any(|r| {
+            r.url.path() == "/api/accounts/oauth/revoke"
+                && String::from_utf8_lossy(&r.body).contains("token=refresh-1")
+        })
+    };
+    for _ in 0..100 {
+        if revoked().await {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(revoked().await);
 
     // A callback for another registration is refused before any exchange.
     let sign_in = SignIn::start(&endpoints, &request).await.unwrap();
