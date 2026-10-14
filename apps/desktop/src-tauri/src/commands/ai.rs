@@ -490,7 +490,8 @@ pub async fn ai_chatgpt_sign_in(
             .then(|| crate::ai::provider_config(&id, &provider)))
     })?;
     if let Some(config) = config {
-        match hatoba_ai::models::list_models(&state.ai.http(), &config, &cancel).await {
+        // The sign-in is done, so Cancel no longer stops it; a lock still does.
+        match hatoba_ai::models::list_models(&state.ai.http(), &config, op.token()).await {
             Ok(models) => {
                 state.with_unlocked(|v| {
                     let mut provider = find_provider(v, &id)?;

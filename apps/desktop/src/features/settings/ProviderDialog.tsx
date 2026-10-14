@@ -218,13 +218,14 @@ export function ProviderDialog({
     signingInRef.current = true;
     try {
       const result = await api.ai_chatgpt_sign_in(provider.id);
+      // A provider without models gets the account's models with the sign-in. The pane learns of
+      // the sign-in also when the editor closed after the browser came back.
+      const models = provider.models.length ? provider.models : result.provider.models;
+      onSaved({ ...result.provider, name: provider.name, models });
       if (!live.current) return;
       setAccount(result.provider.chatgpt ?? null);
       setTest(IDLE);
-      // A provider without models gets the account's models with the sign-in.
-      const models = provider.models.length ? provider.models : result.provider.models;
       if (models !== provider.models) setForm((f) => ({ ...f, models: addModels(f.models, models) }));
-      onSaved({ ...result.provider, name: provider.name, models });
       toast(
         result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.status.plan_disabled") : t("aiSettings.chatgpt.signedIn"),
         result.provider.chatgpt?.status === "plan_disabled" ? "error" : "success",

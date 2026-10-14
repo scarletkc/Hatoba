@@ -43,13 +43,15 @@ export function ChatgptSignInDialog({ onDone, onClose }: { onDone: (provider: Ai
   close.current = onClose;
 
   useEffect(() => {
-    // Per run: a sign-in that a newer one replaced (StrictMode runs the effect twice) settles unseen.
+    // Per run: a sign-in that a newer one replaced (StrictMode runs the effect twice) settles unseen,
+    // apart from a provider it added.
     let live = true;
     void (async () => {
       try {
         const result = await api.ai_chatgpt_sign_in(null);
-        if (!live) return;
+        // The provider exists now, also when the dialog closed first (Cancel after the browser came back).
         done.current(result.provider);
+        if (!live) return;
         if (result.provider.chatgpt?.status === "plan_disabled") {
           toast(t("aiSettings.chatgpt.status.plan_disabled"), "error", 6000);
           close.current();
