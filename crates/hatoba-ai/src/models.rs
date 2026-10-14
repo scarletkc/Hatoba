@@ -168,10 +168,10 @@ fn anthropic_model(item: &Value) -> Option<ModelInfo> {
 }
 
 /// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions and
-/// Responses, `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`,
-/// or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System One, next to
-/// the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped; the
-/// provider's order is kept.
+/// Responses, `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with
+/// `after_id`, or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System
+/// One, next to the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped;
+/// the provider's order is kept.
 ///
 /// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
 /// is dropped, so a lock does not leave the key in use).

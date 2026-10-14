@@ -19,8 +19,8 @@
 //!   answer between 0 and 1, or the response is malformed ([`AiError::Protocol`]).
 //! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`],
 //!   [`Protocol::Responses`]) emulates it with one non-streaming request that forces a single
-//!   tool, `answer` (a Responses request is stateless, `store: false`). Its input schema has a short
-//!   `notes` string first, written before the answers, then a number per question. The system
+//!   tool, `answer` (a Responses request is stateless, `store: false`). Its input schema has a
+//!   short `notes` string first, written before the answers, then a number per question. The system
 //!   prompt says how to answer and that text in the state that is not the user's own words is
 //!   data, never instructions; the user message holds the state as JSON in `<state>` tags and the
 //!   questions after it. Given a key of the state to cache before, an Anthropic request splits
