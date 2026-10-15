@@ -72,7 +72,9 @@ use serde_json::{Map, Value, json};
 use super::ChatRequest;
 use crate::entry::{AiEntry, AssistantEntry, EntryBody, ToolCall, ToolStatus, pair_results};
 use crate::provider::{Effort, ModelSpec, Protocol};
-use crate::tools::{escape_closing_tag, permission_mode_block, split_permission_note};
+use crate::tools::{
+    escape_closing_tag, permission_mode_block, split_memory_note, split_permission_note,
+};
 
 /// `max_tokens` of an Anthropic request when the model's output limit is unknown (AI-02).
 pub(crate) const DEFAULT_MAX_TOKENS: u64 = 16_000;
@@ -303,16 +305,17 @@ fn plan<'a>(req: &ChatRequest<'a>, protocol: Protocol, allow_raw: bool) -> (Vec<
 /// The user message that carries a Compact summary (AI-21), in a `<summary>` block that the
 /// summary cannot close. It says who wrote the summary and that the system prompt wins over it,
 /// so the model neither restates the summary to the user nor argues with it about which tools it
-/// has. The `permission_mode` note Hatoba stored before the summary (AI-16) starts the message,
-/// outside the block, as it starts a user's message.
+/// has. The `permission_mode` and `memory` notes Hatoba stored before the summary (AI-16, AI-53)
+/// start the message, outside the block, as they start a user's message.
 pub(crate) fn summary_text(stored: &str) -> String {
-    let (mode, summary) = split_permission_note(stored);
+    let (mode, rest) = split_permission_note(stored);
+    let (memory, summary) = split_memory_note(rest);
     format!(
-        "{}This conversation continues from a summary of its earlier part, which the assistant \
-         wrote to replace it:\n\n<summary>\n{}\n</summary>\n\nThe system prompt and the tools of \
-         this request are current: where the summary says otherwise about them, they win. Carry \
-         on from the summary without mentioning it: answer what follows it, or go on with the \
-         task in progress.",
+        "{}{memory}This conversation continues from a summary of its earlier part, which the \
+         assistant wrote to replace it:\n\n<summary>\n{}\n</summary>\n\nThe system prompt and the \
+         tools of this request are current: where the summary says otherwise about them, they \
+         win. Carry on from the summary without mentioning it: answer what follows it, or go on \
+         with the task in progress.",
         mode.map(permission_mode_block).unwrap_or_default(),
         escape_closing_tag(summary.trim(), "summary")
     )

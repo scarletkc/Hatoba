@@ -1882,6 +1882,20 @@ async fn memories_start_the_first_message_and_each_summary() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
     assert_eq!(f.user_texts(&conv)[1], "next question");
+    // The notes start the message that carries the summary, outside its block.
+    let requests = f.requests().await;
+    let continued = messages(requests.last().unwrap())
+        .iter()
+        .find_map(|m| {
+            m["content"]
+                .as_str()
+                .filter(|c| c.contains("This conversation continues"))
+        })
+        .unwrap();
+    assert!(
+        continued.starts_with(&manual(&format!("{after}This conversation continues"))),
+        "{continued}"
+    );
     let hits = super::search(&f.vault, "Chinese").unwrap();
     assert!(hits.is_empty(), "{hits:?}");
 }

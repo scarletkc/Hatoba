@@ -1043,6 +1043,23 @@ pub fn split_permission_note(text: &str) -> (Option<PermissionMode>, &str) {
     (None, text)
 }
 
+/// A summary's text after its `permission_mode` note split into the `memory` note (AI-53) Hatoba
+/// stores there, with its blank line, and the summary itself. The note is empty when there is
+/// none. Its body escapes its closing tag, so the first closing tag that a blank line follows ends
+/// it.
+#[must_use]
+pub fn split_memory_note(text: &str) -> (&str, &str) {
+    const CLOSE: &str = "\n</memory>\n\n";
+    let opened = text
+        .strip_prefix("<memory entries=\"")
+        .and_then(|rest| rest.split_once("\">\n"))
+        .is_some_and(|(count, _)| !count.is_empty() && count.bytes().all(|b| b.is_ascii_digit()));
+    match text.find(CLOSE).filter(|_| opened) {
+        Some(at) => text.split_at(at + CLOSE.len()),
+        None => ("", text),
+    }
+}
+
 /// Longest screen a `terminal_state` note shows, in characters. A longer one keeps its first
 /// quarter and the rest from its end, as a long tool result does.
 pub const MAX_SCREEN_CHARS: usize = 4_000;
