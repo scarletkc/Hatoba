@@ -736,7 +736,8 @@ export type ItemType =
   | "ai_message"
   | "skill"
   | "skill_file"
-  | "mcp_server";
+  | "mcp_server"
+  | "ai_memory";
 
 export interface ConflictView {
   id: number;
@@ -1024,6 +1025,8 @@ export interface AiSettingsView {
   send_terminal_screen: boolean;
   /** The judge of Auto mode (AI-47); Auto is unavailable while it is null. */
   judge_model: AiModelRef | null;
+  /** Conversations start with the memories, and the assistant saves them (AI-53). */
+  memory: boolean;
 }
 
 /** What `ai_settings_save` changes, like {@link SettingsPatch}; null clears a field that can be empty. */
@@ -1346,6 +1349,23 @@ export type AiFileRevert =
 export interface AiToolRun {
   entry: AiEntryView;
   dropped_file_changes: boolean;
+}
+
+// ───────────────────────── AI assistant: memory (§13.12) ─────────────────────────
+
+/** A memory the assistant keeps across conversations (AI-53). */
+export interface AiMemoryView {
+  id: string;
+  name: string;
+  content: string;
+  updated_at: number;
+}
+
+/** A memory saved in Settings → AI; a null `id` adds one. */
+export interface AiMemoryInput {
+  id: string | null;
+  name: string;
+  content: string;
 }
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────

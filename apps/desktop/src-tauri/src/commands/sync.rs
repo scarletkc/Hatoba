@@ -401,6 +401,7 @@ pub(crate) fn item_type(item: Option<&Item>) -> ItemType {
         Some(Item::Skill(_)) => ItemType::Skill,
         Some(Item::SkillFile(_)) => ItemType::SkillFile,
         Some(Item::McpServer(_)) => ItemType::McpServer,
+        Some(Item::AiMemory(_)) => ItemType::AiMemory,
         Some(Item::Settings(_)) => ItemType::Settings,
     }
 }
@@ -478,6 +479,7 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("transport", m.transport.kind_str().to_owned()),
             ("always_ask", m.always_ask.to_string()),
         ],
+        Item::AiMemory(m) => vec![("name", m.name.clone()), ("content", m.content.clone())],
         Item::Settings(_) => vec![],
     }
 }

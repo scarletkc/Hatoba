@@ -238,6 +238,11 @@ export function createTauriApi(): HatobaApi {
     ai_allowance_add: (allowance) => commands.aiAllowanceAdd(allowance),
     ai_allowance_remove: (allowance) => commands.aiAllowanceRemove(allowance),
 
+    ai_memories_list: () => commands.aiMemoriesList(),
+    ai_memory_save: (input) => commands.aiMemorySave(input),
+    ai_memory_delete: (id) => done(commands.aiMemoryDelete(id)),
+    ai_memories_delete_all: () => done(commands.aiMemoriesDeleteAll()),
+
     skills_list: () => commands.skillsList(),
     skill_get: (id) => commands.skillGet(id),
     skill_builtin_get: () => commands.skillBuiltinGet(),

@@ -22,6 +22,7 @@ import { defaultRightClick, defaultTerminalFont } from "@/lib/platform";
 import { FRAME_CLOSED, FRAME_DATA, FRAME_SESSION } from "../types";
 import { createAiMock } from "./ai";
 import { createAiExtensionsMock } from "./aiExtensions";
+import { createAiMemoryMock } from "./aiMemory";
 import { createAiSettingsMock } from "./aiSettings";
 import { createDashboardMock } from "./dashboard";
 import * as D from "./data";
@@ -235,9 +236,11 @@ export function createMockApi(): HatobaApi {
     version,
     builtinEnabled: async () => (await aiSettings.ai_settings_get()).builtin_skill_enabled,
   });
+  const { memory_tool, ...aiMemory } = createAiMemoryMock();
   return {
     ...aiSettings,
     ...aiExtensions,
+    ...aiMemory,
     ...createAiMock({
       providers: aiSettings.ai_providers_list,
       settings: aiSettings.ai_settings_get,
@@ -247,6 +250,7 @@ export function createMockApi(): HatobaApi {
         return shell?.host ? formatTarget(shell.host) : shell ? "local" : null;
       },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
+      memory: memory_tool,
     }),
     app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC" }),
     launch_take: async () => {

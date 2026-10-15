@@ -167,6 +167,7 @@ fn ai_settings_view(s: &AiSettings) -> AiSettingsView {
         custom_instructions: s.custom_instructions.clone(),
         send_terminal_screen: s.send_terminal_screen,
         judge_model: s.judge_model.as_ref().map(model_ref_view),
+        memory: s.memory,
     }
 }
 
@@ -887,6 +888,7 @@ pub(crate) fn save_ai_settings(v: &mut Vault, patch: &AiSettingsPatch) -> AppRes
             .send_terminal_screen
             .unwrap_or(current.send_terminal_screen),
         judge_model,
+        memory: patch.memory.unwrap_or(current.memory),
     };
     if ai == settings.ai {
         return Ok(false);
@@ -1691,6 +1693,13 @@ mod tests {
         assert!(!ai_settings_view(&v.settings().ai).send_terminal_screen);
         assert!(!v.settings().ai.builtin_skill_enabled);
 
+        // AI-53: and so is memory, on until turned off.
+        assert!(ai_settings_view(&v.settings().ai).memory);
+        let forgetful = patch(|p| p.memory = Some(false));
+        save_ai_settings(&mut v, &forgetful).unwrap();
+        assert!(!ai_settings_view(&v.settings().ai).memory);
+        assert!(!v.settings().ai.send_terminal_screen);
+
         // AI-14: and so is native search, on until turned off.
         assert!(ai_settings_view(&v.settings().ai).native_search);
         let no_search = patch(|p| p.native_search = Some(false));
@@ -1806,6 +1815,7 @@ mod tests {
         pulled.ai.custom_instructions = "Answer in Japanese.".into();
         pulled.ai.builtin_skill_enabled = false;
         pulled.ai.send_terminal_screen = false;
+        pulled.ai.memory = false;
         // AI-47: a judge chosen on another device, which the pane's patch leaves out.
         pulled.ai.judge_model = Some(CoreRef {
             provider_id: "elsewhere".into(),
@@ -1821,7 +1831,7 @@ mod tests {
         let ai = v.settings().ai;
         assert_eq!(ai.default_effort, Some(CoreEffort::Low));
         assert_eq!(ai.custom_instructions, "Answer in Japanese.");
-        assert!(!ai.builtin_skill_enabled && !ai.send_terminal_screen);
+        assert!(!ai.builtin_skill_enabled && !ai.send_terminal_screen && !ai.memory);
         assert_eq!(ai.default_model.map(|m| m.model_id), Some("m1".into()));
         assert_eq!(
             ai.judge_model.map(|m| m.model_id),
@@ -1842,6 +1852,7 @@ mod tests {
             p.builtin_skill_enabled = Some(shown.builtin_skill_enabled);
             p.custom_instructions = Some(shown.custom_instructions.clone());
             p.send_terminal_screen = Some(shown.send_terminal_screen);
+            p.memory = Some(shown.memory);
         });
         assert!(!save_ai_settings(&mut v, &same).unwrap());
         assert!(!save_ai_settings(&mut v, &AiSettingsPatch::default()).unwrap());

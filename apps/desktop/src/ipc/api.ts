@@ -17,6 +17,8 @@ import type {
   AiProviderView,
   AiSendInput,
   AiSendStarted,
+  AiMemoryInput,
+  AiMemoryView,
   AiSettingsPatch,
   AiSettingsView,
   AiSideAnswer,
@@ -432,6 +434,14 @@ export interface HatobaApi {
   ai_allowance_add(allowance: AiAllowance): Promise<AiAllowance[]>;
   /** AI-19: removes a saved approval; resolves to what is left. */
   ai_allowance_remove(allowance: AiAllowance): Promise<AiAllowance[]>;
+
+  // AI memory (§13.12)
+  /** AI-53: every memory, oldest first. */
+  ai_memories_list(): Promise<AiMemoryView[]>;
+  /** Rejects with `invalid_input` when the name is empty, too long or taken, the text is empty, or memory is full. */
+  ai_memory_save(input: AiMemoryInput): Promise<AiMemoryView>;
+  ai_memory_delete(id: string): Promise<void>;
+  ai_memories_delete_all(): Promise<void>;
 
   // AI skills (§13.8)
   skills_list(): Promise<SkillView[]>;

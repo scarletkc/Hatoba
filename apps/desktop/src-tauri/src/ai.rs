@@ -53,9 +53,9 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, CommandStop, FetchUrlArgs, LocalPrompt, PermissionMode, PromptContext, PromptModel,
-    PromptTools, ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolPlace, ToolSet, WebSearchArgs,
-    escape_closing_tag,
+    self, CommandStop, FetchUrlArgs, LocalPrompt, MemoryArgs, PermissionMode, PromptContext,
+    PromptModel, PromptTools, ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolPlace, ToolSet,
+    WebSearchArgs, escape_closing_tag,
 };
 use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
@@ -3334,13 +3334,15 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
 /// a summary, so the summary starts with the `permission_mode` note (AI-16) of the mode the model
 /// was told of, which the request puts before the summary's block: the mode stays that one, also
 /// for the rest of a turn compacted between tool calls (AI-22). A conversation whose messages never
-/// named one gets no note, and its next message names the mode.
+/// named one gets no note, and its next message names the mode. The `memory` note (AI-53) follows
+/// it, with the memories as they are now.
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
     let noted = noted_permission(&Entries::load(v, conversation_id)?.list);
     let text = format!(
-        "{}{summary}",
-        noted.map(tools::permission_mode_block).unwrap_or_default()
+        "{}{}{summary}",
+        noted.map(tools::permission_mode_block).unwrap_or_default(),
+        memory::note(v)
     );
     let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
@@ -4085,6 +4087,7 @@ fn prompt(
         ),
         host_notes: host.map_or("", |h| bytes_prefix(&h.ai_notes, MAX_HOST_AI_NOTES_BYTES)),
         skills: &skills,
+        memory: settings.ai.memory,
         tools: offered,
     });
     let defs = if fallback.is_none() {
@@ -4097,13 +4100,14 @@ fn prompt(
 
 /// The built-in tools of a request (§13.4): the terminal tools only with a connected tab (AI-09),
 /// `web_search` when a search provider is chosen or the model's provider has a search of its own
-/// (AI-14), `fetch_url` always, and `read_skill` when an enabled skill exists, the built-in one
-/// included (AI-34).
+/// (AI-14), `fetch_url` always, `read_skill` when an enabled skill exists, the built-in one
+/// included (AI-34), and `memory` while memory is on (AI-53).
 fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
     tools::builtin_tools(&ToolSet {
         terminal: context.tab,
         web_search: web_search_for(v, &context.provider_id, &context.model_id).is_some(),
         read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
+        memory: v.settings().ai.memory,
         place: tool_place(context),
     })
 }
@@ -4352,6 +4356,8 @@ enum Job {
     /// `search_tools` (AI-45), which [`AiManager::search_tools`] runs, since it reads the
     /// conversation's MCP tools.
     SearchTools(deferred::SearchArgs),
+    /// `memory` (AI-53), which writes to the vault.
+    Memory(MemoryArgs),
 }
 
 impl Job {
@@ -4424,6 +4430,10 @@ impl Job {
                 Ok(args) => Self::SearchTools(args),
                 Err(message) => Self::error(message),
             },
+            tools::MEMORY => match parse::<MemoryArgs>(arguments) {
+                Ok(args) => Self::Memory(args),
+                Err(message) => Self::error(message),
+            },
             tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
                 "{name} runs in the terminal tab and cannot run here."
             )),
@@ -4456,6 +4466,14 @@ impl Job {
             ),
             Self::NativeSearch(..) => (ToolStatus::Error, "web_search cannot run here.".to_owned()),
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
+            Self::Memory(args) => {
+                let mut v = lock(vault);
+                if v.is_unlocked() {
+                    memory::run(&mut v, &args)
+                } else {
+                    (ToolStatus::Error, "The vault is locked.".to_owned())
+                }
+            }
             Self::File(job, base) => {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
             }
@@ -4899,6 +4917,9 @@ const MCP_TOOLS: &str = deferred::LIST_TAG;
 /// The tag of the note Hatoba puts before a message sent with a connected terminal attached,
 /// which shows its screen (AI-46).
 const TERMINAL_STATE: &str = "terminal_state";
+/// The tag of the note Hatoba puts before a conversation's first message and in a summary, which
+/// shows the memories (AI-53).
+const MEMORY: &str = "memory";
 
 /// A kind of block a user entry may start with (spec §13.3, "Attachment blocks").
 struct AttachmentKind {
@@ -4974,6 +4995,13 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         title: |_| String::new(),
         placeholder: |_| String::new(),
         attributes: |attrs| matches!(attrs, [("mode", "manual" | "auto" | "bypass")]),
+    },
+    AttachmentKind {
+        tag: MEMORY,
+        note: true,
+        title: |_| String::new(),
+        placeholder: |_| String::new(),
+        attributes: |attrs| matches!(attrs, [("entries", entries)] if is_count(entries)),
     },
     AttachmentKind {
         tag: FILE_REVERT,
@@ -5654,6 +5682,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 ///   already, which got no reply (a failed request, say), is not noted again.
 /// - `permission_mode` (AI-16) before a conversation's first message, and when the conversation's
 ///   mode on this device is not the one the model was last told of ([`noted_permission`]).
+/// - `memory` (AI-53) before a conversation's first message, while memory is on and there are
+///   memories ([`memory::note`]); a summary starts with one too.
 /// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
 /// - `terminal_state` (AI-46), the screen of the attached terminal ([`screen_note`]), also before
 ///   a conversation's first message.
@@ -5673,9 +5703,9 @@ fn notes_before(
         tools::permission_mode_block(mode)
     };
     // A message with nothing before it has no earlier screens or replies to tell apart, but it can
-    // name its mode and show the screen now.
+    // name its mode, show the memories and show the screen now.
     if earlier.is_empty() {
-        return permission + &screen_note(context, host_now);
+        return permission + &memory::note(v) + &screen_note(context, host_now);
     }
     for entry in earlier.iter().rev() {
         match &entry.body {
@@ -6046,17 +6076,23 @@ pub fn search(vault: &SharedVault, query: &str) -> AppResult<Vec<AiSearchHit>> {
         let in_entries = entries.ids.iter().zip(&entries.list).find_map(|(id, e)| {
             let text = match &e.body {
                 // The screen a message showed is the host's text, not the conversation's (AI-46),
-                // and the permission mode note is Hatoba's (§13.5).
+                // and the permission mode and memory notes are Hatoba's (§13.5, AI-53).
                 EntryBody::User { text, .. } => {
                     let mut text = Cow::Borrowed(text.as_str());
-                    for tag in [PERMISSION_MODE, TERMINAL_STATE] {
+                    for tag in [PERMISSION_MODE, MEMORY, TERMINAL_STATE] {
                         if let Some(block) = note_block(&text, tag) {
                             text = Cow::Owned(text.replacen(block, "", 1));
                         }
                     }
                     text
                 }
-                EntryBody::Summary { text } => Cow::Borrowed(tools::split_permission_note(text).1),
+                EntryBody::Summary { text } => {
+                    let summary = tools::split_permission_note(text).1;
+                    match note_block(summary, MEMORY) {
+                        Some(block) => Cow::Borrowed(&summary[block.len()..]),
+                        None => Cow::Borrowed(summary),
+                    }
+                }
                 EntryBody::Assistant(a) => Cow::Borrowed(a.text.as_str()),
                 EntryBody::Tool { .. } => return None,
             };
@@ -6282,6 +6318,7 @@ pub fn error_kind(e: &AiError) -> &'static str {
 pub mod chatgpt;
 pub mod conn;
 mod files;
+pub mod memory;
 pub mod mentions;
 mod search;
 #[cfg(test)]

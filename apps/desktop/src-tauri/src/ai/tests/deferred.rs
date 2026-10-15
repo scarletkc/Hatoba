@@ -164,7 +164,7 @@ fn prefix(body: &Value) -> (String, String) {
     )
 }
 
-const BUILTIN: [&str; 10] = [
+const BUILTIN: [&str; 11] = [
     "read_terminal",
     "run_command",
     "send_input",
@@ -175,6 +175,7 @@ const BUILTIN: [&str; 10] = [
     "glob",
     "fetch_url",
     "read_skill",
+    "memory",
 ];
 
 fn deferred_tools() -> Vec<String> {

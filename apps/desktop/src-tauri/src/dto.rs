@@ -709,6 +709,7 @@ pub enum ItemType {
     Skill,
     SkillFile,
     McpServer,
+    AiMemory,
     Settings,
 }
 
@@ -1511,6 +1512,8 @@ pub struct AiSettingsView {
     /// The judge of Auto mode (AI-47): a model of a System One provider or of a provider that
     /// chats. Auto is unavailable until one is chosen.
     pub judge_model: Option<AiModelRef>,
+    /// Conversations start with the memories, and the assistant saves them (AI-53).
+    pub memory: bool,
 }
 
 /// What `ai_settings_save` changes in `Settings.ai`, like [`SettingsPatch`]: a field left out keeps
@@ -1531,6 +1534,7 @@ pub struct AiSettingsPatch {
     pub send_terminal_screen: Option<bool>,
     #[specta(type = Option<AiModelRef>)]
     pub judge_model: Clearable<AiModelRef>,
+    pub memory: Option<bool>,
 }
 
 /// A patch field that `null` clears.
@@ -2169,6 +2173,24 @@ pub struct SkillView {
     /// Paths of the files besides `SKILL.md`, sorted.
     pub files: Vec<String>,
     pub updated_at: i64,
+}
+
+/// A memory of the AI assistant (AI-53).
+#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
+pub struct AiMemoryView {
+    pub id: String,
+    pub name: String,
+    pub content: String,
+    pub updated_at: i64,
+}
+
+/// A memory to save from Settings → AI (AI-53).
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct AiMemoryInput {
+    /// `None` creates a memory.
+    pub id: Option<String>,
+    pub name: String,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

@@ -72,6 +72,8 @@ export interface AiMockDeps {
     start: HatobaApi["mcp_server_start"];
     toolInfo: HatobaApi["mcp_tool_info"];
   };
+  /** The memory mock's `memory` tool (AI-53). */
+  memory?: (action: string, name: string, content: string) => { status: "ok" | "error"; content: string };
 }
 
 type Assistant = Extract<AiEntryView, { role: "assistant" }>;
@@ -1356,6 +1358,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           status: "ok",
           content: `URL: ${String(args.url ?? "")} | Content type: text/html | ${args.full_page === true ? "Whole page" : "Main content"} | Characters 0-230 of 230\nTitle: Module ngx_http_upstream_module\n${args.full_page === true ? "" : "Navigation, sidebars and footers are left out. For the whole page, call fetch_url with full_page true.\n"}\n# Module ngx_http_upstream_module\n\nThe ngx_http_upstream_module module is used to define groups of servers that can be referenced by the proxy_pass directive.\n\n## keepalive\n\nActivates the cache for connections to upstream servers.`,
         };
+      case "memory":
+        await wait(150);
+        return deps.memory?.(String(args.action ?? ""), String(args.name ?? ""), String(args.content ?? "")) ?? { status: "error", content: "Memory is not available." };
       case "read_skill":
         await wait(200);
         if (args.name === "hatoba")

@@ -1,0 +1,324 @@
+//! The assistant's memories (AI-53, spec §13.12): `ai_memory` items, oldest first, which a
+//! conversation starts with in a `memory` note before its first message and before each summary,
+//! so the system prompt and the context before them stay the same. The `memory` tool and
+//! Settings → AI save and delete them under the same rules.
+//!
+//! Memories reach the model as context, so their text is never logged (SEC-04).
+
+use hatoba_ai::entry::ToolStatus;
+use hatoba_ai::tools::{self, MAX_MEMORY_BYTES, MAX_MEMORY_NAME_CHARS, MemoryAction, MemoryArgs};
+use hatoba_core::Vault;
+use hatoba_core::model::{AiMemory, Item};
+
+/// Why a memory was not saved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Refusal {
+    EmptyName,
+    LongName,
+    EmptyContent,
+    /// Another memory has the name: a rename in Settings → AI.
+    Taken,
+    /// With it, all memories would take this many bytes, over [`MAX_MEMORY_BYTES`].
+    Full(usize),
+}
+
+impl Refusal {
+    /// What the model reads, and what Settings → AI shows when its own checks let one through.
+    pub(crate) fn message(self) -> String {
+        match self {
+            Self::EmptyName => "The memory has no name.".to_owned(),
+            Self::LongName => {
+                format!("The name is longer than {MAX_MEMORY_NAME_CHARS} characters.")
+            }
+            Self::EmptyContent => "The memory is empty. To remove a memory, delete it.".to_owned(),
+            Self::Taken => "Another memory has this name.".to_owned(),
+            Self::Full(bytes) => format!(
+                "Memory is full: with this one, all memories would take {bytes} bytes, over \
+                 {MAX_MEMORY_BYTES}. Merge or delete memories, then save again."
+            ),
+        }
+    }
+}
+
+/// A name as it is stored: one line, control characters as spaces, trimmed.
+pub(crate) fn clean_name(name: &str) -> String {
+    let line: String = name
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
+    line.trim().to_owned()
+}
+
+/// A text as it is stored: line breaks as `\n`, trimmed.
+fn clean_content(content: &str) -> String {
+    content
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .trim()
+        .to_owned()
+}
+
+/// The memory named `name`, as [`clean_name`] stores it.
+fn find(v: &Vault, name: &str) -> Option<(String, AiMemory)> {
+    v.ai_memories().into_iter().find(|(_, m)| m.name == name)
+}
+
+/// Saves a memory: `id` replaces that one, `None` adds one. Name and text are cleaned first.
+///
+/// # Errors
+/// The [`Refusal`] when they break a rule; the vault's error when the vault cannot store it.
+pub(crate) fn save(
+    v: &mut Vault,
+    id: Option<&str>,
+    name: &str,
+    content: &str,
+) -> Result<Result<(String, AiMemory), Refusal>, hatoba_core::Error> {
+    let memory = AiMemory {
+        name: clean_name(name),
+        content: clean_content(content),
+        updated_at: 0,
+    };
+    if memory.name.is_empty() {
+        return Ok(Err(Refusal::EmptyName));
+    }
+    if memory.name.chars().count() > MAX_MEMORY_NAME_CHARS {
+        return Ok(Err(Refusal::LongName));
+    }
+    if memory.content.is_empty() {
+        return Ok(Err(Refusal::EmptyContent));
+    }
+    let others: Vec<AiMemory> = v
+        .ai_memories()
+        .into_iter()
+        .filter(|(other, _)| Some(other.as_str()) != id)
+        .map(|(_, m)| m)
+        .collect();
+    if others.iter().any(|m| m.name == memory.name) {
+        return Ok(Err(Refusal::Taken));
+    }
+    let bytes = others.iter().map(AiMemory::size).sum::<usize>() + memory.size();
+    if bytes > MAX_MEMORY_BYTES {
+        return Ok(Err(Refusal::Full(bytes)));
+    }
+    let id = v.put(id, Item::AiMemory(memory))?;
+    let stored = v
+        .get(&id)
+        .and_then(Item::as_ai_memory)
+        .cloned()
+        .unwrap_or_default();
+    Ok(Ok((id, stored)))
+}
+
+/// The `memory` note a conversation's first message and each summary start with: the memories,
+/// oldest first, as many as fit [`MAX_MEMORY_BYTES`] (memories saved on several devices at once
+/// can go past it). Empty while memory is off or there are none.
+pub(crate) fn note(v: &Vault) -> String {
+    if !v.settings().ai.memory {
+        return String::new();
+    }
+    let memories = v.ai_memories();
+    let mut used = 0;
+    let shown: Vec<(&str, &str)> = memories
+        .iter()
+        .map(|(_, m)| m)
+        .take_while(|m| {
+            used += m.size();
+            used <= MAX_MEMORY_BYTES
+        })
+        .map(|m| (m.name.as_str(), m.content.as_str()))
+        .collect();
+    tools::memory_block(&shown)
+}
+
+/// Runs a `memory` call. A call from a response made while memory was on runs nothing once it is
+/// off.
+pub(crate) fn run(v: &mut Vault, args: &MemoryArgs) -> (ToolStatus, String) {
+    if !v.settings().ai.memory {
+        return (
+            ToolStatus::Error,
+            "Memory is turned off in Hatoba's settings.".to_owned(),
+        );
+    }
+    let name = clean_name(&args.name);
+    let found = find(v, &name);
+    let outcome = match args.action {
+        MemoryAction::Save => save(
+            v,
+            found.as_ref().map(|(id, _)| id.as_str()),
+            &name,
+            args.content.as_deref().unwrap_or_default(),
+        )
+        .map(|saved| {
+            saved
+                .map(|(_, m)| format!("Saved the memory \"{}\".", m.name))
+                .map_err(Refusal::message)
+        }),
+        MemoryAction::Delete => match found {
+            Some((id, _)) => v
+                .delete(&id)
+                .map(|()| Ok(format!("Deleted the memory \"{name}\"."))),
+            None => {
+                let names: Vec<String> = v
+                    .ai_memories()
+                    .into_iter()
+                    .map(|(_, m)| format!("\"{}\"", m.name))
+                    .collect();
+                let list = if names.is_empty() {
+                    "none".to_owned()
+                } else {
+                    names.join(", ")
+                };
+                Ok(Err(format!(
+                    "There is no memory named \"{name}\". Memories: {list}."
+                )))
+            }
+        },
+    };
+    match outcome {
+        Ok(Ok(done)) => (ToolStatus::Ok, done),
+        Ok(Err(refused)) => (ToolStatus::Error, refused),
+        Err(e) => (
+            ToolStatus::Error,
+            format!("The memory could not be saved: {e}"),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hatoba_core::model::SETTINGS_ID;
+
+    use super::*;
+
+    fn vault() -> Vault {
+        let mut v = Vault::open_in_memory().unwrap();
+        v.create_with_params("pw", hatoba_core::KdfParams::for_tests())
+            .unwrap();
+        v
+    }
+
+    fn call(v: &mut Vault, action: MemoryAction, name: &str, content: Option<&str>) -> String {
+        let (status, text) = run(
+            v,
+            &MemoryArgs {
+                action,
+                name: name.to_owned(),
+                content: content.map(str::to_owned),
+            },
+        );
+        format!("{status:?}: {text}")
+    }
+
+    fn names(v: &Vault) -> Vec<String> {
+        v.ai_memories().into_iter().map(|(_, m)| m.name).collect()
+    }
+
+    #[test]
+    fn the_tool_saves_replaces_and_deletes_by_name() {
+        let mut v = vault();
+        assert_eq!(
+            call(
+                &mut v,
+                MemoryAction::Save,
+                " web-1\nsudo ",
+                Some("Uses doas.\r\n")
+            ),
+            "Ok: Saved the memory \"web-1 sudo\"."
+        );
+        call(
+            &mut v,
+            MemoryAction::Save,
+            "reply language",
+            Some("Chinese."),
+        );
+        // A save under a name that exists replaces that memory, in its place.
+        call(
+            &mut v,
+            MemoryAction::Save,
+            "web-1 sudo",
+            Some("Uses doas, not sudo."),
+        );
+        assert_eq!(names(&v), ["web-1 sudo", "reply language"]);
+        assert_eq!(v.ai_memories()[0].1.content, "Uses doas, not sudo.");
+
+        assert_eq!(
+            call(&mut v, MemoryAction::Delete, "nope", None),
+            "Error: There is no memory named \"nope\". Memories: \"web-1 sudo\", \"reply \
+             language\"."
+        );
+        assert_eq!(
+            call(&mut v, MemoryAction::Delete, "web-1 sudo", None),
+            "Ok: Deleted the memory \"web-1 sudo\"."
+        );
+        assert_eq!(names(&v), ["reply language"]);
+    }
+
+    #[test]
+    fn saves_that_break_a_rule_change_nothing() {
+        let mut v = vault();
+        for (name, content, refusal) in [
+            ("  ", "x", Refusal::EmptyName),
+            (
+                &*"n".repeat(MAX_MEMORY_NAME_CHARS + 1),
+                "x",
+                Refusal::LongName,
+            ),
+            ("n", " \n ", Refusal::EmptyContent),
+        ] {
+            assert_eq!(save(&mut v, None, name, content).unwrap(), Err(refusal));
+        }
+        assert!(v.ai_memories().is_empty());
+
+        // The limit counts names and texts of all memories together.
+        let half = "x".repeat(MAX_MEMORY_BYTES / 2 - 1);
+        let (first, _) = save(&mut v, None, "a", &half).unwrap().unwrap();
+        save(&mut v, None, "b", &half).unwrap().unwrap();
+        assert_eq!(
+            save(&mut v, None, "c", "x").unwrap(),
+            Err(Refusal::Full(MAX_MEMORY_BYTES + 2))
+        );
+        // Replacing one counts its new size, not both.
+        assert!(save(&mut v, Some(&first), "a", "short").unwrap().is_ok());
+        // A rename to another memory's name is refused.
+        assert_eq!(
+            save(&mut v, Some(&first), "b", "short").unwrap(),
+            Err(Refusal::Taken)
+        );
+    }
+
+    #[test]
+    fn the_note_shows_what_fits_while_memory_is_on() {
+        let mut v = vault();
+        assert_eq!(note(&v), "");
+        save(&mut v, None, "one", "first").unwrap().unwrap();
+        save(&mut v, None, "two", "second").unwrap().unwrap();
+        assert_eq!(
+            note(&v),
+            "<memory entries=\"2\">\n## one\nfirst\n\n## two\nsecond\n</memory>\n\n"
+        );
+
+        // Memories saved on several devices at once can go past the limit: the note keeps the
+        // oldest that fit.
+        let big = "x".repeat(MAX_MEMORY_BYTES);
+        v.put(
+            None,
+            Item::AiMemory(AiMemory {
+                name: "big".into(),
+                content: big,
+                updated_at: 0,
+            }),
+        )
+        .unwrap();
+        assert!(note(&v).starts_with("<memory entries=\"2\">"));
+
+        let mut settings = v.settings();
+        settings.ai.memory = false;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+        assert_eq!(note(&v), "");
+        assert_eq!(
+            call(&mut v, MemoryAction::Save, "three", Some("third")),
+            "Error: Memory is turned off in Hatoba's settings."
+        );
+        assert_eq!(names(&v), ["one", "two", "big"]);
+    }
+}

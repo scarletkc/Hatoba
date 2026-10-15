@@ -466,6 +466,14 @@ export const commands = {
 	aiAllowanceAdd: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_add", { allowance }),
 	/**  Removes a saved approval and returns what is left. */
 	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
+	/**  Every memory, oldest first. */
+	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
+	/**  Saves a memory: `id` replaces that one, none adds one. */
+	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
+	/**  Deletes a memory. */
+	aiMemoryDelete: (id: string) => __TAURI_INVOKE<null>("ai_memory_delete", { id }),
+	/**  Deletes every memory. */
+	aiMemoriesDeleteAll: () => __TAURI_INVOKE<null>("ai_memories_delete_all"),
 	skillsList: () => __TAURI_INVOKE<SkillView[]>("skills_list"),
 	skillGet: (id: string) => __TAURI_INVOKE<SkillDetail>("skill_get", { id }),
 	/**  The built-in `hatoba` skill (AI-34), with this app's version, for the viewer in Settings. */
@@ -858,6 +866,22 @@ export type AiLocalTab = {
 	kind: LocalShellKind | null,
 };
 
+/**  A memory to save from Settings → AI (AI-53). */
+export type AiMemoryInput = {
+	/**  `None` creates a memory. */
+	id: string | null,
+	name: string,
+	content: string,
+};
+
+/**  A memory of the AI assistant (AI-53). */
+export type AiMemoryView = {
+	id: string,
+	name: string,
+	content: string,
+	updated_at: number,
+};
+
 /**  A model of a provider (AI-03). Token limits are `None` when unknown. */
 export type AiModel = {
 	id: string,
@@ -992,6 +1016,7 @@ export type AiSettingsPatch = {
 	custom_instructions?: string | null,
 	send_terminal_screen?: boolean | null,
 	judge_model?: AiModelRef | null,
+	memory?: boolean | null,
 };
 
 /**  The synced `Settings.ai` (§5.1). */
@@ -1019,6 +1044,8 @@ export type AiSettingsView = {
 	 *  chats. Auto is unavailable until one is chosen.
 	 */
 	judge_model: AiModelRef | null,
+	/**  Conversations start with the memories, and the assistant saves them (AI-53). */
+	memory: boolean,
 };
 
 /**  The answer to a side question (AI-42), which nothing stores. */
@@ -1652,7 +1679,7 @@ export type ImportResult = {
 	warnings: string[],
 };
 
-export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings";
+export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
 
 export type KeyAlgorithm = "ed25519" | "ecdsa" | "rsa";
 

@@ -11,6 +11,7 @@ pub mod hosts;
 pub mod keys;
 pub mod local;
 pub mod mcp;
+pub mod memory;
 pub mod proxies;
 pub mod quick;
 pub mod settings;

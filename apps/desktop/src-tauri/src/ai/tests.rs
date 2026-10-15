@@ -669,7 +669,8 @@ async fn a_tool_call_waits_for_its_result_and_the_next_request_carries_it() {
             "grep",
             "glob",
             "fetch_url",
-            "read_skill"
+            "read_skill",
+            "memory"
         ]
     );
     assert_eq!(
@@ -1478,8 +1479,12 @@ async fn a_call_left_without_a_result_is_cancelled_before_the_next_request() {
 
     let requests = f.requests().await;
     assert_eq!(requests.len(), 1);
-    // The built-in skill is on by default (AI-34), so read_skill is offered too.
-    assert_eq!(tool_names(&requests[0]), ["fetch_url", "read_skill"]);
+    // The built-in skill and memory are on by default (AI-34, AI-53), so read_skill and memory
+    // are offered too.
+    assert_eq!(
+        tool_names(&requests[0]),
+        ["fetch_url", "read_skill", "memory"]
+    );
     let system = messages(&requests[0])[0]["content"].as_str().unwrap();
     assert!(system.contains("No terminal is attached"), "{system}");
     // The call of a tool this request does not offer still goes with its cancelled result.
@@ -1814,6 +1819,91 @@ async fn compaction_moves_the_context_start_to_the_summary() {
     assert!(next.contains("This conversation continues from a summary"));
     assert!(next.contains("<summary>\\nSUMMARY: the user checked the disk.\\n</summary>"));
     assert!(next.contains("next question"));
+}
+
+/// AI-53: a conversation's first message and each summary start with the memories, and the
+/// `memory` tool saves one without changing the system prompt or the tools, so the provider's
+/// cache keeps serving them. The saved memory shows from the summary on.
+#[tokio::test]
+async fn memories_start_the_first_message_and_each_summary() {
+    use hatoba_ai::tools::memory_block;
+
+    let f = Fixture::new(vec![
+        calls(&[(
+            "m1",
+            "memory",
+            json!({"action": "save", "name": "web-1 sudo", "content": "web-1 uses doas."}),
+        )]),
+        answer("Noted."),
+        answer("SUMMARY: noted doas."),
+        answer("Next answer."),
+    ])
+    .await;
+    super::memory::save(&mut lock(&f.vault), None, "Replies", "Answer in Chinese.")
+        .unwrap()
+        .unwrap();
+    let (started, sink) = f.send(None, "web-1 uses doas").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    let m1 = f.run(&conv, "m1", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&m1),
+        ("m1", AiToolStatus::Ok, "Saved the memory \"web-1 sudo\".")
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+
+    let before = memory_block(&[("Replies", "Answer in Chinese.")]);
+    assert_eq!(
+        f.user_texts(&conv),
+        [manual(&format!("{before}web-1 uses doas"))]
+    );
+    let requests = f.requests().await;
+    assert_eq!(system_of(&requests[1]), system_of(&requests[0]));
+    assert_eq!(tool_names(&requests[1]), tool_names(&requests[0]));
+    assert!(system_of(&requests[0]).contains("- Memory: the memory tool keeps notes"));
+
+    let summary = f
+        .manager
+        .compact(&f.vault, f.env.as_ref(), &conv, &f.context(), None)
+        .await
+        .unwrap();
+    let AiEntryView::Summary { text, .. } = &summary else {
+        panic!("expected a summary, got {summary:?}");
+    };
+    let after = memory_block(&[
+        ("Replies", "Answer in Chinese."),
+        ("web-1 sudo", "web-1 uses doas."),
+    ]);
+    assert_eq!(text, &manual(&format!("{after}SUMMARY: noted doas.")));
+
+    // The message after the summary has no note of its own, and search skips the note's text.
+    let (_, sink) = f.send(Some(&conv), "next question").await;
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+    f.idle(&conv).await;
+    assert_eq!(f.user_texts(&conv)[1], "next question");
+    let hits = super::search(&f.vault, "Chinese").unwrap();
+    assert!(hits.is_empty(), "{hits:?}");
+}
+
+/// AI-53: with memory off, conversations start without the note and the tool is not offered.
+#[tokio::test]
+async fn memory_off_sends_no_note_and_offers_no_tool() {
+    let f = Fixture::new(vec![answer("Hi.")]).await;
+    {
+        let mut v = lock(&f.vault);
+        super::memory::save(&mut v, None, "Replies", "Answer in Chinese.")
+            .unwrap()
+            .unwrap();
+        let mut settings = v.settings();
+        settings.ai.memory = false;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+    let (conv, _) = f.exchange(None, "hello", f.context()).await;
+    assert_eq!(f.user_texts(&conv), [manual("hello")]);
+    let requests = f.requests().await;
+    assert!(!tool_names(&requests[0]).contains(&"memory".to_owned()));
+    assert!(!system_of(&requests[0]).contains("- Memory:"));
 }
 
 fn without_messages(body: &Value) -> Value {
@@ -2533,7 +2623,8 @@ async fn tools_that_run_in_rust_report_failures_as_error_results() {
             "grep",
             "glob",
             "fetch_url",
-            "read_skill"
+            "read_skill",
+            "memory"
         ]
     );
     let system = messages(&requests[0])[0]["content"].as_str().unwrap();
@@ -2711,6 +2802,7 @@ async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
             "web_search",
             "fetch_url",
             "read_skill",
+            "memory",
             "mcp__files__echo",
             "mcp__files__fail",
             "mcp__files__notify",
@@ -3014,6 +3106,7 @@ async fn a_turn_offers_mcp_tools_and_runs_their_calls() {
             "glob",
             "fetch_url",
             "read_skill",
+            "memory",
             "mcp__files__echo",
             "mcp__files__fail",
             "mcp__files__notify",
