@@ -24,6 +24,14 @@ export const zh: Messages = {
     available: (version) => `版本 ${version}，支持 Windows、Linux 和 macOS`,
     alt: "Hatoba 的 AI 助手在终端旁找出并修复了 nginx 502 错误",
   },
+  demo: {
+    try: "在浏览器里试用",
+    title: "Hatoba 演示",
+    note: "演示使用示例数据：不会连接任何地方，助手的回复也是预先写好的。",
+    restart: "重新开始",
+    newTab: "在新标签页打开",
+    close: "关闭演示",
+  },
   ai: {
     title: "每个终端旁都有 AI 助手",
     body: "在终端旁的面板里描述问题，AI 助手会读取屏幕、运行命令、读取和编辑主机上的文件，找出原因并修好它。",

@@ -4,8 +4,9 @@ import Icon from "../../components/Icon.astro";
 import Sea from "../../components/Sea.astro";
 import Shot from "../../components/Shot.astro";
 import { REPO_URL, SECURITY_MODEL_URL } from "../../consts";
-import { localePath, localeStaticPaths, messages, type Locale } from "../../i18n";
+import { LANG, localePath, localeStaticPaths, messages, type Locale } from "../../i18n";
 import Base from "../../layouts/Base.astro";
+import { demoBuilt } from "../../lib/demo";
 import { loadRelease } from "../../lib/release";
 import { screenshot } from "../../lib/screenshots";
 import { pageTitle, softwareApplication } from "../../lib/seo";
@@ -17,6 +18,8 @@ export function getStaticPaths() {
 const { locale } = Astro.props as { locale: Locale };
 const t = messages(locale);
 const release = await loadRelease();
+/** The app's demo in the page's language, when scripts/demo.mjs built it. */
+const demo = demoBuilt() ? `/demo/?lang=${LANG[locale]}` : null;
 
 /** The AI panel down to the approval card, and the deployment dialog, in screenshot pixels. */
 const AI_PANEL = { x: 2002, y: 172, w: 878, h: 1200 };
@@ -34,11 +37,42 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
       </div>
       <p class="available"><a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a></p>
     </div>
-    <div class="horizon">
-      <div class="window rise">
-        <Shot src={screenshot(locale, "ai-assistant")} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
+    <div class="horizon" data-demo={demo} data-demo-title={t.demo.title}>
+      <div class="stage">
+        {
+          demo && (
+            <div class="demo-bar" hidden>
+              <p>{t.demo.note}</p>
+              <div class="demo-actions">
+                <button type="button" data-demo-restart>
+                  <Icon name="restart" size={16} />
+                  {t.demo.restart}
+                </button>
+                <a href={demo} target="_blank" rel="noopener">
+                  <Icon name="external" size={16} />
+                  {t.demo.newTab}
+                </a>
+                <button type="button" data-demo-close>
+                  <Icon name="close" size={16} />
+                  {t.demo.close}
+                </button>
+              </div>
+            </div>
+          )
+        }
+        <div class="window rise">
+          <Shot src={screenshot(locale, "ai-assistant")} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
+          {
+            demo && (
+              <button type="button" class="btn btn-pier try" data-demo-open hidden>
+                <Icon name="play" />
+                {t.demo.try}
+              </button>
+            )
+          }
+        </div>
       </div>
-      <Sea depth="calc(var(--shot) * var(--sink) + var(--water))" />
+      <Sea depth="var(--sea-depth)" />
     </div>
   </section>
 
@@ -115,6 +149,38 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
   </section>
 </Base>
 
+<script>
+  // The demo takes the screenshot's place in its window, and the window rises out of the water so
+  // that none of the app is under it.
+  for (const horizon of document.querySelectorAll<HTMLElement>(".horizon[data-demo]")) {
+    const open = horizon.querySelector<HTMLButtonElement>("[data-demo-open]")!;
+    const bar = horizon.querySelector<HTMLElement>(".demo-bar")!;
+    const shot = horizon.querySelector<HTMLElement>(".window")!;
+    let frame: HTMLIFrameElement | null = null;
+    open.hidden = false;
+    open.addEventListener("click", () => {
+      frame = document.createElement("iframe");
+      frame.src = horizon.dataset.demo!;
+      frame.title = horizon.dataset.demoTitle!;
+      shot.append(frame);
+      horizon.classList.add("open");
+      bar.hidden = false;
+      frame.focus();
+    });
+    bar.querySelector("[data-demo-restart]")!.addEventListener("click", () => {
+      frame?.contentWindow?.location.reload();
+      frame?.focus();
+    });
+    bar.querySelector("[data-demo-close]")!.addEventListener("click", () => {
+      frame?.remove();
+      frame = null;
+      horizon.classList.remove("open");
+      bar.hidden = true;
+      open.focus();
+    });
+  }
+</script>
+
 <style>
   /* The hero: the name over the night sky, and the app standing in the sea like the pier of the icon. */
   .hero {
@@ -166,14 +232,101 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     --water: 72px;
     /* How much of the window stands in the water, as a share of its width. */
     --sink: 0.14;
+    --sea-depth: calc(var(--shot) * var(--sink) + var(--water));
     margin-top: clamp(48px, 7vw, 80px);
     padding-bottom: var(--water);
+    transition: --sea-depth 0.8s cubic-bezier(0.2, 0.7, 0.15, 1);
+  }
+
+  @property --sea-depth {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
+
+  /* The sea falls below the demo's window, whose waves (36px) stay under it, and the bar above the
+     window takes most of the space over it. */
+  .horizon.open {
+    --sea-depth: calc(var(--water) - 36px);
+    margin-top: 24px;
+  }
+
+  .stage {
+    width: var(--shot);
+    margin: 0 auto;
   }
 
   .horizon .window {
     position: relative;
-    width: var(--shot);
-    margin: 0 auto;
+  }
+
+  /* The demo fills the window over its screenshot, which keeps the window's size. */
+  .window :global(iframe) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #1c1d21;
+  }
+
+  .try {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 12px 32px rgb(5 12 40 / 0.45);
+  }
+
+  .try[hidden],
+  .open .try {
+    display: none;
+  }
+
+  /* Above the demo: what it is, and the way out of it, since the app takes the keyboard. */
+  .demo-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 24px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--on-night-2);
+  }
+
+  .demo-bar p {
+    flex: 1 1 24em;
+  }
+
+  .demo-bar[hidden] {
+    display: none;
+  }
+
+  .demo-actions {
+    display: flex;
+    flex: none;
+    gap: 4px;
+  }
+
+  .demo-actions button,
+  .demo-actions a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    font: inherit;
+    color: var(--on-night);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .demo-actions button:hover,
+  .demo-actions a:hover {
+    background: rgb(227 238 255 / 0.12);
   }
 
   .rise {
@@ -332,6 +485,13 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
     dl {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* The app is laid out as a desktop window, so narrower screens keep the screenshot. */
+  @media (max-width: 959px) {
+    .try {
+      display: none;
     }
   }
 

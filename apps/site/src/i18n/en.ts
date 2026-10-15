@@ -28,6 +28,14 @@ export const en = {
     available: (version: string) => `Version ${version} for Windows, Linux, and macOS`,
     alt: "Hatoba with the AI assistant beside a terminal, after it found and fixed an nginx 502 error",
   },
+  demo: {
+    try: "Try it in your browser",
+    title: "Hatoba demo",
+    note: "A demo with sample data: nothing connects anywhere, and the assistant’s replies are scripted.",
+    restart: "Start over",
+    newTab: "Open in a new tab",
+    close: "Close the demo",
+  },
   ai: {
     title: "An AI assistant beside every terminal",
     body: "Describe the problem in the panel next to your terminal. The assistant reads the screen, runs commands, and reads and edits files on the host to find the cause and fix it.",

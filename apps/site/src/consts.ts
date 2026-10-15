@@ -1,5 +1,7 @@
+import { REPO } from "./lib/github.mjs";
+
+export { REPO };
 export const SITE_URL = "https://hatoba.fog.moe";
-export const REPO = "scarletkc/Hatoba";
 export const REPO_URL = `https://github.com/${REPO}`;
 export const RELEASES_URL = `${REPO_URL}/releases`;
 export const BUG_REPORT_URL = `${REPO_URL}/issues/new?template=bug_report.yml`;

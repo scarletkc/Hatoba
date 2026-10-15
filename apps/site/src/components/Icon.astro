@@ -1,6 +1,6 @@
 ---
 interface Props {
-  name: "download" | "github" | "globe" | "copy" | "check" | "external";
+  name: "download" | "github" | "globe" | "copy" | "check" | "external" | "play" | "restart" | "close";
   size?: number;
 }
 const { name, size = 18 } = Astro.props;
@@ -33,5 +33,8 @@ const { name, size = 18 } = Astro.props;
     )
   }
   {name === "check" && <path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />}
+  {name === "play" && <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" fill="currentColor" />}
+  {name === "restart" && <path d="M4 12a8 8 0 1 0 2.34-5.66M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />}
+  {name === "close" && <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />}
   {name === "external" && <path d="M14 4h6v6m0-6-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />}
 </svg>

@@ -25,6 +25,14 @@ export const ja: Messages = {
     available: (version) => `バージョン ${version}（Windows、Linux、macOS）`,
     alt: "Hatoba の AI アシスタントがターミナルの横で nginx の 502 エラーの原因を見つけて修正したところ",
   },
+  demo: {
+    try: "ブラウザで試す",
+    title: "Hatoba デモ",
+    note: "サンプルデータのデモです。どこにも接続せず、アシスタントの返答もあらかじめ用意したものです。",
+    restart: "最初からやり直す",
+    newTab: "新しいタブで開く",
+    close: "デモを閉じる",
+  },
   ai: {
     title: "すべてのターミナルの横に AI アシスタント",
     body: "ターミナルの横のパネルで問題を伝えると、AI アシスタントが画面を読み、コマンドを実行し、ホスト上のファイルを読んで編集して、原因を突き止めて修正します。",
