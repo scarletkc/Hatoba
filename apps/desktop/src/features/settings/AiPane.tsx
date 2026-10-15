@@ -39,6 +39,7 @@ import { aiErrorMessage } from "./aiShared";
 import { ChatgptSignInDialog, chatgptRowKey } from "./ChatgptSignIn";
 import { useFreshReads } from "./freshReads";
 import { McpSection } from "./McpSection";
+import { MemorySection } from "./MemorySection";
 import { ProviderDialog } from "./ProviderDialog";
 import { SearchSection } from "./SearchSection";
 import { SkillsSection } from "./SkillsSection";
@@ -282,6 +283,9 @@ export function AiPane() {
         }
       />
       <McpSection />
+      <MemorySection
+        enabled={data ? { on: data.settings.memory, onChange: (memory) => void saveSettings({ memory }) } : null}
+      />
       {data && (
         <JudgeSection
           providers={providers}

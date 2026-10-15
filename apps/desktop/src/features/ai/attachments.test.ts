@@ -457,6 +457,18 @@ describe("the permission mode notes (AI-16)", () => {
     expect(splitPermissionNote(`${bypass}\n\nWe cleaned /tmp.`)).toEqual({ mode: "bypass", summary: "We cleaned /tmp." });
     expect(splitPermissionNote("We cleaned /tmp.")).toEqual({ mode: null, summary: "We cleaned /tmp." });
   });
+
+  it("reads the memories a first message and a summary start with (AI-53)", () => {
+    const memory = noteBlock({ kind: "memory", entries: 1, body: "## web-1 sudo\nweb-1 uses doas." });
+    expect(memory).toBe('<memory entries="1">\n## web-1 sudo\nweb-1 uses doas.\n</memory>');
+    expect(parseMessage(`${manual}\n\n${memory}\n\nhello`)).toMatchObject({
+      notes: [{ kind: "permission_mode", mode: "manual" }, { kind: "memory", entries: 1, body: "## web-1 sudo\nweb-1 uses doas." }],
+      typed: "hello",
+    });
+    expect(splitPermissionNote(`${auto}\n\n${memory}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
+    expect(splitPermissionNote(`${memory}\n\nWe restarted nginx.`)).toEqual({ mode: null, summary: "We restarted nginx." });
+    expect(notedPermission([summary(`${auto}\n\n${memory}\n\nWe restarted nginx.`)])).toBe("auto");
+  });
 });
 
 describe("the selection chip", () => {

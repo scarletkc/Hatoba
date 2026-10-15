@@ -10,7 +10,7 @@ import type { MessageKey } from "@/i18n";
 import type { AiHostEntry, AiSkillCommand, McpPromptView, McpResourceView } from "@/ipc/types";
 
 /** The built-in commands, named as Claude Code names the same features. */
-export type BuiltinName = "btw" | "clear" | "compact" | "mcp" | "model";
+export type BuiltinName = "btw" | "clear" | "compact" | "mcp" | "memory" | "model";
 
 export interface BuiltinCommand {
   name: BuiltinName;
@@ -28,6 +28,7 @@ export const BUILTINS: readonly BuiltinCommand[] = [
   { name: "clear", aliases: ["new", "reset"], args: null, argsRequired: false, description: "ai.cmd.clear" },
   { name: "compact", aliases: [], args: "ai.cmd.compact.args", argsRequired: false, description: "ai.cmd.compact" },
   { name: "mcp", aliases: [], args: null, argsRequired: false, description: "ai.cmd.mcp" },
+  { name: "memory", aliases: [], args: null, argsRequired: false, description: "ai.cmd.memory" },
   { name: "model", aliases: [], args: null, argsRequired: false, description: "ai.cmd.model" },
 ];
 

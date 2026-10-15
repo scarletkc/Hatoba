@@ -82,5 +82,17 @@
     "text": "see <terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>",
     "blocks": 0,
     "typed": "see <terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>"
+  },
+  {
+    "name": "a first message starts with its mode, the memories and the screen (AI-53)",
+    "text": "<permission_mode mode=\"manual\">\nFrom this message on, the permission mode is manual approval.\n</permission_mode>\n\n<memory entries=\"2\">\n## web-1 sudo\nweb-1 uses doas.\n\n## Replies\nAnswer in Chinese.\n</memory>\n\n<terminal_state host=\"web-1\" alternate_screen=\"false\" lines=\"1\">\n$\n</terminal_state>\n\nhello",
+    "blocks": 3,
+    "typed": "hello"
+  },
+  {
+    "name": "a memory note without its count is typed text",
+    "text": "<memory>\n## x\ny\n</memory>\n\nhello",
+    "blocks": 0,
+    "typed": "<memory>\n## x\ny\n</memory>\n\nhello"
   }
 ]

@@ -20,6 +20,7 @@ export const FETCH_URL = "fetch_url";
 export const READ_SKILL = "read_skill";
 export const SEARCH_TOOLS = "search_tools";
 export const CALL_MCP_TOOL = "call_mcp_tool";
+export const MEMORY = "memory";
 
 export type ToolKind =
   | "read_terminal"
@@ -34,10 +35,11 @@ export type ToolKind =
   | "fetch_url"
   | "read_skill"
   | "search_tools"
+  | "memory"
   | "mcp"
   | "unknown";
 
-const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS];
+const BUILTIN: readonly string[] = [READ_TERMINAL, RUN_COMMAND, SEND_INPUT, READ_FILE, EDIT_FILE, WRITE_FILE, GREP, GLOB, WEB_SEARCH, FETCH_URL, READ_SKILL, SEARCH_TOOLS, MEMORY];
 
 /** A call's kind; a `call_mcp_tool` call (AI-45) is an MCP call, approved as the tool it names. */
 export function toolKind(name: string): ToolKind {
@@ -137,8 +139,9 @@ export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, d
 }
 
 /**
- * §13.5: in manual approval mode `read_terminal`, `read_file`, `grep`, `glob`, `web_search`, `read_skill` and
- * `search_tools` (AI-45) run without asking and everything else waits for the user; bypass runs everything.
+ * §13.5: in manual approval mode `read_terminal`, `read_file`, `grep`, `glob`, `web_search`, `read_skill`,
+ * `search_tools` (AI-45) and `memory` (AI-53) run without asking and everything else waits for the user; bypass
+ * runs everything.
  * Auto asks about the same calls as manual approval, and its judge decides which of them can skip the card
  * (AI-47). Unknown tools never run, so never ask.
  */
@@ -350,6 +353,7 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
   fetch_url: "ai.tool.fetch_url",
   read_skill: "ai.tool.read_skill",
   search_tools: "ai.tool.search_tools",
+  memory: "ai.tool.memory",
 };
 
 /**
@@ -497,6 +501,8 @@ export function callSummary(name: string, json: string): string {
       return [str(args.name), str(args.path)].filter(Boolean).join(" / ");
     case "search_tools":
       return str(args.query);
+    case "memory":
+      return [str(args.action), str(args.name)].filter(Boolean).join(" · ");
     case "read_file":
       return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
     case "edit_file":

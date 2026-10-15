@@ -31,6 +31,8 @@ export type Page =
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
 export type SettingsTab = "general" | "appearance" | "terminal" | "proxies" | "security" | "ai" | "about";
+/** A section of a Settings tab that `openSettings` can scroll to; the section clears it once it has. */
+export type SettingsSection = "memory";
 
 export const DEFAULT_PREFS: LocalPrefs = {
   language: "system",
@@ -73,6 +75,7 @@ interface AppState {
   settingsOpen: boolean;
   /** The tab the settings window opens on or switches to; null keeps the last one. The window clears it once taken. */
   settingsTab: SettingsTab | null;
+  settingsSection: SettingsSection | null;
   /** Bumped to ask the hosts page to focus its search field (Ctrl+Shift+K). */
   searchFocusTick: number;
   /** The text the search field takes with that focus, or null to keep its own (HOST-13). */
@@ -86,7 +89,8 @@ interface AppState {
   setSync(status: SyncStatus): void;
   setPhase(phase: Phase): void;
   toggleSidebar(): void;
-  openSettings(open: boolean, tab?: SettingsTab): void;
+  /** Opens or closes Settings; `section` scrolls to a section of `tab`, such as `memory` in AI (AI-53). */
+  openSettings(open: boolean, tab?: SettingsTab, section?: SettingsSection): void;
   focusSearch(text?: string): void;
   refreshSynced(): void;
   lock(): Promise<void>;
@@ -104,6 +108,7 @@ export const useApp = create<AppState>((set, get) => ({
   sidebarCollapsed: false,
   settingsOpen: false,
   settingsTab: null,
+  settingsSection: null,
   searchFocusTick: 0,
   searchFocusText: null,
   syncTick: 0,
@@ -122,7 +127,7 @@ export const useApp = create<AppState>((set, get) => ({
   setSync: (sync) => set({ sync }),
   setPhase: (phase) => set({ phase }),
   toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
-  openSettings: (settingsOpen, tab) => set({ settingsOpen, settingsTab: tab ?? null }),
+  openSettings: (settingsOpen, tab, section) => set({ settingsOpen, settingsTab: tab ?? null, settingsSection: section ?? null }),
   focusSearch: (text) => set((s) => ({ searchFocusTick: s.searchFocusTick + 1, searchFocusText: text ?? null })),
   refreshSynced: () => set((s) => ({ syncTick: s.syncTick + 1 })),
   lock: async () => {

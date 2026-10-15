@@ -24,6 +24,7 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   ai_conversation: "chat-circle-text",
   ai_message: "chat-text",
   skill: "book-open",
+  ai_memory: "brain",
   skill_file: "file-text",
   mcp_server: "plugs",
 };

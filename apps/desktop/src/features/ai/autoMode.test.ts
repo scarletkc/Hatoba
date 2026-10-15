@@ -108,6 +108,7 @@ const settings = (judge: AiSettingsView["judge_model"] = { provider_id: "p1", mo
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
+  memory: true,
   judge_model: judge,
 });
 

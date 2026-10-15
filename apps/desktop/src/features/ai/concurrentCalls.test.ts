@@ -92,6 +92,7 @@ const settings: AiSettingsView = {
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,
+  memory: true,
   judge_model: { provider_id: "p1", model_id: "judge" },
 };
 

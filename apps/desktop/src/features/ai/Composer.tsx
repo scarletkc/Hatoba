@@ -217,6 +217,10 @@ export function Composer({ slotId, slot, model, tools }: { slotId: string; slot:
         patchSlot(slotId, { draft: rest });
         showMcp();
         return;
+      case "memory":
+        patchSlot(slotId, { draft: rest });
+        useApp.getState().openSettings(true, "ai", "memory");
+        return;
       case "model":
         patchSlot(slotId, { draft: rest });
         openModels.current?.();

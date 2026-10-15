@@ -329,6 +329,7 @@ export function sanitizeSettings(
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
     judge_model: judgeModel,
+    memory: settings.memory,
   };
 }
 
@@ -361,6 +362,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;
   if (!sameRef(prev.judge_model, next.judge_model)) patch.judge_model = next.judge_model;
+  if (prev.memory !== next.memory) patch.memory = next.memory;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

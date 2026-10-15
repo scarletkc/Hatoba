@@ -74,6 +74,7 @@ const TOOL_ICON: Record<ToolKind, string> = {
   fetch_url: "globe",
   read_skill: "book-open",
   search_tools: "list-magnifying-glass",
+  memory: "brain",
   mcp: "plug",
   unknown: "question",
 };
@@ -345,8 +346,9 @@ function UserMessage({
   const [editing, setEditing] = useState(false);
   // AI-10, AI-35: what was attached to the message is in blocks at its start, after Hatoba's notes.
   const parts = useMemo(() => parseMessage(text), [text]);
+  // AI-53: the memories a conversation starts with are the assistant's context, not a change to show.
   const notes = parts.notes
-    .filter((note) => note.kind !== "terminal_state" && !(first && note.kind === "permission_mode"))
+    .filter((note) => note.kind !== "terminal_state" && note.kind !== "memory" && !(first && note.kind === "permission_mode"))
     .map((note, i) => <NoteDivider key={i} note={note} />);
   // AI-46: the screen the message showed is a collapsed block above its attachments.
   const screen = parts.notes.find((note) => note.kind === "terminal_state");
@@ -386,6 +388,7 @@ const NOTE_ICONS = {
   file_revert: "arrow-counter-clockwise",
   terminal_state: "terminal-window",
   mcp_tools: "plug",
+  memory: "brain",
 } as const;
 
 /**

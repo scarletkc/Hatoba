@@ -173,6 +173,7 @@ export function createAiSettingsMock(): AiSettingsApi {
     send_terminal_screen: true,
     // AI-47: Auto mode's judge, a fast model of a configured provider.
     judge_model: providers.length && !flags.has("nojudge") ? { provider_id: "p-anthropic", model_id: "claude-haiku-5-5" } : null,
+    memory: true,
   };
 
   let allowances: AiAllowance[] = [];

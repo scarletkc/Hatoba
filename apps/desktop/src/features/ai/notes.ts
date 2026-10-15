@@ -9,7 +9,7 @@ type Tr = (key: MessageKey, params?: Params) => string;
  * message, and in an export (§13.1, AI-05, AI-09, AI-41): that the user stopped the reply before it,
  * where the conversation moved, whether a terminal became attached or went away, which model it went
  * to, and what came before, the permission mode it was sent in when it changed (AI-16), which file's
- * change the user reverted, how many lines of the terminal's
+ * change the user reverted, how many memories it started with (AI-53), how many lines of the terminal's
  * screen it showed (AI-46, the title of its collapsed block), or how many MCP tools it listed (AI-45).
  * A host that no longer exists is named as deleted; a model by its name.
  */
@@ -25,6 +25,8 @@ export function noteLabel(t: Tr, note: Note, device = ""): string {
       return t("ai.note.modelChange", { to: modelName(note.to), from: modelName(note.from) });
     case "permission_mode":
       return t(note.mode === "bypass" ? "ai.note.permissionBypass" : note.mode === "auto" ? "ai.note.permissionAuto" : "ai.note.permissionManual");
+    case "memory":
+      return t("ai.note.memory", { n: note.entries });
     case "file_revert":
       return t("ai.note.fileRevert", { path: note.path });
     case "terminal_state":

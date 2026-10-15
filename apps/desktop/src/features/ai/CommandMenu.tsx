@@ -37,6 +37,7 @@ const BUILTIN_ICON: Record<BuiltinName, string> = {
   clear: "note-pencil",
   compact: "arrows-in-line-vertical",
   mcp: "plug",
+  memory: "brain",
   model: "cube",
 };
 

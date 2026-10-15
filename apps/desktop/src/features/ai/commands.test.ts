@@ -130,6 +130,7 @@ describe("the / menu (AI-50)", () => {
       "builtin:clear",
       "builtin:compact",
       "builtin:mcp",
+      "builtin:memory",
       "builtin:model",
       "skill:compactor",
       "skill:nginx-ops",
