@@ -429,9 +429,11 @@ mod windows_tests {
                     .await
                     .unwrap();
                 let printed = String::from_utf8_lossy(&run.output.stdout);
+                // A temporary folder may be named in 8.3 form (RUNNER~1), which PowerShell prints
+                // in full.
                 assert_eq!(
-                    Path::new(printed.trim_end()),
-                    home.path().join("a b"),
+                    std::fs::canonicalize(printed.trim_end()).unwrap(),
+                    std::fs::canonicalize(home.path().join("a b")).unwrap(),
                     "{kind:?} {dir}"
                 );
             }
