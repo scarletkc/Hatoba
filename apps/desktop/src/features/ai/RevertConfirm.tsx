@@ -3,6 +3,7 @@ import { t, useT } from "@/i18n";
 import type { AiFileChange, AiFilePreview } from "@/ipc/types";
 import { FileChange } from "./FileChange";
 import s from "./RevertConfirm.module.css";
+import { serverLabel } from "./revertText";
 
 /**
  * AI-41: asks before a revert writes to the server. The body names the server and shows the diff the revert
@@ -24,7 +25,7 @@ function RevertBody({ change, preview }: { change: AiFileChange; preview: AiFile
   const back = preview && { ...preview, before: preview.after, after: preview.before ?? "" };
   return (
     <div className={s.body}>
-      <div className={s.server}>{tr("ai.revert.where", { server: change.server })}</div>
+      <div className={s.server}>{tr("ai.revert.where", { server: serverLabel(tr, change.server) })}</div>
       {back && (
         <div className={s.diff}>
           <FileChange state={{ preview: back, loading: false, failure: null }} />

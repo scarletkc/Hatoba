@@ -99,6 +99,8 @@ function Main() {
 
   const onShortcut = useCallback((action: ShortcutAction) => {
     const app = useApp.getState();
+    // SEC-03: behind the lock screen the tabs stay as they are.
+    if (app.phase === "locked") return;
     const tabsState = useTabs.getState();
     switch (action) {
       case "search":

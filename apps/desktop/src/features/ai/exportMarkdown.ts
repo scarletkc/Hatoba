@@ -43,17 +43,17 @@ function callStatus(t: Tr, call: AiToolCall, result: ToolEntry | undefined): str
 function attachmentLabel(t: Tr, a: Attachment): string {
   switch (a.kind) {
     case "diagnostics":
-      return `**${t("ai.diagnostics", { host: a.host })}**`;
+      return `**${t("ai.diagnostics", { host: placeLabel(t, a.host) })}**`;
     case "selection":
-      return [`**${t("ai.selection", { n: a.lines })}**`, a.host && `\`${a.host}\``, a.truncated && t("ai.selection.truncated")].filter(Boolean).join(" · ");
+      return [`**${t("ai.selection", { n: a.lines })}**`, a.host && `\`${placeLabel(t, a.host)}\``, a.truncated && t("ai.selection.truncated")].filter(Boolean).join(" · ");
     case "paste":
       return `**${t("ai.paste", { n: a.lines })}**`;
     case "file":
       return `**${t("ai.file", { name: a.name, n: a.lines })}**`;
     case "host_file":
-      return `**${t("ai.file", { name: pathName(a.path), n: a.lines })}** · \`${a.host}\` · \`${a.path}\``;
+      return `**${t("ai.file", { name: pathName(a.path), n: a.lines })}** · \`${placeLabel(t, a.host)}\` · \`${a.path}\``;
     case "host_directory":
-      return [`**${t("ai.mention.folderChip", { name: folderName(a.path), n: a.entries })}**`, `\`${a.host}\``, `\`${a.path}\``, a.truncated && t("ai.selection.truncated")]
+      return [`**${t("ai.mention.folderChip", { name: folderName(a.path), n: a.entries })}**`, `\`${placeLabel(t, a.host)}\``, `\`${a.path}\``, a.truncated && t("ai.selection.truncated")]
         .filter(Boolean)
         .join(" · ");
     case "mcp_resource":
@@ -109,7 +109,7 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
         // AI-46: the screen the message showed, like an attachment.
         for (const n of notes) {
           if (n.kind !== "terminal_state") continue;
-          const label = [`**${noteTitle(t, n)}**`, n.host && `\`${n.host}\``, n.alternate && t("ai.note.screen.fullScreen")];
+          const label = [`**${noteTitle(t, n)}**`, n.host && `\`${placeLabel(t, n.host)}\``, n.alternate && t("ai.note.screen.fullScreen")];
           blocks.push(label.filter(Boolean).join(" · "), fenced(n.body));
         }
         // AI-10, AI-35: what was attached to the message, each as a labelled fenced block.

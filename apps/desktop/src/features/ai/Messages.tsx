@@ -392,6 +392,7 @@ const NOTE_ICONS = {
  */
 function NoteDivider({ note }: { note: Note }) {
   const t = useT();
+  const device = useApp.getState().info.device_name;
   const icon =
     note.kind === "terminal_change"
       ? note.to === "attached"
@@ -401,10 +402,10 @@ function NoteDivider({ note }: { note: Note }) {
         ? MODE_ICON[note.mode]
         : NOTE_ICONS[note.kind];
   return (
-    <div className={s.noteDivider} role="note" title={noteTitle(t, note)}>
+    <div className={s.noteDivider} role="note" title={noteTitle(t, note, device)}>
       <span className={s.noteText}>
         <Icon name={icon} size={12} />
-        {noteLabel(t, note, useApp.getState().info.device_name)}
+        {noteLabel(t, note, device)}
       </span>
     </div>
   );

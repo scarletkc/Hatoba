@@ -6,7 +6,7 @@ import { useT } from "@/i18n";
 import type { AiFileChange, AiFilePreview, AiFileRevert } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { diffLines, diffStats } from "./diff";
-import { revertFailure } from "./revertText";
+import { revertFailure, serverLabel } from "./revertText";
 import s from "./EditFiles.module.css";
 
 /** An edit (AI-26) that deletes calls whose file changes this device can revert (AI-41). */
@@ -98,7 +98,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
   const here = (c: { server: string }) => c.server === ask.server;
   const anyHere = newestFirst.some(here);
   // Why a file on another server is not reverted from this tab.
-  const elsewhere = ask.server === null ? t("ai.revert.failed.disconnected") : t("ai.editFiles.otherServer", { server: ask.server });
+  const elsewhere = ask.server === null ? t("ai.revert.failed.disconnected") : t("ai.editFiles.otherServer", { server: serverLabel(t, ask.server) });
 
   // What reverting each change writes back: from what the call wrote to what the file held before.
   useEffect(() => {
@@ -203,7 +203,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
               <div className={s.fileText}>
                 <div className={cx(s.path, "selectable")}>{group.path}</div>
                 <div className={s.server}>
-                  {group.server}
+                  {serverLabel(t, group.server)}
                   {group.changes.length > 1 && ` · ${t("ai.editFiles.changes", { n: group.changes.length })}`}
                   {created && ` · ${t("ai.editFiles.created")}`}
                   {lines && (lines.added > 0 || lines.removed > 0) && (
@@ -246,7 +246,7 @@ function EditFilesDialog({ ask }: { ask: Ask }) {
             ? t("ai.editFiles.hint")
             : ask.server === null
               ? t("ai.editFiles.disconnected")
-              : t("ai.editFiles.noneHere", { server: ask.server })}
+              : t("ai.editFiles.noneHere", { server: serverLabel(t, ask.server) })}
       </div>
     </Dialog>
   );

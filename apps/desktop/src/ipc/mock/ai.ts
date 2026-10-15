@@ -1310,7 +1310,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (response) {
           const kept = (snapshots.get(c.view.id) ?? []).filter((s) => s.change.tool_call_id !== x.id);
           const host = ((await deps.hosts?.()) ?? []).find((h) => h.id === c.view.host_id);
-          const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : "root@localhost:22";
+          const server = host ? formatTarget(host) : c.view.quick_target ? formatTarget(c.view.quick_target) : c.view.local ? "local" : "root@localhost:22";
           const change: AiFileChange = { response_id: response.entry_id, tool_call_id: x.id, server, path: key, created: current === null, state: "unfinished" };
           snapshot = { change, tool: x.name, before: current, after: after.text };
           snapshots.set(c.view.id, [...kept, snapshot]);

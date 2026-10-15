@@ -35,7 +35,7 @@ export function noteLabel(t: Tr, note: Note, device = ""): string {
 }
 
 /** The note's full text, for a tooltip: a model's name with its ID. */
-export function noteTitle(t: Tr, note: Note): string {
-  if (note.kind !== "model_change") return noteLabel(t, note);
+export function noteTitle(t: Tr, note: Note, device = ""): string {
+  if (note.kind !== "model_change") return noteLabel(t, note, device);
   return t("ai.note.modelChange", { to: note.to, from: note.from });
 }

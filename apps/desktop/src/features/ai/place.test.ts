@@ -3,6 +3,7 @@ import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { HostView, QuickTarget } from "@/ipc/types";
 import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
+import { serverLabel } from "./revertText";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const host = (id: string, name: string, address: string, port = 22, username = "root") => ({ id, name, address, port, username }) as HostView;
@@ -127,5 +128,11 @@ describe("local terminal tabs (§7.5)", () => {
   it("opens a local terminal for a conversation that was on this computer's", () => {
     expect(connectionFor(onLocal("DEMO-PC"), hosts, "DEMO-PC")).toEqual({ name: "DEMO-PC (local terminal)", source: "local" });
     expect(connectionFor(onLocal("LAPTOP"), hosts, "DEMO-PC")).toBeNull();
+  });
+
+  it("names the server of a local tab's file changes This Computer (AI-41)", () => {
+    expect(serverLabel(t, "local")).toBe("This Computer");
+    expect(serverLabel(t, "wsl:Ubuntu")).toBe("This Computer · Ubuntu");
+    expect(serverLabel(t, "root@web-1:22")).toBe("root@web-1:22");
   });
 });
