@@ -21,6 +21,7 @@ import {
   stopTurn,
   toggleAiPanel,
 } from "./actions";
+import { dialectOf } from "./commandRules";
 import { Composer } from "./Composer";
 import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
@@ -53,7 +54,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const hosts = useVaultData((st) => st.hosts);
   const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
   // §7.5: a local tab is this computer, named so wherever a tab's host is named.
-  const local = tab?.local ? { name: t("terminal.local.thisComputer"), target: shellName(tab.local, t), local: true } : null;
+  const local = tab?.local ? { name: t("terminal.local.thisComputer"), target: shellName(tab.local, t), local: true, dialect: dialectOf(tab.local.kind) } : null;
   const [view, setView] = useState<"chat" | "history">("chat");
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);

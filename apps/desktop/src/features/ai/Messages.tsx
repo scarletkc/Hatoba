@@ -27,6 +27,7 @@ import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
 import { useFollowBottom } from "./followBottom";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, splitPermissionNote, type MessageParts, type Note } from "./attachments";
+import type { ShellDialect } from "./commandRules";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { forkPoints } from "./fork";
 import { Markdown } from "./Markdown";
@@ -107,6 +108,8 @@ export interface HostInfo {
   target: string;
   /** This computer, for a local tab (§7.5): its approval cards say so, and so do their Always allow labels. */
   local?: boolean;
+  /** The syntax of a local tab's shell (`dialectOf`), which a command's allowances are named in; POSIX when absent. */
+  dialect?: ShellDialect;
 }
 
 export function hostInfo(host: HostView | undefined): HostInfo | null {
@@ -1207,7 +1210,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
   let allow: AllowLabels | null = null;
   if (refusal === undefined) {
     const next = mode === "edit" ? argsFrom(kind, args, draft) : null;
-    const scope = allowanceScope(kind, next && "json" in next ? (parseArgs(next.json) ?? args) : args, mcp);
+    const scope = allowanceScope(kind, next && "json" in next ? (parseArgs(next.json) ?? args) : args, mcp, host?.dialect);
     allow = scope && allowLabels(t, scope, label, mcp, bypass, !!host?.local);
   }
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {

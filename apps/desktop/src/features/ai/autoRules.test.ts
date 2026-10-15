@@ -88,6 +88,106 @@ describe("the commands Auto always asks about (AI-47)", () => {
   });
 });
 
+describe("the commands Auto always asks about in PowerShell and Command Prompt (AI-47)", () => {
+  const ps = (line: string) => hardRule({ kind: "run_command", args: { command: line }, dialect: "powershell" });
+  const cmd = (line: string) => hardRule({ kind: "run_command", args: { command: line }, dialect: "cmd" });
+
+  it("asks for deleting recursively, with the option before or after the command", () => {
+    const lines: [string, string][] = [
+      ["Remove-Item -Recurse -Force C:\\build", "Remove-Item -Recurse"],
+      ["remove-item C:\\build -r", "remove-item -r"],
+      ["ri build -Rec", "ri -Rec"],
+      ["rm -Recurse:true build", "rm -Recurse:true"],
+      ["Get-ChildItem C:\\data -Recurse | Remove-Item -Force", "Remove-Item -Recurse"],
+      ["Remove-Item –Recurse build", "Remove-Item -Recurse"],
+      ["Remove-Item ‘build’ -Recurse", "Remove-Item -Recurse"],
+      ["Re`move-Item build -Recurse", "Remove-Item -Recurse"],
+      ["rm -rf build", "rm -rf"],
+    ];
+    for (const [line, command] of lines) expect(ps(line), line).toEqual({ kind: "command", command });
+    const cmdLines: [string, string][] = [
+      ["rd /s /q C:\\build", "rd /s"],
+      ["rmdir /S build", "rmdir /S"],
+      ["del /s /q *.tmp", "del /s"],
+      ["erase /q /s *.log", "erase /s"],
+      ["rd/s/q build", "rd /s"],
+      ["dir & del/s/q x", "del /s"],
+      ['"rd" /s build', "rd /s"],
+      ["r^d /s build", "rd /s"],
+    ];
+    for (const [line, command] of cmdLines) expect(cmd(line), line).toEqual({ kind: "command", command });
+  });
+
+  it("leaves deleting without a recursive option to the judge", () => {
+    for (const line of ["Remove-Item x.txt", "rm -Force x.txt", "del -Filter *.tmp", "Get-ChildItem -Recurse"]) expect(ps(line), line).toBeNull();
+    for (const line of ["del x.txt", "rd empty", "del /q /f x.txt", "dir /s"]) expect(cmd(line), line).toBeNull();
+  });
+
+  it("asks for formatting and wiping disks and stopping the computer, named in any case or with a directory", () => {
+    const lines: [string, string][] = [
+      ["format D: /q", "format"],
+      ["FORMAT d:", "FORMAT"],
+      ["format.com E: /fs:ntfs", "format.com"],
+      ["diskpart /s script.txt", "diskpart"],
+      ["Format-Volume -DriveLetter D", "Format-Volume"],
+      ["Get-Disk 1 | Clear-Disk -RemoveData", "Clear-Disk"],
+      ["Remove-Partition -DiskNumber 1 -PartitionNumber 2", "Remove-Partition"],
+      ["Stop-Computer -Force", "Stop-Computer"],
+      ["Restart-Computer", "Restart-Computer"],
+      ["shutdown /s /t 0", "shutdown"],
+      ["shutdown/r", "shutdown"],
+      ["C:\\Windows\\System32\\shutdown.exe /r", "shutdown.exe"],
+      ["& 'C:\\Windows\\System32\\shutdown.exe' -s", "shutdown.exe"],
+      ["C:/Windows/System32/shutdown.exe /s", "shutdown.exe"],
+      ["Start-Process diskpart.exe", "diskpart.exe"],
+      ["cmd /c 'shutdown /s'", "shutdown"],
+      ["wsl -- sudo reboot", "reboot"],
+    ];
+    for (const [line, command] of lines) {
+      expect(ps(line), line).toEqual({ kind: "command", command });
+      expect(cmd(line.replaceAll("'", '"')), line).toEqual({ kind: "command", command });
+    }
+  });
+
+  it("leaves ordinary commands to the judge", () => {
+    for (const line of [
+      "Get-Date -Format yyyy-MM-dd",
+      "Format-Table Name, Id",
+      "git log --format=%H",
+      "npm run format",
+      "dotnet format",
+      "pnpm format && pnpm lint",
+      "Get-Content C:\\data\\notes\\formatting.txt",
+      "Restart-Service spooler",
+      "Stop-Process -Name notepad",
+      "Copy-Item -Recurse a b",
+    ]) {
+      expect(ps(line), line).toBeNull();
+    }
+  });
+
+  it("keeps SSH and POSIX tabs to their own rules", () => {
+    expect(command("format D:")).toBeNull();
+    expect(command("del /s x")).toBeNull();
+    expect(command("Remove-Item -Recurse x")).toBeNull();
+  });
+
+  it("checks the line send_input submits on a PowerShell tab", () => {
+    const typed = (cursor: string, args: Record<string, unknown>) =>
+      hardRule({ kind: "send_input", args, screen: `PS C:\\Users\\kc> Get-Date\n\n${cursor}`, dialect: "powershell" });
+    expect(typed("PS C:\\Users\\kc>", { text: "Stop-Computer\n" })).toEqual({ kind: "command", command: "Stop-Computer" });
+    expect(typed("PS C:\\Users\\kc> Remove-Item C:\\data", { text: " -Recurse", key: "enter" })).toEqual({ kind: "command", command: "Remove-Item -Recurse" });
+    expect(typed("PS C:\\Users\\kc>", { text: "Get-ChildItem\n" })).toBeNull();
+  });
+
+  it("keeps MCP calls to the POSIX rules", () => {
+    expect(hardRule({ kind: "mcp", args: { command: "rm -rf /" }, mcp: { always_ask: false } as McpToolInfo, dialect: "powershell" })).toEqual({
+      kind: "command",
+      command: "rm -r",
+    });
+  });
+});
+
 describe("a line send_input submits (AI-47)", () => {
   const typed = (cursor: string, args: Record<string, unknown>) => hardRule({ kind: "send_input", args, screen: `$ uptime\n 10:02:11 up 3 days\n${cursor}` });
 

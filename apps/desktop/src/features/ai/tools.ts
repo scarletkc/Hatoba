@@ -1,7 +1,7 @@
 import type { MessageKey, Params } from "@/i18n";
 import type { AiAllowance, AiFilePreview, AiPermissionMode, AiSettingsView, McpToolInfo } from "@/ipc/types";
 import type { CallLimit } from "./batches";
-import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes } from "./commandRules";
+import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes, type ShellDialect } from "./commandRules";
 
 /**
  * Built-in tool names (§13.4, §13.8); MCP tools are `mcp__<server>__<tool>` (§13.9), called directly or,
@@ -115,10 +115,10 @@ export function searchesNatively(settings: AiSettingsView | null): boolean {
 
 /**
  * §13.1: whether a call can run at the same time as the calls beside it: a tool that only reads, or a `run_command`
- * call whose command line only reads (§13.5). Edits, writes, typing into the shell, other commands and MCP tools run
- * alone.
+ * call whose command line only reads (§13.5), in the `dialect` of the tab's shell. Edits, writes, typing into the
+ * shell, other commands and MCP tools run alone.
  */
-export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>): boolean {
+export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, dialect: ShellDialect = "posix"): boolean {
   switch (kind) {
     case "read_terminal":
     case "read_file":
@@ -130,7 +130,7 @@ export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>): 
     case "search_tools":
       return true;
     case "run_command":
-      return readsOnlyCommand(str(args.command));
+      return readsOnlyCommand(str(args.command), dialect);
     default:
       return false;
   }
@@ -227,12 +227,12 @@ export function urlDomain(url: string): string | null {
 /**
  * The scope of a call's approvals; null when its card offers none: an MCP tool that is unknown, which
  * cannot be allowed ahead, a command line with no prefix to name, a URL with no host name, or a tool
- * that never asks.
+ * that never asks. A command line is read in the `dialect` of the tab's shell.
  */
-export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mcp: McpToolInfo | null | undefined): Scope | null {
+export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mcp: McpToolInfo | null | undefined, dialect: ShellDialect = "posix"): Scope | null {
   switch (kind) {
     case "run_command": {
-      const prefixes = allowancePrefixes(str(args.command));
+      const prefixes = allowancePrefixes(str(args.command), dialect);
       return prefixes ? { kind: "command", prefixes, savable: savablePrefixes(prefixes) } : null;
     }
     case "fetch_url": {
@@ -284,8 +284,9 @@ export function savedFor(scope: Scope, host: HostRef | null): AiAllowance[] {
 /**
  * AI-19 with §13.5: whether a call runs without asking, by `grants` (Allow for this conversation) or
  * `saved` (this device's approvals, of `host` for commands and tools): a command line whose every command
- * only reads or starts with an allowed prefix, a URL on an allowed domain, an allowed tool, or an allowed
- * MCP tool. An MCP tool's Always allow is in `mcp`, and `mustAsk` reads it.
+ * only reads or starts with an allowed prefix (in the `dialect` of the tab's shell), a URL on an allowed
+ * domain, an allowed tool, or an allowed MCP tool. An MCP tool's Always allow is in `mcp`, and `mustAsk`
+ * reads it.
  */
 export function callAllowed(
   kind: ToolKind,
@@ -294,12 +295,13 @@ export function callAllowed(
   grants: readonly string[],
   saved: readonly AiAllowance[],
   host: HostRef | null,
+  dialect: ShellDialect = "posix",
 ): boolean {
   switch (kind) {
     case "run_command": {
       const here = grants.flatMap((g) => (g.startsWith("run_command:") ? [g.slice("run_command:".length)] : []));
       const device = saved.filter((a) => a.kind === "command" && onHost(a, host)).map((a) => a.value);
-      return commandAllowed(str(args.command), [...here, ...device]);
+      return commandAllowed(str(args.command), [...here, ...device], dialect);
     }
     case "fetch_url": {
       const domain = urlDomain(str(args.url));

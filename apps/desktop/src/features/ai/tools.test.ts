@@ -7,6 +7,7 @@ import {
   callMode,
   callFileChange,
   callSummary,
+  concurrencySafe,
   exitStatusOf,
   grantKeys,
   isFileTool,
@@ -328,6 +329,15 @@ describe("approvals of commands, pages and tools (AI-19)", () => {
     expect(callAllowed("run_command", cmd("git pull"), null, ["run_command:git pull"], [], null)).toBe(true);
     // A tool allowed for the conversation does not allow commands.
     expect(callAllowed("run_command", cmd("rm -rf /tmp/x"), null, ["run_command", "edit_file"], [], web)).toBe(false);
+  });
+
+  it("reads a command in the syntax of the tab's shell", () => {
+    const local: HostRef = { host_id: null, target: "local" };
+    expect(callAllowed("run_command", cmd("Get-ChildItem | Select-String x"), null, [], [], local, "powershell")).toBe(true);
+    expect(callAllowed("run_command", cmd("Get-ChildItem | Select-String x"), null, [], [], local)).toBe(false);
+    expect(callAllowed("run_command", cmd("NPM run build"), null, ["run_command:npm run"], [], local, "powershell")).toBe(true);
+    expect(concurrencySafe("run_command", cmd("dir /s & ver"), "cmd")).toBe(true);
+    expect(allowanceScope("run_command", cmd("Remove-Item -Recurse build"), null, "powershell")).toEqual({ kind: "command", prefixes: ["Remove-Item"], savable: false });
   });
 
   it("allows a page by its exact host name", () => {

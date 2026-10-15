@@ -53,6 +53,7 @@ import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowanc
 import { hardRule, type HardRule } from "./autoRules";
 import { JUDGE_ERROR } from "./autoText";
 import { CallRoom, nextBatch, runConcurrently } from "./batches";
+import { dialectOf } from "./commandRules";
 import { localName } from "./place";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
@@ -564,11 +565,12 @@ class TurnRunner {
     const saved = useAllowances.getState().list ?? [];
     const target = this.target();
     const host = target ? hostRefOf(target.tab) : null;
+    const dialect = dialectOf(target?.tab.local?.kind);
     const grants = useAi.getState().allowed[convId] ?? [];
     return (call) => {
       const kind = toolKind(call.name);
       const args = parseArgs(call.arguments) ?? {};
-      return concurrencySafe(kind, args) && !mustAsk({ kind, mode, allowed: callAllowed(kind, args, null, grants, saved, host) });
+      return concurrencySafe(kind, args, dialect) && !mustAsk({ kind, mode, allowed: callAllowed(kind, args, null, grants, saved, host, dialect) });
     };
   }
 
@@ -620,13 +622,14 @@ class TurnRunner {
       if (mcp && getSlot(this.slotId).mcpOff.includes(mcp.server_id)) return this.answer(convId, call.id, mcpOffResult(mcp.server_name));
     }
     // AI-19: the approvals the user chose for this conversation and saved on this device, which name the
-    // tab's host for commands and tools; and §13.5's commands that only read.
+    // tab's host for commands and tools; and §13.5's commands that only read, in the tab's shell's syntax.
     const target = this.target();
     const host = target ? hostRefOf(target.tab) : null;
+    const dialect = dialectOf(target?.tab.local?.kind);
     const mode = callMode(this.mode, getSlot(this.slotId).mode);
     const saved = kind !== "mcp" && needsApproval(kind, mode) ? await savedAllowances().catch(() => []) : [];
     if (!this.acting) return;
-    const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host);
+    const allowed = callAllowed(kind, parseArgs(call.arguments) ?? {}, mcp, useAi.getState().allowed[convId] ?? [], saved, host, dialect);
     let edited: string | null = null;
     let judged = false;
     if (mustAsk({ kind, mode, allowed, mcp })) {
@@ -649,7 +652,7 @@ class TurnRunner {
         edited = d.edited;
         const allow = allowanceOf(d);
         // What the card offered, for the input that runs: an edited command names its own prefixes.
-        const scope = allow ? allowanceScope(kind, parseArgs(edited ?? call.arguments) ?? {}, mcp) : null;
+        const scope = allow ? allowanceScope(kind, parseArgs(edited ?? call.arguments) ?? {}, mcp, dialect) : null;
         if (allow === "conversation" && scope) allowInConversation(convId, grantKeys(scope));
         else if (allow === "always" && scope) await this.alwaysAllow(scope, host, mcp);
         if (d.refusal !== undefined) {
@@ -697,7 +700,8 @@ class TurnRunner {
     const screen = kind === "send_input" ? this.screenLines() : null;
     // A `call_mcp_tool` call's rules read the arguments of the tool it names (AI-45).
     const args = parseArgs(shownCall(call).arguments) ?? {};
-    const rule: HardRule | null = hardRule({ kind, args, mcp, screen }) ?? (this.rejected ? { kind: "after_reject" } : null);
+    const dialect = dialectOf(this.target()?.tab.local?.kind);
+    const rule: HardRule | null = hardRule({ kind, args, mcp, screen, dialect }) ?? (this.rejected ? { kind: "after_reject" } : null);
     if (rule) return { run: false, ask: { rule }, judged: false };
     this.setCall({ id: call.id, state: "judging", mcp });
     let verdict = await (prefetched ?? this.askJudge(convId, call.id, screen));
@@ -731,14 +735,15 @@ class TurnRunner {
     if (callMode(this.mode, getSlot(this.slotId).mode) !== "auto") return;
     const target = this.target();
     const host = target ? hostRefOf(target.tab) : null;
+    const dialect = dialectOf(target?.tab.local?.kind);
     const grants = useAi.getState().allowed[convId] ?? [];
     const saved = useAllowances.getState().list ?? [];
     for (const call of calls) {
       const kind = toolKind(call.name);
       if (!PREFETCHED.includes(kind) || this.verdicts.has(call.id) || (needsSession(kind) && !target)) continue;
       const args = parseArgs(call.arguments) ?? {};
-      const allowed = callAllowed(kind, args, null, grants, saved, host);
-      if (!mustAsk({ kind, mode: "auto", allowed }) || hardRule({ kind, args })) continue;
+      const allowed = callAllowed(kind, args, null, grants, saved, host, dialect);
+      if (!mustAsk({ kind, mode: "auto", allowed }) || hardRule({ kind, args, dialect })) continue;
       this.verdicts.set(call.id, this.askJudge(convId, call.id, null));
     }
   }

@@ -1,8 +1,24 @@
+import type { LocalShellKind } from "@/ipc/types";
+
 /**
  * §13.5: which `run_command` command lines run without asking in manual approval mode. A command line
  * runs without asking when every command in it only reads (`ls`, `cat`, `grep`, `git log`, …) or starts
  * with a prefix the user allowed (AI-19). Whatever this cannot tell for sure asks.
  */
+
+/**
+ * The syntax a command line is read in: a POSIX shell's, or on a local Windows tab PowerShell's or Command
+ * Prompt's (§7.5).
+ */
+export type ShellDialect = "posix" | "powershell" | "cmd";
+
+/**
+ * The dialect of a tab's shell, by its local shell's kind: PowerShell and Command Prompt have their own,
+ * and SSH tabs (no kind) and every other local shell, Git Bash and WSL too, read POSIX.
+ */
+export function dialectOf(kind: LocalShellKind | null | undefined): ShellDialect {
+  return kind === "powershell" || kind === "cmd" ? kind : "posix";
+}
 
 /** One simple command of a command line: its words after quote removal. */
 interface Simple {
@@ -14,100 +30,200 @@ interface Simple {
 /** Controls but tab and line break, and the bidirectional and zero-width format characters. */
 export const HIDDEN = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/;
 
-/**
- * Splits a command line into simple commands at `|`, `&&`, `||`, `;` and line breaks, removing quotes
- * and backslashes as the shell does. Null when it uses anything else: redirection and heredocs (`<`,
- * `>`), command and process substitution and every other `$` expansion, backticks, a background `&`,
- * subshells and groups, brace expansion, comments, hidden characters, a quote left open, or an empty
- * command.
- */
-export function splitCommands(line: string): Simple[] | null {
-  if (HIDDEN.test(line)) return null;
-  const out: Simple[] = [];
-  let words: string[] = [];
-  let globs: boolean[] = [];
-  let word = "";
-  let inWord = false;
-  let glob = false;
-  // `|`, `&&` or `||` was last, so another command must follow.
-  let open = false;
-  const endWord = () => {
-    if (inWord) {
-      words.push(word);
-      globs.push(glob);
+/** The words and commands a splitter has read so far. */
+class Reader {
+  readonly out: Simple[] = [];
+  word = "";
+  inWord = false;
+  glob = false;
+  /** `|`, `&&` or `||` was last, so another command must follow. */
+  open = false;
+  private words: string[] = [];
+  private globs: boolean[] = [];
+
+  /** Adds characters to the word being read. */
+  add(text: string) {
+    this.word += text;
+    this.inWord = true;
+  }
+
+  endWord() {
+    if (this.inWord) {
+      this.words.push(this.word);
+      this.globs.push(this.glob);
     }
-    word = "";
-    inWord = false;
-    glob = false;
-  };
-  const endCommand = (): boolean => {
-    endWord();
-    if (words.length === 0) return false;
-    out.push({ words, globs });
-    words = [];
-    globs = [];
+    this.word = "";
+    this.inWord = false;
+    this.glob = false;
+  }
+
+  /** Ends the command being read: false when it has no word. `open`: another command must follow. */
+  endCommand(open: boolean): boolean {
+    this.endWord();
+    if (this.words.length === 0) return false;
+    this.out.push({ words: this.words, globs: this.globs });
+    this.words = [];
+    this.globs = [];
+    this.open = open;
     return true;
-  };
+  }
+
+  /** A line break ends a command, or continues after `|`, `&&` and `||`. */
+  lineBreak() {
+    this.endWord();
+    if (this.words.length > 0) this.endCommand(false);
+  }
+
+  /** The commands read, or null when there are none or the last `|`, `&&` or `||` has no command after it. */
+  end(): Simple[] | null {
+    this.endWord();
+    if (this.words.length > 0) this.endCommand(false);
+    else if (this.open) return null;
+    return this.out.length > 0 ? this.out : null;
+  }
+}
+
+/**
+ * Splits a command line into simple commands, removing quotes as the shell does; null when it uses
+ * anything else the dialect's splitter refuses. POSIX: at `|`, `&&`, `||`, `;` and line breaks, also
+ * removing backslashes, and refusing redirection and heredocs (`<`, `>`), command and process substitution
+ * and every other `$` expansion, backticks, a background `&`, subshells and groups, brace expansion,
+ * comments, hidden characters, a quote left open, or an empty command. PowerShell and Command Prompt:
+ * see {@link splitPowerShell} and {@link splitCmd}.
+ */
+export function splitCommands(line: string, dialect: ShellDialect = "posix"): Simple[] | null {
+  if (HIDDEN.test(line)) return null;
+  if (dialect === "powershell") return splitPowerShell(line);
+  if (dialect === "cmd") return splitCmd(line);
+  const r = new Reader();
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (c === "'") {
       const end = line.indexOf("'", i + 1);
       if (end < 0) return null;
-      word += line.slice(i + 1, end);
-      inWord = true;
+      r.add(line.slice(i + 1, end));
       i = end;
     } else if (c === '"') {
       let j = i + 1;
+      let text = "";
       for (; j < line.length && line[j] !== '"'; j++) {
         const d = line[j];
         if (d === "$" || d === "`") return null;
         if (d === "\\" && j + 1 < line.length && '"\\$`\n'.includes(line[j + 1])) {
-          if (line[j + 1] !== "\n") word += line[j + 1];
+          if (line[j + 1] !== "\n") text += line[j + 1];
           j++;
-        } else word += d;
+        } else text += d;
       }
       if (j >= line.length) return null;
-      inWord = true;
+      r.add(text);
       i = j;
     } else if (c === "\\") {
       const next = line[i + 1];
       if (next === undefined) return null;
-      if (next !== "\n") {
-        word += next;
-        inWord = true;
-      }
+      if (next !== "\n") r.add(next);
       i++;
     } else if (c === " " || c === "\t") {
-      endWord();
+      r.endWord();
     } else if (c === "\n") {
-      // A line break ends a command, or continues after `|`, `&&` and `||`.
-      endWord();
-      if (words.length > 0) {
-        endCommand();
-        open = false;
-      }
+      r.lineBreak();
     } else if (c === ";") {
-      if (!endCommand()) return null;
-      open = false;
+      if (!r.endCommand(false)) return null;
     } else if (c === "|" || c === "&") {
       const next = line[i + 1];
       if (c === "&" && next !== "&") return null;
       if (c === "|" && next === "&") return null;
       if (next === c) i++;
-      if (!endCommand()) return null;
-      open = true;
+      if (!r.endCommand(true)) return null;
     } else if ("<>`$(){}#".includes(c)) {
       return null;
     } else {
-      if (c === "*" || c === "?" || c === "[") glob = true;
-      word += c;
-      inWord = true;
+      if (c === "*" || c === "?" || c === "[") r.glob = true;
+      r.add(c);
     }
   }
-  endWord();
-  if (words.length > 0) endCommand();
-  else if (open) return null;
-  return out.length > 0 ? out : null;
+  return r.end();
+}
+
+/** The typographic quotes and dashes PowerShell reads as `'`, `"` and `-`. */
+const POWERSHELL_TYPOGRAPHIC = /[\u2013-\u2015\u2018-\u201f]/;
+
+/**
+ * PowerShell: splits at `|`, `&&`, `||`, `;` and line breaks, and between words at commas too (a list of
+ * arguments). Quotes are removed, a doubled quote inside standing for one; PowerShell expands no globs, so no
+ * word is marked. Null for everything else: variables and every other `$` expression, a double-quoted
+ * string's backtick escapes, the backtick anywhere, redirection, the call operator and background `&`,
+ * parentheses, script blocks, splatting and arrays (`@`), type literals (`[`), comments, stop-parsing
+ * (`--%`), typographic quotes and dashes, a quote left open, or an empty command.
+ */
+function splitPowerShell(line: string): Simple[] | null {
+  if (POWERSHELL_TYPOGRAPHIC.test(line)) return null;
+  const r = new Reader();
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      let text = "";
+      for (; j < line.length; j++) {
+        const d = line[j];
+        if (c === '"' && (d === "$" || d === "`")) return null;
+        if (d !== c) text += d;
+        else if (line[j + 1] === c) text += line[++j];
+        else break;
+      }
+      if (j >= line.length) return null;
+      r.add(text);
+      i = j;
+    } else if (c === " " || c === "\t" || c === ",") {
+      r.endWord();
+    } else if (c === "\n") {
+      r.lineBreak();
+    } else if (c === ";") {
+      if (!r.endCommand(false)) return null;
+    } else if (c === "|" || c === "&") {
+      const next = line[i + 1];
+      if (c === "&" && next !== "&") return null;
+      if (next === c) i++;
+      if (!r.endCommand(true)) return null;
+    } else if ("<>`$(){}#".includes(c) || (!r.inWord && (c === "@" || c === "["))) {
+      return null;
+    } else {
+      r.add(c);
+    }
+  }
+  const out = r.end();
+  return out?.some((s) => s.words.includes("--%")) ? null : out;
+}
+
+/**
+ * Command Prompt, which runs one line: splits at `|`, `||`, `&` and `&&`, and between words at `,`, `;` and
+ * `=` too, which separate its own commands' arguments. Quotes are removed; Command Prompt expands no globs.
+ * Null for everything else: a line break, `%` and `!` variables (also quoted), the `^` escape, redirection,
+ * parentheses, `@` before a command, a quote left open, or an empty command.
+ */
+function splitCmd(line: string): Simple[] | null {
+  if (line.includes("\n")) return null;
+  const r = new Reader();
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      const end = line.indexOf('"', i + 1);
+      if (end < 0) return null;
+      const text = line.slice(i + 1, end);
+      if (/[%!]/.test(text)) return null;
+      r.add(text);
+      i = end;
+    } else if (" \t,;=".includes(c)) {
+      r.endWord();
+    } else if (c === "|" || c === "&") {
+      if (line[i + 1] === c) i++;
+      if (!r.endCommand(true)) return null;
+    } else if ("<>^%!()".includes(c) || (!r.inWord && c === "@")) {
+      return null;
+    } else {
+      r.add(c);
+    }
+  }
+  return r.end();
 }
 
 /**
@@ -361,35 +477,276 @@ const READ_ONLY: Record<string, Rule> = {
   kubectl: { ok: kubectlReads },
 };
 
-function readsOnly({ words, globs }: Simple): boolean {
+/**
+ * A PowerShell parameter (`-Name` or `-Name:value`) that is `name` or an abbreviation of it, as PowerShell
+ * accepts them, in any case.
+ */
+function psParam(arg: string, name: string): boolean {
+  const given = arg.startsWith("-") ? arg.slice(1).split(":")[0].toLowerCase() : "";
+  return given.length > 0 && name.startsWith(given);
+}
+
+/** `ipconfig` that shows the configuration: not `/release`, `/renew`, `/flushdns` and the like. */
+function ipconfigReads(args: string[]): boolean {
+  return args.every((a) => /^[-/](all|allcompartments|displaydns)$/i.test(a));
+}
+
+/** `arp` that shows the table: not `-d` or `-s`, which delete and add entries. */
+function arpReads(args: string[]): boolean {
+  return !args.some((a) => /^[-/][ds]$/i.test(a));
+}
+
+/** `route print`; `-f`, also before it, clears the routing table. */
+function routeReads(args: string[]): boolean {
+  const [verb] = firstWord(args);
+  return verb?.toLowerCase() === "print" && args.every((a) => !a.startsWith("-") || a === "-4" || a === "-6");
+}
+
+/** Command Prompt's `date` and `time` with `/t`; without it they ask for a new date or time to set. */
+function showsOnly(args: string[]): boolean {
+  return args.length === 1 && args[0].toLowerCase() === "/t";
+}
+
+/** The same rule under each of `names`: a cmdlet and its aliases, say. */
+const each = (names: readonly string[], rule: Rule): Record<string, Rule> => Object.fromEntries(names.map((n) => [n, rule]));
+
+/** Windows programs that only read, which PowerShell and Command Prompt run alike, and the tools of {@link READ_ONLY} found there too. */
+const WINDOWS_READS: Record<string, Rule> = {
+  ...each(["where", "tree", "findstr", "whoami", "systeminfo", "tasklist", "getmac", "jq"], free),
+  hostname: { ok: hostnameReads },
+  ipconfig: { ok: ipconfigReads },
+  // A number repeats the output at that interval until stopped.
+  netstat: { ok: (args) => !args.some((a) => /^\d+$/.test(a)) },
+  arp: { ok: arpReads },
+  route: { ok: routeReads },
+  git: READ_ONLY.git,
+  rg: READ_ONLY.rg,
+  docker: READ_ONLY.docker,
+  podman: READ_ONLY.podman,
+  kubectl: READ_ONLY.kubectl,
+};
+
+/**
+ * PowerShell's cmdlets that only read, by name and alias (lowercase): those Claude Code and Codex run
+ * without asking, and the network and system queries beside them. `-Wait` keeps `Get-Content` reading.
+ */
+const POWERSHELL_READS: Record<string, Rule> = {
+  ...WINDOWS_READS,
+  ...each(["get-childitem", "gci", "ls", "dir", "select-string", "sls"], free),
+  ...each(["get-content", "gc", "cat", "type"], { ok: (args) => !args.some((a) => psParam(a, "wait")) }),
+  ...each(
+    [
+      "get-item",
+      "gi",
+      "get-itemproperty",
+      "gp",
+      "get-itempropertyvalue",
+      "gpv",
+      "test-path",
+      "resolve-path",
+      "rvpa",
+      "convert-path",
+      "cvpa",
+      "split-path",
+      "join-path",
+      "get-filehash",
+      "get-acl",
+      "format-hex",
+      "fhx",
+    ],
+    free,
+  ),
+  ...each(["get-location", "gl", "pwd", "set-location", "sl", "cd", "chdir", "push-location", "pushd", "pop-location", "popd"], free),
+  ...each(
+    [
+      "write-output",
+      "echo",
+      "write",
+      "write-host",
+      "select-object",
+      "select",
+      "where-object",
+      "where",
+      "sort-object",
+      "sort",
+      "group-object",
+      "group",
+      "measure-object",
+      "measure",
+      "get-unique",
+      "gu",
+      "compare-object",
+      "compare",
+      "diff",
+      "get-member",
+      "gm",
+      "format-table",
+      "ft",
+      "format-list",
+      "fl",
+      "format-wide",
+      "fw",
+      "format-custom",
+      "fc",
+      "out-string",
+      "out-host",
+      "oh",
+      "convertto-json",
+      "convertfrom-json",
+      "convertto-csv",
+      "convertfrom-csv",
+      "convertto-xml",
+      "convertto-html",
+      "join-string",
+    ],
+    free,
+  ),
+  ...each(
+    [
+      "get-process",
+      "ps",
+      "gps",
+      "get-service",
+      "gsv",
+      "get-command",
+      "gcm",
+      "get-alias",
+      "gal",
+      "get-module",
+      "gmo",
+      "get-psdrive",
+      "gdr",
+      "get-psprovider",
+      "get-date",
+      "get-host",
+      "get-culture",
+      "get-uiculture",
+      "get-timezone",
+      "gtz",
+      "get-uptime",
+      "get-computerinfo",
+      "gin",
+      "get-hotfix",
+      "get-ciminstance",
+      "gcim",
+      "get-wmiobject",
+      "gwmi",
+      "get-winevent",
+      "get-eventlog",
+      "get-executionpolicy",
+      "get-volume",
+      "get-disk",
+      "get-partition",
+      "get-localuser",
+      "get-localgroup",
+      "get-localgroupmember",
+      "get-scheduledtask",
+    ],
+    free,
+  ),
+  ...each(
+    [
+      "get-netadapter",
+      "get-netipaddress",
+      "get-netipconfiguration",
+      "gip",
+      "get-netroute",
+      "get-nettcpconnection",
+      "get-netudpendpoint",
+      "get-dnsclient",
+      "get-dnsclientserveraddress",
+      "get-dnsclientcache",
+      "test-netconnection",
+      "tnc",
+      "resolve-dnsname",
+    ],
+    free,
+  ),
+};
+
+/** Command Prompt's own commands that only read, and the Windows programs of {@link WINDOWS_READS}. */
+const CMD_READS: Record<string, Rule> = {
+  ...WINDOWS_READS,
+  ...each(["dir", "type", "echo", "cd", "chdir", "ver", "vol", "find", "fc"], free),
+  date: { ok: showsOnly },
+  time: { ok: showsOnly },
+  // `/o` writes the sorted lines to a file.
+  sort: { ok: (args) => !args.some((a) => /^\/o/i.test(a)) },
+};
+
+/** Command Prompt's commands that change the current folder. */
+const CMD_CD = new Set(["cd", "chdir"]);
+
+/**
+ * The name a PowerShell or Command Prompt command is looked up by: in lowercase, and without `.exe` or
+ * `.com` unless it names a directory too, which none of the tables trusts.
+ */
+function lookupName(word: string): string {
+  const lower = word.toLowerCase();
+  return /[\\/]/.test(lower) ? lower : lower.replace(/\.(exe|com)$/, "");
+}
+
+/**
+ * A UNC path (`\\server\share`, `//server/share`): Windows reaches the computer it names, and signs in
+ * there as the user.
+ */
+const UNC = /\\\\|(^|[^:])\/\//;
+
+function readsOnly({ words, globs }: Simple, dialect: ShellDialect): boolean {
+  if (dialect !== "posix") {
+    const table = dialect === "powershell" ? POWERSHELL_READS : CMD_READS;
+    const name = lookupName(words[0]);
+    const rule = Object.hasOwn(table, name) ? table[name] : undefined;
+    return !!rule && !words.some((w) => UNC.test(w)) && rule.ok(words.slice(1));
+  }
   const rule = Object.hasOwn(READ_ONLY, words[0]) ? READ_ONLY[words[0]] : undefined;
   if (!rule || globs[0] || (!rule.globs && globs.some(Boolean))) return false;
   return rule.ok(words.slice(1));
 }
 
-/** A command that sets environment variables before it runs, or runs with sudo, never matches a prefix. */
-function plain(words: string[]): boolean {
+/**
+ * Whether each of a line's commands only reads (§13.5). In Command Prompt a `cd` only reads alone: it runs a
+ * program of the current folder before one on PATH, so a command after `cd` could run one the folder holds.
+ */
+function reading(commands: readonly Simple[], dialect: ShellDialect): boolean[] {
+  const moves = dialect === "cmd" && commands.length > 1;
+  return commands.map((c) => readsOnly(c, dialect) && !(moves && CMD_CD.has(lookupName(c.words[0]))));
+}
+
+/**
+ * A command that sets environment variables before it runs, or runs with sudo, never matches a prefix. In
+ * PowerShell and Command Prompt the splitter refuses variables, and sudo counts by its {@link windowsName}.
+ */
+function plain(words: string[], dialect: ShellDialect): boolean {
+  if (dialect !== "posix") return windowsName(words[0]) !== "sudo";
   return !/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]) && words[0] !== "sudo";
 }
 
 /** The words of a prefix the user allowed. */
 const prefixWords = (prefix: string) => prefix.trim().split(/\s+/).filter(Boolean);
 
+/** Whether a command starts with a prefix's words; PowerShell and Command Prompt take the command's name in any case. */
+function startsWith(words: readonly string[], prefix: readonly string[], dialect: ShellDialect): boolean {
+  if (prefix.length > words.length) return false;
+  return prefix.every((w, i) => words[i] === w || (i === 0 && dialect !== "posix" && words[0].toLowerCase() === w.toLowerCase()));
+}
+
 /**
  * Whether a `run_command` command line runs without asking: every command in it only reads, or starts
  * with one of `prefixes` (whole words: `git pull` covers `git pull origin`, not `git pull-request`).
  * A line that uses anything `splitCommands` refuses never does.
  */
-export function commandAllowed(line: string, prefixes: readonly string[]): boolean {
-  const commands = splitCommands(line);
+export function commandAllowed(line: string, prefixes: readonly string[], dialect: ShellDialect = "posix"): boolean {
+  const commands = splitCommands(line, dialect);
   if (!commands) return false;
   const allowed = prefixes.map(prefixWords).filter((p) => p.length > 0);
-  return commands.every((c) => readsOnly(c) || (plain(c.words) && allowed.some((p) => p.length <= c.words.length && p.every((w, i) => c.words[i] === w))));
+  const reads = reading(commands, dialect);
+  return commands.every((c, i) => reads[i] || (plain(c.words, dialect) && allowed.some((p) => startsWith(c.words, p, dialect))));
 }
 
 /** Whether the command line only reads (§13.5), and so runs without asking in manual approval mode. */
-export function readsOnlyCommand(line: string): boolean {
-  return commandAllowed(line, []);
+export function readsOnlyCommand(line: string, dialect: ShellDialect = "posix"): boolean {
+  return commandAllowed(line, [], dialect);
 }
 
 /** Tools whose first argument is a subcommand, which an allowance names too: `git pull`, not all of `git`. */
@@ -422,22 +779,67 @@ const SUBCOMMANDS = new Set([
   "ufw",
 ]);
 
+/** {@link SUBCOMMANDS} in PowerShell and Command Prompt, with Windows' own tools that take one. */
+const WINDOWS_SUBCOMMANDS = new Set([...SUBCOMMANDS, "winget", "choco", "scoop", "dotnet", "net", "netsh", "reg", "sc"]);
+
+/**
+ * A command's name as PowerShell and Command Prompt find it: in lowercase, without its directory and
+ * without `.exe`, `.com`, `.bat` or `.cmd`. `C:\Windows\System32\shutdown.exe` is `shutdown`.
+ */
+export function windowsName(word: string): string {
+  const base = word.slice(Math.max(word.lastIndexOf("/"), word.lastIndexOf("\\")) + 1).toLowerCase();
+  return base.replace(/\.(exe|com|bat|cmd)$/, "");
+}
+
+/** Whether a command's name without its directory is one of `names`, also with a version: `python3.12` is `python`. */
+function inNames(names: ReadonlySet<string>, base: string): boolean {
+  return names.has(base) || names.has(base.replace(/[\d.]+$/, ""));
+}
+
 /**
  * Whether `word` names a command of `names`, also with a directory or a version: `/usr/bin/sudo` is
- * `sudo`, and `python3.12` is `python`.
+ * `sudo`, and `python3.12` is `python`. In PowerShell and Command Prompt by its {@link windowsName}.
  */
-function named(names: ReadonlySet<string>, word: string): boolean {
-  const base = word.slice(word.lastIndexOf("/") + 1);
-  return names.has(base) || names.has(base.replace(/[\d.]+$/, ""));
+function named(names: ReadonlySet<string>, word: string, dialect: ShellDialect = "posix"): boolean {
+  return inNames(names, dialect === "posix" ? word.slice(word.lastIndexOf("/") + 1) : windowsName(word));
 }
 
 /** Commands that run another command, which a prefix of theirs would allow whatever it is. */
 const WRAPPERS = new Set(["sudo", "doas", "su", "env", "xargs", "nohup", "timeout", "nice", "ionice", "time", "watch", "exec", "eval", "command", "builtin", "sh", "bash", "zsh", "dash", "ksh", "fish", "busybox"]);
 
 /**
+ * {@link WRAPPERS} in PowerShell and Command Prompt, with the shells, `start`, `call`, dot-sourcing, and the
+ * cmdlets that run a command, a script block or what a file opens with.
+ */
+const WINDOWS_WRAPPERS = new Set([
+  ...WRAPPERS,
+  "cmd",
+  "powershell",
+  "pwsh",
+  "wsl",
+  "runas",
+  "gsudo",
+  "start",
+  "call",
+  ".",
+  "invoke-expression",
+  "iex",
+  "invoke-command",
+  "icm",
+  "start-process",
+  "saps",
+  "start-job",
+  "invoke-item",
+  "ii",
+  "foreach-object",
+  "foreach",
+  "%",
+]);
+
+/**
  * Commands that a prefix saved for good would let run anything, delete or overwrite data, or send it
  * elsewhere on the host: interpreters, deleting and formatting, permissions, processes and power, and
- * network transfers. Their cards offer Allow for this conversation, not Always allow.
+ * network transfers, Windows' among them. Their cards offer Allow for this conversation, not Always allow.
  */
 const NOT_SAVED = new Set([
   "python",
@@ -478,13 +880,54 @@ const NOT_SAVED = new Set([
   "ssh",
   "sftp",
   "ftp",
+  "powershell",
+  "pwsh",
+  "cmd",
+  "cscript",
+  "wscript",
+  "mshta",
+  "rundll32",
+  "regsvr32",
+  "remove-item",
+  "ri",
+  "del",
+  "erase",
+  "rd",
+  "clear-content",
+  "clc",
+  "format",
+  "diskpart",
+  "format-volume",
+  "clear-disk",
+  "remove-partition",
+  "cipher",
+  "icacls",
+  "cacls",
+  "takeown",
+  "set-acl",
+  "stop-process",
+  "spps",
+  "taskkill",
+  "stop-computer",
+  "restart-computer",
+  "invoke-webrequest",
+  "iwr",
+  "invoke-restmethod",
+  "irm",
+  "start-bitstransfer",
+  "bitsadmin",
+  "certutil",
 ]);
 
-/** Whether Always allow may save these prefixes (`allowancePrefixes`), which `NOT_SAVED` decides. */
+/**
+ * Whether Always allow may save these prefixes (`allowancePrefixes`), which `NOT_SAVED` decides by the
+ * prefix's {@link windowsName} in every dialect: a computer's approvals hold in all of its local shells
+ * (§7.5), and Git Bash and WSL run Windows programs too.
+ */
 export function savablePrefixes(prefixes: readonly string[]): boolean {
   return prefixes.every((p) => {
-    const name = prefixWords(p)[0] ?? "";
-    return !named(NOT_SAVED, name) && !name.slice(name.lastIndexOf("/") + 1).startsWith("mkfs");
+    const base = windowsName(prefixWords(p)[0] ?? "");
+    return !inNames(NOT_SAVED, base) && !base.startsWith("mkfs");
   });
 }
 
@@ -495,20 +938,23 @@ const MAX_PREFIXES = 3;
  * What Allow for this conversation and Always allow on the approval card of a `run_command` call allow
  * (AI-19): for each command of the line that does not only read, its name, and for a tool such as `git`
  * its subcommand too. Null when the card offers neither: the line uses what `splitCommands` refuses,
- * a command runs another one (`sudo`, `xargs`, `sh -c`), sets variables first, or gives no subcommand,
- * or the line would need more than three prefixes.
+ * a command runs another one (`sudo`, `xargs`, `sh -c`, `Start-Process`), sets variables first, or gives no
+ * subcommand (in PowerShell and Command Prompt also a `/` switch in its place), or the line would need more
+ * than three prefixes.
  */
-export function allowancePrefixes(line: string): string[] | null {
-  const commands = splitCommands(line);
+export function allowancePrefixes(line: string, dialect: ShellDialect = "posix"): string[] | null {
+  const commands = splitCommands(line, dialect);
   if (!commands) return null;
+  const windows = dialect !== "posix";
+  const reads = reading(commands, dialect);
   const out: string[] = [];
-  for (const c of commands) {
-    if (readsOnly(c)) continue;
+  for (const [i, c] of commands.entries()) {
+    if (reads[i]) continue;
     const [name, sub] = c.words;
-    if (!plain(c.words) || named(WRAPPERS, name) || c.globs[0] || /\s/.test(name)) return null;
+    if (!plain(c.words, dialect) || named(windows ? WINDOWS_WRAPPERS : WRAPPERS, name, dialect) || c.globs[0] || /\s/.test(name)) return null;
     let prefix = name;
-    if (named(SUBCOMMANDS, name)) {
-      if (!sub || sub.startsWith("-") || c.globs[1] || /\s/.test(sub)) return null;
+    if (named(windows ? WINDOWS_SUBCOMMANDS : SUBCOMMANDS, name, dialect)) {
+      if (!sub || sub.startsWith("-") || (windows && sub.startsWith("/")) || c.globs[1] || /\s/.test(sub)) return null;
       prefix = `${name} ${sub}`;
     }
     if (!out.includes(prefix)) out.push(prefix);

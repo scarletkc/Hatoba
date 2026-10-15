@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowancePrefixes, commandAllowed, readsOnlyCommand, splitCommands } from "./commandRules";
+import { allowancePrefixes, commandAllowed, dialectOf, readsOnlyCommand, savablePrefixes, splitCommands } from "./commandRules";
 
 describe("splitCommands", () => {
   it("splits at pipes, lists and line breaks, removing quotes", () => {
@@ -298,5 +298,332 @@ describe("allowancePrefixes", () => {
     for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod"]) {
       expect(commandAllowed(line, allowancePrefixes(line)!), line).toBe(true);
     }
+  });
+});
+
+describe("the shell dialect of a tab (§13.5, §7.5)", () => {
+  it("reads PowerShell and Command Prompt tabs in their own syntax, and every other tab as POSIX", () => {
+    expect(dialectOf("powershell")).toBe("powershell");
+    expect(dialectOf("cmd")).toBe("cmd");
+    for (const kind of ["unix", "git_bash", "wsl", null, undefined] as const) expect(dialectOf(kind)).toBe("posix");
+  });
+});
+
+describe("PowerShell command lines (§13.5)", () => {
+  const ps = (line: string) => readsOnlyCommand(line, "powershell");
+
+  it("splits at pipes, lists, statements and line breaks, and arguments at commas, removing quotes", () => {
+    expect(
+      splitCommands(`Get-ChildItem -Path 'C:\\Program Files' -Recurse | Select-String "a b" && Get-Date; gci\nGet-Process`, "powershell")?.map((c) => c.words),
+    ).toEqual([["Get-ChildItem", "-Path", "C:\\Program Files", "-Recurse"], ["Select-String", "a b"], ["Get-Date"], ["gci"], ["Get-Process"]]);
+    expect(splitCommands("Select-Object Name,Id , CPU", "powershell")?.[0].words).toEqual(["Select-Object", "Name", "Id", "CPU"]);
+    expect(splitCommands(`Write-Output 'it''s' "say ""hi"""`, "powershell")?.[0].words).toEqual(["Write-Output", "it's", 'say "hi"']);
+    expect(splitCommands("gci |\n  Measure-Object", "powershell")?.map((c) => c.words)).toEqual([["gci"], ["Measure-Object"]]);
+    expect(splitCommands("ls *.log", "powershell")?.[0].globs).toEqual([false, false]);
+  });
+
+  it("refuses variables, expressions, redirection and anything else it cannot follow", () => {
+    for (const line of [
+      "Get-Content $env:USERPROFILE\\.ssh\\config",
+      'Get-Content "$HOME\\x"',
+      "Write-Output $(Remove-Item x)",
+      "Get-ChildItem > out.txt",
+      "Get-Process 2>&1",
+      "& 'C:\\x.exe'",
+      "Start-Sleep 9 &",
+      "Get-ChildItem | ForEach-Object { Remove-Item $_ }",
+      "(Get-Item x).Delete()",
+      "Get-ChildItem @params",
+      "@(1,2)",
+      "[IO.File]::Delete('x')",
+      'Write-Output "a`nb"',
+      "Get-ChildItem `\n -Recurse",
+      "Get-ChildItem # comment",
+      "git --% log",
+      "Get-Content ‘x’",
+      "Remove-Item –Recurse x",
+      "Get-Content 'open",
+      'Get-Content "open',
+      "gci &&",
+      "; gci",
+      "",
+    ]) {
+      expect(splitCommands(line, "powershell"), JSON.stringify(line)).toBeNull();
+    }
+  });
+
+  it("runs cmdlets and programs that only read, by name or alias, in any case", () => {
+    for (const line of [
+      "Get-ChildItem -Recurse -Filter *.log",
+      "gci C:\\Users",
+      "ls",
+      "dir /s",
+      "Get-Content -Tail 50 C:\\logs\\app.log",
+      "cat README.md",
+      "type package.json",
+      "gc -Raw x.json | ConvertFrom-Json",
+      "Select-String -Path *.ts -Pattern TODO",
+      "sls TODO src\\main.ts",
+      "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10",
+      "Get-Process -Name explorer | Format-List *",
+      "ps | Where-Object CPU -GT 10",
+      "Get-Service | Where-Object Status -EQ Running | Measure-Object",
+      "Get-Item C:\\Windows | Get-Member",
+      "Test-Path C:\\x",
+      "Resolve-Path .",
+      "Get-Location",
+      "pwd",
+      "cd C:\\src; git status",
+      "Get-FileHash setup.exe -Algorithm SHA256",
+      "Get-Date -Format o",
+      "Get-ComputerInfo",
+      "Get-CimInstance Win32_OperatingSystem",
+      "Get-WinEvent -LogName System -MaxEvents 20",
+      "Test-NetConnection example.com -Port 443",
+      "tnc 10.0.0.1",
+      "Resolve-DnsName example.com -Type MX",
+      "Get-NetIPAddress -AddressFamily IPv4",
+      "Get-NetTCPConnection -State Listen",
+      "echo hi",
+      "Write-Host done",
+      "GET-CHILDITEM",
+      "get-content x",
+      "whoami /all",
+      "hostname",
+      "ipconfig /all",
+      "netstat -ano",
+      "tasklist /v",
+      "systeminfo",
+      "route print",
+      "arp -a",
+      "findstr /s /i todo *.cs",
+      "where.exe git",
+      "tree /f",
+      "git status",
+      "git.exe log --oneline -5",
+      "GIT diff --stat",
+      "rg -n TODO src",
+      "docker ps -a",
+      "kubectl get pods",
+    ]) {
+      expect(ps(line), line).toBe(true);
+    }
+  });
+
+  it("asks for anything that writes, runs other programs, follows output, reaches another computer or is unclear", () => {
+    for (const line of [
+      "Remove-Item x",
+      "rm -Recurse -Force build",
+      "Set-Content x.txt hi",
+      "Out-File x.txt",
+      "New-Item x -ItemType Directory",
+      "Copy-Item a b",
+      "Stop-Process -Name notepad",
+      "Start-Process notepad",
+      "Invoke-Expression 'gci'",
+      "iex gci",
+      "Invoke-WebRequest https://example.com",
+      "curl https://example.com",
+      "Get-ChildItem | Remove-Item",
+      "Get-Process | ForEach-Object Kill",
+      "Get-Process | % Kill",
+      "Get-Content -Wait app.log",
+      "gc app.log -Tail 10 -Wait",
+      "Get-Content app.log -wa",
+      "Get-Content -Wait:true app.log",
+      "Get-Content \\\\server\\share\\x.txt",
+      "gci //server/share",
+      "Get-Help gci -Online",
+      "ipconfig /release",
+      "ipconfig /flushdns",
+      "netstat 5",
+      "arp -d *",
+      "route -f print",
+      "route add 10.0.0.0 mask 255.0.0.0 10.0.0.1",
+      "hostname newname",
+      "git pull",
+      "git -c core.pager=sh log",
+      "C:\\Windows\\System32\\whoami.exe",
+      "Get-ChildItem; Remove-Item x",
+      "sc stop spooler",
+      ". .\\profile.ps1",
+      ".\\build.ps1",
+      "cmd /c dir",
+      "powershell -c gci",
+    ]) {
+      expect(ps(line), line).toBe(false);
+    }
+  });
+});
+
+describe("Command Prompt command lines (§13.5)", () => {
+  const cmd = (line: string) => readsOnlyCommand(line, "cmd");
+
+  it("splits at pipes and lists, and arguments at commas, semicolons and equal signs, removing quotes", () => {
+    expect(splitCommands('dir "C:\\Program Files" /s | findstr /i x & ver && type a.txt || echo no', "cmd")?.map((c) => c.words)).toEqual([
+      ["dir", "C:\\Program Files", "/s"],
+      ["findstr", "/i", "x"],
+      ["ver"],
+      ["type", "a.txt"],
+      ["echo", "no"],
+    ]);
+    expect(splitCommands("dir a,b;c=d", "cmd")?.[0].words).toEqual(["dir", "a", "b", "c", "d"]);
+  });
+
+  it("refuses variables, escapes, redirection, blocks and anything else it cannot follow", () => {
+    for (const line of [
+      "echo %PATH%",
+      'type "%USERPROFILE%\\x"',
+      "echo !x!",
+      "dir ^& del x",
+      "dir > out.txt",
+      "type < in",
+      "(dir)",
+      "@echo off",
+      "dir\nver",
+      'type "open',
+      "dir &",
+      "& dir",
+      "",
+    ]) {
+      expect(splitCommands(line, "cmd"), JSON.stringify(line)).toBeNull();
+    }
+  });
+
+  it("runs Command Prompt's own commands and programs that only read, in any case", () => {
+    for (const line of [
+      "dir /s /b *.log",
+      "DIR",
+      "type README.md",
+      "echo hello",
+      "cd",
+      "cd C:\\src",
+      "ver",
+      "vol C:",
+      "date /t",
+      "time /T",
+      "where git",
+      "findstr /n TODO *.c",
+      'find /c "x" a.txt',
+      "sort names.txt",
+      "fc a.txt b.txt",
+      "tree /f /a",
+      "whoami",
+      "ipconfig /displaydns",
+      "tasklist | findstr chrome",
+      "systeminfo",
+      "git status",
+      "git log --oneline -5",
+      "dir & ver",
+    ]) {
+      expect(cmd(line), line).toBe(true);
+    }
+  });
+
+  it("asks for anything that writes or runs other programs, and for cd with other commands", () => {
+    for (const line of [
+      "del x.txt",
+      "rd /s /q build",
+      "copy a b",
+      "date 2020-01-01",
+      "date",
+      "time 12:00",
+      "sort /o out.txt in.txt",
+      "sort /output out.txt in.txt",
+      "ipconfig /renew",
+      "type \\\\server\\share\\x",
+      "start notepad",
+      "call x.bat",
+      "git pull",
+      "cmd /c dir",
+      // Command Prompt runs a program of the current folder before one on PATH.
+      "cd C:\\src & git status",
+      "cd C:\\src && dir",
+      "dir/s",
+    ]) {
+      expect(cmd(line), line).toBe(false);
+    }
+  });
+});
+
+describe("allowed prefixes in PowerShell and Command Prompt (AI-19)", () => {
+  it("matches the command's name in any case, and its subcommand as written", () => {
+    expect(commandAllowed("npm run build", ["npm run"], "powershell")).toBe(true);
+    expect(commandAllowed("NPM run build", ["npm run"], "powershell")).toBe(true);
+    expect(commandAllowed("npm RUN build", ["npm run"], "powershell")).toBe(false);
+    expect(commandAllowed("Restart-Service spooler", ["restart-service"], "powershell")).toBe(true);
+    expect(commandAllowed("net stop spooler", ["net stop"], "cmd")).toBe(true);
+    expect(commandAllowed("NPM run build", ["npm run"])).toBe(false);
+    expect(commandAllowed("sudo npm run build", ["npm run", "sudo"], "powershell")).toBe(false);
+  });
+
+  it("names the command, with the subcommand of tools that have them", () => {
+    expect(allowancePrefixes("Restart-Service spooler -Force", "powershell")).toEqual(["Restart-Service"]);
+    expect(allowancePrefixes("Get-ChildItem | Remove-Item", "powershell")).toEqual(["Remove-Item"]);
+    expect(allowancePrefixes("cd C:\\src; npm run build", "powershell")).toEqual(["npm run"]);
+    expect(allowancePrefixes("winget install Git.Git", "powershell")).toEqual(["winget install"]);
+    expect(allowancePrefixes("net stop spooler", "cmd")).toEqual(["net stop"]);
+    expect(allowancePrefixes("cd C:\\src & msbuild app.sln", "cmd")).toEqual(["cd", "msbuild"]);
+  });
+
+  it("offers nothing it could not match later, or that would allow any command", () => {
+    for (const [line, dialect] of [
+      ["Start-Process notepad", "powershell"],
+      ["saps notepad", "powershell"],
+      ["Invoke-Expression x", "powershell"],
+      ["iex x", "powershell"],
+      ["Invoke-Command -ScriptBlock x", "powershell"],
+      ["Get-Process | ForEach-Object Kill", "powershell"],
+      ["Get-Process | % Kill", "powershell"],
+      ["ii setup.exe", "powershell"],
+      [". .\\x.ps1", "powershell"],
+      ["powershell -c x", "powershell"],
+      ["pwsh.exe -c x", "powershell"],
+      ["cmd /c x", "cmd"],
+      ["start notepad", "cmd"],
+      ["call x.bat", "cmd"],
+      ["sudo net stop x", "cmd"],
+      ["net /?", "cmd"],
+      ["Get-Content $x", "powershell"],
+      ["echo %x%", "cmd"],
+    ] as const) {
+      expect(allowancePrefixes(line, dialect), line).toBeNull();
+    }
+  });
+
+  it("matches what it offers", () => {
+    for (const [line, dialect] of [
+      ["Restart-Service spooler", "powershell"],
+      ["cd C:\\src; npm run build", "powershell"],
+      ["cd C:\\src & make install", "cmd"],
+      ["net stop spooler && net start spooler", "cmd"],
+    ] as const) {
+      expect(commandAllowed(line, allowancePrefixes(line, dialect)!, dialect), line).toBe(true);
+    }
+  });
+
+  it("never saves Windows' interpreters, deleting, permissions, processes, power or downloads for good", () => {
+    for (const prefix of [
+      "Remove-Item",
+      "ri",
+      "del",
+      "rd",
+      "Format-Volume",
+      "diskpart",
+      "icacls",
+      "Stop-Process",
+      "taskkill",
+      "Restart-Computer",
+      "Invoke-WebRequest",
+      "iwr",
+      "certutil",
+      "C:\\Windows\\System32\\shutdown.exe",
+      "powershell",
+      "cmd.exe",
+      "RM",
+    ]) {
+      expect(savablePrefixes([prefix]), prefix).toBe(false);
+    }
+    expect(savablePrefixes(["Restart-Service", "npm run", "git pull"])).toBe(true);
   });
 });

@@ -26,6 +26,7 @@ import type {
   AiUsage,
   AppError,
   HostView,
+  LocalShellKind,
   QuickTarget,
 } from "../types";
 
@@ -121,12 +122,21 @@ const DAY = 24 * HOUR;
 const CUT_SHORT = "/srv/app/conf.d/cache.conf";
 /** The file "write" creates, which "symlink" puts a link in the place of (AI-41). */
 const MAINTENANCE = "/srv/app/public/maintenance.html";
+/** What "disk" runs, in the syntax of the tab's shell (§7.5); SSH tabs are `unix`. */
+const DISK_COMMAND: Record<LocalShellKind, string> = {
+  unix: "df -h /",
+  git_bash: "df -h /",
+  wsl: "df -h /",
+  powershell: "Get-PSDrive -PSProvider FileSystem | Format-Table Name, Used, Free",
+  cmd: "dir C:\\ | findstr bytes",
+};
 
 /**
  * Mock of the AI conversations and turns (§13) for `pnpm dev`. A scripted fake model streams
  * reasoning and then Markdown with timers, and calls tools by keyword in the user's message (English,
  * Chinese or Japanese). Without a connected terminal tab it calls only the tools that need none (AI-09):
  *   "disk"            run_command `df -h /`          "fail"     run_command that exits with 5
+ *                     (on a local PowerShell or Command Prompt tab, one in its syntax that only reads, §13.5)
  *   "screen"          read_terminal                  "type" / "send"   send_input `uptime` + Enter
  *   "search"          web_search                     "fetch" / "url"   fetch_url ("whole": the whole page)
  *   "mcp"          a tool of the first running (or startable) MCP server the conversation uses,
@@ -486,7 +496,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
       );
       if (terminal) {
-        if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: "df -h /", timeout_seconds: 30 }));
+        if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }));
         if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
         if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
@@ -1225,6 +1235,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (/nonexistent|fail/.test(command)) return { status: 5, stdout: "", stderr: "Failed to restart nonexistent.service: Unit nonexistent.service not found." };
     if (/\bdf\b/.test(command))
       return { status: 0, stdout: "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   49G   23G   24G  48% /", stderr: "" };
+    if (command === DISK_COMMAND.powershell) return { status: 0, stdout: "Name   Used (GB)  Free (GB)\n----   ---------  ---------\nC         211.40     264.13\nD          88.02     843.51", stderr: "" };
+    if (command === DISK_COMMAND.cmd) return { status: 0, stdout: "              14 File(s)        482,113 bytes\n              21 Dir(s)  283,604,348,928 bytes free", stderr: "" };
     if (/uptime/.test(command)) return { status: 0, stdout: " 09:41:12 up 41 days,  3:12,  1 user,  load average: 0.21, 0.18, 0.12", stderr: "" };
     if (/sleep/.test(command)) return { status: 0, stdout: "done", stderr: "" };
     // `?ai=showcase`

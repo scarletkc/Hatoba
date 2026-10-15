@@ -1,5 +1,5 @@
 import type { McpToolInfo } from "@/ipc/types";
-import { HIDDEN } from "./commandRules";
+import { HIDDEN, type ShellDialect, windowsName } from "./commandRules";
 import type { ToolKind } from "./tools";
 
 /**
@@ -13,6 +13,8 @@ import type { ToolKind } from "./tools";
  *   call's strings may hold the tabs and line breaks of code and text: {@link MCP_HIDDEN});
  * - a `run_command` command, `send_input` text or MCP call's arguments that name one of
  *   {@link ALWAYS_ASK_COMMANDS}: an MCP call's strings at any depth, as its server may run them as a command;
+ *   on a PowerShell or Command Prompt tab, a command or text that names one of {@link WINDOWS_ALWAYS_ASK_COMMANDS}
+ *   or deletes recursively too;
  * - `send_input` while the screen's last line asks for a password or passphrase;
  * - any call after the user rejected an earlier call of the same response (`after_reject`, which the turn
  *   applies).
@@ -33,6 +35,17 @@ import type { ToolKind } from "./tools";
  * `mkfs` counts with any suffix (`mkfs.ext4`). `rm` counts only when it is recursive: see {@link namedCommand}.
  */
 export const ALWAYS_ASK_COMMANDS: readonly string[] = ["shred", "dd", "mkfs", "wipefs", "fdisk", "sfdisk", "parted", "shutdown", "reboot", "poweroff", "halt"];
+
+/**
+ * What a PowerShell or Command Prompt tab also always asks about, in lowercase: formatting and wiping disks and
+ * partitions, and stopping or restarting the computer. `format` counts only with a drive after it (`format D:`),
+ * as it is always run, since `npm run format` and `dotnet format` format code. Deleting asks when it is
+ * recursive: see {@link namedCommand}.
+ */
+export const WINDOWS_ALWAYS_ASK_COMMANDS: readonly string[] = ["diskpart", "format-volume", "clear-disk", "remove-partition", "stop-computer", "restart-computer"];
+
+/** PowerShell's and Command Prompt's commands that delete files and folders: `Remove-Item` and its aliases, `del`, `erase`, `rd` and `rmdir`. */
+const WINDOWS_DELETES: readonly string[] = ["remove-item", "ri", "rm", "rmdir", "rd", "del", "erase"];
 
 /** Why a call in Auto mode goes straight to the approval card (AI-47). */
 export type HardRule =
@@ -57,38 +70,40 @@ export interface HardRuleInput {
   mcp?: McpToolInfo | null;
   /** For `send_input`, the screen's last lines, the cursor's line last; without them, only the text is checked. */
   screen?: string | null;
+  /** The shell of the call's tab (`dialectOf`), which `run_command` and `send_input` are read in; POSIX when absent. */
+  dialect?: ShellDialect;
 }
 
 /**
  * The hard rule that sends a call in Auto mode straight to the approval card, or null when the judge decides it
  * (AI-47). `after_reject` is not decided here: it depends on the response's earlier calls.
  */
-export function hardRule({ kind, args, mcp, screen }: HardRuleInput): HardRule | null {
+export function hardRule({ kind, args, mcp, screen, dialect = "posix" }: HardRuleInput): HardRule | null {
   if (kind === "mcp") {
     if (!mcp) return { kind: "mcp_unknown" };
     if (mcp.always_ask) return { kind: "mcp_always_ask" };
     const { keys, values } = mcpStrings(args);
     if (keys.some((s) => MCP_HIDDEN.test(s)) || values.some((s) => MCP_HIDDEN.test(s))) return { kind: "hidden" };
     // The values in order as one text, so that a command given as a list of words (`["rm", "-rf", "/srv"]`) asks too.
-    return commandRule([values.join("\n")]);
+    return commandRule([values.join("\n")], "posix");
   }
   if (kind !== "run_command" && kind !== "send_input") return null;
   const value = kind === "run_command" ? args.command : args.text;
   const text = typeof value === "string" ? value : "";
   if (HIDDEN.test(text)) return { kind: "hidden" };
-  if (kind !== "send_input" || !screen) return commandRule([text]);
+  if (kind !== "send_input" || !screen) return commandRule([text], dialect);
   const cursor = lastLine(screen);
   if (passwordPrompt(cursor)) return { kind: "password" };
-  if (!submits(args, text)) return commandRule([text]);
+  if (!submits(args, text)) return commandRule([text], dialect);
   if (HIDDEN.test(cursor)) return { kind: "hidden" };
   // The line the shell receives: the text continues what the cursor's line holds, whose trailing spaces the
   // screen does not keep, so the two are joined both without and with a space.
-  return commandRule([text, cursor + text, `${cursor} ${text}`]);
+  return commandRule([text, cursor + text, `${cursor} ${text}`], dialect);
 }
 
-function commandRule(lines: readonly string[]): HardRule | null {
+function commandRule(lines: readonly string[], dialect: ShellDialect): HardRule | null {
   for (const line of lines) {
-    const command = namedCommand(line);
+    const command = namedCommand(line, dialect);
     if (command) return { kind: "command", command };
   }
   return null;
@@ -138,9 +153,11 @@ const SEPARATORS = /[\s;|&()<>{}`$=,#%]+/;
  * `rm` with a recursive option after it: a cluster of short options with `r` or `R` (`-r`, `-rf`, `-fR`), or
  * `--recursive`, also abbreviated as getopt accepts it (`--rec`). Quotes and backslashes are removed first, as
  * the shell joins what they quote (`'r'm`, `r\m`), so a command inside `sh -c '…'` is found too. The option may
- * belong to a later command of the line (`rm a; ls -R`), which asks too.
+ * belong to a later command of the line (`rm a; ls -R`), which asks too. In PowerShell and Command Prompt see
+ * {@link windowsCommand}.
  */
-export function namedCommand(line: string): string | null {
+export function namedCommand(line: string, dialect: ShellDialect = "posix"): string | null {
+  if (dialect !== "posix") return windowsCommand(line);
   const words = line.replace(/['"\\]/g, "").split(SEPARATORS);
   let rm = false;
   for (const word of words) {
@@ -157,6 +174,48 @@ export function namedCommand(line: string): string | null {
 function recursiveOption(word: string): boolean {
   if (word.startsWith("--")) return word.length > 2 && "--recursive".startsWith(word);
   return /^-[A-Za-z]*[rR]/.test(word);
+}
+
+/**
+ * {@link namedCommand} in PowerShell and Command Prompt: the first of {@link ALWAYS_ASK_COMMANDS} and
+ * {@link WINDOWS_ALWAYS_ASK_COMMANDS} (and `format` with a drive) that `line` names, as named (without its directory), or one of
+ * {@link WINDOWS_DELETES} with a recursive option anywhere in the line, before it too (`gci -Recurse |
+ * Remove-Item`): `/s`, `-Recurse` also abbreviated (`-r`), or `rm`'s own (`-rf`, `--recursive`). Escapes
+ * (`` ` ``, `^`) and quotes, the typographic ones too, are removed first, and typographic dashes read as
+ * `-`. A word's first and last parts between `\` and before `/` name commands too, so that one named with a
+ * directory (`C:\Windows\System32\shutdown.exe`) or with switches right after it (`rd/s/q`) is found, by its
+ * {@link windowsName}.
+ */
+function windowsCommand(line: string): string | null {
+  const words = line
+    .replace(/['"`^\u2018-\u201f]/g, "")
+    .replace(/[\u2013-\u2015]/g, "-")
+    .split(SEPARATORS)
+    .filter(Boolean);
+  let deletes: string | null = null;
+  let recursive: string | null = null;
+  for (const [i, word] of words.entries()) {
+    const parts = word.split(/\\|(?=\/)/).filter(Boolean);
+    for (const part of parts) if (!recursive && windowsRecursive(part)) recursive = part;
+    for (const part of new Set([parts[0], parts.at(-1)])) {
+      if (!part) continue;
+      const shown = part.replace(/^\/+/, "");
+      const name = windowsName(shown);
+      const formats = name === "format" && /^[a-z]:/i.test(words[i + 1] ?? "");
+      if (WINDOWS_DELETES.includes(name)) deletes ??= shown;
+      else if (formats || ALWAYS_ASK_COMMANDS.includes(name) || WINDOWS_ALWAYS_ASK_COMMANDS.includes(name) || name.startsWith("mkfs.")) return shown;
+    }
+  }
+  return deletes && recursive ? `${deletes} ${recursive}` : null;
+}
+
+/** A recursive option of {@link WINDOWS_DELETES}: `/s`, `-Recurse` or an abbreviation of it, `--recursive` or a cluster of `rm`'s options with `r`. */
+function windowsRecursive(part: string): boolean {
+  const lower = part.toLowerCase();
+  const name = lower.split(":")[0];
+  if (lower === "/s" || (name.length >= 2 && "-recurse".startsWith(name))) return true;
+  if (lower.startsWith("--")) return lower.length > 2 && "--recursive".startsWith(lower);
+  return /^-[dfiv]*r[dfiv]*$/.test(lower);
 }
 
 /**
