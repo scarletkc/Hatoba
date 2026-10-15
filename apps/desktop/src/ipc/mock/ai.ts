@@ -5,7 +5,6 @@ import { forkCopies } from "@/features/ai/fork";
 import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
 import { shownCall } from "@/features/ai/tools";
 import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
-import { detectLocale } from "@/i18n";
 import type { HatobaApi } from "../api";
 import type {
   AiAutoVerdict,
@@ -29,6 +28,7 @@ import type {
   LocalShellKind,
   QuickTarget,
 } from "../types";
+import { mockLocale, VISITOR } from "./visitor";
 
 type AiApi = Pick<
   HatobaApi,
@@ -199,8 +199,10 @@ const DISK_COMMAND: Record<LocalShellKind, string> = {
  */
 export function createAiMock(deps: AiMockDeps): AiApi {
   const flags = new Set((new URLSearchParams(location.search).get("ai") ?? "").split(",").map((x) => x.trim()));
-  const zh = detectLocale() === "zh-CN";
-  const ja = detectLocale() === "ja";
+  const zh = mockLocale() === "zh-CN";
+  const ja = mockLocale() === "ja";
+  /** The text in the mock's language. */
+  const say = (en: string, zhText: string, jaText: string) => (zh ? zhText : ja ? jaText : en);
   const convs = new Map<string, Conv>();
   const turns = new Map<string, Turn>();
   /** Conversations being compacted (AI-21, AI-22), which refuse a fork (AI-43) and a side question (AI-42). */
@@ -408,7 +410,6 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * written in Japanese too, since the website's Japanese screenshots show it.
    */
   function showcase(step: number): Plan {
-    const say = (en: string, zhText: string, jaText: string) => (zh ? zhText : ja ? jaText : en);
     if (step === 0)
       return {
         reasoning: say(
@@ -460,10 +461,110 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         "**Fixed.** The 502s came from a port mismatch:\n\n| Check | Before | Now |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\nThe last deploy moved the API to port 8080, but `/etc/nginx/conf.d/api.conf` still pointed at 8081. A check at the end of the deploy script catches this next time:\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
         "**修好了。** 502 来自端口不一致：\n\n| 检查项 | 之前 | 现在 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n上次部署把 API 改到了 8080 端口，但 `/etc/nginx/conf.d/api.conf` 还指向 8081。可以在部署脚本最后加一个检查，下次就能马上发现：\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
         "**修正しました。** 502 の原因はポートの不一致でした。\n\n| 確認項目 | 修正前 | 修正後 |\n|---|---|---|\n| nginx upstream | `127.0.0.1:8081` | `127.0.0.1:8080` |\n| `GET /v1/hosts` | 502 Bad Gateway | **200 OK** |\n\n前回のデプロイで API は 8080 に移りましたが、`/etc/nginx/conf.d/api.conf` は 8081 のままでした。デプロイスクリプトの最後にこのチェックを入れれば、次はすぐ気づけます。\n\n```bash\ncurl -fsS http://localhost/healthz || exit 1\n```",
+      ) +
+        (VISITOR
+          ? say(
+              "\n\n---\n\nThat was the demo’s scripted fix. You can also ask how much **disk** space is left or what’s on the **screen**, or ask me to **type** a command, **search** the web, or **edit** the nginx config.",
+              "\n\n---\n\n以上是演示里预先写好的修复过程。你还可以问我**磁盘**还剩多少空间、**屏幕**上有什么，或者让我**输入**一条命令、**搜索**网页、**编辑** nginx 配置。",
+              "\n\n---\n\nここまではデモ用に用意した修正の流れです。ほかにも、**ディスク**の空きや**画面**の内容を聞いたり、コマンドの**入力**、ウェブの**検索**、nginx の設定の**編集**を頼んだりできます。",
+            )
+          : ""),
+      calls: [],
+      finish: "stop",
+    };
+  }
+
+  /** The website's demo: the answer to a message without a keyword, which says what the demo answers. */
+  function visitorOverview(): Plan {
+    return {
+      reasoning: say("Say what this demo can answer.", "说明这个演示能回答什么。", "このデモで答えられることを伝える。"),
+      text: say(
+        "This is a demo with sample servers: nothing here connects anywhere, and my replies are scripted, so I answer only a few requests. Try one of these:\n\n- Users are getting 502s from nginx on this box. Find out why and fix it.\n- How much disk space is left?\n- What’s on my screen?\n- Type a command into the shell.\n- Search the web for nginx upstream errors.\n- Edit the nginx config.\n\nIn the app, the assistant answers with the model you set up.",
+        "这是一个使用示例服务器的演示：它不会连接任何地方，我的回复也是预先写好的，所以只能回应几种请求。可以试试：\n\n- 这台机器上的 nginx 一直返回 502，找出原因并修好它。\n- 磁盘还剩多少空间？\n- 屏幕上显示了什么？\n- 在 shell 里输入一条命令。\n- 搜索 nginx upstream 的报错。\n- 编辑 nginx 配置。\n\n在应用里，助手会用你设置的模型来回答。",
+        "サンプルのサーバーを使ったデモです。どこにも接続せず、返答もあらかじめ用意したものなので、答えられる依頼は限られています。次のどれかを試してください。\n\n- nginx が 502 を返しています。原因を調べて直してください。\n- ディスクの空きはどれくらいですか？\n- 画面に何が表示されていますか？\n- シェルにコマンドを入力してください。\n- nginx の upstream エラーを検索してください。\n- nginx の設定を編集してください。\n\nアプリでは、設定したモデルがアシスタントとして答えます。",
       ),
       calls: [],
       finish: "stop",
     };
+  }
+
+  /** The website's demo: the answer from what each call of the turn returned. */
+  function visitorAnswer(since: AiEntryView[], results: ToolEntry[]): Plan {
+    const calls = new Map(since.flatMap((e) => (e.role === "assistant" ? e.tool_calls : [])).map((x) => [x.id, x]));
+    const edited = results.some((r) => calls.get(r.tool_call_id)?.name === "edit_file");
+    const parts = results.flatMap((r): string[] => {
+      const x = calls.get(r.tool_call_id);
+      if (!x) return [];
+      if (r.status === "rejected") return [say("You declined this step, so it didn’t run.", "你拒绝了这一步，所以它没有运行。", "この操作は拒否されたので、実行していません。")];
+      if (r.status !== "ok") return [say("This step didn’t finish.", "这一步没有完成。", "この操作は完了しませんでした。")];
+      switch (x.name) {
+        case "run_command": {
+          if (x.arguments.includes(DISK_COMMAND.unix))
+            return [
+              say(
+                "The root filesystem is **48% full**: 23 GB of 49 GB used, 24 GB free. Nothing needs cleaning up yet.\n\n| Filesystem | Size | Used | Free | Use |\n|---|---|---|---|---|\n| `/` on `/dev/nvme0n1p1` | 49G | 23G | 24G | 48% |",
+                "根分区已用 **48%**：49 GB 里用了 23 GB，还剩 24 GB，暂时不用清理。\n\n| 文件系统 | 大小 | 已用 | 可用 | 使用率 |\n|---|---|---|---|---|\n| `/`（`/dev/nvme0n1p1`） | 49G | 23G | 24G | 48% |",
+                "ルートファイルシステムの使用率は **48%** です。49 GB のうち 23 GB を使っていて、空きは 24 GB。まだ整理する必要はありません。\n\n| ファイルシステム | サイズ | 使用 | 空き | 使用率 |\n|---|---|---|---|---|\n| `/`（`/dev/nvme0n1p1`） | 49G | 23G | 24G | 48% |",
+              ),
+            ];
+          const stdout = r.content.split("--- stdout ---\n")[1]?.split("\n--- stderr ---")[0] ?? "";
+          return [`${say("Here’s the space on this computer’s drives:", "这台电脑各个磁盘的空间：", "このコンピューターのドライブの容量です。")}\n\n\`\`\`\n${stdout}\n\`\`\``];
+        }
+        case "read_terminal": {
+          const screen = r.content.split("\n\n").slice(1).join("\n\n").split("\n").filter((l) => l.trim()).slice(-8);
+          const missing = screen.some((l) => l.includes("command not found"));
+          return [
+            `${say("Here’s the end of your screen:", "屏幕最后几行是：", "画面の最後の数行です。")}\n\n\`\`\`\n${screen.join("\n")}\n\`\`\`\n\n${
+              missing
+                ? say(
+                    "A command there wasn’t found: this demo’s shell knows only a few, and `help` lists them.",
+                    "其中有条命令没有找到：这个演示里的 shell 只认识几条命令，输入 `help` 可以看到。",
+                    "見つからなかったコマンドがあります。このデモのシェルが知っているコマンドは少しだけで、`help` で一覧できます。",
+                  )
+                : say("Nothing there looks like an error.", "看起来没有报错。", "エラーらしいものは見当たりません。")
+            }`,
+          ];
+        }
+        case "send_input":
+          return [
+            say(
+              "I typed `uptime` into your shell. The server has been **up for 41 days**, and its load average is 0.21, so it’s mostly idle.",
+              "我在你的 shell 里输入了 `uptime`。这台服务器已经**运行了 41 天**，平均负载 0.21，基本空闲。",
+              "シェルに `uptime` と入力しました。サーバーは **41 日間稼働**していて、ロードアベレージは 0.21。ほぼ待機状態です。",
+            ),
+          ];
+        case "web_search":
+          return [
+            say(
+              "The top results agree that a 502 from nginx usually comes from the upstream, not from nginx:\n\n1. **nginx 502 Bad Gateway: upstream prematurely closed connection**: the upstream closed the connection before answering, so check its logs and timeouts.\n2. **Module ngx_http_upstream_module**: nginx’s reference for `keepalive`, `max_fails`, and `fail_timeout`.\n3. **Debugging 502 errors behind a reverse proxy**: check that the upstream listens, doesn’t crash, and answers within the proxy’s timeouts.",
+              "搜索结果的看法一致：nginx 返回 502，问题通常出在上游，而不是 nginx 本身：\n\n1. **nginx 502 Bad Gateway: upstream prematurely closed connection**：上游在回应前关闭了连接，先查它的日志和超时设置。\n2. **Module ngx_http_upstream_module**：nginx 关于 `keepalive`、`max_fails` 和 `fail_timeout` 的文档。\n3. **Debugging 502 errors behind a reverse proxy**：确认上游在监听、没有崩溃，并且在代理的超时时间内回应。",
+              "検索結果はどれも、nginx の 502 は nginx 自体ではなく上流が原因のことが多いとしています。\n\n1. **nginx 502 Bad Gateway: upstream prematurely closed connection**: 上流が応答する前に接続を閉じている。上流のログとタイムアウトを確認する。\n2. **Module ngx_http_upstream_module**: `keepalive`、`max_fails`、`fail_timeout` についての nginx のリファレンス。\n3. **Debugging 502 errors behind a reverse proxy**: 上流が待ち受けているか、落ちていないか、プロキシのタイムアウト内に応答しているかを確認する。",
+            ),
+          ];
+        case "read_file":
+          return edited
+            ? []
+            : [
+                say(
+                  "This is nginx’s default site. It listens on port 80, serves files from `/var/www/html`, and passes `/api/` to `127.0.0.1:8081` with a 30-second read timeout.",
+                  "这是 nginx 的默认站点。它监听 80 端口，从 `/var/www/html` 提供文件，并把 `/api/` 转发到 `127.0.0.1:8081`，读取超时为 30 秒。",
+                  "nginx のデフォルトサイトです。ポート 80 で待ち受け、`/var/www/html` のファイルを返し、`/api/` を読み取りタイムアウト 30 秒で `127.0.0.1:8081` に転送しています。",
+                ),
+              ];
+        case "edit_file":
+          return [
+            say(
+              "I changed `/etc/nginx/sites-available/default`: `/api/` now goes to port **8080**, the read timeout is 60 seconds, and nginx passes the `Host` header on. The diff is above, where you can revert it. Reload nginx to apply it:\n\n```bash\nsudo nginx -t && sudo systemctl reload nginx\n```",
+              "我改了 `/etc/nginx/sites-available/default`：`/api/` 现在转发到 **8080** 端口，读取超时改为 60 秒，并把 `Host` 头传给上游。改动的 diff 在上面，可以在那里撤销。重新加载 nginx 后生效：\n\n```bash\nsudo nginx -t && sudo systemctl reload nginx\n```",
+              "`/etc/nginx/sites-available/default` を変更しました。`/api/` の転送先はポート **8080** になり、読み取りタイムアウトは 60 秒、`Host` ヘッダーも上流に渡します。差分は上にあり、そこから元に戻せます。反映するには nginx をリロードします。\n\n```bash\nsudo nginx -t && sudo systemctl reload nginx\n```",
+            ),
+          ];
+        default:
+          return [];
+      }
+    });
+    if (parts.length === 0) return visitorOverview();
+    return { reasoning: say("Answer from what the tools returned.", "根据工具返回的结果回答。", "ツールの結果から答える。"), text: parts.join("\n\n"), calls: [], finish: "stop" };
   }
 
   async function plan(c: Conv, turn: Turn): Promise<Plan> {
@@ -479,6 +580,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     const errorLine = diagnostics?.text.split("\n").find((line) => line.startsWith("Error:")) ?? "";
     const words = typed.toLowerCase();
     const want = (...w: string[]) => w.some((x) => words.includes(x));
+    /** A keyword for reviewing the app, which the website's demo leaves to the overview it answers with. */
+    const review = (...w: string[]) => !VISITOR && want(...w);
     const terminal = turn.context.tab;
 
     if (flags.has("refused")) return { reasoning: "", text: zh ? "抱歉，我不能帮助完成这个请求。" : "I can’t help with that request.", calls: [], finish: "refused" };
@@ -488,23 +591,24 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         : "This host runs several services; here is each one with its configuration, log location and the usual ways to debug it. ";
       return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
     }
-    if (flags.has("showcase") && terminal) return showcase(since.filter((e) => e.role === "assistant").length);
+    // The website's demo starts the fix from the question its input suggests.
+    if ((flags.has("showcase") || (VISITOR && want("502"))) && terminal) return showcase(since.filter((e) => e.role === "assistant").length);
 
     if (results.length === 0 && callsSoFar === 0) {
       const calls: AiToolCall[] = [];
       // Terminal tools only with a connected tab; a request without one does not offer them.
       const wantsTerminal = want(
-        ...["disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "workdir", "工作目录", "作業フォルダ", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
+        ...["disk", "space", "磁盘", "空间", "ディスク", "容量", "df", "fail", "失败", "失敗", "sleep", "workdir", "工作目录", "作業フォルダ", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
         ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
       );
       if (terminal) {
-        if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }));
-        if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
-        if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
-        if (want("workdir", "工作目录", "作業フォルダ")) calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
+        if (want("disk", "space", "磁盘", "空间", "ディスク", "容量", "df")) calls.push(call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }));
+        if (review("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
+        if (review("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
+        if (review("workdir", "工作目录", "作業フォルダ")) calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
         if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
-        if (want("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
+        if (review("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
         // AI-38…40: the file tools, on the mock's files. A change to an existing file reads it first, as
         // the model must; "unread" skips that to show the refusal.
         const NGINX = "/etc/nginx/sites-available/default";
@@ -512,9 +616,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path)))) calls.push(call("read_file", { path }));
         };
         if (want("read file", "cat ", "读取文件", "ファイルを読")) readFirst(NGINX);
-        if (want("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
-        if (want("grep")) calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
-        if (want("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
+        if (review("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
+        if (review("grep")) calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
+        if (review("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
         if (want("edit", "编辑", "編集")) readFirst(NGINX);
         if (want("edit", "编辑", "編集"))
           calls.push(
@@ -524,25 +628,25 @@ export function createAiMock(deps: AiMockDeps): AiApi {
               new_string: "        proxy_pass http://127.0.0.1:8080/;\n        proxy_read_timeout 60s;\n        proxy_set_header Host $host;",
             }),
           );
-        if (want("listen", "端口", "ポート", "nomatch", "不匹配", "不一致")) readFirst(NGINX);
-        if (want("crlf")) readFirst("/srv/app/web.config");
-        if (want("motd")) readFirst("/etc/motd");
-        if (want("listen", "端口", "ポート")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "80 default_server", new_string: "8080 default_server", replace_all: true }));
-        if (want("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
-        if (want("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
-        if (want("write", "写入", "書き込"))
+        if (review("listen", "端口", "ポート", "nomatch", "不匹配", "不一致")) readFirst(NGINX);
+        if (review("crlf")) readFirst("/srv/app/web.config");
+        if (review("motd")) readFirst("/etc/motd");
+        if (review("listen", "端口", "ポート")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "80 default_server", new_string: "8080 default_server", replace_all: true }));
+        if (review("nomatch", "不匹配", "不一致")) calls.push(call("edit_file", { path: "/etc/nginx/sites-available/default", old_string: "listen 443 ssl;", new_string: "listen 8443 ssl;" }));
+        if (review("crlf")) calls.push(call("edit_file", { path: "/srv/app/web.config", old_string: '<add key="mode" value="production" />', new_string: '<add key="mode" value="maintenance" />\n    <add key="banner" value="Back soon" />' }));
+        if (review("write", "写入", "書き込"))
           calls.push(call("write_file", { path: MAINTENANCE, content: "<!doctype html>\n<title>Maintenance</title>\n<h1>We’ll be back soon</h1>\n<p>Scheduled maintenance until 04:00 UTC.</p>\n" }));
-        if (want("bigfile"))
+        if (review("bigfile"))
           calls.push(call("write_file", { path: "/srv/app/data/seed.csv", content: `id,name\n${Array.from({ length: 1200 }, (_, i) => `${i + 1},host-${i + 1}`).join("\n")}\n` }));
-        if (want("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
-        if (want("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
-        if (want("rmfile")) calls.push(call("run_command", { command: "rm /etc/motd" }));
-        if (want("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
+        if (review("motd")) calls.push(call("write_file", { path: "/etc/motd", content: "Welcome to prod-api.\nMaintenance window: Saturdays 01:00–03:00 UTC.\nOn call: #ops\n" }));
+        if (review("cutshort")) calls.push(call("write_file", { path: CUT_SHORT, content: "# Cache settings\nmax_size = 512m\ninactive = 60m\nuse_temp_path = off\n" }));
+        if (review("rmfile")) calls.push(call("run_command", { command: "rm /etc/motd" }));
+        if (review("symlink")) calls.push(call("run_command", { command: `ln -sfn /srv/app/shared/maintenance.html ${MAINTENANCE}` }));
       }
       if (want("search", "搜索", "検索")) calls.push(call("web_search", { query: "nginx 502 bad gateway upstream prematurely closed" }));
-      if (want("fetch", "url", "网页", "ページ"))
+      if (review("fetch", "url", "网页", "ページ"))
         calls.push(call("fetch_url", { url: "https://nginx.org/en/docs/http/ngx_http_upstream_module.html", ...(want("whole", "整页", "全体") ? { full_page: true } : {}) }));
-      if (want("mcp")) {
+      if (review("mcp")) {
         const mcp = await mcpCall(turn, words);
         // AI-45: "deferred" searches the MCP tools, then calls one through `call_mcp_tool`.
         if (want("deferred")) {
@@ -550,24 +654,28 @@ export function createAiMock(deps: AiMockDeps): AiApi {
           calls.push(call("call_mcp_tool", { tool: mcp.name, arguments: JSON.parse(mcp.arguments) as unknown }));
         } else calls.push(mcp);
       }
-      if (want("unknown")) calls.push(call("delete_everything", { confirm: true }));
+      if (review("unknown")) calls.push(call("delete_everything", { confirm: true }));
       // Connection diagnostics: read the built-in skill's troubleshooting reference first.
       if (diagnostics && calls.length === 0) calls.push(call("read_skill", { name: "hatoba", path: "references/troubleshooting-connections.md" }));
       if (calls.length > 0)
         return {
-          reasoning: zh
-            ? "用户想了解主机的状态。先用工具收集信息，再根据结果回答。"
-            : "The user wants to know about the host. Gather the facts with tools first, then answer from the results.",
-          text: zh ? "我先看一下。" : "Let me check.",
+          reasoning: say(
+            "The user wants to know about the host. Gather the facts with tools first, then answer from the results.",
+            "用户想了解主机的状态。先用工具收集信息，再根据结果回答。",
+            "ユーザーはホストの状態を知りたがっている。まずツールで情報を集め、その結果から答える。",
+          ),
+          text: say("Let me check.", "我先看一下。", "確認します。"),
           calls,
           finish: "tool_calls",
         };
       if (wantsTerminal)
         return {
           reasoning: "",
-          text: zh
-            ? "这个对话没有连接终端标签页，所以我无法运行命令或读取屏幕。请打开一台主机，然后再问我一次。"
-            : "No terminal tab is attached to this conversation, so I can’t run commands or read the screen. Open a host and ask me again.",
+          text: say(
+            "No terminal tab is attached to this conversation, so I can’t run commands or read the screen. Open a host and ask me again.",
+            "这个对话没有连接终端标签页，所以我无法运行命令或读取屏幕。请打开一台主机，然后再问我一次。",
+            "この会話にはターミナルのタブがつながっていないため、コマンドの実行も画面の読み取りもできません。ホストを開いてから、もう一度聞いてください。",
+          ),
           calls: [],
           finish: "stop",
         };
@@ -575,15 +683,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (results.length > 0 && diagnostics) {
       return {
-        reasoning: zh ? "根据诊断信息和故障排查参考给出原因和下一步。" : "Use the diagnostics and the troubleshooting reference to explain the cause and the next steps.",
-        text: zh
-          ? `诊断信息显示：\`${errorLine}\`。\n\n可能的原因：\n\n1. 主机没有开机，或者 SSH 服务没有运行\n2. 防火墙或安全组挡住了端口\n3. 地址或端口填错了\n\n先确认能 ping 通主机，再检查 **编辑主机** 里的地址和端口。改好之后点 **重试**。`
-          : `The diagnostics say \`${errorLine}\`.\n\nLikely causes:\n\n1. The host is down, or its SSH server is not running\n2. A firewall or security group blocks the port\n3. The address or port is wrong\n\nCheck that the host answers at all, then the address and port in **Edit Host**, and choose **Retry** after fixing them.`,
+        reasoning: say(
+          "Use the diagnostics and the troubleshooting reference to explain the cause and the next steps.",
+          "根据诊断信息和故障排查参考给出原因和下一步。",
+          "診断情報とトラブルシューティングの資料から、原因と次の手順を説明する。",
+        ),
+        text: say(
+          `The diagnostics say \`${errorLine}\`.\n\nLikely causes:\n\n1. The host is down, or its SSH server is not running\n2. A firewall or security group blocks the port\n3. The address or port is wrong\n\nCheck that the host answers at all, then the address and port in **Edit Host**, and choose **Retry** after fixing them.`,
+          `诊断信息显示：\`${errorLine}\`。\n\n可能的原因：\n\n1. 主机没有开机，或者 SSH 服务没有运行\n2. 防火墙或安全组挡住了端口\n3. 地址或端口填错了\n\n先确认能 ping 通主机，再检查 **编辑主机** 里的地址和端口。改好之后点 **重试**。`,
+          `診断情報には \`${errorLine}\` とあります。\n\n考えられる原因:\n\n1. ホストが起動していないか、SSH サーバーが動いていない\n2. ファイアウォールやセキュリティグループがポートを塞いでいる\n3. アドレスかポートが間違っている\n\nまずホストが応答するか確かめてから、**ホストを編集** でアドレスとポートを確認してください。直したら **再試行** を選びます。`,
+        ),
         calls: [],
         finish: "stop",
       };
     }
 
+    if (results.length > 0 && VISITOR) return visitorAnswer(since, results);
     if (results.length > 0) {
       const parts = results.map((r) => {
         const head = r.content.split("\n").slice(0, 8).join("\n");
@@ -625,6 +740,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       };
     }
 
+    if (VISITOR) return visitorOverview();
     return {
       reasoning: zh ? "这是一般性的问题，不需要工具。用 Markdown 简短回答。" : "A general question; no tools needed. Answer briefly in Markdown.",
       text: zh

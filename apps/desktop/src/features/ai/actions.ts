@@ -1866,8 +1866,13 @@ export function askAiAboutConnection(tabId: string, host: string, text: string) 
   const diagnostics = makeDiagnostics(host, text);
   if (!diagnostics) return;
   useAi.setState((st) => ({ diagnostics: { ...st.diagnostics, [tabId]: diagnostics } }));
+  suggestQuestion(tabId, t("ai.connection.question"));
+}
+
+/** Puts `question` in the tab's input when it is empty, selected so typing replaces it, and opens the panel on the tab. */
+export function suggestQuestion(tabId: string, question: string) {
   const suggest = !getSlot(tabId).draft.trim();
-  if (suggest) patchSlot(tabId, { draft: t("ai.connection.question") });
+  if (suggest) patchSlot(tabId, { draft: question });
   toggleAiPanel(true);
   focusInput(suggest);
 }

@@ -1,4 +1,4 @@
-import { detectLocale } from "@/i18n";
+import { mockLocale } from "./visitor";
 import type {
   AvailableUpdate,
   ConflictView,
@@ -18,7 +18,7 @@ import type {
 
 /** Sample data from the design file (`Hatoba.dc.html`), used when running in a plain browser. */
 
-const zh = detectLocale() === "zh-CN";
+const zh = mockLocale() === "zh-CN";
 const MIN = 60_000;
 const DAY = 86_400_000;
 

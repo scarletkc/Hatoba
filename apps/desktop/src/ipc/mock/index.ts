@@ -31,6 +31,9 @@ import { applyPatch } from "./patch";
 import { readStoredPrefs } from "./prefs";
 import { FakeShell } from "./shell";
 import { mockLocalShells } from "./local";
+import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor";
+import { startVisitor } from "./visitorStart";
+import { version as appVersion } from "../../../package.json";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> & Record<"timeout", (address: string, port: number) => string> = {
@@ -56,6 +59,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?lang=en | zh-CN | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -80,12 +84,15 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * and `app` for a Worker that needs a newer Hatoba. "Update Worker" honours `?deploy=fail`,
  * `waiting`, `permission`, `nobundle`, and `accounts`, and also `missing`, `novault`, `newer`, and
  * `foreign` for the review.
+ * `?lang` sets the language pref and the language of the sample data until the page reloads.
+ * Built with `--mode demo`, it is the website's demo instead (see `VISITOR`), where the parameters
+ * still work.
  * Nothing here is secure; it never runs inside the Tauri app.
  */
 export function createMockApi(): HatobaApi {
   const q = new URLSearchParams(location.search);
   const platformParam = q.get("platform");
-  const platform = platformParam === "macos" || platformParam === "linux" || platformParam === "windows" ? platformParam : "windows";
+  const platform = platformParam === "macos" || platformParam === "linux" || platformParam === "windows" ? platformParam : VISITOR ? visitorPlatform() : "windows";
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
@@ -93,7 +100,7 @@ export function createMockApi(): HatobaApi {
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
   let closeDemo = q.get("close") === "prompt";
-  const version = "0.1.0-dev";
+  const version = VISITOR ? appVersion : "0.1.0-dev";
   /** The Worker version this build "bundles". */
   const BUNDLED_WORKER = "0.2.0";
 
@@ -104,7 +111,13 @@ export function createMockApi(): HatobaApi {
   let settings = structuredClone(D.SETTINGS);
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
-  let prefs: LocalPrefs = readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
+  // The demo keeps prefs only until the page reloads, so a reload starts it over.
+  let prefs: LocalPrefs = VISITOR ? { ...D.PREFS, ai_panel_open: true } : readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
+  const lang = passedLocale();
+  if (lang) prefs = { ...prefs, language: lang };
+  const storePrefs = () => {
+    if (!VISITOR) localStorage.setItem("hatoba.mock.prefs", JSON.stringify(prefs));
+  };
   const starPrompt: StarPrompt = { first_seen_at: q.get("star") === "due" ? Date.now() - 2 * 86_400_000 : Date.now(), done: false };
   let conflicts = syncDemo === "conflict" ? [...D.CONFLICTS] : [];
   let devices = [...D.DEVICES];
@@ -140,7 +153,7 @@ export function createMockApi(): HatobaApi {
     statsTimers.delete(sid);
   };
   let seq = 0;
-  const launches = q.get("launch")?.trim() ? [q.get("launch")!.trim().split(/\s+/)] : [];
+  const launches = q.get("launch")?.trim() ? [q.get("launch")!.trim().split(/\s+/)] : VISITOR ? [[VISITOR_HOST]] : [];
   let cliCommand = false;
   const cliView = () => ({
     enabled: cliCommand,
@@ -237,6 +250,7 @@ export function createMockApi(): HatobaApi {
     builtinEnabled: async () => (await aiSettings.ai_settings_get()).builtin_skill_enabled,
   });
   const { memory_tool, ...aiMemory } = createAiMemoryMock();
+  if (VISITOR) startVisitor();
   return {
     ...aiSettings,
     ...aiExtensions,
@@ -548,7 +562,7 @@ export function createMockApi(): HatobaApi {
       hosts = hosts.map((h) => (h.proxy_mode === "proxy" && h.proxy_id === pid ? { ...h, proxy_mode: "device_default", proxy_id: null } : h));
       if (prefs.default_proxy_id === pid) {
         prefs = { ...prefs, default_proxy_id: null };
-        localStorage.setItem("hatoba.mock.prefs", JSON.stringify(prefs));
+        storePrefs();
       }
       touch();
     },
@@ -1091,7 +1105,7 @@ export function createMockApi(): HatobaApi {
     prefs_get: async () => prefs,
     prefs_save: async (next) => {
       prefs = next;
-      localStorage.setItem("hatoba.mock.prefs", JSON.stringify(next));
+      storePrefs();
     },
     star_prompt_get: async () => ({ ...starPrompt }),
     star_prompt_done: async () => {
