@@ -145,13 +145,21 @@ The terminal settings sync with the vault. They are in three places:
 | Appearance | 外观 | 外観 |
 | Terminal Colors | 终端配色 | ターミナルの配色 |
 | Always Dark | 始终深色 | 常にダーク |
+| Always Light | 始终浅色 | 常にライト |
 | Match Appearance | 跟随外观 | 外観に合わせる |
+| In Dark Appearance | 深色外观时 | ダーク外観のとき |
+| In Light Appearance | 浅色外观时 | ライト外観のとき |
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
 - **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons.
 - **Cursor Style**: Block (default), Bar or Underline.
 - **Scrollback**: 1,000, 5,000, 10,000 (default), or 50,000 lines.
-- **Terminal Colors**: **Always Dark** (default) keeps the terminal dark in both themes; **Match Appearance** follows the light or dark theme.
+- **Terminal Colors**: **Always Dark** (default), **Always Light**, or **Match Appearance**, which follows the app's light or dark theme. Below it, the built-in color schemes show as small terminal previews; click one to use it:
+  - Dark: Hatoba Dark (default), Dracula, Tokyo Night, Catppuccin Mocha, One Half Dark, Nord, Gruvbox Dark, Solarized Dark, Rosé Pine, Kanagawa, GitHub Dark.
+  - Light: Hatoba Light (default), GitHub Light, One Half Light, Catppuccin Latte, Solarized Light, Gruvbox Light, Rosé Pine Dawn.
+  - With **Match Appearance** both lists show, under **In Dark Appearance** and **In Light Appearance**, and the terminal switches between the two picks with the theme. Open terminals take a new pick when the Settings window closes.
+  - Light schemes darken colors that would be hard to read on a light background, such as white or yellow text from programs written for dark terminals.
+  - There are no custom schemes and no import from other terminals.
 - Language, theme and list density are device-local settings in Settings → Appearance; see `references/settings.md`.
 
 ## Tab states

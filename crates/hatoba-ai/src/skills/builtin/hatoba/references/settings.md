@@ -48,6 +48,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | Auto | 跟随系统 | システムに合わせる |
 | Terminal Colors | 终端配色 | ターミナルの配色 |
 | Always Dark | 始终深色 | 常にダーク |
+| Always Light | 始终浅色 | 常にライト |
 | Match Appearance | 跟随外观 | 外観に合わせる |
 | List Density | 列表密度 | リストの密度 |
 | Regular | 标准 | 標準 |
@@ -59,7 +60,7 @@ Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS)
 | 日本語 | 日本語 | 日本語 |
 
 - **Appearance**: **Light**, **Dark**, or **Auto** (follows the system and changes live).
-- **Terminal Colors**: **Always Dark** (default) or **Match Appearance**.
+- **Terminal Colors**: **Always Dark** (default), **Always Light** or **Match Appearance**, and a color scheme for a dark and a light terminal (Dracula, Nord, Solarized and others); see `references/terminal.md`.
 - **List Density**: **Regular** or **Compact** rows in lists.
 - **Language**: **System Default** (the system language if it is Chinese, Japanese or English, otherwise English), **简体中文**, **English** or **日本語**. It takes effect immediately. Host names, commands and terminal output are never translated.
 
