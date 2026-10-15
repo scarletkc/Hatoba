@@ -3,7 +3,9 @@
 //! what `find` and `rg --null` print, so `hatoba_ai::search` reads the result as it reads a
 //! host's. As there, links to files are searched and links to directories are not followed, `.git`
 //! is skipped, binary files (a NUL byte) are left out, and the output stops at the bytes asked for.
-//! Unlike there, `^` and `$` also take CRLF line breaks, which Windows files often have.
+//! Unlike there, `^` and `$` also take CRLF line breaks, which Windows files often have. As with
+//! rg, a multiline search reads a file whole only when the pattern can span lines, and then counts
+//! matches rather than matching lines, which a match across lines would count more than once.
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read};
@@ -12,10 +14,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use hatoba_ssh::remote_search::{GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput};
 use regex::bytes::{Regex, RegexBuilder};
+use regex_syntax::hir::{Class, Hir, HirKind, Look};
 
 use super::files::{resolve, shown};
 
-/// A file larger than this is not read whole for a multiline search.
+/// A multiline search reads a file whole, and reports a file larger than this as not searched.
 const MAX_MULTILINE_FILE: u64 = 256 * 1024 * 1024;
 
 fn line(value: &str, empty: bool) -> Result<&str, RemoteSearchError> {
@@ -267,10 +270,22 @@ pub fn grep(
                 .trim()
                 .to_owned(),
         })?;
+    let whole = query.multiline && spans_lines(query);
     let target = root(&query.scope, home)?;
     let mut out = Capped::new(max);
     let mut stderr = Vec::new();
     let mut unread = Vec::new();
+    let mut search = |printed: &str, path: &Path| {
+        search_file(
+            &regex,
+            whole,
+            query.mode,
+            printed,
+            path,
+            &mut out,
+            &mut unread,
+        )
+    };
     let start;
     if target.is_dir() {
         start = start_of(&target);
@@ -280,11 +295,11 @@ pub fn grep(
             &query.scope,
             stop,
             &mut stderr,
-            &mut |printed, path| search_file(&regex, query, printed, path, &mut out, &mut unread),
+            &mut search,
         );
     } else {
         start = shown(&target);
-        search_file(&regex, query, &start, &target, &mut out, &mut unread);
+        search(&start, &target);
     }
     stderr.extend_from_slice(&unread);
     let (stdout, cut) = out.finish();
@@ -298,17 +313,57 @@ pub fn grep(
     })
 }
 
-/// Searches one file and prints what the mode asks for. `false` once the output is full.
+/// Whether rg's multiline search reads files whole for `query`'s pattern, rather than line by
+/// line: when a match can take in a line break, or the pattern has `^`, `$`, `\A` or `\z`, as rg's
+/// `non_matching_bytes` tells.
+fn spans_lines(query: &GrepQuery<'_>) -> bool {
+    regex_syntax::ParserBuilder::new()
+        .case_insensitive(query.ignore_case)
+        .multi_line(true)
+        .crlf(true)
+        .dot_matches_new_line(true)
+        .utf8(false)
+        .build()
+        .parse(query.pattern)
+        .ok()
+        .is_none_or(|hir| takes_line_break(&hir))
+}
+
+fn takes_line_break(hir: &Hir) -> bool {
+    match hir.kind() {
+        HirKind::Empty => false,
+        HirKind::Literal(literal) => literal.0.contains(&b'\n'),
+        HirKind::Class(Class::Unicode(class)) => class
+            .ranges()
+            .iter()
+            .any(|r| r.start() <= '\n' && '\n' <= r.end()),
+        HirKind::Class(Class::Bytes(class)) => class
+            .ranges()
+            .iter()
+            .any(|r| r.start() <= b'\n' && b'\n' <= r.end()),
+        HirKind::Look(look) => matches!(
+            look,
+            Look::Start | Look::End | Look::StartLF | Look::EndLF | Look::StartCRLF | Look::EndCRLF
+        ),
+        HirKind::Repetition(repetition) => takes_line_break(&repetition.sub),
+        HirKind::Capture(capture) => takes_line_break(&capture.sub),
+        HirKind::Concat(all) | HirKind::Alternation(all) => all.iter().any(takes_line_break),
+    }
+}
+
+/// Searches one file, whole or line by line, and prints what the mode asks for. `false` once the
+/// output is full.
 fn search_file(
     regex: &Regex,
-    query: &GrepQuery<'_>,
+    whole: bool,
+    mode: GrepMode,
     printed: &str,
     path: &Path,
     out: &mut Capped,
     stderr: &mut Vec<u8>,
 ) -> bool {
-    let lines = match matching_lines(regex, query.multiline, path) {
-        Ok(Some(lines)) => lines,
+    let Searched { lines, count } = match matching_lines(regex, whole, path) {
+        Ok(Some(searched)) => searched,
         // A binary file, as rg leaves it out.
         Ok(None) => return true,
         Err(e) => {
@@ -321,13 +376,12 @@ fn search_file(
             return true;
         }
     };
-    let matched = lines.iter().filter(|l| l.matched).count();
-    if matched == 0 {
+    if count == 0 {
         return true;
     }
-    match query.mode {
+    match mode {
         GrepMode::Files => out.push(format!("{printed}\n").as_bytes()),
-        GrepMode::Count => out.push(format!("{printed}:{matched}\n").as_bytes()),
+        GrepMode::Count => out.push(format!("{printed}:{count}\n").as_bytes()),
         GrepMode::Lines { before, after } => {
             let shown = with_context(&lines, before as usize, after as usize);
             for i in shown {
@@ -354,17 +408,23 @@ struct Line {
     matched: bool,
 }
 
+/// A file searched: its lines, and what `rg -c` counts in it.
+struct Searched {
+    lines: Vec<Line>,
+    /// The matches when the file was searched whole, else the matching lines.
+    count: usize,
+}
+
 /// The file's lines, without their line breaks, each with whether a match touches it; `None` for
 /// a binary file.
-fn matching_lines(
-    regex: &Regex,
-    multiline: bool,
-    path: &Path,
-) -> std::io::Result<Option<Vec<Line>>> {
+fn matching_lines(regex: &Regex, whole: bool, path: &Path) -> std::io::Result<Option<Searched>> {
     let file = File::open(path)?;
-    if multiline {
+    if whole {
         if file.metadata()?.len() > MAX_MULTILINE_FILE {
-            return Ok(Some(Vec::new()));
+            return Err(std::io::Error::other(format!(
+                "not searched: larger than the {} MiB a multiline search reads",
+                MAX_MULTILINE_FILE / 1024 / 1024
+            )));
         }
         let mut bytes = Vec::new();
         BufReader::new(file).read_to_end(&mut bytes)?;
@@ -396,7 +456,9 @@ fn matching_lines(
                 }
             })
             .collect();
+        let mut count = 0;
         for m in regex.find_iter(&bytes) {
+            count += 1;
             let last = if m.end() > m.start() {
                 m.end() - 1
             } else {
@@ -408,10 +470,11 @@ fn matching_lines(
                 }
             }
         }
-        return Ok(Some(lines));
+        return Ok(Some(Searched { lines, count }));
     }
     let mut reader = BufReader::new(file);
     let mut lines = Vec::new();
+    let mut count = 0;
     let mut buf = Vec::new();
     loop {
         buf.clear();
@@ -424,12 +487,14 @@ fn matching_lines(
         if buf.last() == Some(&b'\n') {
             buf.pop();
         }
+        let matched = regex.is_match(&buf);
+        count += usize::from(matched);
         lines.push(Line {
-            matched: regex.is_match(&buf),
+            matched,
             text: buf.clone(),
         });
     }
-    Ok(Some(lines))
+    Ok(Some(Searched { lines, count }))
 }
 
 /// The lines a content result shows: each matching line and up to `before` and `after` lines
@@ -653,8 +718,8 @@ mod tests {
         assert_eq!(
             lines(&out),
             [
-                format!("{start}/README.md:2"),
-                format!("{start}/crlf.txt:2")
+                format!("{start}/README.md:1"),
+                format!("{start}/crlf.txt:1")
             ]
         );
         assert!(matches!(
@@ -666,5 +731,62 @@ mod tests {
             ),
             Err(RemoteSearchError::BadPattern { rg: true, .. })
         ));
+    }
+
+    #[test]
+    fn a_multiline_count_counts_what_rg_c_u_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        fs::write(home.join("u.txt"), "ab ab\nab\n").unwrap();
+        let file = shown(&home.join("u.txt"));
+        let stop = AtomicBool::new(false);
+        let count = |pattern: &str, multiline: bool| {
+            let mut q = query(scope("u.txt", &[], None), pattern, GrepMode::Count);
+            q.multiline = multiline;
+            String::from_utf8(grep(&q, 1 << 20, home, &stop).unwrap().stdout).unwrap()
+        };
+        // What rg 14 prints: the matches where the pattern can span lines, else the matching
+        // lines, as without multiline.
+        for (pattern, n) in [
+            (r"ab", 2),
+            (r"\ba", 2),
+            (r"a(?-s:.)", 2),
+            (r"a.", 3),
+            (r"\s", 3),
+            (r"\Ab|a", 3),
+            (r"b$|a", 5),
+        ] {
+            assert_eq!(count(pattern, true), format!("{file}:{n}\n"), "{pattern}");
+        }
+        assert_eq!(count(r"b$|a", false), format!("{file}:2\n"));
+        // A match across two lines is one.
+        fs::write(home.join("u.txt"), "Hello\nworld\n").unwrap();
+        assert_eq!(count(r"Hello.world", true), format!("{file}:1\n"));
+    }
+
+    #[test]
+    fn a_multiline_search_reports_a_file_too_large_to_read_whole() {
+        let dir = tree();
+        let home = dir.path();
+        File::create(home.join("big.log"))
+            .unwrap()
+            .set_len(MAX_MULTILINE_FILE + 1)
+            .unwrap();
+        let stop = AtomicBool::new(false);
+        let start = start_of(home);
+        let mut q = query(scope("~", &[], None), "Hello.world", GrepMode::Files);
+        q.multiline = true;
+        let out = grep(&q, 1 << 20, home, &stop).unwrap();
+        assert_eq!(lines(&out), [format!("{start}/README.md")]);
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            format!(
+                "rg: {start}/big.log: not searched: larger than the 256 MiB a multiline search reads\n"
+            )
+        );
+        q.scope.path = "big.log";
+        let out = grep(&q, 1 << 20, home, &stop).unwrap();
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("big.log: not searched"));
     }
 }

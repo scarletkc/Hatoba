@@ -22,8 +22,10 @@ portable-pty = "0.9"
 # `run_command` on this computer: the command's whole process tree in a Job Object (Windows) or a
 # process group (Unix), so a stop ends all of it. The features hatoba-ai's MCP servers use.
 process-wrap = { version = "10", default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
-# `grep` on Windows, where the hosts' scripts cannot run: rg's own regex engine.
+# `grep` on Windows, where the hosts' scripts cannot run: rg's own regex engine, and its parser to
+# tell, as rg tells, whether a multiline pattern can span lines.
 regex = "1.11"
+regex-syntax = "0.8"
 # The shells on PATH (PowerShell 7).
 which = "8"
 dirs = "6"

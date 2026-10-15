@@ -202,7 +202,8 @@ pub struct Scope<'a> {
 pub enum GrepMode {
     /// The files with a matching line (`-l`).
     Files,
-    /// The number of matching lines of each file with one (`-c`).
+    /// The number of matching lines of each file with one (`-c`), or of matches where a multiline
+    /// pattern can span lines, as `rg -c -U` counts them.
     Count,
     /// The matching lines, numbered, with this many lines of context before and after each.
     Lines { before: u32, after: u32 },
