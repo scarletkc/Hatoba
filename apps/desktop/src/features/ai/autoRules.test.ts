@@ -244,6 +244,11 @@ describe("hidden characters (AI-47)", () => {
     // Line breaks and tabs are visible on the card.
     expect(command("cd /srv\tmake\nmake install")).toBeNull();
   });
+
+  it("send a command whose directory has them to the card", () => {
+    expect(hardRule({ kind: "run_command", args: { command: "make", workdir: "/srv/‮ppa" } })).toEqual({ kind: "hidden" });
+    expect(hardRule({ kind: "run_command", args: { command: "make", workdir: "/srv/app" } })).toBeNull();
+  });
 });
 
 describe("password prompts (AI-47)", () => {

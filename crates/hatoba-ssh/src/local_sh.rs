@@ -198,14 +198,20 @@ mod wsl_tests {
     #[tokio::test]
     async fn a_command_runs_and_a_stop_ends_it() {
         let Some(sh) = distro() else { return };
-        let run = run_local(&sh, "echo hi; exit 3", std::future::pending())
+        let run = run_local(&sh, "echo hi; exit 3", None, std::future::pending())
             .await
             .unwrap();
         assert_eq!(run.output.exit_status, Some(3));
         assert_eq!(run.output.stdout, b"hi\n");
         assert!(run.stopped.is_none());
+        let run = run_local(&sh, "pwd", Some("/tmp"), std::future::pending())
+            .await
+            .unwrap();
+        assert_eq!(run.output.stdout, b"/tmp\n");
         let stop = tokio::time::sleep(std::time::Duration::from_millis(800));
-        let run = run_local(&sh, "echo start; sleep 30", stop).await.unwrap();
+        let run = run_local(&sh, "echo start; sleep 30", None, stop)
+            .await
+            .unwrap();
         assert_eq!(run.stopped, Some(Stopped::Ended), "{run:?}");
         assert!(String::from_utf8_lossy(&run.output.stdout).contains("start"));
     }

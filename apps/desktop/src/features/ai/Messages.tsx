@@ -1001,6 +1001,8 @@ function RevertChange({ slotId, change, busy, revert }: { slotId: string; change
 /** The fields the Edit form shows: the main input of each tool, or the JSON for others. */
 interface Draft {
   main: string;
+  /** A `run_command` call's directory; empty for the home directory. */
+  dir: string;
   timeout: string;
   key: SendKey | "";
   wait: string;
@@ -1008,30 +1010,36 @@ interface Draft {
 
 function draftFrom(kind: ToolKind, args: Record<string, unknown>, json: string): Draft {
   const str = (v: unknown) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v));
+  const none = { dir: "", timeout: "", key: "", wait: "" } as const;
   switch (kind) {
     case "run_command":
-      return { main: str(args.command), timeout: str(args.timeout_seconds), key: "", wait: "" };
+      return { ...none, main: str(args.command), dir: str(args.workdir), timeout: str(args.timeout_seconds) };
     case "send_input":
-      return { main: str(args.text), timeout: "", key: (SEND_KEYS as readonly string[]).includes(str(args.key)) ? (str(args.key) as SendKey) : "", wait: str(args.wait_seconds) };
+      return { ...none, main: str(args.text), key: (SEND_KEYS as readonly string[]).includes(str(args.key)) ? (str(args.key) as SendKey) : "", wait: str(args.wait_seconds) };
     case "fetch_url":
-      return { main: str(args.url), timeout: "", key: "", wait: "" };
+      return { ...none, main: str(args.url) };
     // AI-39, AI-40: Edit changes the text the call writes; the diff follows.
     case "edit_file":
-      return { main: str(args.new_string), timeout: "", key: "", wait: "" };
+      return { ...none, main: str(args.new_string) };
     case "write_file":
-      return { main: str(args.content), timeout: "", key: "", wait: "" };
+      return { ...none, main: str(args.content) };
     default:
-      return { main: prettyArgs(json), timeout: "", key: "", wait: "" };
+      return { ...none, main: prettyArgs(json) };
   }
 }
 
-/** The arguments after Edit, or an error for invalid JSON. Numbers left empty are dropped. */
+/**
+ * The arguments after Edit, or an error for invalid JSON. Numbers left empty are dropped, and so is a directory
+ * left empty that the call did not give (an empty one is the home directory too).
+ */
 function argsFrom(kind: ToolKind, base: Record<string, unknown>, d: Draft): { json: string } | { error: true } {
   const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
   const without = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
   switch (kind) {
-    case "run_command":
-      return { json: JSON.stringify(without({ ...base, command: d.main, timeout_seconds: num(d.timeout) })) };
+    case "run_command": {
+      const workdir = d.dir === "" && typeof base.workdir !== "string" ? undefined : d.dir;
+      return { json: JSON.stringify(without({ ...base, command: d.main, workdir, timeout_seconds: num(d.timeout) })) };
+    }
     case "send_input":
       return { json: JSON.stringify(without({ ...base, text: d.main, key: d.key || undefined, wait_seconds: num(d.wait) })) };
     case "fetch_url":
@@ -1114,6 +1122,23 @@ function ShownInput({ text, command }: { text: string; command?: boolean }) {
         ))}
       </pre>
     </>
+  );
+}
+
+/**
+ * The directory a `run_command` call starts in, on its approval card (AI-17): the whole path, wrapped rather than
+ * cut, with hidden characters as escapes.
+ */
+function Workdir({ path }: { path: string }) {
+  const t = useT();
+  const shown = useMemo(() => shownText(path), [path]);
+  return (
+    <div className={s.workdir}>
+      <Icon name="folder-simple" size={12} className={s.workdirIcon} />
+      <span className={s.workdirLabel}>{t("ai.approval.workdir")}</span>
+      <span className={cx(s.workdirPath, "selectable")}>{shown.lines.join("↵")}</span>
+      {shown.escaped && <span className={cx(s.chip, s.chipWarn)}>{t("ai.approval.escaped")}</span>}
+    </div>
   );
 }
 
@@ -1312,6 +1337,19 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
           {invalid && <div className={s.fieldError}>{t("ai.approval.invalidJson")}</div>}
           {kind === "run_command" && (
             <label className={s.inline}>
+              {t("ai.approval.workdir")}
+              <input
+                className={cx(s.input, s.dirInput)}
+                value={draft.dir}
+                aria-label={t("ai.approval.workdir")}
+                placeholder={t("ai.approval.homeDir")}
+                spellCheck={false}
+                onChange={(e) => setDraft({ ...draft, dir: e.target.value })}
+              />
+            </label>
+          )}
+          {kind === "run_command" && (
+            <label className={s.inline}>
               {t("ai.approval.timeout")}
               <input className={cx(s.input, s.number)} type="number" min={1} max={600} placeholder="120" value={draft.timeout} onChange={(e) => setDraft({ ...draft, timeout: e.target.value })} />
               {t("ai.approval.seconds")}
@@ -1338,6 +1376,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
         <div className={s.approvalInput}>
           {kind === "run_command" && (
             <>
+              {str(args.workdir) && <Workdir path={str(args.workdir)} />}
               <ShownInput text={str(args.command)} command />
               <div className={s.meta}>{t("ai.approval.timeoutValue", { s: str(args.timeout_seconds) || 120 })}</div>
             </>

@@ -22,7 +22,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 | Tool | What it does | Manual approval mode |
 |---|---|---|
 | **Read terminal** (`read_terminal`) | Returns the terminal's last lines across the screen and the scrollback as text (20 by default, or a full-screen program's whole screen; at most 1,000), with the total line count and whether a full-screen program (vim, htop) is active | Runs without asking |
-| **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. Timeout 120 s by default, at most 600 s. A stop or the timeout ends the command and the processes it started, and the result says whether they ended | Asks, unless it only reads (`ls`, `git status`, …) or is allowed |
+| **Run command** (`run_command`) | Runs a command on a new exec channel of the tab's SSH connection and returns stdout, stderr and the exit status. It has no PTY, does not share the shell's directory, environment or sudo session, and its output does not show in the terminal. It starts in the home directory, or in a folder the assistant names, absolute or from the home directory; when that folder can't be entered, nothing runs. Timeout 120 s by default, at most 600 s. A stop or the timeout ends the command and the processes it started, and the result says whether they ended | Asks, unless it only reads (`ls`, `git status`, …) or is allowed |
 | **Type in terminal** (`send_input`) | Types text into the shell as the keyboard would, optionally followed by Enter, Tab, Esc, Ctrl+C, Ctrl+D or an arrow key, then waits for output (10 s by default, at most 120 s). A command started this way keeps running if the turn is stopped. While another conversation of the tab is using the shell, it fails at once and names that conversation | Asks, unless allowed |
 | **Read file** (`read_file`) | Returns a text file on the tab's host as numbered lines, a page of up to 30,000 characters at a time. Binary files and anything but regular files are refused; edits and writes refuse files over 1 MB. Like the other file tools it never uses sudo | Runs without asking |
 | **Edit file** (`edit_file`) | Replaces an exact piece of text in a file on the host and writes the file back in place, keeping its owner, mode and line breaks. Refused, in every mode, unless the assistant read the file in this conversation and it has not changed since. The approval card shows the diff; **Edit** changes the new text | Asks, unless allowed |
@@ -95,11 +95,13 @@ The judge has 10 seconds (a System One model) or 30 seconds (a chat model), and 
 
 ## Approval cards
 
-An approval card appears in the conversation for a call that needs approval. It shows the tool, the host and the full input (the command and timeout, the text and key, the URL, or an MCP server with the tool's description and arguments). Nothing in the input is hidden: every line shows, with each line break marked ↵, and a chip gives the number of lines when there are several. Hidden control and bidirectional characters (a tab, an escape sequence, a text-direction override) show as escapes such as `\t`, `\x1b` or `\u{202e}`, with a chip "Hidden characters shown as escapes".
+An approval card appears in the conversation for a call that needs approval. It shows the tool, the host and the full input (the command with its **Folder**, when the assistant named one, and timeout, the text and key, the URL, or an MCP server with the tool's description and arguments). Nothing in the input is hidden: every line shows, with each line break marked ↵, and a chip gives the number of lines when there are several. Hidden control and bidirectional characters (a tab, an escape sequence, a text-direction override) show as escapes such as `\t`, `\x1b` or `\u{202e}`, with a chip "Hidden characters shown as escapes".
 
 | en | zh-CN | ja |
 |---|---|---|
 | Needs approval | 等待批准 | 承認待ち |
+| Folder | 目录 | フォルダ |
+| Home folder | 主目录 | ホームフォルダ |
 | Run | 运行 | 実行 |
 | Edit | 编辑 | 編集 |
 | Reject | 拒绝 | 拒否 |
@@ -109,6 +111,6 @@ An approval card appears in the conversation for a call that needs approval. It 
 | Reason (optional, sent to the model) | 理由（可选，会告诉模型） | 理由（任意、モデルに伝えられます） |
 | Hidden characters shown as escapes | 不可见的字符已显示为转义 | 見えない文字をエスケープで表示 |
 
-- **Run** runs the call. **Edit** changes the input first (the model is told what you changed). **Reject** takes an optional reason that goes back to the model.
+- **Run** runs the call. **Edit** changes the input first (the model is told what you changed); for a command, also its folder, where empty means the home folder. **Reject** takes an optional reason that goes back to the model.
 - **Allow for This Conversation** lets later calls it covers run without asking until the app quits; **Always Allow** saves that on this device. The buttons name what they cover, such as "Always Allow “git pull” on This Host" or "Always Allow example.com"; **Saved Approvals** in `references/ai-settings.md` has the rules. An edit or write card that shows why it can't apply offers neither, and a call whose tool cannot be named (its server was deleted, say) always asks, in every mode.
 - **Stop**, or Esc while focus is in the panel, ends a turn; it sends nothing to the terminal. A command from Run command is ended too, along with the processes it started, and Stop waits a few seconds for that. A reply stopped mid-stream keeps its text so far, and the next message gets a "Previous reply stopped" divider.

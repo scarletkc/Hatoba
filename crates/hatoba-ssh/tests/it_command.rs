@@ -51,7 +51,7 @@ async fn a_command_runs_with_the_login_shell_and_keeps_its_output() {
     let server = server!();
     let session = server.connect_key("ed25519", None).await;
     let command = "printf 'a\\nb'; echo \"$0 $(id -un)\" >&2\nexit 7";
-    let run = remote_command::run(&session, command, std::future::pending())
+    let run = remote_command::run(&session, command, None, std::future::pending())
         .await
         .unwrap();
     assert_eq!(run.stopped, None);
@@ -68,10 +68,46 @@ async fn a_command_runs_with_the_login_shell_and_keeps_its_output() {
     );
 
     // The command gets an empty stdin, as `exec_output` without one gives it.
-    let run = remote_command::run(&session, "cat; echo done", std::future::pending())
+    let run = remote_command::run(&session, "cat; echo done", None, std::future::pending())
         .await
         .unwrap();
     assert_eq!(run.output.stdout, b"done\n");
+}
+
+/// AI-12: `workdir` is where the command starts: absolute, or from the home directory.
+#[tokio::test]
+async fn a_command_starts_in_workdir() {
+    let server = server!();
+    let session = server.connect_key("ed25519", None).await;
+    let dir = server.area("workdir").join("a b");
+    std::fs::create_dir(&dir).unwrap();
+    let run = remote_command::run(&session, "pwd -P", dir.to_str(), std::future::pending())
+        .await
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&run.output.stdout),
+        format!("{}\n", dir.canonicalize().unwrap().display())
+    );
+    let run = remote_command::run(
+        &session,
+        "[ \"$(pwd)\" = \"$HOME\" ] && echo home",
+        Some("~"),
+        std::future::pending(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(run.output.stdout, b"home\n");
+    // A directory it cannot change to runs nothing.
+    let run = remote_command::run(
+        &session,
+        "echo ran",
+        Some("/no/such/dir"),
+        std::future::pending(),
+    )
+    .await
+    .unwrap();
+    assert_ne!(run.output.exit_status, Some(0));
+    assert!(run.output.stdout.is_empty());
 }
 
 /// AI-18: stopping a command ends it and every process it started: `sh -c` runs `sleep` as a
@@ -95,7 +131,7 @@ async fn a_stopped_command_leaves_no_process_behind() {
         };
         let began = Instant::now();
         let (run, ()) = tokio::join!(
-            remote_command::run(&session, command, stop.cancelled()),
+            remote_command::run(&session, command, None, stop.cancelled()),
             stopping
         );
         let run = run.unwrap();
@@ -122,6 +158,7 @@ async fn a_timed_out_command_leaves_no_process_behind() {
         let run = remote_command::run(
             &session,
             command,
+            None,
             tokio::time::sleep(Duration::from_secs(2)),
         )
         .await
@@ -144,7 +181,7 @@ async fn a_command_that_ignores_term_is_killed() {
         started("sleep 305").await;
     };
     let began = Instant::now();
-    let run = remote_command::run(&session, "trap '' TERM; sleep 305; echo after", stop)
+    let run = remote_command::run(&session, "trap '' TERM; sleep 305; echo after", None, stop)
         .await
         .unwrap();
     assert_eq!(run.stopped, Some(Stopped::Ended));
@@ -161,7 +198,7 @@ async fn a_stop_before_the_command_starts_runs_nothing() {
     let session = server.connect_key("ed25519", None).await;
     let marker = server.area("not_started").join("ran");
     let command = format!("touch '{}'", marker.display());
-    let run = remote_command::run(&session, &command, std::future::ready(()))
+    let run = remote_command::run(&session, &command, None, std::future::ready(()))
         .await
         .unwrap();
     assert_eq!(run.stopped, Some(Stopped::NotStarted));
@@ -180,11 +217,16 @@ async fn a_host_that_cannot_run_the_script_runs_the_command_as_it_is() {
     };
     let session = server.connect_key("ed25519", None).await;
     for _ in 0..2 {
-        let run = remote_command::run(&session, "echo asked", std::future::pending())
+        let run = remote_command::run(&session, "echo asked", None, std::future::pending())
             .await
             .unwrap();
         assert_eq!(run.stopped, None);
         assert_eq!(run.output.stdout, b"forced\n");
         assert_eq!(run.output.exit_status, Some(0));
     }
+    // Without the script, nothing can start the command in a directory.
+    let refused = remote_command::run(&session, "echo asked", Some("/tmp"), std::future::pending())
+        .await
+        .unwrap_err();
+    assert!(refused.message.contains("workdir"), "{}", refused.message);
 }

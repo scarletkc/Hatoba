@@ -595,6 +595,33 @@
   gap: 5px;
 }
 
+/* A command's directory: the whole path, which wraps rather than being cut. */
+.workdir {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--fg2);
+}
+
+.workdirIcon {
+  flex: none;
+}
+
+.workdirLabel {
+  flex: none;
+}
+
+.workdirPath {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg);
+}
+
 .meta {
   font-size: var(--text-xs);
   color: var(--fg2);
@@ -655,6 +682,11 @@
 .number {
   width: 64px;
   flex: none;
+}
+
+.dirInput {
+  flex: 1 1 160px;
+  width: auto;
 }
 
 .inline {

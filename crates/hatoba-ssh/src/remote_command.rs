@@ -43,10 +43,14 @@ use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSessi
 /// BSDs), else in its own group, which only TERM to the command's own process reaches. A
 /// command started in the background of a script gets SIGINT and SIGQUIT ignored, which `env
 /// --default-signal` (GNU) and `perl` undo. The script prints the marker and the way it found,
-/// then reads the number of lines that follow, the command, and a last line of the marker and
-/// `-end`, so a command cut short is never run (exit status 9). The command's stdin is
-/// `/dev/null`, as the empty stdin sshd gives a command that is sent none. Its exit status is the
-/// script's; one ended by a signal is 128 and the signal's number.
+/// then reads the number of the command's lines, a line with the directory to start it in, the
+/// command, and a last line of the marker and `-end`, so a command cut short is never run (exit
+/// status 9). An empty directory leaves the command in the directory the script started in, the
+/// home directory; `~` and `~/…` are from `$HOME`, and any other relative path, also one that
+/// starts with `-`, is from the home directory, never from `CDPATH`. When `cd` fails, the script
+/// ends with its status and message, and runs nothing. The command's stdin is `/dev/null`, as
+/// the empty stdin sshd gives a command that is sent none. Its exit status is the script's; one
+/// ended by a signal is 128 and the signal's number.
 ///
 /// When stdin ends, a second process sends the group TERM, waits up to 2 seconds for its
 /// processes to end, sends KILL to those left, waits up to 1 second more, and prints the marker
@@ -64,9 +68,11 @@ use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSessi
 const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${SHELL:-sh}; \
      if command -v setsid >/dev/null 2>&1; then g=setsid; \
      elif command -v perl >/dev/null 2>&1; then g=perl; else g=none; fi; \
-     echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; \
+     echo \"$m $g\" || exit 1; IFS= read -r n || exit 9; IFS= read -r h || exit 9; \
      c=$(head -n $((n+1)); echo x); c=${c%x}; d=${c%\"$m\"-end?}; [ \"$d\" = \"$c\" ] && exit 9; \
      d=${d%?}; \
+     case $h in \"\") ;; \"~\") cd || exit;; \"~/\"*) cd \"$HOME/${h#??}\" || exit;; \
+     /*) cd \"$h\" || exit;; *) cd \"./$h\" || exit;; esac; \
      exec 3<&0; case $g in \
      setsid) if env --default-signal=INT,QUIT true >/dev/null 2>&1; then \
      setsid env --default-signal=INT,QUIT \"$s\" -c \"$d\" </dev/null 3<&- & \
@@ -117,22 +123,22 @@ pub enum Stopped {
 }
 
 /// Runs `command` with the login shell on a new exec channel of `session` and returns what it
-/// printed, like [`SshSession::exec_output`] with no stdin. When `stop` completes first, the
+/// printed, like [`SshSession::exec_output`] with no stdin. It starts in `workdir`, absolute or
+/// from the home directory, or else in the home directory. When `stop` completes first, the
 /// command and the processes it started are ended, and the result says whether they did
 /// ([`CommandRun::stopped`]); that takes at most [`STOP_WAIT`] more.
 pub async fn run(
     session: &SshSession,
     command: &str,
+    workdir: Option<&str>,
     stop: impl Future<Output = ()>,
 ) -> Result<CommandRun, SshError> {
-    if command.contains('\0') {
-        return Err(SshError::other("the command has a NUL character"));
-    }
+    check(command, workdir)?;
     tokio::pin!(stop);
     let shared = session.shared();
     // Win32-OpenSSH runs commands with cmd.exe or PowerShell, which have no `sh`.
     if !shared.plain_commands() && session.server_os() != Some(ServerOs::Windows) {
-        match wrapped(session, command, stop.as_mut()).await? {
+        match wrapped(session, command, workdir, stop.as_mut()).await? {
             Some(run) => return Ok(run),
             None => {
                 tracing::info!("the host cannot run the command script; commands run as they are");
@@ -140,7 +146,34 @@ pub async fn run(
             }
         }
     }
+    if workdir.is_some() {
+        return Err(SshError::other(
+            "this host has no sh to start the command in workdir: leave out workdir and change \
+             the directory in the command",
+        ));
+    }
     plain(session, command, stop).await
+}
+
+/// What [`SCRIPT`] cannot take: a NUL character, or a directory on more than one line.
+fn check(command: &str, workdir: Option<&str>) -> Result<(), SshError> {
+    if command.contains('\0') {
+        return Err(SshError::other("the command has a NUL character"));
+    }
+    if workdir.is_some_and(|d| d.contains(['\n', '\0'])) {
+        return Err(SshError::other(
+            "workdir has a line break or a NUL character",
+        ));
+    }
+    Ok(())
+}
+
+/// What [`SCRIPT`] reads once it is ready: the number of the command's lines, the directory, the
+/// command, and the line that ends it.
+fn request(command: &str, workdir: Option<&str>, marker: &str) -> String {
+    let lines = command.matches('\n').count() + 1;
+    let workdir = workdir.unwrap_or("");
+    format!("{lines}\n{workdir}\n{command}\n{marker}-end\n")
 }
 
 /// Runs `command` under [`SCRIPT`]. `None` when the channel ended before the script was ready, so
@@ -148,6 +181,7 @@ pub async fn run(
 async fn wrapped(
     session: &SshSession,
     command: &str,
+    workdir: Option<&str>,
     mut stop: Pin<&mut impl Future<Output = ()>>,
 ) -> Result<Option<CommandRun>, SshError> {
     let n = nonce();
@@ -184,9 +218,9 @@ async fn wrapped(
         }
     }
 
-    let lines = command.matches('\n').count() + 1;
-    let request = Bytes::from(format!("{lines}\n{command}\n{marker}-end\n"));
-    let feed = writer.half().data_bytes(request);
+    let feed = writer
+        .half()
+        .data_bytes(Bytes::from(request(command, workdir, &marker)));
     tokio::pin!(feed);
     let mut fed = false;
     let mut deadline: Option<Instant> = None;
@@ -276,15 +310,14 @@ async fn plain(
 /// Runs `command` like [`run`], with the `sh` of this computer (a local tab, spec §7.5): under
 /// [`SCRIPT`], with `sh`'s stdin as the line that stops it, so a stop ends the command and every
 /// process it started as it does on a host. The script runs the command with `$SHELL`, which `sh`
-/// sets to the tab's shell.
+/// sets to the tab's shell, in `workdir` or the directory `sh` starts in.
 pub async fn run_local(
     sh: &LocalSh,
     command: &str,
+    workdir: Option<&str>,
     stop: impl Future<Output = ()>,
 ) -> Result<CommandRun, SshError> {
-    if command.contains('\0') {
-        return Err(SshError::other("the command has a NUL character"));
-    }
+    check(command, workdir)?;
     tokio::pin!(stop);
     let n = nonce();
     let marker = marker(n);
@@ -325,8 +358,7 @@ pub async fn run_local(
         }
     }
 
-    let lines = command.matches('\n').count() + 1;
-    let request = format!("{lines}\n{command}\n{marker}-end\n");
+    let request = request(command, workdir, &marker);
     let feed = async move {
         let mut input = input;
         input.write_all(request.as_bytes()).await.map(|()| input)
@@ -628,17 +660,23 @@ mod tests {
 
         /// Starts the script as sshd would, with `SHELL` set, and sends `command` once it is ready.
         fn start(path: Option<&str>, command: &str) -> Local {
+            let mut cmd = Command::new("sh");
+            if let Some(path) = path {
+                cmd.env("PATH", path);
+            }
+            start_in(cmd, "", command)
+        }
+
+        /// [`start`] with `cmd`, which may set the environment and the directory, and the
+        /// directory line `workdir`.
+        fn start_in(mut cmd: Command, workdir: &str, command: &str) -> Local {
             let n = nonce();
             let marker = marker(n);
-            let mut cmd = Command::new("sh");
             cmd.args(["-c", SCRIPT, "sh", &n.to_string()])
                 .env("SHELL", "/bin/sh")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
-            if let Some(path) = path {
-                cmd.env("PATH", path);
-            }
             let mut child = cmd.spawn().unwrap();
             let mut ready = String::new();
             BufReader::new(child.stdout.as_mut().unwrap())
@@ -647,7 +685,7 @@ mod tests {
             let lines = command.matches('\n').count() + 1;
             write!(
                 child.stdin.as_mut().unwrap(),
-                "{lines}\n{command}\n{marker}-end\n"
+                "{lines}\n{workdir}\n{command}\n{marker}-end\n"
             )
             .unwrap();
             Local {
@@ -746,11 +784,49 @@ mod tests {
                 .stdin
                 .take()
                 .unwrap()
-                .write_all(b"2\necho first\n")
+                .write_all(b"2\n\necho first\n")
                 .unwrap();
             let out = child.wait_with_output().unwrap();
             assert_eq!(out.status.code(), Some(9));
             assert!(!String::from_utf8_lossy(&out.stdout).contains("first"));
+        }
+
+        #[test]
+        fn script_starts_the_command_in_workdir() {
+            let home = tempfile::tempdir().unwrap();
+            let home = home.path().canonicalize().unwrap();
+            for dir in ["a b", "-x", "sub", "sub/a b"] {
+                std::fs::create_dir(home.join(dir)).unwrap();
+            }
+            let pwd = |workdir: &str| {
+                let mut cmd = Command::new("sh");
+                // A relative directory is from the home directory, not from CDPATH.
+                cmd.current_dir(&home)
+                    .env("HOME", &home)
+                    .env("CDPATH", home.join("sub"));
+                finish(start_in(cmd, workdir, "pwd -P"), None)
+            };
+            let absolute = home.join("sub");
+            for (workdir, expected) in [
+                ("", home.clone()),
+                ("~", home.clone()),
+                ("~/a b", home.join("a b")),
+                ("a b", home.join("a b")),
+                ("-x", home.join("-x")),
+                (absolute.to_str().unwrap(), absolute.clone()),
+            ] {
+                let (status, stdout, stderr) = pwd(workdir);
+                assert_eq!(
+                    (status, stdout),
+                    (Some(0), format!("{}\n", expected.display())),
+                    "{workdir}: {stderr}"
+                );
+            }
+            // A directory it cannot change to runs nothing, and says why.
+            let (status, stdout, stderr) = pwd("missing");
+            assert_ne!(status, Some(0));
+            assert_eq!(stdout, "");
+            assert!(stderr.contains("missing"), "{stderr}");
         }
 
         #[cfg(target_os = "linux")]

@@ -492,13 +492,14 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const calls: AiToolCall[] = [];
       // Terminal tools only with a connected tab; a request without one does not offer them.
       const wantsTerminal = want(
-        ...["disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
+        ...["disk", "磁盘", "ディスク", "df", "fail", "失败", "失敗", "sleep", "workdir", "工作目录", "作業フォルダ", "screen", "屏幕", "画面", "type", "send", "输入", "入力"],
         ...["read file", "读取文件", "ファイルを読", "edit", "编辑", "編集", "write", "写入", "書き込", "grep", "glob"],
       );
       if (terminal) {
         if (want("disk", "磁盘", "ディスク", "df")) calls.push(call("run_command", { command: DISK_COMMAND[turn.context.local?.kind ?? "unix"], timeout_seconds: 30 }));
         if (want("fail", "失败", "失敗")) calls.push(call("run_command", { command: "sudo systemctl restart nonexistent.service" }));
         if (want("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
+        if (want("workdir", "工作目录", "作業フォルダ")) calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
         if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
         if (want("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));

@@ -8,7 +8,7 @@ import type { ToolKind } from "./tools";
  *
  * - an MCP tool whose server is set to **Always ask** (AI-31), or a tool that cannot be found (its server was
  *   deleted, say), which asks in every mode;
- * - a `run_command` command, `send_input` text or string of an MCP call's arguments with hidden or
+ * - a `run_command` command or directory, `send_input` text or string of an MCP call's arguments with hidden or
  *   bidirectional characters, which could show the judge and the user something other than what runs (an MCP
  *   call's strings may hold the tabs and line breaks of code and text: {@link MCP_HIDDEN});
  * - a `run_command` command, `send_input` text or MCP call's arguments that name one of
@@ -53,7 +53,7 @@ export type HardRule =
   | { kind: "mcp_always_ask" }
   /** The MCP call's tool cannot be found, so it asks in every mode (AI-31). */
   | { kind: "mcp_unknown" }
-  /** The command, the text or the MCP call's arguments have hidden or bidirectional characters. */
+  /** The command or its directory, the text or the MCP call's arguments have hidden or bidirectional characters. */
   | { kind: "hidden" }
   /** The command, the line the text submits or the MCP call's arguments name `command`: one of {@link ALWAYS_ASK_COMMANDS}, or `rm -r`. */
   | { kind: "command"; command: string }
@@ -91,6 +91,7 @@ export function hardRule({ kind, args, mcp, screen, dialect = "posix" }: HardRul
   const value = kind === "run_command" ? args.command : args.text;
   const text = typeof value === "string" ? value : "";
   if (HIDDEN.test(text)) return { kind: "hidden" };
+  if (kind === "run_command" && typeof args.workdir === "string" && HIDDEN.test(args.workdir)) return { kind: "hidden" };
   if (kind !== "send_input" || !screen) return commandRule([text], dialect);
   const cursor = lastLine(screen);
   if (passwordPrompt(cursor)) return { kind: "password" };

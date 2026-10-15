@@ -627,3 +627,25 @@ describe("allowed prefixes in PowerShell and Command Prompt (AI-19)", () => {
     expect(savablePrefixes(["Restart-Service", "npm run", "git pull"])).toBe(true);
   });
 });
+
+describe("a run_command call's workdir (AI-12, §13.5)", () => {
+  it("counts as a cd before the line", () => {
+    expect(readsOnlyCommand("git status", "posix", "/srv/app")).toBe(true);
+    expect(readsOnlyCommand("Get-ChildItem", "powershell", "C:/src")).toBe(true);
+    expect(commandAllowed("git pull", ["git pull"], "posix", "/srv/app")).toBe(true);
+    expect(allowancePrefixes("npm test", "posix", "/srv/app")).toEqual(["npm test"]);
+    // Command Prompt runs a program of the folder before one on PATH; PowerShell reaches another computer.
+    expect(readsOnlyCommand("dir", "cmd", "C:\\src")).toBe(false);
+    expect(allowancePrefixes("msbuild app.sln", "cmd", "C:\\src")).toEqual(["cd", "msbuild"]);
+    expect(readsOnlyCommand("Get-ChildItem", "powershell", "\\\\server\\share")).toBe(false);
+  });
+
+  it("asks when the directory hides characters", () => {
+    expect(readsOnlyCommand("ls", "posix", "/srv/\u202eppa")).toBe(false);
+    expect(allowancePrefixes("npm test", "posix", "/srv/\u202eppa")).toBeNull();
+  });
+
+  it("reads an empty directory as none", () => {
+    expect(readsOnlyCommand("dir", "cmd", "")).toBe(true);
+  });
+});

@@ -149,6 +149,29 @@ describe("Auto mode on calls (AI-47)", () => {
   });
 });
 
+describe("a command's folder on the approval card (AI-17)", () => {
+  const asking = (args: Record<string, unknown>): Slot => {
+    const call: AiToolCall = { id: "call_1", name: "run_command", arguments: JSON.stringify(args) };
+    const calling: AiEntryView = { ...(reply("tool_calls") as Extract<AiEntryView, { role: "assistant" }>), tool_calls: [call] };
+    return { ...slot([user, calling]), turn: { ...newTurn(), phase: "tools", calls: [{ id: "call_1", state: "approval" }] } };
+  };
+
+  it("shows the whole path, with hidden characters as escapes, and nothing without one", () => {
+    expect(render(asking({ command: "npm test", workdir: "/srv/app" }))).toContain("Folder/srv/app");
+    const hidden = render(asking({ command: "npm test", workdir: "/srv/‮ppa" }));
+    expect(hidden).toContain("/srv/\\u{202e}ppa");
+    expect(hidden).toContain("Hidden characters shown as escapes");
+    expect(render(asking({ command: "npm test" }))).not.toContain("Folder");
+  });
+
+  it("lets Edit change it, with the home folder for an empty one", () => {
+    const host = mount(asking({ command: "npm test", workdir: "/srv/app" }));
+    act(() => [...host.querySelectorAll("button")].find((b) => b.textContent === "Edit")?.click());
+    const input = host.querySelector<HTMLInputElement>("input[placeholder='Home folder']");
+    expect(input?.value).toBe("/srv/app");
+  });
+});
+
 describe("calls that run together (§13.1)", () => {
   const read = (id: string, path: string): AiToolCall => ({ id, name: "read_file", arguments: JSON.stringify({ path }) });
   const calls = [read("call_1", "/etc/hosts"), read("call_2", "/etc/hostname"), read("call_3", "/etc/motd")];

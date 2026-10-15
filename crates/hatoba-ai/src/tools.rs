@@ -156,19 +156,17 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             ToolPlace::Ssh => (
                 "Run a shell command on a new exec channel of the tab's SSH connection",
                 "The channel has no PTY",
-                "working directory, environment variables or sudo session: use absolute paths or \
-                 `cd dir && command`",
+                "working directory, environment variables or sudo session",
             ),
             ToolPlace::Local => (
                 "Run a shell command on this computer in a new process, apart from the terminal,",
                 "The process has no terminal",
-                "working directory, environment variables or sudo session: use absolute paths or \
-                 `cd dir && command`",
+                "working directory, environment variables or sudo session",
             ),
             ToolPlace::LocalWindows => (
                 "Run a command on this computer in a new process, apart from the terminal,",
                 "The process has no terminal",
-                "working directory or environment variables: use absolute paths",
+                "working directory or environment variables",
             ),
         };
         tools.push(tool(
@@ -176,7 +174,8 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             format!(
                 "{runs} and return its stdout, stderr and exit status. {apart}, so interactive \
                  programs and password prompts do not work, and it does not share the terminal \
-                 shell's {shared}. Its output does not appear in the terminal. Use send_input \
+                 shell's {shared}: it starts in the user's home directory, or in `workdir` when \
+                 given. Its output does not appear in the terminal. Use send_input \
                  instead when the command must run in the user's shell or needs interaction, glob \
                  and grep to find files and search their contents, and read_file, edit_file and \
                  write_file to read and change files. The command is stopped after \
@@ -193,6 +192,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         } else {
                             "The command line, run by the user's login shell on the host."
                         }
+                    },
+                    "workdir": {
+                        "type": "string",
+                        "description": "The directory to run the command in: an absolute path, or \
+                                        a path from the user's home directory (default: the home \
+                                        directory). Use it rather than starting the command with cd."
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -1358,12 +1363,22 @@ pub fn truncate_result_to(s: &str, max: usize) -> String {
 pub struct RunCommandArgs {
     /// The command line.
     pub command: String,
+    /// The directory the command starts in: absolute, or from the home directory.
+    #[serde(default)]
+    pub workdir: Option<String>,
     /// Seconds before the command is stopped.
     #[serde(default)]
     pub timeout_seconds: Option<u64>,
 }
 
 impl RunCommandArgs {
+    /// The directory the command starts in; `None` for the home directory, also when the model
+    /// gave an empty one.
+    #[must_use]
+    pub fn workdir(&self) -> Option<&str> {
+        self.workdir.as_deref().filter(|d| !d.is_empty())
+    }
+
     /// The timeout: 120 s by default, clamped to 1..=600 s (AI-12).
     #[must_use]
     pub fn timeout(&self) -> Duration {
@@ -1694,6 +1709,8 @@ mod tests {
             assert!(run.description.contains(phrase), "{phrase}");
         }
         assert_eq!(run.input_schema["required"], json!(["command"]));
+        assert!(run.description.contains("home directory, or in `workdir`"));
+        assert_eq!(run.input_schema["properties"]["workdir"]["type"], "string");
         let send = &builtin_tools(&ALL)[2];
         assert_eq!(
             send.input_schema["properties"]["key"]["enum"],
@@ -2445,13 +2462,22 @@ Skills are instructions for particular tasks. When a request matches a skill's d
     fn run_command_timeout_defaults_and_clamps() {
         let args: RunCommandArgs = serde_json::from_str(r#"{"command":"ls"}"#).unwrap();
         assert_eq!(args.timeout(), Duration::from_secs(120));
+        assert_eq!(args.workdir(), None);
         for (given, expected) in [(0, 1), (1, 1), (45, 45), (600, 600), (9999, 600)] {
             let args = RunCommandArgs {
                 command: "x".into(),
+                workdir: None,
                 timeout_seconds: Some(given),
             };
             assert_eq!(args.timeout(), Duration::from_secs(expected));
         }
+        let args: RunCommandArgs =
+            serde_json::from_str(r#"{"command":"ls","workdir":"/srv/app"}"#).unwrap();
+        assert_eq!(args.workdir(), Some("/srv/app"));
+        // An empty directory is the home directory.
+        let args: RunCommandArgs =
+            serde_json::from_str(r#"{"command":"ls","workdir":""}"#).unwrap();
+        assert_eq!(args.workdir(), None);
         let fetch: FetchUrlArgs = serde_json::from_str(r#"{"url":"https://x"}"#).unwrap();
         assert_eq!(fetch.offset, None);
         let skill: ReadSkillArgs =

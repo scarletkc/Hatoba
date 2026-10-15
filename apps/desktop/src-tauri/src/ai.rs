@@ -4543,8 +4543,8 @@ pub fn session_server(env: &dyn AiEnv, session_id: Option<&str>) -> Option<Strin
 }
 
 /// AI-12: `command` on a new exec channel of the tab's connection, or apart from a local tab's
-/// shell (§7.5), with the call's timeout. A stop or the timeout ends the command and the
-/// processes it started, and the result says whether they ended (AI-18).
+/// shell (§7.5), in the call's `workdir` and with its timeout. A stop or the timeout ends the
+/// command and the processes it started, and the result says whether they ended (AI-18).
 async fn run_command(
     env: &dyn AiEnv,
     session_id: Option<&str>,
@@ -4561,11 +4561,12 @@ async fn run_command(
             () = tokio::time::sleep(limit) => {}
         }
     };
+    let workdir = args.workdir();
     let ran = match &session {
-        conn::Conn::Ssh(ssh) => remote_command::run(ssh, &args.command, stop)
+        conn::Conn::Ssh(ssh) => remote_command::run(ssh, &args.command, workdir, stop)
             .await
             .map_err(|e| e.message),
-        conn::Conn::Local(local) => local.tools.run_command(&args.command, stop).await,
+        conn::Conn::Local(local) => local.tools.run_command(&args.command, workdir, stop).await,
     };
     match ran {
         Ok(run) => {

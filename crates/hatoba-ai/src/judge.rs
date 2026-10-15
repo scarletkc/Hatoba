@@ -311,7 +311,7 @@ pub fn builtin_description(tool: &str) -> Option<&'static str> {
     Some(match tool {
         RUN_COMMAND => {
             "Runs `command` in a shell on `host`, apart from the terminal, and returns its \
-             output."
+             output. It starts in `workdir` when given, else in the user's home directory."
         }
         SEND_INPUT => {
             "Types `text` into a terminal connected to `host`, as the keyboard does, then \

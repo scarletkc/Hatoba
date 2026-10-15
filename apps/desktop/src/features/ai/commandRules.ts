@@ -732,21 +732,33 @@ function startsWith(words: readonly string[], prefix: readonly string[], dialect
 }
 
 /**
- * Whether a `run_command` command line runs without asking: every command in it only reads, or starts
- * with one of `prefixes` (whole words: `git pull` covers `git pull origin`, not `git pull-request`).
- * A line that uses anything `splitCommands` refuses never does.
+ * The commands of a `run_command` call: its line's, after a `cd` to its `workdir` when it gives one, so that the
+ * directory counts as in `cd workdir && …` (in Command Prompt, a program of that folder runs before one on PATH;
+ * in PowerShell, a network path is another computer). Null as for `splitCommands`, and for a directory with
+ * hidden characters.
  */
-export function commandAllowed(line: string, prefixes: readonly string[], dialect: ShellDialect = "posix"): boolean {
+function callCommands(line: string, dialect: ShellDialect, workdir: string): Simple[] | null {
   const commands = splitCommands(line, dialect);
+  if (!commands || !workdir) return commands;
+  return HIDDEN.test(workdir) ? null : [{ words: ["cd", workdir], globs: [false, false] }, ...commands];
+}
+
+/**
+ * Whether a `run_command` command line, run in `workdir` (none: the home directory), runs without asking: every
+ * command in it only reads, or starts with one of `prefixes` (whole words: `git pull` covers `git pull origin`,
+ * not `git pull-request`). A line that uses anything `splitCommands` refuses never does.
+ */
+export function commandAllowed(line: string, prefixes: readonly string[], dialect: ShellDialect = "posix", workdir = ""): boolean {
+  const commands = callCommands(line, dialect, workdir);
   if (!commands) return false;
   const allowed = prefixes.map(prefixWords).filter((p) => p.length > 0);
   const reads = reading(commands, dialect);
   return commands.every((c, i) => reads[i] || (plain(c.words, dialect) && allowed.some((p) => startsWith(c.words, p, dialect))));
 }
 
-/** Whether the command line only reads (§13.5), and so runs without asking in manual approval mode. */
-export function readsOnlyCommand(line: string, dialect: ShellDialect = "posix"): boolean {
-  return commandAllowed(line, [], dialect);
+/** Whether the command line, run in `workdir`, only reads (§13.5), and so runs without asking in manual approval mode. */
+export function readsOnlyCommand(line: string, dialect: ShellDialect = "posix", workdir = ""): boolean {
+  return commandAllowed(line, [], dialect, workdir);
 }
 
 /** Tools whose first argument is a subcommand, which an allowance names too: `git pull`, not all of `git`. */
@@ -940,10 +952,10 @@ const MAX_PREFIXES = 3;
  * its subcommand too. Null when the card offers neither: the line uses what `splitCommands` refuses,
  * a command runs another one (`sudo`, `xargs`, `sh -c`, `Start-Process`), sets variables first, or gives no
  * subcommand (in PowerShell and Command Prompt also a `/` switch in its place), or the line would need more
- * than three prefixes.
+ * than three prefixes. A `workdir` counts as a `cd` before the line.
  */
-export function allowancePrefixes(line: string, dialect: ShellDialect = "posix"): string[] | null {
-  const commands = splitCommands(line, dialect);
+export function allowancePrefixes(line: string, dialect: ShellDialect = "posix", workdir = ""): string[] | null {
+  const commands = callCommands(line, dialect, workdir);
   if (!commands) return null;
   const windows = dialect !== "posix";
   const reads = reading(commands, dialect);

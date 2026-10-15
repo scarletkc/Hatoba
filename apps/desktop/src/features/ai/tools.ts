@@ -130,7 +130,7 @@ export function concurrencySafe(kind: ToolKind, args: Record<string, unknown>, d
     case "search_tools":
       return true;
     case "run_command":
-      return readsOnlyCommand(str(args.command), dialect);
+      return readsOnlyCommand(str(args.command), dialect, str(args.workdir));
     default:
       return false;
   }
@@ -232,7 +232,7 @@ export function urlDomain(url: string): string | null {
 export function allowanceScope(kind: ToolKind, args: Record<string, unknown>, mcp: McpToolInfo | null | undefined, dialect: ShellDialect = "posix"): Scope | null {
   switch (kind) {
     case "run_command": {
-      const prefixes = allowancePrefixes(str(args.command), dialect);
+      const prefixes = allowancePrefixes(str(args.command), dialect, str(args.workdir));
       return prefixes ? { kind: "command", prefixes, savable: savablePrefixes(prefixes) } : null;
     }
     case "fetch_url": {
@@ -301,7 +301,7 @@ export function callAllowed(
     case "run_command": {
       const here = grants.flatMap((g) => (g.startsWith("run_command:") ? [g.slice("run_command:".length)] : []));
       const device = saved.filter((a) => a.kind === "command" && onHost(a, host)).map((a) => a.value);
-      return commandAllowed(str(args.command), [...here, ...device], dialect);
+      return commandAllowed(str(args.command), [...here, ...device], dialect, str(args.workdir));
     }
     case "fetch_url": {
       const domain = urlDomain(str(args.url));
