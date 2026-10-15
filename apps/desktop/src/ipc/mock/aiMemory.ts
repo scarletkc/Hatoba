@@ -3,7 +3,7 @@
  * memories; `?memory=full` with memories that leave no room.
  */
 
-import { cleanMemoryContent, cleanMemoryName, MEMORY_MAX_BYTES, memoryProblem } from "@/features/ai/memory";
+import { cleanMemoryContent, cleanMemoryName, editedIds, MEMORY_MAX_BYTES, memoryProblem } from "@/features/ai/memory";
 import type { HatobaApi } from "../api";
 import type { AiMemoryView, AppError } from "../types";
 
@@ -42,11 +42,15 @@ export function createAiMemoryMock(): AiMemoryMock {
   if (flags.has("full")) memories = [{ id: "mem-big", name: "Runbook", content: "x".repeat(MEMORY_MAX_BYTES - 7), updated_at: Date.now() }];
   let seq = 0;
 
-  function save(id: string | null, name: string, content: string): AiMemoryView {
-    const problem = memoryProblem(memories, id, name, content);
+  /** As Rust's `memory::save`: in place of the memories `replaced`, the first keeping its place and the others deleted. */
+  function save(replaced: readonly string[], name: string, content: string): AiMemoryView {
+    const problem = memoryProblem(memories, replaced, name, content);
     if (problem) throw { code: "invalid_input", detail: DETAIL[problem], field: "memory" } satisfies AppError;
-    const saved: AiMemoryView = { id: id ?? `mem-new-${++seq}`, name: cleanMemoryName(name), content: cleanMemoryContent(content), updated_at: Date.now() };
-    memories = id ? memories.map((m) => (m.id === id ? saved : m)) : [...memories, saved];
+    const id = replaced[0] ?? `mem-new-${++seq}`;
+    const saved: AiMemoryView = { id, name: cleanMemoryName(name), content: cleanMemoryContent(content), updated_at: Date.now() };
+    memories = replaced.length
+      ? memories.flatMap((m) => (m.id === id ? [saved] : replaced.includes(m.id) ? [] : [m]))
+      : [...memories, saved];
     return structuredClone(saved);
   }
 
@@ -54,7 +58,7 @@ export function createAiMemoryMock(): AiMemoryMock {
     ai_memories_list: async () => structuredClone(memories),
     ai_memory_save: async (input) => {
       if (input.id && !memories.some((m) => m.id === input.id)) throw { code: "not_found", detail: "memory not found" } satisfies AppError;
-      return save(input.id, input.name, input.content);
+      return save(editedIds(memories, input.id, input.name), input.name, input.content);
     },
     ai_memory_delete: async (id) => {
       if (!memories.some((m) => m.id === id)) throw { code: "not_found", detail: "memory not found" } satisfies AppError;
@@ -64,14 +68,16 @@ export function createAiMemoryMock(): AiMemoryMock {
       memories = [];
     },
     memory_tool: (action, name, content) => {
-      const found = memories.find((m) => m.name === cleanMemoryName(name));
+      // As Rust's `memory::run`: memories saved under one name before a sync count as one.
+      const clean = cleanMemoryName(name);
+      const found = memories.filter((m) => m.name === clean).map((m) => m.id);
       if (action === "delete") {
-        if (!found) return { status: "error", content: `There is no memory named "${cleanMemoryName(name)}".` };
-        memories = memories.filter((m) => m !== found);
-        return { status: "ok", content: `Deleted the memory "${found.name}".` };
+        if (!found.length) return { status: "error", content: `There is no memory named "${clean}".` };
+        memories = memories.filter((m) => !found.includes(m.id));
+        return { status: "ok", content: `Deleted the memory "${clean}".` };
       }
       try {
-        const saved = save(found?.id ?? null, name, content);
+        const saved = save(found, name, content);
         return { status: "ok", content: `Saved the memory "${saved.name}".` };
       } catch (e) {
         return { status: "error", content: (e as AppError).detail };

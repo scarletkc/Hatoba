@@ -459,10 +459,11 @@ describe("the permission mode notes (AI-16)", () => {
   });
 
   it("reads the memories a first message and a summary start with (AI-53)", () => {
-    const memory = noteBlock({ kind: "memory", entries: 1, body: "## web-1 sudo\nweb-1 uses doas." });
-    expect(memory).toBe('<memory entries="1">\n## web-1 sudo\nweb-1 uses doas.\n</memory>');
+    const body = '<entry name="web-1 sudo">\nweb-1 uses doas.\n</entry>';
+    const memory = noteBlock({ kind: "memory", entries: 1, body });
+    expect(memory).toBe(`<memory entries="1">\n${body}\n</memory>`);
     expect(parseMessage(`${manual}\n\n${memory}\n\nhello`)).toMatchObject({
-      notes: [{ kind: "permission_mode", mode: "manual" }, { kind: "memory", entries: 1, body: "## web-1 sudo\nweb-1 uses doas." }],
+      notes: [{ kind: "permission_mode", mode: "manual" }, { kind: "memory", entries: 1, body }],
       typed: "hello",
     });
     expect(splitPermissionNote(`${auto}\n\n${memory}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });

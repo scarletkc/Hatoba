@@ -4113,7 +4113,7 @@ fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
         terminal: context.tab,
         web_search: web_search_for(v, &context.provider_id, &context.model_id).is_some(),
         read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
-        memory: v.settings().ai.memory,
+        memory: memory::on(v),
         place: tool_place(context),
     })
 }

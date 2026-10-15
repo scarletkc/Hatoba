@@ -8,7 +8,7 @@
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::tools::{self, MAX_MEMORY_BYTES, MAX_MEMORY_NAME_CHARS, MemoryAction, MemoryArgs};
 use hatoba_core::Vault;
-use hatoba_core::model::{AiMemory, Item};
+use hatoba_core::model::{AiMemory, Item, SETTINGS_ID};
 
 /// Why a memory was not saved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +68,22 @@ fn named(v: &Vault, name: &str) -> Vec<String> {
         .collect()
 }
 
+/// The memories an edit in Settings → AI saves in place of: the memory `id`, and when the edit
+/// keeps its name, the other memories of that name, which count as one with it. A rename into
+/// another memory's name stays refused.
+pub(crate) fn edited(v: &Vault, id: &str, name: &str) -> Vec<String> {
+    let name = clean_name(name);
+    let kept = v
+        .get(id)
+        .and_then(Item::as_ai_memory)
+        .is_some_and(|m| m.name == name);
+    let mut ids = vec![id.to_owned()];
+    if kept {
+        ids.extend(named(v, &name).into_iter().filter(|other| other != id));
+    }
+    ids
+}
+
 /// Saves a memory in place of the memories `ids` (none adds one): the first keeps its place and
 /// the others are deleted. Name and text are cleaned first.
 ///
@@ -118,11 +134,19 @@ pub(crate) fn save(
     Ok(Ok((id, stored)))
 }
 
+/// Whether memory is on (`Settings.ai.memory`), read without copying the settings: on while no
+/// settings are stored, as by default.
+pub(crate) fn on(v: &Vault) -> bool {
+    v.get(SETTINGS_ID)
+        .and_then(Item::as_settings)
+        .is_none_or(|s| s.ai.memory)
+}
+
 /// The `memory` note a conversation's first message and each summary start with: the memories,
 /// oldest first, as many as fit [`MAX_MEMORY_BYTES`] (memories saved on several devices at once
 /// can go past it). Empty while memory is off or there are none.
 pub(crate) fn note(v: &Vault) -> String {
-    if !v.settings().ai.memory {
+    if !on(v) {
         return String::new();
     }
     let memories = v.ai_memories();
@@ -142,7 +166,7 @@ pub(crate) fn note(v: &Vault) -> String {
 /// Runs a `memory` call. A call from a response made while memory was on runs nothing once it is
 /// off.
 pub(crate) fn run(v: &mut Vault, args: &MemoryArgs) -> (ToolStatus, String) {
-    if !v.settings().ai.memory {
+    if !on(v) {
         return (
             ToolStatus::Error,
             "Memory is turned off in Hatoba's settings.".to_owned(),
@@ -194,8 +218,6 @@ pub(crate) fn run(v: &mut Vault, args: &MemoryArgs) -> (ToolStatus, String) {
 
 #[cfg(test)]
 mod tests {
-    use hatoba_core::model::SETTINGS_ID;
-
     use super::*;
 
     fn vault() -> Vault {
@@ -298,6 +320,33 @@ mod tests {
         synced(&mut v, "From the desktop again.");
         call(&mut v, MemoryAction::Delete, "web-1 sudo", None);
         assert!(v.ai_memories().is_empty());
+
+        // Settings → AI: an edit that keeps the name saves in place of all of them; a rename
+        // leaves the others alone, and a rename into another memory's name is refused.
+        let laptop = synced(&mut v, "From the laptop.");
+        let desktop = synced(&mut v, "From the desktop.");
+        let other = synced(&mut v, "Other.");
+        assert_eq!(
+            edited(&v, &desktop, " web-1 sudo "),
+            [desktop.clone(), laptop.clone(), other.clone()]
+        );
+        let ids = edited(&v, &laptop, "web-1 doas");
+        assert_eq!(ids, std::slice::from_ref(&laptop));
+        save(&mut v, &ids, "web-1 doas", "Uses doas.")
+            .unwrap()
+            .unwrap();
+        assert_eq!(names(&v), ["web-1 doas", "web-1 sudo", "web-1 sudo"]);
+        let ids = edited(&v, &desktop, "web-1 doas");
+        assert_eq!(
+            save(&mut v, &ids, "web-1 doas", "x").unwrap(),
+            Err(Refusal::Taken)
+        );
+        let ids = edited(&v, &desktop, "web-1 sudo");
+        save(&mut v, &ids, "web-1 sudo", "Merged.")
+            .unwrap()
+            .unwrap();
+        assert_eq!(names(&v), ["web-1 doas", "web-1 sudo"]);
+        assert_eq!(v.ai_memories()[1].0, desktop);
     }
 
     #[test]
@@ -345,7 +394,8 @@ mod tests {
         save(&mut v, &[], "two", "second").unwrap().unwrap();
         assert_eq!(
             note(&v),
-            "<memory entries=\"2\">\n## one\nfirst\n\n## two\nsecond\n</memory>\n\n"
+            "<memory entries=\"2\">\n<entry name=\"one\">\nfirst\n</entry>\n\n\
+             <entry name=\"two\">\nsecond\n</entry>\n</memory>\n\n"
         );
 
         // Memories saved on several devices at once can go past the limit: the note keeps the

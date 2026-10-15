@@ -35,15 +35,27 @@ export function memoriesSize(memories: readonly { name: string; content: string 
 export type MemoryProblem = "empty_name" | "long_name" | "empty_content" | "taken" | "full";
 
 /**
- * Why a memory cannot be saved under `id` (null adds one) beside the others in `memories`, as Rust
- * checks it, or null when it can. `name` and `content` are cleaned first.
+ * The memories an edit of `id` (null adds one) saves in place of, as Rust's `memory::edited`: `id`, and when the
+ * edit keeps its name, the other memories of that name, which devices saved before they synced and which count as
+ * one with it.
  */
-export function memoryProblem(memories: readonly AiMemoryView[], id: string | null, name: string, content: string): MemoryProblem | null {
+export function editedIds(memories: readonly AiMemoryView[], id: string | null, name: string): string[] {
+  if (id === null) return [];
+  const clean = cleanMemoryName(name);
+  const kept = memories.find((m) => m.id === id)?.name === clean;
+  return [id, ...(kept ? memories.filter((m) => m.id !== id && m.name === clean).map((m) => m.id) : [])];
+}
+
+/**
+ * Why a memory cannot be saved in place of the memories `replaced` (none adds one) beside the others in
+ * `memories`, as Rust checks it, or null when it can. `name` and `content` are cleaned first.
+ */
+export function memoryProblem(memories: readonly AiMemoryView[], replaced: readonly string[], name: string, content: string): MemoryProblem | null {
   const memory = { name: cleanMemoryName(name), content: cleanMemoryContent(content) };
   if (!memory.name) return "empty_name";
   if (charCount(memory.name) > MEMORY_NAME_MAX_CHARS) return "long_name";
   if (!memory.content) return "empty_content";
-  const others = memories.filter((m) => m.id !== id);
+  const others = memories.filter((m) => !replaced.includes(m.id));
   if (others.some((m) => m.name === memory.name)) return "taken";
   if (memoriesSize(others) + memorySize(memory) > MEMORY_MAX_BYTES) return "full";
   return null;

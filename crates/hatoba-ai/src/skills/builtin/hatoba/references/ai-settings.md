@@ -1,6 +1,6 @@
 # Settings → AI
 
-Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Skills, MCP Servers, Memory (`references/ai-instructions.md`), Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
+Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** tab. It has these sections in order: Providers, Default Model, Web Search, Custom Instructions (`references/ai-instructions.md`), Terminal Screen, Memory (`references/ai-instructions.md`), Skills, MCP Servers, Auto Mode and This Device. Using the assistant is covered in `references/ai-panel.md`.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -11,9 +11,9 @@ Open Settings (the gear in the sidebar, or Ctrl+, / ⌘,) and choose the **AI** 
 | Web Search | 网页搜索 | Web 検索 |
 | Custom Instructions | 自定义指令 | カスタム指示 |
 | Terminal Screen | 终端屏幕 | ターミナル画面 |
+| Memory | 记忆 | メモリ |
 | Skills | 技能 | スキル |
 | MCP Servers | MCP 服务器 | MCP サーバー |
-| Memory | 记忆 | メモリ |
 | Auto Mode | 自动批准模式 | 自動承認モード |
 | This Device | 此设备 | このデバイス |
 

@@ -272,6 +272,10 @@ export function AiPane() {
           </Group>
         </section>
       )}
+      <MemorySection
+        enabled={data ? { on: data.settings.memory, onChange: (memory) => void saveSettings({ memory }) } : null}
+        settled={!!data || !!loadError}
+      />
       <SkillsSection
         builtin={
           data
@@ -283,9 +287,6 @@ export function AiPane() {
         }
       />
       <McpSection />
-      <MemorySection
-        enabled={data ? { on: data.settings.memory, onChange: (memory) => void saveSettings({ memory }) } : null}
-      />
       {data && (
         <JudgeSection
           providers={providers}

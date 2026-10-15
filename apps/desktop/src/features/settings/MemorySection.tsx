@@ -4,7 +4,16 @@ import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, Spinner, Switch, TextArea, TextField } from "@/components/controls";
 import { FormRow, Group, layoutStyles } from "@/components/layout";
 import { FooterSpacer, Sheet, SheetHeader, confirm, toast } from "@/components/overlay";
-import { cleanMemoryContent, cleanMemoryName, MEMORY_MAX_BYTES, MEMORY_NAME_MAX_CHARS, memoriesSize, memoryProblem, type MemoryProblem } from "@/features/ai/memory";
+import {
+  cleanMemoryContent,
+  cleanMemoryName,
+  editedIds,
+  MEMORY_MAX_BYTES,
+  MEMORY_NAME_MAX_CHARS,
+  memoriesSize,
+  memoryProblem,
+  type MemoryProblem,
+} from "@/features/ai/memory";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiMemoryView } from "@/ipc/types";
@@ -34,9 +43,10 @@ const PROBLEM: Record<MemoryProblem, MessageKey> = {
  * Settings → AI → Memory (AI-53): the switch, then the memories the assistant keeps, oldest first, with what they
  * take of the limit: add, edit or delete one, or delete them all. `enabled` is null until the AI settings are loaded.
  * The list is read again after each sync round, as the other synced settings are. `/memory` in the AI panel opens
- * Settings here.
+ * Settings here, once `settled` says the AI settings above the section have loaded or failed to, so the section no
+ * longer moves when it is scrolled to.
  */
-export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
+export function MemorySection({ enabled, settled }: { enabled: MemorySwitch | null; settled: boolean }) {
   const t = useT();
   const [memories, setMemories] = useState<AiMemoryView[] | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -55,12 +65,12 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
     setLoadError,
   );
 
-  // `/memory` asked for this section: show it once the list has its height.
+  // `/memory` asked for this section: show it once it and what is above it have their heights.
   useEffect(() => {
-    if (requested !== "memory" || (memories === null && !loadError)) return;
+    if (requested !== "memory" || !settled || (memories === null && !loadError)) return;
     section.current?.scrollIntoView({ block: "start" });
     useApp.setState({ settingsSection: null });
-  }, [requested, memories, loadError]);
+  }, [requested, settled, memories, loadError]);
 
   const remove = async (memory: AiMemoryView) => {
     const ok = await confirm({
@@ -175,7 +185,8 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
           onSaved={(saved) => {
             reads.edited();
             setMemories((cur) => {
-              const rest = cur ?? [];
+              // Rust deleted the others of its name, which count as one with it (AI-53).
+              const rest = (cur ?? []).filter((m) => m.id === saved.id || m.name !== saved.name);
               return rest.some((m) => m.id === saved.id) ? rest.map((m) => (m.id === saved.id ? saved : m)) : [...rest, saved];
             });
             setEditing(null);
@@ -206,14 +217,15 @@ function MemoryDialog({
   const [problem, setProblem] = useState<{ rule: MemoryProblem } | { text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const nf = new Intl.NumberFormat(t.locale);
-  const others = memories.filter((m) => m.id !== memory?.id);
+  const replaced = editedIds(memories, memory?.id ?? null, name);
+  const others = memories.filter((m) => !replaced.includes(m.id));
   const used = memoriesSize([...others, { name: cleanMemoryName(name), content: cleanMemoryContent(content) }]);
   const rule = problem && "rule" in problem ? problem.rule : null;
   const nameProblem = rule === "empty_name" || rule === "long_name" || rule === "taken";
 
   const save = async () => {
     if (saving) return;
-    const found = memoryProblem(memories, memory?.id ?? null, name, content);
+    const found = memoryProblem(memories, replaced, name, content);
     if (found) {
       setProblem({ rule: found });
       document.getElementById(found === "empty_content" || found === "full" ? ids.content : ids.name)?.focus();

@@ -358,11 +358,17 @@ const TOOL_LABEL: Record<Exclude<ToolKind, "mcp" | "unknown">, MessageKey> = {
 
 /**
  * The name a call shows with: the built-in tool's label, `server · tool` for MCP, or the raw name. A
- * `call_mcp_tool` call shows as the tool it names: pass it through `shownCall` first.
+ * `call_mcp_tool` call shows as the tool it names: pass it through `shownCall` first. With the call's
+ * arguments, a `memory` call (AI-53) is named by what it does.
  */
-export function toolLabel(t: (key: MessageKey, params?: Params) => string, name: string): string {
+export function toolLabel(t: (key: MessageKey, params?: Params) => string, name: string, json?: string): string {
   const kind = toolKind(name);
   if (name === CALL_MCP_TOOL) return name;
+  if (kind === "memory" && json !== undefined) {
+    const action = parseArgs(json)?.action;
+    if (action === "save") return t("ai.tool.memory.save");
+    if (action === "delete") return t("ai.tool.memory.delete");
+  }
   if (kind === "mcp") {
     const [server, tool] = splitMcpName(name) ?? ["", name];
     return t("ai.tool.mcp", { server, tool });
@@ -502,7 +508,7 @@ export function callSummary(name: string, json: string): string {
     case "search_tools":
       return str(args.query);
     case "memory":
-      return [str(args.action), str(args.name)].filter(Boolean).join(" · ");
+      return str(args.name);
     case "read_file":
       return args.offset !== undefined && args.offset !== null ? `${str(args.path)}:${str(args.offset)}` : str(args.path);
     case "edit_file":

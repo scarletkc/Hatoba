@@ -69,7 +69,7 @@ function attachmentLabel(t: Tr, a: Attachment): string {
 function toolCall(t: Tr, call: AiToolCall, result: ToolEntry | undefined): string {
   // AI-45: a `call_mcp_tool` call as the MCP tool it names.
   const shown = shownCall(call);
-  const parts = [`**${toolLabel(t, shown.name)}** · ${callStatus(t, call, result)}`, `${t("ai.call.input")}:`, fenced(prettyArgs(shown.arguments) || "{}", "json")];
+  const parts = [`**${toolLabel(t, shown.name, shown.arguments)}** · ${callStatus(t, call, result)}`, `${t("ai.call.input")}:`, fenced(prettyArgs(shown.arguments) || "{}", "json")];
   if (result?.status === "rejected") {
     const reason = result.content.trim();
     if (reason) parts.push(`${t("ai.approval.reason")}:`, fenced(reason));

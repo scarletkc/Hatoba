@@ -784,7 +784,7 @@ function ToolBlock({
       <div className={s.toolHeadRow}>
         <button type="button" className={s.toolHead} aria-expanded={open} aria-describedby={statusId} onClick={() => setOpen((v) => !v)}>
           <Icon name={TOOL_ICON[kind]} size={14} className={s.toolIcon} />
-          <span className={s.toolName}>{toolLabel(t, shown.name)}</span>
+          <span className={s.toolName}>{toolLabel(t, shown.name, shown.arguments)}</span>
           <span className={s.toolSummary}>{summary}</span>
           {auto?.decision === "run" && (
             <span className={cx(s.chip, s.chipAuto)} title={answersText(t, auto.answers) || t("ai.auto.ran")}>

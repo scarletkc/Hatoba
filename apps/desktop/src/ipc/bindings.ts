@@ -468,7 +468,10 @@ export const commands = {
 	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
 	/**  Every memory, oldest first. */
 	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
-	/**  Saves a memory: `id` replaces that one, none adds one. */
+	/**
+	 *  Saves a memory: `id` replaces that one, together with the others of its name when the edit
+	 *  keeps it ([`memory::edited`]); none adds one.
+	 */
 	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
 	/**  Deletes a memory. */
 	aiMemoryDelete: (id: string) => __TAURI_INVOKE<null>("ai_memory_delete", { id }),

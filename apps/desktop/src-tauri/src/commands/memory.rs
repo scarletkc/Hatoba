@@ -31,7 +31,8 @@ pub async fn ai_memories_list(state: State<'_, AppState>) -> AppResult<Vec<AiMem
     })
 }
 
-/// Saves a memory: `id` replaces that one, none adds one.
+/// Saves a memory: `id` replaces that one, together with the others of its name when the edit
+/// keeps it ([`memory::edited`]); none adds one.
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_memory_save(
@@ -40,12 +41,14 @@ pub async fn ai_memory_save(
     input: AiMemoryInput,
 ) -> AppResult<AiMemoryView> {
     let saved = state.with_unlocked(|v| {
-        if let Some(id) = &input.id
-            && v.get(id).and_then(Item::as_ai_memory).is_none()
-        {
-            return Err(AppError::not_found("memory"));
-        }
-        memory::save(v, input.id.as_slice(), &input.name, &input.content)?
+        let ids = match &input.id {
+            Some(id) if v.get(id).and_then(Item::as_ai_memory).is_none() => {
+                return Err(AppError::not_found("memory"));
+            }
+            Some(id) => memory::edited(v, id, &input.name),
+            None => Vec::new(),
+        };
+        memory::save(v, &ids, &input.name, &input.content)?
             .map(|(id, m)| view(id, m))
             .map_err(|refusal| AppError::invalid("memory", refusal.message()))
     })?;
