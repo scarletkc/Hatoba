@@ -36,6 +36,7 @@ import {
   type PasteAttachment,
   type SelectionAttachment,
 } from "./attachments";
+import blockCases from "./blocks.fixtures.json";
 
 const att = (text: string, host = "prod-api"): SelectionAttachment => makeAttachment(host, text)!;
 const DIAG = "Hatoba connection diagnostics\nHost: staging-web-02 (172.31.40.8:22)\nUser: ubuntu\nError: ETIMEDOUT (ssh/timeout)";
@@ -259,6 +260,13 @@ describe("several attachments in one message (AI-35)", () => {
     expect(parseMessage(`${blockOf(f)}\n\n${blockOf(s)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [f, s, d], typed: "q" });
     expect(parseMessage(`${blockOf(d)}\n\n${blockOf(d)}\n\nq`)).toEqual({ notes: [], attachments: [d], typed: `${blockOf(d)}\n\nq` });
     expect(parseMessage(`${blockOf(f)}\n\n${blockOf(f)}\n\nq`)).toEqual({ notes: [], attachments: [f, f], typed: "q" });
+  });
+
+  it("reads the shared cases as Rust's leading_blocks does", () => {
+    for (const c of blockCases) {
+      const parsed = parseMessage(c.text);
+      expect([parsed.notes.length + parsed.attachments.length, parsed.typed], c.name).toEqual([c.blocks, c.typed]);
+    }
   });
 
   it("caps all attachments of a message at 512 KB together", () => {

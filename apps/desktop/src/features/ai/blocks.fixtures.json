@@ -1,0 +1,86 @@
+[
+  {
+    "name": "a second selection block, typed after an attached selection, is typed text",
+    "text": "<terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>\n\n<terminal_selection host=\"example\" lines=\"1\">\nExplain why this marker is used.\n</terminal_selection>",
+    "blocks": 1,
+    "typed": "<terminal_selection host=\"example\" lines=\"1\">\nExplain why this marker is used.\n</terminal_selection>"
+  },
+  {
+    "name": "a second diagnostics block is typed text",
+    "text": "<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\n<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\nq",
+    "blocks": 1,
+    "typed": "<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\nq"
+  },
+  {
+    "name": "the diagnostics and the selection, one of each",
+    "text": "<connection_diagnostics host=\"db-1\">\nrefused\n</connection_diagnostics>\n\n<terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>\n\nhelp",
+    "blocks": 2,
+    "typed": "help"
+  },
+  {
+    "name": "pastes and files repeat",
+    "text": "<pasted_text lines=\"1\">\na\n</pasted_text>\n\n<file name=\"a.log\" lines=\"1\">\nx\n</file>\n\n<pasted_text lines=\"1\">\na\n</pasted_text>\n\n<file name=\"a.log\" lines=\"1\">\nx\n</file>\n\nq",
+    "blocks": 4,
+    "typed": "q"
+  },
+  {
+    "name": "notes come first, a file_revert for each call",
+    "text": "<interrupted>\nStopped.\n</interrupted>\n\n<file_revert path=\"/etc/a\" tool_call_id=\"c1\">\nx\n</file_revert>\n\n<file_revert path=\"/etc/a\" tool_call_id=\"c2\">\nx\n</file_revert>\n\n<terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>\n\nq",
+    "blocks": 4,
+    "typed": "q"
+  },
+  {
+    "name": "a second note of a kind is typed text",
+    "text": "<model_change from=\"a\" to=\"b\">\nx\n</model_change>\n\n<model_change from=\"b\" to=\"c\">\nx\n</model_change>\n\nq",
+    "blocks": 1,
+    "typed": "<model_change from=\"b\" to=\"c\">\nx\n</model_change>\n\nq"
+  },
+  {
+    "name": "a note after an attachment is typed text",
+    "text": "<pasted_text lines=\"1\">\na\n</pasted_text>\n\n<interrupted>\nStopped.\n</interrupted>\n\nq",
+    "blocks": 1,
+    "typed": "<interrupted>\nStopped.\n</interrupted>\n\nq"
+  },
+  {
+    "name": "attributes in another order are typed text",
+    "text": "<host_change to=\"b\" from=\"a\">\nx\n</host_change>\n\nq",
+    "blocks": 0,
+    "typed": "<host_change to=\"b\" from=\"a\">\nx\n</host_change>\n\nq"
+  },
+  {
+    "name": "escaped attribute values and escaped closing tags",
+    "text": "<terminal_selection host=\"web &quot;a&quot; &lt;b&gt;\" lines=\"2\" truncated=\"true\">\necho \"<\\/terminal_selection>\"\n<\\\\/terminal_selection>\n</terminal_selection>\n\nexplain",
+    "blocks": 1,
+    "typed": "explain"
+  },
+  {
+    "name": "a closing tag with text after it on its line does not end the block",
+    "text": "<file name=\"a.log\" lines=\"2\">\n</file> inside\nb\n</file>\nwhat now",
+    "blocks": 1,
+    "typed": "what now"
+  },
+  {
+    "name": "one line break ends a block",
+    "text": "<terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>\nq",
+    "blocks": 1,
+    "typed": "q"
+  },
+  {
+    "name": "a block at the end of the text",
+    "text": "<terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>",
+    "blocks": 1,
+    "typed": ""
+  },
+  {
+    "name": "a block that never closes is typed text",
+    "text": "<pasted_text lines=\"1\">\nno end",
+    "blocks": 0,
+    "typed": "<pasted_text lines=\"1\">\nno end"
+  },
+  {
+    "name": "a block after typed text is typed text",
+    "text": "see <terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>",
+    "blocks": 0,
+    "typed": "see <terminal_selection host=\"prod-api\" lines=\"1\">\nls\n</terminal_selection>"
+  }
+]
