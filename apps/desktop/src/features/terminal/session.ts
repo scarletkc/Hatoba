@@ -240,10 +240,13 @@ export class LiveSession {
     if (this.disposed) return;
     Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
     requestAnimationFrame(() => this.fitNow());
-    // The search addon keeps the colours it drew matches with, so a new scheme redraws them.
+    // The search addon keeps the colours it drew matches with, so a new scheme redraws them. Searching
+    // again scrolls to a match; the view stays where the user left it.
     if (this.findQuery && JSON.stringify(this.findColors()) !== this.findDrawn) {
+      const top = this.term.buffer.active.viewportY;
       this.search.clearDecorations();
       this.find(this.findQuery, "next", true);
+      this.term.scrollToLine(top);
     }
   }
 

@@ -19,6 +19,8 @@ vi.mock("@xterm/xterm", () => ({
     paste = vi.fn();
     focus = vi.fn();
     options = {};
+    buffer = { active: { viewportY: 0 } };
+    scrollToLine = vi.fn();
   },
 }));
 vi.mock("./paste", () => ({ confirmMultilinePaste: vi.fn(async () => true) }));
@@ -128,10 +130,13 @@ describe("terminal search", () => {
     session.applySettings();
     expect(findNext).toHaveBeenCalledTimes(1);
 
+    // The user scrolled up through the scrollback; the redraw leaves the view there.
+    Object.assign(session.term.buffer.active, { viewportY: 120 });
     pick("dracula");
     session.applySettings();
     expect(clear).toHaveBeenCalled();
     expect(findNext).toHaveBeenLastCalledWith("ops", { incremental: true, decorations: searchColors(schemeFor("dark", "dracula")) });
+    expect(session.term.scrollToLine).toHaveBeenCalledWith(120);
 
     // Closed find bar: nothing to redraw.
     session.endFind();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SCHEME, SCHEMES, schemeFor, schemesFor, searchColors } from "./schemes";
+import { contrast, DEFAULT_SCHEME, MATCH_CONTRAST, SCHEMES, schemeFor, schemesFor, searchColors } from "./schemes";
 
 const HEX = /^#[0-9a-f]{6}$/;
 const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"] as const;
@@ -35,6 +35,15 @@ describe("terminal colour schemes", () => {
     for (const s of SCHEMES) {
       for (const value of Object.values(searchColors(s))) expect(value, s.id).toMatch(HEX);
     }
-    expect(searchColors(schemeFor("dark", "nord")).matchBackground).toBe("#676157");
+  });
+
+  it("keep text readable on search highlights, the current match standing out", () => {
+    for (const s of SCHEMES) {
+      const { matchBackground, activeMatchBackground } = searchColors(s);
+      const { foreground, background } = s.colors;
+      expect(contrast(foreground, matchBackground), `${s.id} match`).toBeGreaterThanOrEqual(MATCH_CONTRAST);
+      expect(contrast(foreground, activeMatchBackground), `${s.id} active match`).toBeGreaterThanOrEqual(MATCH_CONTRAST);
+      if (!s.search) expect(contrast(background, activeMatchBackground), s.id).toBeGreaterThan(contrast(background, matchBackground));
+    }
   });
 });

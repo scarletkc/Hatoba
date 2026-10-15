@@ -622,17 +622,43 @@ function mix(a: string, b: string, amount: number): string {
   return `#${ch(ar, br)}${ch(ag, bg)}${ch(ab, bb)}`;
 }
 
+/** WCAG contrast ratio of two `#RRGGBB` colours. */
+export function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, b] = rgb(hex).map((c) => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** What a match's text needs against its highlight; Hatoba Dark's fixed colours give 3.4. */
+export const MATCH_CONTRAST = 3;
+
+/** The most of `yellow` over `background`, up to `amount`, that keeps the text readable on it. */
+function highlightAmount(yellow: string, background: string, foreground: string, amount: number): number {
+  let a = amount;
+  while (a > 0.1 && contrast(foreground, mix(yellow, background, a)) < MATCH_CONTRAST) a -= 0.05;
+  return a;
+}
+
 /** Search highlights: the scheme's own, or its yellow blended into the background. */
 export function searchColors(scheme: TermScheme): SearchColors {
   if (scheme.search) return scheme.search;
-  const { yellow, background } = scheme.colors;
+  const { yellow, background, foreground } = scheme.colors;
   const dark = scheme.mode === "dark";
   const accent = dark ? yellow : mix(yellow, "#000000", 0.8);
+  const active = highlightAmount(yellow, background, foreground, dark ? 0.6 : 0.55);
+  // The other matches stay fainter than the current one.
+  const match = Math.min(highlightAmount(yellow, background, foreground, dark ? 0.3 : 0.28), active / 2);
   return {
-    matchBackground: mix(yellow, background, dark ? 0.3 : 0.28),
+    matchBackground: mix(yellow, background, match),
     matchBorder: mix(yellow, background, dark ? 0.55 : 0.6),
     matchOverviewRuler: accent,
-    activeMatchBackground: mix(yellow, background, dark ? 0.6 : 0.55),
+    activeMatchBackground: mix(yellow, background, active),
     activeMatchBorder: accent,
     activeMatchColorOverviewRuler: accent,
   };
