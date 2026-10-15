@@ -34,8 +34,10 @@ export DISPLAY=:99 LANG=en_US.UTF-8
 # A fresh home for every run, so the app starts at its first launch.
 rm -rf "$OUT/home"
 mkdir -p "$OUT/home"
-# Stops this run's tauri-driver and the WebKitWebDriver it started, and no other.
-HOME="$(realpath "$OUT/home")" dbus-run-session -- bash -c '
+# The XDG folders follow HOME only when unset. The trap stops this run's tauri-driver and the
+# WebKitWebDriver it started, and no other.
+env -u XDG_DATA_HOME -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME \
+  HOME="$(realpath "$OUT/home")" dbus-run-session -- bash -c '
   tauri-driver & driver=$!
   trap "pkill -P $driver; kill $driver" EXIT
   sleep 2
