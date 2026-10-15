@@ -1,6 +1,7 @@
 //! AI assistant items in the vault (spec §5.1, §13.7).
 //!
-//! Providers, search providers, skills and MCP servers are plain items with typed accessors. A
+//! Providers, search providers, skills, MCP servers and memories are plain items with typed
+//! accessors. A
 //! conversation is an `ai_conversation` item plus its entries, which are stored as `ai_message`
 //! items:
 //!
@@ -28,8 +29,8 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::crypto::{item_aad, random_bytes, seal};
 use crate::error::{Error, Result};
 use crate::model::{
-    AiConversation, AiMessage, AiProvider, Item, McpServer, SearchProvider, Skill, SkillFile,
-    new_id,
+    AiConversation, AiMemory, AiMessage, AiProvider, Item, McpServer, SearchProvider, Skill,
+    SkillFile, new_id,
 };
 use crate::store::{ItemRow, StoreOps};
 use crate::vault::{Vault, decode_envelope};
@@ -103,6 +104,12 @@ impl Vault {
     #[must_use]
     pub fn mcp_servers(&self) -> Vec<(String, McpServer)> {
         self.collect(Item::as_mcp_server)
+    }
+
+    /// The AI assistant's memories (AI-53), oldest first: their ids are UUIDv7s.
+    #[must_use]
+    pub fn ai_memories(&self) -> Vec<(String, AiMemory)> {
+        self.collect(Item::as_ai_memory)
     }
 
     // ---- conversation entries ----
@@ -526,6 +533,20 @@ impl Vault {
         let mut ids = vec![skill_id.to_owned()];
         ids.extend(self.skill_files(skill_id).into_iter().map(|(id, _)| id));
         self.tombstone(&ids)
+    }
+
+    /// Deletes every memory of the AI assistant (AI-53) in one transaction, leaving tombstones
+    /// that sync, and returns how many there were.
+    ///
+    /// # Errors
+    /// [`Error::Locked`]; storage errors.
+    pub fn ai_memories_delete_all(&mut self) -> Result<usize> {
+        if !self.is_unlocked() {
+            return Err(Error::Locked);
+        }
+        let ids: Vec<String> = self.ai_memories().into_iter().map(|(id, _)| id).collect();
+        self.tombstone(&ids)?;
+        Ok(ids.len())
     }
 
     /// Tombstones the given items in one transaction and drops them (wiped) from the item map.
@@ -1357,6 +1378,7 @@ pub(crate) mod tests {
             Err(Error::Locked)
         ));
         assert!(matches!(vault.skill_delete("x"), Err(Error::Locked)));
+        assert!(matches!(vault.ai_memories_delete_all(), Err(Error::Locked)));
         assert_eq!(vault.ai_last_activity(&conv), 0);
         vault.unlock(PW).unwrap();
         assert_eq!(vault.pending_count(), pending);
@@ -1629,6 +1651,37 @@ pub(crate) mod tests {
             vault.skill_delete(&f3),
             Err(Error::InvalidItem(_))
         ));
+    }
+
+    #[test]
+    fn memories_list_oldest_first_and_delete_together() {
+        let (mut vault, _clock) = vault();
+        let memory = |name: &str| {
+            Item::AiMemory(AiMemory {
+                name: name.into(),
+                content: "text".into(),
+                ..AiMemory::default()
+            })
+        };
+        let first = vault.put(None, memory("first")).unwrap();
+        let second = vault.put(None, memory("second")).unwrap();
+        let skill = vault.put(None, Item::Skill(Skill::default())).unwrap();
+        // Saving the first again keeps its place.
+        vault.put(Some(&first), memory("first, edited")).unwrap();
+        let names: Vec<String> = vault
+            .ai_memories()
+            .into_iter()
+            .map(|(_, m)| m.name)
+            .collect();
+        assert_eq!(names, ["first, edited", "second"]);
+
+        assert_eq!(vault.ai_memories_delete_all().unwrap(), 2);
+        assert!(vault.ai_memories().is_empty());
+        for id in [&first, &second] {
+            assert!(vault.store.item_row(id).unwrap().unwrap().deleted);
+        }
+        assert!(vault.get(&skill).is_some());
+        assert_eq!(vault.ai_memories_delete_all().unwrap(), 0);
     }
 
     #[test]

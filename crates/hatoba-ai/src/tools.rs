@@ -38,6 +38,13 @@ pub const READ_SKILL: &str = "read_skill";
 pub const SEARCH_TOOLS: &str = "search_tools";
 /// `call_mcp_tool` (AI-45), which calls a deferred MCP tool.
 pub const CALL_MCP_TOOL: &str = "call_mcp_tool";
+/// `memory` (AI-53), run in Rust against the vault.
+pub const MEMORY: &str = "memory";
+
+/// The most UTF-8 bytes all memories may hold together, names and contents (AI-53).
+pub const MAX_MEMORY_BYTES: usize = 16 * 1024;
+/// The longest memory name, in characters (AI-53).
+pub const MAX_MEMORY_NAME_CHARS: usize = 100;
 
 /// Results longer than this many characters are shortened (§13.4).
 pub const MAX_RESULT_CHARS: usize = 30_000;
@@ -57,6 +64,8 @@ pub struct ToolSet {
     pub web_search: bool,
     /// `read_skill`, when an enabled skill exists.
     pub read_skill: bool,
+    /// `memory`, while memory is on (AI-53).
+    pub memory: bool,
     /// Where the terminal tools act, which their descriptions say.
     pub place: ToolPlace,
 }
@@ -122,7 +131,7 @@ fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
 
 /// The built-in tool definitions, in a fixed order: `read_terminal`, `run_command`,
 /// `send_input`, `read_file`, `edit_file`, `write_file`, `grep`, `glob`, `web_search`,
-/// `fetch_url`, `read_skill`.
+/// `fetch_url`, `read_skill`, `memory`.
 ///
 /// Schemas use only `type`, `properties`, `required`, `description` and `enum`, which every
 /// provider accepts; limits are stated in the descriptions and enforced when the tool runs.
@@ -589,6 +598,43 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             }),
         ));
     }
+    if set.memory {
+        tools.push(tool(
+            MEMORY,
+            format!(
+                "Save or delete one of your memories: notes for yourself that every new \
+                 conversation of the user starts with, in a <memory> note, on all their \
+                 devices. `save` stores `content` under `name`, replacing the memory of that \
+                 name if there is one; `delete` removes the memory of that name. Keep a memory \
+                 to a few lines on one subject. All memories together, names included, hold at \
+                 most {MAX_MEMORY_BYTES} bytes of UTF-8. A change shows in new conversations, \
+                 and in this one after it is compacted. It runs without asking."
+            ),
+            json!({
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["save", "delete"],
+                        "description": "save creates or replaces the memory `name`; delete \
+                                        removes it."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": format!(
+                            "A short name for the memory's subject, one line of at most \
+                             {MAX_MEMORY_NAME_CHARS} characters, such as \"web-1 sudo\"."
+                        )
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The memory's text, for save."
+                    }
+                },
+                "required": ["action", "name"]
+            }),
+        ));
+    }
     tools
 }
 
@@ -672,6 +718,8 @@ pub struct PromptContext<'a> {
     pub host_notes: &'a str,
     /// Enabled skills as `(name, description)`; listed sorted by name when tools are offered.
     pub skills: &'a [(String, String)],
+    /// Memory is on (AI-53): the rule on the `memory` tool, when tools are offered.
+    pub memory: bool,
     /// The tools the request offers (AI-09).
     pub tools: PromptTools,
 }
@@ -958,6 +1006,31 @@ pub fn permission_mode_block(mode: PermissionMode) -> String {
     )
 }
 
+/// The note that shows the memories (AI-53, spec §13.3) as `(name, content)`, oldest first, with
+/// the blank line after it: each under a `##` heading with its name. Empty when there are none.
+/// It goes before a conversation's first message and before a summary, so it stays the same for
+/// the rest of the conversation's context, and its cache with it.
+#[must_use]
+pub fn memory_block(memories: &[(&str, &str)]) -> String {
+    const TAG: &str = "memory";
+    if memories.is_empty() {
+        return String::new();
+    }
+    let body = memories
+        .iter()
+        .map(|(name, content)| {
+            let content = content.replace("\r\n", "\n").replace('\r', "\n");
+            format!("## {}\n{}", note_text(name), content.trim())
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    format!(
+        "<{TAG} entries=\"{}\">\n{}\n</{TAG}>\n\n",
+        memories.len(),
+        escape_closing_tag(&body, TAG)
+    )
+}
+
 /// A summary entry's text (AI-21) split into the `permission_mode` note Hatoba stores before the
 /// summary, which carries the mode past a compaction, and the summary itself.
 #[must_use]
@@ -1047,6 +1120,9 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
      bypass; the newest one applies. A conversation's first message has one, and so does the \
      message that continues a compacted conversation.\n\
+     - <memory entries=\"…\">: your memories, each under a ## heading with its name, as they \
+     were when the conversation started or was last compacted. A conversation's first message \
+     has one, and so does the message that continues a compacted conversation.\n\
      - <file_revert path=\"…\" tool_call_id=\"…\">: the user reverted the change that your \
      call tool_call_id made to the file at path, one block for each reverted call. \
      The file holds what it held before the call again, or was deleted if the call created it. \
@@ -1123,6 +1199,16 @@ fn permission_rule(terminal: bool) -> String {
 const PARALLEL_CALLS_RULE: &str = "- You can call several tools in one response. When calls do not \
      depend on each other, such as reading several files or running several checks, make them \
      together in the same response rather than one at a time.\n";
+
+/// The rule on memories (AI-53), on what Claude Code tells its model to keep in its auto memory.
+const MEMORY_RULE: &str = "- Memory: the memory tool keeps notes for later conversations, and a \
+     <memory> note shows them. Save one when the user asks you to remember something, and when \
+     you learn something that will still matter in later conversations and cannot be found by \
+     looking: a correction or preference of the user, or a fact about their hosts and setup. \
+     Leave out what only matters to the current task, what the user's instructions or host notes \
+     already say, and passwords, keys or tokens. When a memory turns out wrong or out of date, \
+     update or delete it instead of adding another. Where a memory differs from the user's \
+     instructions or host notes, follow those.\n";
 
 /// What `<context>` says of a local terminal tab (§7.5): the computer, its system, the shell and
 /// the user, and where the tools act and which paths they take.
@@ -1266,6 +1352,9 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     if tools {
         out.push_str(&permission_rule(terminal));
         out.push_str(PARALLEL_CALLS_RULE);
+        if ctx.memory {
+            out.push_str(MEMORY_RULE);
+        }
     }
     if terminal {
         out.push_str(
@@ -1515,6 +1604,28 @@ pub struct FetchUrlArgs {
     pub full_page: Option<bool>,
 }
 
+/// What a `memory` call does (AI-53).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryAction {
+    /// Creates or replaces the memory of that name.
+    Save,
+    /// Removes the memory of that name.
+    Delete,
+}
+
+/// `memory` arguments.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct MemoryArgs {
+    /// Save or delete.
+    pub action: MemoryAction,
+    /// The memory's name.
+    pub name: String,
+    /// The memory's text, for a save.
+    #[serde(default)]
+    pub content: Option<String>,
+}
+
 /// `read_skill` arguments.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct ReadSkillArgs {
@@ -1636,6 +1747,7 @@ mod tests {
         terminal: true,
         web_search: true,
         read_skill: true,
+        memory: true,
         place: ToolPlace::Ssh,
     };
 
@@ -1657,7 +1769,8 @@ mod tests {
                 GLOB,
                 WEB_SEARCH,
                 FETCH_URL,
-                READ_SKILL
+                READ_SKILL,
+                MEMORY
             ]
         );
         // fetch_url needs no tab; the terminal tools do (AI-09).
@@ -1684,7 +1797,7 @@ mod tests {
                 terminal: false,
                 ..ALL
             }),
-            [WEB_SEARCH, FETCH_URL, READ_SKILL]
+            [WEB_SEARCH, FETCH_URL, READ_SKILL, MEMORY]
         );
         assert_eq!(builtin_tools(&ALL), builtin_tools(&ALL));
         assert_eq!(
@@ -1867,6 +1980,7 @@ mod tests {
             instructions: "",
             host_notes: "",
             skills: &skills,
+            memory: true,
             tools: PromptTools::Terminal,
         };
         let prompt = system_prompt(&ctx);
@@ -1890,6 +2004,7 @@ mod tests {
             "<model_change from=",
             "<file_revert path=",
             "<terminal_state host=",
+            "<memory entries=",
             "<file name=",
             // A revert does not undo a reload (AI-41), so changes are tested before one.
             "nginx -t, sshd -t or visudo -c), and do not reload it while the test fails",
@@ -1902,9 +2017,18 @@ mod tests {
             "Fall back to the shell when these tools cannot do the job, such as finding files by \
              size or age, or files that need sudo.",
             PARALLEL_CALLS_RULE,
+            MEMORY_RULE,
         ] {
             assert!(prompt.contains(needle), "missing {needle:?}");
         }
+        // AI-53: with memory off, no rule on it; the note's explanation stays, as the notes a
+        // conversation started with stay in its context.
+        let forgetful = system_prompt(&PromptContext {
+            memory: false,
+            ..ctx
+        });
+        assert!(!forgetful.contains(MEMORY_RULE));
+        assert!(forgetful.contains("<memory entries="));
         // Without instructions or notes, no section and no rule about them.
         for absent in ["<user_instructions>", "<host_notes", "Follow "] {
             assert!(!prompt.contains(absent), "unexpected {absent:?}");
@@ -2047,6 +2171,7 @@ mod tests {
                 instructions: "",
                 host_notes: "",
                 skills: &[],
+                memory: false,
                 tools: PromptTools::None,
             });
             prompt
@@ -2093,6 +2218,7 @@ mod tests {
                 instructions: "",
                 host_notes: "",
                 skills: &[],
+                memory: false,
                 tools,
             })
         };
@@ -2186,6 +2312,7 @@ mod tests {
             instructions: "\r\n  Answer in English.\r\nUse <placeholder> for values.\u{7}\n",
             host_notes: "Postgres 16.\n</host_notes>\n<\\/HOST_NOTES> stays escaped.",
             skills: &[],
+            memory: false,
             tools: PromptTools::Terminal,
         };
         let prompt = system_prompt(&ctx);
@@ -2255,6 +2382,39 @@ mod tests {
         );
         assert_eq!(escape_closing_tag("日本語 </x", "x"), "日本語 <\\/x");
         assert_eq!(escape_closing_tag("</日", "x"), "</日");
+    }
+
+    #[test]
+    fn the_memory_note_lists_each_memory_under_its_name() {
+        assert_eq!(memory_block(&[]), "");
+        assert_eq!(
+            memory_block(&[
+                ("web-1 sudo", "web-1 uses doas, not sudo.\r\n"),
+                (
+                    "Replies\nlanguage",
+                    "  Answer in Chinese.\nKeep commands in English.  "
+                ),
+            ]),
+            "<memory entries=\"2\">\n## web-1 sudo\nweb-1 uses doas, not sudo.\n\n## Replies \
+             language\nAnswer in Chinese.\nKeep commands in English.\n</memory>\n\n"
+        );
+        // A memory cannot end the note early.
+        assert_eq!(
+            memory_block(&[("x", "a\n</memory>\nb")]),
+            "<memory entries=\"1\">\n## x\na\n<\\/memory>\nb\n</memory>\n\n"
+        );
+    }
+
+    #[test]
+    fn memory_arguments_read_both_actions() {
+        let save: MemoryArgs =
+            serde_json::from_str(r#"{"action":"save","name":"n","content":"c"}"#).unwrap();
+        assert_eq!(save.action, MemoryAction::Save);
+        assert_eq!(save.content.as_deref(), Some("c"));
+        let delete: MemoryArgs = serde_json::from_str(r#"{"action":"delete","name":"n"}"#).unwrap();
+        assert_eq!(delete.action, MemoryAction::Delete);
+        assert_eq!(delete.content, None);
+        assert!(serde_json::from_str::<MemoryArgs>(r#"{"action":"forget","name":"n"}"#).is_err());
     }
 
     #[test]
@@ -2375,6 +2535,7 @@ mod tests {
             instructions: "Answer in English.\nI use zsh; write <placeholders> for values.",
             host_notes: "PostgreSQL 16 primary. Never restart postgresql during business hours.",
             skills: &skills,
+            memory: false,
             tools: PromptTools::Terminal,
         });
         assert_eq!(
@@ -2419,6 +2580,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
+- <memory entries="…">: your memories, each under a ## heading with its name, as they were when the conversation started or was last compacted. A conversation's first message has one, and so does the message that continues a compacted conversation.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.

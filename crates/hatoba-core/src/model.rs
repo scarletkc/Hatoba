@@ -10,7 +10,7 @@
 //!
 //! [`Proxy`] holds a proxy password and has a redacting `Debug` too (SSH-13).
 //!
-//! The AI assistant adds seven item types (spec §5.1, §13): [`AiProvider`] and [`SearchProvider`]
+//! The AI assistant adds eight item types (spec §5.1, §13): [`AiProvider`] and [`SearchProvider`]
 //! hold API keys, [`McpServer`] holds environment and header values, and [`AiMessage`] holds a
 //! slice of conversation content (SEC-04). All four have a redacting `Debug`. An `ai_message`'s
 //! `data` is only held while an entry is being read or written: the in-memory item map keeps the
@@ -938,6 +938,28 @@ pub struct SkillFile {
     pub updated_at: i64,
 }
 
+/// A note the AI assistant keeps across conversations (AI-53, spec §13.12): every conversation
+/// starts with all of them.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiMemory {
+    /// One line, unique among memories.
+    pub name: String,
+    /// The text: a few lines on one subject.
+    pub content: String,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
+}
+
+impl AiMemory {
+    /// The UTF-8 bytes it takes of the limit on all memories together (AI-53): its name and its
+    /// content.
+    #[must_use]
+    pub fn size(&self) -> usize {
+        self.name.len() + self.content.len()
+    }
+}
+
 /// How an [`McpServer`] is reached (spec §13.9). The environment and header values are secrets:
 /// they are wiped on drop and never printed.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1232,6 +1254,9 @@ pub struct AiSettings {
     /// chats. `None` (absent) until the user chooses one, and Auto is unavailable until then.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub judge_model: Option<AiModelRef>,
+    /// Conversations start with the memories, and the assistant can save and delete them (AI-53).
+    /// On by default, also for settings written before it existed.
+    pub memory: bool,
 }
 
 /// The longest [`AiSettings::custom_instructions`], in bytes of UTF-8 (AI-36). Plain text this long
@@ -1250,6 +1275,7 @@ impl Default for AiSettings {
             custom_instructions: String::new(),
             send_terminal_screen: true,
             judge_model: None,
+            memory: true,
         }
     }
 }
@@ -1268,7 +1294,7 @@ pub struct Settings {
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
 /// "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" |
-/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings"`.
+/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
@@ -1300,6 +1326,8 @@ pub enum Item {
     SkillFile(SkillFile),
     /// An MCP server.
     McpServer(McpServer),
+    /// A memory of the AI assistant.
+    AiMemory(AiMemory),
     /// The settings singleton.
     Settings(Settings),
 }
@@ -1323,6 +1351,7 @@ impl Item {
             Self::Skill(_) => "skill",
             Self::SkillFile(_) => "skill_file",
             Self::McpServer(_) => "mcp_server",
+            Self::AiMemory(_) => "ai_memory",
             Self::Settings(_) => "settings",
         }
     }
@@ -1345,6 +1374,7 @@ impl Item {
             Self::Skill(i) => i.updated_at,
             Self::SkillFile(i) => i.updated_at,
             Self::McpServer(i) => i.updated_at,
+            Self::AiMemory(i) => i.updated_at,
             Self::Settings(i) => i.updated_at,
         }
     }
@@ -1366,6 +1396,7 @@ impl Item {
             Self::Skill(i) => i.updated_at = at,
             Self::SkillFile(i) => i.updated_at = at,
             Self::McpServer(i) => i.updated_at = at,
+            Self::AiMemory(i) => i.updated_at = at,
             Self::Settings(i) => i.updated_at = at,
         }
     }
@@ -1388,6 +1419,7 @@ impl Item {
             Self::Skill(i) => i.name.clone(),
             Self::SkillFile(i) => i.path.clone(),
             Self::McpServer(i) => i.name.clone(),
+            Self::AiMemory(i) => i.name.clone(),
             Self::Settings(_) => "settings".to_owned(),
         }
     }
@@ -1528,6 +1560,16 @@ impl Item {
         }
     }
 
+    /// The AI memory, if this is one.
+    #[must_use]
+    pub fn as_ai_memory(&self) -> Option<&AiMemory> {
+        if let Self::AiMemory(m) = self {
+            Some(m)
+        } else {
+            None
+        }
+    }
+
     /// The settings, if this is the settings item.
     #[must_use]
     pub fn as_settings(&self) -> Option<&Settings> {
@@ -1552,6 +1594,7 @@ impl Item {
             Self::AiProvider(i) => i.name.push_str(suffix),
             Self::Skill(i) => i.name.push_str(suffix),
             Self::McpServer(i) => i.name.push_str(suffix),
+            Self::AiMemory(i) => i.name.push_str(suffix),
             Self::KnownHost(_)
             | Self::Forward(_)
             | Self::SearchProvider(_)
@@ -1915,6 +1958,7 @@ mod tests {
             (Item::Skill(Skill::default()), "skill"),
             (Item::SkillFile(SkillFile::default()), "skill_file"),
             (Item::McpServer(McpServer::default()), "mcp_server"),
+            (Item::AiMemory(AiMemory::default()), "ai_memory"),
             (Item::Settings(Settings::default()), "settings"),
         ];
         for (item, tag) in items {
@@ -2164,6 +2208,18 @@ mod tests {
                 "always_ask": false, "updated_at": 14
             })
         );
+        let memory = Item::AiMemory(AiMemory {
+            name: "web-1 sudo".into(),
+            content: "web-1 uses doas, not sudo.".into(),
+            updated_at: 15,
+        });
+        assert_eq!(
+            serde_json::to_value(&memory).unwrap(),
+            json!({
+                "type": "ai_memory", "name": "web-1 sudo",
+                "content": "web-1 uses doas, not sudo.", "updated_at": 15
+            })
+        );
 
         let mut settings = Settings::default();
         settings.ai.default_model = Some(AiModelRef {
@@ -2188,7 +2244,8 @@ mod tests {
                 "builtin_skill_enabled": true,
                 "custom_instructions": "Answer in English.",
                 "send_terminal_screen": true,
-                "judge_model": {"provider_id": "p2", "model_id": "jev-latest"}
+                "judge_model": {"provider_id": "p2", "model_id": "jev-latest"},
+                "memory": true
             })
         );
         assert_eq!(
@@ -2198,7 +2255,8 @@ mod tests {
                 "search_provider_id": null,
                 "native_search": true,
                 "builtin_skill_enabled": true,
-                "send_terminal_screen": true
+                "send_terminal_screen": true,
+                "memory": true
             })
         );
 
@@ -2212,6 +2270,7 @@ mod tests {
             file,
             stdio,
             http,
+            memory,
         ] {
             let back = Item::from_plaintext(&item.to_plaintext().unwrap()).unwrap();
             assert_eq!(back, item);
@@ -2240,6 +2299,18 @@ mod tests {
         assert!(ai.send_terminal_screen);
         let quiet = read(json!({"type": "settings", "ai": {"send_terminal_screen": false}}));
         assert!(!quiet.as_settings().unwrap().ai.send_terminal_screen);
+        // Those written before memory (AI-53) have it on.
+        assert!(ai.memory);
+        let forgetful = read(json!({"type": "settings", "ai": {"memory": false}}));
+        assert!(!forgetful.as_settings().unwrap().ai.memory);
+        let memory = read(json!({"type": "ai_memory", "name": "web-1", "extra": 1}));
+        assert_eq!(
+            memory,
+            Item::AiMemory(AiMemory {
+                name: "web-1".into(),
+                ..AiMemory::default()
+            })
+        );
         // AI-36: settings from before custom instructions have none.
         assert_eq!(ai.custom_instructions, "");
         let with = read(json!({
