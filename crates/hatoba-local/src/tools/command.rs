@@ -4,9 +4,10 @@
 //!
 //! The command runs non-interactively, without the shell's profile, like a command over SSH,
 //! with UTF-8 output: PowerShell through `-EncodedCommand`, so no quoting is involved; Command
-//! Prompt in a second Command Prompt started after `chcp 65001`; Git Bash with the command on
-//! stdin, which it reads before the command runs, so the command's own stdin is empty as on a
-//! host.
+//! Prompt in a second Command Prompt started after `chcp 65001`, which gets the line from an
+//! environment variable, so the first one does not parse it; Git Bash, not as a login shell, with
+//! the command on stdin, which it reads before the command runs, so the command's own stdin is
+//! empty as on a host.
 //!
 //! A command that ends on its own leaves the processes it put in the background running, until
 //! Hatoba quits: closing the Job Object would end them.
@@ -85,11 +86,14 @@ impl NativeShell {
                 let mut cmd = tokio::process::Command::new(program);
                 // `/s` keeps the line as it is between the outer quotes. Command Prompt's own
                 // commands, such as `ver` and `dir`, print in the code page it started with, so the
-                // command runs in a second one, started after `chcp`.
+                // command runs in a second one, started after `chcp`. The first one expands the
+                // variable after it parsed its own line (`/v:on`), so the command's quotes, `&` and
+                // `^` reach the second one as they were.
+                cmd.env(COMMAND_VAR, command);
                 cmd_line(
                     &mut cmd,
                     &format!(
-                        "/d /s /c \"chcp 65001 >nul & \"{}\" /d /s /c \"{command}\"\"",
+                        "/d /v:on /s /c \"chcp 65001 >nul & \"{}\" /d /s /c \"!{COMMAND_VAR}!\"\"",
                         program.display()
                     ),
                 );
@@ -98,7 +102,8 @@ impl NativeShell {
             Self::GitBash(program) => {
                 stdin = Some(command.as_bytes().to_vec());
                 let mut cmd = tokio::process::Command::new(program);
-                cmd.args(["-l", "-c", "eval \"$(cat)\""]);
+                // `bin\bash.exe` sets PATH, HOME and MSYSTEM itself, as a login shell would.
+                cmd.args(["-c", "eval \"$(cat)\""]);
                 cmd
             }
         };
@@ -113,6 +118,9 @@ impl NativeShell {
         Ok((cmd, stdin))
     }
 }
+
+/// The environment variable that takes the command to the second Command Prompt.
+const COMMAND_VAR: &str = "HATOBA_COMMAND";
 
 #[cfg(windows)]
 fn cmd_line(cmd: &mut tokio::process::Command, line: &str) {
@@ -289,6 +297,19 @@ mod tests {
         .unwrap();
         assert_eq!(text(&run.output.stdout).trim_end(), "a \"b c\"");
         assert_eq!(run.output.exit_status, Some(2));
+        // Quotes, carets, `!` and `%` mean what they mean when typed at the prompt.
+        let run = super::run(
+            &cmd,
+            "echo \"a & b|c\" x^&y! %OS%",
+            &home,
+            std::future::pending(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            text(&run.output.stdout).trim_end(),
+            "\"a & b|c\" x&y! Windows_NT"
+        );
         // Command Prompt's own commands print UTF-8 too, whatever the system's code page.
         let run = super::run(&cmd, "ver", &home, std::future::pending())
             .await

@@ -286,10 +286,15 @@ pub fn write(
         io::ErrorKind::AlreadyExists => RemoteFileError::Changed,
         _ => io_error(&e),
     })?;
+    // The file is open, and cut short if it existed: a failure from here on may leave it so, as a
+    // failed write on a host does, and its snapshot stays for Revert.
     handle
         .write_all(content)
         .and_then(|()| handle.flush())
-        .map_err(|e| RemoteFileError::Incomplete(e.to_string()))?;
+        .map_err(|e| RemoteFileError::Failed {
+            status: None,
+            stderr: e.to_string(),
+        })?;
     drop(handle);
     #[cfg(unix)]
     if !exists {

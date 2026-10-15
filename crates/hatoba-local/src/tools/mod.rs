@@ -53,8 +53,14 @@ impl LocalTools {
                 // The command script runs commands with `$SHELL`: the tab's shell.
                 env.push(("SHELL".into(), shell.program.clone().into_os_string()));
                 env.push(("HOME".into(), home.clone().into_os_string()));
+                // From the home directory, as a command over SSH starts.
+                let cwd = if home.is_dir() {
+                    home.clone()
+                } else {
+                    PathBuf::from("/")
+                };
                 Self::Sh {
-                    sh: LocalSh::new("/bin/sh", Vec::new(), env, Some(PathBuf::from("/"))),
+                    sh: LocalSh::new("/bin/sh", Vec::new(), env, Some(cwd)),
                     server: LOCAL_SERVER.to_owned(),
                 }
             }
@@ -304,4 +310,30 @@ async fn searching(
             e.to_string(),
         )))
     })
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_command_starts_in_the_home_directory() {
+        let shell = Shell {
+            id: "/bin/sh".into(),
+            name: "sh".into(),
+            kind: ShellKind::Unix,
+            program: "/bin/sh".into(),
+            args: Vec::new(),
+        };
+        let tools = LocalTools::for_shell(&shell, Vec::new());
+        let run = tools
+            .run_command("pwd -P", std::future::pending())
+            .await
+            .unwrap();
+        let home = dirs::home_dir().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&run.output.stdout).trim_end(),
+            home.to_str().unwrap()
+        );
+    }
 }

@@ -99,6 +99,9 @@ fn pump(
                     }
                 }
                 PtyEvent::Exited { exit_status } => {
+                    // A shell Hatoba ended, on lock or quit, has no status of its own: its tab
+                    // stays, to restart it, even if the shell took the hangup as a clean exit.
+                    let exit_status = exit_status.filter(|_| !live.is_closed());
                     let _ = channel.send(TermFrame::new(FRAME_CLOSED, b""));
                     emit_state(&app, &session_id, None, SessionState::Disconnected, |e| {
                         e.exit_status = exit_status
