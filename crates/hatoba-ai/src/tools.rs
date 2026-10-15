@@ -195,9 +195,16 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     },
                     "workdir": {
                         "type": "string",
-                        "description": "The directory to run the command in: an absolute path, or \
-                                        a path from the user's home directory (default: the home \
-                                        directory). Use it rather than starting the command with cd."
+                        "description": if place.local() {
+                            "The directory to run the command in: an absolute path, or a path \
+                             from the user's home directory (default: the home directory). Use it \
+                             rather than starting the command with cd."
+                        } else {
+                            "The directory to run the command in: an absolute path, or a path \
+                             from the user's home directory (default: the home directory). Use it \
+                             rather than starting the command with cd, except on a host without \
+                             sh, such as a Windows server, which does not take it."
+                        }
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -1711,6 +1718,16 @@ mod tests {
         assert_eq!(run.input_schema["required"], json!(["command"]));
         assert!(run.description.contains("home directory, or in `workdir`"));
         assert_eq!(run.input_schema["properties"]["workdir"]["type"], "string");
+        // A Windows server runs no sh, so it takes no workdir; a Windows tab does.
+        let workdir = |place| {
+            let set = ToolSet { place, ..ALL };
+            builtin_tools(&set)[1].input_schema["properties"]["workdir"]["description"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        assert!(workdir(ToolPlace::Ssh).contains("Windows server"));
+        assert!(!workdir(ToolPlace::LocalWindows).contains("Windows server"));
         let send = &builtin_tools(&ALL)[2];
         assert_eq!(
             send.input_schema["properties"]["key"]["enum"],

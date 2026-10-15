@@ -25,6 +25,8 @@ interface Simple {
   words: string[];
   /** Whether a word has an unquoted `*`, `?` or `[`, which the shell may expand into other words. */
   globs: boolean[];
+  /** The `cd` a call's `workdir` stands for (`callCommands`), whose allowance names its folder. */
+  workdir?: true;
 }
 
 /** Controls but tab and line break, and the bidirectional and zero-width format characters. */
@@ -687,10 +689,10 @@ function lookupName(word: string): string {
 }
 
 /**
- * A UNC path (`\\server\share`, `//server/share`): Windows reaches the computer it names, and signs in
- * there as the user.
+ * A UNC path (`\\server\share`, `//server/share`, or with the slashes mixed, as in `/\server\share`): Windows
+ * reaches the computer it names, and signs in there as the user.
  */
-const UNC = /\\\\|(^|[^:])\/\//;
+const UNC = /\\\\|(^|[^:])[\\/]{2}/;
 
 function readsOnly({ words, globs }: Simple, dialect: ShellDialect): boolean {
   if (dialect !== "posix") {
@@ -740,7 +742,7 @@ function startsWith(words: readonly string[], prefix: readonly string[], dialect
 function callCommands(line: string, dialect: ShellDialect, workdir: string): Simple[] | null {
   const commands = splitCommands(line, dialect);
   if (!commands || !workdir) return commands;
-  return HIDDEN.test(workdir) ? null : [{ words: ["cd", workdir], globs: [false, false] }, ...commands];
+  return HIDDEN.test(workdir) ? null : [{ words: ["cd", workdir], globs: [false, false], workdir: true }, ...commands];
 }
 
 /**
@@ -952,7 +954,10 @@ const MAX_PREFIXES = 3;
  * its subcommand too. Null when the card offers neither: the line uses what `splitCommands` refuses,
  * a command runs another one (`sudo`, `xargs`, `sh -c`, `Start-Process`), sets variables first, or gives no
  * subcommand (in PowerShell and Command Prompt also a `/` switch in its place), or the line would need more
- * than three prefixes. A `workdir` counts as a `cd` before the line.
+ * than three prefixes. A `workdir` counts as a `cd` before the line; when that `cd` does not only read (in
+ * Command Prompt beside any command, in PowerShell to a network path), it is offered for that folder alone
+ * (`cd C:\src`), so that allowing it never lets a program of every other folder run, and not for a folder whose
+ * name has a space, which a prefix cannot name.
  */
 export function allowancePrefixes(line: string, dialect: ShellDialect = "posix", workdir = ""): string[] | null {
   const commands = callCommands(line, dialect, workdir);
@@ -962,6 +967,11 @@ export function allowancePrefixes(line: string, dialect: ShellDialect = "posix",
   const out: string[] = [];
   for (const [i, c] of commands.entries()) {
     if (reads[i]) continue;
+    if (c.workdir) {
+      if (/\s/.test(c.words[1])) return null;
+      out.push(`cd ${c.words[1]}`);
+      continue;
+    }
     const [name, sub] = c.words;
     if (!plain(c.words, dialect) || named(windows ? WINDOWS_WRAPPERS : WRAPPERS, name, dialect) || c.globs[0] || /\s/.test(name)) return null;
     let prefix = name;

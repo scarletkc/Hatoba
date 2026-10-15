@@ -256,9 +256,16 @@ impl LocalTools {
 /// it cannot: for a missing one, the shell's own error would only say that it could not start.
 async fn native_workdir(shell: &NativeShell, dir: &str, home: &Path) -> Result<PathBuf, String> {
     let path = files::resolve(dir, home);
-    // Command Prompt starts in C:\Windows instead, after a warning.
-    let text = path.to_string_lossy();
-    if matches!(shell, NativeShell::Cmd(_)) && (text.starts_with(r"\\") || text.starts_with("//")) {
+    // Command Prompt starts in C:\Windows instead, after a warning. A network path starts with two
+    // slashes of either kind.
+    let network = path
+        .to_string_lossy()
+        .chars()
+        .take(2)
+        .filter(|c| matches!(c, '\\' | '/'))
+        .count()
+        == 2;
+    if matches!(shell, NativeShell::Cmd(_)) && network {
         return Err(
             "Command Prompt cannot start in a network path: leave out workdir and use pushd in \
              the command"
@@ -458,10 +465,12 @@ mod windows_tests {
             shell: shell(ShellKind::Cmd),
             home: home.path().to_path_buf(),
         };
-        let refused = cmd
-            .run_command("cd", Some(r"\\server\share"), std::future::pending())
-            .await
-            .unwrap_err();
-        assert!(refused.contains("pushd"), "{refused}");
+        for dir in [r"\\server\share", r"/\server\share", r"\/server/share"] {
+            let refused = cmd
+                .run_command("cd", Some(dir), std::future::pending())
+                .await
+                .unwrap_err();
+            assert!(refused.contains("pushd"), "{dir}: {refused}");
+        }
     }
 }
