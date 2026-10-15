@@ -1839,7 +1839,7 @@ async fn memories_start_the_first_message_and_each_summary() {
         answer("Next answer."),
     ])
     .await;
-    super::memory::save(&mut lock(&f.vault), None, "Replies", "Answer in Chinese.")
+    super::memory::save(&mut lock(&f.vault), &[], "Replies", "Answer in Chinese.")
         .unwrap()
         .unwrap();
     let (started, sink) = f.send(None, "web-1 uses doas").await;
@@ -1906,7 +1906,7 @@ async fn memory_off_sends_no_note_and_offers_no_tool() {
     let f = Fixture::new(vec![answer("Hi.")]).await;
     {
         let mut v = lock(&f.vault);
-        super::memory::save(&mut v, None, "Replies", "Answer in Chinese.")
+        super::memory::save(&mut v, &[], "Replies", "Answer in Chinese.")
             .unwrap()
             .unwrap();
         let mut settings = v.settings();

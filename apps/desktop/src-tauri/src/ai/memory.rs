@@ -58,18 +58,24 @@ fn clean_content(content: &str) -> String {
         .to_owned()
 }
 
-/// The memory named `name`, as [`clean_name`] stores it.
-fn find(v: &Vault, name: &str) -> Option<(String, AiMemory)> {
-    v.ai_memories().into_iter().find(|(_, m)| m.name == name)
+/// The ids of the memories named `name`, as [`clean_name`] stores it, oldest first. Devices that
+/// save under one name before they sync each keep their own, so there can be more than one.
+fn named(v: &Vault, name: &str) -> Vec<String> {
+    v.ai_memories()
+        .into_iter()
+        .filter(|(_, m)| m.name == name)
+        .map(|(id, _)| id)
+        .collect()
 }
 
-/// Saves a memory: `id` replaces that one, `None` adds one. Name and text are cleaned first.
+/// Saves a memory in place of the memories `ids` (none adds one): the first keeps its place and
+/// the others are deleted. Name and text are cleaned first.
 ///
 /// # Errors
 /// The [`Refusal`] when they break a rule; the vault's error when the vault cannot store it.
 pub(crate) fn save(
     v: &mut Vault,
-    id: Option<&str>,
+    ids: &[String],
     name: &str,
     content: &str,
 ) -> Result<Result<(String, AiMemory), Refusal>, hatoba_core::Error> {
@@ -90,7 +96,7 @@ pub(crate) fn save(
     let others: Vec<AiMemory> = v
         .ai_memories()
         .into_iter()
-        .filter(|(other, _)| Some(other.as_str()) != id)
+        .filter(|(other, _)| !ids.contains(other))
         .map(|(_, m)| m)
         .collect();
     if others.iter().any(|m| m.name == memory.name) {
@@ -100,7 +106,10 @@ pub(crate) fn save(
     if bytes > MAX_MEMORY_BYTES {
         return Ok(Err(Refusal::Full(bytes)));
     }
-    let id = v.put(id, Item::AiMemory(memory))?;
+    let id = v.put(ids.first().map(String::as_str), Item::AiMemory(memory))?;
+    for other in ids.iter().skip(1) {
+        v.delete(other)?;
+    }
     let stored = v
         .get(&id)
         .and_then(Item::as_ai_memory)
@@ -140,11 +149,11 @@ pub(crate) fn run(v: &mut Vault, args: &MemoryArgs) -> (ToolStatus, String) {
         );
     }
     let name = clean_name(&args.name);
-    let found = find(v, &name);
+    let found = named(v, &name);
     let outcome = match args.action {
         MemoryAction::Save => save(
             v,
-            found.as_ref().map(|(id, _)| id.as_str()),
+            &found,
             &name,
             args.content.as_deref().unwrap_or_default(),
         )
@@ -153,26 +162,25 @@ pub(crate) fn run(v: &mut Vault, args: &MemoryArgs) -> (ToolStatus, String) {
                 .map(|(_, m)| format!("Saved the memory \"{}\".", m.name))
                 .map_err(Refusal::message)
         }),
-        MemoryAction::Delete => match found {
-            Some((id, _)) => v
-                .delete(&id)
-                .map(|()| Ok(format!("Deleted the memory \"{name}\"."))),
-            None => {
-                let names: Vec<String> = v
-                    .ai_memories()
-                    .into_iter()
-                    .map(|(_, m)| format!("\"{}\"", m.name))
-                    .collect();
-                let list = if names.is_empty() {
-                    "none".to_owned()
-                } else {
-                    names.join(", ")
-                };
-                Ok(Err(format!(
-                    "There is no memory named \"{name}\". Memories: {list}."
-                )))
-            }
-        },
+        MemoryAction::Delete if !found.is_empty() => found
+            .iter()
+            .try_for_each(|id| v.delete(id))
+            .map(|()| Ok(format!("Deleted the memory \"{name}\"."))),
+        MemoryAction::Delete => {
+            let names: Vec<String> = v
+                .ai_memories()
+                .into_iter()
+                .map(|(_, m)| format!("\"{}\"", m.name))
+                .collect();
+            let list = if names.is_empty() {
+                "none".to_owned()
+            } else {
+                names.join(", ")
+            };
+            Ok(Err(format!(
+                "There is no memory named \"{name}\". Memories: {list}."
+            )))
+        }
     };
     match outcome {
         Ok(Ok(done)) => (ToolStatus::Ok, done),
@@ -253,6 +261,45 @@ mod tests {
         assert_eq!(names(&v), ["reply language"]);
     }
 
+    /// Two devices that save under one name before they sync each keep their memory. The tool
+    /// handles them as one: a save keeps the oldest and deletes the others, a delete deletes all.
+    #[test]
+    fn the_tool_handles_memories_synced_under_one_name_together() {
+        let mut v = vault();
+        let synced = |v: &mut Vault, content: &str| {
+            v.put(
+                None,
+                Item::AiMemory(AiMemory {
+                    name: "web-1 sudo".into(),
+                    content: content.into(),
+                    updated_at: 0,
+                }),
+            )
+            .unwrap()
+        };
+        let first = synced(&mut v, "From the laptop.");
+        synced(&mut v, "From the desktop.");
+        assert_eq!(
+            call(&mut v, MemoryAction::Save, "web-1 sudo", Some("Uses doas.")),
+            "Ok: Saved the memory \"web-1 sudo\"."
+        );
+        assert_eq!(
+            v.ai_memories(),
+            [(
+                first,
+                AiMemory {
+                    name: "web-1 sudo".into(),
+                    content: "Uses doas.".into(),
+                    updated_at: v.ai_memories()[0].1.updated_at,
+                }
+            )]
+        );
+
+        synced(&mut v, "From the desktop again.");
+        call(&mut v, MemoryAction::Delete, "web-1 sudo", None);
+        assert!(v.ai_memories().is_empty());
+    }
+
     #[test]
     fn saves_that_break_a_rule_change_nothing() {
         let mut v = vault();
@@ -265,23 +312,27 @@ mod tests {
             ),
             ("n", " \n ", Refusal::EmptyContent),
         ] {
-            assert_eq!(save(&mut v, None, name, content).unwrap(), Err(refusal));
+            assert_eq!(save(&mut v, &[], name, content).unwrap(), Err(refusal));
         }
         assert!(v.ai_memories().is_empty());
 
         // The limit counts names and texts of all memories together.
         let half = "x".repeat(MAX_MEMORY_BYTES / 2 - 1);
-        let (first, _) = save(&mut v, None, "a", &half).unwrap().unwrap();
-        save(&mut v, None, "b", &half).unwrap().unwrap();
+        let (first, _) = save(&mut v, &[], "a", &half).unwrap().unwrap();
+        save(&mut v, &[], "b", &half).unwrap().unwrap();
         assert_eq!(
-            save(&mut v, None, "c", "x").unwrap(),
+            save(&mut v, &[], "c", "x").unwrap(),
             Err(Refusal::Full(MAX_MEMORY_BYTES + 2))
         );
         // Replacing one counts its new size, not both.
-        assert!(save(&mut v, Some(&first), "a", "short").unwrap().is_ok());
+        assert!(
+            save(&mut v, std::slice::from_ref(&first), "a", "short")
+                .unwrap()
+                .is_ok()
+        );
         // A rename to another memory's name is refused.
         assert_eq!(
-            save(&mut v, Some(&first), "b", "short").unwrap(),
+            save(&mut v, std::slice::from_ref(&first), "b", "short").unwrap(),
             Err(Refusal::Taken)
         );
     }
@@ -290,8 +341,8 @@ mod tests {
     fn the_note_shows_what_fits_while_memory_is_on() {
         let mut v = vault();
         assert_eq!(note(&v), "");
-        save(&mut v, None, "one", "first").unwrap().unwrap();
-        save(&mut v, None, "two", "second").unwrap().unwrap();
+        save(&mut v, &[], "one", "first").unwrap().unwrap();
+        save(&mut v, &[], "two", "second").unwrap().unwrap();
         assert_eq!(
             note(&v),
             "<memory entries=\"2\">\n## one\nfirst\n\n## two\nsecond\n</memory>\n\n"

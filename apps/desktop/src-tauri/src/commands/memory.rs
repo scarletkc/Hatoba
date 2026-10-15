@@ -45,7 +45,7 @@ pub async fn ai_memory_save(
         {
             return Err(AppError::not_found("memory"));
         }
-        memory::save(v, input.id.as_deref(), &input.name, &input.content)?
+        memory::save(v, input.id.as_slice(), &input.name, &input.content)?
             .map(|(id, m)| view(id, m))
             .map_err(|refusal| AppError::invalid("memory", refusal.message()))
     })?;

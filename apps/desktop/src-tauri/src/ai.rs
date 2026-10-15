@@ -105,7 +105,9 @@ const DISCONNECTED: &str = "The terminal tab is disconnected, so the command did
 /// The final instruction of a Compact request (AI-21). The request offers the conversation's
 /// tools, so it first asks for text only. The summary leaves out what the assistant can use:
 /// every request states that in its system prompt, and a summary written by the fallback without
-/// tools would otherwise tell the requests after it that there are none.
+/// tools would otherwise tell the requests after it that there are none. It leaves out the memories
+/// too (AI-53): the summary is stored with them as they are then, and a copy in the summary would
+/// outlive an edit of one.
 const COMPACT_INSTRUCTION: &str = "Respond with text only. Do not call any tools.\n\n\
      Summarize the conversation so far so that the summary can replace it as the context of the \
      rest of this conversation. Keep everything later work needs: the user's goals and requests, \
@@ -113,7 +115,9 @@ const COMPACT_INSTRUCTION: &str = "Respond with text only. Do not call any tools
      settings that were changed, decisions made, and open problems and next steps. Leave out what \
      no longer matters, and leave out what the assistant can use, such as its tools, skills and \
      terminal connection: every request states that in its system prompt, and it can change \
-     between requests. Write the summary in the user's language and reply with the summary only.";
+     between requests. The memories in a <memory> note are stored with the summary as they are \
+     then, so leave out what the note says. Write the summary in the user's language and reply \
+     with the summary only.";
 
 /// The instruction of a Compact request between tool calls (AI-22), after which the turn goes on
 /// from the summary alone: it asks for the task in progress and its next step as well.
@@ -125,7 +129,9 @@ const COMPACT_MID_TURN_INSTRUCTION: &str = "Respond with text only. Do not call 
      and settings that were changed, decisions made, and the next step. Leave out what no longer \
      matters, and leave out what the assistant can use, such as its tools, skills and terminal \
      connection: every request states that in its system prompt, and it can change between \
-     requests. Write the summary in the user's language and reply with the summary only.";
+     requests. The memories in a <memory> note are stored with the summary as they are then, so \
+     leave out what the note says. Write the summary in the user's language and reply with the \
+     summary only.";
 
 /// The most output tokens a Compact request asks for (Anthropic's `max_tokens`, AI-21).
 const COMPACT_MAX_TOKENS: u64 = 16_000;

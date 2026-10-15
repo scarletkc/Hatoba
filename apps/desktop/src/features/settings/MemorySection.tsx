@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { Button, Icon, IconButton, Spinner, Switch, TextArea, TextField } from "@/components/controls";
@@ -10,6 +10,7 @@ import { api } from "@/ipc/api";
 import type { AiMemoryView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { aiErrorMessage } from "./aiShared";
+import { useFreshReads } from "./freshReads";
 import { EmptyBlock, StatusRow } from "./sectionParts";
 import { SettingRow } from "./shared";
 import a from "./AiPane.module.css";
@@ -32,7 +33,8 @@ const PROBLEM: Record<MemoryProblem, MessageKey> = {
 /**
  * Settings → AI → Memory (AI-53): the switch, then the memories the assistant keeps, oldest first, with what they
  * take of the limit: add, edit or delete one, or delete them all. `enabled` is null until the AI settings are loaded.
- * `/memory` in the AI panel opens Settings here.
+ * The list is read again after each sync round, as the other synced settings are. `/memory` in the AI panel opens
+ * Settings here.
  */
 export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
   const t = useT();
@@ -40,28 +42,18 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [editing, setEditing] = useState<{ memory: AiMemoryView | null } | null>(null);
   const section = useRef<HTMLElement>(null);
-  const live = useRef(true);
   const requested = useApp((st) => st.settingsSection);
   const loaded = memories !== null;
   const list = memories ?? [];
 
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      const list = await api.ai_memories_list();
-      if (live.current) setMemories(list);
-    } catch (e) {
-      if (live.current) setLoadError(e);
-    }
-  }, []);
-
-  useEffect(() => {
-    live.current = true;
-    void load();
-    return () => {
-      live.current = false;
-    };
-  }, [load]);
+  const reads = useFreshReads(
+    () => api.ai_memories_list(),
+    (next) => {
+      setLoadError(null);
+      setMemories(next);
+    },
+    setLoadError,
+  );
 
   // `/memory` asked for this section: show it once the list has its height.
   useEffect(() => {
@@ -78,9 +70,9 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
       danger: true,
     });
     if (!ok) return;
+    setMemories((cur) => (cur ?? []).filter((m) => m.id !== memory.id));
     try {
-      await api.ai_memory_delete(memory.id);
-      setMemories((cur) => (cur ?? []).filter((m) => m.id !== memory.id));
+      await reads.save(() => api.ai_memory_delete(memory.id));
       toast(t("aiSettings.memory.deleted", { name: memory.name }));
     } catch (e) {
       toast(aiErrorMessage(t, e), "error");
@@ -95,9 +87,9 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
       danger: true,
     });
     if (!ok) return;
+    setMemories([]);
     try {
-      await api.ai_memories_delete_all();
-      setMemories([]);
+      await reads.save(() => api.ai_memories_delete_all());
       toast(t("aiSettings.memory.deletedAll"));
     } catch (e) {
       toast(aiErrorMessage(t, e), "error");
@@ -137,7 +129,7 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
           <StatusRow
             icon={<Icon name="warning-circle" color="var(--red)" />}
             action={
-              <Button size="sm" onClick={() => void load()}>
+              <Button size="sm" onClick={() => reads.refresh()}>
                 {t("btn.retry")}
               </Button>
             }
@@ -181,6 +173,7 @@ export function MemorySection({ enabled }: { enabled: MemorySwitch | null }) {
           memories={list}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
+            reads.edited();
             setMemories((cur) => {
               const rest = cur ?? [];
               return rest.some((m) => m.id === saved.id) ? rest.map((m) => (m.id === saved.id ? saved : m)) : [...rest, saved];
