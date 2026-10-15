@@ -19,8 +19,8 @@ afterEach(() => {
   unmount = null;
 });
 
-function open() {
-  useApp.setState({ settingsTab: "terminal" });
+function open(tab: "terminal" | "appearance" = "terminal") {
+  useApp.setState({ settingsTab: tab });
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -132,5 +132,33 @@ describe("SettingsWindow", () => {
     expect(field.value).toBe("Fira Code");
     await act(() => new Promise((r) => setTimeout(r, 50)));
     expect((await stored()).font_family).toBe("Fira Code");
+  });
+
+  it("picks a colour scheme for each terminal mode", async () => {
+    await syncIn({ theme: "dark" });
+    open("appearance");
+    // A card reads as its name; the miniature terminal above it is hidden from assistive tech.
+    const card = (name: string) =>
+      [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name);
+    const checked = (name: string) => card(name)?.getAttribute("aria-checked") === "true";
+    await until(() => card("Hatoba Dark"));
+    // Nothing picked yet: Hatoba's own scheme, and only the dark ones while the terminal is always dark.
+    expect(checked("Hatoba Dark")).toBe(true);
+    expect(card("Solarized Light")).toBeUndefined();
+
+    act(() => card("Dracula")!.click());
+    await until(async () => (await stored()).dark_scheme === "dracula");
+    expect(checked("Dracula")).toBe(true);
+
+    const follow = [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.textContent === t("settings.termColors.follow"));
+    act(() => follow!.click());
+    await until(() => byLabel(t("settings.termColors.forLight")));
+    expect(byLabel(t("settings.termColors.forDark"))).not.toBeNull();
+    act(() => card("Solarized Light")!.click());
+    const after = await until(async () => {
+      const now = await stored();
+      return now.light_scheme === "solarized-light" && now;
+    });
+    expect(after).toMatchObject({ theme: "system", dark_scheme: "dracula" });
   });
 });

@@ -266,6 +266,8 @@ export const SETTINGS: SettingsView = {
     font_family: "Cascadia Mono",
     font_size: 13,
     theme: "dark",
+    dark_scheme: null,
+    light_scheme: null,
     cursor_style: "block",
     scrollback: 10000,
     right_click: "copy_paste",

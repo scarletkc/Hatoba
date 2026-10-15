@@ -33,6 +33,8 @@ pub fn settings_view(s: &Settings) -> SettingsView {
                 ThemeMode::Dark => ThemeChoice::Dark,
                 ThemeMode::System => ThemeChoice::System,
             },
+            dark_scheme: s.terminal.dark_scheme.clone(),
+            light_scheme: s.terminal.light_scheme.clone(),
             cursor_style: match s.terminal.cursor_style {
                 CursorStyle::Bar => CursorChoice::Bar,
                 CursorStyle::Underline => CursorChoice::Underline,
@@ -104,6 +106,17 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
             ThemeChoice::System => ThemeMode::System,
         };
     }
+    for (field, value, stored) in [
+        ("dark_scheme", &patch.dark_scheme, &mut t.dark_scheme),
+        ("light_scheme", &patch.light_scheme, &mut t.light_scheme),
+    ] {
+        if let Some(id) = value {
+            if !is_scheme_id(id) {
+                return Err(AppError::invalid(field, "invalid colour scheme"));
+            }
+            *stored = Some(id.clone());
+        }
+    }
     if let Some(cursor_style) = patch.cursor_style {
         t.cursor_style = match cursor_style {
             CursorChoice::Bar => CursorStyle::Bar,
@@ -131,6 +144,15 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
         t.set_confirm_multiline_paste(confirm);
     }
     Ok(())
+}
+
+/// A colour scheme id as the desktop app names them: lowercase words joined by hyphens. Which ids
+/// exist is up to the frontend, which reads one it does not know as its default scheme.
+fn is_scheme_id(id: &str) -> bool {
+    (1..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// Readable while locked: the unlock screen needs the language.
@@ -524,11 +546,47 @@ mod tests {
                 },
                 "font_family",
             ),
+            (
+                TerminalSettingsPatch {
+                    dark_scheme: Some("dracula".into()),
+                    light_scheme: Some("Solarized Light".into()),
+                    ..TerminalSettingsPatch::default()
+                },
+                "light_scheme",
+            ),
+            (
+                TerminalSettingsPatch {
+                    dark_scheme: Some(String::new()),
+                    ..TerminalSettingsPatch::default()
+                },
+                "dark_scheme",
+            ),
         ] {
             let err = save_settings(&mut vault, &terminal(patch)).unwrap_err();
             assert_eq!(err.field.as_deref(), Some(field));
         }
         assert_eq!(vault.settings(), before);
+    }
+
+    #[test]
+    fn colour_schemes_are_stored_for_each_mode() {
+        let mut vault = vault();
+        assert_eq!(settings_view(&vault.settings()).terminal.dark_scheme, None);
+        let dracula = terminal(TerminalSettingsPatch {
+            dark_scheme: Some("dracula".into()),
+            ..TerminalSettingsPatch::default()
+        });
+        assert!(save_settings(&mut vault, &dracula).unwrap());
+        assert!(!save_settings(&mut vault, &dracula).unwrap());
+        let latte = terminal(TerminalSettingsPatch {
+            light_scheme: Some("catppuccin-latte".into()),
+            ..TerminalSettingsPatch::default()
+        });
+        assert!(save_settings(&mut vault, &latte).unwrap());
+
+        let shown = settings_view(&vault.settings()).terminal;
+        assert_eq!(shown.dark_scheme.as_deref(), Some("dracula"));
+        assert_eq!(shown.light_scheme.as_deref(), Some("catppuccin-latte"));
     }
 
     #[test]

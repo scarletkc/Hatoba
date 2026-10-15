@@ -1,0 +1,104 @@
+.section {
+  padding: 12px 14px 14px;
+}
+
+.caption {
+  margin-bottom: 10px;
+  font-size: 11.5px;
+  color: var(--fg2);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 14px 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+}
+
+/* Miniature terminal; its colours come from the scheme, not the theme tokens. */
+.term {
+  height: 66px;
+  padding: 8px 9px 7px;
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  white-space: nowrap;
+  transition: box-shadow 0.12s ease;
+}
+
+.dark {
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.16);
+}
+
+.light {
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.16);
+}
+
+.card:hover .term:not(.termOn) {
+  box-shadow: 0 0 0 1px var(--line2), 0 0 0 3.5px var(--fill);
+}
+
+.termOn {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4.5px var(--accenttint);
+}
+
+.card:focus-visible {
+  outline: none;
+}
+
+.card:focus-visible .term {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.line {
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.cursor {
+  display: inline-block;
+  width: 6px;
+  height: 11px;
+  vertical-align: -1.5px;
+}
+
+.swatches {
+  margin-top: auto;
+  display: flex;
+  gap: 3px;
+}
+
+.swatches i {
+  flex: 1;
+  height: 5px;
+  border-radius: 2.5px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--fg2);
+}
+
+.nameOn {
+  color: var(--fg);
+  font-weight: 500;
+}

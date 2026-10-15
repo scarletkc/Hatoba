@@ -914,6 +914,9 @@ pub struct TerminalSettings {
     pub font_family: String,
     pub font_size: u32,
     pub theme: ThemeChoice,
+    /// Colour scheme ids for a dark and a light terminal; `None` until one is picked.
+    pub dark_scheme: Option<String>,
+    pub light_scheme: Option<String>,
     pub cursor_style: CursorChoice,
     pub scrollback: u32,
     pub right_click: RightClick,
@@ -932,6 +935,8 @@ pub struct TerminalSettingsPatch {
     pub font_family: Option<String>,
     pub font_size: Option<u32>,
     pub theme: Option<ThemeChoice>,
+    pub dark_scheme: Option<String>,
+    pub light_scheme: Option<String>,
     pub cursor_style: Option<CursorChoice>,
     pub scrollback: Option<u32>,
     pub right_click: Option<RightClick>,

@@ -5,17 +5,21 @@ import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { Language, LocalPrefs } from "@/ipc/types";
 import { cx } from "@/lib/cx";
+import { SchemePicker } from "./SchemePicker";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./AppearancePane.module.css";
 
 type Appearance = LocalPrefs["appearance"];
 
-/** Settings → Appearance (design §07): theme thumbnails, terminal colors, density, language. */
+/** Settings → Appearance (design §07): theme thumbnails, density, terminal color schemes, language. */
 export function AppearancePane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
   const langMenu = useMenu();
   const langButton = useRef<HTMLButtonElement>(null);
+  const term = settings?.terminal;
+  /** Following the app appearance: a scheme for each mode. */
+  const both = term?.theme === "system";
 
   const languages: { value: Language; label: string }[] = [
     { value: "system", label: t("settings.language.system") },
@@ -38,17 +42,6 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
             <Thumb kind="system" label={t("settings.appearance.auto")} selected={prefs.appearance === "system"} onSelect={() => setPrefs({ appearance: "system" })} />
           </div>
         </SettingRow>
-        <SettingRow label={t("settings.termColors")}>
-          <Segmented
-            ariaLabel={t("settings.termColors")}
-            value={settings?.terminal.theme === "dark" ? "dark" : "system"}
-            options={[
-              { value: "dark", label: t("settings.termColors.dark") },
-              { value: "system", label: t("settings.termColors.follow") },
-            ]}
-            onChange={(theme) => updateTerminal({ theme })}
-          />
-        </SettingRow>
         <SettingRow label={t("settings.density")}>
           <Segmented
             ariaLabel={t("settings.density")}
@@ -61,6 +54,41 @@ export function AppearancePane({ settings, updateTerminal }: PaneProps) {
           />
         </SettingRow>
       </Group>
+
+      {term && (
+        <Group>
+          <SettingRow label={t("settings.termColors")}>
+            <Segmented
+              ariaLabel={t("settings.termColors")}
+              value={term.theme}
+              options={[
+                { value: "dark", label: t("settings.termColors.dark") },
+                { value: "light", label: t("settings.termColors.light") },
+                { value: "system", label: t("settings.termColors.follow") },
+              ]}
+              onChange={(theme) => updateTerminal({ theme })}
+            />
+          </SettingRow>
+          {term.theme !== "light" && (
+            <SchemePicker
+              mode="dark"
+              value={term.dark_scheme}
+              label={t("settings.termColors")}
+              caption={both ? t("settings.termColors.forDark") : undefined}
+              onChange={(dark_scheme) => updateTerminal({ dark_scheme })}
+            />
+          )}
+          {term.theme !== "dark" && (
+            <SchemePicker
+              mode="light"
+              value={term.light_scheme}
+              label={t("settings.termColors")}
+              caption={both ? t("settings.termColors.forLight") : undefined}
+              onChange={(light_scheme) => updateTerminal({ light_scheme })}
+            />
+          )}
+        </Group>
+      )}
 
       <Group>
         <SettingRow label={t("settings.language")}>

@@ -386,6 +386,8 @@ interface Settings {             // Fixed ID "settings", a single item
     font_family: string;        // "Cascadia Mono" for a new vault, "Menlo" when created on macOS
     font_size: number;
     theme: "system" | "light" | "dark";
+    dark_scheme?: string;       // TERM-06 colour scheme id for a dark terminal, "hatoba-dark" while absent or unknown
+    light_scheme?: string;      // Same for a light terminal, "hatoba-light" while absent or unknown
     cursor_style: "block" | "bar" | "underline";
     scrollback: number;         // 10000 by default
     right_click?: "copy_paste" | "menu"; // WIN-05, "copy_paste" while absent ("menu" on macOS)
@@ -841,7 +843,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 | TERM-03 | Sync the PTY size when the window or a panel resizes | P0 |
 | TERM-04 | Copy and paste. A single-line paste drops its trailing line breaks, so the command does not run, and needs no confirmation. Multi-line text is pasted unchanged after a confirmation, which the user can turn off | P0 |
 | TERM-05 | Scrollback of 10,000 lines by default, configurable | P0 |
-| TERM-06 | Font, font size, and theme (light, dark, or system) | P0 |
+| TERM-06 | Font, font size, and theme (light, dark, or system), with built-in color schemes for dark and light terminals | P0 |
 | TERM-07 | Search in the terminal | P1 |
 | TERM-08 | HTTP and HTTPS links open in the system browser on Ctrl+click (Cmd+click on macOS); other URL schemes are not opened | P1 |
 | TERM-09 | Split panes | P2 |

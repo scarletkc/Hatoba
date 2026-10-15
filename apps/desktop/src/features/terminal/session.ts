@@ -29,7 +29,8 @@ import { dropSessionForwards, syncActiveForwards } from "./forwards";
 import { clearInfo, getInfo, patchInfo } from "./info";
 import { confirmMultilinePaste } from "./paste";
 import { askSecret, cancelSessionPrompts } from "./prompts";
-import { resolveMode, SEARCH_DECORATIONS, terminalOptions, useTermSettings } from "./theme";
+import { searchColors } from "./schemes";
+import { resolveScheme, terminalOptions, useTermSettings } from "./theme";
 
 /** One-off credentials for a connection attempt (SSH-03). They are passed to `ssh_connect` and dropped. */
 export interface Credentials {
@@ -631,7 +632,7 @@ export class LiveSession {
     }
     const options = {
       incremental,
-      decorations: SEARCH_DECORATIONS[resolveMode(useTermSettings.getState().settings.theme)],
+      decorations: searchColors(resolveScheme(useTermSettings.getState().settings)),
     };
     return direction === "next" ? this.search.findNext(query, options) : this.search.findPrevious(query, options);
   }

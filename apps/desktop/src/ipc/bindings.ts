@@ -2249,6 +2249,9 @@ export type TerminalSettings = {
 	font_family: string,
 	font_size: number,
 	theme: ThemeChoice,
+	/**  Colour scheme ids for a dark and a light terminal; `None` until one is picked. */
+	dark_scheme: string | null,
+	light_scheme: string | null,
 	cursor_style: CursorChoice,
 	scrollback: number,
 	right_click: RightClick,
@@ -2260,6 +2263,8 @@ export type TerminalSettingsPatch = {
 	font_family?: string | null,
 	font_size?: number | null,
 	theme?: ThemeChoice | null,
+	dark_scheme?: string | null,
+	light_scheme?: string | null,
 	cursor_style?: CursorChoice | null,
 	scrollback?: number | null,
 	right_click?: RightClick | null,

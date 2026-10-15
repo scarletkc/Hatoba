@@ -1115,6 +1115,14 @@ pub struct TerminalSettings {
     /// Colour theme.
     #[zeroize(skip)]
     pub theme: ThemeMode,
+    /// Id of the colour scheme used while the terminal is dark. `None` until one is picked,
+    /// which reads as the app's own dark scheme; the desktop app owns the ids and reads one it
+    /// does not know the same way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dark_scheme: Option<String>,
+    /// Id of the colour scheme used while the terminal is light, like [`Self::dark_scheme`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub light_scheme: Option<String>,
     /// Cursor shape.
     #[zeroize(skip)]
     pub cursor_style: CursorStyle,
@@ -1148,6 +1156,8 @@ impl Default for TerminalSettings {
             font_family: DEFAULT_FONT_FAMILY.to_owned(),
             font_size: 13,
             theme: ThemeMode::Dark,
+            dark_scheme: None,
+            light_scheme: None,
             cursor_style: CursorStyle::Block,
             scrollback: 10_000,
             right_click: None,
@@ -2483,6 +2493,8 @@ mod tests {
         // Unset fields are left out, as builds that kept them device-local wrote them.
         assert!(value["terminal"].get("right_click").is_none());
         assert!(value["terminal"].get("confirm_multiline_paste").is_none());
+        assert!(value["terminal"].get("dark_scheme").is_none());
+        assert!(value["terminal"].get("light_scheme").is_none());
     }
 
     #[test]
@@ -2510,6 +2522,22 @@ mod tests {
             read(json!({"right_click":"middle_paste"})).right_click,
             Some(RightClick::CopyPaste)
         );
+    }
+
+    #[test]
+    fn colour_schemes_round_trip_as_stored() {
+        let item: Item = serde_json::from_value(json!({
+            "type": "settings",
+            "terminal": {"theme": "system", "dark_scheme": "dracula", "light_scheme": "from-the-future"}
+        }))
+        .unwrap();
+        let t = &item.as_settings().unwrap().terminal;
+        assert_eq!(t.dark_scheme.as_deref(), Some("dracula"));
+        // The desktop app decides what an id it does not know reads as; the item keeps it.
+        assert_eq!(t.light_scheme.as_deref(), Some("from-the-future"));
+        let value = serde_json::to_value(t).unwrap();
+        assert_eq!(value["dark_scheme"], "dracula");
+        assert_eq!(value["light_scheme"], "from-the-future");
     }
 
     #[test]

@@ -4,6 +4,7 @@ import { isDarkTheme, useApp } from "@/app/store";
 import { api } from "@/ipc/api";
 import type { TerminalSettings } from "@/ipc/types";
 import { defaultRightClick, defaultTerminalFont, type Platform } from "@/lib/platform";
+import { DEFAULT_SCHEME, schemeFor, type TermMode, type TermScheme } from "./schemes";
 
 /** Used until `settings_get` answers, and when it fails. */
 export function defaultTerminalSettings(platform: Platform): TerminalSettings {
@@ -11,6 +12,8 @@ export function defaultTerminalSettings(platform: Platform): TerminalSettings {
     font_family: defaultTerminalFont(platform),
     font_size: 13,
     theme: "dark",
+    dark_scheme: null,
+    light_scheme: null,
     cursor_style: "block",
     scrollback: 10_000,
     right_click: defaultRightClick(platform),
@@ -39,97 +42,35 @@ export const useTermSettings = create<TermSettingsState>((set) => ({
   },
 }));
 
-export type TermMode = "dark" | "light";
-
 /** "system" follows the app's resolved light/dark theme. */
 export function resolveMode(setting: TerminalSettings["theme"]): TermMode {
   if (setting === "system") return isDarkTheme() ? "dark" : "light";
   return setting;
 }
 
-const DARK: ITheme = {
-  foreground: "#d5d8de",
-  cursor: "#d5d8de",
-  selectionBackground: "rgba(122, 183, 255, 0.3)",
-  selectionInactiveBackground: "rgba(122, 183, 255, 0.18)",
-  black: "#2b2e36",
-  red: "#f07178",
-  green: "#8bd49c",
-  yellow: "#e5c07b",
-  blue: "#7ab7ff",
-  magenta: "#c792ea",
-  cyan: "#7fd1d6",
-  white: "#d5d8de",
-  brightBlack: "#6b717c",
-  brightRed: "#ff8b92",
-  brightGreen: "#a4e5b3",
-  brightYellow: "#f0d08f",
-  brightBlue: "#9cc9ff",
-  brightMagenta: "#d7a8f0",
-  brightCyan: "#9fe3e7",
-  brightWhite: "#ffffff",
-};
+type SchemeSettings = Pick<TerminalSettings, "theme" | "dark_scheme" | "light_scheme">;
 
-const LIGHT: ITheme = {
-  background: "#ffffff",
-  foreground: "#1d1d1f",
-  cursor: "#1d1d1f",
-  cursorAccent: "#ffffff",
-  selectionBackground: "rgba(0, 122, 255, 0.25)",
-  selectionInactiveBackground: "rgba(0, 122, 255, 0.14)",
-  black: "#1d1d1f",
-  red: "#c9302c",
-  green: "#1f8a3b",
-  yellow: "#946200",
-  blue: "#0b62d6",
-  magenta: "#8a3fb8",
-  cyan: "#0f7f89",
-  white: "#c9ccd2",
-  brightBlack: "#6b717c",
-  brightRed: "#e5342b",
-  brightGreen: "#28a745",
-  brightYellow: "#a87a00",
-  brightBlue: "#007aff",
-  brightMagenta: "#a24dd6",
-  brightCyan: "#12919d",
-  brightWhite: "#ffffff",
-};
-
-/** Search-match highlight colours (xterm needs #RRGGBB here). */
-export const SEARCH_DECORATIONS = {
-  dark: {
-    matchBackground: "#4a3f1d",
-    matchBorder: "#7a6a2e",
-    matchOverviewRuler: "#e5c07b",
-    activeMatchBackground: "#8a6d1f",
-    activeMatchBorder: "#e5c07b",
-    activeMatchColorOverviewRuler: "#e5c07b",
-  },
-  light: {
-    matchBackground: "#fff1a8",
-    matchBorder: "#e0c34a",
-    matchOverviewRuler: "#e0b400",
-    activeMatchBackground: "#ffd54a",
-    activeMatchBorder: "#b88700",
-    activeMatchColorOverviewRuler: "#b88700",
-  },
-} as const;
+/** The colour scheme for the current mode (TERM-06). */
+export function resolveScheme(settings: SchemeSettings): TermScheme {
+  const mode = resolveMode(settings.theme);
+  return schemeFor(mode, mode === "dark" ? settings.dark_scheme : settings.light_scheme);
+}
 
 function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 
-export function terminalTheme(mode: TermMode): ITheme {
-  if (mode === "light") return LIGHT;
-  const background = cssVar("--term", "#0d0e10");
-  return { ...DARK, background, cursorAccent: background };
+/** xterm's theme for `scheme`. Hatoba Dark sits on the app's own terminal background. */
+export function terminalTheme(scheme: TermScheme): ITheme {
+  const background = scheme.id === DEFAULT_SCHEME.dark ? cssVar("--term", scheme.colors.background) : scheme.colors.background;
+  return { cursorAccent: background, ...scheme.colors, background };
 }
 
-/** Terminal chrome colours (background behind the padding, find bar…) for the resolved mode. */
-export function terminalChrome(mode: TermMode): { background: string; foreground: string } {
-  const th = terminalTheme(mode);
-  return { background: th.background ?? "#0d0e10", foreground: th.foreground ?? "#d5d8de" };
+/** Terminal chrome colours (background behind the padding, find bar…) for `scheme`. */
+export function terminalChrome(scheme: TermScheme): { background: string; foreground: string } {
+  const th = terminalTheme(scheme);
+  return { background: th.background!, foreground: th.foreground! };
 }
 
 /**
@@ -146,7 +87,7 @@ export function terminalFontFamily(family: string): string {
 }
 
 export function terminalOptions(settings: TerminalSettings): ITerminalOptions {
-  const mode = resolveMode(settings.theme);
+  const scheme = resolveScheme(settings);
   return {
     fontFamily: terminalFontFamily(settings.font_family),
     fontSize: settings.font_size,
@@ -154,18 +95,19 @@ export function terminalOptions(settings: TerminalSettings): ITerminalOptions {
     cursorStyle: settings.cursor_style,
     cursorBlink: false,
     scrollback: settings.scrollback,
-    theme: terminalTheme(mode),
-    // Programs written for dark terminals stay readable on the light palette.
-    minimumContrastRatio: mode === "light" ? 4.5 : 1,
+    theme: terminalTheme(scheme),
+    minimumContrastRatio: scheme.contrast,
   };
 }
 
 /** React hook: terminal background / foreground for the current settings and app theme. */
 export function useTerminalChrome(): { mode: TermMode; background: string; foreground: string } {
   const theme = useTermSettings((s) => s.settings.theme);
+  const dark = useTermSettings((s) => s.settings.dark_scheme);
+  const light = useTermSettings((s) => s.settings.light_scheme);
   useTermSettings((s) => s.appearanceTick);
-  const mode = resolveMode(theme);
-  return { mode, ...terminalChrome(mode) };
+  const scheme = resolveScheme({ theme, dark_scheme: dark, light_scheme: light });
+  return { mode: scheme.mode, ...terminalChrome(scheme) };
 }
 
 let watching = false;

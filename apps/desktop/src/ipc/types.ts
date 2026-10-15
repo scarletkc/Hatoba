@@ -759,6 +759,9 @@ export interface TerminalSettings {
   font_family: string;
   font_size: number;
   theme: "system" | "light" | "dark";
+  /** TERM-06: colour scheme ids for a dark and a light terminal; null until one is picked. */
+  dark_scheme: string | null;
+  light_scheme: string | null;
   cursor_style: "block" | "bar" | "underline";
   scrollback: number;
   /** WIN-05: PuTTY-style right click, or a context menu. */
