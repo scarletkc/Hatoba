@@ -162,7 +162,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @hatoba/desktop build
-      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-desktop
+      - run: cargo test -p hatoba-core -p hatoba-ssh -p hatoba-ai -p hatoba-local -p hatoba-desktop
 
   windows-installer:
     name: Windows installer

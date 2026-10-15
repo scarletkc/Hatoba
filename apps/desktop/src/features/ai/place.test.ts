@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TabSource } from "@/app/tabs";
 import { translate, type MessageKey, type Params } from "@/i18n";
 import type { HostView, QuickTarget } from "@/ipc/types";
-import { connectionFor, conversationPlace, movedFrom, placeName } from "./place";
+import { connectionFor, conversationPlace, movedFrom, moves, placeLabel, placeName } from "./place";
 
 const t = (key: MessageKey, params?: Params) => translate("en", key, params);
 const host = (id: string, name: string, address: string, port = 22, username = "root") => ({ id, name, address, port, username }) as HostView;
@@ -101,5 +101,31 @@ describe("connectionFor (AI-09)", () => {
     });
     expect(connectionFor(onTarget(target("10.0.0.9")), hosts)).toEqual({ name: "web-1", source: hostTab("h-web") });
     expect(connectionFor(onTarget(target("2001:db8::1", 2222)), hosts)).toEqual({ name: "v6", source: hostTab("h-v6") });
+  });
+});
+
+describe("local terminal tabs (§7.5)", () => {
+  const onLocal = (local: string) => ({ host_id: null, quick_target: null, local });
+  const localTab: TabSource = { hostId: null, target: null, local: { id: "pwsh", name: "PowerShell", kind: "powershell" } };
+
+  it("records the computer, and names this one This Computer", () => {
+    expect(placeName(t, conversationPlace(onLocal("DEMO-PC"), hosts), "DEMO-PC")).toBe("This Computer");
+    expect(placeName(t, conversationPlace(onLocal("LAPTOP"), hosts), "DEMO-PC")).toBe("Local terminal on LAPTOP");
+    expect(placeLabel(t, "DEMO-PC (local terminal)", "DEMO-PC")).toBe("This Computer");
+    expect(placeLabel(t, "prod-db", "DEMO-PC")).toBe("prod-db");
+  });
+
+  it("moves a conversation to this computer, named as Rust's notes name it", () => {
+    expect(moves(onLocal("DEMO-PC"), localTab, "DEMO-PC")).toBe(false);
+    expect(moves(onLocal("LAPTOP"), localTab, "DEMO-PC")).toBe(true);
+    expect(movedFrom(onHost("h-prod"), localTab, hosts, "DEMO-PC")).toEqual({ from: "prod-db", to: "DEMO-PC (local terminal)" });
+    expect(movedFrom(onLocal("DEMO-PC"), hostTab("h-web"), hosts, "DEMO-PC")).toEqual({ from: "DEMO-PC (local terminal)", to: "web-1" });
+    // A home tab chat moves without a note.
+    expect(movedFrom(homeChat, localTab, hosts, "DEMO-PC")).toBeNull();
+  });
+
+  it("opens a local terminal for a conversation that was on this computer's", () => {
+    expect(connectionFor(onLocal("DEMO-PC"), hosts, "DEMO-PC")).toEqual({ name: "DEMO-PC (local terminal)", source: "local" });
+    expect(connectionFor(onLocal("LAPTOP"), hosts, "DEMO-PC")).toBeNull();
   });
 });

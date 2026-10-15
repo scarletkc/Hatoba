@@ -45,6 +45,9 @@ account.
 - **Terminal**: tabs, 256 colors and truecolor, CJK wide characters and input
   methods, confirmation before multi-line paste, search, clickable links, and
   the CPU, memory, and network usage of Linux servers in the status bar.
+- **Local terminal**: tabs for the shells of your own computer, such as
+  PowerShell, Command Prompt, Git Bash, and WSL distributions on Windows, or
+  your login shell on macOS and Linux, beside the SSH tabs.
 - **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
   a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
   (2FA).
@@ -61,7 +64,8 @@ account.
   device list with revocation.
 - **AI assistant**: a panel beside each terminal that reads the screen, runs
   commands, types into the shell, reads, edits, and searches files on the host,
-  and can search the web and read pages. You approve its actions, a model you
+  or on your own computer in a local terminal, and can search the web and read
+  pages. You approve its actions, a model you
   choose approves the safe ones in Auto mode, or bypass mode skips approval. It
   uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
   servers, and takes terminal selections, connection errors, long pastes, and

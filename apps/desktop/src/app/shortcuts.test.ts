@@ -13,6 +13,13 @@ describe("matchShortcut (WIN-04)", () => {
     expect(matchShortcut(key({ key: "A", code: "KeyA", ctrlKey: true, shiftKey: true }), "linux", false)).toBe("aiPanel");
   });
 
+  it("opens a local terminal with Ctrl+Shift+`, ⌃⇧` on macOS (LOCAL-01)", () => {
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "windows", true)).toBe("newLocal");
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "linux", false)).toBe("newLocal");
+    expect(matchShortcut(key({ key: "~", code: "Backquote", ctrlKey: true, shiftKey: true }), "macos", true)).toBe("newLocal");
+    expect(matchShortcut(key({ key: "`", code: "Backquote", ctrlKey: true }), "windows", true)).toBeNull();
+  });
+
   it("leaves plain Ctrl+letter to the terminal", () => {
     for (const k of ["l", "w", "k", "c", "v", "t", "a"]) {
       expect(matchShortcut(key({ key: k, ctrlKey: true }), "windows", true)).toBeNull();

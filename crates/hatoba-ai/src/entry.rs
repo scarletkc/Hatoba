@@ -490,6 +490,7 @@ mod tests {
                             port: 22,
                         }),
                         origin: None,
+                        local: None,
                     },
                 ),
                 json!({"created_at": 1, "role": "user", "text": "on", "came_from": {

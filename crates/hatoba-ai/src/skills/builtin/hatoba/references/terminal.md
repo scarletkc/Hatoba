@@ -1,6 +1,29 @@
 # Terminal
 
-Each SSH session is a tab with a full terminal (256 colors and truecolor, CJK wide characters and input methods, mouse support for programs such as vim and tmux). Inactive tabs keep running. There are no split panes, no session logging and no snippets.
+Each SSH session, and each local terminal (below), is a tab with a full terminal (256 colors and truecolor, CJK wide characters and input methods, mouse support for programs such as vim and tmux). Inactive tabs keep running. There are no split panes, no session logging and no snippets.
+
+## Local terminal tabs
+
+A local terminal tab runs a shell of this computer beside the SSH tabs: open one from **New Local Terminal** (the arrow right after **New Tab** (+) in the tab bar), which lists the shells, or with Ctrl+Shift+` (⌃⇧` on macOS), which opens the shell chosen in Settings → Terminal → **Local Terminal Shell** (the system default unless changed). The shells:
+
+- Windows: PowerShell (PowerShell 7, when installed), Windows PowerShell, Command Prompt, Git Bash (when Git for Windows is installed) and each installed WSL distribution. The system default is PowerShell 7, else Windows PowerShell.
+- macOS and Linux: the login shell and the other shells in `/etc/shells`. The system default is the login shell; on macOS it starts as a login shell, as Terminal does.
+
+A local tab has the same terminal settings, search, links, copy and paste as SSH tabs. Its status bar shows **This Computer** and the shell, and has no resource usage, port forwarding or SFTP. The shell starts in the home directory. Typing `exit` (a shell that exits with status 0) closes the tab; a shell that exits with an error leaves the tab with the exit status and **Restart**, and one that cannot start shows why with **Retry**. **More actions** has **Restart** in place of Reconnect, Disconnect and Edit Host. Locking does not end local shells, unless Settings → Security → **Disconnect all sessions when locked** is on; quitting Hatoba ends them. The AI assistant works in a local tab as in an SSH tab: see `references/ai-tools.md`.
+
+| en | zh-CN | ja |
+|---|---|---|
+| New Local Terminal | 新建本地终端 | 新しいローカル ターミナル |
+| Local Terminal | 本地终端 | ローカル ターミナル |
+| Connect to Host | 连接主机 | ホストに接続 |
+| This Computer | 本机 | このコンピューター |
+| Command Prompt | 命令提示符 | コマンド プロンプト |
+| Starting… | 正在启动… | 起動中… |
+| Running | 运行中 | 実行中 |
+| Failed to start | 启动失败 | 起動に失敗 |
+| Exited | 已退出 | 終了 |
+| Restart | 重新启动 | 再起動 |
+| Local Terminal Shell | 本地终端的 shell | ローカル ターミナルのシェル |
 
 ## The status bar
 
@@ -103,7 +126,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 
 The terminal settings sync with the vault. They are in three places:
 
-- Settings → Terminal: font, size, cursor and scrollback, with a live preview.
+- Settings → Terminal: font, size, cursor and scrollback, with a live preview, and **Local Terminal Shell**, the shell new local tabs run, which is kept on this device only (not synced).
 - Settings → Appearance: **Terminal Colors**.
 - Settings → General: **Right-Click in Terminal** and **Confirm before pasting multiple lines** (labels above).
 

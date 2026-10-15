@@ -27,7 +27,8 @@ impl Conn {
     }
 
     /// The server, as the record of what the model has seen and the file snapshots name it:
-    /// `user@host:port`, or for a local tab `local` (this computer's files) or `wsl:<distribution>`.
+    /// `user@host:port`, or for a local tab `local` (this computer's files) or
+    /// `wsl:<distribution>`.
     pub fn server(&self) -> String {
         match self {
             Self::Ssh(session) => format!(

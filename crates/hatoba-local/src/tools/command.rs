@@ -1,11 +1,12 @@
-//! `run_command` in a Windows shell (AI-12, §7.5): PowerShell, Command Prompt or Git Bash, without a
-//! console window, in a Job Object, so a stop or the timeout ends the command and every process it
-//! started. The hosts' command script needs `sh`, which these shells are not.
+//! `run_command` in a Windows shell (AI-12, §7.5): PowerShell, Command Prompt or Git Bash, without
+//! a console window, in a Job Object, so a stop or the timeout ends the command and every process
+//! it started. The hosts' command script needs `sh`, which these shells are not.
 //!
 //! The command runs non-interactively, without the shell's profile, like a command over SSH,
 //! with UTF-8 output: PowerShell through `-EncodedCommand`, so no quoting is involved; Command
-//! Prompt after `chcp 65001`; Git Bash with the command on stdin, which it reads before the command
-//! runs, so the command's own stdin is empty as on a host.
+//! Prompt in a second Command Prompt started after `chcp 65001`; Git Bash with the command on
+//! stdin, which it reads before the command runs, so the command's own stdin is empty as on a
+//! host.
 //!
 //! A command that ends on its own leaves the processes it put in the background running, until
 //! Hatoba quits: closing the Job Object would end them.
@@ -82,10 +83,15 @@ impl NativeShell {
                     );
                 }
                 let mut cmd = tokio::process::Command::new(program);
-                // `/s` keeps the line as it is between the outer quotes.
+                // `/s` keeps the line as it is between the outer quotes. Command Prompt's own
+                // commands, such as `ver` and `dir`, print in the code page it started with, so the
+                // command runs in a second one, started after `chcp`.
                 cmd_line(
                     &mut cmd,
-                    &format!("/d /s /c \"chcp 65001 >nul & {command}\""),
+                    &format!(
+                        "/d /s /c \"chcp 65001 >nul & \"{}\" /d /s /c \"{command}\"\"",
+                        program.display()
+                    ),
                 );
                 cmd
             }
@@ -283,6 +289,15 @@ mod tests {
         .unwrap();
         assert_eq!(text(&run.output.stdout).trim_end(), "a \"b c\"");
         assert_eq!(run.output.exit_status, Some(2));
+        // Command Prompt's own commands print UTF-8 too, whatever the system's code page.
+        let run = super::run(&cmd, "ver", &home, std::future::pending())
+            .await
+            .unwrap();
+        let out = std::str::from_utf8(&run.output.stdout).expect("UTF-8");
+        assert!(
+            out.contains("10.0.") && !out.contains('\u{fffd}'),
+            "{out:?}"
+        );
         assert!(
             super::run(&cmd, "echo a\necho b", &home, std::future::pending())
                 .await

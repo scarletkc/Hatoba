@@ -61,7 +61,8 @@ impl LocalTools {
             ShellKind::Wsl { distro } => Self::Sh {
                 sh: LocalSh::new(
                     shell.program.clone(),
-                    ["-d", distro.as_str(), "-e", "sh"]
+                    // From the home directory, as a command over SSH starts.
+                    ["-d", distro.as_str(), "--cd", "~", "-e", "sh"]
                         .map(OsString::from)
                         .to_vec(),
                     Vec::new(),

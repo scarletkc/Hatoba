@@ -7193,3 +7193,133 @@ async fn skill_commands_are_the_enabled_skills_and_run_with_their_skill_md() {
         ErrorCode::NotFound
     );
 }
+
+impl Fixture {
+    /// A local tab (§7.5) on the computer `device`, running `shell` of `kind`.
+    fn local(&self, device: &str, shell: &str, kind: crate::dto::LocalShellKind) -> AiTurnContext {
+        AiTurnContext {
+            local: Some(crate::dto::AiLocalTab {
+                device: device.into(),
+                shell: Some(shell.into()),
+                kind: Some(kind),
+            }),
+            ..self.context()
+        }
+    }
+}
+
+/// The description of the request's tool `name`, in Chat Completions' shape.
+fn tool_description(body: &Value, name: &str) -> String {
+    body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["function"]["name"] == name)
+        .map(|t| t["function"]["description"].as_str().unwrap().to_owned())
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_local_tab_moves_the_conversation_to_its_computer() {
+    use crate::dto::LocalShellKind;
+    use hatoba_ai::tools::{host_change_block, terminal_change_block};
+
+    let f = Fixture::new((0..4).map(|i| answer(&format!("Answer {i}."))).collect()).await;
+    let prod = f.add_host("prod-db", "Primary.");
+    let on_prod = AiTurnContext {
+        host_id: Some(prod.clone()),
+        ..f.context()
+    };
+    let (conv, _) = f.exchange(None, "one", on_prod.clone()).await;
+    // §7.5: the computer is the conversation's place, named like a host in notes.
+    let here = f.local("DEMO-PC", "PowerShell", LocalShellKind::Powershell);
+    f.exchange(Some(&conv), "two", here).await;
+    assert_eq!(
+        f.detail(&conv).conversation.local.as_deref(),
+        Some("DEMO-PC")
+    );
+    assert_eq!(f.recorded_place(&conv), (None, None));
+    // The home tab sends the computer it recorded, which leaves it there.
+    let home = AiTurnContext {
+        tab: false,
+        local: Some(crate::dto::AiLocalTab {
+            device: "DEMO-PC".into(),
+            shell: None,
+            kind: None,
+        }),
+        ..f.context()
+    };
+    f.exchange(Some(&conv), "three", home).await;
+    f.exchange(Some(&conv), "four", on_prod).await;
+    assert_eq!(f.detail(&conv).conversation.local, None);
+    assert_eq!(
+        f.user_texts(&conv),
+        [
+            manual("one"),
+            format!(
+                "{}two",
+                host_change_block("prod-db", "DEMO-PC (local terminal)")
+            ),
+            format!("{}three", terminal_change_block(false)),
+            format!(
+                "{}{}four",
+                host_change_block("DEMO-PC (local terminal)", "prod-db"),
+                terminal_change_block(true)
+            ),
+        ]
+    );
+
+    let requests = f.requests().await;
+    let local = system_of(&requests[1]);
+    assert!(
+        local.contains("local terminal on the user's own computer \"DEMO-PC\""),
+        "{local}"
+    );
+    assert!(local.contains("It runs PowerShell"), "{local}");
+    assert!(local.contains("Windows paths"), "{local}");
+    assert!(!local.contains("SSH server"), "{local}");
+    assert!(
+        tool_description(&requests[1], "run_command").contains("on this computer"),
+        "{}",
+        tool_description(&requests[1], "run_command")
+    );
+    let home = system_of(&requests[2]);
+    assert!(
+        home.contains("This conversation is about the host \"DEMO-PC (local terminal)\"."),
+        "{home}"
+    );
+    assert!(tool_description(&requests[3], "run_command").contains("SSH connection"));
+}
+
+#[tokio::test]
+async fn another_computers_local_tab_is_a_move() {
+    use crate::dto::LocalShellKind;
+    use hatoba_ai::tools::host_change_block;
+
+    let f = Fixture::new(vec![answer("One."), answer("Two.")]).await;
+    let (conv, _) = f
+        .exchange(None, "one", f.local("DEMO-PC", "zsh", LocalShellKind::Unix))
+        .await;
+    let wsl = f.local("LAPTOP", "Ubuntu", LocalShellKind::Wsl);
+    f.exchange(Some(&conv), "two", wsl).await;
+    assert_eq!(
+        f.detail(&conv).conversation.local.as_deref(),
+        Some("LAPTOP")
+    );
+    assert_eq!(
+        f.user_texts(&conv)[1],
+        format!(
+            "{}two",
+            host_change_block("DEMO-PC (local terminal)", "LAPTOP (local terminal)")
+        )
+    );
+    let system = system_of(&f.requests().await[1]);
+    assert!(system.contains("Ubuntu is a WSL distribution"), "{system}");
+}
+
+#[test]
+fn a_note_from_a_local_terminal_names_its_computer() {
+    let (place, origin) = super::place_named(&[], "DEMO-PC (local terminal)".to_owned());
+    assert_eq!(place.local.as_deref(), Some("DEMO-PC"));
+    assert!(place.host_id.is_none() && place.quick_target.is_none() && origin.is_none());
+}

@@ -5,7 +5,7 @@ description: "How Hatoba works: its windows, menus, settings and features, and w
 
 # Hatoba
 
-Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs, an SFTP file panel, local port forwarding, optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
+Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, local port forwarding, optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
 
 - Local first: everything works offline. Hatoba runs no server and collects no telemetry.
 - Sync is optional. It goes through a Worker and a D1 database in the user's own Cloudflare account, or straight to D1. The cloud holds only ciphertext.
@@ -14,7 +14,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 ## Window layout
 
 - Sidebar (left). The header has **Settings** (gear) and **Show or hide the sidebar**. Below: **Dashboard** (every host's status and resource usage), **All Hosts**, **Favorites**, **Recent**; **Groups** with **New Group** (right-click a group for Rename Group and Delete Group); **Tags** (only when some host has a tag); and a **Vault** heading with **Keys** and **Cloud Sync**. At the bottom: the sync status button (opens Cloud Sync) and **Lock**. A card asking for a GitHub star appears occasionally.
-- Tab bar (top, merged with the title bar). The first tab is the home tab. It shows the page chosen in the sidebar: the dashboard, the host list, the host editor, Keys or Cloud Sync. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs. Then **New Tab** (+), which goes to the host list and focuses the search box, and the AI button (sparkle). Windows and Linux show their own minimize, maximize and close buttons here; macOS uses its native window buttons.
+- Tab bar (top, merged with the title bar). The first tab is the home tab. It shows the page chosen in the sidebar: the dashboard, the host list, the host editor, Keys or Cloud Sync. Each open SSH session gets its own tab after it, with a status dot (orange connecting, green connected, red failed, grey disconnected), and the same host can be open in several tabs; a local terminal tab (a shell of this computer) shows a terminal icon. Then **New Tab** (+), which goes to the host list and focuses the search box, **New Local Terminal** (the arrow after it), which lists this computer's shells, and the AI button (sparkle). Windows and Linux show their own minimize, maximize and close buttons here; macOS uses its native window buttons.
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding**, **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
 - Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
@@ -38,6 +38,8 @@ Labels (the exact strings in each language):
 | Keys | 密钥库 | 鍵 |
 | Cloud Sync | 云同步 | クラウド同期 |
 | Lock | 锁定 | ロック |
+| New Local Terminal | 新建本地终端 | 新しいローカル ターミナル |
+| This Computer | 本机 | このコンピューター |
 | New Tab | 新建标签 | 新しいタブ |
 | Close Tab | 关闭标签 | タブを閉じる |
 | Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
@@ -74,7 +76,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing an SSH config, host key prompts, connecting and reconnecting |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
 | `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
-| `references/terminal.md` | The terminal tab: status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback) |
+| `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
 | `references/sync.md` | Cloud Sync: what syncs, the setup wizard, joining a cloud vault from a device that has its own, the status page, devices, conflicts, restoring on a new device, disconnecting |
