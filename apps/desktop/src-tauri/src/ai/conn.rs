@@ -26,6 +26,15 @@ impl Conn {
         }
     }
 
+    /// Whether the tools take Windows paths: a local tab of PowerShell, Command Prompt or Git
+    /// Bash (§7.5).
+    pub fn windows_paths(&self) -> bool {
+        match self {
+            Self::Ssh(_) => false,
+            Self::Local(local) => local.tools.windows_paths(),
+        }
+    }
+
     /// The server, as the record of what the model has seen and the file snapshots name it:
     /// `user@host:port`, or for a local tab `local` (this computer's files) or
     /// `wsl:<distribution>`.

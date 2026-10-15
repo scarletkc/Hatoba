@@ -28,8 +28,8 @@ const MAX_ERRORS: usize = 3;
 /// Where a search starts and which files it looks at.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Search {
-    /// The path the model gave, the home directory (`~`) without one, or `/` for a glob that
-    /// starts with `/`.
+    /// The path the model gave, the home directory (`~`) without one, `/` for a glob that starts
+    /// with `/`, or a drive's root, such as `C:/`, for one that starts with it (§7.5).
     pub path: String,
     /// The directories the glob starts with, as `a/b`, which the host searches below `path` when
     /// that is a directory; empty for none.
@@ -56,8 +56,8 @@ enum Part {
 impl Search {
     /// The search of `path` (the home directory when `None` or empty) for the files `glob`
     /// matches, or all of them without one. A glob without `/` matches file names at any depth;
-    /// one with `/` matches paths below `path`, and one that starts with `/` paths below `/`.
-    /// An error is the message for the model.
+    /// one with `/` matches paths below `path`, and one that starts with `/`, or with a drive as
+    /// `C:/` does, paths below it. An error is the message for the model.
     pub fn new(path: Option<&str>, glob: Option<&str>) -> Result<Self, String> {
         let path = path.filter(|p| !p.is_empty()).unwrap_or("~").to_owned();
         let none = Self {
@@ -73,9 +73,15 @@ impl Search {
         if given.contains(['\n', '\r', '\0']) {
             return Err("The glob has a line break, so nothing was searched.".to_owned());
         }
-        let absolute = given.starts_with('/');
-        let path = if absolute { "/".to_owned() } else { path };
-        let mut rest = given.trim_start_matches('/');
+        let drive = drive_root(given);
+        let absolute = given.starts_with('/') || drive.is_some();
+        let rest = if drive.is_some() { &given[2..] } else { given };
+        let path = match drive {
+            Some(root) => root,
+            None if absolute => "/".to_owned(),
+            None => path,
+        };
+        let mut rest = rest.trim_start_matches('/');
         while let Some(after) = rest.strip_prefix("./") {
             rest = after.trim_start_matches('/');
         }
@@ -192,10 +198,23 @@ impl Search {
             .and_then(|r| r.strip_suffix('/'))
         {
             Some("") => "/".to_owned(),
+            Some(base) if is_drive(base) => format!("{base}/"),
             Some(base) => base.to_owned(),
             None => root.to_owned(),
         }
     }
+}
+
+/// The root of the drive a glob starts with, such as `C:/` for `C:/Projects/*.json`.
+fn drive_root(glob: &str) -> Option<String> {
+    let bytes = glob.as_bytes();
+    (bytes.len() > 2 && bytes[2] == b'/' && is_drive(&glob[..2]))
+        .then(|| format!("{}:/", char::from(bytes[0]).to_ascii_uppercase()))
+}
+
+/// `C:`: a drive, without its root.
+fn is_drive(text: &str) -> bool {
+    matches!(text.as_bytes(), [letter, b':'] if letter.is_ascii_alphabetic())
 }
 
 /// The alternatives of a glob's braces, `{a,b}`, nested or not; braces without a comma, or
@@ -851,7 +870,13 @@ impl Root {
     fn of(start: &str) -> Self {
         match start.strip_suffix("/.") {
             Some(dir) => Self {
-                shown: if dir.is_empty() { "/" } else { dir }.to_owned(),
+                shown: if dir.is_empty() {
+                    "/".to_owned()
+                } else if is_drive(dir) {
+                    format!("{dir}/")
+                } else {
+                    dir.to_owned()
+                },
                 prefix: Some(format!("{start}/")),
             },
             None => Self {
@@ -1455,6 +1480,33 @@ mod tests {
         // A file given as the path is searched itself, and a path the base cannot be found in is
         // shown as resolved.
         assert_eq!(search(None, "a/b").base("/srv/notes.txt"), "/srv/notes.txt");
+    }
+
+    #[test]
+    fn a_glob_from_a_drive_searches_from_its_root() {
+        // Windows paths (§7.5): whatever the path, as with a glob that starts with /.
+        let s = search(Some("C:/Users/kc/missing.txt"), "c:/Projects/**/*.json");
+        assert_eq!(
+            (s.path.as_str(), s.below.as_str(), s.max_depth),
+            ("C:/", "Projects", None)
+        );
+        assert_eq!(
+            (s.shown(), s.base("C:/Projects")),
+            ("C:/Projects".into(), "C:/".into())
+        );
+        let s = search(None, "D:/*.log");
+        assert_eq!((s.path.as_str(), s.below.as_str()), ("D:/", ""));
+        assert!(s.matches("a.log") && !s.matches("logs/a.log"));
+        assert_eq!(Root::of("D:/.").place(&s), "under D:/");
+        assert_eq!(
+            Root::of("D:/.").kept("D:/./a.log", &s).as_deref(),
+            Some("D:/a.log")
+        );
+        let s = search(None, "C:/Projects/{a,b}/*.json");
+        assert_eq!((s.path.as_str(), s.below.as_str()), ("C:/", ""));
+        assert!(s.matches("Projects/b/x.json") && !s.matches("Projects/c/x.json"));
+        // Without the root's slash, `C:` names a directory.
+        assert_eq!(search(None, "C:*.log").path, "~");
     }
 
     #[test]

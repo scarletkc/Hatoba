@@ -58,7 +58,19 @@ pub(super) async fn run(
     }
 }
 
-async fn search(session: &Conn, job: SearchJob) -> Result<String, String> {
+async fn search(session: &Conn, mut job: SearchJob) -> Result<String, String> {
+    // On Windows itself a glob takes `\` between directories, as its paths do (§7.5); Windows
+    // names have no `*` or `?` to escape.
+    if session.windows_paths() {
+        match &mut job {
+            SearchJob::Glob(args) => args.pattern = args.pattern.replace('\\', "/"),
+            SearchJob::Grep(args) => {
+                if let Some(glob) = &mut args.glob {
+                    *glob = glob.replace('\\', "/");
+                }
+            }
+        }
+    }
     match job {
         SearchJob::Glob(args) => {
             let target = Search::glob(args.path.as_deref(), &args.pattern)?;

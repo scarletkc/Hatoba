@@ -34,10 +34,14 @@ fn root(scope: &Scope<'_>, home: &Path) -> Result<PathBuf, RemoteSearchError> {
         line(name, false)?;
     }
     let mut path = resolve(scope.path, home);
-    if let Some(rooted) = drive_rooted(scope.below) {
-        path = rooted;
-    } else if !scope.below.is_empty() && path.is_dir() {
-        path = path.join(scope.below);
+    if !scope.below.is_empty() && path.is_dir() {
+        // Joined as text and resolved again, so `/` and `c/Users` are Git Bash's `/c/Users`.
+        let slash = if scope.path.ends_with(['/', '\\']) {
+            ""
+        } else {
+            "/"
+        };
+        path = resolve(&format!("{}{slash}{}", scope.path, scope.below), home);
     }
     match fs::symlink_metadata(&path) {
         Ok(link) if link.file_type().is_symlink() && fs::metadata(&path).is_err() => {
@@ -49,21 +53,6 @@ fn root(scope: &Scope<'_>, home: &Path) -> Result<PathBuf, RemoteSearchError> {
         }
         Err(_) => Err(RemoteSearchError::NotFound),
     }
-}
-
-/// The directories a glob starts with, from the root of the drive they start with, as for
-/// `C:/*.log` (`C:`): joined to a path, `C:` would be that drive's working directory.
-fn drive_rooted(below: &str) -> Option<PathBuf> {
-    if !cfg!(windows) {
-        return None;
-    }
-    let (drive, rest) = below.split_once('/').unwrap_or((below, ""));
-    let [letter, b':'] = drive.as_bytes() else {
-        return None;
-    };
-    letter
-        .is_ascii_alphabetic()
-        .then(|| PathBuf::from(format!("{drive}/{rest}")))
 }
 
 /// What `find` would print for a directory: `dir/.`.
@@ -547,30 +536,35 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn a_glob_from_a_drive_starts_at_its_root() {
+    fn a_glob_starts_below_a_drive_or_a_git_bash_path() {
         let dir = tree();
-        let drive = &shown(dir.path())[..2];
+        let full = shown(dir.path());
+        let (drive, rest) = full.split_at(2);
         let names = vec!["*.md".to_owned()];
         let stop = AtomicBool::new(false);
+        let root_of = |path: &str, below: &str| {
+            let scope = Scope {
+                path,
+                below,
+                max_depth: Some(1),
+                names: &names,
+            };
+            shown(&root(&scope, Path::new("~")).unwrap())
+        };
+        let drive_root = format!("{drive}/");
+        assert_eq!(root_of(&drive_root, ""), drive_root);
+        assert_eq!(root_of(&drive_root, &rest[1..]), full);
+        // Git Bash's /c/Users/…: the glob's / and c/Users/….
+        let letter = drive[..1].to_ascii_lowercase();
+        assert_eq!(root_of("/", &format!("{letter}{rest}")), full);
         let scope = Scope {
-            path: "~",
-            below: drive,
+            path: &drive_root,
+            below: &rest[1..],
             max_depth: Some(1),
             names: &names,
         };
-        let out = glob(&scope, 1 << 20, dir.path(), &stop).unwrap();
-        assert_eq!(out.start, format!("{drive}/."));
-        assert_eq!(
-            root(&scope, dir.path()).unwrap(),
-            PathBuf::from(format!("{drive}/"))
-        );
-        let below = shown(dir.path());
-        let scope = Scope {
-            below: &below,
-            ..scope
-        };
         let out = glob(&scope, 1 << 20, Path::new("~"), &stop).unwrap();
-        assert_eq!(lines(&out), [format!("{below}/./README.md")]);
+        assert_eq!(lines(&out), [format!("{full}/./README.md")]);
     }
 
     fn query<'a>(scope: Scope<'a>, pattern: &'a str, mode: GrepMode) -> GrepQuery<'a> {
