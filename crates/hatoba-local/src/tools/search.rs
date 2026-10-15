@@ -3,6 +3,7 @@
 //! what `find` and `rg --null` print, so `hatoba_ai::search` reads the result as it reads a
 //! host's. As there, links to files are searched and links to directories are not followed, `.git`
 //! is skipped, binary files (a NUL byte) are left out, and the output stops at the bytes asked for.
+//! Unlike there, `^` and `$` also take CRLF line breaks, which Windows files often have.
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read};
@@ -33,7 +34,9 @@ fn root(scope: &Scope<'_>, home: &Path) -> Result<PathBuf, RemoteSearchError> {
         line(name, false)?;
     }
     let mut path = resolve(scope.path, home);
-    if !scope.below.is_empty() && path.is_dir() {
+    if let Some(rooted) = drive_rooted(scope.below) {
+        path = rooted;
+    } else if !scope.below.is_empty() && path.is_dir() {
         path = path.join(scope.below);
     }
     match fs::symlink_metadata(&path) {
@@ -46,6 +49,21 @@ fn root(scope: &Scope<'_>, home: &Path) -> Result<PathBuf, RemoteSearchError> {
         }
         Err(_) => Err(RemoteSearchError::NotFound),
     }
+}
+
+/// The directories a glob starts with, from the root of the drive they start with, as for
+/// `C:/*.log` (`C:`): joined to a path, `C:` would be that drive's working directory.
+fn drive_rooted(below: &str) -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
+    let (drive, rest) = below.split_once('/').unwrap_or((below, ""));
+    let [letter, b':'] = drive.as_bytes() else {
+        return None;
+    };
+    letter
+        .is_ascii_alphabetic()
+        .then(|| PathBuf::from(format!("{drive}/{rest}")))
 }
 
 /// What `find` would print for a directory: `dir/.`.
@@ -247,6 +265,7 @@ pub fn grep(
     let regex = RegexBuilder::new(query.pattern)
         .case_insensitive(query.ignore_case)
         .multi_line(true)
+        .crlf(true)
         .dot_matches_new_line(query.multiline)
         .build()
         .map_err(|e| RemoteSearchError::BadPattern {
@@ -526,6 +545,34 @@ mod tests {
         assert!(out.cut && out.stdout.len() == 10);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn a_glob_from_a_drive_starts_at_its_root() {
+        let dir = tree();
+        let drive = &shown(dir.path())[..2];
+        let names = vec!["*.md".to_owned()];
+        let stop = AtomicBool::new(false);
+        let scope = Scope {
+            path: "~",
+            below: drive,
+            max_depth: Some(1),
+            names: &names,
+        };
+        let out = glob(&scope, 1 << 20, dir.path(), &stop).unwrap();
+        assert_eq!(out.start, format!("{drive}/."));
+        assert_eq!(
+            root(&scope, dir.path()).unwrap(),
+            PathBuf::from(format!("{drive}/"))
+        );
+        let below = shown(dir.path());
+        let scope = Scope {
+            below: &below,
+            ..scope
+        };
+        let out = glob(&scope, 1 << 20, Path::new("~"), &stop).unwrap();
+        assert_eq!(lines(&out), [format!("{below}/./README.md")]);
+    }
+
     fn query<'a>(scope: Scope<'a>, pattern: &'a str, mode: GrepMode) -> GrepQuery<'a> {
         GrepQuery {
             scope,
@@ -596,6 +643,26 @@ mod tests {
         multi.multiline = true;
         let out = grep(&multi, 1 << 20, home, &stop).unwrap();
         assert_eq!(lines(&out), [format!("{start}/README.md")]);
+        let mut anchored = query(scope("~", &[], None), "^Hello$", GrepMode::Count);
+        fs::write(home.join("crlf.txt"), "Hello\r\nworld\r\n").unwrap();
+        let out = grep(&anchored, 1 << 20, home, &stop).unwrap();
+        assert_eq!(
+            lines(&out),
+            [
+                format!("{start}/README.md:1"),
+                format!("{start}/crlf.txt:1")
+            ]
+        );
+        anchored.multiline = true;
+        anchored.pattern = r"^Hello$\s+^world$";
+        let out = grep(&anchored, 1 << 20, home, &stop).unwrap();
+        assert_eq!(
+            lines(&out),
+            [
+                format!("{start}/README.md:2"),
+                format!("{start}/crlf.txt:2")
+            ]
+        );
         assert!(matches!(
             grep(
                 &query(scope("~", &[], None), "(", GrepMode::Files),
