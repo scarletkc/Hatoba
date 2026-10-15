@@ -25,6 +25,7 @@ import { AttachmentCardFor, AttachmentChipFor, ScreenCard } from "./AttachmentCh
 import { answersText, askText, verdictText } from "./autoText";
 import { FileChange } from "./FileChange";
 import { useFilePreview } from "./filePreview";
+import { useFollowBottom } from "./followBottom";
 import { composeMessage, fitsMessage, isLongPaste, makePaste, parseMessage, splitPermissionNote, type MessageParts, type Note } from "./attachments";
 import { insertAtCaret, isPlainPasteKey } from "./Composer";
 import { forkPoints } from "./fork";
@@ -54,7 +55,7 @@ import {
   type SendKey,
   type ToolKind,
 } from "./tools";
-import { callRevealKey, editedFiles, revealKey, type AutoAsk, type CallState, type LiveResponse } from "./turn";
+import { callRevealKey, editedFiles, LOCAL_ENTRY, revealKey, type AutoAsk, type CallState, type LiveResponse } from "./turn";
 import s from "./Messages.module.css";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -115,8 +116,11 @@ export function hostInfo(host: HostView | undefined): HostInfo | null {
 export function MessageList({ slotId, slot, host, empty }: { slotId: string; slot: Slot; host: HostInfo | null; empty: ReactNode }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
   const { entries, turn, outcome } = slot;
+  // The reply at the end may still grow while a turn runs: it shows its time and Copy once it is finished,
+  // and until then the list follows what grows in it on its own.
+  const running = !!turn || slot.remoteRunning;
+  const bottom = useFollowBottom(ref, running);
 
   const results = useMemo(() => {
     const map = new Map<string, ToolEntry>();
@@ -134,11 +138,11 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
   // AI-41: the changes of file tool calls this device keeps, by response and call.
   const changes = useMemo(() => new Map(slot.fileChanges.map((c) => [`${c.response_id}:${c.tool_call_id}`, c])), [slot.fileChanges]);
 
-  // Follow new content while the view is at the bottom.
+  // The user's own message brings the list back to the bottom, to follow the reply.
+  const sending = entries[entries.length - 1]?.entry_id === LOCAL_ENTRY;
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  });
+    if (sending) bottom.stick();
+  }, [sending, bottom]);
 
   // AI-24: a search hit scrolls to its entry and highlights it, or the block of the call a result belongs to.
   const [flash, setFlash] = useState<string | null>(null);
@@ -155,10 +159,10 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     const el = key && list.querySelector(`[data-reveal="${CSS.escape(key)}"]`);
     patchSlot(slotId, { reveal: null });
     if (!key || !el) return;
-    stick.current = false;
+    bottom.release();
     el.scrollIntoView({ block: "center" });
     setFlash(key);
-  }, [reveal, entries, slot.loading, slotId]);
+  }, [reveal, entries, slot.loading, slotId, bottom]);
   useEffect(() => {
     if (!flash) return;
     const timer = window.setTimeout(() => setFlash(null), FLASH_MS);
@@ -184,20 +188,11 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
     canEdit && !slot.reverting && !forking && conversationId && forkable.has(entryId) ? () => void forkConversation(slotId, conversationId, entryId) : undefined;
 
   const isEmpty = entries.length === 0 && !turn && !slot.remoteRunning && !outcome;
-  // A reply shows its time and Copy once it is finished: the one at the end may still grow while a turn runs.
-  const running = !!turn || slot.remoteRunning;
   // AI-41: a revert waits until the conversation is idle, so the next message tells the model before it acts again.
   const busy = running || slot.compacting || slot.loading || slot.reverting;
 
   return (
-    <div
-      ref={ref}
-      className={s.list}
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-      }}
-    >
+    <div ref={ref} className={s.list} onScroll={bottom.onScroll} onWheel={bottom.onWheel} onKeyDown={bottom.onKeyDown}>
       {isEmpty && !slot.loading && empty}
       {slot.loading && entries.length === 0 && (
         <div className={s.status}>
