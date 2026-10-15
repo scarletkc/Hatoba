@@ -2396,6 +2396,7 @@ dependencies = [
 name = "hatoba-local"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "dirs 6.0.0",
  "hatoba-ssh",

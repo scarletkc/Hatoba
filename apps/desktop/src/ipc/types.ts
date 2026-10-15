@@ -869,6 +869,8 @@ export interface AppInfo {
   mica: boolean;
   /** The local user name, which quick connect uses when the target names no user (HOST-12); empty when unknown. */
   local_user: string;
+  /** This computer's name, which a conversation on a local tab records (§7.5). */
+  device_name: string;
 }
 
 /** The `hatoba` command on this device (HOST-13). */
@@ -1093,6 +1095,8 @@ export interface AiConversationView {
   quick_target: QuickTarget | null;
   /** AI-43: with neither, the name of the server a fork's copies came from, when the fork could not tell which it is; its next message on a tab of a host or target notes the move from it. */
   origin: string | null;
+  /** §7.5: with neither a host nor a target, the computer whose local terminal tab it last worked on (its `device_name`). */
+  local: string | null;
   pinned: boolean;
   /** entry_id where the context sent to the model starts (AI-21); earlier entries are outside it. */
   context_start: string | null;
@@ -1149,6 +1153,15 @@ export interface AiConversationDetail {
 }
 
 /** What a request is made with. The frontend owns the tab, so it says what the turn may act on. */
+/** A local terminal tab (§7.5) in a turn's context. */
+export interface AiLocalTab {
+  /** This computer's name (`AppInfo.device_name`) for a local tab, or the one a home tab conversation recorded. */
+  device: string;
+  /** The tab's shell, as the picker names it in English, and its kind; null on the home tab. */
+  shell: string | null;
+  kind: LocalShellKind | null;
+}
+
 export interface AiTurnContext {
   provider_id: string;
   model_id: string;
@@ -1161,6 +1174,11 @@ export interface AiTurnContext {
    * conversation off its saved host, and the request names the target instead.
    */
   target: QuickTarget | null;
+  /**
+   * A local terminal tab's computer and shell (§7.5), or on the home tab the computer a conversation
+   * recorded, while there is neither a host nor a target: the next message moves the conversation there.
+   */
+  local: AiLocalTab | null;
   /** A connected terminal tab is attached; false offers no terminal tools (AI-09). */
   tab: boolean;
   /** The tab's SSH session while it is connected; the system prompt states its server's identification string (§13.1). */

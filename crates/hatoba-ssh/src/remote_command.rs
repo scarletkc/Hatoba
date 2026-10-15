@@ -17,6 +17,7 @@
 //! might take for a command: the command then runs as it is ([`plain`]), as on Windows, and
 //! stopping it only closes its channel.
 
+use std::ffi::OsStr;
 use std::future::Future;
 use std::hash::{BuildHasher, RandomState};
 use std::pin::Pin;
@@ -25,9 +26,11 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use russh::{ChannelMsg, ChannelReadHalf, Sig};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::Instant;
 
 use crate::error::SshError;
+use crate::local_sh::LocalSh;
 use crate::server_os::ServerOs;
 use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSession};
 
@@ -268,6 +271,161 @@ async fn plain(
             },
         }
     }
+}
+
+/// Runs `command` like [`run`], with the `sh` of this computer (a local tab, spec §7.5): under
+/// [`SCRIPT`], with `sh`'s stdin as the line that stops it, so a stop ends the command and every
+/// process it started as it does on a host. The script runs the command with `$SHELL`, which `sh`
+/// sets to the tab's shell.
+pub async fn run_local(
+    sh: &LocalSh,
+    command: &str,
+    stop: impl Future<Output = ()>,
+) -> Result<CommandRun, SshError> {
+    if command.contains('\0') {
+        return Err(SshError::other("the command has a NUL character"));
+    }
+    tokio::pin!(stop);
+    let n = nonce();
+    let marker = marker(n);
+    let number = n.to_string();
+    let mut child = sh.spawn(&[
+        OsStr::new("-c"),
+        OsStr::new(SCRIPT),
+        OsStr::new("sh"),
+        OsStr::new(&number),
+    ])?;
+    let (Some(input), Some(mut stdout), Some(mut stderr)) =
+        (child.stdin.take(), child.stdout.take(), child.stderr.take())
+    else {
+        return Err(SshError::other("sh has no pipes"));
+    };
+    let mut pipes = LocalPipes::default();
+
+    // Until the script says it is ready, nothing goes to `sh` but its arguments.
+    loop {
+        tokio::select! {
+            biased;
+            () = &mut stop => return Ok(not_started()),
+            read = stdout.read(&mut pipes.out_buf), if pipes.out_open => {
+                pipes.take_out(read)?;
+                if take_line(&mut pipes.output.stdout, &marker, Find::First).is_some() {
+                    break;
+                }
+            }
+            read = stderr.read(&mut pipes.err_buf), if pipes.err_open => pipes.take_err(read)?,
+            status = child.wait() => {
+                let status = status.map(|s| s.code()).unwrap_or_default();
+                return Err(SshError::other(format!(
+                    "sh could not run the command (status {}): {}",
+                    status.map_or_else(|| "none".to_owned(), |s| s.to_string()),
+                    String::from_utf8_lossy(&pipes.output.stderr).trim()
+                )));
+            }
+        }
+    }
+
+    let lines = command.matches('\n').count() + 1;
+    let request = format!("{lines}\n{command}\n{marker}-end\n");
+    let feed = async move {
+        let mut input = input;
+        input.write_all(request.as_bytes()).await.map(|()| input)
+    };
+    tokio::pin!(feed);
+    // Kept open while the command runs: its end is the stop.
+    let mut held = None;
+    let mut fed = false;
+    let mut deadline: Option<Instant> = None;
+    let mut exited: Option<Option<u32>> = None;
+    let mut drain: Option<Instant> = None;
+    loop {
+        tokio::select! {
+            biased;
+            // Stopped once the whole command is on its way, as on a host.
+            () = &mut stop, if fed && deadline.is_none() => {
+                held = None;
+                deadline = Some(Instant::now() + STOP_WAIT);
+            }
+            () = sleep_until(deadline), if deadline.is_some() && exited.is_none() => break,
+            result = &mut feed, if !fed => {
+                fed = true;
+                match result {
+                    Ok(input) => held = Some(input),
+                    Err(e) => tracing::debug!("run_local: sending the command ended early: {e}"),
+                }
+            }
+            read = stdout.read(&mut pipes.out_buf), if pipes.out_open => pipes.take_out(read)?,
+            read = stderr.read(&mut pipes.err_buf), if pipes.err_open => pipes.take_err(read)?,
+            status = child.wait(), if exited.is_none() => {
+                exited = Some(status.ok().and_then(|s| s.code()).and_then(|c| u32::try_from(c).ok()));
+                // What it printed last is still read, unless a process it left holds the pipes.
+                drain = Some(Instant::now() + Duration::from_millis(200));
+            }
+            () = sleep_until(drain), if drain.is_some() => break,
+        }
+        if exited.is_some() && !pipes.out_open && !pipes.err_open {
+            break;
+        }
+    }
+    drop(held);
+    let mut output = pipes.output;
+    output.exit_status = exited.flatten();
+    let report = take_line(&mut output.stdout, &marker, Find::Last);
+    let stopped = match (deadline, report.as_deref()) {
+        (None, _) => None,
+        (Some(_), Some("ended")) => Some(Stopped::Ended),
+        (Some(_), Some(_)) => Some(Stopped::MayRun),
+        (Some(_), None) if exited.is_some() && output.exit_status.is_some() => None,
+        (Some(_), None) => Some(Stopped::MayRun),
+    };
+    Ok(CommandRun { output, stopped })
+}
+
+/// What `sh`'s pipes have given [`run_local`].
+struct LocalPipes {
+    output: ExecOutput,
+    out_buf: Vec<u8>,
+    err_buf: Vec<u8>,
+    out_open: bool,
+    err_open: bool,
+}
+
+impl Default for LocalPipes {
+    fn default() -> Self {
+        Self {
+            output: ExecOutput::default(),
+            out_buf: vec![0; 32 * 1024],
+            err_buf: vec![0; 32 * 1024],
+            out_open: true,
+            err_open: true,
+        }
+    }
+}
+
+impl LocalPipes {
+    fn take_out(&mut self, read: std::io::Result<usize>) -> Result<(), SshError> {
+        match read {
+            Ok(0) | Err(_) => self.out_open = false,
+            Ok(n) => push(&mut self.output.stdout, &self.out_buf[..n])?,
+        }
+        Ok(())
+    }
+
+    fn take_err(&mut self, read: std::io::Result<usize>) -> Result<(), SshError> {
+        match read {
+            Ok(0) | Err(_) => self.err_open = false,
+            Ok(n) => push(&mut self.output.stderr, &self.err_buf[..n])?,
+        }
+        Ok(())
+    }
+}
+
+fn push(to: &mut Vec<u8>, data: &[u8]) -> Result<(), SshError> {
+    if to.len() + data.len() > MAX_EXEC_OUTPUT {
+        return Err(SshError::other("command output is too large"));
+    }
+    to.extend_from_slice(data);
+    Ok(())
 }
 
 /// Opens an exec channel, counted among the connection's exec channels while the slot lives, so a

@@ -313,7 +313,7 @@ pub struct SessionStateEvent {
 // ───────────────────────── Local terminals ─────────────────────────
 
 /// What kind of shell a local tab runs (§7.5).
-#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LocalShellKind {
     /// A shell of macOS or Linux.
@@ -1118,6 +1118,9 @@ pub struct AppInfo {
     /// The local user name, which quick connect (HOST-12) uses when the target names no user;
     /// empty when unknown.
     pub local_user: String,
+    /// This computer's name, as the sync device list shows it, which a conversation on a local
+    /// tab records (§7.5).
+    pub device_name: String,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,
@@ -1624,13 +1627,16 @@ pub enum AiAllowanceKind {
 }
 
 /// An AI approval saved on this device (AI-19): never synced, kept until the user removes it.
-/// A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab.
+/// A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab
+/// or this computer's local tabs.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct AiAllowance {
     pub kind: AiAllowanceKind,
     /// The saved host the approval is for.
     pub host_id: Option<String>,
-    /// The quick-connect target (`user@host:port`) the approval is for, without a saved host.
+    /// The quick-connect target (`user@host:port`) the approval is for, without a saved host, or
+    /// `local` for this computer's local tabs (§7.5). Approvals stay on the device, so `local`
+    /// always means the computer that keeps them.
     pub target: Option<String>,
     /// The command prefix, the tool's name, or the domain.
     pub value: String,
@@ -1648,6 +1654,9 @@ pub struct AiConversationView {
     /// AI-43: with neither, the name of the server a fork's copies came from, when the fork could
     /// not tell which it is; its next message on a tab of a host or target notes the move from it.
     pub origin: Option<String>,
+    /// §7.5: with neither a host nor a target, the computer whose local terminal tab it last
+    /// worked on, by its name (`AppInfo.device_name` on that computer).
+    pub local: Option<String>,
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
     pub context_start: Option<String>,
@@ -1875,6 +1884,10 @@ pub struct AiTurnContext {
     /// The tab's quick-connect target when it has no saved host (HOST-12): the next message
     /// moves the conversation off its saved host, and the request names the target instead.
     pub target: Option<QuickTarget>,
+    /// A local terminal tab's computer and shell (§7.5), or on the home tab the computer a
+    /// conversation recorded, while there is neither a host nor a target. The next message moves
+    /// the conversation to that computer.
+    pub local: Option<AiLocalTab>,
     /// A connected terminal tab is attached; `false` offers no terminal tools (AI-09).
     pub tab: bool,
     /// The tab's SSH session while it is connected, whose server's identification string the
@@ -1890,6 +1903,18 @@ pub struct AiTurnContext {
     /// tab is connected and **Send Terminal Screen** is on for the conversation. Only a stored
     /// message (and an idle side question) shows it, in a `terminal_state` note.
     pub screen: Option<AiScreen>,
+}
+
+/// A local terminal tab (§7.5) in a turn's context.
+#[derive(Debug, Clone, Deserialize, Type, PartialEq, Eq)]
+pub struct AiLocalTab {
+    /// The computer's name: this one's (`AppInfo.device_name`) for a local tab, or the one a home
+    /// tab conversation recorded.
+    pub device: String,
+    /// The tab's shell, for a local tab: its name as the shell picker shows it in English, and
+    /// its kind, which decides how the tools run and what the system prompt says of them.
+    pub shell: Option<String>,
+    pub kind: Option<LocalShellKind>,
 }
 
 /// What a `terminal_state` note shows (AI-46, §13.3). Its `Debug` leaves the text out, like

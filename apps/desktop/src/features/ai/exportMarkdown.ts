@@ -4,6 +4,7 @@ import type { AiConversationView, AiEntryView, AiToolCall } from "@/ipc/types";
 import { folderName, parseMessage, pathName, splitPermissionNote, type Attachment } from "./attachments";
 import { fenced, quoted } from "./markdownText";
 import { noteTitle } from "./notes";
+import { localName, placeLabel } from "./place";
 import { exitStatusOf, prettyArgs, shownCall, toolKind, toolLabel } from "./tools";
 
 type ToolEntry = Extract<AiEntryView, { role: "tool" }>;
@@ -91,6 +92,7 @@ export function conversationMarkdown({ conversation, entries, host }: ExportSour
   if (host) meta.push(`- ${t("ai.export.host")}: ${host.name} (\`${host.target}\`)`);
   else if (conversation.host_id) meta.push(`- ${t("ai.export.host")}: ${t("ai.history.hostGone")}`);
   else if (conversation.quick_target) meta.push(`- ${t("ai.export.host")}: \`${formatTarget(conversation.quick_target)}\``);
+  else if (conversation.local) meta.push(`- ${t("ai.export.host")}: ${placeLabel(t, localName(conversation.local))}`);
   meta.push(`- ${t("ai.export.created")}: ${time(conversation.created_at)}`);
 
   const blocks = [`# ${conversation.title || t("ai.untitled")}`, meta.join("\n")];

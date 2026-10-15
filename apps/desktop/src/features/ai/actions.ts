@@ -53,6 +53,7 @@ import { addAllowances, hostRefOf, resetAllowances, savedAllowances, useAllowanc
 import { hardRule, type HardRule } from "./autoRules";
 import { JUDGE_ERROR } from "./autoText";
 import { CallRoom, nextBatch, runConcurrently } from "./batches";
+import { localName } from "./place";
 import { askEditedFiles } from "./EditFiles";
 import { confirmRevert } from "./RevertConfirm";
 import { chosenEffort } from "./effort";
@@ -172,12 +173,19 @@ export function turnContext(slotId: string): AiTurnContext | null {
     effort: slotEffort(slotId),
     host_id: attached ? attached.tab.hostId : (conversation?.host_id ?? null),
     target: attached ? attached.tab.target : (conversation?.quick_target ?? null),
+    local: attached ? localOf(attached.tab) : conversation?.local ? { device: conversation.local, shell: null, kind: null } : null,
     tab: connected,
     session_id: connected ? (attached.tab.sessionId ?? null) : null,
     disabled_mcp_servers: slot.mcpOff,
     permission_mode: slot.mode,
     screen: term ? screenNote(term.buffer.active, term.rows) : null,
   };
+}
+
+/** A local tab's computer and shell, as a turn's context names them (§7.5); null for an SSH tab. */
+function localOf(tab: SessionTab): AiTurnContext["local"] {
+  if (!tab.local) return null;
+  return { device: useApp.getState().info.device_name, shell: tab.local.name, kind: tab.local.kind };
 }
 
 /** Applies a streamed event to a slot; a stored summary moves the conversation's `context_start` (AI-21, AI-22). */
@@ -1679,10 +1687,17 @@ export function openNotified({ tab, conversation_id }: NotificationTarget) {
   }
 }
 
-/** AI-09 "Connect to host": opens a tab on the host or quick-connect target (HOST-12) and attaches the home tab's conversation to it. */
-export async function connectConversation(source: TabSource) {
+/**
+ * AI-09 "Connect to host": opens a tab on the host or quick-connect target (HOST-12), or a local terminal
+ * (§7.5), and attaches the home tab's conversation to it.
+ */
+export async function connectConversation(source: TabSource | "local") {
   const before = new Set(useTabs.getState().tabs.map((x) => x.id));
-  await (source.local ? openLocalTerminal() : source.hostId !== null ? connectHost(source.hostId) : connectTarget(source.target));
+  await (source === "local" || source.local
+    ? openLocalTerminal()
+    : source.hostId !== null
+      ? connectHost(source.hostId)
+      : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
 }
@@ -1815,10 +1830,11 @@ export function hideSelection(tabId: string) {
   setTabSelection(tabId, (sel) => (sel.hidden === sel.seq ? sel : { ...sel, hidden: sel.seq }));
 }
 
-/** The host name the selection block carries: the tab host's display name. */
+/** The host name the selection block carries: the tab host's display name, or a local tab's computer (§7.5). */
 export function selectionHost(tabId: string): string {
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return "";
+  if (tab.local) return localName(useApp.getState().info.device_name);
   return useVaultData.getState().hosts.find((h) => h.id === tab.hostId)?.name ?? tab.title;
 }
 

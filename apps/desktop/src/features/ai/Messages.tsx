@@ -105,6 +105,8 @@ const COPIED_MS = 1500;
 export interface HostInfo {
   name: string;
   target: string;
+  /** This computer, for a local tab (§7.5): its approval cards say so, and so do their Always allow labels. */
+  local?: boolean;
 }
 
 export function hostInfo(host: HostView | undefined): HostInfo | null {
@@ -402,7 +404,7 @@ function NoteDivider({ note }: { note: Note }) {
     <div className={s.noteDivider} role="note" title={noteTitle(t, note)}>
       <span className={s.noteText}>
         <Icon name={icon} size={12} />
-        {noteLabel(t, note)}
+        {noteLabel(t, note, useApp.getState().info.device_name)}
       </span>
     </div>
   );
@@ -1122,8 +1124,11 @@ interface AllowLabels {
   alwaysHint: string;
 }
 
-/** The labels of a card's Allow for this conversation and Always allow (AI-19, AI-31), which name what they cover. */
-function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp: McpToolInfo | null, bypass: boolean): AllowLabels {
+/**
+ * The labels of a card's Allow for this conversation and Always allow (AI-19, AI-31), which name what they
+ * cover; `local` for a call on this computer (§7.5).
+ */
+function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp: McpToolInfo | null, bypass: boolean, local: boolean): AllowLabels {
   switch (scope.kind) {
     case "command": {
       const prefix = scope.prefixes.join(", ");
@@ -1131,8 +1136,8 @@ function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp
         here: t("ai.approval.allowCommandHere", { prefix }),
         hereHint: t("ai.approval.allowCommandHereHint", { prefix }),
         // Interpreters, deleting and the like are allowed for the conversation only (`savablePrefixes`).
-        always: scope.savable ? t("ai.approval.alwaysAllowCommand", { prefix }) : null,
-        alwaysHint: t("ai.approval.alwaysAllowCommandHint", { prefix }),
+        always: scope.savable ? t(local ? "ai.approval.alwaysAllowLocalCommand" : "ai.approval.alwaysAllowCommand", { prefix }) : null,
+        alwaysHint: t(local ? "ai.approval.alwaysAllowLocalCommandHint" : "ai.approval.alwaysAllowCommandHint", { prefix }),
       };
     }
     case "domain": {
@@ -1148,8 +1153,8 @@ function allowLabels(t: ReturnType<typeof useT>, scope: Scope, tool: string, mcp
       return {
         here: t("ai.approval.allowHere"),
         hereHint: t("ai.approval.allowHereHint", { tool }),
-        always: t("ai.approval.alwaysAllowHost"),
-        alwaysHint: t("ai.approval.alwaysAllowHostHint", { tool }),
+        always: t(local ? "ai.approval.alwaysAllowLocal" : "ai.approval.alwaysAllowHost"),
+        alwaysHint: t(local ? "ai.approval.alwaysAllowLocalHint" : "ai.approval.alwaysAllowHostHint", { tool }),
       };
     case "mcp":
       return {
@@ -1202,7 +1207,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
   if (refusal === undefined) {
     const next = mode === "edit" ? argsFrom(kind, args, draft) : null;
     const scope = allowanceScope(kind, next && "json" in next ? (parseArgs(next.json) ?? args) : args, mcp);
-    allow = scope && allowLabels(t, scope, label, mcp, bypass);
+    allow = scope && allowLabels(t, scope, label, mcp, bypass, !!host?.local);
   }
   const run = (allow?: Extract<Decision, { kind: "run" }>["allow"]) => {
     if (holdRun) return;
@@ -1243,7 +1248,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
       ) : (
         host && (
           <div className={s.approvalHost}>
-            <Icon name="hard-drives" size={12} />
+            <Icon name={host.local ? "desktop" : "hard-drives"} size={12} />
             <span className={s.hostName}>{host.name}</span>
             <span className={s.hostTarget}>{host.target}</span>
           </div>

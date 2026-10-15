@@ -7,8 +7,8 @@
 use std::future::Future;
 use std::time::Duration;
 
-use hatoba_ssh::SshSession;
-use hatoba_ssh::remote_file::{self, RemoteFileError};
+use super::conn::Conn;
+use hatoba_ssh::remote_file::RemoteFileError;
 
 use crate::dropped::{FILE_MAX_BYTES, text_of};
 use crate::dto::{AiHostEntry, AiHostFile, AiHostListing, AiHostRefusal};
@@ -19,13 +19,13 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_LISTING_BYTES: u64 = 256 * 1024;
 
 /// The entries of the directory at `path` on the session's host, sorted by name.
-pub async fn list(session: Option<SshSession>, path: &str) -> AiHostListing {
+pub async fn list(session: Option<Conn>, path: &str) -> AiHostListing {
     let Some(session) = session.filter(|s| !s.is_closed()) else {
         return AiHostListing::Refused {
             reason: AiHostRefusal::Disconnected,
         };
     };
-    match within(remote_file::list_dir(&session, path, MAX_LISTING_BYTES)).await {
+    match within(session.list_dir(path, MAX_LISTING_BYTES)).await {
         Ok(dir) => {
             let mut entries: Vec<AiHostEntry> = dir
                 .entries
@@ -50,13 +50,13 @@ pub async fn list(session: Option<SshSession>, path: &str) -> AiHostListing {
 
 /// The text file at `path` on the session's host: UTF-8 without NUL bytes, at most
 /// [`FILE_MAX_BYTES`] as a text file from this computer (AI-35), without a byte order mark.
-pub async fn read(session: Option<SshSession>, path: &str) -> AiHostFile {
+pub async fn read(session: Option<Conn>, path: &str) -> AiHostFile {
     let Some(session) = session.filter(|s| !s.is_closed()) else {
         return AiHostFile::Refused {
             reason: AiHostRefusal::Disconnected,
         };
     };
-    match within(remote_file::read(&session, path, FILE_MAX_BYTES)).await {
+    match within(session.read(path, FILE_MAX_BYTES)).await {
         Ok(file) => match text_of(file.bytes) {
             Some(text) => AiHostFile::Ok {
                 path: file.path,
@@ -84,7 +84,7 @@ async fn within<T>(
 }
 
 /// Why a listing or a read failed, for the panel.
-fn refusal(session: &SshSession, error: Option<RemoteFileError>) -> AiHostRefusal {
+fn refusal(session: &Conn, error: Option<RemoteFileError>) -> AiHostRefusal {
     match error {
         Some(RemoteFileError::NotFound) => AiHostRefusal::NotFound,
         Some(RemoteFileError::IsDirectory | RemoteFileError::NotDirectory) => {

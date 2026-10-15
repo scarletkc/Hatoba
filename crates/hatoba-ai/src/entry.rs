@@ -131,6 +131,9 @@ pub struct EntryPlace {
     /// conversation item's `origin`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// §7.5: with neither a host nor a target, the computer whose local terminal tab it was on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local: Option<String>,
 }
 
 /// A quick-connect target in an [`EntryPlace`].

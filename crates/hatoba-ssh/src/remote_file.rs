@@ -13,7 +13,8 @@
 use std::fmt;
 
 use crate::error::SshError;
-use crate::session::{ExecOutput, SshSession};
+use crate::exec::Exec;
+use crate::session::ExecOutput;
 
 /// The line both scripts print before the resolved path (and the read script before the file),
 /// so that anything the login shell's startup files print to stdout is told apart from them.
@@ -241,7 +242,7 @@ pub struct RemoteEntry {
 
 /// Lists the directory at `path`, at most `max` bytes of entries.
 pub async fn list_dir(
-    session: &SshSession,
+    session: &impl Exec,
     path: &str,
     max: u64,
 ) -> Result<RemoteDir, RemoteFileError> {
@@ -256,7 +257,7 @@ pub async fn list_dir(
 /// Reads at most `max` bytes of the file at `path`, from the start of line `from` (1-based) on,
 /// whatever the file's size: for a page of a file too large to read whole.
 pub async fn read_lines(
-    session: &SshSession,
+    session: &impl Exec,
     path: &str,
     from: u64,
     max: u64,
@@ -271,7 +272,7 @@ pub async fn read_lines(
 
 /// Reads the file at `path`, refusing one larger than `max` bytes.
 pub async fn read(
-    session: &SshSession,
+    session: &impl Exec,
     path: &str,
     max: u64,
 ) -> Result<RemoteFile, RemoteFileError> {
@@ -289,7 +290,7 @@ pub async fn read(
 /// file keeps its own. The file is opened only once the whole content has reached the host, so
 /// a write dropped or cut off on its way leaves the file as it was.
 pub async fn write(
-    session: &SshSession,
+    session: &impl Exec,
     path: &str,
     content: &[u8],
     expect: Expect<'_>,
@@ -307,7 +308,7 @@ pub async fn write(
 /// size, and returns the path as resolved. A symbolic link in the file's place is not deleted
 /// ([`RemoteFileError::SymbolicLink`]): the link is not what was checked.
 pub async fn delete(
-    session: &SshSession,
+    session: &impl Exec,
     path: &str,
     expect: &[u8],
 ) -> Result<String, RemoteFileError> {
@@ -769,14 +770,14 @@ mod tests {
     }
 
     /// The scripts against the local `sh`, `wc`, `cksum` and `dirname` (GNU on Linux, BSD on
-    /// macOS), as [`crate::local_sh`] starts them.
+    /// macOS), as [`crate::test_sh`] starts them.
     #[cfg(unix)]
     mod local_sh {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         use std::path::Path;
 
         use super::super::*;
-        use crate::local_sh::{is_root, run, run_with};
+        use crate::test_sh::{is_root, run, run_with};
 
         fn read_file(home: &Path, path: &str, max: u64) -> Result<RemoteFile, RemoteFileError> {
             let (command, stdin) = read_request(path, max)?;

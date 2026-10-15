@@ -30,8 +30,9 @@
 use std::time::Duration;
 
 use crate::error::SshError;
+use crate::exec::Exec;
 use crate::remote_file::{after_marker, command, last_line};
-use crate::session::{ExecOutput, SshSession};
+use crate::session::ExecOutput;
 
 /// Reads the path, and the directories below it to search instead, from the variables `f` and `s`,
 /// and resolves them as the file tools resolve a path, `s` only when `f` is a directory. Exit
@@ -273,7 +274,7 @@ pub struct SearchOutput {
 /// the list. The host ends the search after `time_limit`, and within about a second of the
 /// channel closing.
 pub async fn glob(
-    session: &SshSession,
+    session: &impl Exec,
     scope: &Scope<'_>,
     max: u64,
     time_limit: Duration,
@@ -289,7 +290,7 @@ pub async fn glob(
 /// Runs `query`, and reads at most `max` bytes of what `rg` or `grep` prints. The host ends the
 /// search as [`glob`]'s.
 pub async fn grep(
-    session: &SshSession,
+    session: &impl Exec,
     query: &GrepQuery<'_>,
     max: u64,
     time_limit: Duration,
@@ -593,7 +594,7 @@ mod tests {
     }
 
     /// The scripts against the local `sh`, `find`, `grep` and, where installed, `rg`, as
-    /// [`crate::local_sh`] starts them.
+    /// [`crate::test_sh`] starts them.
     #[cfg(unix)]
     mod local_sh {
         use std::io::{Read, Write};
@@ -605,7 +606,7 @@ mod tests {
 
         use super::super::*;
         use super::LIMIT;
-        use crate::local_sh::{is_root, run_with};
+        use crate::test_sh::{is_root, run_with};
 
         /// What the scripts find on `PATH`.
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]

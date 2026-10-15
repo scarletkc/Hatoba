@@ -354,6 +354,7 @@ mod tests {
                     host_id: None,
                     quick_target: None,
                     origin: None,
+                    local: None,
                     pinned: false,
                     context_start: None,
                     effort: None,

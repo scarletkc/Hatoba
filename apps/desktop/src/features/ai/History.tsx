@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useVaultData } from "@/app/data";
+import { useApp } from "@/app/store";
 import { Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { confirm, Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { formatRelative, useT } from "@/i18n";
@@ -171,7 +172,8 @@ export function History({ slotId, currentId, onClose }: { slotId: string; curren
                   <div className={s.rowMeta}>
                     {place.kind === "host" && <Icon name="hard-drives" size={11} />}
                     {place.kind === "target" && <Icon name="terminal-window" size={11} />}
-                    <span className={s.metaHost}>{placeName(t, place)}</span>
+                    {place.kind === "local" && <Icon name="desktop" size={11} />}
+                    <span className={s.metaHost}>{placeName(t, place, useApp.getState().info.device_name)}</span>
                     <span className={s.dot}>·</span>
                     <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
                   </div>
@@ -342,7 +344,7 @@ function SearchResults({
               )}
               {c && (
                 <div className={s.rowMeta}>
-                  <span className={s.metaHost}>{placeName(t, conversationPlace(c, hosts))}</span>
+                  <span className={s.metaHost}>{placeName(t, conversationPlace(c, hosts), useApp.getState().info.device_name)}</span>
                   <span className={s.dot}>·</span>
                   <span className={s.time}>{formatRelative(t.locale, c.last_activity)}</span>
                 </div>

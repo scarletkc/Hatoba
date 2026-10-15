@@ -555,13 +555,18 @@ export const events = {
 /* Types */
 /**
  *  An AI approval saved on this device (AI-19): never synced, kept until the user removes it.
- *  A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab.
+ *  A command or tool approval names its host by `host_id`, or by `target` for a quick-connect tab
+ *  or this computer's local tabs.
  */
 export type AiAllowance = {
 	kind: AiAllowanceKind,
 	/**  The saved host the approval is for. */
 	host_id: string | null,
-	/**  The quick-connect target (`user@host:port`) the approval is for, without a saved host. */
+	/**
+	 *  The quick-connect target (`user@host:port`) the approval is for, without a saved host, or
+	 *  `local` for this computer's local tabs (§7.5). Approvals stay on the device, so `local`
+	 *  always means the computer that keeps them.
+	 */
 	target: string | null,
 	/**  The command prefix, the tool's name, or the domain. */
 	value: string,
@@ -661,6 +666,11 @@ export type AiConversationView = {
 	 *  not tell which it is; its next message on a tab of a host or target notes the move from it.
 	 */
 	origin: string | null,
+	/**
+	 *  §7.5: with neither a host nor a target, the computer whose local terminal tab it last
+	 *  worked on, by its name (`AppInfo.device_name` on that computer).
+	 */
+	local: string | null,
 	pinned: boolean,
 	/**  `entry_id` where the context sent to the model starts (AI-21). */
 	context_start: string | null,
@@ -831,6 +841,21 @@ export type AiJudgeSampleOutcome = {
 	expected: AiJudgeDecision,
 	/**  What the judge decided, with its answers in the order it asks its questions. */
 	verdict: AiAutoVerdict,
+};
+
+/**  A local terminal tab (§7.5) in a turn's context. */
+export type AiLocalTab = {
+	/**
+	 *  The computer's name: this one's (`AppInfo.device_name`) for a local tab, or the one a home
+	 *  tab conversation recorded.
+	 */
+	device: string,
+	/**
+	 *  The tab's shell, for a local tab: its name as the shell picker shows it in English, and
+	 *  its kind, which decides how the tools run and what the system prompt says of them.
+	 */
+	shell: string | null,
+	kind: LocalShellKind | null,
 };
 
 /**  A model of a provider (AI-03). Token limits are `None` when unknown. */
@@ -1092,6 +1117,12 @@ export type AiTurnContext = {
 	 *  moves the conversation off its saved host, and the request names the target instead.
 	 */
 	target: QuickTarget | null,
+	/**
+	 *  A local terminal tab's computer and shell (§7.5), or on the home tab the computer a
+	 *  conversation recorded, while there is neither a host nor a target. The next message moves
+	 *  the conversation to that computer.
+	 */
+	local: AiLocalTab | null,
 	/**  A connected terminal tab is attached; `false` offers no terminal tools (AI-09). */
 	tab: boolean,
 	/**
@@ -1173,6 +1204,11 @@ export type AppInfo = {
 	 *  empty when unknown.
 	 */
 	local_user: string,
+	/**
+	 *  This computer's name, as the sync device list shows it, which a conversation on a local
+	 *  tab records (§7.5).
+	 */
+	device_name: string,
 };
 
 export type Appearance = "system" | "light" | "dark";

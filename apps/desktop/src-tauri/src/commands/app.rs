@@ -17,6 +17,7 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
         platform: platform::platform(),
         mica: state.mica,
         local_user: platform::system::default_user(),
+        device_name: platform::system::device_name(),
     }
 }
 

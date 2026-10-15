@@ -9,7 +9,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-tokio.workspace = true
+# `process`: the scripts of the AI's tools also run with the local `sh` (a local tab, §7.5).
+tokio = { workspace = true, features = ["process"] }
 tokio-util.workspace = true
 serde.workspace = true
 thiserror.workspace = true

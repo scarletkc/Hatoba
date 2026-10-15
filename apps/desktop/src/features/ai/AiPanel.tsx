@@ -4,6 +4,7 @@ import { useApp } from "@/app/store";
 import { useTabs, type SessionTab } from "@/app/tabs";
 import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { reconnectSession } from "@/features/terminal/connect";
+import { shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
 import type { HostView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
@@ -25,7 +26,7 @@ import { usePanelFileDrop } from "./fileDrop";
 import { History } from "./History";
 import { hostInfo, MessageList } from "./Messages";
 import { chats, conversationModel, hasModels } from "./models";
-import { connectionFor, movedFrom } from "./place";
+import { connectionFor, movedFrom, placeLabel } from "./place";
 import { sideRunning } from "./side";
 import { blankSlot, HOME_SLOT, offersHomeConversation, useAi, type Slot } from "./store";
 import { approvalOf } from "./turn";
@@ -51,6 +52,8 @@ export function AiPanel({ slotId }: { slotId: string }) {
   const tab = useTabs((st) => (slotId === HOME_SLOT ? undefined : st.tabs.find((x) => x.id === slotId)));
   const hosts = useVaultData((st) => st.hosts);
   const tabHost = tab ? hosts.find((h) => h.id === tab.hostId) : undefined;
+  // §7.5: a local tab is this computer, named so wherever a tab's host is named.
+  const local = tab?.local ? { name: t("terminal.local.thisComputer"), target: shellName(tab.local, t), local: true } : null;
   const [view, setView] = useState<"chat" | "history">("chat");
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -118,7 +121,7 @@ export function AiPanel({ slotId }: { slotId: string }) {
   };
 
   const title = slot.conversation?.title || (slot.conversationId ? t("ai.untitled") : t("ai.newConversation"));
-  const hostLabel = tab ? (tabHost?.name ?? tab.title) : t("ai.noTerminal");
+  const hostLabel = tab ? (local ? `${local.name} · ${local.target}` : (tabHost?.name ?? tab.title)) : t("ai.noTerminal");
 
   return (
     <aside
@@ -200,7 +203,13 @@ export function AiPanel({ slotId }: { slotId: string }) {
               </LinkButton>
             </div>
           ) : (
-            <MessageList key={`${slotId}:${slot.conversationId ?? ""}`} slotId={slotId} slot={slot} host={hostInfo(tabHost)} empty={<EmptyConversation tab={tab} host={tabHost} />} />
+            <MessageList
+              key={`${slotId}:${slot.conversationId ?? ""}`}
+              slotId={slotId}
+              slot={slot}
+              host={local ?? hostInfo(tabHost)}
+              empty={<EmptyConversation tab={tab} host={tabHost} />}
+            />
           )}
           <Composer slotId={slotId} slot={slot} model={model} tools={!!tab} />
         </>
@@ -225,11 +234,12 @@ function Notice({ icon, tone, children, action }: { icon: ReactNode; tone?: "war
  */
 function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: Slot; tab: SessionTab | undefined; tabHost: HostView | undefined; hosts: HostView[] }) {
   const t = useT();
+  const device = useApp((st) => st.info.device_name);
   // The title of the home tab's conversation while this tab offers to continue it (AI-09).
   const homeTitle = useAi((st) => (tab && offersHomeConversation(slot, st.slots[HOME_SLOT]) ? (st.slots[HOME_SLOT]?.conversation?.title ?? "") : null));
   const items: ReactNode[] = [];
   if (!tab) {
-    const connection = slot.conversation ? connectionFor(slot.conversation, hosts) : null;
+    const connection = slot.conversation ? connectionFor(slot.conversation, hosts, device) : null;
     if (connection)
       items.push(
         <Notice
@@ -237,7 +247,7 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
           icon={<Icon name="terminal-window" size={14} />}
           action={
             <Button size="xs" icon="plugs-connected" onClick={() => void connectConversation(connection.source)}>
-              {t("ai.connectTo", { host: connection.name })}
+              {connection.source === "local" ? t("ai.openLocal") : t("ai.connectTo", { host: connection.name })}
             </Button>
           }
         >
@@ -246,7 +256,7 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
       );
     else if (slot.entries.length > 0) items.push(<Notice key="tab" icon={<Icon name="terminal-window" size={14} />}>{t("ai.notice.noTab")}</Notice>);
   } else {
-    const name = tabHost?.name ?? tab.title;
+    const name = tab.local ? `${t("terminal.local.thisComputer")} · ${tab.title}` : (tabHost?.name ?? tab.title);
     if (tab.status === "disconnected" || tab.status === "failed")
       items.push(
         <Notice
@@ -255,7 +265,7 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
           icon={<Icon name="plugs" size={14} />}
           action={
             <Button size="xs" icon="arrow-clockwise" onClick={() => void reconnectSession(tab.id)}>
-              {t("terminal.reconnect")}
+              {t(tab.local ? "terminal.local.restart" : "terminal.reconnect")}
             </Button>
           }
         >
@@ -278,11 +288,11 @@ function Notices({ slotId, slot, tab, tabHost, hosts }: { slotId: string; slot: 
         </Notice>,
       );
     // Only for a move the next message notes, named as its divider will name them.
-    const move = slot.conversation ? movedFrom(slot.conversation, tab, hosts) : null;
+    const move = slot.conversation ? movedFrom(slot.conversation, tab, hosts, device) : null;
     if (move)
       items.push(
         <Notice key="move" icon={<Icon name="arrows-left-right" size={14} />}>
-          {t("ai.notice.moveHost", { from: move.from || t("ai.history.hostGone"), to: move.to })}
+          {t("ai.notice.moveHost", { from: move.from ? placeLabel(t, move.from, device) : t("ai.history.hostGone"), to: placeLabel(t, move.to, device) })}
         </Notice>,
       );
   }
@@ -296,7 +306,9 @@ function EmptyConversation({ tab, host }: { tab: SessionTab | undefined; host: H
       <div className={s.emptyIcon}>
         <Icon name="sparkle" size={20} />
       </div>
-      <div className={s.emptyTitle}>{tab ? t("ai.empty.title", { host: host?.name ?? tab.title }) : t("ai.empty.homeTitle")}</div>
+      <div className={s.emptyTitle}>
+        {tab ? t("ai.empty.title", { host: tab.local ? t("terminal.local.thisComputer") : (host?.name ?? tab.title) }) : t("ai.empty.homeTitle")}
+      </div>
       <div className={s.emptyBody}>{tab ? t("ai.empty.body") : t("ai.empty.homeBody")}</div>
     </div>
   );

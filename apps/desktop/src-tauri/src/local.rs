@@ -2,9 +2,10 @@
 //! Their ids are UUIDv7 like the SSH sessions', so one id never names both.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use hatoba_local::{LocalPty, Shell};
+use hatoba_local::{LocalPty, LocalTools, Shell};
 
 use crate::error::{AppError, AppResult};
 
@@ -12,12 +13,30 @@ use crate::error::{AppError, AppResult};
 pub struct LocalSession {
     pub pty: Arc<LocalPty>,
     pub shell: Shell,
+    /// How the AI assistant's tools run on the tab (AI-12, AI-38…41, AI-48, AI-49).
+    pub tools: LocalTools,
+    closed: AtomicBool,
 }
 
 impl LocalSession {
+    pub fn new(pty: Arc<LocalPty>, shell: Shell, tools: LocalTools) -> Self {
+        Self {
+            pty,
+            shell,
+            tools,
+            closed: AtomicBool::new(false),
+        }
+    }
+
     /// Ends the shell and the console programs it started.
     pub fn close(&self) {
+        self.closed.store(true, Ordering::Relaxed);
         self.pty.close();
+    }
+
+    /// `true` once the shell has ended, so the tab's tools return the disconnected result.
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Relaxed)
     }
 }
 
@@ -63,6 +82,14 @@ impl LocalManager {
     pub fn take_all(&self) -> Vec<(String, Arc<LocalSession>)> {
         lock(&self.sessions).drain().collect()
     }
+}
+
+/// The variables the AI's tools on a local tab start their `sh` with (macOS and Linux): on macOS
+/// the login shell's `PATH`, which an app started from the Dock lacks, as MCP servers get it.
+pub fn tools_env() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    crate::platform::shell_path::default_path()
+        .map(|path| vec![("PATH".into(), path.to_owned())])
+        .unwrap_or_default()
 }
 
 /// The variables a local shell starts with, on top of Hatoba's own environment: the terminal

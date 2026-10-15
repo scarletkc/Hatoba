@@ -19,6 +19,7 @@ const view: AiConversationView = {
   host_id: null,
   quick_target: null,
   origin: null,
+      local: null,
   pinned: false,
   context_start: null,
   effort: null,

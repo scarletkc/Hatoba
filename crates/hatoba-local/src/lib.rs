@@ -9,7 +9,9 @@
 pub mod error;
 pub mod pty;
 pub mod shells;
+pub mod tools;
 
 pub use error::LocalError;
 pub use pty::{LocalPty, PtyEvent, PtySize};
 pub use shells::{Shell, ShellKind};
+pub use tools::LocalTools;

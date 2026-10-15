@@ -50,12 +50,15 @@ impl AiEnv for AppEnv {
         sync::local_change(&self.0);
     }
 
-    fn session(&self, session_id: &str) -> Option<hatoba_ssh::SshSession> {
-        state(&self.0)
-            .ssh
-            .get(session_id)
-            .ok()
-            .map(|live| live.session.clone())
+    fn session(&self, session_id: &str) -> Option<crate::ai::conn::Conn> {
+        let state = state(&self.0);
+        match state.ssh.get(session_id) {
+            Ok(live) => Some(crate::ai::conn::Conn::Ssh(live.session.clone())),
+            Err(_) => state
+                .local
+                .find(session_id)
+                .map(crate::ai::conn::Conn::Local),
+        }
     }
 
     fn app_version(&self) -> String {

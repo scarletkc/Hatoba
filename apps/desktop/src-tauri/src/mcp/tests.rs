@@ -405,6 +405,7 @@ fn context(disabled: &[&str]) -> AiTurnContext {
         effort: None,
         host_id: None,
         target: None,
+        local: None,
         tab: true,
         session_id: None,
         disabled_mcp_servers: disabled.iter().map(|s| (*s).to_owned()).collect(),

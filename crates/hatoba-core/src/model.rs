@@ -817,6 +817,10 @@ pub struct AiConversation {
     /// moves the fork starts with a note from it, and the move clears it. `None` (absent) is none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// §7.5: the name of the computer whose local terminal tab it last worked on, while it has
+    /// neither a host nor a target. `None` (absent) is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local: Option<String>,
     /// Pinned to the top of the history.
     pub pinned: bool,
     /// `entry_id` where the context sent to the model starts (AI-21).
@@ -2028,6 +2032,7 @@ mod tests {
             host_id: Some("h1".into()),
             quick_target: None,
             origin: None,
+            local: None,
             pinned: true,
             context_start: Some("e1".into()),
             effort: Some(AiEffort::Xhigh),

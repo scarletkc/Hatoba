@@ -622,6 +622,7 @@ async fn anthropic_streams_thinking_text_and_tool_use() {
         terminal: true,
         web_search: true,
         read_skill: false,
+        ..ToolSet::default()
     });
     let entries = vec![AiEntry::user(1, "Is the disk full?")];
     let (result, events) = run(
@@ -1285,6 +1286,7 @@ fn request_bodies_are_deterministic() {
         terminal: true,
         web_search: true,
         read_skill: true,
+        ..ToolSet::default()
     });
     let req = request(&model, &entries, &tools);
     let a = serde_json::to_string(&request::anthropic(&req, true, true).body).unwrap();

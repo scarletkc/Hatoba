@@ -53,8 +53,9 @@ use hatoba_ai::mcp::deferred;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
-    self, CommandStop, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools,
-    ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolSet, WebSearchArgs, escape_closing_tag,
+    self, CommandStop, FetchUrlArgs, LocalPrompt, PermissionMode, PromptContext, PromptModel,
+    PromptTools, ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolPlace, ToolSet, WebSearchArgs,
+    escape_closing_tag,
 };
 use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
@@ -74,9 +75,10 @@ use zeroize::Zeroizing;
 use crate::dto::{
     AiAutoVerdict, AiConversationDetail, AiConversationView, AiEffort, AiEntryView, AiFileChange,
     AiFileChangeState, AiFilePreview, AiFileRevert, AiFinish, AiJudgeAnswer, AiJudgeDecision,
-    AiJudgeSampleOutcome, AiModelRef, AiPermissionMode, AiSearchHit, AiSendInput, AiSendStarted,
-    AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiToolCall, AiToolResultInput,
-    AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent, AiUsage, QuickTarget,
+    AiJudgeSampleOutcome, AiLocalTab, AiModelRef, AiPermissionMode, AiSearchHit, AiSendInput,
+    AiSendStarted, AiSideAnswer, AiSideEvent, AiSideQuestionInput, AiSkillCommand, AiToolCall,
+    AiToolResultInput, AiToolRun, AiToolStatus, AiTurnContext, AiTurnEndReason, AiTurnEvent,
+    AiUsage, LocalShellKind, QuickTarget,
 };
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::mcp::{McpManager, Offer, OfferedTool};
@@ -185,13 +187,15 @@ pub trait AiEnv: Send + Sync + 'static {
     /// The vault changed: schedules a sync (`sync::local_change`). Never called with the vault
     /// guard held.
     fn changed(&self);
-    /// The SSH connection of a terminal tab's session, while it is open (AI-08).
-    fn session(&self, session_id: &str) -> Option<hatoba_ssh::SshSession>;
-    /// The identification string the server of a tab's open session sent (§13.1).
+    /// What a terminal tab's session runs over, while it is open (AI-08): its SSH connection, or
+    /// a local tab's shell (§7.5).
+    fn session(&self, session_id: &str) -> Option<conn::Conn>;
+    /// The identification string the server of a tab's open SSH session sent (§13.1).
     fn server_id(&self, session_id: &str) -> Option<String> {
-        self.session(session_id)
-            .filter(|s| !s.is_closed())
-            .and_then(|s| s.server_id().map(str::to_owned))
+        match self.session(session_id)? {
+            conn::Conn::Ssh(s) if !s.is_closed() => s.server_id().map(str::to_owned),
+            _ => None,
+        }
     }
     /// The running app's version, which the built-in skill states (AI-34).
     fn app_version(&self) -> String;
@@ -1175,6 +1179,7 @@ impl AiManager {
             title,
             host_id: place.host_id,
             quick_target: place.quick_target,
+            local: place.local,
             origin,
             pinned: false,
             context_start: None,
@@ -1418,6 +1423,7 @@ impl AiManager {
             if let Some(place) = moved_to {
                 conversation.host_id = place.host_id;
                 conversation.quick_target = place.quick_target;
+                conversation.local = place.local;
                 // AI-43: the move's note named the server a fork's copies came from.
                 conversation.origin = None;
             }
@@ -1516,7 +1522,13 @@ impl AiManager {
                 // quick-connect target (HOST-12), which is no saved host, so the conversation
                 // records the target instead. On the home tab it stays where it was.
                 let target = tab_target(&context);
-                let moves = moves_to(&conversation, context.host_id.as_deref(), target.as_ref());
+                let local = tab_local(&context);
+                let moves = moves_to(
+                    &conversation,
+                    context.host_id.as_deref(),
+                    target.as_ref(),
+                    local.as_deref(),
+                );
                 let mut moved_to = None;
                 if moves {
                     if came_from.is_none() {
@@ -1530,11 +1542,16 @@ impl AiManager {
                     moved_to = Some(Place {
                         host_id: context.host_id.clone(),
                         quick_target: target,
+                        local,
                     });
                 }
-                let (host_id, quick_target) = match &moved_to {
-                    Some(place) => (&place.host_id, &place.quick_target),
-                    None => (&conversation.host_id, &conversation.quick_target),
+                let (host_id, quick_target, local) = match &moved_to {
+                    Some(place) => (&place.host_id, &place.quick_target, &place.local),
+                    None => (
+                        &conversation.host_id,
+                        &conversation.quick_target,
+                        &conversation.local,
+                    ),
                 };
                 // An edit keeps the move the deleted messages noted, unless the note names the
                 // server the message goes from under its other name: a target and the saved host
@@ -1552,7 +1569,8 @@ impl AiManager {
                 let host_now = host_id
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
-                    .or_else(|| quick_target.as_ref().map(target_name));
+                    .or_else(|| quick_target.as_ref().map(target_name))
+                    .or_else(|| local.as_deref().map(local_name));
                 let reverts = pending_reverts(&v, &id, &ids[..earlier.len()], &earlier);
                 let notes = notes_before(
                     &v,
@@ -1569,6 +1587,7 @@ impl AiManager {
                     title: title_of(text),
                     host_id: context.host_id.clone(),
                     quick_target: tab_target(&context),
+                    local: tab_local(&context),
                     origin: None,
                     pinned: false,
                     context_start: None,
@@ -1581,7 +1600,8 @@ impl AiManager {
                     .host_id
                     .as_deref()
                     .and_then(|id| host_name(&v, id))
-                    .or_else(|| created.quick_target.as_ref().map(target_name));
+                    .or_else(|| created.quick_target.as_ref().map(target_name))
+                    .or_else(|| created.local.as_deref().map(local_name));
                 let notes = notes_before(&v, &[], None, host_now.as_deref(), &context, &[]);
                 (
                     id,
@@ -3722,7 +3742,8 @@ fn judge_state(
         .host_id
         .as_deref()
         .and_then(|id| host_name(v, id))
-        .or_else(|| conversation.quick_target.as_ref().map(target_name));
+        .or_else(|| conversation.quick_target.as_ref().map(target_name))
+        .or_else(|| conversation.local.as_deref().map(local_name));
     let user_messages = entries[..at]
         .iter()
         .filter_map(|e| match &e.body {
@@ -4006,6 +4027,20 @@ fn prompt(
         .and_then(|id| v.get(id))
         .and_then(Item::as_host);
     let target = context.target.as_ref().map(quick_label);
+    // §7.5: a local tab's computer, named like a host, and its shell.
+    let local = local_tab(context);
+    let local_named = local.map(|l| local_name(&l.device));
+    let local_user = local.map(|_| crate::platform::system::default_user());
+    let os = crate::platform::os_label();
+    let local_prompt = local.and_then(|l| {
+        Some(LocalPrompt {
+            device: &l.device,
+            os: &os,
+            shell: l.shell.as_deref()?,
+            place: tool_place(context),
+            wsl: l.kind == Some(LocalShellKind::Wsl),
+        })
+    });
     let provider = v.get(&context.provider_id).and_then(Item::as_ai_provider);
     let model_name = provider
         .and_then(|p| p.models.iter().find(|m| m.id == context.model_id))
@@ -4030,11 +4065,16 @@ fn prompt(
             name: model_name,
             provider: provider.map_or("", |p| p.name.as_str()),
         },
-        host_name: host.map(|h| h.name.as_str()).or(target.as_deref()),
+        host_name: host
+            .map(|h| h.name.as_str())
+            .or(target.as_deref())
+            .or(local_named.as_deref()),
         host_user: host
             .map(|h| h.username.as_str())
-            .or(context.target.as_ref().map(|t| t.username.as_str())),
+            .or(context.target.as_ref().map(|t| t.username.as_str()))
+            .or(local_user.as_deref()),
         server_id,
+        local: local_prompt,
         date: &date,
         instructions: bytes_prefix(
             &settings.ai.custom_instructions,
@@ -4061,7 +4101,28 @@ fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
         terminal: context.tab,
         web_search: web_search_for(v, &context.provider_id, &context.model_id).is_some(),
         read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
+        place: tool_place(context),
     })
+}
+
+/// A local tab's computer and shell (§7.5), while the context names neither a host nor a target.
+fn local_tab(context: &AiTurnContext) -> Option<&AiLocalTab> {
+    context
+        .local
+        .as_ref()
+        .filter(|_| context.host_id.is_none() && context.target.is_none())
+}
+
+/// Where the terminal tools act, which their descriptions say: a host, or this computer with
+/// `sh` (macOS, Linux, WSL) or Windows itself (§7.5).
+fn tool_place(context: &AiTurnContext) -> ToolPlace {
+    match local_tab(context).and_then(|l| l.kind) {
+        None => ToolPlace::Ssh,
+        Some(LocalShellKind::Unix | LocalShellKind::Wsl) => ToolPlace::Local,
+        Some(LocalShellKind::Powershell | LocalShellKind::Cmd | LocalShellKind::GitBash) => {
+            ToolPlace::LocalWindows
+        }
+    }
 }
 
 /// At most the first `max` bytes of `s`, cut at a character. Saving refuses longer text; text
@@ -4465,8 +4526,8 @@ fn parse<T: DeserializeOwned>(arguments: &str) -> Result<T, String> {
     serde_json::from_str(arguments).map_err(|e| format!("The arguments are not valid: {e}."))
 }
 
-/// The tab's SSH connection while it is open (AI-08).
-fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<hatoba_ssh::SshSession> {
+/// What the tab's tools run over while it is open (AI-08).
+fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<conn::Conn> {
     session_id
         .and_then(|id| env.session(id))
         .filter(|s| !s.is_closed())
@@ -4475,12 +4536,12 @@ fn live_session(env: &dyn AiEnv, session_id: Option<&str>) -> Option<hatoba_ssh:
 /// The server a revert (AI-41) on the tab `session_id` runs on, as file changes name it; `None`
 /// while the tab is not connected.
 pub fn session_server(env: &dyn AiEnv, session_id: Option<&str>) -> Option<String> {
-    live_session(env, session_id).map(|s| files::server(&s))
+    live_session(env, session_id).map(|s| s.server())
 }
 
-/// AI-12: `command` on a new exec channel of the tab's connection, with the call's timeout. A
-/// stop or the timeout ends the command and the processes it started, and the result says
-/// whether they ended (AI-18).
+/// AI-12: `command` on a new exec channel of the tab's connection, or apart from a local tab's
+/// shell (§7.5), with the call's timeout. A stop or the timeout ends the command and the
+/// processes it started, and the result says whether they ended (AI-18).
 async fn run_command(
     env: &dyn AiEnv,
     session_id: Option<&str>,
@@ -4497,7 +4558,13 @@ async fn run_command(
             () = tokio::time::sleep(limit) => {}
         }
     };
-    match remote_command::run(&session, &args.command, stop).await {
+    let ran = match &session {
+        conn::Conn::Ssh(ssh) => remote_command::run(ssh, &args.command, stop)
+            .await
+            .map_err(|e| e.message),
+        conn::Conn::Local(local) => local.tools.run_command(&args.command, stop).await,
+    };
+    match ran {
         Ok(run) => {
             let stdout = String::from_utf8_lossy(&run.output.stdout);
             let stderr = String::from_utf8_lossy(&run.output.stderr);
@@ -4525,9 +4592,9 @@ async fn run_command(
             (status, tools::truncate_result(&content))
         }
         Err(_) if session.is_closed() => (ToolStatus::Error, DISCONNECTED.to_owned()),
-        Err(e) => (
+        Err(message) => (
             ToolStatus::Error,
-            format!("The command could not run: {}", e.message),
+            format!("The command could not run: {message}"),
         ),
     }
 }
@@ -5250,6 +5317,25 @@ fn tab_target(context: &AiTurnContext) -> Option<AiQuickTarget> {
         .map(|t| AiQuickTarget::new(&t.username, &t.address, t.port))
 }
 
+/// The computer of a local tab (§7.5), or the one a home tab conversation recorded, while the
+/// context names neither a host nor a target.
+fn tab_local(context: &AiTurnContext) -> Option<String> {
+    context
+        .local
+        .as_ref()
+        .filter(|_| context.host_id.is_none() && context.target.is_none())
+        .map(|l| l.device.clone())
+}
+
+/// What a local tab's computer (§7.5) is called where a host's display name would be: in notes,
+/// the judge's state and the system prompt of a conversation without a terminal.
+fn local_name(device: &str) -> String {
+    format!("{device} {LOCAL_SUFFIX}")
+}
+
+/// What follows a computer's name in [`local_name`].
+const LOCAL_SUFFIX: &str = "(local terminal)";
+
 /// A saved host's address, port, and user in the form a conversation records a target, which is
 /// equal to a target's when HOST-12 would pick the host for it.
 fn host_target(v: &Vault, host_id: &str) -> Option<AiQuickTarget> {
@@ -5293,6 +5379,7 @@ fn fork_place(
                     .quick_target
                     .as_ref()
                     .map(|t| AiQuickTarget::new(&t.username, &t.address, t.port)),
+                local: came_from.local.clone(),
             };
             return (place, came_from.origin.clone());
         }
@@ -5303,6 +5390,7 @@ fn fork_place(
     let place = Place {
         host_id: original.host_id.clone(),
         quick_target: original.quick_target.clone(),
+        local: original.local.clone(),
     };
     (place, original.origin.clone())
 }
@@ -5320,12 +5408,26 @@ fn place_named(hosts: &[(String, String)], from: String) -> (Place, Option<Strin
         let place = Place {
             host_id: Some(host_id.clone()),
             quick_target: None,
+            local: None,
+        };
+        return (place, None);
+    }
+    if let Some(device) = from
+        .strip_suffix(LOCAL_SUFFIX)
+        .and_then(|d| d.strip_suffix(' '))
+        .filter(|d| !d.is_empty())
+    {
+        let place = Place {
+            host_id: None,
+            quick_target: None,
+            local: Some(device.to_owned()),
         };
         return (place, None);
     }
     let place = Place {
         host_id: None,
         quick_target: parse_target(&from),
+        local: None,
     };
     let origin = place.quick_target.is_none().then_some(from);
     (place, origin)
@@ -5342,6 +5444,7 @@ fn entry_place(conversation: &AiConversation) -> EntryPlace {
             port: t.port,
         }),
         origin: conversation.origin.clone(),
+        local: conversation.local.clone(),
     }
 }
 
@@ -5369,11 +5472,12 @@ fn parse_target(label: &str) -> Option<AiQuickTarget> {
     Some(AiQuickTarget::new(username, address, port))
 }
 
-/// Where a message moves its conversation (AI-09): to a saved host, or to the quick-connect
-/// target it records in place of one (HOST-12).
+/// Where a message moves its conversation (AI-09): to a saved host, to the quick-connect target
+/// it records in place of one (HOST-12), or to a computer's local terminal (§7.5).
 struct Place {
     host_id: Option<String>,
     quick_target: Option<AiQuickTarget>,
+    local: Option<String>,
 }
 
 /// What [`AiManager::open_turn`] hands on: the conversation's id, the turn, the notes, the move,
@@ -5438,24 +5542,34 @@ fn moved_from(
             None
         }
         (None, Some(old)) => Some(target_name(old)),
-        (None, None) => conversation.origin.clone(),
+        (None, None) => conversation
+            .local
+            .as_deref()
+            .map(local_name)
+            .or_else(|| conversation.origin.clone()),
     }
 }
 
-/// AI-09: whether the next message moves the conversation to the tab's host `host_id`, or to the
-/// tab's quick-connect `target` (HOST-12) when it has no saved host. On the home tab, with
-/// neither, it stays where it was.
+/// AI-09: whether the next message moves the conversation to the tab's host `host_id`, to the
+/// tab's quick-connect `target` (HOST-12) when it has no saved host, or to the computer of a local
+/// tab (§7.5). On the home tab, with none of them, it stays where it was.
 fn moves_to(
     conversation: &AiConversation,
     host_id: Option<&str>,
     target: Option<&AiQuickTarget>,
+    local: Option<&str>,
 ) -> bool {
-    match (host_id, target) {
-        (Some(host_id), _) => conversation.host_id.as_deref() != Some(host_id),
-        (None, Some(target)) => {
+    match (host_id, target, local) {
+        (Some(host_id), _, _) => conversation.host_id.as_deref() != Some(host_id),
+        (None, Some(target), _) => {
             conversation.host_id.is_some() || conversation.quick_target.as_ref() != Some(target)
         }
-        (None, None) => false,
+        (None, None, Some(device)) => {
+            conversation.host_id.is_some()
+                || conversation.quick_target.is_some()
+                || conversation.local.as_deref() != Some(device)
+        }
+        (None, None, None) => false,
     }
 }
 
@@ -5472,21 +5586,25 @@ fn next_message_notes(
     context: &AiTurnContext,
 ) -> String {
     let target = tab_target(context);
+    let local = tab_local(context);
     let host_id = context.host_id.as_deref();
-    let (came_from, host_now) = if moves_to(conversation, host_id, target.as_ref()) {
-        let came_from = moved_from(v, conversation, host_id, target.as_ref());
-        let host_now = host_id
-            .and_then(|id| host_name(v, id))
-            .or_else(|| target.as_ref().map(target_name));
-        (came_from, host_now)
-    } else {
-        let host_now = conversation
-            .host_id
-            .as_deref()
-            .and_then(|id| host_name(v, id))
-            .or_else(|| conversation.quick_target.as_ref().map(target_name));
-        (None, host_now)
-    };
+    let (came_from, host_now) =
+        if moves_to(conversation, host_id, target.as_ref(), local.as_deref()) {
+            let came_from = moved_from(v, conversation, host_id, target.as_ref());
+            let host_now = host_id
+                .and_then(|id| host_name(v, id))
+                .or_else(|| target.as_ref().map(target_name))
+                .or_else(|| local.as_deref().map(local_name));
+            (came_from, host_now)
+        } else {
+            let host_now = conversation
+                .host_id
+                .as_deref()
+                .and_then(|id| host_name(v, id))
+                .or_else(|| conversation.quick_target.as_ref().map(target_name))
+                .or_else(|| conversation.local.as_deref().map(local_name));
+            (None, host_now)
+        };
     let reverts = pending_reverts(v, conversation_id, &earlier.ids, &earlier.list);
     notes_before(
         v,
@@ -6018,6 +6136,7 @@ pub fn conversation_view_at(
             username: t.username.clone(),
         }),
         origin: c.origin.clone(),
+        local: c.local.clone(),
         pinned: c.pinned,
         context_start: c.context_start.clone(),
         effort: c.effort.map(effort_view),
@@ -6151,6 +6270,7 @@ pub fn error_kind(e: &AiError) -> &'static str {
 }
 
 pub mod chatgpt;
+pub mod conn;
 mod files;
 pub mod mentions;
 mod search;

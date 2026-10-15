@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use crate::commands::ssh::{FRAME_CLOSED, FRAME_DATA, TermFrame, emit_state};
 use crate::dto::{LocalOpenOptions, LocalShellKind, LocalShellView, SessionState};
 use crate::error::{AppError, AppResult};
-use crate::local::{LocalSession, shell_env};
+use crate::local::{LocalSession, shell_env, tools_env};
 use crate::state::AppState;
 
 pub(crate) fn shell_view(shell: &Shell, default: bool) -> LocalShellView {
@@ -71,7 +71,8 @@ pub async fn local_open(
     let (pty, events) =
         LocalPty::spawn(&shell, size, &env, home.as_deref()).map_err(AppError::local)?;
     let session_id = uuid::Uuid::now_v7().to_string();
-    let live = Arc::new(LocalSession { pty, shell });
+    let tools = hatoba_local::LocalTools::for_shell(&shell, tools_env());
+    let live = Arc::new(LocalSession::new(pty, shell, tools));
     state.local.insert(session_id.clone(), live.clone());
     tracing::info!(shell = %live.shell.name, "local terminal started");
     emit_state(&app, &session_id, None, SessionState::Connected, |_| {});

@@ -3,7 +3,7 @@ import { useVaultData } from "@/app/data";
 import { Button, Icon, IconButton, Segmented, Spinner, StatusDot, Switch, controlStyles } from "@/components/controls";
 import { Group, layoutStyles } from "@/components/layout";
 import { Menu, PopupSelect, confirm, toast, useMenu, type MenuEntry } from "@/components/overlay";
-import { removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
+import { LOCAL_TARGET, removeAllowance, savedAllowances, useAllowances } from "@/features/ai/allowances";
 import { EFFORTS, effortKey } from "@/features/ai/effort";
 import { answersText, verdictText } from "@/features/ai/autoText";
 import { InstructionsField } from "@/features/ai/InstructionsField";
@@ -655,7 +655,12 @@ function SavedApprovals() {
     savedAllowances().catch((e) => toast(aiErrorMessage(t, e), "error"));
   }, [t]);
 
-  const hostName = (a: AiAllowance) => (a.host_id !== null ? (hosts.find((h) => h.id === a.host_id)?.name ?? t("ai.history.hostGone")) : (a.target ?? ""));
+  const hostName = (a: AiAllowance) =>
+    a.host_id !== null
+      ? (hosts.find((h) => h.id === a.host_id)?.name ?? t("ai.history.hostGone"))
+      : a.target === LOCAL_TARGET
+        ? t("terminal.local.thisComputer")
+        : (a.target ?? "");
   const what = (a: AiAllowance) =>
     a.kind === "command" ? t("aiSettings.allowances.command", { prefix: a.value }) : a.kind === "domain" ? t("aiSettings.allowances.domain", { domain: a.value }) : toolLabel(t, a.value);
   const remove = (a: AiAllowance) => removeAllowance(a).catch((e) => toast(aiErrorMessage(t, e), "error"));

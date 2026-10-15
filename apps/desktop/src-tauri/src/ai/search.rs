@@ -5,13 +5,11 @@
 use std::future::Future;
 use std::time::Duration;
 
+use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::search::{self, Found, MAX_OUTPUT_BYTES, Search};
 use hatoba_ai::tools::{self, GlobArgs, GrepArgs, GrepOutput};
-use hatoba_ssh::SshSession;
-use hatoba_ssh::remote_search::{
-    self, GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput,
-};
+use hatoba_ssh::remote_search::{GrepMode, GrepQuery, RemoteSearchError, Scope, SearchOutput};
 use tokio_util::sync::CancellationToken;
 
 use super::files::{DISCONNECTED, command_failed};
@@ -41,7 +39,7 @@ impl SearchJob {
 /// Runs a search tool. A stop ends it at once: it changes nothing on the host, and the host ends
 /// it within a second of its channel closing.
 pub(super) async fn run(
-    session: Option<SshSession>,
+    session: Option<Conn>,
     job: SearchJob,
     cancel: &CancellationToken,
 ) -> (ToolStatus, String) {
@@ -60,7 +58,7 @@ pub(super) async fn run(
     }
 }
 
-async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> {
+async fn search(session: &Conn, job: SearchJob) -> Result<String, String> {
     match job {
         SearchJob::Glob(args) => {
             let target = Search::glob(args.path.as_deref(), &args.pattern)?;
@@ -68,7 +66,7 @@ async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> 
                 &target,
                 tools::GLOB,
                 None,
-                remote_search::glob(session, &scope(&target), MAX_OUTPUT_BYTES, TIMEOUT),
+                session.glob(&scope(&target), MAX_OUTPUT_BYTES, TIMEOUT),
             )
             .await?;
             Ok(search::glob_result(&args.pattern, &target, &found(&out)))
@@ -98,7 +96,7 @@ async fn search(session: &SshSession, job: SearchJob) -> Result<String, String> 
                 &target,
                 tools::GREP,
                 pattern.extended.as_ref().err().copied(),
-                remote_search::grep(session, &query, MAX_OUTPUT_BYTES, TIMEOUT),
+                session.grep(&query, MAX_OUTPUT_BYTES, TIMEOUT),
             )
             .await?;
             Ok(search::grep_result(&args, &target, &found(&out)))

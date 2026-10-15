@@ -15,6 +15,8 @@ tokio-util.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 bytes.workspace = true
+# PowerShell's -EncodedCommand.
+base64.workspace = true
 # The terminal: ConPTY on Windows, a Unix pseudo-terminal elsewhere (wezterm's crate).
 portable-pty = "0.9"
 # `run_command` on this computer: the command's whole process tree in a Job Object (Windows) or a

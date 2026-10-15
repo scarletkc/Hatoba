@@ -20,6 +20,7 @@ import {
   type SelectionAttachment,
 } from "./attachments";
 import { formatTokens } from "./meter";
+import { localName, placeLabel } from "./place";
 import { pickInput } from "./queue";
 import { HOME_SLOT, NO_SELECTION, useAi } from "./store";
 import s from "./AttachmentChips.module.css";
@@ -76,10 +77,12 @@ export function useTerminalSelection(slotId: string) {
   }, [slotId, status]);
 }
 
-/** The tab host's display name, as the selection block carries it. */
+/** The tab host's display name, or a local tab's computer (§7.5), as the selection block carries it. */
 function useTabHostName(slotId: string): string {
   const tab = useTabs((st) => st.tabs.find((x) => x.id === slotId));
   const name = useVaultData((st) => st.hosts.find((h) => h.id === tab?.hostId)?.name);
+  const device = useApp((st) => st.info.device_name);
+  if (tab?.local) return localName(device);
   return name ?? tab?.title ?? "";
 }
 
@@ -296,7 +299,7 @@ export function AttachmentChipFor({ attachment: a, onRemove, onPasteAsText }: { 
           badge={a.truncated ? t("ai.selection.truncated") : undefined}
           previewTitle={t("ai.selection.preview")}
           removeLabel={t("ai.selection.remove")}
-          head={a.host ? t("ai.selection.from", { host: a.host }) : ""}
+          head={a.host ? t("ai.selection.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name) }) : ""}
           body={body}
           more={moreText}
           onRemove={onRemove}
@@ -367,13 +370,13 @@ export function shownAttachment(
 ): { icon: string; title: string; name: string; from: string; badge?: string } {
   switch (a.kind) {
     case "host_file":
-      return { icon: "file-text", title: t("ai.file", { name: pathName(a.path), n: a.lines }), name: pathName(a.path), from: t("ai.mention.from", { host: a.host, path: a.path }) };
+      return { icon: "file-text", title: t("ai.file", { name: pathName(a.path), n: a.lines }), name: pathName(a.path), from: t("ai.mention.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name), path: a.path }) };
     case "host_directory":
       return {
         icon: "folder-open",
         title: t("ai.mention.folderChip", { name: folderName(a.path), n: a.entries }),
         name: pathName(a.path),
-        from: t("ai.mention.from", { host: a.host, path: a.path }),
+        from: t("ai.mention.from", { host: placeLabel(t, a.host, useApp.getState().info.device_name), path: a.path }),
         badge: a.truncated ? t("ai.selection.truncated") : undefined,
       };
     case "mcp_resource":
@@ -409,7 +412,7 @@ export function ScreenCard({ note }: { note: Extract<Note, { kind: "terminal_sta
     <AttachmentCard
       icon="terminal-window"
       title={t("ai.note.screen", { n: note.lines })}
-      host={note.host}
+      host={placeLabel(t, note.host, useApp.getState().info.device_name)}
       badge={note.alternate ? t("ai.note.screen.fullScreen") : undefined}
       body={note.body}
     />
@@ -426,7 +429,7 @@ export function AttachmentCardFor({ attachment: a }: { attachment: Attachment })
         <AttachmentCard
           icon="selection"
           title={t("ai.selection", { n: a.lines })}
-          host={a.host}
+          host={placeLabel(t, a.host, useApp.getState().info.device_name)}
           badge={a.truncated ? t("ai.selection.truncated") : undefined}
           body={a.text}
         />

@@ -13,6 +13,7 @@ const conversation: AiConversationView = {
   host_id: "h1",
   quick_target: null,
   origin: null,
+      local: null,
   pinned: false,
   context_start: "s1",
   effort: null,

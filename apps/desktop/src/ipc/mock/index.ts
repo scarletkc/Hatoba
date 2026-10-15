@@ -248,7 +248,7 @@ export function createMockApi(): HatobaApi {
       },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
-    app_info: async () => ({ version, platform, mica: false, local_user: "demo" }),
+    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC" }),
     launch_take: async () => {
       needUnlocked();
       return launches.splice(0);

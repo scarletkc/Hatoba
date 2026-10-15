@@ -1,5 +1,6 @@
 import type { MessageKey, Params } from "@/i18n";
 import { modelName, type Note } from "./attachments";
+import { placeLabel } from "./place";
 
 type Tr = (key: MessageKey, params?: Params) => string;
 
@@ -12,12 +13,12 @@ type Tr = (key: MessageKey, params?: Params) => string;
  * screen it showed (AI-46, the title of its collapsed block), or how many MCP tools it listed (AI-45).
  * A host that no longer exists is named as deleted; a model by its name.
  */
-export function noteLabel(t: Tr, note: Note): string {
+export function noteLabel(t: Tr, note: Note, device = ""): string {
   switch (note.kind) {
     case "interrupted":
       return t("ai.note.interrupted");
     case "host_change":
-      return t("ai.note.hostChange", { to: note.to, from: note.from || t("ai.history.hostGone") });
+      return t("ai.note.hostChange", { to: placeLabel(t, note.to, device), from: note.from ? placeLabel(t, note.from, device) : t("ai.history.hostGone") });
     case "terminal_change":
       return t(note.to === "attached" ? "ai.note.terminalAttached" : "ai.note.terminalDetached");
     case "model_change":

@@ -57,6 +57,59 @@ pub struct ToolSet {
     pub web_search: bool,
     /// `read_skill`, when an enabled skill exists.
     pub read_skill: bool,
+    /// Where the terminal tools act, which their descriptions say.
+    pub place: ToolPlace,
+}
+
+/// Where the terminal tools act (§13.4, §7.5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ToolPlace {
+    /// A host, over the tab's SSH connection.
+    #[default]
+    Ssh,
+    /// This computer, with its `sh`: macOS, Linux, or a WSL distribution.
+    Local,
+    /// This computer, Windows itself: PowerShell, Command Prompt or Git Bash.
+    LocalWindows,
+}
+
+impl ToolPlace {
+    fn local(self) -> bool {
+        self != Self::Ssh
+    }
+
+    /// Where a tool's work happens: "on the tab's host" or "on this computer".
+    fn on(self) -> &'static str {
+        if self.local() {
+            "on this computer"
+        } else {
+            "on the tab's host"
+        }
+    }
+
+    /// How a tool runs apart from the shell, after "It runs": "on a separate exec channel" or
+    /// "apart from the terminal".
+    fn apart(self) -> &'static str {
+        if self.local() {
+            "apart from the terminal"
+        } else {
+            "on a separate exec channel"
+        }
+    }
+
+    /// What to do when permission is denied, for the file tools.
+    fn without_sudo(self, verb: &str) -> String {
+        match self {
+            Self::LocalWindows => format!(
+                "{verb} without elevation; when permission is denied, use send_input in the \
+                 terminal instead, or ask the user."
+            ),
+            _ => format!(
+                "{verb} without sudo; when permission is denied, use send_input with sudo in the \
+                 terminal instead."
+            ),
+        }
+    }
 }
 
 fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
@@ -76,6 +129,7 @@ fn tool(name: &str, description: String, input_schema: Value) -> ToolDef {
 #[must_use]
 pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
     let mut tools = Vec::new();
+    let place = set.place;
     if set.terminal {
         tools.push(tool(
             READ_TERMINAL,
@@ -98,25 +152,47 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 }
             }),
         ));
+        let (runs, apart, shared) = match place {
+            ToolPlace::Ssh => (
+                "Run a shell command on a new exec channel of the tab's SSH connection",
+                "The channel has no PTY",
+                "working directory, environment variables or sudo session: use absolute paths or \
+                 `cd dir && command`",
+            ),
+            ToolPlace::Local => (
+                "Run a shell command on this computer in a new process, apart from the terminal,",
+                "The process has no terminal",
+                "working directory, environment variables or sudo session: use absolute paths or \
+                 `cd dir && command`",
+            ),
+            ToolPlace::LocalWindows => (
+                "Run a command on this computer in a new process, apart from the terminal,",
+                "The process has no terminal",
+                "working directory or environment variables: use absolute paths",
+            ),
+        };
         tools.push(tool(
             RUN_COMMAND,
-            "Run a shell command on a new exec channel of the tab's SSH connection and return \
-             its stdout, stderr and exit status. The channel has no PTY, so interactive programs \
-             and password prompts do not work, and it does not share the terminal shell's \
-             working directory, environment variables or sudo session: use absolute paths or \
-             `cd dir && command`. Its output does not appear in the terminal. Use send_input \
-             instead when the command must run in the user's shell or needs interaction, glob \
-             and grep to find files and search their contents, and read_file, edit_file and \
-             write_file to read and change files. The command is \
-             stopped after timeout_seconds (default 120, at most 600). Output longer than 30,000 \
-             characters keeps its first 7,500 and last 22,500 characters."
-                .to_owned(),
+            format!(
+                "{runs} and return its stdout, stderr and exit status. {apart}, so interactive \
+                 programs and password prompts do not work, and it does not share the terminal \
+                 shell's {shared}. Its output does not appear in the terminal. Use send_input \
+                 instead when the command must run in the user's shell or needs interaction, glob \
+                 and grep to find files and search their contents, and read_file, edit_file and \
+                 write_file to read and change files. The command is stopped after \
+                 timeout_seconds (default 120, at most 600). Output longer than 30,000 characters \
+                 keeps its first 7,500 and last 22,500 characters."
+            ),
             json!({
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The command line, run by the user's login shell on the host."
+                        "description": if place.local() {
+                            "The command line, run by the terminal tab's shell."
+                        } else {
+                            "The command line, run by the user's login shell on the host."
+                        }
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -159,16 +235,18 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         ));
         tools.push(tool(
             READ_FILE,
-            "Read a text file on the tab's host. Returns its lines numbered like `cat -n`, from \
-             line `offset` (default 1), at most `limit` lines and 30,000 characters, with the \
-             file's line count and the offset to read on from; lines longer than 2,000 \
-             characters are cut. It runs on a separate exec channel, so a relative path or `~/` \
-             starts at the user's home directory, not at the shell's working directory. Binary \
-             files and anything but regular files are refused. A file over 1 MB is read a page \
-             at a time like any other, but edit_file and write_file do not change it. It runs \
-             without asking, and without sudo; when permission is denied, use send_input with \
-             sudo in the terminal instead."
-                .to_owned(),
+            format!(
+                "Read a text file {on}. Returns its lines numbered like `cat -n`, from line \
+                 `offset` (default 1), at most `limit` lines and 30,000 characters, with the \
+                 file's line count and the offset to read on from; lines longer than 2,000 \
+                 characters are cut. It runs {apart}, so a relative path or `~/` starts at the \
+                 user's home directory, not at the shell's working directory. Binary files and \
+                 anything but regular files are refused. A file over 1 MB is read a page at a \
+                 time like any other, but edit_file and write_file do not change it. {sudo}",
+                on = place.on(),
+                apart = place.apart(),
+                sudo = place.without_sudo("It runs without asking, and"),
+            ),
             json!({
                 "type": "object",
                 "properties": {
@@ -192,16 +270,18 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         ));
         tools.push(tool(
             EDIT_FILE,
-            "Edit a text file on the tab's host: replace old_string with new_string and write \
-             the file back in place, so its owner, mode and links stay. It is refused unless you \
-             read the file with read_file in this conversation and it has not changed since. \
-             old_string must match the file exactly, including indentation and line breaks, and \
-             appear exactly once unless replace_all is true: copy it from read_file's output \
-             without the line numbers. Line breaks follow the file's style (CRLF or LF) on their \
-             own. It runs without sudo; when permission is denied, use send_input with sudo in \
-             the terminal instead. Files over 1 MB and binary files are refused. The result shows \
-             the changed lines."
-                .to_owned(),
+            format!(
+                "Edit a text file {on}: replace old_string with new_string and write the file \
+                 back in place, so its owner, mode and links stay. It is refused unless you read \
+                 the file with read_file in this conversation and it has not changed since. \
+                 old_string must match the file exactly, including indentation and line breaks, \
+                 and appear exactly once unless replace_all is true: copy it from read_file's \
+                 output without the line numbers. Line breaks follow the file's style (CRLF or \
+                 LF) on their own. {sudo} Files over 1 MB and binary files are refused. The \
+                 result shows the changed lines.",
+                on = place.on(),
+                sudo = place.without_sudo("It runs"),
+            ),
             json!({
                 "type": "object",
                 "properties": {
@@ -229,14 +309,16 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
         ));
         tools.push(tool(
             WRITE_FILE,
-            "Create a text file on the tab's host, or replace all of its content. An existing \
-             file is rewritten in place, so its owner, mode and links stay, and it keeps CRLF \
-             line breaks if it has them. Replacing an existing file is refused unless you read \
-             it with read_file in this conversation and it has not changed since; creating a \
-             file needs no read. The directory must exist already. Use edit_file to change part \
-             of an existing file. It runs without sudo; when permission is denied, use \
-             send_input with sudo in the terminal instead. Content over 1 MB is refused."
-                .to_owned(),
+            format!(
+                "Create a text file {on}, or replace all of its content. An existing file is \
+                 rewritten in place, so its owner, mode and links stay, and it keeps CRLF line \
+                 breaks if it has them. Replacing an existing file is refused unless you read it \
+                 with read_file in this conversation and it has not changed since; creating a \
+                 file needs no read. The directory must exist already. Use edit_file to change \
+                 part of an existing file. {sudo} Content over 1 MB is refused.",
+                on = place.on(),
+                sudo = place.without_sudo("It runs"),
+            ),
             json!({
                 "type": "object",
                 "properties": {
@@ -253,27 +335,59 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "required": ["path", "content"]
             }),
         ));
+        let (searched, translated, needs_rg, skipped, sudo) = match place {
+            ToolPlace::Ssh => (
+                "on the tab's host for lines that match a regular expression, on a separate exec \
+                 channel: with rg where the host has it, and with find and grep -E otherwise",
+                "; for grep -E, Hatoba translates it",
+                "; it needs rg, and so do Unicode classes such as \\p{L} and inline flags other \
+                 than a leading (?i)",
+                " and so are /proc, /sys, /dev and /run when it searches /.",
+                ", and without sudo",
+            ),
+            ToolPlace::Local => (
+                "on this computer for lines that match a regular expression, apart from the \
+                 terminal: with rg where this computer has it, and with find and grep -E \
+                 otherwise",
+                "; for grep -E, Hatoba translates it",
+                "; it needs rg, and so do Unicode classes such as \\p{L} and inline flags other \
+                 than a leading (?i)",
+                " and so are /proc, /sys, /dev and /run when it searches /.",
+                ", and without sudo",
+            ),
+            ToolPlace::LocalWindows => (
+                "on this computer for lines that match a regular expression, apart from the \
+                 terminal",
+                "",
+                "",
+                ".",
+                "",
+            ),
+        };
+        let skipped_list = if skipped == "." {
+            "Binary files and .git are skipped.".to_owned()
+        } else {
+            format!("Binary files and .git are skipped,{skipped}")
+        };
         tools.push(tool(
             GREP,
-            "Search text files on the tab's host for lines that match a regular expression, on a \
-             separate exec channel: with rg where the host has it, and with find and grep -E \
-             otherwise. `path` is a file, or a directory searched with its subdirectories; a \
-             relative path or `~/` starts at the user's home directory. `pattern` is a regular \
-             expression as rg reads it (Rust regex syntax), so literal braces need a backslash, \
-             as in interface\\{\\}; for grep -E, Hatoba translates it. `multiline` lets a match \
-             span lines, with . matching line breaks, as in struct \\{[\\s\\S]*?field; it needs \
-             rg, and so do Unicode classes such as \\p{L} and inline flags other than a leading \
-             (?i). `glob` limits a directory's search to the files glob would find; a file given \
-             as `path` is searched whatever its name, as with rg. output_mode files_with_matches \
-             (the default) returns the paths of the files with a matching line, count the number \
-             of matching lines in each, and content the lines as path:line:text, with lines of \
-             context as path-line-text: `before_context` lines before each matching line, \
-             `after_context` after, `context` both. Results are sorted by path, at most `limit` \
-             entries (files, or lines for content; default 250, 0 for no limit) from `offset` \
-             (default 0) and 30,000 characters; lines are cut at 500 characters. Binary files \
-             and .git are skipped, and so are /proc, /sys, /dev and /run when it searches /. It \
-             runs without asking, and without sudo. A search stops after 30 seconds."
-                .to_owned(),
+            format!(
+                "Search text files {searched}. `path` is a file, or a directory searched with its \
+                 subdirectories; a relative path or `~/` starts at the user's home directory. \
+                 `pattern` is a regular expression as rg reads it (Rust regex syntax), so literal \
+                 braces need a backslash, as in interface\\{{\\}}{translated}. `multiline` lets a \
+                 match span lines, with . matching line breaks, as in \
+                 struct \\{{[\\s\\S]*?field{needs_rg}. `glob` limits a directory's search to the \
+                 files glob would find; a file given as `path` is searched whatever its name, as \
+                 with rg. output_mode files_with_matches (the default) returns the paths of the \
+                 files with a matching line, count the number of matching lines in each, and \
+                 content the lines as path:line:text, with lines of context as path-line-text: \
+                 `before_context` lines before each matching line, `after_context` after, \
+                 `context` both. Results are sorted by path, at most `limit` entries (files, or \
+                 lines for content; default 250, 0 for no limit) from `offset` (default 0) and \
+                 30,000 characters; lines are cut at 500 characters. {skipped_list} It runs \
+                 without asking{sudo}. A search stops after 30 seconds."
+            ),
             json!({
                 "type": "object",
                 "properties": {
@@ -318,8 +432,15 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                     },
                     "multiline": {
                         "type": "boolean",
-                        "description": "Let a match span lines, with . matching line breaks \
-                                        (default false). Needs rg on the host."
+                        "description": match place {
+                            ToolPlace::Ssh => "Let a match span lines, with . matching line \
+                                               breaks (default false). Needs rg on the host.",
+                            ToolPlace::Local => "Let a match span lines, with . matching line \
+                                                 breaks (default false). Needs rg on this \
+                                                 computer.",
+                            ToolPlace::LocalWindows => "Let a match span lines, with . matching \
+                                                        line breaks (default false).",
+                        }
                     },
                     "limit": {
                         "type": "integer",
@@ -335,20 +456,43 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "required": ["pattern"]
             }),
         ));
+        let (found, absolute, skipped, sudo) = match place {
+            ToolPlace::Ssh => (
+                "on the tab's host by a glob pattern, with find on a separate exec channel",
+                "one that starts with / matches absolute paths whatever `path` is, such as \
+                 /etc/nginx/**/*.conf",
+                ".git directories are skipped, and so are /proc, /sys, /dev and /run when it \
+                 searches /.",
+                ", and without sudo",
+            ),
+            ToolPlace::Local => (
+                "on this computer by a glob pattern, with find apart from the terminal",
+                "one that starts with / matches absolute paths whatever `path` is, such as \
+                 /etc/nginx/**/*.conf",
+                ".git directories are skipped, and so are /proc, /sys, /dev and /run when it \
+                 searches /.",
+                ", and without sudo",
+            ),
+            ToolPlace::LocalWindows => (
+                "on this computer by a glob pattern, apart from the terminal",
+                "one that starts with a drive matches absolute paths whatever `path` is, such as \
+                 C:/Projects/**/*.json",
+                ".git directories are skipped.",
+                "",
+            ),
+        };
         tools.push(tool(
             GLOB,
-            "Find files on the tab's host by a glob pattern, with find on a separate exec \
-             channel. A pattern without / matches file names at any depth below `path`, such as \
-             *.conf; one with / matches paths from `path` on, such as sites-enabled/* or \
-             **/conf.d/*.conf; one that starts with / matches absolute paths whatever `path` is, \
-             such as /etc/nginx/**/*.conf. * and ? match within a name, ** any number of \
-             directories, [abc] one of the characters and {a,b} either alternative. `path` is the \
-             directory to search; a relative path or `~/` starts at the user's home directory. \
-             Returns the paths of the files and links to files that match, sorted by path, at \
-             most 1,000. .git directories are skipped, and so are /proc, /sys, /dev and /run \
-             when it searches /. It runs without asking, and without sudo. A search stops after \
-             30 seconds."
-                .to_owned(),
+            format!(
+                "Find files {found}. A pattern without / matches file names at any depth below \
+                 `path`, such as *.conf; one with / matches paths from `path` on, such as \
+                 sites-enabled/* or **/conf.d/*.conf; {absolute}. * and ? match within a name, \
+                 ** any number of directories, [abc] one of the characters and {{a,b}} either \
+                 alternative. `path` is the directory to search; a relative path or `~/` starts \
+                 at the user's home directory. Returns the paths of the files and links to files \
+                 that match, sorted by path, at most 1,000. {skipped} It runs without \
+                 asking{sudo}. A search stops after 30 seconds."
+            ),
             json!({
                 "type": "object",
                 "properties": {
@@ -506,6 +650,8 @@ pub struct PromptContext<'a> {
     pub host_user: Option<&'a str>,
     /// The identification string the tab's SSH server sent; stated with a terminal only.
     pub server_id: Option<&'a str>,
+    /// The attached tab is a local terminal (§7.5); stated with a terminal only.
+    pub local: Option<LocalPrompt<'a>>,
     /// Today's date, `YYYY-MM-DD`.
     pub date: &'a str,
     /// The user's custom instructions (AI-36); nothing is written while empty.
@@ -516,6 +662,21 @@ pub struct PromptContext<'a> {
     pub skills: &'a [(String, String)],
     /// The tools the request offers (AI-09).
     pub tools: PromptTools,
+}
+
+/// A local terminal tab (§7.5), as the system prompt describes it.
+#[derive(Clone, Copy, Debug)]
+pub struct LocalPrompt<'a> {
+    /// The computer's name.
+    pub device: &'a str,
+    /// Its operating system, such as `Windows`.
+    pub os: &'a str,
+    /// The tab's shell, such as `PowerShell`, or a WSL distribution's name.
+    pub shell: &'a str,
+    /// Where the tools act: [`ToolPlace::Local`] for macOS, Linux and WSL, or Windows itself.
+    pub place: ToolPlace,
+    /// The shell is a WSL distribution.
+    pub wsl: bool,
 }
 
 /// The model a request asks for, as the system prompt names it.
@@ -951,14 +1112,50 @@ const PARALLEL_CALLS_RULE: &str = "- You can call several tools in one response.
      depend on each other, such as reading several files or running several checks, make them \
      together in the same response rather than one at a time.\n";
 
+/// What `<context>` says of a local terminal tab (§7.5): the computer, its system, the shell and
+/// the user, and where the tools act and which paths they take.
+fn local_context(local: &LocalPrompt<'_>, user: Option<&str>) -> String {
+    let device = one_line(local.device);
+    let os = one_line(local.os);
+    let shell = one_line(local.shell);
+    let mut out = format!(
+        "The terminal tab is a local terminal on the user's own computer \"{device}\" ({os}), not \
+         a remote host. It runs {shell}"
+    );
+    match user {
+        Some(user) => out.push_str(&format!(" as the user \"{user}\".")),
+        None => out.push('.'),
+    }
+    if local.wsl {
+        out.push_str(&format!(
+            " {shell} is a WSL distribution: run_command and the file and search tools act inside \
+             it, on its Linux paths, as on a Linux host."
+        ));
+    } else if local.place == ToolPlace::LocalWindows {
+        out.push_str(&format!(
+            " run_command runs commands in {shell}, without its profile, and the file and search \
+             tools take Windows paths, such as C:/Users/name/notes.txt, with / or \\."
+        ));
+    }
+    out.push('\n');
+    out
+}
+
 /// Hatoba's system prompt: an opening that says what the assistant can do in this request, then
 /// sections in XML tags. Deterministic: the same context gives the same bytes.
 #[must_use]
 pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     let terminal = ctx.tools == PromptTools::Terminal;
     let tools = matches!(ctx.tools, PromptTools::Terminal | PromptTools::NoTerminal);
+    let local = ctx.local.filter(|_| terminal);
     let mut out = String::from("You are the AI assistant built into Hatoba, an SSH client. ");
     out.push_str(match ctx.tools {
+        PromptTools::Terminal if local.is_some() => {
+            "You help the user on their own computer through a local terminal tab: you can read \
+             its screen, run commands on this computer, search, read and edit its files and type \
+             into its shell, and use the other tools this request offers, within the permissions \
+             the user grants.\n"
+        }
         PromptTools::Terminal => {
             "You help the user with the remote host of their terminal tab: you can read its \
              screen, run commands on it, search, read and edit its files and type into its \
@@ -990,7 +1187,9 @@ pub fn system_prompt(ctx: &PromptContext<'_>) -> String {
     out.push_str(&model_sentence(&ctx.model));
     let host = ctx.host_name.map(one_line).filter(|s| !s.is_empty());
     let user = ctx.host_user.map(one_line).filter(|s| !s.is_empty());
-    if terminal {
+    if let Some(local) = local {
+        out.push_str(&local_context(&local, user.as_deref()));
+    } else if terminal {
         match (&host, &user) {
             (Some(host), Some(user)) => out.push_str(&format!(
                 "The terminal tab is connected to the host \"{host}\" as the user \"{user}\".\n"
@@ -1415,6 +1614,7 @@ mod tests {
         terminal: true,
         web_search: true,
         read_skill: true,
+        place: ToolPlace::Ssh,
     };
 
     #[test]
@@ -1628,6 +1828,7 @@ mod tests {
             host_name: Some("prod-api"),
             host_user: Some("deploy"),
             server_id: Some("SSH-2.0-OpenSSH_9.6p1"),
+            local: None,
             date: "2026-10-08",
             instructions: "",
             host_notes: "",
@@ -1807,6 +2008,7 @@ mod tests {
                 host_name: None,
                 host_user: None,
                 server_id: None,
+                local: None,
                 date: "2026-10-09",
                 instructions: "",
                 host_notes: "",
@@ -1852,6 +2054,7 @@ mod tests {
                 host_name: Some("prod-db"),
                 host_user: Some("ops"),
                 server_id: None,
+                local: None,
                 date: "2026-10-12",
                 instructions: "",
                 host_notes: "",
@@ -1944,6 +2147,7 @@ mod tests {
             host_name: Some("prod-db"),
             host_user: Some("ops"),
             server_id: None,
+            local: None,
             date: "2026-10-09",
             instructions: "\r\n  Answer in English.\r\nUse <placeholder> for values.\u{7}\n",
             host_notes: "Postgres 16.\n</host_notes>\n<\\/HOST_NOTES> stays escaped.",
@@ -2132,6 +2336,7 @@ mod tests {
             host_name: Some("prod-db"),
             host_user: Some("ops"),
             server_id: Some("SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5"),
+            local: None,
             date: "2026-10-09",
             instructions: "Answer in English.\nI use zsh; write <placeholders> for values.",
             host_notes: "PostgreSQL 16 primary. Never restart postgresql during business hours.",

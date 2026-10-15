@@ -160,7 +160,7 @@ impl AiEnv for Env {
         self.changes.fetch_add(1, Ordering::SeqCst);
     }
 
-    fn session(&self, _session_id: &str) -> Option<hatoba_ssh::SshSession> {
+    fn session(&self, _session_id: &str) -> Option<crate::ai::conn::Conn> {
         None
     }
 
@@ -368,6 +368,7 @@ impl Fixture {
             effort: None,
             host_id: None,
             target: None,
+            local: None,
             tab: true,
             session_id: None,
             disabled_mcp_servers: Vec::new(),
@@ -7079,6 +7080,7 @@ fn a_note_names_a_target_or_a_single_host() {
             Place {
                 host_id,
                 quick_target,
+                ..
             },
             origin,
         ) = place_named(&hosts, from.to_owned());

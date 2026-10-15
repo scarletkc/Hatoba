@@ -15,13 +15,13 @@ mod agent;
 mod auth;
 pub mod config;
 pub mod error;
+pub mod exec;
 pub mod forward;
 mod handler;
 pub mod hostkey;
 pub mod interactive;
 pub mod keys;
-#[cfg(all(test, unix))]
-mod local_sh;
+pub mod local_sh;
 mod net;
 mod ppk;
 pub mod probe;
@@ -34,6 +34,8 @@ pub mod session;
 pub mod sftp;
 pub mod shell;
 pub mod stats;
+#[cfg(all(test, unix))]
+mod test_sh;
 
 pub use config::{SshConfigHost, parse_ssh_config, parse_ssh_config_with_home};
 pub use error::{SshError, SshErrorKind};

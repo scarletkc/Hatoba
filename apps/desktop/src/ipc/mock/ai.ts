@@ -2,7 +2,7 @@ import type { TabSource } from "@/app/tabs";
 import { blockTitle, fileRevertNote, noteBlock, notedPermission, parseMessage, screenStateNote, splitPermissionNote, type Note } from "@/features/ai/attachments";
 import { effectiveEffort, modelEfforts } from "@/features/ai/effort";
 import { forkCopies } from "@/features/ai/fork";
-import { movedFrom, moves, recordedTarget } from "@/features/ai/place";
+import { localName, movedFrom, moves, recordedTarget } from "@/features/ai/place";
 import { shownCall } from "@/features/ai/tools";
 import { formatTarget, parseQuickConnect, sameTarget } from "@/features/hosts/quickConnect";
 import { detectLocale } from "@/i18n";
@@ -87,15 +87,17 @@ interface Conv {
  * Like Rust's `EntryPlace` (AI-43), which a user entry records and the view does not carry: where the conversation
  * was when the message was stored, before its move.
  */
-type Recorded = Pick<AiConversationView, "host_id" | "quick_target" | "origin">;
+type Recorded = Pick<AiConversationView, "host_id" | "quick_target" | "origin" | "local">;
 
-const placeOf = (c: Recorded): Recorded => ({ host_id: c.host_id, quick_target: c.quick_target, origin: c.origin });
+const placeOf = (c: Recorded): Recorded => ({ host_id: c.host_id, quick_target: c.quick_target, origin: c.origin, local: c.local });
 
 /** Like Rust's `Place` (AI-09): where a message moves its conversation, and where from (`moveOf`). */
 interface Move {
   from: string | null;
   host_id: string | null;
   quick_target: QuickTarget | null;
+  /** §7.5: the computer of a local tab. */
+  local: string | null;
 }
 
 interface Turn {
@@ -803,7 +805,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     // AI-05: the conversation keeps the level of its last message.
     if (c.view.effort !== context.effort) c.view = { ...c.view, effort: context.effort, updated_at: Date.now() };
     if (move) {
-      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, origin: null, updated_at: Date.now() };
+      c.view = { ...c.view, host_id: move.host_id, quick_target: move.quick_target, local: move.local, origin: null, updated_at: Date.now() };
     }
     const user_entry: AiEntryView = { role: "user", entry_id: newId(), created_at: Date.now(), text };
     if (recorded) cameFrom.set(user_entry.entry_id, recorded);
@@ -837,7 +839,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     }
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? c.view;
-    const to = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quick_target ? formatTarget(place.quick_target) : undefined);
+    const to =
+      hosts.find((h) => h.id === place.host_id)?.name ??
+      (place.quick_target ? formatTarget(place.quick_target) : place.local ? localName(place.local) : undefined);
     if (cameFrom !== null && to !== undefined && cameFrom !== to) notes.push({ kind: "host_change", from: cameFrom, to });
     if (terminalBefore(earlier) === !context.tab) notes.push({ kind: "terminal_change", to: context.tab ? "attached" : "detached" });
     const providers = await deps.providers();
@@ -865,7 +869,9 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     if (!context.tab || !context.screen) return "";
     const hosts = (await deps.hosts?.()) ?? [];
     const place = move ?? c.view;
-    const host = hosts.find((h) => h.id === place.host_id)?.name ?? (place.quick_target ? formatTarget(place.quick_target) : "");
+    const host =
+      hosts.find((h) => h.id === place.host_id)?.name ??
+      (place.quick_target ? formatTarget(place.quick_target) : place.local ? localName(place.local) : "");
     const note = screenStateNote(host, context.screen);
     return note ? `${noteBlock(note)}\n\n` : "";
   }
@@ -913,10 +919,22 @@ export function createAiMock(deps: AiMockDeps): AiApi {
    * message.
    */
   async function moveOf(c: Conv, context: AiTurnContext): Promise<Move | null> {
-    const tab: TabSource | null = context.host_id ? { hostId: context.host_id, target: null } : context.target ? { hostId: null, target: context.target } : null;
-    if (!tab || !moves(c.view, tab)) return null;
+    const local = context.local;
+    const tab: TabSource | null = context.host_id
+      ? { hostId: context.host_id, target: null }
+      : context.target
+        ? { hostId: null, target: context.target }
+        : local
+          ? { hostId: null, target: null, local: { id: "", name: local.shell ?? "", kind: local.kind ?? "unix" } }
+          : null;
+    if (!tab || !moves(c.view, tab, local?.device)) return null;
     const hosts = (await deps.hosts?.()) ?? [];
-    return { from: movedFrom(c.view, tab, hosts)?.from ?? null, host_id: tab.hostId, quick_target: tab.target && recordedTarget(tab.target) };
+    return {
+      from: movedFrom(c.view, tab, hosts, local?.device)?.from ?? null,
+      host_id: tab.hostId,
+      quick_target: tab.target && recordedTarget(tab.target),
+      local: tab.local && local ? local.device : null,
+    };
   }
 
   /**
@@ -1389,7 +1407,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const at = (offset: number) => created + offset;
       const c: Conv = {
         // The pinned one was last sent at High (AI-05).
-        view: { id, title, host_id: host, quick_target: null, origin: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
+        view: { id, title, host_id: host, quick_target: null, origin: null, local: null, pinned, context_start: null, effort: pinned ? "high" : null, created_at: created, updated_at: created },
         entries: build(at),
         runningUntil: 0,
       };
@@ -1657,7 +1675,8 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const named = ((await deps.hosts?.()) ?? []).filter((h) => moved.from && h.name === moved.from);
         const host_id = named.length === 1 ? named[0].id : null;
         const quick_target = !host_id && target?.ok && target.target.username ? recordedTarget({ ...target.target, username: target.target.username }) : null;
-        place = { host_id, quick_target, origin: host_id || quick_target ? null : moved.from };
+        const local = !host_id && !quick_target && moved.from.endsWith(" (local terminal)") ? moved.from.slice(0, -" (local terminal)".length) : null;
+        place = { host_id, quick_target, local, origin: host_id || quick_target || local ? null : moved.from };
         break;
       }
       const now = Date.now();
@@ -1686,6 +1705,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
             title: titleOf(input.text),
             host_id: input.context.host_id,
             quick_target: !input.context.host_id && input.context.target ? recordedTarget(input.context.target) : null,
+            local: !input.context.host_id && !input.context.target ? (input.context.local?.device ?? null) : null,
             origin: null,
             pinned: false,
             context_start: null,
@@ -1702,7 +1722,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       const earlier = [...c.entries];
       const move = await moveOf(c, input.context);
       const notes = (await notesBefore(c, earlier, move, move?.from ?? null, input.context)) + (await deferredList(input.context, input.text));
-      const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null };
+      const recorded = input.conversation_id ? placeOf(c.view) : { host_id: null, quick_target: null, origin: null, local: null };
       const user_entry = await storeMessage(c, turn, notes + input.text, input.context, move, recorded);
       return { conversation: view(c), user_entry };
     },

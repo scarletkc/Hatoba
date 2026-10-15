@@ -94,7 +94,7 @@ interface AppState {
 
 export const useApp = create<AppState>((set, get) => ({
   phase: "boot",
-  info: { version: "0.0.0", platform: "web", mica: false, local_user: "" },
+  info: { version: "0.0.0", platform: "web", mica: false, local_user: "", device_name: "" },
   floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,

@@ -8,10 +8,10 @@ use std::future::Future;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use super::conn::Conn;
 use hatoba_ai::entry::ToolStatus;
 use hatoba_ai::files::{self, MAX_FILE_BYTES, TextFile};
 use hatoba_ai::tools::{self, EditFileArgs, ReadFileArgs, WriteFileArgs};
-use hatoba_ssh::SshSession;
 use hatoba_ssh::remote_file::{self, Expect, RemoteFile, RemoteFileError};
 use tokio_util::sync::CancellationToken;
 
@@ -60,17 +60,6 @@ impl FileJob {
             Self::Write(a) => &a.path,
         }
     }
-}
-
-/// The server a session is connected to, as the record of what the model has seen and the file
-/// snapshots name it.
-pub(super) fn server(session: &SshSession) -> String {
-    format!(
-        "{}@{}:{}",
-        session.username(),
-        session.host(),
-        session.port()
-    )
 }
 
 /// What the model has seen of each file, by conversation (§13.4, "What the model has seen"). In
@@ -404,7 +393,7 @@ async fn unless_cancelled<T>(
 /// Runs a file tool. `base` is what the approval card read for the call, if it showed one. A stop
 /// ends the call while it reads, but never cuts a write off once it has begun.
 pub(super) async fn run(
-    session: Option<SshSession>,
+    session: Option<Conn>,
     job: FileJob,
     base: Option<Base>,
     seen: SeenBy<'_>,
@@ -441,7 +430,7 @@ pub(super) fn preview_job(name: &str, arguments: &str) -> Result<(FileJob, Strin
 
 /// Reads the file the approval card shows a change to.
 pub(super) async fn read_base(
-    session: Option<SshSession>,
+    session: Option<Conn>,
     path: &str,
     cancel: &CancellationToken,
 ) -> Result<Base, Stop> {
@@ -451,7 +440,7 @@ pub(super) async fn read_base(
     match unless_cancelled(cancel, read_bytes(&session, path)).await {
         Ok(file) => Ok(Base {
             path: path.to_owned(),
-            server: server(&session),
+            server: session.server(),
             file,
         }),
         Err(Stop::Failed(_)) if session.is_closed() => Err(Stop::Failed(DISCONNECTED.to_owned())),
@@ -514,17 +503,8 @@ pub(super) fn failed_preview(path: &str, message: String) -> AiFilePreview {
 /// `read_file`: a page of the file. The model has now seen the whole file as it was read. A file
 /// over 1 MB is read a part at a time instead, and recorded as seen by no one: the other file
 /// tools do not change it.
-async fn read(
-    session: &SshSession,
-    args: &ReadFileArgs,
-    seen: SeenBy<'_>,
-) -> Result<String, String> {
-    let file = match tokio::time::timeout(
-        TIMEOUT,
-        remote_file::read(session, &args.path, MAX_FILE_BYTES),
-    )
-    .await
-    {
+async fn read(session: &Conn, args: &ReadFileArgs, seen: SeenBy<'_>) -> Result<String, String> {
+    let file = match tokio::time::timeout(TIMEOUT, session.read(&args.path, MAX_FILE_BYTES)).await {
         Err(_) => return Err(timed_out(&args.path, Op::Read)),
         Ok(Ok(file)) => file,
         Ok(Err(RemoteFileError::TooLarge(_))) => return read_large(session, args).await,
@@ -537,17 +517,17 @@ async fn read(
         args.offset,
         args.limit,
     )?;
-    seen.shows(&server(session), &file.path, &file.bytes);
+    seen.shows(&session.server(), &file.path, &file.bytes);
     Ok(page)
 }
 
 /// `read_file` on a file over 1 MB (AI-38): at most [`files::MAX_PAGE_BYTES`] of it from the line
 /// asked for, whatever the file's size.
-async fn read_large(session: &SshSession, args: &ReadFileArgs) -> Result<String, String> {
+async fn read_large(session: &Conn, args: &ReadFileArgs) -> Result<String, String> {
     let from = args.offset.unwrap_or(1).max(1);
     match tokio::time::timeout(
         TIMEOUT,
-        remote_file::read_lines(session, &args.path, from, files::MAX_PAGE_BYTES),
+        session.read_lines(&args.path, from, files::MAX_PAGE_BYTES),
     )
     .await
     {
@@ -566,13 +546,13 @@ async fn read_large(session: &SshSession, args: &ReadFileArgs) -> Result<String,
 }
 
 async fn edit(
-    session: &SshSession,
+    session: &Conn,
     args: &EditFileArgs,
     base: Option<Base>,
     seen: SeenBy<'_>,
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
-    let server = server(session);
+    let server = session.server();
     let (file, from_card) = unless_cancelled(
         cancel,
         current(session, &server, &args.path, base, tools::EDIT_FILE),
@@ -598,13 +578,13 @@ async fn edit(
 }
 
 async fn write(
-    session: &SshSession,
+    session: &Conn,
     args: &WriteFileArgs,
     base: Option<Base>,
     seen: SeenBy<'_>,
     cancel: &CancellationToken,
 ) -> Result<String, Stop> {
-    let server = server(session);
+    let server = session.server();
     let (file, from_card) = unless_cancelled(
         cancel,
         current(session, &server, &args.path, base, tools::WRITE_FILE),
@@ -656,7 +636,7 @@ fn new_content(path: &str, before: Option<&TextFile>, content: &str) -> Result<T
 /// The file to change: what the approval card read, or without a card, the file as it is now.
 /// The flag says it came from the card.
 async fn current(
-    session: &SshSession,
+    session: &Conn,
     server: &str,
     path: &str,
     base: Option<Base>,
@@ -691,8 +671,8 @@ fn card_read(
 }
 
 /// The file, `None` when it does not exist, or the message for the model.
-async fn read_bytes(session: &SshSession, path: &str) -> Result<Option<RemoteFile>, String> {
-    match tokio::time::timeout(TIMEOUT, remote_file::read(session, path, MAX_FILE_BYTES)).await {
+async fn read_bytes(session: &Conn, path: &str) -> Result<Option<RemoteFile>, String> {
+    match tokio::time::timeout(TIMEOUT, session.read(path, MAX_FILE_BYTES)).await {
         Err(_) => Err(timed_out(path, Op::Read)),
         Ok(Ok(file)) => Ok(Some(file)),
         Ok(Err(RemoteFileError::NotFound)) => Ok(None),
@@ -705,7 +685,7 @@ async fn read_bytes(session: &SshSession, path: &str) -> Result<Option<RemoteFil
 /// begun it runs to the end (or the timeout), because closing the channel midway leaves the file
 /// cut short. `keep` keeps the snapshot of the change before the write begins (AI-41).
 async fn write_bytes(
-    session: &SshSession,
+    session: &Conn,
     path: &str,
     bytes: &[u8],
     expect: Expect<'_>,
@@ -724,11 +704,7 @@ async fn write_bytes(
             return Err(Stop::Cancelled);
         }
     }
-    let result = match tokio::time::timeout(
-        TIMEOUT,
-        remote_file::write(session, path, bytes, expect, None),
-    )
-    .await
+    let result = match tokio::time::timeout(TIMEOUT, session.write(path, bytes, expect, None)).await
     {
         Err(_) => Err(Stop::Unfinished(timed_out(path, Op::Write))),
         Ok(Ok(resolved)) => Ok(resolved),
@@ -939,8 +915,8 @@ fn plan(change: &Change, current: Option<&[u8]>, shown: Option<Found>) -> Plan {
 
 /// The file at `path` as a revert finds it: its bytes, `None` when it does not exist, or why the
 /// revert stops here.
-async fn current_file(session: &SshSession, path: &str) -> Result<Option<Vec<u8>>, Revert> {
-    match tokio::time::timeout(TIMEOUT, remote_file::read(session, path, MAX_FILE_BYTES)).await {
+async fn current_file(session: &Conn, path: &str) -> Result<Option<Vec<u8>>, Revert> {
+    match tokio::time::timeout(TIMEOUT, session.read(path, MAX_FILE_BYTES)).await {
         Err(_) => Err(revert_failed(AiRevertFailure::TimedOut, None)),
         Ok(Ok(file)) => Ok(Some(file.bytes)),
         Ok(Err(RemoteFileError::NotFound)) => Ok(None),
@@ -1011,7 +987,7 @@ fn show(change: &Change, current: Option<&[u8]>) -> Revert {
 
 /// Reads the file again after a write or deletion found it changed since the read: done when it
 /// holds what it held before the call, otherwise the diff.
-async fn found_again(session: &SshSession, change: &Change) -> Revert {
+async fn found_again(session: &Conn, change: &Change) -> Revert {
     match current_file(session, &change.meta.path).await {
         Ok(current) if plan(change, current.as_deref(), None) == Plan::Done => {
             AiFileRevert::Reverted { wrote: false }.into()
@@ -1028,14 +1004,14 @@ const RECREATED_MODE: u32 = 0o600;
 /// Writes back what the file held before the call, or deletes the file the call created, only
 /// while it holds exactly `current`, by `cksum` checksum and size. A file deleted since is created
 /// again with the permission bits it had, owned by the user the tab is logged in as.
-async fn restore(session: &SshSession, change: &Change, current: Option<&[u8]>) -> Revert {
+async fn restore(session: &Conn, change: &Change, current: Option<&[u8]>) -> Revert {
     let path = &change.meta.path;
     let ended = match &change.content.before {
         None => {
             let Some(current) = current else {
                 return AiFileRevert::Reverted { wrote: false }.into();
             };
-            let delete = remote_file::delete(session, path, current);
+            let delete = session.delete(path, current);
             deleted(tokio::time::timeout(TIMEOUT, delete).await.ok())
         }
         Some(before) => {
@@ -1043,7 +1019,7 @@ async fn restore(session: &SshSession, change: &Change, current: Option<&[u8]>) 
             let mode = current
                 .is_none()
                 .then(|| change.meta.mode.unwrap_or(RECREATED_MODE));
-            let write = remote_file::write(session, path, before.as_bytes(), expect, mode);
+            let write = session.write(path, before.as_bytes(), expect, mode);
             written(tokio::time::timeout(TIMEOUT, write).await.ok())
         }
     };
@@ -1109,7 +1085,7 @@ fn written(result: Option<Result<String, RemoteFileError>>) -> Option<Revert> {
 /// left as it is and counts as reverted. `None` when `cancel` (the lock) fired before anything was
 /// written; once a write or deletion has begun, it runs to its end.
 pub(super) async fn revert(
-    session: Option<SshSession>,
+    session: Option<Conn>,
     change: &Change,
     shown: Option<Found>,
     cancel: &CancellationToken,
@@ -1117,7 +1093,7 @@ pub(super) async fn revert(
     let Some(session) = session else {
         return Some(revert_failed(AiRevertFailure::Disconnected, None));
     };
-    if server(&session) != change.meta.server {
+    if session.server() != change.meta.server {
         return Some(revert_failed(
             AiRevertFailure::OtherServer,
             Some(change.meta.server.clone()),
