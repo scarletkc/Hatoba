@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "demo": "node scripts/demo.mjs",
+    "demo:check": "node scripts/demo-check.mjs",
     "preview": "astro preview",
     "typecheck": "astro sync && tsc --noEmit",
     "test": "vitest run"
@@ -17,6 +18,7 @@
     "sharp": "^0.35.5"
   },
   "devDependencies": {
+    "playwright-core": "^1.64.1",
     "typescript": "~6.0.3",
     "vitest": "^5.0.3"
   }

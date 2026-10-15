@@ -1,12 +1,13 @@
 name: Site
 
 # Builds the website in apps/site and deploys it to GitHub Pages, which serves it at
-# hatoba.fog.moe. The build reads the newest release from GitHub, so the Release workflow calls this
-# one after publishing; pull requests only build it.
+# hatoba.fog.moe. The build reads the newest release from GitHub, and its docs and the app's demo
+# come from that release, so the Release workflow calls this one after publishing; pull requests
+# only build it, with the demo of their own apps/desktop.
 on:
   push:
     branches: [main]
-    # Keep in sync with the paths under pull_request.
+    # The paths under pull_request, without apps/desktop: the demo on the site follows the release.
     paths:
       - apps/site/**
       - crates/hatoba-ai/src/skills/builtin/hatoba/**
@@ -23,6 +24,12 @@ on:
   pull_request:
     paths:
       - apps/site/**
+      # The demo (apps/site/scripts/demo.mjs).
+      - apps/desktop/src/**
+      - apps/desktop/public/**
+      - apps/desktop/index.html
+      - apps/desktop/package.json
+      - apps/desktop/vite.config.ts
       - crates/hatoba-ai/src/skills/builtin/hatoba/**
       - docs/media/**
       - apps/desktop/src-tauri/app-icon.svg
@@ -55,6 +62,8 @@ jobs:
     env:
       # Reads the releases without the unauthenticated rate limit.
       GITHUB_TOKEN: ${{ github.token }}
+      # A pull request's demo is its own apps/desktop, so a change that breaks the demo fails here.
+      HATOBA_DEMO_REF: ${{ github.event_name == 'pull_request' && 'worktree' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,10 +75,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @hatoba/site
+      - run: pnpm install --frozen-lockfile --filter @hatoba/site --filter @hatoba/desktop
       - run: pnpm --filter @hatoba/site typecheck
       - run: pnpm --filter @hatoba/site test
+      - run: pnpm --filter @hatoba/site demo
       - run: pnpm --filter @hatoba/site build
+      # Uses the runner's Chrome.
+      - run: pnpm --filter @hatoba/site demo:check
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:

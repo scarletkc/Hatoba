@@ -41,5 +41,9 @@ try {
     console.log(`Built the demo of ${ref} into ${OUT}.`);
   }
 } finally {
-  if (checkout !== ROOT) run("git", ["worktree", "remove", "--force", checkout], ROOT);
+  if (checkout !== ROOT) {
+    // git worktree remove can't delete the links in node_modules on Windows.
+    rmSync(checkout, { recursive: true, force: true });
+    run("git", ["worktree", "prune"], ROOT);
+  }
 }

@@ -197,7 +197,7 @@ python scripts/media/video.py                        # hatoba-demo.mp4 with musi
 
 ## Website
 
-The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it, and deploys it to GitHub Pages from `main` and after each release.
+The website at https://hatoba.fog.moe is an Astro site in [`apps/site`](../apps/site), in English, Chinese, and Japanese. Its text is in `apps/site/src/i18n`, where `en.ts` holds the English that the other files translate. The [Site workflow](../.github/workflows/site.yml) builds it for pull requests that touch it or the desktop frontend, and deploys it to GitHub Pages from `main` and after each release.
 
 ```sh
 pnpm --filter @hatoba/site dev    # http://localhost:4321
@@ -206,6 +206,15 @@ pnpm --filter @hatoba/site build  # writes apps/site/dist
 ```
 
 The build reads the newest release from the GitHub API (set `GITHUB_TOKEN` if it hits the rate limit) and takes the docs from the built-in skill at that release's tag, so they describe the version people download. To preview a change to the docs, run it with `HATOBA_DOCS_REF=worktree`. A new reference file needs a place in `DOC_GROUPS` in [`apps/site/src/lib/docs.ts`](../apps/site/src/lib/docs.ts), which a test checks.
+
+The home page's **Try it in your browser** button swaps its first screenshot for the app's demo at `/demo/`: the browser frontend and its mock backend, built with `--mode demo` for visitors (`VISITOR` in [`apps/desktop/src/ipc/mock/visitor.ts`](../apps/desktop/src/ipc/mock/visitor.ts)). The button shows only when the demo was built before the site:
+
+```sh
+pnpm --filter @hatoba/site demo        # writes apps/site/public/demo from the release's tag
+pnpm --filter @hatoba/site demo:check  # after build: opens the demo in Chrome and runs it to its first approval card
+```
+
+Like the docs, the demo comes from the release's tag, so it shows the version people download, and a release from before the demo builds none. `HATOBA_DEMO_REF=worktree` builds your checkout instead, as pull requests do, and `pnpm dev --mode demo` in `apps/desktop` runs the visitors' version with hot reload.
 
 ## Checks before committing
 
