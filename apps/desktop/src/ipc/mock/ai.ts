@@ -592,7 +592,29 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return { reasoning: zh ? "需要写一份很长的说明。" : "This needs a long write-up.", text: `## ${zh ? "服务总览" : "Services"}\n\n${para.repeat(14)}`, calls: [], finish: "length" };
     }
     // The website's demo starts the fix from the question its input suggests.
-    if ((flags.has("showcase") || (VISITOR && want("502"))) && terminal) return showcase(since.filter((e) => e.role === "assistant").length);
+    if ((flags.has("showcase") || (VISITOR && want("502"))) && terminal) {
+      // The script goes on only while each step runs; a declined one ends it.
+      const stopped = results.find((r) => r.status !== "ok");
+      if (stopped)
+        return {
+          reasoning: "",
+          text:
+            stopped.status === "rejected"
+              ? say(
+                  "You declined that step, so I stopped there. Send the question again to start over.",
+                  "你拒绝了这一步，所以我停在这里。重新发送问题就能从头开始。",
+                  "この操作は拒否されたので、ここで止めました。もう一度質問を送ると最初からやり直します。",
+                )
+              : say(
+                  "That step didn’t finish, so I stopped there. Send the question again to start over.",
+                  "这一步没有完成，所以我停在这里。重新发送问题就能从头开始。",
+                  "この操作が完了しなかったので、ここで止めました。もう一度質問を送ると最初からやり直します。",
+                ),
+          calls: [],
+          finish: "stop",
+        };
+      return showcase(since.filter((e) => e.role === "assistant").length);
+    }
 
     if (results.length === 0 && callsSoFar === 0) {
       const calls: AiToolCall[] = [];
@@ -615,7 +637,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         const readFirst = (path: string) => {
           if (!calls.some((c) => c.name === "read_file" && c.arguments.includes(JSON.stringify(path)))) calls.push(call("read_file", { path }));
         };
-        if (want("read file", "cat ", "读取文件", "ファイルを読")) readFirst(NGINX);
+        if (want("read file", "读取文件", "ファイルを読") || review("cat ")) readFirst(NGINX);
         if (review("glob")) calls.push(call("glob", { pattern: "sites-*/*", path: "/etc/nginx" }));
         if (review("grep")) calls.push(call("grep", { pattern: "proxy_\\w+", path: "/etc", output_mode: "content", context: 1 }));
         if (review("unread")) calls.push(call("edit_file", { path: "/etc/motd", old_string: "Sundays", new_string: "Saturdays" }));
@@ -716,12 +738,16 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     }
 
     if (added.length > 0) {
-      const list = added.map((a) => `- ${a.kind === "file" ? `\`${a.name}\`` : zh ? "粘贴的文本" : "pasted text"}: ${a.lines} ${zh ? "行" : "line(s)"}, ${[...a.text].length} ${zh ? "个字符" : "characters"}`).join("\n");
+      const list = added
+        .map((a) => `- ${a.kind === "file" ? `\`${a.name}\`` : say("pasted text", "粘贴的文本", "貼り付けたテキスト")}: ${a.lines} ${say("line(s)", "行", "行")}, ${[...a.text].length} ${say("characters", "个字符", "文字")}`)
+        .join("\n");
       return {
-        reasoning: zh ? "用户附上了文本，根据它回答。" : "The user attached text; answer from it.",
-        text: zh
-          ? `我收到了这些附件：\n\n${list}\n\n内容都完整地到了。告诉我要从里面找什么。`
-          : `I received these attachments:\n\n${list}\n\nAll of it arrived whole. Tell me what to look for in it.`,
+        reasoning: say("The user attached text; answer from it.", "用户附上了文本，根据它回答。", "ユーザーがテキストを添付した。それをもとに答える。"),
+        text: say(
+          `I received these attachments:\n\n${list}\n\nAll of it arrived whole. Tell me what to look for in it.`,
+          `我收到了这些附件：\n\n${list}\n\n内容都完整地到了。告诉我要从里面找什么。`,
+          `次の添付を受け取りました。\n\n${list}\n\nすべて欠けずに届いています。何を探せばよいか教えてください。`,
+        ),
         calls: [],
         finish: "stop",
       };
@@ -729,12 +755,18 @@ export function createAiMock(deps: AiMockDeps): AiApi {
 
     if (attachment) {
       const first = "```\n" + attachment.text.split("\n")[0] + "\n```";
-      const cut = attachment.truncated ? (zh ? "（太长，中间部分被省略了）" : " (long, so the middle was left out)") : "";
+      const cut = attachment.truncated ? say(" (long, so the middle was left out)", "（太长，中间部分被省略了）", "（長いので途中を省略しました）") : "";
       return {
-        reasoning: zh ? "用户附上了终端里选中的内容，根据它回答。" : "The user attached text selected in the terminal; answer from it.",
-        text: zh
-          ? `你从 **${attachment.host}** 选中了 ${attachment.lines} 行${cut}。第一行是：\n\n${first}\n\n这看起来是一段正常的终端输出。如果要我进一步检查，告诉我要看什么。`
-          : `You selected ${attachment.lines} line(s) on **${attachment.host}**${cut}. The first one is:\n\n${first}\n\nIt looks like ordinary terminal output. Tell me what to look into next.`,
+        reasoning: say(
+          "The user attached text selected in the terminal; answer from it.",
+          "用户附上了终端里选中的内容，根据它回答。",
+          "ユーザーがターミナルで選択したテキストを添付した。それをもとに答える。",
+        ),
+        text: say(
+          `You selected ${attachment.lines} line(s) on **${attachment.host}**${cut}. The first one is:\n\n${first}\n\nIt looks like ordinary terminal output. Tell me what to look into next.`,
+          `你从 **${attachment.host}** 选中了 ${attachment.lines} 行${cut}。第一行是：\n\n${first}\n\n这看起来是一段正常的终端输出。如果要我进一步检查，告诉我要看什么。`,
+          `**${attachment.host}** で ${attachment.lines} 行を選択しました${cut}。最初の行は次のとおりです。\n\n${first}\n\nふつうのターミナル出力のようです。次に何を調べるか教えてください。`,
+        ),
         calls: [],
         finish: "stop",
       };

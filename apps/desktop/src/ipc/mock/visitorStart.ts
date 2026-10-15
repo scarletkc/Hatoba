@@ -15,12 +15,18 @@ const SAMPLE_SECRET = "sample-secret-for-the-demo-7Qx2";
 
 /** Starts the demo once the app is up: the question waits in the first tab, and secret fields fill themselves. */
 export function startVisitor() {
-  const stop = useTabs.subscribe((st) => {
+  // The tab may have connected before this module loaded, so the state as it is counts too.
+  const suggest = (st: ReturnType<typeof useTabs.getState>) => {
     const tab = st.tabs.find((x) => x.title === VISITOR_HOST && x.status === "connected");
-    if (!tab) return;
-    stop();
+    if (!tab) return false;
     suggestQuestion(tab.id, QUESTION[getLocale()]);
-  });
+    return true;
+  };
+  if (!suggest(useTabs.getState())) {
+    const stop = useTabs.subscribe((st) => {
+      if (suggest(st)) stop();
+    });
+  }
   fillSecrets();
 }
 

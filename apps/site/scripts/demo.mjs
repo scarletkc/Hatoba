@@ -17,9 +17,10 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 /** Keep in sync with DEMO_DIR in src/lib/demo.ts. */
 const OUT = fileURLToPath(new URL("../public/demo/", import.meta.url));
 
-/** Runs `command`; pnpm is a .cmd script on Windows, which only a shell runs. */
+/** Runs `command`. pnpm is a .cmd script on Windows, which only a shell runs, so paths with spaces are quoted for it. */
 function run(command, args, cwd) {
-  execFileSync(command, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+  const shell = process.platform === "win32" && command === "pnpm";
+  execFileSync(command, shell ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args, { cwd, stdio: "inherit", shell });
 }
 
 rmSync(OUT, { recursive: true, force: true });
