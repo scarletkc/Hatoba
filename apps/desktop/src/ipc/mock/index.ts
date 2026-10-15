@@ -32,7 +32,6 @@ import { readStoredPrefs } from "./prefs";
 import { FakeShell } from "./shell";
 import { mockLocalShells } from "./local";
 import { passedLocale, VISITOR, VISITOR_HOST, visitorPlatform } from "./visitor";
-import { startVisitor } from "./visitorStart";
 import { version as appVersion } from "../../../package.json";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
@@ -250,7 +249,8 @@ export function createMockApi(): HatobaApi {
     builtinEnabled: async () => (await aiSettings.ai_settings_get()).builtin_skill_enabled,
   });
   const { memory_tool, ...aiMemory } = createAiMemoryMock();
-  if (VISITOR) startVisitor();
+  // Loaded only for the demo: it reaches into the app's stores, which the mock's tests leave out.
+  if (VISITOR) void import("./visitorStart").then((m) => m.startVisitor());
   return {
     ...aiSettings,
     ...aiExtensions,
