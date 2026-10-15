@@ -308,19 +308,30 @@ mod tests {
     #[tokio::test]
     async fn a_stop_ends_the_command_and_what_it_started() {
         let ps = shell(ShellKind::PowerShell).unwrap();
-        let home = std::env::temp_dir();
-        let stop = tokio::time::sleep(Duration::from_millis(1500));
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("started");
+        // The stop comes once the command has started, however long PowerShell takes to.
+        let stop = async {
+            while !marker.exists() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
         let started = Instant::now();
         let run = run(
             &ps,
-            "Write-Output start; ping -n 30 127.0.0.1 >$null",
-            &home,
+            &format!(
+                "Write-Output start; New-Item -ItemType File '{}' | Out-Null; \
+                 ping -n 30 127.0.0.1 >$null",
+                marker.display()
+            ),
+            dir.path(),
             stop,
         )
         .await
         .unwrap();
         assert_eq!(run.stopped, Some(Stopped::Ended));
-        assert!(started.elapsed() < Duration::from_secs(10));
+        // ping alone takes 29 seconds.
+        assert!(started.elapsed() < Duration::from_secs(20));
         assert!(text(&run.output.stdout).contains("start"));
     }
 
