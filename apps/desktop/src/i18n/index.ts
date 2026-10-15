@@ -16,6 +16,8 @@ export function detectLocale(languages: readonly string[] = navigator.languages 
 }
 
 let current: Locale = detectLocale();
+// The first setLocale is a no-op when the language pref is the system one, so set it here too.
+document.documentElement.lang = current;
 const listeners = new Set<() => void>();
 
 export function getLocale(): Locale {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { messages } from "./locales";
 import { detectLocale, formatBytes, formatDateTime, formatMessageTime, formatRelative, startOfDay, translate } from "./index";
 
@@ -100,5 +100,29 @@ describe("locale helpers", () => {
     expect(formatBytes(612)).toBe("612 B");
     expect(formatBytes(2150)).toBe("2.1 KB");
     expect(formatBytes(84 * 1024)).toBe("84 KB");
+  });
+});
+
+describe("document language", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it.each([
+    ["en-US", "en"],
+    ["ja-JP", "ja"],
+    ["zh-CN", "zh-CN"],
+  ] as const)("matches the locale from startup on a %s system", async (system, locale) => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue([system]);
+    document.documentElement.lang = "";
+    vi.resetModules();
+    const { setLocale } = await import("./index");
+    expect(document.documentElement.lang).toBe(locale);
+    // What applyPrefs does with the "system" language: the same locale the module started with.
+    setLocale(locale);
+    expect(document.documentElement.lang).toBe(locale);
+    setLocale(locale === "ja" ? "en" : "ja");
+    expect(document.documentElement.lang).toBe(locale === "ja" ? "en" : "ja");
   });
 });
