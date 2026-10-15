@@ -20,5 +20,18 @@ export default defineConfig({
     // The site uses the screenshots in docs/media, the app icon, and scripts/release from the
     // rest of the repository.
     server: { fs: { allow: [fileURLToPath(new URL("../..", import.meta.url))] } },
+    plugins: [
+      {
+        // The dev server serves public/demo (scripts/demo.mjs) at /demo/ as GitHub Pages does,
+        // which it would otherwise answer with the 404 page.
+        name: "hatoba-demo-index",
+        configureServer(server) {
+          server.middlewares.use((request, _response, next) => {
+            if (request.url && /^\/demo\/(\?|$)/.test(request.url)) request.url = request.url.replace("/demo/", "/demo/index.html");
+            next();
+          });
+        },
+      },
+    ],
   },
 });

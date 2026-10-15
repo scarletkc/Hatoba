@@ -18,6 +18,7 @@ export function getStaticPaths() {
 const { locale } = Astro.props as { locale: Locale };
 const t = messages(locale);
 const release = await loadRelease();
+const hero = screenshot(locale, "ai-assistant");
 /** The app's demo in the page's language, when scripts/demo.mjs built it. */
 const demo = demoBuilt() ? `/demo/?lang=${LANG[locale]}` : null;
 
@@ -37,7 +38,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
       </div>
       <p class="available"><a href={localePath(locale, "/download/")}>{t.hero.available(release.version)}</a></p>
     </div>
-    <div class="horizon" data-demo={demo} data-demo-title={t.demo.title}>
+    <div class="horizon" data-demo={demo} data-demo-title={t.demo.title} style={`--ratio: ${hero.height / hero.width}`}>
       <div class="stage">
         {
           demo && (
@@ -61,11 +62,11 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
           )
         }
         <div class="window rise">
-          <Shot src={screenshot(locale, "ai-assistant")} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
+          <Shot src={hero} alt={t.hero.alt} width="min(1100px, 100vw - 48px)" eager />
           {
             demo && (
               <button type="button" class="btn btn-pier try" data-demo-open hidden>
-                <Icon name="play" />
+                <span class="try-icon"><Icon name="play" /></span>
                 {t.demo.try}
               </button>
             )
@@ -150,23 +151,37 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 </Base>
 
 <script>
-  // The demo takes the screenshot's place in its window, and the window rises out of the water so
-  // that none of the app is under it.
+  // The demo takes the screenshot's place in its window once it has loaded, and the window rises out
+  // of the water so that none of the app is under it. The screenshot opens it too, where the button
+  // shows.
   for (const horizon of document.querySelectorAll<HTMLElement>(".horizon[data-demo]")) {
     const open = horizon.querySelector<HTMLButtonElement>("[data-demo-open]")!;
     const bar = horizon.querySelector<HTMLElement>(".demo-bar")!;
     const shot = horizon.querySelector<HTMLElement>(".window")!;
     let frame: HTMLIFrameElement | null = null;
-    open.hidden = false;
-    open.addEventListener("click", () => {
+    const start = () => {
+      if (frame || getComputedStyle(open).display === "none") return;
       frame = document.createElement("iframe");
       frame.src = horizon.dataset.demo!;
       frame.title = horizon.dataset.demoTitle!;
+      frame.addEventListener(
+        "load",
+        () => {
+          horizon.classList.replace("loading", "open");
+          bar.hidden = false;
+          const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+          horizon.querySelector(".stage")!.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+          frame?.focus();
+        },
+        { once: true },
+      );
+      horizon.classList.add("loading");
+      open.setAttribute("aria-busy", "true");
       shot.append(frame);
-      horizon.classList.add("open");
-      bar.hidden = false;
-      frame.focus();
-    });
+    };
+    horizon.classList.add("playable");
+    open.hidden = false;
+    shot.addEventListener("click", start);
     bar.querySelector("[data-demo-restart]")!.addEventListener("click", () => {
       frame?.contentWindow?.location.reload();
       frame?.focus();
@@ -175,6 +190,7 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
       frame?.remove();
       frame = null;
       horizon.classList.remove("open");
+      open.removeAttribute("aria-busy");
       bar.hidden = true;
       open.focus();
     });
@@ -260,27 +276,93 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
     position: relative;
   }
 
-  /* The demo fills the window over its screenshot, which keeps the window's size. */
+  /* The demo fills the window over its screenshot, and shows once it has loaded. */
   .window :global(iframe) {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     border: 0;
-    background: #1c1d21;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  .open .window :global(iframe) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* A short screen keeps all of the demo in view, the bar above it included. */
+  .open .window {
+    height: min(var(--shot) * var(--ratio), 100svh - 96px);
+  }
+
+  .open .window :global(.shot) {
+    display: none;
+  }
+
+  /* The screenshot is the demo's poster: it dims under the pointer, and a click anywhere starts it. */
+  .playable:not(.open) .window {
+    cursor: pointer;
+  }
+
+  .playable .window::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgb(9 16 39 / 0);
+    pointer-events: none;
+    transition: background-color 0.2s ease;
+  }
+
+  .playable:not(.open) .window:hover::after,
+  .loading .window::after {
+    background: rgb(9 16 39 / 0.22);
   }
 
   .try {
     position: absolute;
+    z-index: 1;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
     box-shadow: 0 12px 32px rgb(5 12 40 / 0.45);
+    transition: background-color 0.15s ease, transform 0.2s ease;
+  }
+
+  .window:hover .try {
+    background: var(--foam);
+    transform: translate(-50%, -50%) scale(1.04);
   }
 
   .try[hidden],
   .open .try {
     display: none;
+  }
+
+  .try-icon {
+    display: inline-flex;
+  }
+
+  /* While the demo loads, the play icon turns into a spinner. */
+  .loading .try-icon {
+    width: 18px;
+    height: 18px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .loading .try-icon :global(svg) {
+    display: none;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Above the demo: what it is, and the way out of it, since the app takes the keyboard. */
@@ -490,8 +572,13 @@ const DEPLOY_DIALOG = { x: 1094, y: 400, w: 1152, h: 1090 };
 
   /* The app is laid out as a desktop window, so narrower screens keep the screenshot. */
   @media (max-width: 959px) {
-    .try {
+    .try,
+    .playable .window::after {
       display: none;
+    }
+
+    .playable:not(.open) .window {
+      cursor: auto;
     }
   }
 
