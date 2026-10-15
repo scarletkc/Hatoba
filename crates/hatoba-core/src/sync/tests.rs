@@ -11,8 +11,8 @@ use super::*;
 use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
 use crate::model::{
-    AiConversation, AiEffort, AiMessage, Host, HostAuth, Item, RightClick, SETTINGS_ID, SshKey,
-    new_id,
+    AiConversation, AiEffort, AiMessage, Group, Host, HostAuth, Item, PortForward, RightClick,
+    SETTINGS_ID, SshKey, new_id,
 };
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
@@ -1135,6 +1135,49 @@ async fn delete_vs_delete_leaves_one_tombstone_and_no_conflict() {
         a.v().unreviewed_conflict_count() + b.v().unreviewed_conflict_count(),
         0
     );
+}
+
+#[tokio::test]
+async fn host_group_and_key_deletions_sync_their_repairs() {
+    let (server, clock, a, b) = two_devices().await;
+    let group = a.put(Item::Group(Group {
+        name: "prod".into(),
+        ..Group::default()
+    }));
+    let key_id = a.put(key("deploy", "PRIVATE-KEY-BODY"));
+    let bastion = a.put(host("bastion"));
+    let forward = a.put(Item::Forward(PortForward {
+        host_id: bastion.clone(),
+        bind_port: 8080,
+        ..PortForward::default()
+    }));
+    let inner = a.put(Item::Host(Host {
+        name: "inner".into(),
+        group_id: Some(group.clone()),
+        jump_host_id: Some(bastion.clone()),
+        auth: HostAuth::Key {
+            key_id: key_id.clone(),
+        },
+        ..Host::default()
+    }));
+    converge(&a, &b).await;
+
+    clock.advance(1000);
+    a.v().delete_host(&bastion).unwrap();
+    a.v().delete_group(&group).unwrap();
+    a.v().delete_key(&key_id).unwrap();
+    converge(&a, &b).await;
+
+    for id in [&group, &key_id, &bastion, &forward] {
+        assert!(b.v().get(id).is_none());
+        assert!(server.item(id).unwrap().deleted);
+    }
+    let Item::Host(h) = b.v().get(&inner).unwrap().clone() else {
+        panic!()
+    };
+    assert_eq!(h.group_id, None);
+    assert_eq!(h.jump_host_id, None);
+    assert_eq!(h.auth, HostAuth::Ask);
 }
 
 // ---- conflicts ------------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 use std::io::Read;
 use std::path::Path;
 
-use hatoba_core::model::{HostAuth, Item, KeyAlgorithm as CoreAlg, SshKey};
+use hatoba_core::model::{Item, KeyAlgorithm as CoreAlg, SshKey};
 use hatoba_ssh::{GenerateKind, KeyAlgorithm as SshAlg, ParsedKey};
 use tauri::{AppHandle, State};
 use zeroize::{Zeroize, Zeroizing};
@@ -226,13 +226,8 @@ pub fn key_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> App
         v.get(&id)
             .and_then(Item::as_key)
             .ok_or_else(|| AppError::not_found("key"))?;
-        for (host_id, mut host) in v.hosts() {
-            if matches!(&host.auth, HostAuth::Key { key_id } if *key_id == id) {
-                host.auth = HostAuth::Ask;
-                v.put(Some(&host_id), Item::Host(host))?;
-            }
-        }
-        v.delete(&id)?;
+        // Hosts that signed in with it ask on every connection.
+        v.delete_key(&id)?;
         Ok(())
     })?;
     sync::local_change(&app);

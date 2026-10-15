@@ -218,19 +218,8 @@ fn check_item_size(vault: &Vault, item: &Item) -> AppResult<()> {
 pub fn host_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.with_unlocked(|v| {
         find_host(v, &id)?;
-        // Hosts that jumped through this one now connect directly.
-        for (other_id, mut other) in v.hosts() {
-            if other.jump_host_id.as_deref() == Some(id.as_str()) {
-                other.jump_host_id = None;
-                v.put(Some(&other_id), Item::Host(other))?;
-            }
-        }
-        for (fwd_id, fwd) in v.forwards() {
-            if fwd.host_id == id {
-                v.delete(&fwd_id)?;
-            }
-        }
-        v.delete(&id)?;
+        // Hosts that jumped through this one now connect directly; its forwards go with it.
+        v.delete_host(&id)?;
         Ok(())
     })?;
     sync::local_change(&app);
@@ -373,19 +362,8 @@ pub fn group_delete(app: AppHandle, state: State<'_, AppState>, id: String) -> A
         v.get(&id)
             .and_then(Item::as_group)
             .ok_or_else(|| AppError::not_found("group"))?;
-        for (host_id, mut host) in v.hosts() {
-            if host.group_id.as_deref() == Some(id.as_str()) {
-                host.group_id = None;
-                v.put(Some(&host_id), Item::Host(host))?;
-            }
-        }
-        for (child_id, mut child) in v.groups() {
-            if child.parent_id.as_deref() == Some(id.as_str()) {
-                child.parent_id = None;
-                v.put(Some(&child_id), Item::Group(child))?;
-            }
-        }
-        v.delete(&id)?;
+        // Its hosts and child groups move to the top level.
+        v.delete_group(&id)?;
         Ok(())
     })?;
     sync::local_change(&app);

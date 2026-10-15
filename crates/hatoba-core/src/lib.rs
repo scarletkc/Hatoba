@@ -14,6 +14,7 @@
 //! | [`store`] | local SQLite: ciphertext only (spec §5.2) |
 //! | [`vault`] | lock state, password and recovery operations, the decrypted item map |
 //! | `vault_ai` | AI items on [`Vault`]: providers, skills, MCP servers, conversations (§13.7) |
+//! | `vault_cascade` | deleting a host, group or key and repairing references, in one transaction |
 //! | `vault_pin` | PIN unlock after a lock, device-local (SEC-11) |
 //! | `vault_snapshots` | device-local, sealed snapshots of AI file edits, for Revert (spec AI-41) |
 //! | [`sync`] | backends (Worker / D1), engine, conflict rules, user-facing flows (spec §6) |
@@ -49,6 +50,7 @@ pub mod store;
 pub mod sync;
 pub mod vault;
 mod vault_ai;
+mod vault_cascade;
 mod vault_pin;
 mod vault_snapshots;
 pub mod version;
