@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
 use regex_syntax::ast::{self, Ast};
+use regex_syntax::hir::{Class, Hir, HirKind, Look};
 
 use crate::tools::{GrepArgs, GrepOutput, MAX_RESULT_CHARS};
 
@@ -597,6 +598,42 @@ fn has_line_feed(ast: &Ast) -> bool {
         Ast::Alternation(alternation) => alternation.asts.iter().any(has_line_feed),
         Ast::Concat(concat) => concat.asts.iter().any(has_line_feed),
         _ => false,
+    }
+}
+
+/// Whether `rg -c` counts matches rather than matching lines for `args`: in a multiline search
+/// whose pattern can take in a line break, or has `^`, `$`, `\A` or `\z`, for which rg reads files
+/// whole, as its `non_matching_bytes` tells.
+fn counts_matches(args: &GrepArgs) -> bool {
+    args.multiline.unwrap_or(false)
+        && regex_syntax::ParserBuilder::new()
+            .multi_line(true)
+            .dot_matches_new_line(true)
+            .utf8(false)
+            .build()
+            .parse(&args.pattern)
+            .is_ok_and(|hir| takes_line_break(&hir))
+}
+
+fn takes_line_break(hir: &Hir) -> bool {
+    match hir.kind() {
+        HirKind::Empty => false,
+        HirKind::Literal(literal) => literal.0.contains(&b'\n'),
+        HirKind::Class(Class::Unicode(class)) => class
+            .ranges()
+            .iter()
+            .any(|r| r.start() <= '\n' && '\n' <= r.end()),
+        HirKind::Class(Class::Bytes(class)) => class
+            .ranges()
+            .iter()
+            .any(|r| r.start() <= b'\n' && b'\n' <= r.end()),
+        HirKind::Look(look) => matches!(
+            look,
+            Look::Start | Look::End | Look::StartLF | Look::EndLF | Look::StartCRLF | Look::EndCRLF
+        ),
+        HirKind::Repetition(repetition) => takes_line_break(&repetition.sub),
+        HirKind::Capture(capture) => takes_line_break(&capture.sub),
+        HirKind::Concat(all) | HirKind::Alternation(all) => all.iter().any(takes_line_break),
     }
 }
 
@@ -1268,14 +1305,16 @@ pub fn grep_result(args: &GrepArgs, search: &Search, found: &Found<'_>) -> Strin
                 })
                 .collect();
             counts.sort();
-            let total: u64 = counts.iter().map(|(_, n)| n).sum();
+            let total =
+                usize::try_from(counts.iter().map(|(_, n)| n).sum::<u64>()).unwrap_or(usize::MAX);
+            let (one, many) = if counts_matches(args) {
+                ("match", "matches")
+            } else {
+                ("matching line", "matching lines")
+            };
             let summary = format!(
                 "{} in {} {place}",
-                count(
-                    usize::try_from(total).unwrap_or(usize::MAX),
-                    "matching line",
-                    "matching lines"
-                ),
+                count(total, one, many),
                 count(counts.len(), "file", "files")
             );
             let entries = counts
@@ -1931,5 +1970,31 @@ mod tests {
             out,
             "2 matching lines in 1 file in /s/a, sorted by path:\n/s/a:1:x\n/s/a:2:y\n"
         );
+    }
+
+    #[test]
+    fn a_multiline_count_names_what_rg_counts() {
+        let s = Search::new(Some("/s/a"), None).unwrap();
+        let counted = found("/s/a", "/s/a:3\n", "");
+        // `rg -c -U` counts matches where the pattern can span lines, and lines otherwise.
+        for (json, summary) in [
+            (r#"{"pattern":"x\\ny","multiline":true}"#, "3 matches"),
+            (r#"{"pattern":"a.b","multiline":true}"#, "3 matches"),
+            (r#"{"pattern":"^x","multiline":true}"#, "3 matches"),
+            (r#"{"pattern":"ab","multiline":true}"#, "3 matching lines"),
+            (
+                r#"{"pattern":"a(?-s:.)","multiline":true}"#,
+                "3 matching lines",
+            ),
+            (r#"{"pattern":"^x"}"#, "3 matching lines"),
+        ] {
+            let mut args = grep(json);
+            args.output_mode = Some(GrepOutput::Count);
+            assert_eq!(
+                grep_result(&args, &s, &counted),
+                format!("{summary} in 1 file in /s/a, sorted by path:\n/s/a:3\n"),
+                "{json}"
+            );
+        }
     }
 }
