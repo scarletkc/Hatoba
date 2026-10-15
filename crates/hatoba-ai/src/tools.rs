@@ -184,10 +184,7 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                 "{runs} and return its stdout, stderr and exit status. {apart}, so interactive \
                  programs and password prompts do not work, and it does not share the terminal \
                  shell's {shared}: it starts in the user's home directory, or in `workdir` when \
-                 given. Its output does not appear in the terminal. Use send_input \
-                 instead when the command must run in the user's shell or needs interaction, glob \
-                 and grep to find files and search their contents, and read_file, edit_file and \
-                 write_file to read and change files. The command is stopped after \
+                 given. Its output does not appear in the terminal. The command is stopped after \
                  timeout_seconds (default 120, at most 600). Output longer than 30,000 characters \
                  keeps its first 7,500 and last 22,500 characters."
             ),
@@ -1198,16 +1195,14 @@ fn permission_rule(terminal: bool) -> String {
     format!(
         "- Permission mode: the newest <permission_mode> note says which mode applies.\n  \
          - Manual approval: a call of {tools} shows the user an approval card first, where the \
-         user can run, edit or reject it; {exempt} run without one. So call the tool rather than \
-         asking for permission in prose first: the card is the question. Before anything that \
-         changes or deletes data, restarts services or affects other users, say what it will \
-         do.\n  \
+         user can run, edit or reject it; {exempt} run without one.\n  \
          - Auto: a call that manual approval would show a card for goes to a reviewer first, \
          which runs it without the card when it finds that the call only reads, or is a change \
          the user asked for that deletes nothing, touches no credentials and sends nothing out; \
-         otherwise the approval card shows as in manual approval. So call the tool rather than \
-         asking for permission in prose first. Before anything that changes or deletes data, \
-         restarts services or affects other users, say what it will do.\n  \
+         otherwise the approval card shows as in manual approval.\n  \
+         - In manual approval and Auto, call the tool rather than asking for permission in prose \
+         first: the card is the question. Before anything that changes or deletes data, restarts \
+         services or affects other users, say what it will do.\n  \
          - Bypass: your tool calls run as soon as you make them, without the user seeing them \
          first; only the tools of MCP servers the user set to always ask wait for approval. So \
          before anything that deletes data, cannot be undone, restarts services or affects \
@@ -1847,11 +1842,11 @@ mod tests {
             "working directory",
             "sudo",
             "does not appear in the terminal",
-            // Where to read and change files instead (the rules say when to pick which tool).
-            "read_file, edit_file and write_file",
         ] {
             assert!(run.description.contains(phrase), "{phrase}");
         }
+        // Which tool to pick instead is one rule of the system prompt.
+        assert!(!run.description.contains("read_file"));
         assert_eq!(run.input_schema["required"], json!(["command"]));
         assert!(run.description.contains("home directory, or in `workdir`"));
         assert_eq!(run.input_schema["properties"]["workdir"]["type"], "string");
@@ -2259,16 +2254,14 @@ mod tests {
                  run_command, send_input, edit_file, write_file, fetch_url or an MCP tool shows \
                  the user an approval card first, where the user can run, edit or reject it; \
                  run_command calls that only read and calls the user has already allowed run \
-                 without one. So call the tool rather than asking for permission in prose first: \
-                 the card is the question. Before anything that changes or deletes data, \
-                 restarts services or affects other users, say what it will do.\n  - Auto: a \
+                 without one.\n  - Auto: a \
                  call that manual approval would show a card for goes to a reviewer first, which \
                  runs it without the card when it finds that the call only reads, or is a change \
                  the user asked for that deletes nothing, touches no credentials and sends \
-                 nothing out; otherwise the approval card shows as in manual approval. So call \
-                 the tool rather than asking for permission in prose first. Before anything that \
-                 changes or deletes data, restarts services or affects other users, say what it \
-                 will do.\n  - Bypass: \
+                 nothing out; otherwise the approval card shows as in manual approval.\n  - In \
+                 manual approval and Auto, call the tool rather than asking for permission in \
+                 prose first: the card is the question. Before anything that changes or deletes \
+                 data, restarts services or affects other users, say what it will do.\n  - Bypass: \
                  your tool calls run as soon as you make them, without the user seeing them \
                  first; only the tools of MCP servers the user set to always ask wait for \
                  approval. So before anything that deletes data, cannot be undone, restarts \
@@ -2580,8 +2573,9 @@ The SSH server identifies itself as "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5".
 - Look before you act: check the current state with the screen or a read-only command first. A <terminal_state> block at the start of a message already shows the screen as it was when the user sent it, so do not read the screen again just to see it; call read_terminal when there is none, when you need the lines above it, or when the screen may have changed since, such as while a command is still printing. Prefer the safest command that does the job.
 - After a change, check that it worked before you call it done: test a configuration with the service's own test before reloading what uses it (such as nginx -t, sshd -t or visudo -c), and do not reload it while the test fails; then check what the user cares about, such as the service's status or the request that failed. When edit_file or write_file succeeds, the file holds what the call wrote, so do not read it back to check that. Say what you checked, or that you could not check it.
 - Permission mode: the newest <permission_mode> note says which mode applies.
-  - Manual approval: a call of run_command, send_input, edit_file, write_file, fetch_url or an MCP tool shows the user an approval card first, where the user can run, edit or reject it; run_command calls that only read and calls the user has already allowed run without one. So call the tool rather than asking for permission in prose first: the card is the question. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
-  - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval. So call the tool rather than asking for permission in prose first. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
+  - Manual approval: a call of run_command, send_input, edit_file, write_file, fetch_url or an MCP tool shows the user an approval card first, where the user can run, edit or reject it; run_command calls that only read and calls the user has already allowed run without one.
+  - Auto: a call that manual approval would show a card for goes to a reviewer first, which runs it without the card when it finds that the call only reads, or is a change the user asked for that deletes nothing, touches no credentials and sends nothing out; otherwise the approval card shows as in manual approval.
+  - In manual approval and Auto, call the tool rather than asking for permission in prose first: the card is the question. Before anything that changes or deletes data, restarts services or affects other users, say what it will do.
   - Bypass: your tool calls run as soon as you make them, without the user seeing them first; only the tools of MCP servers the user set to always ask wait for approval. So before anything that deletes data, cannot be undone, restarts services or affects other users, unless the user asked for exactly that, stop and ask in chat, and go on only after the user agrees.
 - After a rejection, do not repeat the same call unchanged: change your approach as the user's reason says, or ask.
 - You can call several tools in one response. When calls do not depend on each other, such as reading several files or running several checks, make them together in the same response rather than one at a time.
