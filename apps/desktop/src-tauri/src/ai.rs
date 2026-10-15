@@ -5083,18 +5083,24 @@ struct Block<'a> {
     attrs: Vec<(&'a str, &'a str)>,
 }
 
+/// The attachments a message has at most one of, as the panel attaches them (AI-10).
+const SINGLE_ATTACHMENTS: [&str; 2] = ["terminal_selection", "connection_diagnostics"];
+
 /// The blocks `text` starts with, in order, and the text after them. Notes come first, at most
 /// one of each kind but `file_revert`, which comes once for each reverted call: a note after an
-/// attachment, or a second one of another kind, is typed text.
+/// attachment, or a second one of another kind, is typed text, and so is a second selection or
+/// diagnostics block.
 fn leading_blocks(text: &str) -> (Vec<Block<'_>>, &str) {
     let mut blocks: Vec<Block<'_>> = Vec::new();
     let mut rest = text;
     while let Some((block, after)) = leading_block(rest) {
-        if block.kind.note
-            && blocks.iter().any(|b| {
-                !b.kind.note || (b.kind.tag == block.kind.tag && block.kind.tag != FILE_REVERT)
-            })
-        {
+        let repeated = blocks.iter().any(|b| b.kind.tag == block.kind.tag);
+        let typed = if block.kind.note {
+            blocks.iter().any(|b| !b.kind.note) || (repeated && block.kind.tag != FILE_REVERT)
+        } else {
+            repeated && SINGLE_ATTACHMENTS.contains(&block.kind.tag)
+        };
+        if typed {
             break;
         }
         blocks.push(block);

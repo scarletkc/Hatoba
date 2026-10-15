@@ -30,9 +30,11 @@ sudo apps/desktop/e2e/run-smoke.sh ./e2e-shots
 ```
 
 The script starts a throwaway `sshd`, Xvfb, D-Bus and tauri-driver, builds the app in debug mode,
-and writes a screenshot of every step to the output directory (`./e2e-shots` above).
+and writes a screenshot of every step to the output directory (`./e2e-shots` above). The app runs
+with `home/` in the output directory as its home folder, emptied at the start of each run, so every
+run starts at the first launch and your own Hatoba data is left alone.
 
 ## Check the vault for plaintext
 
 After a run, confirm that the vault database holds no plaintext:
-`grep -a <host name> ~/.local/share/app.hatoba.desktop/vault.db*` must find nothing.
+`grep -a <host name> ./e2e-shots/home/.local/share/app.hatoba.desktop/vault.db*` must find nothing.

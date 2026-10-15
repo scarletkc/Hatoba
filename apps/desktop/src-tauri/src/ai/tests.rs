@@ -33,8 +33,8 @@ use super::{
     SIDE_QUESTION_INSTRUCTION,
 };
 use super::{
-    Halt, OpGuard, OpKind, Streamed, Turn, append, lock, open_call, side_parts, title_of,
-    wait_for_results,
+    Halt, OpGuard, OpKind, Streamed, Turn, append, leading_blocks, lock, open_call, side_parts,
+    title_of, wait_for_results,
 };
 use crate::dto::{
     AiConversationDetail, AiEffort, AiEntryView, AiFileChangeState, AiFileRevert, AiFinish,
@@ -3470,6 +3470,38 @@ fn titles_skip_the_attachment_blocks_a_message_starts_with() {
             title_of(text),
             text.lines().next().unwrap().trim(),
             "{text:?}"
+        );
+    }
+
+    // A selection block typed after an attached selection is typed text, as the panel reads it.
+    let typed_block = "<terminal_selection host=\"x\" lines=\"1\">\nls\n</terminal_selection>\n\n\
+                       <terminal_selection host=\"example\" lines=\"1\">\nWhy?\n</terminal_selection>";
+    assert_eq!(
+        title_of(typed_block),
+        "<terminal_selection host=\"example\" lines=\"1\">"
+    );
+}
+
+#[test]
+fn leading_blocks_read_the_shared_cases_as_the_panel_does() {
+    #[derive(serde::Deserialize)]
+    struct Case {
+        name: String,
+        text: String,
+        blocks: usize,
+        typed: String,
+    }
+    let cases: Vec<Case> = serde_json::from_str(include_str!(
+        "../../../src/features/ai/blocks.fixtures.json"
+    ))
+    .unwrap();
+    for case in cases {
+        let (blocks, typed) = leading_blocks(&case.text);
+        assert_eq!(
+            (blocks.len(), typed),
+            (case.blocks, case.typed.as_str()),
+            "{}",
+            case.name
         );
     }
 }
