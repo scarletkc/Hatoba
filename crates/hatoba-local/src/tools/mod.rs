@@ -17,9 +17,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use hatoba_ssh::local_sh::LocalSh;
-use hatoba_ssh::remote_command::{self, CommandRun};
+use hatoba_ssh::remote_command::{self, CommandRun, Stopped};
 use hatoba_ssh::remote_file::{self, Expect, RemoteDir, RemoteFile, RemoteFileError, RemoteLines};
 use hatoba_ssh::remote_search::{self, GrepQuery, RemoteSearchError, Scope, SearchOutput};
+use hatoba_ssh::session::ExecOutput;
 use hatoba_ssh::{SshError, SshErrorKind};
 
 use crate::shells::{Shell, ShellKind};
@@ -230,8 +231,19 @@ impl LocalTools {
                 .await
                 .map_err(|e| e.message),
             Self::Native { shell, home } => {
+                tokio::pin!(stop);
                 let cwd = match workdir {
-                    Some(dir) => native_workdir(shell, dir, home).await?,
+                    // A network folder can take long to answer; a stop does not wait for it.
+                    Some(dir) => tokio::select! {
+                        biased;
+                        () = &mut stop => {
+                            return Ok(CommandRun {
+                                output: ExecOutput::default(),
+                                stopped: Some(Stopped::NotStarted),
+                            });
+                        }
+                        cwd = native_workdir(shell, dir, home) => cwd?,
+                    },
                     None => home.clone(),
                 };
                 command::run(shell, command, &cwd, stop).await
@@ -253,13 +265,14 @@ async fn native_workdir(shell: &NativeShell, dir: &str, home: &Path) -> Result<P
                 .to_owned(),
         );
     }
+    let shown = files::shown(&path);
     match tokio::fs::metadata(&path).await {
         Ok(meta) if meta.is_dir() => Ok(path),
-        Ok(_) => Err(format!("{} is not a directory", files::shown(&path))),
-        Err(_) => Err(format!(
-            "the directory {} does not exist",
-            files::shown(&path)
-        )),
+        Ok(_) => Err(format!("{shown} is not a directory")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(format!("the directory {shown} does not exist"))
+        }
+        Err(e) => Err(format!("the directory {shown} cannot be used: {e}")),
     }
 }
 
@@ -432,6 +445,12 @@ mod windows_tests {
                     .unwrap_err();
                 assert!(refused.contains(error), "{refused}");
             }
+            // A stop while the directory is looked up runs nothing.
+            let run = tools
+                .run_command(line, Some("a b"), std::future::ready(()))
+                .await
+                .unwrap();
+            assert_eq!(run.stopped, Some(Stopped::NotStarted));
         }
         let cmd = LocalTools::Native {
             shell: shell(ShellKind::Cmd),

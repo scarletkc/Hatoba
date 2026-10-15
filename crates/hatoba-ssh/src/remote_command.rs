@@ -45,9 +45,10 @@ use crate::session::{ExecOutput, ExecSlot, ExecWriter, MAX_EXEC_OUTPUT, SshSessi
 /// --default-signal` (GNU) and `perl` undo. The script prints the marker and the way it found,
 /// then reads the number of the command's lines, a line with the directory to start it in, the
 /// command, and a last line of the marker and `-end`, so a command cut short is never run (exit
-/// status 9). An empty directory leaves the command in the directory the script started in, the
-/// home directory; `~` and `~/…` are from `$HOME`, and any other relative path, also one that
-/// starts with `-`, is from the home directory, never from `CDPATH`. When `cd` fails, the script
+/// status 9). An empty directory leaves the command in the directory the script started in,
+/// usually the home directory; `~`, `~/…` and any other relative path, also one that starts with
+/// `-`, are from `$HOME`, not from where the login shell's startup files may have changed to, nor
+/// from `CDPATH`. When `cd` fails, the script
 /// ends with its status and message, and runs nothing. The command's stdin is `/dev/null`, as
 /// the empty stdin sshd gives a command that is sent none. Its exit status is the script's; one
 /// ended by a signal is 128 and the signal's number.
@@ -72,7 +73,7 @@ const SCRIPT: &str = "m=hatoba-run-$(($1+1)); s=${SHELL:-sh}; \
      c=$(head -n $((n+1)); echo x); c=${c%x}; d=${c%\"$m\"-end?}; [ \"$d\" = \"$c\" ] && exit 9; \
      d=${d%?}; \
      case $h in \"\") ;; \"~\") cd || exit;; \"~/\"*) cd \"$HOME/${h#??}\" || exit;; \
-     /*) cd \"$h\" || exit;; *) cd \"./$h\" || exit;; esac; \
+     /*) cd \"$h\" || exit;; *) cd \"$HOME/$h\" || exit;; esac; \
      exec 3<&0; case $g in \
      setsid) if env --default-signal=INT,QUIT true >/dev/null 2>&1; then \
      setsid env --default-signal=INT,QUIT \"$s\" -c \"$d\" </dev/null 3<&- & \
@@ -800,15 +801,16 @@ mod tests {
             }
             let pwd = |workdir: &str| {
                 let mut cmd = Command::new("sh");
-                // A relative directory is from the home directory, not from CDPATH.
-                cmd.current_dir(&home)
+                // A relative directory is from HOME, not from where the script started (as after
+                // a startup file's cd) or from CDPATH, both of which hold an `a b` of their own.
+                cmd.current_dir(home.join("sub"))
                     .env("HOME", &home)
                     .env("CDPATH", home.join("sub"));
                 finish(start_in(cmd, workdir, "pwd -P"), None)
             };
             let absolute = home.join("sub");
             for (workdir, expected) in [
-                ("", home.clone()),
+                ("", home.join("sub")),
                 ("~", home.clone()),
                 ("~/a b", home.join("a b")),
                 ("a b", home.join("a b")),
