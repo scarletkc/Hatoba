@@ -1,12 +1,12 @@
 # AI assistant panel
 
-The AI assistant is a chat panel at the right edge of the window, below the tab bar. It can read the terminal, run commands, type into the shell, search the web, fetch pages, read skills and use MCP tools, within the permission mode of the conversation. It calls a model provider that the user adds with their own API key (Settings → AI, see `references/ai-settings.md`).
+The AI assistant is a chat panel at the right edge of the window, below the tab bar. It can read the terminal, run commands, type into the shell, search the web, fetch pages, read skills and use MCP tools, within the permission mode of the conversation. It calls a model provider that the user adds in Settings → AI (`references/ai-settings.md`).
 
 ## Opening the panel
 
 - Click the sparkle button at the right of the tab bar, or press Ctrl+Shift+A (⌘⇧A on macOS). The close button (×) in the panel header hides it again. The open state and the width are remembered on this device.
 - **Ask AI** in a terminal's right-click menu or **More actions** menu opens the panel on that tab with the input focused; the selected text shows as a chip above the input. It is disabled while nothing is selected, and the right-click menu appears only when **Right-Click in Terminal** is set to **Show context menu** (`references/terminal.md`). **Ask AI** on a failed connection's card attaches its diagnostics.
-- Drag the panel's left edge to resize it (300 to 900 px); double-click the edge to reset the width ("Drag to resize, double-click to reset").
+- Drag the panel's left edge to resize it (300 to 900 px); double-click the edge to reset the width.
 - With no provider, the panel says "Add a model provider" with a button that opens Settings → AI. With a provider that has no model, it asks to add a model.
 
 | en | zh-CN | ja |
@@ -69,6 +69,7 @@ Type `/` at the start of the box for commands, or `@` at the start of a word to 
 - `/clear` (also `/new`, `/reset`): a new conversation.
 - `/compact [instructions]`: compacts the conversation; text after it tells the summary what to keep (`references/ai-models.md`).
 - `/mcp`: the MCP servers of this conversation (below).
+- `/memory`: opens Settings → AI at **Memory** (`references/ai-instructions.md`).
 - `/model`: opens the **Model** picker.
 - `/<skill>`: runs an enabled skill, the built-in `/hatoba` included. Its `SKILL.md` goes with the message, which the panel shows as a chip, so the assistant follows it without reading it first.
 - `/mcp__<server>__<prompt> [arguments]`: runs a prompt of an MCP server. Words after it fill the prompt's arguments in order, a word in quotes may hold spaces, and the last argument takes the rest. The prompt's text goes with the message.

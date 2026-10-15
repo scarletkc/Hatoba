@@ -603,12 +603,12 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
             MEMORY,
             format!(
                 "Save or delete one of your memories: notes for yourself that every new \
-                 conversation of the user starts with, in a <memory> note, on all their \
-                 devices. `save` stores `content` under `name`, replacing the memory of that \
-                 name if there is one; `delete` removes the memory of that name. Keep a memory \
-                 to a few lines on one subject. All memories together, names included, hold at \
-                 most {MAX_MEMORY_BYTES} bytes of UTF-8. A change shows in new conversations, \
-                 and in this one after it is compacted. It runs without asking."
+                 conversation of the user starts with, in a <memory> note. `save` stores \
+                 `content` under `name`, replacing the memory of that name if there is one; \
+                 `delete` removes the memory of that name. Keep a memory to a few lines on one \
+                 subject. All memories together, names included, hold at most \
+                 {MAX_MEMORY_BYTES} bytes of UTF-8. A change shows in new conversations, and in \
+                 this one after it is compacted. It runs without asking."
             ),
             json!({
                 "type": "object",

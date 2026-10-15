@@ -70,8 +70,9 @@ account.
   uses your own OpenAI-compatible or Anthropic API key, supports skills and MCP
   servers, and takes terminal selections, connection errors, long pastes, and
   text files as attachments. Type `/` for commands, skills, and MCP prompts, and
-  `@` to attach files and folders on the host or MCP resources. Conversations
-  sync with the rest of the vault.
+  `@` to attach files and folders on the host or MCP resources. Conversations,
+  and the memories the assistant keeps across them, sync with the rest of the
+  vault.
 
 ## Download
 

@@ -18,6 +18,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 | Fetch page | 读取网页 | ページを取得 |
 | Read skill | 读取技能 | スキルを読む |
 | Search MCP tools | 搜索 MCP 工具 | MCP ツールを検索 |
+| Memory | 记忆 | メモリ |
 
 | Tool | What it does | Manual approval mode |
 |---|---|---|
@@ -32,6 +33,7 @@ What the assistant can call, which calls wait for the user, and the approval car
 | **Web search** (`web_search`) | Searches with the search provider chosen in Settings → AI. With Native Search (the default), the current model searches with its provider's own search and returns the pages it found with its account of them. Not offered with None | Runs without asking |
 | **Fetch page** (`fetch_url`) | Fetches an http or https page without cookies, converts HTML to Markdown and returns up to 30,000 characters at a time. Of an HTML page it returns the main content, without navigation, sidebars and footers, unless the page does not read as one text or the assistant asks for the whole page. Addresses on loopback, private or link-local networks are refused | Asks, unless allowed |
 | **Read skill** (`read_skill`) | Reads an enabled skill's instructions or one of its files | Runs without asking |
+| **Memory** (`memory`) | Saves a memory under a name, replacing the one of that name, or deletes one (`references/ai-instructions.md`). Offered while memory is on | Runs without asking |
 | MCP tools (`mcp__<server>__<tool>`) | Tools from the MCP servers the user added (shown as server · tool) | Ask, unless set to Always allow |
 | **Search MCP tools** (`search_tools`) | With many MCP tools (see `/mcp` in `references/ai-panel.md`), finds them by keywords or name and returns their descriptions and input schemas | Runs without asking |
 | `call_mcp_tool` | Calls an MCP tool by name; shown, approved and allowed as that tool | As that tool |
