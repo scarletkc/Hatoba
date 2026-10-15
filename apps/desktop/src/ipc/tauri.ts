@@ -1,265 +1,267 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
 import type { HatobaApi } from "./api";
+import { commands } from "./bindings";
 import type { AiSideEvent, AiTurnEvent, DashboardEvent, DeployProgress, StatsEvent, UpdateProgress } from "./types";
 
+/** A command whose Rust function returns `()` resolves to `null`; the API declares `void`. */
+const done = (result: Promise<null>): Promise<void> => result.then(() => undefined);
+
 /**
- * Tauri implementation of {@link HatobaApi}. Command arguments use Tauri's default camelCase
- * mapping of the Rust snake_case parameter names.
+ * Tauri implementation of {@link HatobaApi}, on the command functions tauri-specta generates, so
+ * a changed command name or parameter list fails the type check here.
  */
 export function createTauriApi(): HatobaApi {
-  const call = <T>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args);
-
   return {
-    app_info: () => call("app_info"),
-    update_check: () => call("update_check"),
+    app_info: () => commands.appInfo(),
+    update_check: () => commands.updateCheck(),
     update_install: (onProgress) => {
       const progress = new Channel<UpdateProgress>();
       progress.onmessage = onProgress;
-      return call("update_install", { progress });
+      return done(commands.updateInstall(progress));
     },
-    launch_take: () => call("launch_take"),
-    cli_command_get: () => call("cli_command_get"),
-    cli_command_set: (enabled) => call("cli_command_set", { enabled }),
+    launch_take: () => commands.launchTake(),
+    cli_command_get: () => commands.cliCommandGet(),
+    cli_command_set: (enabled) => commands.cliCommandSet(enabled),
 
-    vault_status: () => call("vault_status"),
-    vault_create: (password) => call("vault_create", { password }),
-    vault_unlock: (password) => call("vault_unlock", { password }),
-    vault_unlock_biometric: () => call("vault_unlock_biometric"),
-    vault_unlock_pin: (pin) => call("vault_unlock_pin", { pin }),
-    vault_lock: () => call("vault_lock"),
-    vault_verify_password: (password) => call("vault_verify_password", { password }),
-    vault_change_password: (current, next) => call("vault_change_password", { current, next }),
-    vault_recover: (recoveryCode, newPassword) => call("vault_recover", { recoveryCode, newPassword }),
-    vault_restore_from_cloud: (config, password) => call("vault_restore_from_cloud", { config, password }),
-    vault_export_backup: (path) => call("vault_export_backup", { path }),
-    vault_rotate_recovery: (password) => call("vault_rotate_recovery", { password }),
-    biometric_enable: (password) => call("biometric_enable", { password }),
-    biometric_disable: () => call("biometric_disable"),
-    pin_enable: (password, pin) => call("pin_enable", { password, pin }),
-    pin_disable: () => call("pin_disable"),
-    pin_set_persist: (persist) => call("pin_set_persist", { persist }),
-    activity_ping: () => call("activity_ping"),
+    vault_status: () => commands.vaultStatus(),
+    vault_create: (password) => commands.vaultCreate(password),
+    vault_unlock: (password) => done(commands.vaultUnlock(password)),
+    vault_unlock_biometric: () => done(commands.vaultUnlockBiometric()),
+    vault_unlock_pin: (pin) => done(commands.vaultUnlockPin(pin)),
+    vault_lock: () => commands.vaultLock(),
+    vault_verify_password: (password) => commands.vaultVerifyPassword(password),
+    vault_change_password: (current, next) => done(commands.vaultChangePassword(current, next)),
+    vault_recover: (recoveryCode, newPassword) => done(commands.vaultRecover(recoveryCode, newPassword)),
+    vault_restore_from_cloud: (config, password) => done(commands.vaultRestoreFromCloud(config, password)),
+    vault_export_backup: (path) => done(commands.vaultExportBackup(path)),
+    vault_rotate_recovery: (password) => commands.vaultRotateRecovery(password),
+    biometric_enable: (password) => done(commands.biometricEnable(password)),
+    biometric_disable: () => done(commands.biometricDisable()),
+    pin_enable: (password, pin) => done(commands.pinEnable(password, pin)),
+    pin_disable: () => done(commands.pinDisable()),
+    pin_set_persist: (persist) => done(commands.pinSetPersist(persist)),
+    activity_ping: () => commands.activityPing(),
 
-    hosts_list: () => call("hosts_list"),
-    host_get: (id) => call("host_get", { id }),
-    host_save: (input) => call("host_save", { input }),
-    host_delete: (id) => call("host_delete", { id }),
-    host_duplicate: (id) => call("host_duplicate", { id }),
-    host_set_favorite: (id, favorite) => call("host_set_favorite", { id, favorite }),
-    host_set_show_stats: (id, on) => call("host_set_show_stats", { id, on }),
-    dashboard_set_shown: (id, shown) => call("dashboard_set_shown", { id, shown }),
-    host_copy_password: (id) => call("host_copy_password", { id }),
-    groups_list: () => call("groups_list"),
-    group_save: (input) => call("group_save", { input }),
-    group_delete: (id) => call("group_delete", { id }),
-    tags_list: () => call("tags_list"),
-    hosts_probe: (ids) => call("hosts_probe", { ids }),
+    hosts_list: () => commands.hostsList(),
+    host_get: (id) => commands.hostGet(id),
+    host_save: (input) => commands.hostSave(input),
+    host_delete: (id) => done(commands.hostDelete(id)),
+    host_duplicate: (id) => commands.hostDuplicate(id),
+    host_set_favorite: (id, favorite) => done(commands.hostSetFavorite(id, favorite)),
+    host_set_show_stats: (id, on) => done(commands.hostSetShowStats(id, on)),
+    dashboard_set_shown: (id, shown) => done(commands.dashboardSetShown(id, shown)),
+    host_copy_password: (id) => done(commands.hostCopyPassword(id)),
+    groups_list: () => commands.groupsList(),
+    group_save: (input) => commands.groupSave(input),
+    group_delete: (id) => done(commands.groupDelete(id)),
+    tags_list: () => commands.tagsList(),
+    hosts_probe: (ids) => commands.hostsProbe(ids),
     dashboard_watch: (hostIds, intervalSecs, onEvent) => {
       const channel = new Channel<DashboardEvent>();
       channel.onmessage = onEvent;
-      return call("dashboard_watch", { hostIds, intervalSecs, channel });
+      return commands.dashboardWatch(hostIds, intervalSecs, channel);
     },
-    dashboard_unwatch: (watchId) => call("dashboard_unwatch", { watchId }),
-    dashboard_retry: (hostId) => call("dashboard_retry", { hostId }),
-    ssh_config_preview: () => call("ssh_config_preview"),
-    ssh_config_import: (aliases, keyFiles) => call("ssh_config_import", { aliases, keyFiles }),
+    dashboard_unwatch: (watchId) => commands.dashboardUnwatch(watchId),
+    dashboard_retry: (hostId) => commands.dashboardRetry(hostId),
+    ssh_config_preview: () => commands.sshConfigPreview(),
+    ssh_config_import: (aliases, keyFiles) => commands.sshConfigImport(aliases, keyFiles),
 
-    proxies_list: () => call("proxies_list"),
-    proxy_save: (input) => call("proxy_save", { input }),
-    proxy_delete: (id) => call("proxy_delete", { id }),
+    proxies_list: () => commands.proxiesList(),
+    proxy_save: (input) => commands.proxySave(input),
+    proxy_delete: (id) => done(commands.proxyDelete(id)),
 
-    keys_list: () => call("keys_list"),
-    key_import: (input) => call("key_import", { input }),
-    key_generate: (input) => call("key_generate", { input }),
-    key_rename: (id, name) => call("key_rename", { id, name }),
-    key_delete: (id) => call("key_delete", { id }),
-    key_public: (id) => call("key_public", { id }),
-    key_deploy: (keyId, hostId) => call("key_deploy", { keyId, hostId }),
+    keys_list: () => commands.keysList(),
+    key_import: (input) => commands.keyImport(input),
+    key_generate: (input) => commands.keyGenerate(input),
+    key_rename: (id, name) => commands.keyRename(id, name),
+    key_delete: (id) => done(commands.keyDelete(id)),
+    key_public: (id) => commands.keyPublic(id),
+    key_deploy: (keyId, hostId) => done(commands.keyDeploy(keyId, hostId)),
 
     ssh_connect: (hostId, options, onFrame) => {
       const channel = new Channel<ArrayBuffer | number[]>();
       channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
-      return call("ssh_connect", { hostId, options, channel });
+      return commands.sshConnect(hostId, options, channel);
     },
     ssh_connect_target: (target, options, onFrame) => {
       const channel = new Channel<ArrayBuffer | number[]>();
       channel.onmessage = (msg) => onFrame(msg instanceof ArrayBuffer ? new Uint8Array(msg) : Uint8Array.from(msg));
-      return call("ssh_connect_target", { target, options, channel });
+      return commands.sshConnectTarget(target, options, channel);
     },
-    recent_targets_list: () => call("recent_targets_list"),
-    recent_target_remove: (target) => call("recent_target_remove", { target }),
-    ssh_write: (sessionId, data) => call("ssh_write", { sessionId, data }),
-    ssh_write_bytes: (sessionId, data) => call("ssh_write_bytes", { sessionId, data }),
-    ssh_resize: (sessionId, cols, rows) => call("ssh_resize", { sessionId, cols, rows }),
-    ssh_disconnect: (sessionId) => call("ssh_disconnect", { sessionId }),
+    recent_targets_list: () => commands.recentTargetsList(),
+    recent_target_remove: (target) => commands.recentTargetRemove(target),
+    ssh_write: (sessionId, data) => done(commands.sshWrite(sessionId, data)),
+    ssh_write_bytes: (sessionId, data) => done(commands.sshWriteBytes(sessionId, data)),
+    ssh_resize: (sessionId, cols, rows) => done(commands.sshResize(sessionId, cols, rows)),
+    ssh_disconnect: (sessionId) => done(commands.sshDisconnect(sessionId)),
     ssh_stats_start: (sessionId, onEvent) => {
       const channel = new Channel<StatsEvent>();
       channel.onmessage = onEvent;
-      return call("ssh_stats_start", { sessionId, channel });
+      return commands.sshStatsStart(sessionId, channel);
     },
-    ssh_stats_stop: (sessionId, statsId) => call("ssh_stats_stop", { sessionId, statsId }),
-    ssh_test: (input) => call("ssh_test", { input }),
-    hostkey_respond: (requestId, accept) => call("hostkey_respond", { requestId, accept }),
-    auth_prompt_respond: (requestId, answers) => call("auth_prompt_respond", { requestId, answers }),
+    ssh_stats_stop: (sessionId, statsId) => commands.sshStatsStop(sessionId, statsId),
+    ssh_test: (input) => commands.sshTest(input),
+    hostkey_respond: (requestId, accept) => commands.hostkeyRespond(requestId, accept),
+    auth_prompt_respond: (requestId, answers) => commands.authPromptRespond(requestId, answers),
 
-    forwards_list: (hostId) => call("forwards_list", { hostId }),
-    forward_save: (input) => call("forward_save", { input }),
-    forward_delete: (id) => call("forward_delete", { id }),
-    forward_start: (sessionId, forwardId) => call("forward_start", { sessionId, forwardId }),
-    forward_stop: (sessionId, forwardId) => call("forward_stop", { sessionId, forwardId }),
-    forwards_active: (sessionId) => call("forwards_active", { sessionId }),
-    sftp_home: (sessionId) => call("sftp_home", { sessionId }),
-    sftp_list: (sessionId, path) => call("sftp_list", { sessionId, path }),
-    sftp_download: (sessionId, remotePath, localPath) => call("sftp_download", { sessionId, remotePath, localPath }),
-    sftp_upload: (sessionId, localPath, remoteDir) => call("sftp_upload", { sessionId, localPath, remoteDir }),
-    sftp_rename: (sessionId, from, to) => call("sftp_rename", { sessionId, from, to }),
-    sftp_remove: (sessionId, path, isDir) => call("sftp_remove", { sessionId, path, isDir }),
-    sftp_mkdir: (sessionId, path) => call("sftp_mkdir", { sessionId, path }),
-    transfer_cancel: (transferId) => call("transfer_cancel", { transferId }),
+    forwards_list: (hostId) => commands.forwardsList(hostId),
+    forward_save: (input) => commands.forwardSave(input),
+    forward_delete: (id) => done(commands.forwardDelete(id)),
+    forward_start: (sessionId, forwardId) => commands.forwardStart(sessionId, forwardId),
+    forward_stop: (sessionId, forwardId) => done(commands.forwardStop(sessionId, forwardId)),
+    forwards_active: (sessionId) => commands.forwardsActive(sessionId),
+    sftp_home: (sessionId) => commands.sftpHome(sessionId),
+    sftp_list: (sessionId, path) => commands.sftpList(sessionId, path),
+    sftp_download: (sessionId, remotePath, localPath) => commands.sftpDownload(sessionId, remotePath, localPath),
+    sftp_upload: (sessionId, localPath, remoteDir) => commands.sftpUpload(sessionId, localPath, remoteDir),
+    sftp_rename: (sessionId, from, to) => done(commands.sftpRename(sessionId, from, to)),
+    sftp_remove: (sessionId, path, isDir) => done(commands.sftpRemove(sessionId, path, isDir)),
+    sftp_mkdir: (sessionId, path) => done(commands.sftpMkdir(sessionId, path)),
+    transfer_cancel: (transferId) => commands.transferCancel(transferId),
 
-    sync_status: () => call("sync_status"),
-    sync_test: (config) => call("sync_test", { config }),
-    sync_configure: (config, password) => call("sync_configure", { config, password }),
-    sync_join: (config, password) => call("sync_join", { config, password }),
-    sync_now: () => call("sync_now"),
-    sync_login: (password) => call("sync_login", { password }),
-    sync_set_auto: (enabled) => call("sync_set_auto", { enabled }),
-    sync_check_worker: () => call("sync_check_worker"),
-    sync_dismiss_worker_update: () => call("sync_dismiss_worker_update"),
-    sync_disconnect: () => call("sync_disconnect"),
-    sync_devices: () => call("sync_devices"),
-    sync_revoke_device: (deviceId) => call("sync_revoke_device", { deviceId }),
-    sync_conflicts: () => call("sync_conflicts"),
-    sync_conflict_resolve: (id, action) => call("sync_conflict_resolve", { id, action }),
+    sync_status: () => commands.syncStatus(),
+    sync_test: (config) => commands.syncTest(config),
+    sync_configure: (config, password) => done(commands.syncConfigure(config, password)),
+    sync_join: (config, password) => done(commands.syncJoin(config, password)),
+    sync_now: () => done(commands.syncNow()),
+    sync_login: (password) => done(commands.syncLogin(password)),
+    sync_set_auto: (enabled) => commands.syncSetAuto(enabled),
+    sync_check_worker: () => commands.syncCheckWorker(),
+    sync_dismiss_worker_update: () => done(commands.syncDismissWorkerUpdate()),
+    sync_disconnect: () => done(commands.syncDisconnect()),
+    sync_devices: () => commands.syncDevices(),
+    sync_revoke_device: (deviceId) => done(commands.syncRevokeDevice(deviceId)),
+    sync_conflicts: () => commands.syncConflicts(),
+    sync_conflict_resolve: (id, action) => done(commands.syncConflictResolve(id, action)),
 
-    deploy_start: (apiToken, accountId) => call("deploy_start", { apiToken, accountId }),
-    deploy_inspect: (handle, target) => call("deploy_inspect", { handle, target }),
+    deploy_start: (apiToken, accountId) => commands.deployStart(apiToken, accountId),
+    deploy_inspect: (handle, target) => commands.deployInspect(handle, target),
     deploy_run: (handle, target, onProgress) => {
       const progress = new Channel<DeployProgress>();
       progress.onmessage = onProgress;
-      return call("deploy_run", { handle, target, progress });
+      return commands.deployRun(handle, target, progress);
     },
-    deploy_check: (handle) => call("deploy_check", { handle }),
-    deploy_cleanup: (handle) => call("deploy_cleanup", { handle }),
-    deploy_cancel: (handle) => call("deploy_cancel", { handle }),
-    deploy_setup: (handle, password) => call("deploy_setup", { handle, password }),
-    deploy_join: (handle, target, password) => call("deploy_join", { handle, target, password }),
-    deploy_upgrade_defaults: () => call("deploy_upgrade_defaults"),
-    deploy_upgrade_inspect: (handle, target) => call("deploy_upgrade_inspect", { handle, target }),
+    deploy_check: (handle) => commands.deployCheck(handle),
+    deploy_cleanup: (handle) => done(commands.deployCleanup(handle)),
+    deploy_cancel: (handle) => commands.deployCancel(handle),
+    deploy_setup: (handle, password) => done(commands.deploySetup(handle, password)),
+    deploy_join: (handle, target, password) => done(commands.deployJoin(handle, target, password)),
+    deploy_upgrade_defaults: () => commands.deployUpgradeDefaults(),
+    deploy_upgrade_inspect: (handle, target) => commands.deployUpgradeInspect(handle, target),
     deploy_upgrade: (handle, target, onProgress) => {
       const progress = new Channel<DeployProgress>();
       progress.onmessage = onProgress;
-      return call("deploy_upgrade", { handle, target, progress });
+      return commands.deployUpgrade(handle, target, progress);
     },
 
-    settings_get: () => call("settings_get"),
-    settings_save: (patch) => call("settings_save", { patch }),
-    prefs_get: () => call("prefs_get"),
-    prefs_save: (prefs) => call("prefs_save", { prefs }),
-    star_prompt_get: () => call("star_prompt_get"),
-    star_prompt_done: () => call("star_prompt_done"),
+    settings_get: () => commands.settingsGet(),
+    settings_save: (patch) => done(commands.settingsSave(patch)),
+    prefs_get: () => commands.prefsGet(),
+    prefs_save: (prefs) => done(commands.prefsSave(prefs)),
+    star_prompt_get: () => commands.starPromptGet(),
+    star_prompt_done: () => done(commands.starPromptDone()),
 
-    ai_providers_list: () => call("ai_providers_list"),
-    ai_provider_save: (input) => call("ai_provider_save", { input }),
-    ai_provider_delete: (id) => call("ai_provider_delete", { id }),
-    ai_provider_models: (input) => call("ai_provider_models", { input }),
-    ai_provider_test: (input) => call("ai_provider_test", { input }),
-    ai_chatgpt_sign_in: (providerId) => call("ai_chatgpt_sign_in", { providerId }),
-    ai_chatgpt_sign_in_cancel: () => call("ai_chatgpt_sign_in_cancel"),
-    ai_chatgpt_sign_out: (providerId) => call("ai_chatgpt_sign_out", { providerId }),
-    search_providers_list: () => call("search_providers_list"),
-    search_provider_save: (input) => call("search_provider_save", { input }),
-    search_provider_delete: (id) => call("search_provider_delete", { id }),
-    search_provider_test: (input) => call("search_provider_test", { input }),
-    ai_settings_get: () => call("ai_settings_get"),
-    ai_settings_save: (patch) => call("ai_settings_save", { patch }),
-    ai_conversations_list: () => call("ai_conversations_list"),
-    ai_conversation_get: (id) => call("ai_conversation_get", { id }),
-    ai_conversation_rename: (id, title) => call("ai_conversation_rename", { id, title }),
-    ai_conversation_pin: (id, pinned) => call("ai_conversation_pin", { id, pinned }),
-    ai_conversation_delete: (id) => call("ai_conversation_delete", { id }),
-    ai_conversation_fork: (id, entryId, title) => call("ai_conversation_fork", { id, entryId, title }),
+    ai_providers_list: () => commands.aiProvidersList(),
+    ai_provider_save: (input) => commands.aiProviderSave(input),
+    ai_provider_delete: (id) => done(commands.aiProviderDelete(id)),
+    ai_provider_models: (input) => commands.aiProviderModels(input),
+    ai_provider_test: (input) => commands.aiProviderTest(input),
+    ai_chatgpt_sign_in: (providerId) => commands.aiChatgptSignIn(providerId),
+    ai_chatgpt_sign_in_cancel: () => commands.aiChatgptSignInCancel(),
+    ai_chatgpt_sign_out: (providerId) => commands.aiChatgptSignOut(providerId),
+    search_providers_list: () => commands.searchProvidersList(),
+    search_provider_save: (input) => commands.searchProviderSave(input),
+    search_provider_delete: (id) => done(commands.searchProviderDelete(id)),
+    search_provider_test: (input) => commands.searchProviderTest(input),
+    ai_settings_get: () => commands.aiSettingsGet(),
+    ai_settings_save: (patch) => done(commands.aiSettingsSave(patch)),
+    ai_conversations_list: () => commands.aiConversationsList(),
+    ai_conversation_get: (id) => commands.aiConversationGet(id),
+    ai_conversation_rename: (id, title) => commands.aiConversationRename(id, title),
+    ai_conversation_pin: (id, pinned) => commands.aiConversationPin(id, pinned),
+    ai_conversation_delete: (id) => done(commands.aiConversationDelete(id)),
+    ai_conversation_fork: (id, entryId, title) => commands.aiConversationFork(id, entryId, title),
     ai_send: (input, onEvent) => {
       const channel = new Channel<AiTurnEvent>();
       channel.onmessage = onEvent;
-      return call("ai_send", { input, channel });
+      return commands.aiSend(input, channel);
     },
     ai_retry: (conversationId, context, onEvent) => {
       const channel = new Channel<AiTurnEvent>();
       channel.onmessage = onEvent;
-      return call("ai_retry", { conversationId, context, channel });
+      return done(commands.aiRetry(conversationId, context, channel));
     },
-    ai_tool_result: (conversationId, toolCallId, result) => call("ai_tool_result", { conversationId, toolCallId, result }),
+    ai_tool_result: (conversationId, toolCallId, result) => commands.aiToolResult(conversationId, toolCallId, result),
     ai_tool_run: (conversationId, toolCallId, sessionId, editedArguments, judged) =>
-      call("ai_tool_run", { conversationId, toolCallId, sessionId, editedArguments, judged }),
-    ai_judge: (conversationId, toolCallId, screenTail) => call("ai_judge", { conversationId, toolCallId, screenTail }),
-    ai_judge_test: (judge) => call("ai_judge_test", { judge }),
+      commands.aiToolRun(conversationId, toolCallId, sessionId, editedArguments, judged),
+    ai_judge: (conversationId, toolCallId, screenTail) => commands.aiJudge(conversationId, toolCallId, screenTail),
+    ai_judge_test: (judge) => commands.aiJudgeTest(judge),
     ai_file_preview: (conversationId, toolCallId, sessionId, editedArguments) =>
-      call("ai_file_preview", { conversationId, toolCallId, sessionId, editedArguments }),
-    ai_file_changes: (conversationId) => call("ai_file_changes", { conversationId }),
-    ai_file_change_diff: (conversationId, responseId, toolCallId) => call("ai_file_change_diff", { conversationId, responseId, toolCallId }),
+      commands.aiFilePreview(conversationId, toolCallId, sessionId, editedArguments),
+    ai_file_changes: (conversationId) => commands.aiFileChanges(conversationId),
+    ai_file_change_diff: (conversationId, responseId, toolCallId) => commands.aiFileChangeDiff(conversationId, responseId, toolCallId),
     ai_file_revert: (conversationId, responseId, toolCallId, sessionId, restore) =>
-      call("ai_file_revert", { conversationId, responseId, toolCallId, sessionId, restore }),
-    ai_session_server: (sessionId) => call("ai_session_server", { sessionId }),
-    ai_stop: (conversationId) => call("ai_stop", { conversationId }),
-    ai_compact: (conversationId, context, instructions) => call("ai_compact", { conversationId, context, instructions }),
+      commands.aiFileRevert(conversationId, responseId, toolCallId, sessionId, restore),
+    ai_session_server: (sessionId) => commands.aiSessionServer(sessionId),
+    ai_stop: (conversationId) => done(commands.aiStop(conversationId)),
+    ai_compact: (conversationId, context, instructions) => commands.aiCompact(conversationId, context, instructions),
     ai_side_question: (input, onEvent) => {
       const channel = new Channel<AiSideEvent>();
       channel.onmessage = onEvent;
-      return call("ai_side_question", { input, channel });
+      return commands.aiSideQuestion(input, channel);
     },
-    ai_side_stop: (conversationId, questionId) => call("ai_side_stop", { conversationId, questionId }),
+    ai_side_stop: (conversationId, questionId) => done(commands.aiSideStop(conversationId, questionId)),
 
-    ai_search: (query) => call("ai_search", { query }),
+    ai_search: (query) => commands.aiSearch(query),
     ai_edit_resend: (conversationId, entryId, text, context, onEvent) => {
       const channel = new Channel<AiTurnEvent>();
       channel.onmessage = onEvent;
-      return call("ai_edit_resend", { conversationId, entryId, text, context, channel });
+      return commands.aiEditResend(conversationId, entryId, text, context, channel);
     },
-    ai_read_dropped_files: (paths) => call("ai_read_dropped_files", { paths }),
-    ai_skill_commands: () => call("ai_skill_commands"),
-    ai_skill_text: (name) => call("ai_skill_text", { name }),
-    ai_host_list: (sessionId, path) => call("ai_host_list", { sessionId, path }),
-    ai_host_read: (sessionId, path) => call("ai_host_read", { sessionId, path }),
-    ai_allowances_list: () => call("ai_allowances_list"),
-    ai_allowance_add: (allowance) => call("ai_allowance_add", { allowance }),
-    ai_allowance_remove: (allowance) => call("ai_allowance_remove", { allowance }),
+    ai_read_dropped_files: (paths) => commands.aiReadDroppedFiles(paths),
+    ai_skill_commands: () => commands.aiSkillCommands(),
+    ai_skill_text: (name) => commands.aiSkillText(name),
+    ai_host_list: (sessionId, path) => commands.aiHostList(sessionId, path),
+    ai_host_read: (sessionId, path) => commands.aiHostRead(sessionId, path),
+    ai_allowances_list: () => commands.aiAllowancesList(),
+    ai_allowance_add: (allowance) => commands.aiAllowanceAdd(allowance),
+    ai_allowance_remove: (allowance) => commands.aiAllowanceRemove(allowance),
 
-    skills_list: () => call("skills_list"),
-    skill_get: (id) => call("skill_get", { id }),
-    skill_builtin_get: () => call("skill_builtin_get"),
-    skill_save: (input) => call("skill_save", { input }),
-    skill_delete: (id) => call("skill_delete", { id }),
-    skill_set_enabled: (id, enabled) => call("skill_set_enabled", { id, enabled }),
-    skill_import_preview: (path) => call("skill_import_preview", { path }),
-    skill_import: (path, replaceId, rename) => call("skill_import", { path, replaceId, rename }),
-    skill_export: (id, path) => call("skill_export", { id, path }),
+    skills_list: () => commands.skillsList(),
+    skill_get: (id) => commands.skillGet(id),
+    skill_builtin_get: () => commands.skillBuiltinGet(),
+    skill_save: (input) => commands.skillSave(input),
+    skill_delete: (id) => done(commands.skillDelete(id)),
+    skill_set_enabled: (id, enabled) => done(commands.skillSetEnabled(id, enabled)),
+    skill_import_preview: (path) => commands.skillImportPreview(path),
+    skill_import: (path, replaceId, rename) => commands.skillImport(path, replaceId, rename),
+    skill_export: (id, path) => done(commands.skillExport(id, path)),
 
-    mcp_servers_list: () => call("mcp_servers_list"),
-    mcp_server_save: (input) => call("mcp_server_save", { input }),
-    mcp_server_delete: (id) => call("mcp_server_delete", { id }),
-    mcp_server_set_enabled: (id, enabled) => call("mcp_server_set_enabled", { id, enabled }),
-    mcp_server_status: (id) => call("mcp_server_status", { id }),
-    mcp_server_start: (id) => call("mcp_server_start", { id }),
-    mcp_server_stop: (id) => call("mcp_server_stop", { id }),
-    mcp_set_always_allow: (serverId, tool, allow) => call("mcp_set_always_allow", { serverId, tool, allow }),
-    mcp_tool_info: (conversationId, name) => call("mcp_tool_info", { conversationId, name }),
-    mcp_proxy_info: (conversationId, args) => call("mcp_proxy_info", { conversationId, callArguments: args }),
-    mcp_warm: (disabled) => call("mcp_warm", { disabledMcpServers: disabled }),
-    mcp_prompt_get: (serverId, name, args) => call("mcp_prompt_get", { serverId, name, promptArguments: args }),
-    mcp_resource_read: (serverId, uri) => call("mcp_resource_read", { serverId, uri }),
-    mcp_import_preview: (json) => call("mcp_import_preview", { json }),
-    mcp_import: (json) => call("mcp_import", { json }),
-    mcp_export: () => call("mcp_export"),
+    mcp_servers_list: () => commands.mcpServersList(),
+    mcp_server_save: (input) => commands.mcpServerSave(input),
+    mcp_server_delete: (id) => done(commands.mcpServerDelete(id)),
+    mcp_server_set_enabled: (id, enabled) => done(commands.mcpServerSetEnabled(id, enabled)),
+    mcp_server_status: (id) => commands.mcpServerStatus(id),
+    mcp_server_start: (id) => commands.mcpServerStart(id),
+    mcp_server_stop: (id) => done(commands.mcpServerStop(id)),
+    mcp_set_always_allow: (serverId, tool, allow) => done(commands.mcpSetAlwaysAllow(serverId, tool, allow)),
+    mcp_tool_info: (conversationId, name) => commands.mcpToolInfo(conversationId, name),
+    mcp_proxy_info: (conversationId, args) => commands.mcpProxyInfo(conversationId, args),
+    mcp_warm: (disabled) => done(commands.mcpWarm(disabled)),
+    mcp_prompt_get: (serverId, name, args) => commands.mcpPromptGet(serverId, name, args),
+    mcp_resource_read: (serverId, uri) => commands.mcpResourceRead(serverId, uri),
+    mcp_import_preview: (json) => commands.mcpImportPreview(json),
+    mcp_import: (json) => commands.mcpImport(json),
+    mcp_export: () => commands.mcpExport(),
 
-    window_snap_overlay: () => call("window_snap_overlay"),
-    window_floating: () => call("window_floating"),
-    window_hide_to_tray: () => call("window_hide_to_tray"),
-    app_quit: () => call("app_quit"),
-    tray_set_menu: (menu) => call("tray_set_menu", { menu }),
-    notification_show: (notification) => call("notification_show", { notification }),
-    save_text_file: (path, contents) => call("save_text_file", { path, contents }),
+    window_snap_overlay: () => commands.windowSnapOverlay(),
+    window_floating: () => commands.windowFloating(),
+    window_hide_to_tray: () => commands.windowHideToTray(),
+    app_quit: () => commands.appQuit(),
+    tray_set_menu: (menu) => commands.traySetMenu(menu),
+    notification_show: (notification) => commands.notificationShow(notification),
+    save_text_file: (path, contents) => done(commands.saveTextFile(path, contents)),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),
   };
