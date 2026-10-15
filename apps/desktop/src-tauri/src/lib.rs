@@ -10,6 +10,7 @@ mod dropped;
 mod dto;
 mod error;
 mod launch;
+mod local;
 mod lock;
 mod logging;
 mod mcp;
@@ -23,8 +24,8 @@ mod update;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
-    hosts, keys, mcp as mcp_cmd, proxies, quick, settings, sftp, skills, ssh as ssh_cmd,
-    sync as sync_cmd, vault,
+    hosts, keys, local as local_cmd, mcp as mcp_cmd, proxies, quick, settings, sftp, skills,
+    ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -107,6 +108,12 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ssh_cmd::ssh_stats_start,
             ssh_cmd::ssh_stats_stop,
             ssh_cmd::ssh_test,
+            local_cmd::local_shells,
+            local_cmd::local_open,
+            local_cmd::local_write,
+            local_cmd::local_write_bytes,
+            local_cmd::local_resize,
+            local_cmd::local_close,
             ssh_cmd::hostkey_respond,
             ssh_cmd::auth_prompt_respond,
             forwards::forwards_list,
@@ -343,6 +350,10 @@ pub fn run() {
                 if let Some(state) = app.try_state::<state::AppState>() {
                     // AI-32: MCP servers stop when the app quits.
                     tauri::async_runtime::block_on(state.mcp.shutdown());
+                    // Local shells end with the app, as with any terminal.
+                    for (_, live) in state.local.take_all() {
+                        live.close();
+                    }
                 }
             }
             // macOS: a Dock click shows the window again. Every click counts, including one while

@@ -3,7 +3,7 @@ import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs, type SessionTab, type TabSource } from "@/app/tabs";
 import { confirm, toast } from "@/components/overlay";
-import { connectHost, connectTarget } from "@/features/terminal/connect";
+import { connectHost, connectTarget, openLocalTerminal } from "@/features/terminal/connect";
 import { getSession, type LiveSession } from "@/features/terminal/session";
 import { getLocale, t, type MessageKey, type Params } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
@@ -1682,7 +1682,7 @@ export function openNotified({ tab, conversation_id }: NotificationTarget) {
 /** AI-09 "Connect to host": opens a tab on the host or quick-connect target (HOST-12) and attaches the home tab's conversation to it. */
 export async function connectConversation(source: TabSource) {
   const before = new Set(useTabs.getState().tabs.map((x) => x.id));
-  await (source.hostId !== null ? connectHost(source.hostId) : connectTarget(source.target));
+  await (source.local ? openLocalTerminal() : source.hostId !== null ? connectHost(source.hostId) : connectTarget(source.target));
   const tab = useTabs.getState().tabs.find((x) => !before.has(x.id));
   if (tab) moveSlot(HOME_SLOT, tab.id);
 }

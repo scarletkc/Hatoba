@@ -183,6 +183,18 @@ export const commands = {
 	sshStatsStop: (sessionId: string, statsId: number) => __TAURI_INVOKE<void>("ssh_stats_stop", { sessionId, statsId }),
 	/**  "Test connection" in the host editor: connect, authenticate, verify the host key, disconnect. */
 	sshTest: (input: HostInput) => __TAURI_INVOKE<TestResult>("ssh_test", { input }),
+	/**  The shells a local tab can run (LOCAL-02), the default one first. */
+	localShells: () => __TAURI_INVOKE<LocalShellView[]>("local_shells"),
+	/**
+	 *  Starts the shell `shell_id` in a new PTY for a local tab (LOCAL-01) and returns the session
+	 *  id. Its output streams on `channel` until it exits or `local_close`.
+	 */
+	localOpen: (shellId: string, options: LocalOpenOptions, channel: Channel<TermFrame>) => __TAURI_INVOKE<string>("local_open", { shellId, options, channel }),
+	localWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("local_write", { sessionId, data }),
+	/**  Writes bytes as they are, for xterm's binary mouse reports (see `ssh_write_bytes`). */
+	localWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("local_write_bytes", { sessionId, data }),
+	localResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("local_resize", { sessionId, cols, rows }),
+	localClose: (sessionId: string) => __TAURI_INVOKE<null>("local_close", { sessionId }),
 	hostkeyRespond: (requestId: string, accept: boolean) => __TAURI_INVOKE<void>("hostkey_respond", { requestId, accept }),
 	authPromptRespond: (requestId: string, answers: string[] | null) => __TAURI_INVOKE<void>("auth_prompt_respond", { requestId, answers }),
 	forwardsList: (hostId: string) => __TAURI_INVOKE<ForwardView[]>("forwards_list", { hostId }),
@@ -1643,6 +1655,11 @@ export type Language = "system" | "zh-CN" | "en" | "ja";
 /**  A second launch handed its arguments to this window (HOST-13); `launch_take` returns them. */
 export type LaunchEvent = null;
 
+export type LocalOpenOptions = {
+	cols: number,
+	rows: number,
+};
+
 /**  Device-local UI preferences (readable while locked; never synced). */
 export type LocalPrefs = {
 	language: Language,
@@ -1673,7 +1690,7 @@ export type LocalPrefs = {
 	auto_lock_minutes: number,
 	/**  SEC-02: lock the vault when the computer sleeps. */
 	lock_on_sleep: boolean,
-	/**  SEC-03: disconnect the SSH sessions when the vault locks. */
+	/**  SEC-03: disconnect the SSH sessions, and end the local shells, when the vault locks. */
 	lock_disconnects_sessions: boolean,
 	/**  SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
 	clipboard_clear_secs: number,
@@ -1692,6 +1709,32 @@ export type LocalPrefs = {
 	dashboard_disk_alert: number,
 	/**  WIN-10: what the window's close button does on Windows and Linux. */
 	close_action: CloseAction,
+	/**
+	 *  LOCAL-02: the shell new local tabs run on this device, by its id; the system default
+	 *  while `None` or when the shell is gone.
+	 */
+	local_shell: string | null,
+};
+
+/**  What kind of shell a local tab runs (§7.5). */
+export type LocalShellKind = 
+/**  A shell of macOS or Linux. */
+"unix" | 
+/**  PowerShell 7 or Windows PowerShell. */
+"powershell" | "cmd" | "git_bash" | "wsl";
+
+/**  A shell this computer can run in a local tab (LOCAL-02). */
+export type LocalShellView = {
+	/**
+	 *  Stable on this device: `pwsh`, `powershell`, `cmd`, `git-bash` or `wsl:<distribution>` on
+	 *  Windows, the shell's path elsewhere.
+	 */
+	id: string,
+	/**  In English; the app translates the names of the Windows shells. */
+	name: string,
+	kind: LocalShellKind,
+	/**  The system default: PowerShell 7, else Windows PowerShell, on Windows; `$SHELL` elsewhere. */
+	default: boolean,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";

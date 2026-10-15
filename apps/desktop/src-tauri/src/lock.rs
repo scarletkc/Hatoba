@@ -96,15 +96,23 @@ pub async fn lock_vault(app: &AppHandle, reason: LockReason) {
         if disconnects_on_lock(&state) {
             // The sessions open now: one opened after an unlock in the meantime stays.
             let sessions = state.ssh.take_all();
-            futures::future::join_all(sessions.into_iter().map(|(id, live)| {
+            let locals = state.local.take_all();
+            let ssh = futures::future::join_all(sessions.into_iter().map(|(id, live)| {
                 let ai = &state.ai;
                 async move {
                     // A file write the assistant began on it runs to its end first.
                     ai.file_writes_ended(&id).await;
                     live.close().await;
                 }
-            }))
-            .await;
+            }));
+            let local = futures::future::join_all(locals.into_iter().map(|(id, live)| {
+                let ai = &state.ai;
+                async move {
+                    ai.file_writes_ended(&id).await;
+                    live.close();
+                }
+            }));
+            futures::join!(ssh, local);
         }
     };
     // AI-32: every MCP server stops, and `http` sessions close, with the vault.

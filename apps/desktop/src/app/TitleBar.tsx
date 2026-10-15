@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/controls";
+import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { AiPanelButton } from "@/features/ai/AiPanel";
 import { tabActivity, useAi } from "@/features/ai/store";
 import { OsIcon } from "@/features/hosts/OsIcon";
+import { openLocalTerminal } from "@/features/terminal/connect";
+import { loadLocalShells, preferredShell, shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
 import { api, isTauri } from "@/ipc/api";
+import type { LocalShellKind, LocalShellView } from "@/ipc/types";
+import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
@@ -86,10 +91,57 @@ const STATUS_DOT: Record<TabStatus, string> = {
   disconnected: "var(--fg3)",
 };
 
-/** HOST-11: the tab host's OS, with the session status as the badge. A quick connection has no host, so no OS. */
-function TabOsIcon({ hostId, status }: { hostId: string | null; status: TabStatus }) {
+/**
+ * HOST-11: the tab host's OS, with the session status as the badge. A quick connection has no host, so
+ * no OS; a local tab shows a terminal.
+ */
+function TabOsIcon({ hostId, local, status }: { hostId: string | null; local: boolean; status: TabStatus }) {
   const os = useVaultData((st) => (hostId ? (st.hosts.find((h) => h.id === hostId)?.os ?? null) : null));
-  return <OsIcon os={os} badge={STATUS_DOT[status]} />;
+  return <OsIcon os={os} badge={STATUS_DOT[status]} icon={local ? "terminal-window" : undefined} />;
+}
+
+const SHELL_ICON: Record<LocalShellKind, string> = {
+  unix: "terminal-window",
+  powershell: "terminal-window",
+  cmd: "terminal",
+  git_bash: "git-branch",
+  wsl: "linux-logo",
+};
+
+/**
+ * LOCAL-01: the menu beside New Tab, as in Windows Terminal: this computer's shells, read again each
+ * time it opens so a shell installed meanwhile shows up, then New Tab's host list.
+ */
+function useLocalMenu(onNewTab: () => void) {
+  const t = useT();
+  const menu = useMenu();
+  const platform = useApp((st) => st.info.platform);
+  const preferred = useApp((st) => st.prefs.local_shell);
+  const [shells, setShells] = useState<LocalShellView[] | null>(null);
+  const open = (button: HTMLElement) => {
+    menu.openBelow(button);
+    setShells(null);
+    void loadLocalShells()
+      .then(setShells)
+      .catch(() => setShells([]));
+  };
+  const first = shells ? preferredShell(shells, preferred) : undefined;
+  const entries: MenuEntry[] = [
+    { kind: "header", label: t("terminal.local.title") },
+    ...(shells === null
+      ? [{ label: t("terminal.local.loading"), disabled: true, onSelect: () => {} }]
+      : shells.length === 0
+        ? [{ label: t("terminal.local.noShell"), disabled: true, onSelect: () => {} }]
+        : shells.map((shell) => ({
+            label: shellName(shell, t),
+            icon: SHELL_ICON[shell.kind],
+            hint: shell.id === first?.id ? shortcutLabel(platform, "Ctrl+Shift+`", "⌃⇧`") : undefined,
+            onSelect: () => void openLocalTerminal(shell),
+          }))),
+    { kind: "separator" },
+    { label: t("tabs.hosts"), icon: "hard-drives", hint: shortcutLabel(platform, "Ctrl+Shift+T", "⌘T"), onSelect: onNewTab },
+  ];
+  return { menu, open, entries };
 }
 
 /** AI-07: a tab whose conversation, or one it left in the background, is running a turn or waiting for approval. */
@@ -116,6 +168,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   const { tabs, active, activate } = useTabs();
   const collapsed = useApp((st) => st.sidebarCollapsed);
   const platform = useApp((st) => st.info.platform);
+  const local = useLocalMenu(onNewTab);
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
@@ -151,7 +204,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
             }}
             title={tab.title}
           >
-            <TabOsIcon hostId={tab.hostId} status={tab.status} />
+            <TabOsIcon hostId={tab.hostId} local={!!tab.local} status={tab.status} />
             <span className={s.tabLabel}>{tab.title}</span>
             <AiActivity slotId={tab.id} />
             <span
@@ -173,6 +226,18 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
       <button type="button" className={s.newTab} title={t("tabs.newTab")} aria-label={t("tabs.newTab")} onClick={onNewTab}>
         <Icon name="plus" />
       </button>
+      <button
+        type="button"
+        className={cx(s.newTab, s.newTabMenu)}
+        title={t("tabs.newMenu")}
+        aria-label={t("tabs.newMenu")}
+        aria-haspopup="menu"
+        aria-expanded={!!local.menu.anchor}
+        onClick={(e) => local.open(e.currentTarget)}
+      >
+        <Icon name="caret-down" size={11} />
+      </button>
+      {local.menu.anchor && <Menu anchor={local.menu.anchor} entries={local.entries} onClose={local.menu.close} minWidth={220} />}
       <div className={s.drag} data-tauri-drag-region />
       <AiPanelButton className={s.aiButton} activeClassName={s.aiButtonOn} dotClassName={s.aiDot} />
       <WindowControls />

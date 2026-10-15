@@ -1,4 +1,11 @@
-import type { HostView } from "../types";
+import type { HostView, LocalShellKind } from "../types";
+
+/** A local tab's shell (§7.5): its kind decides the prompt. */
+export interface LocalStyle {
+  shell: LocalShellKind;
+  user: string;
+  machine: string;
+}
 
 const G = "\x1b[38;2;139;212;156m"; // design green  #8bd49c
 const B = "\x1b[38;2;122;183;255m"; // design blue   #7ab7ff
@@ -16,14 +23,32 @@ export class FakeShell {
   private enc = new TextEncoder();
 
   constructor(
-    /** The host the session is connected to. */
-    readonly host: HostView,
+    /** The host the session is connected to; null for a local tab. */
+    readonly host: HostView | null,
     private out: (bytes: Uint8Array) => void,
+    /** A local tab's shell. */
+    readonly local: LocalStyle | null = null,
   ) {}
 
   /** The server OS the host recorded (HOST-11), for the mock resource usage (TERM-12). */
   get os(): string | null {
-    return this.host.os;
+    return this.host?.os ?? null;
+  }
+
+  private get user(): string {
+    return this.host?.username ?? this.local?.user ?? "demo";
+  }
+
+  private get machine(): string {
+    return this.host?.name ?? this.local?.machine ?? "localhost";
+  }
+
+  private get windowsPath(): string {
+    return this.cwd === "~" ? `C:\\Users\\${this.user}` : this.cwd;
+  }
+
+  private get windows(): boolean {
+    return this.local?.shell === "powershell" || this.local?.shell === "cmd";
   }
 
   private write(s: string) {
@@ -31,12 +56,17 @@ export class FakeShell {
   }
 
   private prompt() {
-    this.write(`${G}${this.host.username}@${this.host.name}${X}:${B}${this.cwd}${X}$ `);
+    if (this.local?.shell === "powershell") this.write(`PS ${this.windowsPath}> `);
+    else if (this.local?.shell === "cmd") this.write(`${this.windowsPath}>`);
+    else this.write(`${G}${this.user}@${this.machine}${X}:${B}${this.cwd}${X}$ `);
   }
 
   start() {
-    this.write(`${D}Last login: Thu Oct  8 09:41:12 2026 from 10.0.0.4${X}\r\n`);
-    if (this.host.name === "prod-api-tokyo") {
+    if (this.local?.shell === "cmd") {
+      this.write("Microsoft Windows [Version 10.0.26100.4652]\r\n(c) Microsoft Corporation. All rights reserved.\r\n\r\n");
+    }
+    if (!this.local) this.write(`${D}Last login: Thu Oct  8 09:41:12 2026 from 10.0.0.4${X}\r\n`);
+    if (this.host?.name === "prod-api-tokyo") {
       this.cwd = "/srv/api";
       const p = `${G}${this.host.username}@${this.host.name}${X}:`;
       this.write(
@@ -106,7 +136,7 @@ export class FakeShell {
         this.write("\x1b[H\x1b[2J");
         return;
       case "pwd":
-        this.write(`${this.cwd === "~" ? `/home/${this.host.username}` : this.cwd}\r\n`);
+        this.write(`${this.windows ? this.windowsPath : this.cwd === "~" ? `/home/${this.user}` : this.cwd}\r\n`);
         return;
       case "cd":
         this.cwd = args[0] ?? "~";
@@ -115,12 +145,13 @@ export class FakeShell {
         this.write(`${args.join(" ")}\r\n`);
         return;
       case "whoami":
-        this.write(`${this.host.username}\r\n`);
+        this.write(`${this.user}\r\n`);
         return;
       case "date":
         this.write(`${new Date().toString()}\r\n`);
         return;
       case "ls":
+      case "dir":
         this.write(`${B}migrations${X}  ${B}src${X}  ${B}target${X}  Cargo.lock  Cargo.toml  Dockerfile  README.md  wrangler.toml\r\n`);
         return;
       case "uname":

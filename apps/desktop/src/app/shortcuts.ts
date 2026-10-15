@@ -1,19 +1,21 @@
 import { useEffect } from "react";
 import type { Platform } from "@/lib/platform";
 
-export type ShortcutAction = "search" | "newTab" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
+export type ShortcutAction = "search" | "newTab" | "newLocal" | "closeTab" | "nextTab" | "prevTab" | "settings" | "lock" | "aiPanel";
 
 /**
  * App-level shortcuts (WIN-04). On Windows/Linux every app shortcut uses Ctrl+Shift so that plain
  * Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K…). Exceptions are Ctrl+Tab,
  * Ctrl+, and Ctrl+K while focus is outside the terminal. On macOS ⌘K likewise searches hosts only
  * outside the terminal; inside it clears the terminal (session.ts). ⌘⇧K searches hosts everywhere,
- * like Ctrl+Shift+K.
+ * like Ctrl+Shift+K. A new local terminal (LOCAL-01) is Ctrl+Shift+` everywhere, ⌃⇧` on macOS, as in
+ * VS Code.
  */
 export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: boolean): ShortcutAction | null {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   if (platform === "macos") {
     if (e.ctrlKey && key === "Tab") return e.shiftKey ? "prevTab" : "nextTab";
+    if (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey && e.code === "Backquote") return "newLocal";
     if (!e.metaKey || e.altKey || e.ctrlKey) return null;
     if (key === "k") return e.shiftKey || !inTerminal ? "search" : null;
     if (key === "t" && !e.shiftKey) return "newTab";
@@ -39,6 +41,8 @@ export function matchShortcut(e: KeyboardEvent, platform: Platform, inTerminal: 
         return "lock";
       case "KeyA":
         return "aiPanel";
+      case "Backquote":
+        return "newLocal";
     }
     return null;
   }

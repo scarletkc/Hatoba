@@ -6,8 +6,15 @@ import type { AiAllowance } from "@/ipc/types";
 import { recordedTarget } from "./place";
 import type { HostRef } from "./tools";
 
+/**
+ * The target a local tab's calls are approved for (AI-19): approvals are kept on the device, so it names
+ * this computer, and a quick-connect target always has a user and a port, so it is never one.
+ */
+export const LOCAL_TARGET = "local";
+
 /** The host a tab's calls are approved for (AI-19). */
 export function hostRefOf(source: TabSource): HostRef {
+  if (source.local) return { host_id: null, target: LOCAL_TARGET };
   return source.hostId !== null ? { host_id: source.hostId, target: null } : { host_id: null, target: formatTarget(recordedTarget(source.target)) };
 }
 

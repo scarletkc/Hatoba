@@ -91,6 +91,8 @@ import type {
   UpgradePlan,
   UpgradeTarget,
   VaultStatus,
+  LocalOpenOptions,
+  LocalShellView,
 } from "./types";
 
 /** Receives raw terminal frames (see FRAME_* in types.ts). */
@@ -216,6 +218,17 @@ export interface HatobaApi {
   ssh_test(input: HostInput): Promise<TestResult>;
   hostkey_respond(request_id: string, accept: boolean): Promise<void>;
   auth_prompt_respond(request_id: string, answers: string[] | null): Promise<void>;
+
+  // local terminals (§7.5)
+  /** LOCAL-02: the shells this computer can run in a local tab, the default first. */
+  local_shells(): Promise<LocalShellView[]>;
+  /** LOCAL-01: starts a shell in a PTY; resolves to the session id once it runs. Output arrives as the frames SSH tabs get. */
+  local_open(shell_id: string, options: LocalOpenOptions, onFrame: FrameHandler): Promise<string>;
+  local_write(session_id: string, data: string): Promise<void>;
+  local_write_bytes(session_id: string, data: number[]): Promise<void>;
+  local_resize(session_id: string, cols: number, rows: number): Promise<void>;
+  /** Ends the shell and the console programs it started. */
+  local_close(session_id: string): Promise<void>;
 
   // port forwarding (FWD-01/02)
   forwards_list(host_id: string): Promise<ForwardView[]>;

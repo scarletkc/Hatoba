@@ -91,6 +91,8 @@ export default defineMessages({
 
     "tabs.newTab": "新建标签",
     "tabs.close": "关闭标签",
+    "tabs.newMenu": "新建本地终端",
+    "tabs.hosts": "连接主机",
 
     "time.justNow": "刚刚",
     "time.minutesAgo": "{n} 分钟前",
@@ -257,6 +259,8 @@ export default defineMessages({
 
     "tabs.newTab": "New Tab",
     "tabs.close": "Close Tab",
+    "tabs.newMenu": "New Local Terminal",
+    "tabs.hosts": "Connect to Host",
 
     "time.justNow": "Just now",
     "time.minutesAgo": "{n} min ago",
@@ -421,6 +425,8 @@ export default defineMessages({
 
     "tabs.newTab": "新しいタブ",
     "tabs.close": "タブを閉じる",
+    "tabs.newMenu": "新しいローカル ターミナル",
+    "tabs.hosts": "ホストに接続",
 
     "time.justNow": "たった今",
     "time.minutesAgo": "{n} 分前",

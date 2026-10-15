@@ -165,6 +165,15 @@ impl AppError {
         }
     }
 
+    /// A local terminal (§7.5) failed.
+    pub fn local(err: hatoba_local::LocalError) -> Self {
+        match err {
+            hatoba_local::LocalError::UnknownShell(_) => Self::not_found("shell"),
+            hatoba_local::LocalError::Closed => Self::not_found("session"),
+            other => Self::io(other),
+        }
+    }
+
     pub fn key(kind: KeyParseErrorKind, detail: impl Into<String>) -> Self {
         Self {
             key_kind: Some(kind),

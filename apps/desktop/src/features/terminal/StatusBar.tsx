@@ -13,6 +13,8 @@ const DOT: Record<TabStatus, string> = {
 };
 
 interface Props {
+  /** A local tab (§7.5): its shell runs on this computer, so it has no resource usage, forwards or SFTP. */
+  local: boolean;
   status: TabStatus;
   /** `user@host:port`, when the host still exists. */
   target: string | null;
@@ -43,6 +45,7 @@ interface Props {
 
 /** The 36px bar above a terminal (design §03 / §03b). */
 export function StatusBar({
+  local,
   status,
   target,
   via,
@@ -70,7 +73,7 @@ export function StatusBar({
     <div className={s.bar}>
       <span className={s.state} role="status">
         <StatusDot color={DOT[status]} />
-        <span className={s.stateText}>{t(`terminal.status.${status}`)}</span>
+        <span className={s.stateText}>{t(local ? `terminal.local.status.${status}` : `terminal.status.${status}`)}</span>
       </span>
       <span className={s.sep} />
       {target && <span className={s.target}>{target}</span>}
@@ -82,7 +85,7 @@ export function StatusBar({
       )}
       {connected && latencyMs != null && <span className={s.latency}>{latencyMs} ms</span>}
       <div className={s.spacer} />
-      {statsOn && connected ? (
+      {local ? null : statsOn && connected ? (
         <StatsReadout stats={stats} open={statsOpen} onClick={onStats} />
       ) : (
         <IconButton icon="gauge" label={t("terminal.stats.show")} disabled={!connected} onClick={onShowStats} />
@@ -104,17 +107,19 @@ export function StatusBar({
           {forwardCount > 0 && <span className={s.fwdCount}>{forwardCount}</span>}
         </button>
       )}
-      <button
-        type="button"
-        className={cx(s.sftp, sftpOpen && connected && s.sftpOn)}
-        disabled={!connected}
-        aria-pressed={sftpOpen && connected}
-        title={t("terminal.sftpToggle")}
-        onClick={onToggleSftp}
-      >
-        <Icon name="folder-simple" size={14} />
-        <span className={s.sftpLabel}>{t("terminal.sftp")}</span>
-      </button>
+      {!local && (
+        <button
+          type="button"
+          className={cx(s.sftp, sftpOpen && connected && s.sftpOn)}
+          disabled={!connected}
+          aria-pressed={sftpOpen && connected}
+          title={t("terminal.sftpToggle")}
+          onClick={onToggleSftp}
+        >
+          <Icon name="folder-simple" size={14} />
+          <span className={s.sftpLabel}>{t("terminal.sftp")}</span>
+        </button>
+      )}
       <IconButton
         icon="dots-three"
         size={16}

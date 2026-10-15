@@ -12,7 +12,8 @@ const OS_NAMES = new Map([
   ["windows", "Windows"],
 ]);
 
-function Glyph({ os }: { os: string | null }) {
+function Glyph({ os, icon }: { os: string | null; icon?: string }) {
+  if (icon) return <Icon name={icon} className={s.server} />;
   if (os === "windows") return <Icon name="windows-logo" fill className={s.windows} />;
   if (os !== null && OS_NAMES.has(os)) return <span className={cx(s.logo, s[os])} />;
   return <Icon name="hard-drives" className={s.server} />;
@@ -20,14 +21,15 @@ function Glyph({ os }: { os: string | null }) {
 
 /**
  * HOST-11: the logo of the host's OS, or a generic server when it is unknown, with a status
- * badge (a CSS color) in the bottom-right corner.
+ * badge (a CSS color) in the bottom-right corner. `icon` shows that Phosphor icon instead, as a local
+ * tab's terminal (§7.5).
  */
-export function OsIcon({ os, badge }: { os: string | null; badge: string }) {
+export function OsIcon({ os, badge, icon }: { os: string | null; badge: string; icon?: string }) {
   const name = os === null ? undefined : OS_NAMES.get(os);
   return (
     <span className={s.root} role={name ? "img" : undefined} aria-label={name} aria-hidden={name ? undefined : true} title={name}>
       <span className={s.glyph}>
-        <Glyph os={os} />
+        <Glyph os={os} icon={icon} />
       </span>
       <span className={s.badge} style={{ background: badge }} />
     </span>

@@ -7,14 +7,14 @@ import { writeClipboard } from "./clipboard";
 import { clockTime, diagnosticsText, errorCode } from "./diagnostics";
 import s from "./Overlays.module.css";
 
-/** Shown over the terminal while the SSH handshake and authentication run. */
-export function ConnectingOverlay({ name }: { name: string }) {
+/** Shown over the terminal while the SSH handshake and authentication run, or a local shell starts. */
+export function ConnectingOverlay({ name, local = false }: { name: string; local?: boolean }) {
   const t = useT();
   return (
     <div className={s.connecting} role="status">
       <div className={s.connectingPill}>
         <Spinner size={14} />
-        {t("terminal.connectingTo", { host: name })}
+        {local ? t("terminal.local.starting", { shell: name }) : t("terminal.connectingTo", { host: name })}
       </div>
     </div>
   );
@@ -98,17 +98,51 @@ export function ErrorCard({
   );
 }
 
-/** SSH-07: the session ended; reconnecting is always an explicit action. */
-export function DisconnectedBanner({ reason, onReconnect }: { reason: string | null; onReconnect(): void }) {
+/** LOCAL-01: the tab's shell could not start. */
+export function LocalErrorCard({ name, error, onRetry }: { name: string; error: AppError | null; onRetry(): void }) {
   const t = useT();
   return (
+    <div className={s.scrim}>
+      <div role="alertdialog" aria-labelledby="term-err-title" className={s.card}>
+        <div className={s.cardHead}>
+          <Icon name="terminal-window" size={20} color="#ff6b61" />
+          <div id="term-err-title" className={s.cardTitle}>
+            {t("terminal.local.startFailed", { shell: name })}
+          </div>
+        </div>
+        {/* What the system said, as it said it: why a program does not start is rarely worth a translation. */}
+        <div className={s.cardBody}>{!error ? "" : error.code === "not_found" ? t("terminal.local.shellGone") : error.detail || errorMessage(t, error)}</div>
+        <div className={s.cardActions}>
+          <div className={s.grow} />
+          <button type="button" className={s.primaryButton} onClick={onRetry}>
+            <Icon name="arrow-clockwise" size={13} />
+            {t("btn.retry")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SSH-07: the session ended; reconnecting is always an explicit action. A local tab's shell that
+ * exited with an error says so and offers to start it again (LOCAL-01).
+ */
+export function DisconnectedBanner({ reason, local, onReconnect }: { reason: string | null; local: string | null; onReconnect(): void }) {
+  const t = useT();
+  const text = local
+    ? reason
+      ? t("terminal.local.exitedReason", { shell: local, reason })
+      : t("terminal.local.exited", { shell: local })
+    : reason
+      ? t("terminal.disconnectedReason", { reason })
+      : t("terminal.disconnected");
+  return (
     <div className={s.banner} role="status">
-      <Icon name="plugs" size={16} color="var(--orange)" />
-      <span className={s.bannerText}>
-        {reason ? t("terminal.disconnectedReason", { reason }) : t("terminal.disconnected")}
-      </span>
+      <Icon name={local ? "terminal-window" : "plugs"} size={16} color="var(--orange)" />
+      <span className={s.bannerText}>{text}</span>
       <Button variant="primary" size="sm" icon="arrow-clockwise" onClick={onReconnect}>
-        {t("terminal.reconnect")}
+        {t(local ? "terminal.local.restart" : "terminal.reconnect")}
       </Button>
     </div>
   );

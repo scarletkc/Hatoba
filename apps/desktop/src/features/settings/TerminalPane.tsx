@@ -3,20 +3,32 @@ import { useApp } from "@/app/store";
 import { Icon, Segmented, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
+import { loadLocalShells, shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
-import type { TerminalSettings } from "@/ipc/types";
+import type { LocalShellView, TerminalSettings } from "@/ipc/types";
 import { isImeEvent } from "@/lib/ime";
 import { defaultTerminalFont } from "@/lib/platform";
-import { Pane, SettingRow, type PaneProps } from "./shared";
+import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
 import s from "./TerminalPane.module.css";
 
 const SIZE_MIN = 10;
 const SIZE_MAX = 24;
 const SCROLLBACK = [1000, 5000, 10000, 50000];
 
-/** Settings → Terminal (TERM-05 / TERM-06): font, cursor and scrollback. */
+/** Settings → Terminal (TERM-05 / TERM-06): font, cursor and scrollback, and the local tabs' shell (LOCAL-02). */
 export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
+  const [prefs, setPrefs] = usePrefs();
+  const [shells, setShells] = useState<LocalShellView[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    loadLocalShells()
+      .then((list) => live && setShells(list))
+      .catch(() => live && setShells([]));
+    return () => {
+      live = false;
+    };
+  }, []);
   const defaultFont = defaultTerminalFont(useApp((a) => a.info.platform));
   const term = settings?.terminal;
   const fontFamily = term?.font_family;
@@ -93,6 +105,7 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             onChange={(scrollback) => updateTerminal({ scrollback })}
           />
         </SettingRow>
+        {shells && shells.length > 0 && <LocalShellRow shells={shells} value={prefs.local_shell} onChange={(local_shell) => setPrefs({ local_shell })} />}
       </Group>
 
       <div className={s.preview} style={{ fontFamily: `"${font.split(",")[0].trim()}", var(--font-mono)`, fontSize: term.font_size }} aria-hidden>
@@ -105,6 +118,31 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
         </div>
       </div>
     </Pane>
+  );
+}
+
+/**
+ * LOCAL-02: the shell new local tabs run on this device. A shell that is gone, such as an uninstalled
+ * WSL distribution, shows as the system default, which new tabs then run.
+ */
+function LocalShellRow({ shells, value, onChange }: { shells: LocalShellView[]; value: string | null; onChange(id: string | null): void }) {
+  const t = useT();
+  const system = shells.find((s) => s.default) ?? shells[0];
+  const current = shells.some((s) => s.id === value) ? (value ?? "") : "";
+  const options = [
+    { value: "", label: t("settings.term.localShellDefault", { name: shellName(system, t) }) },
+    ...shells.map((shell) => ({ value: shell.id, label: shellName(shell, t) })),
+  ];
+  return (
+    <SettingRow label={t("settings.term.localShell")}>
+      <PopupSelect
+        ariaLabel={t("settings.term.localShell")}
+        value={current}
+        minWidth={200}
+        options={options}
+        onChange={(id) => onChange(id === "" ? null : id)}
+      />
+    </SettingRow>
   );
 }
 

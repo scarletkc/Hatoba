@@ -61,6 +61,8 @@ export default defineMessages({
     "settings.term.cursor.underline": "下划线",
     "settings.term.scrollback": "回滚缓冲区",
     "settings.term.lines": "{n} 行",
+    "settings.term.localShell": "本地终端的 shell",
+    "settings.term.localShellDefault": "系统默认（{name}）",
 
     "settings.sec.autoLock": "自动锁定",
     "settings.sec.seconds": "{n} 秒",
@@ -234,6 +236,8 @@ export default defineMessages({
     "settings.term.cursor.underline": "Underline",
     "settings.term.scrollback": "Scrollback",
     "settings.term.lines": "{n} lines",
+    "settings.term.localShell": "Local Terminal Shell",
+    "settings.term.localShellDefault": "System Default ({name})",
 
     "settings.sec.autoLock": "Auto-Lock",
     "settings.sec.seconds": "{n} seconds",
@@ -412,6 +416,8 @@ export default defineMessages({
     "settings.term.cursor.underline": "アンダーライン",
     "settings.term.scrollback": "スクロールバック",
     "settings.term.lines": "{n} 行",
+    "settings.term.localShell": "ローカル ターミナルのシェル",
+    "settings.term.localShellDefault": "システムの既定（{name}）",
 
     "settings.sec.autoLock": "自動ロック",
     "settings.sec.seconds": "{n} 秒",

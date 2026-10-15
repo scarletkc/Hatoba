@@ -1,0 +1,39 @@
+[package]
+name = "hatoba-local"
+description = "Local terminal tabs for Hatoba: the shells of this computer in a PTY, and the AI assistant's tools on this computer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+hatoba-ssh.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tokio-util.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+bytes.workspace = true
+# The terminal: ConPTY on Windows, a Unix pseudo-terminal elsewhere (wezterm's crate).
+portable-pty = "0.9"
+# `run_command` on this computer: the command's whole process tree in a Job Object (Windows) or a
+# process group (Unix), so a stop ends all of it. The features hatoba-ai's MCP servers use.
+process-wrap = { version = "10", default-features = false, features = ["tokio1", "job-object", "creation-flags", "kill-on-drop", "process-group"] }
+# `grep` on Windows, where the hosts' scripts cannot run: rg's own regex engine.
+regex = "1.11"
+# The shells on PATH (PowerShell 7).
+which = "8"
+dirs = "6"
+
+[target.'cfg(windows)'.dependencies]
+# Git for Windows and the WSL distributions are found in the registry.
+winreg = "0.56"
+windows = { version = "0.62", features = ["Win32_System_Threading"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread", "macros"] }
+tempfile = "3"

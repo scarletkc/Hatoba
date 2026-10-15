@@ -55,6 +55,7 @@ export const DEFAULT_PREFS: LocalPrefs = {
   dashboard_mem_alert: 90,
   dashboard_disk_alert: 90,
   close_action: "ask",
+  local_shell: null,
 };
 
 interface AppState {

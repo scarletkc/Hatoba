@@ -57,6 +57,7 @@ export function connectionFor(c: Recorded, hosts: HostView[]): { name: string; s
  * (AI-09), as Rust's `open_turn` decides.
  */
 export function moves(c: Recorded, tab: TabSource): boolean {
+  if (tab.local) return c.host_id !== null || c.quick_target !== null;
   return tab.hostId !== null ? c.host_id !== tab.hostId : c.host_id !== null || !c.quick_target || !sameTarget(c.quick_target, tab.target);
 }
 
@@ -69,7 +70,7 @@ export function moves(c: Recorded, tab: TabSource): boolean {
  * tab's saved host was deleted, or both have one name.
  */
 export function movedFrom(c: Recorded, tab: TabSource, hosts: HostView[]): { from: string; to: string } | null {
-  if (!moves(c, tab)) return null;
+  if (!moves(c, tab) || tab.local) return null;
   const old = hosts.find((h) => h.id === c.host_id);
   const next = hosts.find((h) => h.id === tab.hostId);
   let from: string | null;

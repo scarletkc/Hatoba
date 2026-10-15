@@ -310,6 +310,40 @@ pub struct SessionStateEvent {
     pub exit_status: Option<u32>,
 }
 
+// ───────────────────────── Local terminals ─────────────────────────
+
+/// What kind of shell a local tab runs (§7.5).
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalShellKind {
+    /// A shell of macOS or Linux.
+    Unix,
+    /// PowerShell 7 or Windows PowerShell.
+    Powershell,
+    Cmd,
+    GitBash,
+    Wsl,
+}
+
+/// A shell this computer can run in a local tab (LOCAL-02).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct LocalShellView {
+    /// Stable on this device: `pwsh`, `powershell`, `cmd`, `git-bash` or `wsl:<distribution>` on
+    /// Windows, the shell's path elsewhere.
+    pub id: String,
+    /// In English; the app translates the names of the Windows shells.
+    pub name: String,
+    pub kind: LocalShellKind,
+    /// The system default: PowerShell 7, else Windows PowerShell, on Windows; `$SHELL` elsewhere.
+    pub default: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct LocalOpenOptions {
+    pub cols: u32,
+    pub rows: u32,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HostKeyPromptKind {
@@ -966,7 +1000,7 @@ pub struct LocalPrefs {
     pub auto_lock_minutes: u32,
     /// SEC-02: lock the vault when the computer sleeps.
     pub lock_on_sleep: bool,
-    /// SEC-03: disconnect the SSH sessions when the vault locks.
+    /// SEC-03: disconnect the SSH sessions, and end the local shells, when the vault locks.
     pub lock_disconnects_sessions: bool,
     /// SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it.
     pub clipboard_clear_secs: u32,
@@ -983,6 +1017,9 @@ pub struct LocalPrefs {
     pub dashboard_disk_alert: u32,
     /// WIN-10: what the window's close button does on Windows and Linux.
     pub close_action: CloseAction,
+    /// LOCAL-02: the shell new local tabs run on this device, by its id; the system default
+    /// while `None` or when the shell is gone.
+    pub local_shell: Option<String>,
 }
 
 impl Default for LocalPrefs {
@@ -1010,6 +1047,7 @@ impl Default for LocalPrefs {
             dashboard_mem_alert: 90,
             dashboard_disk_alert: 90,
             close_action: CloseAction::Ask,
+            local_shell: None,
         }
     }
 }

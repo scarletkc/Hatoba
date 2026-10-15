@@ -16,7 +16,7 @@ const CHOICES: { [K in ChoicePref]: Record<LocalPrefs[K], true> } = {
 /** Whether `value` reads as the pref `key`, as serde reads Rust's `LocalPrefs`. */
 function fits(key: keyof LocalPrefs, value: unknown): boolean {
   if (Object.hasOwn(CHOICES, key)) return typeof value === "string" && Object.hasOwn(CHOICES[key as ChoicePref], value);
-  if (key === "default_proxy_id") return value === null || typeof value === "string";
+  if (key === "default_proxy_id" || key === "local_shell") return value === null || typeof value === "string";
   if (key === "dashboard_hidden_columns") return Array.isArray(value) && value.every((v) => typeof v === "string");
   const fallback = PREFS[key];
   // Rust stores the numbers as u32.

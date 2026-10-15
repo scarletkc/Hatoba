@@ -338,6 +338,27 @@ export interface QuickTarget {
   username: string;
 }
 
+// ───────────────────────── Local terminals (§7.5) ─────────────────────────
+
+/** What kind of shell a local tab runs. */
+export type LocalShellKind = "unix" | "powershell" | "cmd" | "git_bash" | "wsl";
+
+/** A shell this computer can run in a local tab (LOCAL-02). */
+export interface LocalShellView {
+  /** Stable on this device: `pwsh`, `powershell`, `cmd`, `git-bash` or `wsl:<distribution>` on Windows, the shell's path elsewhere. */
+  id: string;
+  /** In English; `shellName` translates the Windows shells' names. */
+  name: string;
+  kind: LocalShellKind;
+  /** The system default: PowerShell 7, else Windows PowerShell, on Windows; `$SHELL` elsewhere. */
+  default: boolean;
+}
+
+export interface LocalOpenOptions {
+  cols: number;
+  rows: number;
+}
+
 export type SessionState = "connecting" | "connected" | "disconnected" | "failed";
 
 export interface SessionStateEvent {
@@ -786,7 +807,7 @@ export interface LocalPrefs {
   auto_lock_minutes: number;
   /** SEC-02: lock the vault when the computer sleeps. */
   lock_on_sleep: boolean;
-  /** SEC-03: disconnect the SSH sessions when the vault locks. */
+  /** SEC-03: disconnect the SSH sessions, and end the local shells, when the vault locks. */
   lock_disconnects_sessions: boolean;
   /** SEC-08: seconds until a copied password is cleared from the clipboard; 0 never clears it. */
   clipboard_clear_secs: number;
@@ -802,6 +823,8 @@ export interface LocalPrefs {
   dashboard_disk_alert: number;
   /** WIN-10: what the window's close button does on Windows and Linux. */
   close_action: CloseAction;
+  /** LOCAL-02: the shell new local tabs run on this device, by id; the system default while null or when it is gone. */
+  local_shell: string | null;
 }
 
 /** WIN-10: the close button asks, hides the window to the system tray, or quits. Without a tray it quits. */

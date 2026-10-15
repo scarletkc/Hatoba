@@ -12,6 +12,7 @@ use crate::dashboard::Dashboard;
 use crate::deploy::Deployments;
 use crate::dropped::DroppedPaths;
 use crate::error::{AppError, AppResult};
+use crate::local::LocalManager;
 use crate::lock::LockPolicy;
 use crate::mcp::McpManager;
 use crate::platform::secrets::KeyringStore;
@@ -25,6 +26,8 @@ pub struct AppState {
     pub vault: SharedVault,
     pub secrets: Arc<KeyringStore>,
     pub ssh: SshManager,
+    /// Local terminal tabs (§7.5).
+    pub local: LocalManager,
     /// The dashboard's background connections and readers (HOST-14).
     pub dashboard: Dashboard,
     pub sync: SyncController,
@@ -53,6 +56,7 @@ impl AppState {
             vault,
             secrets: Arc::new(KeyringStore),
             ssh: SshManager::default(),
+            local: LocalManager::default(),
             dashboard: Dashboard::default(),
             sync: SyncController::default(),
             deploy: Deployments::default(),

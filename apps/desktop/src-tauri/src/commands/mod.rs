@@ -9,6 +9,7 @@ pub mod deploy;
 pub mod forwards;
 pub mod hosts;
 pub mod keys;
+pub mod local;
 pub mod mcp;
 pub mod proxies;
 pub mod quick;

@@ -1,17 +1,30 @@
 import { create } from "zustand";
-import type { QuickTarget } from "@/ipc/types";
+import type { LocalShellKind, QuickTarget } from "@/ipc/types";
 
 export type TabStatus = "connecting" | "connected" | "failed" | "disconnected";
 
-/** What a tab connects to: a saved host, or a quick-connect target that is not one (HOST-12). */
-export type TabSource = { hostId: string; target: null } | { hostId: null; target: QuickTarget };
+/** The shell of this computer that a local tab runs (§7.5). */
+export interface LocalShell {
+  id: string;
+  name: string;
+  kind: LocalShellKind;
+}
+
+/**
+ * What a tab connects to: a saved host, a quick-connect target that is not one (HOST-12), or a shell
+ * of this computer (§7.5).
+ */
+export type TabSource =
+  | { hostId: string; target: null; local?: undefined }
+  | { hostId: null; target: QuickTarget; local?: undefined }
+  | { hostId: null; target: null; local: LocalShell };
 
 /** One terminal tab (TERM-01). The same host may be open in several tabs. */
 export type SessionTab = TabSource & {
   id: string;
   title: string;
   status: TabStatus;
-  /** Backend session id once `ssh_connect` resolved; null while connecting or after closing. */
+  /** Backend session id once `ssh_connect` or `local_open` resolved; null while connecting or after closing. */
   sessionId: string | null;
 };
 
@@ -53,7 +66,7 @@ export const useTabs = create<TabsState>((set, get) => ({
     }),
   activate: (active) => set({ active }),
   adoptHost: (id, hostId, title) =>
-    set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, hostId, target: null, title } : t)) })),
+    set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && !t.local ? { ...t, hostId, target: null, title } : t)) })),
   update: (id, patch) =>
     set((s) => ({
       tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)),

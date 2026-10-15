@@ -23,8 +23,8 @@ use crate::error::{AppError, AppResult};
 use crate::ssh::{LiveSession, Overrides, build_config, connect_with, resolve_proxy};
 use crate::state::{AppState, now_ms};
 
-const FRAME_DATA: u8 = 0;
-const FRAME_CLOSED: u8 = 1;
+pub(crate) const FRAME_DATA: u8 = 0;
+pub(crate) const FRAME_CLOSED: u8 = 1;
 const FRAME_ERROR: u8 = 2;
 /// The session id, sent before connecting: the tab can then answer the session's host-key and
 /// login prompts for itself if it closes while they are open.
@@ -40,7 +40,7 @@ static NEXT_STATS_ID: AtomicU64 = AtomicU64::new(1);
 pub struct TermFrame(#[specta(type = Vec<u8>)] Vec<u8>);
 
 impl TermFrame {
-    fn new(tag: u8, payload: &[u8]) -> Self {
+    pub(crate) fn new(tag: u8, payload: &[u8]) -> Self {
         let mut buf = Vec::with_capacity(payload.len() + 1);
         buf.push(tag);
         buf.extend_from_slice(payload);
@@ -54,7 +54,7 @@ impl IpcResponse for TermFrame {
     }
 }
 
-fn emit_state(
+pub(crate) fn emit_state(
     app: &AppHandle,
     session_id: &str,
     host_id: Option<&str>,

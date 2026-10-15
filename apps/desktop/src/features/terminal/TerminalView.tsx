@@ -17,7 +17,8 @@ import { countRunning, useForwardRuns } from "./forwards";
 import { ForwardsPopover } from "./ForwardsPopover";
 import { FindBar } from "./FindBar";
 import { patchInfo, useSessionInfo } from "./info";
-import { ConnectingOverlay, DisconnectedBanner, ErrorCard } from "./Overlays";
+import { shellName } from "./localShells";
+import { ConnectingOverlay, DisconnectedBanner, ErrorCard, LocalErrorCard } from "./Overlays";
 import { ensureSession, type LiveSession } from "./session";
 import { clearStats, startStats, stopStats, useDocumentVisible, useSessionStats } from "./stats";
 import { StatsPopover } from "./StatsPopover";
@@ -115,7 +116,14 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       if (sessionId) clearStats(sessionId);
     };
   }, [sessionId]);
-  const target = host ? `${host.username}@${host.address}:${host.port}` : tab.target ? formatTarget(tab.target) : null;
+  const local = tab.local ?? null;
+  const target = local
+    ? `${t("terminal.local.thisComputer")} · ${shellName(local, t)}`
+    : host
+      ? `${host.username}@${host.address}:${host.port}`
+      : tab.target
+        ? formatTarget(tab.target)
+        : null;
   const quickTarget = tab.target;
 
   const buildMenu = (context: boolean): MenuEntry[] => {
@@ -162,6 +170,19 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
       onSelect: () => askAiAbout(tab.id, selection),
     };
     if (context) return [copy, paste, selectAll, { kind: "separator" }, askAi, { kind: "separator" }, clear, find];
+    if (local) {
+      return [
+        { label: t("terminal.local.restart"), icon: "arrow-clockwise", disabled: tab.status === "connecting", onSelect: () => void reconnectSession(tab.id) },
+        { kind: "separator" },
+        copy,
+        paste,
+        clear,
+        selectAll,
+        { kind: "separator" },
+        find,
+        askAi,
+      ];
+    }
     return [
       { label: t("terminal.menu.reconnect"), icon: "arrow-clockwise", disabled: tab.status === "connecting", onSelect: () => void reconnectSession(tab.id) },
       { label: t("terminal.menu.disconnect"), icon: "plugs", disabled: !connected, onSelect: () => void session.disconnect() },
@@ -202,6 +223,7 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
   return (
     <div className={cx(s.root, !active && s.hidden)} inert={!active}>
       <StatusBar
+        local={!!local}
         status={tab.status}
         target={target}
         via={jumpName}
@@ -236,8 +258,11 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
         <div className={s.termArea} style={{ background: chrome.background }}>
           <div ref={containerRef} className={s.term} onContextMenu={onContextMenu} />
           {findOpen && <FindBar session={session} onClose={closeFind} />}
-          {tab.status === "connecting" && <ConnectingOverlay name={host?.name ?? tab.title} />}
-          {tab.status === "failed" && (
+          {tab.status === "connecting" && <ConnectingOverlay name={host?.name ?? tab.title} local={!!local} />}
+          {tab.status === "failed" && local && (
+            <LocalErrorCard name={tab.title} error={info.error} onRetry={() => void reconnectSession(tab.id)} />
+          )}
+          {tab.status === "failed" && !local && (
             <ErrorCard
               name={host?.name ?? tab.title}
               host={host}
@@ -251,10 +276,10 @@ function TerminalBody({ tab, active, session }: { tab: SessionTab; active: boole
             />
           )}
           {tab.status === "disconnected" && (
-            <DisconnectedBanner reason={info.reason} onReconnect={() => void reconnectSession(tab.id)} />
+            <DisconnectedBanner reason={info.reason} local={local ? tab.title : null} onReconnect={() => void reconnectSession(tab.id)} />
           )}
         </div>
-        {info.sftpOpen && connected && tab.sessionId && (
+        {info.sftpOpen && connected && tab.sessionId && !local && (
           <SftpPanel key={tab.sessionId} sessionId={tab.sessionId} hostName={host?.name ?? tab.title} active={active} />
         )}
       </div>

@@ -14,7 +14,7 @@ import { SettingsWindow } from "@/features/settings/SettingsWindow";
 import { SyncPage } from "@/features/sync/SyncPage";
 import { SessionDialogs } from "@/features/terminal/SessionDialogs";
 import { TerminalView } from "@/features/terminal/TerminalView";
-import { closeSessionTab } from "@/features/terminal/connect";
+import { closeSessionTab, openLocalTerminal } from "@/features/terminal/connect";
 import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
@@ -106,6 +106,9 @@ function Main() {
         if (app.page.kind !== "hosts") app.navigate({ kind: "hosts", filter: { kind: "all" } });
         tabsState.activate("home");
         app.focusSearch();
+        break;
+      case "newLocal":
+        void openLocalTerminal();
         break;
       case "closeTab":
         if (tabsState.active !== "home") void closeSessionTab(tabsState.active);

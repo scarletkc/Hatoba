@@ -7,7 +7,7 @@ import { hostById, useVaultData } from "@/app/data";
 import { errorMessage } from "@/app/errors";
 import { isAppShortcut } from "@/app/shortcuts";
 import { useApp } from "@/app/store";
-import { useTabs, type TabSource, type TabStatus } from "@/app/tabs";
+import { useTabs, type LocalShell, type TabSource, type TabStatus } from "@/app/tabs";
 import { toast } from "@/components/overlay";
 import { useRecentTargets } from "@/features/hosts/recent";
 import { useTransfers } from "@/features/sftp/transfers";
@@ -57,7 +57,11 @@ export function ensureSession(tabId: string): LiveSession | null {
   if (existing) return existing;
   const tab = useTabs.getState().tabs.find((x) => x.id === tabId);
   if (!tab) return null;
-  const source: TabSource = tab.target !== null ? { hostId: null, target: tab.target } : { hostId: tab.hostId, target: null };
+  const source: TabSource = tab.local
+    ? { hostId: null, target: null, local: tab.local }
+    : tab.target !== null
+      ? { hostId: null, target: tab.target }
+      : { hostId: tab.hostId, target: null };
   const session = new LiveSession(tabId, source);
   byTab.set(tabId, session);
   return session;
@@ -77,6 +81,28 @@ export function routeStateEvent(ev: SessionStateEvent) {
 }
 
 useTermSettings.subscribe(() => byTab.forEach((s) => s.applySettings()));
+
+/** How a tab's input, size and end reach its backend session: an SSH shell, or a local PTY (§7.5). */
+interface SessionIo {
+  write(sid: string, data: string): Promise<void>;
+  writeBytes(sid: string, data: number[]): Promise<void>;
+  resize(sid: string, cols: number, rows: number): Promise<void>;
+  close(sid: string): Promise<void>;
+}
+
+const SSH_IO: SessionIo = {
+  write: (sid, data) => api.ssh_write(sid, data),
+  writeBytes: (sid, data) => api.ssh_write_bytes(sid, data),
+  resize: (sid, cols, rows) => api.ssh_resize(sid, cols, rows),
+  close: (sid) => api.ssh_disconnect(sid),
+};
+
+const LOCAL_IO: SessionIo = {
+  write: (sid, data) => api.local_write(sid, data),
+  writeBytes: (sid, data) => api.local_write_bytes(sid, data),
+  resize: (sid, cols, rows) => api.local_resize(sid, cols, rows),
+  close: (sid) => api.local_close(sid),
+};
 
 function needsPassphrase(err: AppError): boolean {
   return err.code === "key_parse" && (err.key_kind === "passphrase_required" || err.key_kind === "wrong_passphrase");
@@ -145,6 +171,15 @@ export class LiveSession {
   /** What a quick connection connects to (HOST-12); null for a saved host. */
   get target(): QuickTarget | null {
     return this.source.target;
+  }
+
+  /** The shell a local tab runs (§7.5); null for an SSH tab. */
+  get local(): LocalShell | null {
+    return this.source.local ?? null;
+  }
+
+  private get io(): SessionIo {
+    return this.source.local ? LOCAL_IO : SSH_IO;
   }
 
   /** A quick connection whose target is now a saved host connects as that host from here on. */
@@ -269,6 +304,10 @@ export class LiveSession {
     this.pendingSessionId = null;
     this.term.write("\x1b[?25h"); // show the cursor again (hidden while failed / disconnected)
     this.setStatus("connecting");
+    if (this.source.local) {
+      await this.startLocal(gen, this.source.local);
+      return;
+    }
 
     let passphrase = creds?.passphrase ?? null;
     const password = creds?.password ?? null;
@@ -313,6 +352,22 @@ export class LiveSession {
     }
   }
 
+  /** LOCAL-01: starts the tab's shell in a PTY of the terminal's size. */
+  private async startLocal(gen: number, shell: LocalShell) {
+    const sentSize = { cols: this.term.cols, rows: this.term.rows };
+    try {
+      const sid = await api.local_open(shell.id, sentSize, (frame) => this.onFrame(frame, gen));
+      if (gen !== this.gen || this.disposed) {
+        void api.local_close(sid).catch(() => {});
+        return;
+      }
+      this.onConnected(sid, sentSize);
+    } catch (e) {
+      if (gen !== this.gen || this.disposed) return;
+      this.fail(toAppError(e));
+    }
+  }
+
   private onConnected(sid: string, sentSize: { cols: number; rows: number }) {
     this.releaseSession();
     this.sessionId = sid;
@@ -320,10 +375,12 @@ export class LiveSession {
     this.sent = sentSize;
     bySession.set(sid, this);
     this.setStatus("connected");
-    // A saved host's last connected time and server OS; a quick connection's recent targets.
-    if (this.target) void useRecentTargets.getState().load();
-    else void useVaultData.getState().reloadHosts().catch(() => {});
-    void syncActiveForwards(sid); // auto-start forwards (FWD-02) may be running already
+    if (!this.local) {
+      // A saved host's last connected time and server OS; a quick connection's recent targets.
+      if (this.target) void useRecentTargets.getState().load();
+      else void useVaultData.getState().reloadHosts().catch(() => {});
+      void syncActiveForwards(sid); // auto-start forwards (FWD-02) may be running already
+    }
     this.sendResize(); // the view may have been resized while connecting
     const early = earlyEvents.get(sid);
     earlyEvents.delete(sid);
@@ -334,7 +391,7 @@ export class LiveSession {
   private fail(err: AppError) {
     patchInfo(this.tabId, { error: err, errorAt: Date.now() });
     const atLineStart = this.term.buffer.active.cursorX === 0;
-    this.term.write(`${atLineStart ? "" : "\r\n"}ssh: ${err.detail}\r\n\x1b[?25l`);
+    this.term.write(`${atLineStart ? "" : "\r\n"}${this.local?.name ?? "ssh"}: ${err.detail}\r\n\x1b[?25l`);
     this.setStatus("failed");
   }
 
@@ -360,7 +417,16 @@ export class LiveSession {
   onState(ev: SessionStateEvent) {
     if (this.disposed) return;
     if (ev.latency_ms != null) patchInfo(this.tabId, { latencyMs: ev.latency_ms });
-    if (ev.state === "disconnected" || ev.state === "failed") this.markDisconnected(this.reasonFrom(ev));
+    if (ev.state === "disconnected" || ev.state === "failed") {
+      // LOCAL-01: a shell that exits cleanly closes its tab, as in other terminals; one that fails
+      // stays open with its status, to read what it printed and restart it.
+      if (this.local && ev.exit_status === 0 && !ev.error && this.lastSessionId === ev.session_id) {
+        useTabs.getState().closeTab(this.tabId);
+        void this.dispose();
+        return;
+      }
+      this.markDisconnected(this.reasonFrom(ev));
+    }
   }
 
   private reasonFrom(ev: SessionStateEvent): string | null {
@@ -408,7 +474,7 @@ export class LiveSession {
   /** Reconnect in this tab (SSH-07: always user-initiated, never an automatic loop). */
   async reconnect(collect: () => Promise<Credentials | null>) {
     if (this.disposed || this.isConnecting) return;
-    if (!this.target && !hostById(this.hostId)) {
+    if (!this.local && !this.target && !hostById(this.hostId)) {
       toast(t("terminal.hostMissing"), "error");
       return;
     }
@@ -420,11 +486,12 @@ export class LiveSession {
       this.sessionId = null;
       useTransfers.getState().purge(old);
       dropSessionForwards(old);
-      void api.ssh_disconnect(old).catch(() => {});
+      void this.io.close(old).catch(() => {});
     }
     this.releaseSession();
     const atLineStart = this.term.buffer.active.cursorX === 0;
-    this.term.write(`${atLineStart ? "" : "\r\n"}\x1b[90m── ${t("terminal.reconnecting")} ──\x1b[0m\r\n`);
+    const line = t(this.local ? "terminal.local.restarting" : "terminal.reconnecting");
+    this.term.write(`${atLineStart ? "" : "\r\n"}\x1b[90m── ${line} ──\x1b[0m\r\n`);
     await this.connect(creds);
   }
 
@@ -434,7 +501,7 @@ export class LiveSession {
     if (!sid) return;
     this.gen++;
     this.markDisconnected(null);
-    await api.ssh_disconnect(sid).catch(() => {});
+    await this.io.close(sid).catch(() => {});
   }
 
   /** Close everything: backend session, xterm, listeners. */
@@ -446,7 +513,7 @@ export class LiveSession {
     this.gen++;
     const sid = this.sessionId;
     this.sessionId = null;
-    const closing = sid ? api.ssh_disconnect(sid).catch(() => {}) : null;
+    const closing = sid ? this.io.close(sid).catch(() => {}) : null;
     if (sid) {
       useTransfers.getState().purge(sid);
       dropSessionForwards(sid);
@@ -466,7 +533,7 @@ export class LiveSession {
 
   private write(data: string) {
     const sid = this.sessionId;
-    if (sid && this.status === "connected") void api.ssh_write(sid, data).catch(() => {});
+    if (sid && this.status === "connected") void this.io.write(sid, data).catch(() => {});
   }
 
   /**
@@ -477,7 +544,7 @@ export class LiveSession {
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") return;
     const bytes = Array.from({ length: data.length }, (_, i) => data.charCodeAt(i) & 0xff);
-    void api.ssh_write_bytes(sid, bytes).catch(() => {});
+    void this.io.writeBytes(sid, bytes).catch(() => {});
   }
 
   /** Types `data` into the shell through the same path as the keyboard (AI-13). Rejects when not connected. */
@@ -485,7 +552,7 @@ export class LiveSession {
     const sid = this.sessionId;
     if (!sid || this.status !== "connected") throw toAppError(new Error("the session is not connected"));
     this.term.scrollToBottom();
-    await api.ssh_write(sid, data);
+    await this.io.write(sid, data);
   }
 
   /** Calls `listener` with the output as it arrives, decoded to text (AI-13). Returns the unsubscribe function. */
@@ -502,7 +569,7 @@ export class LiveSession {
     const { cols, rows } = this.term;
     if (cols === this.sent.cols && rows === this.sent.rows) return;
     this.sent = { cols, rows };
-    void api.ssh_resize(sid, cols, rows).catch(() => {});
+    void this.io.resize(sid, cols, rows).catch(() => {});
   }
 
   async copySelection(clearAfter = false): Promise<boolean> {

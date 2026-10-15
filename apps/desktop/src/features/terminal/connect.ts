@@ -1,11 +1,13 @@
 import { hostById, useVaultData } from "@/app/data";
+import { errorMessage } from "@/app/errors";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { toast } from "@/components/overlay";
 import { formatTarget, savedHostFor } from "@/features/hosts/quickConnect";
 import { t } from "@/i18n";
-import type { HostView, QuickTarget } from "@/ipc/types";
+import type { HostView, LocalShellView, QuickTarget } from "@/ipc/types";
 import { startSessionListeners } from "./listeners";
+import { loadLocalShells, preferredShell, shellName } from "./localShells";
 import { askSecret, askUsername } from "./prompts";
 import { ensureSession, getSession, type Credentials } from "./session";
 
@@ -54,11 +56,38 @@ export async function connectTarget(typed: { address: string; port: number; user
   useTabs.getState().openSession({ hostId: null, target }, `${username}@${target.address}`);
 }
 
-/** Retry / reconnect a tab in place (prompting again for "ask every time" hosts). */
+/**
+ * LOCAL-01: open a local terminal tab on `shell`, or on the shell picked in Settings → Terminal, else
+ * the system default.
+ */
+export async function openLocalTerminal(shell?: LocalShellView): Promise<void> {
+  startSessionListeners();
+  let chosen = shell;
+  if (!chosen) {
+    try {
+      chosen = preferredShell(await loadLocalShells(), useApp.getState().prefs.local_shell);
+    } catch (e) {
+      toast(errorMessage(t, e), "error");
+      return;
+    }
+  }
+  if (!chosen) {
+    toast(t("terminal.local.noShell"), "error");
+    return;
+  }
+  const local = { id: chosen.id, name: chosen.name, kind: chosen.kind };
+  useTabs.getState().openSession({ hostId: null, target: null, local }, shellName(local, t));
+}
+
+/** Retry / reconnect a tab in place (prompting again for "ask every time" hosts), or restart a local tab's shell. */
 export async function reconnectSession(tabId: string): Promise<void> {
   const session = getSession(tabId);
   if (!session || session.status === "connecting") return;
   // A quick connection saved as a host since (Save as Host…) reconnects as that host.
+  if (session.local) {
+    await session.reconnect(async () => NONE);
+    return;
+  }
   const saved = session.target ? savedHostFor(useVaultData.getState().hosts, session.target) : undefined;
   if (saved) session.adoptHost(saved);
   const host = hostById(session.hostId);

@@ -108,6 +108,12 @@
   background: var(--fill);
 }
 
+/* The local terminal menu (LOCAL-01) right after New Tab. */
+.newTabMenu {
+  width: 18px;
+  margin-left: -2px;
+}
+
 .drag {
   flex: 1;
   align-self: stretch;

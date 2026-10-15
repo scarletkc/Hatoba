@@ -29,6 +29,7 @@ import { mockStats } from "./data";
 import { applyPatch } from "./patch";
 import { readStoredPrefs } from "./prefs";
 import { FakeShell } from "./shell";
+import { mockLocalShells } from "./local";
 
 /** `?ssh=<kind>`: every connection fails with this SSH error kind and a detail like the real one. */
 const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: number) => string>> & Record<"timeout", (address: string, port: number) => string> = {
@@ -243,7 +244,7 @@ export function createMockApi(): HatobaApi {
       hosts: async () => hosts,
       sessionServer: (sid) => {
         const shell = shells.get(sid);
-        return shell ? formatTarget(shell.host) : null;
+        return shell?.host ? formatTarget(shell.host) : shell ? "local" : null;
       },
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
     }),
@@ -753,6 +754,40 @@ export function createMockApi(): HatobaApi {
       shells.delete(sid);
       dropSessionForwards(sid);
       stopStats(sid);
+    },
+    local_shells: async () => mockLocalShells(platform),
+    local_open: async (shellId, _options, onFrame: FrameHandler) => {
+      needUnlocked();
+      const shell = mockLocalShells(platform).find((s) => s.id === shellId) ?? fail("not_found", "shell not found");
+      // `?local=fail`: the shell does not start, as when a WSL distribution is broken.
+      if (q.get("local") === "fail") fail("io", `the shell could not be started: ${shell.name} exited at once`);
+      await delay(120);
+      const sid = id("l");
+      const fake = new FakeShell(null, (bytes) => onFrame(frame(FRAME_DATA, bytes)), {
+        shell: shell.kind,
+        user: "demo",
+        machine: platform === "macos" ? "Demo-MacBook" : "DEMO-PC",
+      });
+      shells.set(sid, fake);
+      setTimeout(() => {
+        emit("ssh://state", { session_id: sid, host_id: null, state: "connected", latency_ms: null, error: null, exit_status: null });
+        fake.start();
+      }, 0);
+      fake.onExit = () => {
+        onFrame(frame(FRAME_CLOSED, new Uint8Array()));
+        emit("ssh://state", { session_id: sid, host_id: null, state: "disconnected", latency_ms: null, error: null, exit_status: 0 });
+        shells.delete(sid);
+      };
+      return sid;
+    },
+    local_write: async (sid, data) => {
+      shells.get(sid)?.input(data);
+    },
+    local_write_bytes: async () => {},
+    local_resize: async () => {},
+    local_close: async (sid) => {
+      shells.get(sid)?.stop();
+      shells.delete(sid);
     },
     ssh_stats_start: async (sid, onEvent) => {
       const shell = shells.get(sid) ?? fail("not_found", "session");
