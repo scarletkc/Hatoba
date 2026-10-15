@@ -401,6 +401,7 @@ pub(crate) fn item_type(item: Option<&Item>) -> ItemType {
         Some(Item::Skill(_)) => ItemType::Skill,
         Some(Item::SkillFile(_)) => ItemType::SkillFile,
         Some(Item::McpServer(_)) => ItemType::McpServer,
+        Some(Item::TerminalScheme(_)) => ItemType::TerminalScheme,
         Some(Item::Settings(_)) => ItemType::Settings,
     }
 }
@@ -477,6 +478,13 @@ fn summary(item: &Item, hosts: &dyn Fn(&str) -> Option<String>) -> Vec<(&'static
             ("name", m.name.clone()),
             ("transport", m.transport.kind_str().to_owned()),
             ("always_ask", m.always_ask.to_string()),
+        ],
+        Item::TerminalScheme(s) => vec![
+            ("name", s.name.clone()),
+            (
+                "colors",
+                crate::commands::schemes::palette_summary(&s.colors),
+            ),
         ],
         Item::Settings(_) => vec![],
     }

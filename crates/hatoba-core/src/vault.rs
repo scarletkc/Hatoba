@@ -24,7 +24,7 @@ use crate::crypto::{
 use crate::error::{Error, Result};
 use crate::model::{
     Group, Host, Item, KnownHost, PortForward, Proxy, RightClick, SETTINGS_ID, Settings, SshKey,
-    new_id,
+    TerminalScheme, new_id,
 };
 use crate::recovery::RecoveryCode;
 use crate::store::{ConflictRow, ItemRow, Store, StoreOps, meta};
@@ -976,6 +976,12 @@ impl Vault {
     #[must_use]
     pub fn forwards(&self) -> Vec<(String, PortForward)> {
         self.collect(Item::as_forward)
+    }
+
+    /// The terminal colour schemes the user made (TERM-06).
+    #[must_use]
+    pub fn terminal_schemes(&self) -> Vec<(String, TerminalScheme)> {
+        self.collect(Item::as_terminal_scheme)
     }
 
     /// The settings (defaults while locked or if none is stored yet).

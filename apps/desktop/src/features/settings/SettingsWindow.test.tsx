@@ -9,6 +9,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 const { useApp } = await import("@/app/store");
 const { getLocale, t } = await import("@/i18n");
 const { api } = await import("@/ipc/api");
+const { ConfirmHost, ToastHost } = await import("@/components/overlay");
 const { SettingsWindow } = await import("./SettingsWindow");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,7 +25,15 @@ function open(tab: "terminal" | "appearance" = "terminal") {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  act(() => root.render(<SettingsWindow onClose={() => {}} />));
+  act(() =>
+    root.render(
+      <>
+        <SettingsWindow onClose={() => {}} />
+        <ConfirmHost />
+        <ToastHost />
+      </>,
+    ),
+  );
   unmount = () => {
     root.unmount();
     host.remove();
@@ -55,6 +64,19 @@ const blur = (field: HTMLElement) =>
 async function syncIn(terminal: Parameters<typeof api.settings_save>[0]["terminal"]) {
   await act(() => api.settings_save({ terminal }));
 }
+
+/** A scheme card reads as its name; the miniature terminal above it is hidden from assistive tech. */
+const card = (name: string) =>
+  [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name);
+const checked = (name: string) => card(name)?.getAttribute("aria-checked") === "true";
+const button = (text: string, within: ParentNode = document) =>
+  [...within.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text);
+const editor = () => [...document.querySelectorAll<HTMLElement>("[role=dialog]")].at(-1)!;
+/** The scheme editor's name field, named by its form label. */
+const nameField = () => {
+  const label = [...document.querySelectorAll("label")].find((l) => l.textContent === t("settings.scheme.name"));
+  return label?.htmlFor ? (document.getElementById(label.htmlFor) as HTMLInputElement | null) : null;
+};
 
 function type(field: HTMLInputElement, text: string) {
   act(() => {
@@ -137,10 +159,6 @@ describe("SettingsWindow", () => {
   it("picks a colour scheme for each terminal mode", async () => {
     await syncIn({ theme: "dark" });
     open("appearance");
-    // A card reads as its name; the miniature terminal above it is hidden from assistive tech.
-    const card = (name: string) =>
-      [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.querySelector(":scope > :not([aria-hidden])")?.textContent === name);
-    const checked = (name: string) => card(name)?.getAttribute("aria-checked") === "true";
     await until(() => card("Hatoba Dark"));
     // Nothing picked yet: Hatoba's own scheme, and only the dark ones while the terminal is always dark.
     expect(checked("Hatoba Dark")).toBe(true);
@@ -160,5 +178,94 @@ describe("SettingsWindow", () => {
       return now.light_scheme === "solarized-light" && now;
     });
     expect(after).toMatchObject({ theme: "system", dark_scheme: "dracula" });
+  });
+
+  it("duplicates a scheme, edits the copy, puts it to use, and deletes it", async () => {
+    await syncIn({ theme: "dark", dark_scheme: "dracula" });
+    open("appearance");
+    await until(() => checked("Dracula"));
+    // A built-in scheme cannot be edited, only duplicated.
+    expect(button(t("settings.scheme.edit"))).toBeUndefined();
+    act(() => button(t("settings.scheme.duplicate"))!.click());
+
+    const copyName = t("settings.scheme.copyName", { name: "Dracula" });
+    const name = await until(nameField);
+    expect(name.value).toBe(copyName);
+    const red = editor().querySelector<HTMLInputElement>(`input[aria-label="${t("settings.scheme.color.red")}"]:not([type=color])`)!;
+    expect(red.value).toBe("#ff5555");
+    // The preview follows each valid code as it is typed; a partial one changes nothing yet.
+    type(red, "#12");
+    expect(red.getAttribute("aria-invalid")).toBe("true");
+    type(red, "123456");
+    const preview = editor().querySelector<HTMLElement>("[aria-hidden]")!;
+    expect([...preview.querySelectorAll<HTMLElement>("span")].some((el) => el.style.color === "rgb(18, 52, 86)")).toBe(true);
+    act(() => button(t("btn.save"), editor())!.click());
+
+    // Saved, listed after the built-in schemes, and put to use for dark terminals.
+    const saved = await until(async () => (await api.terminal_schemes_list()).find((s) => s.name === copyName) ?? false);
+    expect(saved).toMatchObject({ mode: "dark", colors: { red: "#123456", background: "#282a36" } });
+    await until(async () => (await stored()).dark_scheme === saved.id);
+    await until(() => checked(copyName));
+
+    // A second copy of Dracula gets a name of its own.
+    act(() => card("Dracula")!.click());
+    await until(() => checked("Dracula"));
+    act(() => button(t("settings.scheme.duplicate"))!.click());
+    await until(() => nameField()?.value === `${copyName} 2`);
+    act(() => button(t("btn.cancel"), editor())!.click());
+
+    act(() => card(copyName)!.click());
+    await until(() => checked(copyName));
+    act(() => button(t("settings.scheme.edit"))!.click());
+    const remove = await until(() => nameField() && button(t("btn.delete"), editor()));
+    act(() => remove.click());
+    const ok = await until(() => [...document.querySelectorAll<HTMLElement>("[role=alertdialog]")].at(-1));
+    act(() => button(t("btn.delete"), ok)!.click());
+
+    await until(async () => (await api.terminal_schemes_list()).length === 0);
+    // The settings keep the id, which now names nothing and reads as Hatoba's own scheme.
+    await until(() => checked("Hatoba Dark"));
+    expect(card(copyName)).toBeUndefined();
+    expect((await stored()).dark_scheme).toBe(saved.id);
+  });
+
+  it("imports a scheme file into the editor, choosing among the schemes it holds", async () => {
+    await syncIn({ theme: "light" });
+    open("appearance");
+    await until(() => card("Hatoba Light"));
+    const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+    const pick = (file: File) =>
+      act(() => {
+        Object.defineProperty(input, "files", { value: [file], configurable: true });
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    const scheme = (name: string, background: string) => ({ name, background, foreground: "#333333", red: "#cc0000", purple: "#aa00aa" });
+
+    act(() => button(t("settings.scheme.import"))!.click());
+    pick(new File([JSON.stringify({ schemes: [scheme("Paper", "#f8f8f8"), scheme("Ink", "#101010")] })], "settings.json"));
+    const ink = await until(() => [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((el) => el.textContent?.includes("Ink")));
+    act(() => ink.click());
+
+    // Imported where the user asked, though its background is dark.
+    const name = await until(nameField);
+    expect(name.value).toBe("Ink");
+    act(() => button(t("btn.save"), editor())!.click());
+    const saved = await until(async () => (await api.terminal_schemes_list())[0] ?? false);
+    expect(saved).toMatchObject({ name: "Ink", mode: "light", colors: { background: "#101010", magenta: "#aa00aa" } });
+    await until(async () => (await stored()).light_scheme === saved.id);
+
+    act(() => button(t("settings.scheme.import"))!.click());
+    pick(new File(["not a scheme"], "notes.txt"));
+    await until(() => document.body.textContent?.includes(t("settings.scheme.importFailed.unreadable", { name: "notes.txt" })));
+    await act(() => api.terminal_scheme_delete(saved.id));
+  });
+
+  it("saves the line height and the cursor blink", async () => {
+    open();
+    const taller = await until(() => byLabel<HTMLButtonElement>(t("settings.term.lineHeightUp")));
+    act(() => taller.click());
+    await until(async () => (await stored()).line_height === 1.4);
+    act(() => byLabel<HTMLButtonElement>(t("settings.term.cursorBlink"))!.click());
+    await until(async () => (await stored()).cursor_blink);
   });
 });

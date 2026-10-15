@@ -709,6 +709,7 @@ pub enum ItemType {
     Skill,
     SkillFile,
     McpServer,
+    TerminalScheme,
     Settings,
 }
 
@@ -917,7 +918,12 @@ pub struct TerminalSettings {
     /// Colour scheme ids for a dark and a light terminal; `None` until one is picked.
     pub dark_scheme: Option<String>,
     pub light_scheme: Option<String>,
+    /// Line spacing in lines, 1.0 to 2.0. Always finite, so never `null` in JSON, which the
+    /// generated type of a float would allow.
+    #[specta(type = specta_typescript::Number)]
+    pub line_height: f64,
     pub cursor_style: CursorChoice,
+    pub cursor_blink: bool,
     pub scrollback: u32,
     pub right_click: RightClick,
     pub confirm_multiline_paste: bool,
@@ -937,10 +943,65 @@ pub struct TerminalSettingsPatch {
     pub theme: Option<ThemeChoice>,
     pub dark_scheme: Option<String>,
     pub light_scheme: Option<String>,
+    #[specta(type = Option<specta_typescript::Number>)]
+    pub line_height: Option<f64>,
     pub cursor_style: Option<CursorChoice>,
+    pub cursor_blink: Option<bool>,
     pub scrollback: Option<u32>,
     pub right_click: Option<RightClick>,
     pub confirm_multiline_paste: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SchemeMode {
+    Dark,
+    Light,
+}
+
+/// A colour scheme's palette, each colour `#rrggbb`. A view's colour is empty when the stored
+/// scheme has none, which the app fills from its default scheme for the mode.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct SchemeColors {
+    pub foreground: String,
+    pub background: String,
+    pub cursor: String,
+    pub selection: String,
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
+    pub bright_black: String,
+    pub bright_red: String,
+    pub bright_green: String,
+    pub bright_yellow: String,
+    pub bright_blue: String,
+    pub bright_magenta: String,
+    pub bright_cyan: String,
+    pub bright_white: String,
+}
+
+/// A colour scheme the user made (TERM-06); settings pick it by `id`.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct TerminalSchemeView {
+    pub id: String,
+    pub name: String,
+    pub mode: SchemeMode,
+    pub colors: SchemeColors,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct TerminalSchemeInput {
+    /// `None` adds a scheme.
+    pub id: Option<String>,
+    pub name: String,
+    pub mode: SchemeMode,
+    pub colors: SchemeColors,
 }
 
 /// What `settings_save` changes. Only these fields are written, over the stored settings, so a

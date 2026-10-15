@@ -293,6 +293,9 @@ export const commands = {
 	deployUpgrade: (handle: string, target: UpgradeTarget, progress: Channel<DeployProgress>) => __TAURI_INVOKE<DeployOutcome>("deploy_upgrade", { handle, target, progress }),
 	settingsGet: () => __TAURI_INVOKE<SettingsView>("settings_get"),
 	settingsSave: (patch: SettingsPatch) => __TAURI_INVOKE<null>("settings_save", { patch }),
+	terminalSchemesList: () => __TAURI_INVOKE<TerminalSchemeView[]>("terminal_schemes_list"),
+	terminalSchemeSave: (input: TerminalSchemeInput) => __TAURI_INVOKE<TerminalSchemeView>("terminal_scheme_save", { input }),
+	terminalSchemeDelete: (id: string) => __TAURI_INVOKE<null>("terminal_scheme_delete", { id }),
 	/**  Readable while locked: the unlock screen needs the language. */
 	prefsGet: () => __TAURI_INVOKE<LocalPrefs>("prefs_get"),
 	prefsSave: (prefs: LocalPrefs) => __TAURI_INVOKE<null>("prefs_save", { prefs }),
@@ -1652,7 +1655,7 @@ export type ImportResult = {
 	warnings: string[],
 };
 
-export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings";
+export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "terminal_scheme" | "settings";
 
 export type KeyAlgorithm = "ed25519" | "ecdsa" | "rsa";
 
@@ -2002,6 +2005,35 @@ export type QuickTarget = {
 
 export type RightClick = "copy_paste" | "menu";
 
+/**
+ *  A colour scheme's palette, each colour `#rrggbb`. A view's colour is empty when the stored
+ *  scheme has none, which the app fills from its default scheme for the mode.
+ */
+export type SchemeColors = {
+	foreground: string,
+	background: string,
+	cursor: string,
+	selection: string,
+	black: string,
+	red: string,
+	green: string,
+	yellow: string,
+	blue: string,
+	magenta: string,
+	cyan: string,
+	white: string,
+	bright_black: string,
+	bright_red: string,
+	bright_green: string,
+	bright_yellow: string,
+	bright_blue: string,
+	bright_magenta: string,
+	bright_cyan: string,
+	bright_white: string,
+};
+
+export type SchemeMode = "dark" | "light";
+
 export type SearchKind = "brave" | "tavily" | "searxng";
 
 export type SearchProviderInput = {
@@ -2245,6 +2277,23 @@ export type TagCount = {
  */
 export type TermFrame = number[];
 
+export type TerminalSchemeInput = {
+	/**  `None` adds a scheme. */
+	id: string | null,
+	name: string,
+	mode: SchemeMode,
+	colors: SchemeColors,
+};
+
+/**  A colour scheme the user made (TERM-06); settings pick it by `id`. */
+export type TerminalSchemeView = {
+	id: string,
+	name: string,
+	mode: SchemeMode,
+	colors: SchemeColors,
+	updated_at: number,
+};
+
 export type TerminalSettings = {
 	font_family: string,
 	font_size: number,
@@ -2252,7 +2301,13 @@ export type TerminalSettings = {
 	/**  Colour scheme ids for a dark and a light terminal; `None` until one is picked. */
 	dark_scheme: string | null,
 	light_scheme: string | null,
+	/**
+	 *  Line spacing in lines, 1.0 to 2.0. Always finite, so never `null` in JSON, which the
+	 *  generated type of a float would allow.
+	 */
+	line_height: number,
 	cursor_style: CursorChoice,
+	cursor_blink: boolean,
 	scrollback: number,
 	right_click: RightClick,
 	confirm_multiline_paste: boolean,
@@ -2265,7 +2320,9 @@ export type TerminalSettingsPatch = {
 	theme?: ThemeChoice | null,
 	dark_scheme?: string | null,
 	light_scheme?: string | null,
+	line_height?: number | null,
 	cursor_style?: CursorChoice | null,
+	cursor_blink?: boolean | null,
 	scrollback?: number | null,
 	right_click?: RightClick | null,
 	confirm_multiline_paste?: boolean | null,

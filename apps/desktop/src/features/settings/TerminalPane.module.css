@@ -46,7 +46,6 @@
   border-radius: var(--radius-panel);
   background: var(--term);
   color: var(--term-fg);
-  line-height: 1.5;
   white-space: pre;
   overflow: hidden;
 }
@@ -59,8 +58,18 @@
 .cursor {
   display: inline-block;
   width: 0.6em;
-  height: 1.5em;
   vertical-align: top;
+}
+
+/* xterm's blink: on and off, 600 ms each. */
+.blink {
+  animation: blink 1.2s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 .block {

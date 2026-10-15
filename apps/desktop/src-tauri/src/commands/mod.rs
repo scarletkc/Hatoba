@@ -13,6 +13,7 @@ pub mod local;
 pub mod mcp;
 pub mod proxies;
 pub mod quick;
+pub mod schemes;
 pub mod settings;
 pub mod sftp;
 pub mod skills;

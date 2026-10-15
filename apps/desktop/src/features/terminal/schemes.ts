@@ -1,34 +1,33 @@
 import type { ITheme } from "@xterm/xterm";
+import type { SchemeColors as PaletteColors, TerminalSchemeView } from "@/ipc/types";
 
 export type TermMode = "dark" | "light";
 
+/** The xterm theme colours every scheme sets. */
+type ThemeKey =
+  | "background"
+  | "foreground"
+  | "cursor"
+  | "selectionBackground"
+  | "black"
+  | "red"
+  | "green"
+  | "yellow"
+  | "blue"
+  | "magenta"
+  | "cyan"
+  | "white"
+  | "brightBlack"
+  | "brightRed"
+  | "brightGreen"
+  | "brightYellow"
+  | "brightBlue"
+  | "brightMagenta"
+  | "brightCyan"
+  | "brightWhite";
+
 /** A full terminal palette: xterm's theme with every colour a preview draws set. */
-export type SchemeColors = ITheme &
-  Required<
-    Pick<
-      ITheme,
-      | "background"
-      | "foreground"
-      | "cursor"
-      | "selectionBackground"
-      | "black"
-      | "red"
-      | "green"
-      | "yellow"
-      | "blue"
-      | "magenta"
-      | "cyan"
-      | "white"
-      | "brightBlack"
-      | "brightRed"
-      | "brightGreen"
-      | "brightYellow"
-      | "brightBlue"
-      | "brightMagenta"
-      | "brightCyan"
-      | "brightWhite"
-    >
-  >;
+export type SchemeColors = ITheme & Required<Pick<ITheme, ThemeKey>>;
 
 /** Search-match highlight colours (xterm needs #RRGGBB here). */
 export interface SearchColors {
@@ -41,7 +40,10 @@ export interface SearchColors {
 }
 
 export interface TermScheme {
-  /** Stored in the synced settings (`dark_scheme` / `light_scheme`); never rename one. */
+  /**
+   * Stored in the synced settings (`dark_scheme` / `light_scheme`); never rename one. A scheme the
+   * user made has its item id.
+   */
   id: string;
   /** The scheme's own name, the same in every language. */
   name: string;
@@ -54,6 +56,8 @@ export interface TermScheme {
   contrast: number;
   /** Fixed search highlights; derived from the palette when absent. */
   search?: SearchColors;
+  /** The user made it (a `terminal_scheme` item), so it can be edited and deleted. */
+  custom?: boolean;
 }
 
 /** What a mode uses until a scheme is picked for it, and for an id this build does not know. */
@@ -596,14 +600,18 @@ export const SCHEMES: readonly TermScheme[] = [
   },
 ];
 
-/** The scheme picked for `mode`; the mode's default when none is, or `id` names no scheme of that mode. */
-export function schemeFor(mode: TermMode, id: string | null | undefined): TermScheme {
-  const picked = id ? SCHEMES.find((s) => s.id === id && s.mode === mode) : undefined;
+/**
+ * The scheme picked for `mode`, built in or one of `custom`; the mode's default when none is, or `id`
+ * names no scheme of that mode.
+ */
+export function schemeFor(mode: TermMode, id: string | null | undefined, custom: readonly TermScheme[] = []): TermScheme {
+  const picked = id ? [...SCHEMES, ...custom].find((s) => s.id === id && s.mode === mode) : undefined;
   return picked ?? SCHEMES.find((s) => s.id === DEFAULT_SCHEME[mode])!;
 }
 
-export function schemesFor(mode: TermMode): TermScheme[] {
-  return SCHEMES.filter((s) => s.mode === mode);
+/** The built-in schemes of `mode`, then the user's. */
+export function schemesFor(mode: TermMode, custom: readonly TermScheme[] = []): TermScheme[] {
+  return [...SCHEMES, ...custom].filter((s) => s.mode === mode);
 }
 
 function rgb(hex: string): [number, number, number] {
@@ -611,8 +619,115 @@ function rgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
+/** The palette's colours in the order the editor and the stored item list them. */
+export const PALETTE_KEYS = [
+  "foreground",
+  "background",
+  "cursor",
+  "selection",
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+  "bright_black",
+  "bright_red",
+  "bright_green",
+  "bright_yellow",
+  "bright_blue",
+  "bright_magenta",
+  "bright_cyan",
+  "bright_white",
+] as const satisfies readonly (keyof PaletteColors)[];
+
+export type PaletteKey = (typeof PALETTE_KEYS)[number];
+
+/** xterm's name for a palette colour: `bright_red` → `brightRed`, `selection` → `selectionBackground`. */
+function themeKey(key: PaletteKey): ThemeKey {
+  if (key === "selection") return "selectionBackground";
+  return key.replace(/_(\w)/, (_, c: string) => c.toUpperCase()) as ThemeKey;
+}
+
+/**
+ * `#rrggbb` for a CSS colour a palette holds: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` or `rgba()`, with any
+ * transparency blended over `under`. `null` for anything else.
+ */
+export function toHex(color: string, under = "#000000"): string | null {
+  const text = color.trim().toLowerCase();
+  let parts: number[] | null = null;
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(text)?.[1];
+  if (hex) {
+    const full = hex.length === 3 ? [...hex].map((c) => c + c).join("") : hex;
+    parts = [0, 2, 4].map((i) => Number.parseInt(full.slice(i, i + 2), 16));
+    parts.push(full.length === 8 ? Number.parseInt(full.slice(6, 8), 16) / 255 : 1);
+  } else {
+    const fn = /^rgba?\(([^)]*)\)$/.exec(text)?.[1];
+    const nums = fn?.split(/[\s,/]+/).filter(Boolean).map(Number);
+    if (nums && (nums.length === 3 || nums.length === 4) && nums.every(Number.isFinite)) parts = [...nums.slice(0, 3), nums[3] ?? 1];
+  }
+  if (!parts || parts.slice(0, 3).some((v) => v < 0 || v > 255)) return null;
+  const alpha = Math.min(1, Math.max(0, parts[3]));
+  const base = rgb(under);
+  return `#${parts
+    .slice(0, 3)
+    .map((v, i) =>
+      Math.round(v * alpha + base[i] * (1 - alpha))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+/** Relative luminance (WCAG) of `#rrggbb`. */
+function luminance(hex: string): number {
+  const [r, g, b] = rgb(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The appearance a background reads as. */
+export function modeOf(background: string): TermMode {
+  return luminance(toHex(background) ?? "#000000") > 0.4 ? "light" : "dark";
+}
+
+/** `scheme`'s palette as the editor and the stored item hold it, every colour `#rrggbb`. */
+export function paletteOf(scheme: TermScheme): PaletteColors {
+  const background = toHex(scheme.colors.background)!;
+  const palette = {} as PaletteColors;
+  for (const key of PALETTE_KEYS) palette[key] = toHex(scheme.colors[themeKey(key)], background) ?? background;
+  return palette;
+}
+
+/**
+ * A scheme the user made, as the terminal draws it. A colour it lacks, or holds in a form this build does
+ * not read, comes from the mode's default scheme.
+ */
+export function customScheme(view: TerminalSchemeView): TermScheme {
+  const fallback = paletteOf(schemeFor(view.mode, null));
+  const colors = {} as Record<ThemeKey, string>;
+  for (const key of PALETTE_KEYS) {
+    const value = view.colors[key]?.trim().toLowerCase();
+    colors[themeKey(key)] = value && HEX_COLOR.test(value) ? value : fallback[key];
+  }
+  return {
+    id: view.id,
+    name: view.name,
+    mode: view.mode,
+    colors,
+    contrast: view.mode === "light" ? LIGHT_CONTRAST : 1,
+    custom: true,
+  };
+}
+
 /** `#RRGGBB` that is `amount` of `a` over `b`. */
-function mix(a: string, b: string, amount: number): string {
+export function mix(a: string, b: string, amount: number): string {
   const [ar, ag, ab] = rgb(a);
   const [br, bg, bb] = rgb(b);
   const ch = (x: number, y: number) =>

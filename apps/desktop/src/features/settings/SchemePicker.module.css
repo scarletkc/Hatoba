@@ -102,3 +102,11 @@
   color: var(--fg);
   font-weight: 500;
 }
+
+.actions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

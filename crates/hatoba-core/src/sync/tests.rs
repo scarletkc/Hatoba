@@ -11,8 +11,8 @@ use super::*;
 use crate::crypto::{KdfParams, random_key, seal};
 use crate::error::Error;
 use crate::model::{
-    AiConversation, AiEffort, AiMessage, Group, Host, HostAuth, Item, PortForward, RightClick,
-    SETTINGS_ID, SshKey, new_id,
+    AiConversation, AiEffort, AiMessage, Group, Host, HostAuth, Item, LineHeight, PortForward,
+    RightClick, SETTINGS_ID, SchemeColors, SchemeMode, SshKey, TerminalScheme, new_id,
 };
 use crate::platform::DeviceInfo;
 use crate::recovery::RecoveryCode;
@@ -1816,6 +1816,56 @@ async fn settings_item_syncs_like_any_other() {
     a.v().put(None, Item::Settings(s)).unwrap();
     converge(&a, &b).await;
     assert_eq!(b.v().settings().terminal.scrollback, 42_000);
+}
+
+#[tokio::test]
+async fn terminal_schemes_outlast_settings_saved_by_an_older_build() {
+    let (server, clock, a, b) = two_devices().await;
+    // A makes a colour scheme, picks it, and sets the newer terminal fields.
+    let scheme = a.put(Item::TerminalScheme(TerminalScheme {
+        name: "Mine".into(),
+        mode: SchemeMode::Dark,
+        colors: SchemeColors {
+            background: "#101010".into(),
+            ..SchemeColors::default()
+        },
+        updated_at: 0,
+    }));
+    let mut s = a.v().settings();
+    s.terminal.dark_scheme = Some(scheme.clone());
+    s.terminal.line_height = LineHeight::from_lines(1.5);
+    s.terminal.cursor_blink = true;
+    a.v().put(None, Item::Settings(s)).unwrap();
+    a.sync().await;
+    b.sync().await;
+    let scheme_row = server.item(&scheme).unwrap();
+
+    // B runs a build from before custom schemes. It skips the scheme item, which it cannot read,
+    // and saving its settings writes only the fields it knows: the picked id stays, the line
+    // height and the blink are dropped.
+    clock.advance(1000);
+    let mut older = serde_json::to_value(b.v().get(SETTINGS_ID).unwrap()).unwrap();
+    let terminal = older["terminal"].as_object_mut().unwrap();
+    terminal.remove("line_height");
+    terminal.remove("cursor_blink");
+    terminal.insert("font_size".into(), 15.into());
+    let older = Item::from_plaintext(older.to_string().as_bytes()).unwrap();
+    b.v().put(Some(SETTINGS_ID), older).unwrap();
+    converge(&a, &b).await;
+
+    let t = a.v().settings().terminal;
+    assert_eq!(t.font_size, 15);
+    assert_eq!(t.dark_scheme.as_deref(), Some(scheme.as_str()));
+    assert_eq!(t.line_height, None);
+    assert_eq!(t.line_height(), LineHeight::DEFAULT);
+    assert!(!t.cursor_blink);
+    // The scheme item itself was never written again, so A still has it as it made it.
+    let after = server.item(&scheme).unwrap();
+    assert_eq!(
+        (after.revision, after.envelope),
+        (scheme_row.revision, scheme_row.envelope)
+    );
+    assert_eq!(a.v().terminal_schemes().len(), 1);
 }
 
 #[tokio::test]

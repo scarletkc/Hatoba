@@ -167,6 +167,9 @@ export function createTauriApi(): HatobaApi {
 
     settings_get: () => commands.settingsGet(),
     settings_save: (patch) => done(commands.settingsSave(patch)),
+    terminal_schemes_list: () => commands.terminalSchemesList(),
+    terminal_scheme_save: (input) => commands.terminalSchemeSave(input),
+    terminal_scheme_delete: (id) => done(commands.terminalSchemeDelete(id)),
     prefs_get: () => commands.prefsGet(),
     prefs_save: (prefs) => done(commands.prefsSave(prefs)),
     star_prompt_get: () => commands.starPromptGet(),

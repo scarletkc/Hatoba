@@ -26,10 +26,11 @@ const TYPE_ICON: Record<ConflictView["item_type"], string> = {
   skill: "book-open",
   skill_file: "file-text",
   mcp_server: "plugs",
+  terminal_scheme: "palette",
 };
 
 /** Fields whose values read better in the monospace face (as in the design). */
-const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path", "env"]);
+const MONO_FIELDS = new Set(["name", "address", "port", "username", "key", "fingerprint", "base_url", "path", "env", "colors"]);
 
 /** Fields the backend sends as "true" or "false". */
 const BOOL_FIELDS = new Set(["pinned", "enabled", "always_ask"]);

@@ -1123,9 +1123,20 @@ pub struct TerminalSettings {
     /// Id of the colour scheme used while the terminal is light, like [`Self::dark_scheme`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub light_scheme: Option<String>,
+    /// Line spacing. `None` until one is picked, which reads as [`LineHeight::DEFAULT`]; read it
+    /// with [`Self::line_height`].
+    #[zeroize(skip)]
+    #[serde(
+        deserialize_with = "LineHeight::read",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub line_height: Option<LineHeight>,
     /// Cursor shape.
     #[zeroize(skip)]
     pub cursor_style: CursorStyle,
+    /// The cursor blinks. Absent while off.
+    #[serde(skip_serializing_if = "is_false")]
+    pub cursor_blink: bool,
     /// Scrollback lines.
     pub scrollback: u32,
     /// Right-click behaviour. `None` until a value is recorded, which items written by builds
@@ -1158,7 +1169,9 @@ impl Default for TerminalSettings {
             theme: ThemeMode::Dark,
             dark_scheme: None,
             light_scheme: None,
+            line_height: None,
             cursor_style: CursorStyle::Block,
+            cursor_blink: false,
             scrollback: 10_000,
             right_click: None,
             confirm_multiline_paste: None,
@@ -1177,6 +1190,12 @@ impl TerminalSettings {
     #[must_use]
     pub fn confirm_multiline_paste(&self) -> bool {
         self.confirm_multiline_paste.unwrap_or(true)
+    }
+
+    /// The line spacing; [`LineHeight::DEFAULT`] while unset.
+    #[must_use]
+    pub fn line_height(&self) -> LineHeight {
+        self.line_height.unwrap_or(LineHeight::DEFAULT)
     }
 
     /// Records the right-click behaviour. An unset field stays unset when `value` is the default.
@@ -1198,6 +1217,124 @@ fn record<T: PartialEq>(field: &mut Option<T>, value: T, default: T) {
     if field.is_some() || value != default {
         *field = Some(value);
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
+/// Terminal line spacing in lines, from [`Self::MIN`] to [`Self::MAX`]. Kept in hundredths, so
+/// settings compare exactly; the JSON holds the number of lines, such as `1.3`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineHeight(u16);
+
+impl LineHeight {
+    /// What an unset field reads as, the spacing from before it could be changed.
+    pub const DEFAULT: Self = Self(130);
+    /// The tightest spacing: one line, as the terminal draws it without extra space.
+    pub const MIN: Self = Self(100);
+    /// The loosest spacing.
+    pub const MAX: Self = Self(200);
+
+    /// `lines` rounded to hundredths, or `None` when that is outside [`Self::MIN`] to
+    /// [`Self::MAX`] or not a number.
+    #[must_use]
+    pub fn from_lines(lines: f64) -> Option<Self> {
+        let hundredths = (lines * 100.0).round();
+        (f64::from(Self::MIN.0)..=f64::from(Self::MAX.0))
+            .contains(&hundredths)
+            // In range, so the cast is exact.
+            .then(|| Self(hundredths as u16))
+    }
+
+    /// The spacing in lines.
+    #[must_use]
+    pub fn lines(self) -> f64 {
+        f64::from(self.0) / 100.0
+    }
+
+    /// Lenient reader: a number outside the range, which a newer version may allow, reads as the
+    /// nearest end of it, and anything that is not a number as unset, instead of making the
+    /// settings unreadable.
+    fn read<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<Self>, D::Error> {
+        let value = Option::<serde_json::Value>::deserialize(d)?;
+        Ok(value
+            .as_ref()
+            .and_then(serde_json::Value::as_f64)
+            .map(|lines| {
+                Self::from_lines(lines).unwrap_or(if lines < Self::MIN.lines() {
+                    Self::MIN
+                } else {
+                    Self::MAX
+                })
+            }))
+    }
+}
+
+impl Serialize for LineHeight {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> std::result::Result<S::Ok, S::Error> {
+        s.serialize_f64(self.lines())
+    }
+}
+
+/// Which terminal a colour scheme is for: the scheme lists under that appearance (TERM-06).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchemeMode {
+    /// A light terminal.
+    Light,
+    /// A dark terminal. Also what an unknown future value decodes to.
+    #[default]
+    #[serde(other)]
+    Dark,
+}
+
+/// The colours of a [`TerminalScheme`], each `#rrggbb`. One that is missing or empty reads as
+/// the desktop app's default scheme for the mode has it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+#[allow(missing_docs)] // the 16 ANSI colours are named by what they are
+pub struct SchemeColors {
+    /// Text.
+    pub foreground: String,
+    /// Behind the text.
+    pub background: String,
+    /// The cursor.
+    pub cursor: String,
+    /// Behind selected text.
+    pub selection: String,
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
+    pub bright_black: String,
+    pub bright_red: String,
+    pub bright_green: String,
+    pub bright_yellow: String,
+    pub bright_blue: String,
+    pub bright_magenta: String,
+    pub bright_cyan: String,
+    pub bright_white: String,
+}
+
+/// A colour scheme the user made, from a built-in one or an imported file (TERM-06). Settings
+/// pick it by its item id, like a built-in scheme by its name.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct TerminalScheme {
+    /// Display name.
+    pub name: String,
+    /// The appearance it lists under.
+    #[zeroize(skip)]
+    pub mode: SchemeMode,
+    /// The palette.
+    pub colors: SchemeColors,
+    /// Last modification, Unix ms.
+    pub updated_at: i64,
 }
 
 /// A model picked by provider and model id.
@@ -1278,7 +1415,7 @@ pub struct Settings {
 
 /// Any syncable item. Serialises with `"type": "host" | "group" | "key" | "known_host" |
 /// "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" |
-/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "settings"`.
+/// "ai_message" | "skill" | "skill_file" | "mcp_server" | "terminal_scheme" | "settings"`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
@@ -1310,6 +1447,8 @@ pub enum Item {
     SkillFile(SkillFile),
     /// An MCP server.
     McpServer(McpServer),
+    /// A terminal colour scheme the user made.
+    TerminalScheme(TerminalScheme),
     /// The settings singleton.
     Settings(Settings),
 }
@@ -1333,6 +1472,7 @@ impl Item {
             Self::Skill(_) => "skill",
             Self::SkillFile(_) => "skill_file",
             Self::McpServer(_) => "mcp_server",
+            Self::TerminalScheme(_) => "terminal_scheme",
             Self::Settings(_) => "settings",
         }
     }
@@ -1355,6 +1495,7 @@ impl Item {
             Self::Skill(i) => i.updated_at,
             Self::SkillFile(i) => i.updated_at,
             Self::McpServer(i) => i.updated_at,
+            Self::TerminalScheme(i) => i.updated_at,
             Self::Settings(i) => i.updated_at,
         }
     }
@@ -1376,6 +1517,7 @@ impl Item {
             Self::Skill(i) => i.updated_at = at,
             Self::SkillFile(i) => i.updated_at = at,
             Self::McpServer(i) => i.updated_at = at,
+            Self::TerminalScheme(i) => i.updated_at = at,
             Self::Settings(i) => i.updated_at = at,
         }
     }
@@ -1398,6 +1540,7 @@ impl Item {
             Self::Skill(i) => i.name.clone(),
             Self::SkillFile(i) => i.path.clone(),
             Self::McpServer(i) => i.name.clone(),
+            Self::TerminalScheme(i) => i.name.clone(),
             Self::Settings(_) => "settings".to_owned(),
         }
     }
@@ -1538,6 +1681,16 @@ impl Item {
         }
     }
 
+    /// The terminal colour scheme, if this is one.
+    #[must_use]
+    pub fn as_terminal_scheme(&self) -> Option<&TerminalScheme> {
+        if let Self::TerminalScheme(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     /// The settings, if this is the settings item.
     #[must_use]
     pub fn as_settings(&self) -> Option<&Settings> {
@@ -1562,6 +1715,7 @@ impl Item {
             Self::AiProvider(i) => i.name.push_str(suffix),
             Self::Skill(i) => i.name.push_str(suffix),
             Self::McpServer(i) => i.name.push_str(suffix),
+            Self::TerminalScheme(i) => i.name.push_str(suffix),
             Self::KnownHost(_)
             | Self::Forward(_)
             | Self::SearchProvider(_)
@@ -1925,6 +2079,10 @@ mod tests {
             (Item::Skill(Skill::default()), "skill"),
             (Item::SkillFile(SkillFile::default()), "skill_file"),
             (Item::McpServer(McpServer::default()), "mcp_server"),
+            (
+                Item::TerminalScheme(TerminalScheme::default()),
+                "terminal_scheme",
+            ),
             (Item::Settings(Settings::default()), "settings"),
         ];
         for (item, tag) in items {
@@ -2538,6 +2696,83 @@ mod tests {
         let value = serde_json::to_value(t).unwrap();
         assert_eq!(value["dark_scheme"], "dracula");
         assert_eq!(value["light_scheme"], "from-the-future");
+    }
+
+    #[test]
+    fn line_height_and_cursor_blink_are_absent_until_set() {
+        let read = |terminal: serde_json::Value| -> TerminalSettings {
+            let item: Item =
+                serde_json::from_value(json!({"type":"settings","terminal":terminal})).unwrap();
+            item.as_settings().unwrap().terminal.clone()
+        };
+        let unset = read(json!({}));
+        assert_eq!(unset.line_height, None);
+        assert_eq!(unset.line_height().lines(), 1.3);
+        assert!(!unset.cursor_blink);
+        let value = serde_json::to_value(&unset).unwrap();
+        assert!(value.get("line_height").is_none());
+        assert!(value.get("cursor_blink").is_none());
+
+        let set = read(json!({"line_height": 1.5, "cursor_blink": true}));
+        assert_eq!(set.line_height, LineHeight::from_lines(1.5));
+        assert!(set.cursor_blink);
+        let value = serde_json::to_value(&set).unwrap();
+        assert_eq!(value["line_height"], 1.5);
+        assert_eq!(value["cursor_blink"], true);
+
+        // A spacing a newer version allows reads as the nearest one this version has, and a
+        // value that is not a number as unset, without making the settings unreadable.
+        assert_eq!(
+            read(json!({"line_height": 3})).line_height,
+            Some(LineHeight::MAX)
+        );
+        assert_eq!(
+            read(json!({"line_height": 0.8})).line_height,
+            Some(LineHeight::MIN)
+        );
+        assert_eq!(read(json!({"line_height": "tall"})).line_height, None);
+        assert_eq!(read(json!({"line_height": null})).line_height, None);
+        assert_eq!(
+            LineHeight::from_lines(1.249).map(LineHeight::lines),
+            Some(1.25)
+        );
+        assert_eq!(LineHeight::from_lines(f64::NAN), None);
+    }
+
+    #[test]
+    fn terminal_schemes_match_the_spec_shape() {
+        let colors = SchemeColors {
+            background: "#282a36".into(),
+            bright_white: "#ffffff".into(),
+            ..SchemeColors::default()
+        };
+        let item = Item::TerminalScheme(TerminalScheme {
+            name: "Dracula (Copy)".into(),
+            mode: SchemeMode::Dark,
+            colors,
+            updated_at: 7,
+        });
+        let value = serde_json::to_value(&item).unwrap();
+        assert_eq!(value["type"], "terminal_scheme");
+        assert_eq!(value["name"], "Dracula (Copy)");
+        assert_eq!(value["mode"], "dark");
+        assert_eq!(value["colors"]["background"], "#282a36");
+        assert_eq!(value["colors"]["bright_white"], "#ffffff");
+        assert_eq!(value["colors"].as_object().unwrap().len(), 20);
+        assert_eq!(
+            Item::from_plaintext(&item.to_plaintext().unwrap()).unwrap(),
+            item
+        );
+
+        // A scheme from a newer version, with a mode and colours this one does not know, reads.
+        let item = Item::from_plaintext(
+            br##"{"type":"terminal_scheme","name":"x","mode":"sepia","colors":{"red":"#ff0000","cursor_text":"#000000"},"font":"x"}"##,
+        )
+        .unwrap();
+        let scheme = item.as_terminal_scheme().unwrap();
+        assert_eq!(scheme.mode, SchemeMode::Dark);
+        assert_eq!(scheme.colors.red, "#ff0000");
+        assert_eq!(scheme.colors.background, "");
     }
 
     #[test]

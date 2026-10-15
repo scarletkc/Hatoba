@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/app/store";
-import { Icon, Segmented, TextField } from "@/components/controls";
+import { Icon, Segmented, Switch, TextField } from "@/components/controls";
 import { Group } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { loadLocalShells, shellName } from "@/features/terminal/localShells";
 import { useT } from "@/i18n";
 import type { LocalShellView, TerminalSettings } from "@/ipc/types";
+import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { defaultTerminalFont } from "@/lib/platform";
 import { Pane, SettingRow, usePrefs, type PaneProps } from "./shared";
@@ -13,9 +14,17 @@ import s from "./TerminalPane.module.css";
 
 const SIZE_MIN = 10;
 const SIZE_MAX = 24;
+const LINE_HEIGHT_MIN = 1;
+const LINE_HEIGHT_MAX = 2;
 const SCROLLBACK = [1000, 5000, 10000, 50000];
 
-/** Settings → Terminal (TERM-05 / TERM-06): font, cursor and scrollback, and the local tabs' shell (LOCAL-02). */
+/** 1.3, or 1.25 for a spacing another device stored in hundredths. */
+const formatLineHeight = (v: number) => v.toFixed(Number.isInteger(Math.round(v * 100) / 10) ? 1 : 2);
+
+/**
+ * Settings → Terminal (TERM-05 / TERM-06): font, size, line height, cursor and scrollback, and the local tabs'
+ * shell (LOCAL-02).
+ */
 export function TerminalPane({ settings, updateTerminal }: PaneProps) {
   const t = useT();
   const [prefs, setPrefs] = usePrefs();
@@ -84,6 +93,18 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             onChange={(font_size) => updateTerminal({ font_size })}
           />
         </SettingRow>
+        <SettingRow label={t("settings.term.lineHeight")}>
+          <Stepper
+            value={term.line_height}
+            min={LINE_HEIGHT_MIN}
+            max={LINE_HEIGHT_MAX}
+            step={0.1}
+            format={formatLineHeight}
+            downLabel={t("settings.term.lineHeightDown")}
+            upLabel={t("settings.term.lineHeightUp")}
+            onChange={(line_height) => updateTerminal({ line_height })}
+          />
+        </SettingRow>
         <SettingRow label={t("settings.term.cursor")}>
           <Segmented<TerminalSettings["cursor_style"]>
             ariaLabel={t("settings.term.cursor")}
@@ -95,6 +116,9 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
             ]}
             onChange={(cursor_style) => updateTerminal({ cursor_style })}
           />
+        </SettingRow>
+        <SettingRow label={t("settings.term.cursorBlink")}>
+          <Switch label={t("settings.term.cursorBlink")} checked={term.cursor_blink} onChange={(cursor_blink) => updateTerminal({ cursor_blink })} />
         </SettingRow>
         <SettingRow label={t("settings.term.scrollback")}>
           <PopupSelect
@@ -108,13 +132,19 @@ export function TerminalPane({ settings, updateTerminal }: PaneProps) {
         {shells && shells.length > 0 && <LocalShellRow shells={shells} value={prefs.local_shell} onChange={(local_shell) => setPrefs({ local_shell })} />}
       </Group>
 
-      <div className={s.preview} style={{ fontFamily: `"${font.split(",")[0].trim()}", var(--font-mono)`, fontSize: term.font_size }} aria-hidden>
+      <div
+        className={s.preview}
+        style={{ fontFamily: `"${font.split(",")[0].trim()}", var(--font-mono)`, fontSize: term.font_size, lineHeight: term.line_height }}
+        aria-hidden
+      >
         <div>
           <span className={s.dim}>$ </span>ssh deploy@prod-api-tokyo
         </div>
         <div>
           <span className={s.dim}>deploy@prod-api-tokyo:~$ </span>
-          <span className={`${s.cursor} ${s[term.cursor_style]}`}>&nbsp;</span>
+          <span className={cx(s.cursor, s[term.cursor_style], term.cursor_blink && s.blink)} style={{ height: `${term.line_height}em` }}>
+            &nbsp;
+          </span>
         </div>
       </div>
     </Pane>
@@ -150,6 +180,8 @@ function Stepper({
   value,
   min,
   max,
+  step = 1,
+  format = String,
   downLabel,
   upLabel,
   onChange,
@@ -157,19 +189,23 @@ function Stepper({
   value: number;
   min: number;
   max: number;
+  step?: number;
+  format?: (v: number) => string;
   downLabel: string;
   upLabel: string;
   onChange: (v: number) => void;
 }) {
+  // In hundredths, so 1.3 + 0.1 is 1.4 and not 1.4000000000000001.
+  const by = (delta: number) => onChange(Math.min(max, Math.max(min, Math.round((value + delta) * 100) / 100)));
   return (
     <div className={s.stepper}>
-      <button type="button" aria-label={downLabel} title={downLabel} disabled={value <= min} onClick={() => onChange(value - 1)}>
+      <button type="button" aria-label={downLabel} title={downLabel} disabled={value <= min} onClick={() => by(-step)}>
         <Icon name="minus" />
       </button>
       <span className={s.stepValue} aria-live="polite">
-        {value}
+        {format(value)}
       </span>
-      <button type="button" aria-label={upLabel} title={upLabel} disabled={value >= max} onClick={() => onChange(value + 1)}>
+      <button type="button" aria-label={upLabel} title={upLabel} disabled={value >= max} onClick={() => by(step)}>
         <Icon name="plus" />
       </button>
     </div>

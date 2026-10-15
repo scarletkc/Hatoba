@@ -13,6 +13,7 @@ import type {
   SshErrorKind,
   StarPrompt,
   SyncStatus,
+  TerminalSchemeView,
   VaultStatus,
 } from "../types";
 import { byteCount, HOST_NOTES_MAX_BYTES } from "@/features/ai/instructions";
@@ -101,6 +102,7 @@ export function createMockApi(): HatobaApi {
   let keys: KeyView[] = demo === "empty" ? [] : D.KEYS.map((k) => ({ ...k }));
   let proxies: ProxyView[] = demo === "empty" ? [] : D.PROXIES.map((p) => ({ ...p }));
   let settings = structuredClone(D.SETTINGS);
+  let schemes: TerminalSchemeView[] = [];
   settings.terminal.font_family = defaultTerminalFont(platform);
   settings.terminal.right_click = defaultRightClick(platform);
   let prefs: LocalPrefs = readStoredPrefs(() => localStorage.getItem("hatoba.mock.prefs"));
@@ -1079,9 +1081,37 @@ export function createMockApi(): HatobaApi {
 
     settings_get: async () => structuredClone(settings),
     settings_save: async (patch) => {
+      const lh = patch.terminal?.line_height;
+      if (lh !== undefined && !(lh >= 1 && lh <= 2)) fail("invalid_input", "line height must be between 1 and 2", { field: "line_height" });
       const terminal = applyPatch(settings.terminal, patch.terminal);
       if (JSON.stringify(terminal) === JSON.stringify(settings.terminal)) return;
       settings = { ...settings, terminal };
+      touch();
+    },
+    terminal_schemes_list: async () => {
+      needUnlocked();
+      return structuredClone(schemes);
+    },
+    terminal_scheme_save: async (input) => {
+      needUnlocked();
+      const name = input.name.trim();
+      if (!name) fail("invalid_input", "name is required", { field: "name" });
+      if ([...name].length > 64) fail("invalid_input", "name is too long", { field: "name" });
+      const colors = { ...input.colors };
+      for (const [key, value] of Object.entries(colors)) {
+        if (!/^#[0-9a-f]{6}$/i.test(value.trim())) fail("invalid_input", "colour must be #rrggbb", { field: key });
+        colors[key as keyof typeof colors] = value.trim().toLowerCase();
+      }
+      if (input.id && !schemes.some((s) => s.id === input.id)) fail("not_found");
+      // Like a real item id: lowercase letters, digits and hyphens.
+      const view: TerminalSchemeView = { id: input.id ?? id("scheme"), name, mode: input.mode, colors, updated_at: Date.now() };
+      schemes = [...schemes.filter((s) => s.id !== view.id), view].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+      touch();
+      return structuredClone(view);
+    },
+    terminal_scheme_delete: async (sid) => {
+      if (!schemes.some((s) => s.id === sid)) fail("not_found");
+      schemes = schemes.filter((s) => s.id !== sid);
       touch();
     },
     prefs_get: async () => prefs,

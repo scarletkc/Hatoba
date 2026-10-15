@@ -4,7 +4,7 @@ import { isDarkTheme, useApp } from "@/app/store";
 import { api } from "@/ipc/api";
 import type { TerminalSettings } from "@/ipc/types";
 import { defaultRightClick, defaultTerminalFont, type Platform } from "@/lib/platform";
-import { DEFAULT_SCHEME, schemeFor, type TermMode, type TermScheme } from "./schemes";
+import { customScheme, DEFAULT_SCHEME, schemeFor, type TermMode, type TermScheme } from "./schemes";
 
 /** Used until `settings_get` answers, and when it fails. */
 export function defaultTerminalSettings(platform: Platform): TerminalSettings {
@@ -14,7 +14,9 @@ export function defaultTerminalSettings(platform: Platform): TerminalSettings {
     theme: "dark",
     dark_scheme: null,
     light_scheme: null,
+    line_height: 1.3,
     cursor_style: "block",
+    cursor_blink: false,
     scrollback: 10_000,
     right_click: defaultRightClick(platform),
     confirm_multiline_paste: true,
@@ -23,6 +25,8 @@ export function defaultTerminalSettings(platform: Platform): TerminalSettings {
 
 interface TermSettingsState {
   settings: TerminalSettings;
+  /** The colour schemes the user made (TERM-06). */
+  schemes: TermScheme[];
   /** Bumped when the app theme (light/dark) flips, so terminals that follow it re-theme. */
   appearanceTick: number;
   reload(): Promise<void>;
@@ -31,11 +35,12 @@ interface TermSettingsState {
 /** Synced terminal settings (TERM-04/05/06, WIN-05), cached for every terminal. Re-read when the settings window closes. */
 export const useTermSettings = create<TermSettingsState>((set) => ({
   settings: defaultTerminalSettings(useApp.getState().info.platform),
+  schemes: [],
   appearanceTick: 0,
   reload: async () => {
     try {
-      const { terminal } = await api.settings_get();
-      set({ settings: { ...defaultTerminalSettings(useApp.getState().info.platform), ...terminal } });
+      const [{ terminal }, schemes] = await Promise.all([api.settings_get(), api.terminal_schemes_list()]);
+      set({ settings: { ...defaultTerminalSettings(useApp.getState().info.platform), ...terminal }, schemes: schemes.map(customScheme) });
     } catch {
       /* locked or unavailable: keep what we have */
     }
@@ -50,10 +55,10 @@ export function resolveMode(setting: TerminalSettings["theme"]): TermMode {
 
 type SchemeSettings = Pick<TerminalSettings, "theme" | "dark_scheme" | "light_scheme">;
 
-/** The colour scheme for the current mode (TERM-06). */
-export function resolveScheme(settings: SchemeSettings): TermScheme {
+/** The colour scheme for the current mode (TERM-06), built in or one of the user's `custom` schemes. */
+export function resolveScheme(settings: SchemeSettings, custom: readonly TermScheme[] = []): TermScheme {
   const mode = resolveMode(settings.theme);
-  return schemeFor(mode, mode === "dark" ? settings.dark_scheme : settings.light_scheme);
+  return schemeFor(mode, mode === "dark" ? settings.dark_scheme : settings.light_scheme, custom);
 }
 
 function cssVar(name: string, fallback: string): string {
@@ -86,14 +91,14 @@ export function terminalFontFamily(family: string): string {
   return `${head}, ${mono}`;
 }
 
-export function terminalOptions(settings: TerminalSettings): ITerminalOptions {
-  const scheme = resolveScheme(settings);
+export function terminalOptions(settings: TerminalSettings, custom: readonly TermScheme[] = []): ITerminalOptions {
+  const scheme = resolveScheme(settings, custom);
   return {
     fontFamily: terminalFontFamily(settings.font_family),
     fontSize: settings.font_size,
-    lineHeight: 1.3,
+    lineHeight: settings.line_height,
     cursorStyle: settings.cursor_style,
-    cursorBlink: false,
+    cursorBlink: settings.cursor_blink,
     scrollback: settings.scrollback,
     theme: terminalTheme(scheme),
     minimumContrastRatio: scheme.contrast,
@@ -105,8 +110,9 @@ export function useTerminalChrome(): { mode: TermMode; background: string; foreg
   const theme = useTermSettings((s) => s.settings.theme);
   const dark = useTermSettings((s) => s.settings.dark_scheme);
   const light = useTermSettings((s) => s.settings.light_scheme);
+  const custom = useTermSettings((s) => s.schemes);
   useTermSettings((s) => s.appearanceTick);
-  const scheme = resolveScheme({ theme, dark_scheme: dark, light_scheme: light });
+  const scheme = resolveScheme({ theme, dark_scheme: dark, light_scheme: light }, custom);
   return { mode: scheme.mode, ...terminalChrome(scheme) };
 }
 

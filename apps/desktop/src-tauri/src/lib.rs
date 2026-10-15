@@ -24,8 +24,8 @@ mod update;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
-    hosts, keys, local as local_cmd, mcp as mcp_cmd, proxies, quick, settings, sftp, skills,
-    ssh as ssh_cmd, sync as sync_cmd, vault,
+    hosts, keys, local as local_cmd, mcp as mcp_cmd, proxies, quick, schemes, settings, sftp,
+    skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -157,6 +157,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             deploy_cmd::deploy_upgrade,
             settings::settings_get,
             settings::settings_save,
+            schemes::terminal_schemes_list,
+            schemes::terminal_scheme_save,
+            schemes::terminal_scheme_delete,
             settings::prefs_get,
             settings::prefs_save,
             settings::star_prompt_get,

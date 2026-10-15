@@ -3,7 +3,7 @@
 
 use hatoba_core::Vault;
 use hatoba_core::model::{
-    CursorStyle, Item, RightClick as CoreRightClick, SETTINGS_ID, Settings,
+    CursorStyle, Item, LineHeight, RightClick as CoreRightClick, SETTINGS_ID, Settings,
     TerminalSettings as CoreTerminal, ThemeMode,
 };
 use serde_json::{Map, Value};
@@ -35,11 +35,13 @@ pub fn settings_view(s: &Settings) -> SettingsView {
             },
             dark_scheme: s.terminal.dark_scheme.clone(),
             light_scheme: s.terminal.light_scheme.clone(),
+            line_height: s.terminal.line_height().lines(),
             cursor_style: match s.terminal.cursor_style {
                 CursorStyle::Bar => CursorChoice::Bar,
                 CursorStyle::Underline => CursorChoice::Underline,
                 CursorStyle::Block => CursorChoice::Block,
             },
+            cursor_blink: s.terminal.cursor_blink,
             scrollback: s.terminal.scrollback,
             right_click: match s.terminal.right_click() {
                 CoreRightClick::Menu => RightClick::Menu,
@@ -117,12 +119,24 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
             *stored = Some(id.clone());
         }
     }
+    if let Some(lines) = patch.line_height {
+        let height = LineHeight::from_lines(lines).ok_or_else(|| {
+            AppError::invalid("line_height", "line height must be between 1 and 2")
+        })?;
+        // Picking the spacing it already reads as leaves an unset field unset.
+        if t.line_height.is_some() || height != LineHeight::DEFAULT {
+            t.line_height = Some(height);
+        }
+    }
     if let Some(cursor_style) = patch.cursor_style {
         t.cursor_style = match cursor_style {
             CursorChoice::Bar => CursorStyle::Bar,
             CursorChoice::Underline => CursorStyle::Underline,
             CursorChoice::Block => CursorStyle::Block,
         };
+    }
+    if let Some(blink) = patch.cursor_blink {
+        t.cursor_blink = blink;
     }
     if let Some(scrollback) = patch.scrollback {
         if !(100..=200_000).contains(&scrollback) {
@@ -146,9 +160,10 @@ fn patch_terminal(t: &mut CoreTerminal, patch: &TerminalSettingsPatch) -> AppRes
     Ok(())
 }
 
-/// A colour scheme id as the desktop app names them: lowercase words joined by hyphens. Which ids
-/// exist is up to the frontend, which reads one it does not know as its default scheme.
-fn is_scheme_id(id: &str) -> bool {
+/// A colour scheme id as the desktop app names them: a built-in scheme's lowercase words joined by
+/// hyphens, or a `terminal_scheme` item's id. Which ids exist is up to the frontend, which reads
+/// one it does not know as its default scheme.
+pub(crate) fn is_scheme_id(id: &str) -> bool {
     (1..=64).contains(&id.len())
         && id
             .bytes()

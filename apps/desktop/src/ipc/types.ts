@@ -736,7 +736,8 @@ export type ItemType =
   | "ai_message"
   | "skill"
   | "skill_file"
-  | "mcp_server";
+  | "mcp_server"
+  | "terminal_scheme";
 
 export interface ConflictView {
   id: number;
@@ -762,12 +763,57 @@ export interface TerminalSettings {
   /** TERM-06: colour scheme ids for a dark and a light terminal; null until one is picked. */
   dark_scheme: string | null;
   light_scheme: string | null;
+  /** Line spacing in lines, 1 to 2 (1.3 by default). */
+  line_height: number;
   cursor_style: "block" | "bar" | "underline";
+  cursor_blink: boolean;
   scrollback: number;
   /** WIN-05: PuTTY-style right click, or a context menu. */
   right_click: "copy_paste" | "menu";
   /** TERM-04: ask before pasting text with line breaks. */
   confirm_multiline_paste: boolean;
+}
+
+/** A colour scheme's palette, each colour `#rrggbb`; empty where the stored scheme has none. */
+export interface SchemeColors {
+  foreground: string;
+  background: string;
+  cursor: string;
+  selection: string;
+  black: string;
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  bright_black: string;
+  bright_red: string;
+  bright_green: string;
+  bright_yellow: string;
+  bright_blue: string;
+  bright_magenta: string;
+  bright_cyan: string;
+  bright_white: string;
+}
+
+/** TERM-06: a colour scheme the user made; settings pick it by `id`. */
+export interface TerminalSchemeView {
+  id: string;
+  name: string;
+  /** The appearance it lists under. */
+  mode: "dark" | "light";
+  colors: SchemeColors;
+  updated_at: number;
+}
+
+export interface TerminalSchemeInput {
+  /** null adds a scheme. */
+  id: string | null;
+  name: string;
+  mode: "dark" | "light";
+  colors: SchemeColors;
 }
 
 /** Synced settings item (spec §5.1 `Settings`). */

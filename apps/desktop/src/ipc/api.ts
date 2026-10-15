@@ -78,6 +78,8 @@ import type {
   SkillView,
   SshConfigCandidate,
   StarPrompt,
+  TerminalSchemeInput,
+  TerminalSchemeView,
   StatsEvent,
   SyncConfigInput,
   SyncStatus,
@@ -300,6 +302,11 @@ export interface HatobaApi {
   settings_get(): Promise<SettingsView>;
   /** Writes the fields `patch` sets over the stored settings; the others keep their stored values. */
   settings_save(patch: SettingsPatch): Promise<void>;
+  /** TERM-06: the colour schemes the user made, by name. */
+  terminal_schemes_list(): Promise<TerminalSchemeView[]>;
+  terminal_scheme_save(input: TerminalSchemeInput): Promise<TerminalSchemeView>;
+  /** Settings that picked it read it as the mode's default scheme. */
+  terminal_scheme_delete(id: string): Promise<void>;
   prefs_get(): Promise<LocalPrefs>;
   prefs_save(prefs: LocalPrefs): Promise<void>;
   /** The sidebar's star prompt (spec §9). The first call records when this device started waiting. */

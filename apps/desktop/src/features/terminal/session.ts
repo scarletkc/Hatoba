@@ -145,7 +145,7 @@ export class LiveSession {
     private source: TabSource,
   ) {
     this.term = new Terminal({
-      ...terminalOptions(useTermSettings.getState().settings),
+      ...terminalOptions(useTermSettings.getState().settings, useTermSettings.getState().schemes),
       allowProposedApi: true, // search decorations
       scrollOnUserInput: true,
       macOptionIsMeta: true,
@@ -238,7 +238,8 @@ export class LiveSession {
 
   applySettings() {
     if (this.disposed) return;
-    Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
+    const { settings, schemes } = useTermSettings.getState();
+    Object.assign(this.term.options, terminalOptions(settings, schemes));
     requestAnimationFrame(() => this.fitNow());
   }
 
@@ -632,7 +633,7 @@ export class LiveSession {
     }
     const options = {
       incremental,
-      decorations: searchColors(resolveScheme(useTermSettings.getState().settings)),
+      decorations: searchColors(resolveScheme(useTermSettings.getState().settings, useTermSettings.getState().schemes)),
     };
     return direction === "next" ? this.search.findNext(query, options) : this.search.findPrevious(query, options);
   }
