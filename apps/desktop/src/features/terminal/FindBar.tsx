@@ -19,7 +19,7 @@ export function FindBar({ session, onClose }: { session: LiveSession; onClose():
     const sub = session.search.onDidChangeResults((e) => setResults({ index: e.resultIndex, count: e.resultCount }));
     return () => {
       sub.dispose();
-      session.search.clearDecorations();
+      session.endFind();
     };
   }, [session]);
 

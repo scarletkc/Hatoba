@@ -240,6 +240,11 @@ export class LiveSession {
     if (this.disposed) return;
     Object.assign(this.term.options, terminalOptions(useTermSettings.getState().settings));
     requestAnimationFrame(() => this.fitNow());
+    // The search addon keeps the colours it drew matches with, so a new scheme redraws them.
+    if (this.findQuery && JSON.stringify(this.findColors()) !== this.findDrawn) {
+      this.search.clearDecorations();
+      this.find(this.findQuery, "next", true);
+    }
   }
 
   private scheduleFit() {
@@ -625,16 +630,30 @@ export class LiveSession {
 
   // ───────────── search ─────────────
 
+  /** The find bar's query while it highlights matches, and the colours they were drawn with (JSON). */
+  private findQuery = "";
+  private findDrawn = "";
+
+  private findColors() {
+    return searchColors(resolveScheme(useTermSettings.getState().settings));
+  }
+
   find(query: string, direction: "next" | "prev", incremental = false): boolean {
+    this.findQuery = query;
     if (!query) {
       this.search.clearDecorations();
       return false;
     }
-    const options = {
-      incremental,
-      decorations: searchColors(resolveScheme(useTermSettings.getState().settings)),
-    };
+    const decorations = this.findColors();
+    this.findDrawn = JSON.stringify(decorations);
+    const options = { incremental, decorations };
     return direction === "next" ? this.search.findNext(query, options) : this.search.findPrevious(query, options);
+  }
+
+  /** The find bar closed: drop the highlights. */
+  endFind() {
+    this.findQuery = "";
+    this.search.clearDecorations();
   }
 
   requestFind() {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "@/app/store";
 import { confirmMultilinePaste } from "./paste";
+import { schemeFor, searchColors } from "./schemes";
 import { LiveSession } from "./session";
 import { useTermSettings } from "./theme";
 
@@ -17,6 +18,7 @@ vi.mock("@xterm/xterm", () => ({
     onResize = vi.fn();
     paste = vi.fn();
     focus = vi.fn();
+    options = {};
   },
 }));
 vi.mock("./paste", () => ({ confirmMultilinePaste: vi.fn(async () => true) }));
@@ -113,5 +115,28 @@ describe("terminal binary input", () => {
     session.status = "disconnected";
     binaryInput()("[M *");
     expect(writeBytes).not.toHaveBeenCalled();
+  });
+});
+
+describe("terminal search", () => {
+  it("redraws highlighted matches in a new scheme's colors", () => {
+    const findNext = vi.spyOn(session.search, "findNext").mockReturnValue(true);
+    const clear = vi.spyOn(session.search, "clearDecorations").mockImplementation(() => {});
+    const pick = (dark_scheme: string) => useTermSettings.setState((s) => ({ settings: { ...s.settings, theme: "dark", dark_scheme } }));
+    pick("hatoba-dark");
+    session.find("ops", "next");
+    session.applySettings();
+    expect(findNext).toHaveBeenCalledTimes(1);
+
+    pick("dracula");
+    session.applySettings();
+    expect(clear).toHaveBeenCalled();
+    expect(findNext).toHaveBeenLastCalledWith("ops", { incremental: true, decorations: searchColors(schemeFor("dark", "dracula")) });
+
+    // Closed find bar: nothing to redraw.
+    session.endFind();
+    pick("nord");
+    session.applySettings();
+    expect(findNext).toHaveBeenCalledTimes(2);
   });
 });
