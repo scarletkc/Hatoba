@@ -1351,7 +1351,13 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
           {kind === "fetch_url" && (
             <>
               <ShownInput text={str(args.url)} command />
-              {args.offset !== undefined && <div className={s.meta}>{t("ai.approval.offset", { n: str(args.offset) })}</div>}
+              {(args.full_page === true || args.offset !== undefined) && (
+                <div className={s.meta}>
+                  {[args.full_page === true && t("ai.approval.fullPage"), args.offset !== undefined && t("ai.approval.offset", { n: str(args.offset) })]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              )}
             </>
           )}
           {fileChange && <FileChange state={file} replaceAll={args.replace_all === true} />}

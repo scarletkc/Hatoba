@@ -39,6 +39,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_providers_list: () => Promise.resolve([provider]),
     mcp_tool_info: () => Promise.resolve(shell),
     mcp_proxy_info: () => Promise.resolve({ tool: shell, runs: true }),
+    notification_show: () => Promise.resolve(),
   },
 }));
 // The app store follows the system theme from its first import; jsdom has no matchMedia.
@@ -102,6 +103,7 @@ const settings = (judge: AiSettingsView["judge_model"] = { provider_id: "p1", mo
   default_model: null,
   default_effort: null,
   search_provider_id: null,
+  native_search: true,
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,

@@ -7,6 +7,19 @@
   min-height: 24px;
 }
 
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The sign-in that waits for the browser (AI-52) */
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .sectionHint {
   padding: 0 4px;
   font-size: 11.5px;
@@ -153,6 +166,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
+}
+
+.providerMeta > .providerAccount {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dot {

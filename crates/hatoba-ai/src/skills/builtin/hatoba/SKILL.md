@@ -18,6 +18,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - Terminal tab. A status bar sits above the terminal: connection state, `user@host:port`, the jump host ("via"), latency in ms, and the buttons **Show Resource Usage** (or the resource usage readout once it is on), **Find in terminal**, **Port Forwarding**, **SFTP** and **More actions**. The SFTP file panel opens to the right of the terminal.
 - AI panel. At the window's right edge, below the tab bar. It shows the active tab's conversation. Open it with the AI button or Ctrl+Shift+A (⌘⇧A on macOS).
 - Settings. A window with the tabs General, Appearance, Terminal, Proxies, Security, AI and About. Open it with the gear in the sidebar or with Ctrl+, (⌘, on macOS).
+- System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock** and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
 Labels (the exact strings in each language):
@@ -45,6 +46,9 @@ Labels (the exact strings in each language):
 | Maximize | 最大化 | 最大化 |
 | Restore Down | 向下还原 | 元に戻す（縮小） |
 | Close | 关闭 | 閉じる |
+| Open Hatoba | 打开 Hatoba | Hatoba を開く |
+| Minimize to Tray | 最小化到托盘 | トレイに最小化 |
+| Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
 | Connected | 已连接 | 接続済み |
 | Connecting… | 正在连接… | 接続中… |
 | Connection failed | 连接失败 | 接続に失敗 |
@@ -69,7 +73,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 |---|---|
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing an SSH config, host key prompts, connecting and reconnecting |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
-| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the encrypted backup, and the Keys page (import, generate, deploy) |
+| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
@@ -84,6 +88,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/ai-side-questions.md` | Asking the assistant something while it works or an approval card waits, without stopping it: **Ask a Side Question**, Alt+Enter, **Ask About This** on an approval card, what is not saved, stopping a side question |
 | `references/ai-instructions.md` | Custom Instructions in Settings → AI and a host's AI Notes: what they are for, limits, saving and sync, how the assistant follows them |
 | `references/ai-settings.md` | Settings → AI: providers and models (including each model's thinking levels and System One providers), web search, default model and thinking level, the terminal screen switch, Auto mode's judge and its Test, permission mode, saved approvals, skills (including the built-in `hatoba` skill) |
+| `references/ai-chatgpt.md` | Sign in with ChatGPT: **Continue with ChatGPT**, a ChatGPT provider's account and models, signing in on each device, Sign Out, usage limits and sign-in errors |
 | `references/ai-mcp.md` | MCP servers in Settings → AI: adding a Command or HTTP server, templates, Always ask, import and export, a server's state, tools and Always allow |
 | `references/shortcuts.md` | Keyboard shortcuts on Windows/Linux and macOS |
 | `references/settings.md` | General, Appearance, Proxies, Security and About settings, language, checking for and installing updates, Report a Problem, and which settings sync |

@@ -19,6 +19,7 @@ import { UnlockScreen } from "@/features/unlock/UnlockScreen";
 import { useT, type MessageKey } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { SyncState } from "@/ipc/types";
+import { ClosePrompt, useTrayMenu } from "./ClosePrompt";
 import { ContextMenuHost } from "./ContextMenu";
 import { ResizeHandles } from "./ResizeHandles";
 import { useVaultData } from "./data";
@@ -28,7 +29,7 @@ import { Sidebar } from "./Sidebar";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TabBar } from "./TitleBar";
-import { useStartupUpdateCheck } from "./update";
+import { useAutoUpdateCheck } from "./update";
 import s from "./App.module.css";
 
 // Synchronous with the phase change, so no dialog shows above the lock screen for a frame.
@@ -44,8 +45,9 @@ export function App() {
   useWindowChrome();
   useAiLifecycle();
   useActivityPing(phase === "unlocked");
-  useStartupUpdateCheck(phase === "unlocked");
+  useAutoUpdateCheck(phase === "unlocked");
   useLaunches(phase === "unlocked");
+  useTrayMenu();
 
   if (phase === "boot") return null;
   if (phase === "onboarding")
@@ -53,6 +55,7 @@ export function App() {
       <>
         <Onboarding />
         <ConfirmHost />
+        <ClosePrompt />
         <ToastHost />
         <ContextMenuHost platform={platform} />
         <ResizeHandles platform={platform} />
@@ -73,6 +76,7 @@ export function App() {
       {!locked && <SessionDialogs />}
       <EditFilesHost />
       <ConfirmHost />
+      <ClosePrompt />
       <ToastHost />
       <ContextMenuHost platform={platform} />
       <ResizeHandles platform={platform} />
@@ -210,9 +214,10 @@ function useGlobalEvents() {
     // The state of the last sync status, to tell when a round ends.
     let lastSync: SyncState | null = null;
     const subs = [
-      api.listen("vault://locked", () => {
+      api.listen("vault://locked", ({ reason }) => {
         // HOST-14: the readings are not kept behind the lock screen.
         clearReadouts();
+        useApp.setState({ lockReason: reason });
         useApp.getState().setPhase("locked");
         useApp.getState().openSettings(false);
         void useApp.getState().refreshVault();

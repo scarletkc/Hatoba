@@ -26,6 +26,7 @@ export function createTauriApi(): HatobaApi {
     vault_create: (password) => call("vault_create", { password }),
     vault_unlock: (password) => call("vault_unlock", { password }),
     vault_unlock_biometric: () => call("vault_unlock_biometric"),
+    vault_unlock_pin: (pin) => call("vault_unlock_pin", { pin }),
     vault_create_keychain: () => call("vault_create_keychain"),
     vault_unlock_keychain: () => call("vault_unlock_keychain"),
     vault_set_password: (password) => call("vault_set_password", { password }),
@@ -39,6 +40,9 @@ export function createTauriApi(): HatobaApi {
     vault_rotate_recovery: (password) => call("vault_rotate_recovery", { password }),
     biometric_enable: (password) => call("biometric_enable", { password }),
     biometric_disable: () => call("biometric_disable"),
+    pin_enable: (password, pin) => call("pin_enable", { password, pin }),
+    pin_disable: () => call("pin_disable"),
+    pin_set_persist: (persist) => call("pin_set_persist", { persist }),
     activity_ping: () => call("activity_ping"),
 
     hosts_list: () => call("hosts_list"),
@@ -90,6 +94,7 @@ export function createTauriApi(): HatobaApi {
     recent_targets_list: () => call("recent_targets_list"),
     recent_target_remove: (target) => call("recent_target_remove", { target }),
     ssh_write: (sessionId, data) => call("ssh_write", { sessionId, data }),
+    ssh_write_bytes: (sessionId, data) => call("ssh_write_bytes", { sessionId, data }),
     ssh_resize: (sessionId, cols, rows) => call("ssh_resize", { sessionId, cols, rows }),
     ssh_disconnect: (sessionId) => call("ssh_disconnect", { sessionId }),
     ssh_stats_start: (sessionId, onEvent) => {
@@ -164,6 +169,9 @@ export function createTauriApi(): HatobaApi {
     ai_provider_delete: (id) => call("ai_provider_delete", { id }),
     ai_provider_models: (input) => call("ai_provider_models", { input }),
     ai_provider_test: (input) => call("ai_provider_test", { input }),
+    ai_chatgpt_sign_in: (providerId) => call("ai_chatgpt_sign_in", { providerId }),
+    ai_chatgpt_sign_in_cancel: () => call("ai_chatgpt_sign_in_cancel"),
+    ai_chatgpt_sign_out: (providerId) => call("ai_chatgpt_sign_out", { providerId }),
     search_providers_list: () => call("search_providers_list"),
     search_provider_save: (input) => call("search_provider_save", { input }),
     search_provider_delete: (id) => call("search_provider_delete", { id }),
@@ -251,6 +259,10 @@ export function createTauriApi(): HatobaApi {
 
     window_snap_overlay: () => call("window_snap_overlay"),
     window_floating: () => call("window_floating"),
+    window_hide_to_tray: () => call("window_hide_to_tray"),
+    app_quit: () => call("app_quit"),
+    tray_set_menu: (menu) => call("tray_set_menu", { menu }),
+    notification_show: (notification) => call("notification_show", { notification }),
     save_text_file: (path, contents) => call("save_text_file", { path, contents }),
 
     listen: (event, handler) => tauriListen(event, (e) => handler(e.payload as never)),

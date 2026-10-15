@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
+use url::Url;
 
+use crate::chat;
 use crate::decision::{self, Question};
 use crate::error::AiError;
 use crate::net;
@@ -167,11 +169,56 @@ fn anthropic_model(item: &Value) -> Option<ModelInfo> {
     })
 }
 
-/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions,
-/// `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with `after_id`,
-/// or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System One, next to
-/// the `/systemone` endpoint when the base URL names it. Duplicate ids are dropped; the
-/// provider's order is kept.
+/// One entry of the model list a ChatGPT account gets (AI-52): `models[]` with `slug`,
+/// `display_name` and `visibility`, of which only the entries whose `visibility` is `list` are
+/// for pickers. The thinking levels come from `supported_reasoning_levels` when it is there.
+fn chatgpt_model(item: &Value) -> Option<ModelInfo> {
+    if item.get("visibility").and_then(Value::as_str) != Some("list") {
+        return None;
+    }
+    let id = ["slug", "id"]
+        .iter()
+        .find_map(|k| item.get(*k).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|id| !id.is_empty())?;
+    let name = item
+        .get("display_name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(id);
+    let efforts = item
+        .get("supported_reasoning_levels")
+        .and_then(Value::as_array)
+        .map(|levels| {
+            let named: Vec<&str> = levels
+                .iter()
+                .filter_map(|l| {
+                    l.as_str()
+                        .or_else(|| l.get("effort").and_then(Value::as_str))
+                })
+                .collect();
+            Effort::ALL
+                .into_iter()
+                .filter(|e| named.contains(&e.as_str()))
+                .collect::<Vec<_>>()
+        });
+    Some(ModelInfo {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        context_window: first_u64(item, CONTEXT_KEYS),
+        max_output_tokens: first_u64(item, OUTPUT_KEYS),
+        efforts,
+        adaptive_thinking: None,
+    })
+}
+
+/// Fetches the provider's model list: `GET {base}/models` (`data[]`) for Chat Completions and
+/// Responses, `GET {base}/v1/models` for Anthropic, following `has_more`/`last_id` pages with
+/// `after_id`, or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System
+/// One, next to the `/systemone` endpoint when the base URL names it. A ChatGPT provider (AI-52)
+/// gets its account's list, of which the entries shown in pickers are kept. Duplicate ids are
+/// dropped; the provider's order is kept.
 ///
 /// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
 /// is dropped, so a lock does not leave the key in use).
@@ -191,7 +238,15 @@ async fn list_models_inner(
     cancel: &CancellationToken,
 ) -> Result<Vec<ModelInfo>, AiError> {
     let base = validate_base_url(&provider.base_url)?;
-    let headers = provider.headers()?;
+    let get = |url: Url| async move {
+        let response = provider
+            .send(cancel, |headers| http.get(url.clone()).headers(headers))
+            .await?;
+        if !response.status().is_success() {
+            return Err(provider.error(response, cancel).await);
+        }
+        net::read_json(response, cancel).await
+    };
     let mut models: Vec<ModelInfo> = Vec::new();
     let push = |model: ModelInfo, models: &mut Vec<ModelInfo>| {
         if !models.iter().any(|m| m.id == model.id) {
@@ -199,13 +254,19 @@ async fn list_models_inner(
         }
     };
     match provider.protocol {
-        Protocol::ChatCompletions => {
-            let url = net::endpoint(&base, "/models");
-            let response = net::send(http.get(url).headers(headers), cancel).await?;
-            if !response.status().is_success() {
-                return Err(net::http_error(response, cancel).await);
+        Protocol::ChatCompletions | Protocol::Responses if provider.is_chatgpt() => {
+            let body = get(net::endpoint(&base, "/models")).await?;
+            let items = body
+                .get("models")
+                .or_else(|| body.get("data"))
+                .and_then(Value::as_array)
+                .ok_or_else(|| AiError::Protocol("the model list has no `models` array".into()))?;
+            for model in items.iter().filter_map(chatgpt_model) {
+                push(model, &mut models);
             }
-            let body = net::read_json(response, cancel).await?;
+        }
+        Protocol::ChatCompletions | Protocol::Responses => {
+            let body = get(net::endpoint(&base, "/models")).await?;
             let items = body
                 .get("data")
                 .or_else(|| body.get("models"))
@@ -224,11 +285,7 @@ async fn list_models_inner(
                 if let Some(after) = &after {
                     url.query_pairs_mut().append_pair("after_id", after);
                 }
-                let response = net::send(http.get(url).headers(headers.clone()), cancel).await?;
-                if !response.status().is_success() {
-                    return Err(net::http_error(response, cancel).await);
-                }
-                let body = net::read_json(response, cancel).await?;
+                let body = get(url).await?;
                 let items = body.get("data").and_then(Value::as_array).ok_or_else(|| {
                     AiError::Protocol("the model list has no `data` array".into())
                 })?;
@@ -249,12 +306,7 @@ async fn list_models_inner(
             }
         }
         Protocol::SystemOne => {
-            let url = net::endpoint(&decision::system_one_base(&base), "/models");
-            let response = net::send(http.get(url).headers(headers), cancel).await?;
-            if !response.status().is_success() {
-                return Err(net::http_error(response, cancel).await);
-            }
-            let body = net::read_json(response, cancel).await?;
+            let body = get(net::endpoint(&decision::system_one_base(&base), "/models")).await?;
             let items = body
                 .get("models")
                 .or_else(|| body.get("data"))
@@ -350,7 +402,7 @@ fn says_unknown_model(message: &str) -> bool {
 pub(crate) fn classify(err: &AiError, with_model: bool) -> TestOutcome {
     let failure = match err {
         AiError::InvalidUrl(_) => TestFailure::InvalidUrl,
-        AiError::Config(_) => TestFailure::Auth,
+        AiError::Config(_) | AiError::SignIn(_) => TestFailure::Auth,
         AiError::Network(_) => TestFailure::Network,
         AiError::Http {
             status: 401 | 403, ..
@@ -404,7 +456,6 @@ async fn probe_model(
     cancel: &CancellationToken,
 ) -> Result<(), AiError> {
     let base = validate_base_url(&provider.base_url)?;
-    let headers = provider.headers()?;
     let messages = json!([{"role": "user", "content": "Hi"}]);
     let (url, body) = match provider.protocol {
         // No token limit: OpenAI's newer models refuse `max_tokens`, and the field name differs
@@ -417,18 +468,33 @@ async fn probe_model(
             net::endpoint(&base, "/v1/messages"),
             json!({"model": model, "max_tokens": 16, "messages": messages}),
         ),
+        // No token limit, as for Chat Completions. A ChatGPT provider only streams; the stream
+        // is read to its end.
+        Protocol::Responses => {
+            let url = net::endpoint(&base, "/responses");
+            let mut body = Map::new();
+            body.insert("model".into(), json!(model));
+            body.insert("input".into(), messages);
+            body.insert("store".into(), json!(false));
+            return chat::responses_json(http, provider, &url, body, cancel)
+                .await
+                .map(drop);
+        }
         Protocol::SystemOne => return probe_decision(http, provider, model, cancel).await,
     };
-    let request = http
-        .post(url)
-        .headers(headers)
-        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .body(body.to_string());
-    let response = net::send(request, cancel).await?;
+    let body = body.to_string();
+    let response = provider
+        .send(cancel, |headers| {
+            http.post(url.clone())
+                .headers(headers)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                .body(body.clone())
+        })
+        .await?;
     if response.status().is_success() {
         Ok(())
     } else {
-        Err(net::http_error(response, cancel).await)
+        Err(provider.error(response, cancel).await)
     }
 }
 

@@ -70,7 +70,7 @@ const RETRY_PAUSE: Duration = Duration::from_millis(500);
 pub fn timeout_for(protocol: Protocol) -> Duration {
     match protocol {
         Protocol::SystemOne => SYSTEM_ONE_TIMEOUT,
-        Protocol::ChatCompletions | Protocol::Anthropic => CHAT_MODEL_TIMEOUT,
+        Protocol::ChatCompletions | Protocol::Anthropic | Protocol::Responses => CHAT_MODEL_TIMEOUT,
     }
 }
 
@@ -577,7 +577,9 @@ impl Thresholds {
     pub fn for_protocol(protocol: Protocol) -> Self {
         match protocol {
             Protocol::SystemOne => Self::SYSTEM_ONE,
-            Protocol::ChatCompletions | Protocol::Anthropic => Self::CHAT_MODEL,
+            Protocol::ChatCompletions | Protocol::Anthropic | Protocol::Responses => {
+                Self::CHAT_MODEL
+            }
         }
     }
 }
@@ -668,7 +670,7 @@ impl JudgeFailure {
         match err {
             AiError::Cancelled => Self::Cancelled,
             AiError::Network(_) | AiError::InvalidUrl(_) | AiError::Blocked(_) => Self::Unreachable,
-            AiError::Http { .. } | AiError::Config(_) => Self::Refused,
+            AiError::Http { .. } | AiError::Config(_) | AiError::SignIn(_) => Self::Refused,
             AiError::Protocol(_) | AiError::UnsupportedContentType(_) => Self::Malformed,
         }
     }

@@ -12,6 +12,8 @@ export function errorMessage(t: T, e: unknown, ctx: { host?: string; port?: numb
       const s = err.retry_at ? Math.max(1, Math.ceil((err.retry_at - Date.now()) / 1000)) : 1;
       return t("err.throttled", { s });
     }
+    case "wrong_pin":
+      return err.attempts_left ? t("err.wrong_pin", { n: err.attempts_left }) : t("err.pin_locked");
     case "ssh":
       return sshErrorMessage(t, err, ctx);
     case "key_parse":

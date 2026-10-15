@@ -528,6 +528,9 @@ pub struct Snippet {
 pub enum AiProtocol {
     /// Anthropic Messages (`/v1/messages`).
     Anthropic,
+    /// OpenAI Responses (`/responses`). A version without it reads such a provider as Chat
+    /// Completions, which the same base URL also serves at OpenAI.
+    Responses,
     /// TypeSafe's System One decision format, which the judge of Auto mode can use (AI-47). Such
     /// a provider answers decision questions and cannot chat: `base_url` is the endpoint's base,
     /// such as `https://api.typesafe.ai/v1`, and `models` are its model ids, such as `jev-latest`
@@ -546,6 +549,7 @@ impl AiProtocol {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Anthropic => "anthropic",
+            Self::Responses => "responses",
             Self::SystemOne => "system_one",
             Self::ChatCompletions => "chat_completions",
         }
@@ -693,8 +697,34 @@ pub struct AiProvider {
     pub auth_header: AiAuthHeader,
     /// Models the user can pick.
     pub models: Vec<AiModel>,
+    /// The ChatGPT account the provider signs in with instead of a key (AI-52), absent for a key
+    /// provider. Its tokens never sync: each device signs in itself and keeps its session
+    /// sealed in its own vault.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chatgpt: Option<AiChatgptAccount>,
     /// Last modification, Unix ms.
     pub updated_at: i64,
+}
+
+/// The ChatGPT account of an [`AiProvider`] (AI-52): which registration of Hatoba a sign-in on
+/// any device reuses. No secrets, but wiped with the provider like the rest of the item.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
+#[serde(default)]
+pub struct AiChatgptAccount {
+    /// The client id OpenAI issued at the first sign-in (`oaiapp_…`).
+    pub client_id: String,
+    /// The account's verified `sub`.
+    pub subject: String,
+    /// The account's email, shown in the settings and sent as a sign-in hint.
+    pub email: String,
+}
+
+impl fmt::Debug for AiChatgptAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AiChatgptAccount")
+            .field("client_id", &self.client_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl fmt::Debug for AiProvider {
@@ -706,6 +736,7 @@ impl fmt::Debug for AiProvider {
             .field("api_key", &"<redacted>")
             .field("auth_header", &self.auth_header)
             .field("models", &self.models)
+            .field("chatgpt", &self.chatgpt)
             .field("updated_at", &self.updated_at)
             .finish()
     }
@@ -1180,6 +1211,9 @@ pub struct AiSettings {
     pub default_effort: Option<AiEffort>,
     /// Id of the [`SearchProvider`] item behind `web_search`.
     pub search_provider_id: Option<String>,
+    /// While no search provider is chosen, `web_search` uses the chat provider's own search
+    /// (AI-14). On by default, also for settings written before it existed.
+    pub native_search: bool,
     /// The built-in `hatoba` skill is offered (AI-34). On by default, also for settings written
     /// before it existed.
     pub builtin_skill_enabled: bool,
@@ -1207,6 +1241,7 @@ impl Default for AiSettings {
             default_model: None,
             default_effort: None,
             search_provider_id: None,
+            native_search: true,
             builtin_skill_enabled: true,
             custom_instructions: String::new(),
             send_terminal_screen: true,
@@ -1910,6 +1945,7 @@ mod tests {
                 },
                 AiModel::default(),
             ],
+            chatgpt: None,
             updated_at: 7,
         });
         assert_eq!(
@@ -1940,6 +1976,30 @@ mod tests {
                 "models": [], "updated_at": 0
             })
         );
+        // AI-52: the account a ChatGPT provider signs in with syncs; its tokens do not.
+        let chatgpt = Item::AiProvider(AiProvider {
+            name: "ChatGPT".into(),
+            protocol: AiProtocol::Responses,
+            base_url: "https://api.openai.com/v1".into(),
+            chatgpt: Some(AiChatgptAccount {
+                client_id: "oaiapp_1".into(),
+                subject: "user-1".into(),
+                email: "user@example.com".into(),
+            }),
+            ..AiProvider::default()
+        });
+        let value = serde_json::to_value(&chatgpt).unwrap();
+        assert_eq!(
+            value["chatgpt"],
+            json!({"client_id": "oaiapp_1", "subject": "user-1", "email": "user@example.com"})
+        );
+        assert_eq!(serde_json::from_value::<Item>(value).unwrap(), chatgpt);
+        assert!(!format!("{chatgpt:?}").contains("user@example.com"));
+        let Item::AiProvider(mut wiped) = chatgpt else {
+            unreachable!()
+        };
+        wiped.zeroize();
+        assert_eq!(wiped.chatgpt, None);
 
         let search = Item::SearchProvider(SearchProvider {
             kind: SearchKind::Searxng,
@@ -2119,6 +2179,7 @@ mod tests {
                 "default_model": {"provider_id": "p1", "model_id": "m1"},
                 "default_effort": "medium",
                 "search_provider_id": "sp1",
+                "native_search": true,
                 "builtin_skill_enabled": true,
                 "custom_instructions": "Answer in English.",
                 "send_terminal_screen": true,
@@ -2130,6 +2191,7 @@ mod tests {
             json!({
                 "default_model": null,
                 "search_provider_id": null,
+                "native_search": true,
                 "builtin_skill_enabled": true,
                 "send_terminal_screen": true
             })
@@ -2165,6 +2227,10 @@ mod tests {
         assert_eq!(ai.search_provider_id.as_deref(), Some("s"));
         let off = read(json!({"type": "settings", "ai": {"builtin_skill_enabled": false}}));
         assert!(!off.as_settings().unwrap().ai.builtin_skill_enabled);
+        // Those written before native search (AI-14) search with the chat provider.
+        assert!(ai.native_search);
+        let none = read(json!({"type": "settings", "ai": {"native_search": false}}));
+        assert!(!none.as_settings().unwrap().ai.native_search);
         // And those written before the screen note (AI-46) send the screen.
         assert!(ai.send_terminal_screen);
         let quiet = read(json!({"type": "settings", "ai": {"send_terminal_screen": false}}));
@@ -2232,6 +2298,12 @@ mod tests {
             AiProtocol::SystemOne
         );
         assert_eq!(AiProtocol::SystemOne.as_str(), "system_one");
+        let responses = read(json!({"type": "ai_provider", "protocol": "responses"}));
+        assert_eq!(
+            responses.as_ai_provider().unwrap().protocol,
+            AiProtocol::Responses
+        );
+        assert_eq!(AiProtocol::Responses.as_str(), "responses");
 
         // A missing or unknown protocol / auth header reads as the default.
         let provider = read(json!({

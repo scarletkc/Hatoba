@@ -9,7 +9,7 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 | Status | Usual cause | What to do |
 |---|---|---|
 | 401, 403 | The API key is wrong, expired or lacks access to the model; for the Anthropic protocol, the wrong **Auth Header** | Edit the provider: **Replace** the key; try the other **Auth Header** |
-| 404 | The **Base URL** is wrong (a missing `/v1` for Chat Completions) or the model ID does not exist | Fix the base URL; check the model ID with **Fetch Models** |
+| 404 | The **Base URL** is wrong (a missing `/v1` for Chat Completions or Responses) or the model ID does not exist | Fix the base URL; check the model ID with **Fetch Models** |
 | 400 | The provider rejected the request: the model does not support tool calls or a parameter, or the conversation is too long | Choose a model that supports tools; **Compact** the conversation; check **Max Output** |
 | 413, "context length" | The conversation is over the model's context window | **Compact**, or start a **New Conversation**; set the right **Context** value for the model |
 | 429 | Rate limit or quota used up | Wait, or switch model or provider |
@@ -42,6 +42,8 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 - "The model ended its reply without an answer." under the last reply, with **Retry**: the model sent neither text nor tool calls, at most its reasoning. **Retry** asks again and leaves the empty reply out of the request; if it keeps happening, switch model or choose another **Thinking Level**. Earlier replies without an answer, and a side question's, say "The model gave no answer."
 - Models that do not support tool calls cannot work as the assistant: the provider answers with an error as soon as a request carries tools.
 
+Errors of a provider that signs in with a ChatGPT account (usage limits, an ended sign-in) are in `references/ai-chatgpt.md`.
+
 ## Thinking level and reasoning
 
 | en | zh-CN | ja |
@@ -58,7 +60,7 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 - The note "The model doesn’t accept the chosen thinking level, so this message was sent at its default level." means the provider answered with an error naming the thinking fields, so Hatoba sent the message once more without them. Pick **Default** under **Thinking Level** for that model, or fix the model's levels: in the provider (Settings → AI → Providers), open the model's **Thinking** menu ("Levels this model accepts") and untick the levels it refuses, or choose **None**. A provider that is not really OpenAI- or Anthropic-compatible is the usual cause.
 - A level missing from the menu: the menu lists only the levels the model offers. Add them in the model's **Thinking** menu, or use **Fetch Models** so the provider's list fills them in. A model with unknown levels offers Low, Medium and High only.
 - A different level than the one chosen: a level the model lacks is sent as the highest lower level it has, and the menu shows the level that is sent.
-- No **Reasoning** block: the model may not return its reasoning, or at **Default** it may not think at all (some Claude models only think when a level is chosen). Choose a level other than Default. Chat Completions services show reasoning only when they return it as `reasoning_content` or `reasoning`.
+- No **Reasoning** block: the model may not return its reasoning, or at **Default** it may not think at all (some Claude models only think when a level is chosen). Choose a level other than Default. Chat Completions services show reasoning only when they return it as `reasoning_content` or `reasoning`, and Responses services when they return a reasoning summary or reasoning text.
 - Slow or costly answers: higher levels think longer and use more output tokens. Lower the level, or set **Thinking level for new conversations** (Settings → AI → Default Model) to Default.
 
 ## Test Connection and provider settings
@@ -85,7 +87,7 @@ A failed request ends the turn with a banner in the panel ("The request failed",
 
 ## Web search
 
-Without a search provider the assistant has no web search tool. In Settings → AI → **Web Search**:
+With **Native Search**, the current model searches with its provider's own search: an Anthropic-protocol provider, OpenRouter, OpenAI, xAI or Gemini. Any other OpenAI-compatible provider is tried with OpenAI's web search, and when it turns that away, the assistant's searches report that the provider does not seem to offer web search, without asking it again until Hatoba restarts. With **None** the assistant has no web search tool. A native search that fails reports the provider's error to the assistant: for example, an Anthropic organization whose admin turned web search off in the Claude Console, a model the provider has no search for, or an Anthropic-compatible service that does not run web search ("the model ran no web search"). Choosing Brave Search API, Tavily or SearXNG instead works with every model. In Settings → AI → **Web Search**:
 
 | en | zh-CN | ja |
 |---|---|---|

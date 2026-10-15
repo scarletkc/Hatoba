@@ -26,7 +26,7 @@ Under the current model, the same menu has a **Thinking Level** row. It lists **
 | Extra High | 超高 | 超高 |
 | Max | 最高 | 最大 |
 
-- **Default** sends no thinking or effort fields, so every provider accepts it and the depth is left to the provider. For newer Claude models it only turns the display of the reasoning on.
+- **Default** leaves the depth to the provider. It sends no thinking or effort fields, except that for newer Claude models, and for OpenAI reasoning models over the Responses protocol, it turns the display of the reasoning on; a provider that refuses that gets the request again without it.
 - A higher level lets the model think longer and use more output tokens, so answers take longer and cost more. Pick a lower level for quick questions.
 - The model button shows the level, Default included. When the input area has no room, it leaves out the level, then the model's name, and shows only its cube icon; hover it for both. A level the model lacks is sent as the highest lower level it has (Default when there is none), and the menu shows the level that is actually sent.
 - Each conversation keeps the level of its last message, and that syncs to the other devices. A new conversation starts at "Thinking level for new conversations" in Settings → AI (Default unless changed); the levels a model offers are set in the provider's model list (`references/ai-settings.md`).

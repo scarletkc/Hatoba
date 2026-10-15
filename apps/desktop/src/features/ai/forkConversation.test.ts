@@ -18,6 +18,7 @@ vi.mock("@/ipc/api", async (importActual) => ({
     ai_side_stop: (id: string, questionId: number) => sideStop(id, questionId),
     ai_send: (input: unknown, onEvent: (event: AiTurnEvent) => void) => send(input, onEvent),
     ai_compact: () => compact(),
+    notification_show: () => Promise.resolve(),
   },
 }));
 const toast = vi.fn();

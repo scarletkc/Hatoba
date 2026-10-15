@@ -1,6 +1,7 @@
 import type {
   AiAllowance,
   AiAutoVerdict,
+  AiChatgptSignIn,
   AiConversationDetail,
   AiConversationView,
   AiEntryView,
@@ -62,6 +63,7 @@ import type {
   McpServerView,
   McpToolInfo,
   McpProxyInfo,
+  NotificationInput,
   ProbeResult,
   ProxyInput,
   ProxyView,
@@ -82,6 +84,7 @@ import type {
   SyncTestResult,
   TagCount,
   TestResult,
+  TrayMenuInput,
   UpdateCheck,
   UpdateProgress,
   UpgradeDefaults,
@@ -119,6 +122,8 @@ export interface HatobaApi {
   vault_create(password: string): Promise<string>;
   vault_unlock(password: string): Promise<void>;
   vault_unlock_biometric(): Promise<void>;
+  /** SEC-11: unlock with the PIN. */
+  vault_unlock_pin(pin: string): Promise<void>;
   /** Issue #190: create the vault without a master password; one is stored in the OS credential store. */
   vault_create_keychain(): Promise<string>;
   /** Issue #190: unlock with the stored device password. */
@@ -140,6 +145,10 @@ export interface HatobaApi {
   vault_rotate_recovery(password: string): Promise<string>;
   biometric_enable(password: string): Promise<void>;
   biometric_disable(): Promise<void>;
+  /** SEC-11: set or replace the PIN after checking the master password. It needs the master password after a restart until `pin_set_persist`. */
+  pin_enable(password: string, pin: string): Promise<void>;
+  pin_disable(): Promise<void>;
+  pin_set_persist(persist: boolean): Promise<void>;
   /** Resets the idle auto-lock timer (SEC-02). Called on user activity, throttled by the UI. */
   activity_ping(): Promise<void>;
 
@@ -200,6 +209,8 @@ export interface HatobaApi {
   /** Forgets a recent target; resolves to what is left. */
   recent_target_remove(target: QuickTarget): Promise<QuickTarget[]>;
   ssh_write(session_id: string, data: string): Promise<void>;
+  /** Bytes written as they are, for the legacy mouse reports xterm sends as binary. */
+  ssh_write_bytes(session_id: string, data: number[]): Promise<void>;
   ssh_resize(session_id: string, cols: number, rows: number): Promise<void>;
   ssh_disconnect(session_id: string): Promise<void>;
   /**
@@ -300,6 +311,19 @@ export interface HatobaApi {
   ai_provider_models(input: AiProviderInput): Promise<AiModel[]>;
   /** AI-04: a minimal request to the first model, or the model list when there is none. */
   ai_provider_test(input: AiProviderInput): Promise<AiTestResult>;
+  /**
+   * AI-52: signs in with ChatGPT in the system browser: a new account (`null`), which adds a ChatGPT
+   * provider with its models, or a ChatGPT provider's account again. Resolves once the browser comes
+   * back; rejects with `cancelled` after `ai_chatgpt_sign_in_cancel` or the lock, and with `ai` otherwise.
+   */
+  ai_chatgpt_sign_in(providerId: string | null): Promise<AiChatgptSignIn>;
+  /** AI-52: cancels the sign-in that waits for the browser. */
+  ai_chatgpt_sign_in_cancel(): Promise<void>;
+  /**
+   * AI-52: signs a ChatGPT provider out on this device. Resolves to whether OpenAI confirmed revoking the
+   * session; the session is gone from this device either way.
+   */
+  ai_chatgpt_sign_out(providerId: string): Promise<boolean>;
   /** AI-14: the search providers behind `web_search`. */
   search_providers_list(): Promise<SearchProviderView[]>;
   search_provider_save(input: SearchProviderInput): Promise<SearchProviderView>;
@@ -468,6 +492,12 @@ export interface HatobaApi {
    * or tiled, without a compositor, and on other platforms.
    */
   window_floating(): Promise<boolean>;
+  /** WIN-10: the close prompt's choices, and the tray menu in the app's language. */
+  window_hide_to_tray(): Promise<void>;
+  app_quit(): Promise<void>;
+  tray_set_menu(menu: TrayMenuInput): Promise<void>;
+  /** AI-07: a system notification; a click on it sends `app://notification-click`. */
+  notification_show(notification: NotificationInput): Promise<void>;
   /** Write a text file to a path the user picked in the native save dialog (recovery code "Save as Text"). */
   save_text_file(path: string, contents: string): Promise<void>;
 

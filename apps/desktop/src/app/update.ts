@@ -4,10 +4,17 @@ import { api, toAppError } from "@/ipc/api";
 import type { AppError, UpdateCheck, UpdateProgress } from "@/ipc/types";
 import { useApp } from "./store";
 
+/** A running Hatoba checks again this long after the last check that succeeded. */
+const RECHECK_MS = 24 * 60 * 60 * 1000;
+/** How often the automatic check looks at the clock, so a failed check is tried again this soon. */
+const TICK_MS = 60 * 60 * 1000;
+
 interface UpdateState {
   checking: boolean;
   /** The last check that succeeded. A later failure keeps it, so the sidebar dot stays. */
   result: UpdateCheck | null;
+  /** When `result` arrived, in milliseconds since the epoch. */
+  checkedAt: number | null;
   /** Why the latest check failed; cleared when the next one starts. */
   error: AppError | null;
   /** The install in progress: `starting` until the first progress arrives, null when none runs. */
@@ -25,6 +32,7 @@ let running: Promise<void> | null = null;
 export const useUpdate = create<UpdateState>((set, get) => ({
   checking: false,
   result: null,
+  checkedAt: null,
   error: null,
   install: null,
   installError: null,
@@ -32,7 +40,7 @@ export const useUpdate = create<UpdateState>((set, get) => ({
     running ??= (async () => {
       set({ checking: true, error: null, installError: null });
       try {
-        set({ result: await api.update_check() });
+        set({ result: await api.update_check(), checkedAt: Date.now() });
       } catch (e) {
         set({ error: toAppError(e) });
       } finally {
@@ -57,17 +65,29 @@ export const useUpdate = create<UpdateState>((set, get) => ({
 
 export const selectUpdateAvailable = (s: UpdateState) => s.result?.update != null;
 
-let startupChecked = false;
+let started = false;
 
-/** With the automatic check on, checks once after the first unlock of each launch. */
-export function checkOnFirstUnlock() {
-  if (startupChecked) return;
-  startupChecked = true;
-  if (useApp.getState().prefs.auto_update_check) void useUpdate.getState().check();
+/**
+ * With the automatic check on, checks after the first unlock of each launch, then again 24 hours
+ * after the last check that succeeded for as long as Hatoba runs, hidden in the tray too (WIN-10).
+ */
+export function startAutoCheck() {
+  if (started) return;
+  started = true;
+  autoCheck();
+  // Hourly, against the wall clock: a timer does not count the time the computer sleeps.
+  setInterval(autoCheck, TICK_MS);
 }
 
-export function useStartupUpdateCheck(unlocked: boolean) {
+function autoCheck() {
+  if (!useApp.getState().prefs.auto_update_check) return;
+  const { checkedAt, install } = useUpdate.getState();
+  if (install) return;
+  if (checkedAt === null || Date.now() - checkedAt >= RECHECK_MS) void useUpdate.getState().check();
+}
+
+export function useAutoUpdateCheck(unlocked: boolean) {
   useEffect(() => {
-    if (unlocked) checkOnFirstUnlock();
+    if (unlocked) startAutoCheck();
   }, [unlocked]);
 }

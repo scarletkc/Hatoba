@@ -281,6 +281,7 @@ export const PREFS: LocalPrefs = {
   auto_update_check: true,
   ai_permission_mode: "manual",
   ai_bypass_confirmed: false,
+  ai_notifications: true,
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
@@ -294,6 +295,7 @@ export const PREFS: LocalPrefs = {
   dashboard_cpu_alert: 90,
   dashboard_mem_alert: 90,
   dashboard_disk_alert: 90,
+  close_action: "ask",
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

@@ -242,17 +242,63 @@ pub(crate) async fn read_json(
         .map_err(|_| AiError::Protocol("the response is not valid JSON".into()))
 }
 
-/// Turns a non-2xx response into [`AiError::Http`] with the provider's message.
+/// Turns a non-2xx response into [`AiError::Http`] with the provider's message. An error code of
+/// the ChatGPT route gets its message from [`chatgpt::explain`](crate::chatgpt::explain).
 pub(crate) async fn http_error(response: reqwest::Response, cancel: &CancellationToken) -> AiError {
+    match read_http_error(response, cancel).await {
+        Ok(failure) => failure.into_error(),
+        Err(err) => err,
+    }
+}
+
+/// A non-2xx response, read.
+pub(crate) struct HttpFailure {
+    pub(crate) status: u16,
+    /// The provider's message, or an excerpt of the body, or the status's reason.
+    pub(crate) message: String,
+    /// `error.code`, or `code`, when the body has one.
+    pub(crate) code: Option<String>,
+    /// `error.param`, when the body has one.
+    pub(crate) param: Option<String>,
+    /// The `x-request-id` header.
+    pub(crate) request_id: Option<String>,
+}
+
+impl HttpFailure {
+    /// [`AiError::Http`], with [`chatgpt::explain`](crate::chatgpt::explain)'s message for a code
+    /// it knows.
+    pub(crate) fn into_error(self) -> AiError {
+        let explained = self
+            .code
+            .as_deref()
+            .and_then(|code| crate::chatgpt::explain(code, self.param.as_deref()));
+        AiError::Http {
+            status: self.status,
+            message: explained.unwrap_or(self.message),
+        }
+    }
+}
+
+/// Reads a non-2xx response; only [`AiError::Cancelled`] fails.
+pub(crate) async fn read_http_error(
+    response: reqwest::Response,
+    cancel: &CancellationToken,
+) -> Result<HttpFailure, AiError> {
     let status = response.status();
-    let is_json = response
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.to_ascii_lowercase().contains("json"));
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(clean_message)
+            .filter(|v| !v.is_empty())
+    };
+    let is_json =
+        header(CONTENT_TYPE.as_str()).is_some_and(|v| v.to_ascii_lowercase().contains("json"));
+    let request_id = header("x-request-id");
     let body = match read_capped(response, MAX_ERROR_BODY, cancel).await {
         Ok((body, _)) => body,
-        Err(AiError::Cancelled) => return AiError::Cancelled,
+        Err(AiError::Cancelled) => return Err(AiError::Cancelled),
         Err(_) => Vec::new(),
     };
     let message = error_message(&body)
@@ -263,10 +309,22 @@ pub(crate) async fn http_error(response: reqwest::Response, cancel: &Cancellatio
                 .unwrap_or("request failed")
                 .to_owned()
         });
-    AiError::Http {
+    let value = serde_json::from_slice::<Value>(&body).unwrap_or(Value::Null);
+    let field = |key: &str| {
+        value
+            .pointer(&format!("/error/{key}"))
+            .or_else(|| value.get(key))
+            .and_then(Value::as_str)
+            .map(clean_message)
+            .filter(|v| !v.is_empty())
+    };
+    Ok(HttpFailure {
         status: status.as_u16(),
         message,
-    }
+        code: field("code"),
+        param: field("param"),
+        request_id,
+    })
 }
 
 /// The provider's message from an error body: `error.message`, `message`, `error` (string),

@@ -13,10 +13,12 @@ mod launch;
 mod lock;
 mod logging;
 mod mcp;
+mod notification;
 mod platform;
 mod ssh;
 mod state;
 mod sync;
+mod tray;
 mod update;
 
 use commands::{
@@ -37,6 +39,10 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             app::app_info,
             app::window_snap_overlay,
             app::window_floating,
+            app::window_hide_to_tray,
+            app::app_quit,
+            app::tray_set_menu,
+            app::notification_show,
             app::save_text_file,
             app::activity_ping,
             app::update_check,
@@ -48,6 +54,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             vault::vault_create,
             vault::vault_unlock,
             vault::vault_unlock_biometric,
+            vault::vault_unlock_pin,
             vault::vault_create_keychain,
             vault::vault_unlock_keychain,
             vault::vault_set_password,
@@ -61,6 +68,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             vault::vault_rotate_recovery,
             vault::biometric_enable,
             vault::biometric_disable,
+            vault::pin_enable,
+            vault::pin_disable,
+            vault::pin_set_persist,
             hosts::hosts_list,
             hosts::host_get,
             hosts::host_save,
@@ -95,6 +105,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             quick::recent_targets_list,
             quick::recent_target_remove,
             ssh_cmd::ssh_write,
+            ssh_cmd::ssh_write_bytes,
             ssh_cmd::ssh_resize,
             ssh_cmd::ssh_disconnect,
             ssh_cmd::ssh_stats_start,
@@ -152,6 +163,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             ai_cmd::ai_provider_delete,
             ai_cmd::ai_provider_models,
             ai_cmd::ai_provider_test,
+            ai_cmd::ai_chatgpt_sign_in,
+            ai_cmd::ai_chatgpt_sign_in_cancel,
+            ai_cmd::ai_chatgpt_sign_out,
             ai_cmd::search_providers_list,
             ai_cmd::search_provider_save,
             ai_cmd::search_provider_delete,
@@ -226,6 +240,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dto::McpServerStatus,
             dto::WindowChromeEvent,
             dto::LaunchEvent,
+            dto::ClosePromptEvent,
+            dto::NotificationTarget,
+            dto::TrayUpdateEvent,
         ])
 }
 
@@ -252,6 +269,7 @@ pub fn run() {
     app.plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
@@ -278,8 +296,14 @@ pub fn run() {
             launch::queue_startup(&data_dir);
             cli::restore(&app.state::<state::AppState>());
 
+            notification::init(&handle);
             lock::spawn_watchers(handle.clone());
             sync::spawn_scheduler(handle.clone());
+            #[cfg(not(target_os = "macos"))]
+            {
+                tray::refresh_close_action(&app.state::<state::AppState>());
+                tray::init(&handle);
+            }
             platform::window::show_main(&handle);
             Ok(())
         })
@@ -287,6 +311,9 @@ pub fn run() {
             // §6.3: sync when the window regains focus.
             tauri::WindowEvent::Focused(true) => {
                 sync::trigger(window.app_handle(), sync::Trigger::Focus);
+                // WIN-10: whether a tray shows when the close button is clicked.
+                #[cfg(target_os = "linux")]
+                tray::refresh_host();
             }
             // AI-35: the AI panel may read the files of the last drop, and no others.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
@@ -303,6 +330,13 @@ pub fn run() {
             {
                 api.prevent_close();
                 platform::window::hide_main(window.clone());
+            }
+            // WIN-10: Windows and Linux ask, hide the window to the tray, or quit.
+            #[cfg(not(target_os = "macos"))]
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if window.label() == platform::window::MAIN =>
+            {
+                tray::close_requested(window, api);
             }
             _ => {}
         })

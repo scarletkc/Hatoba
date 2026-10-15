@@ -143,7 +143,7 @@ pub(crate) fn finish_of(reason: Option<&str>, has_calls: bool, refusal: bool) ->
 
 /// A fresh call id for servers that send none, unique enough that results never pair with the
 /// wrong call.
-fn synthetic_call_id(position: usize) -> String {
+pub(crate) fn synthetic_call_id(position: usize) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())

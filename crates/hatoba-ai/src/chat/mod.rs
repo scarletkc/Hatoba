@@ -1,4 +1,4 @@
-//! The two protocol adapters (spec §13.2): requests built from stored entries, streamed
+//! The three protocol adapters (spec §13.2): requests built from stored entries, streamed
 //! responses turned into the same [`StreamEvent`]s and the same [`AssistantEntry`].
 //!
 //! - Chat Completions: `POST {base_url}/chat/completions` with `Authorization: Bearer` (none when
@@ -14,27 +14,53 @@
 //!   request that replayed `raw` is refused with a 400 about thinking, signatures or blocks
 //!   (newer Claude models bind signed thinking to the exact prefix), it is sent once more with
 //!   every assistant entry rebuilt from its fields.
+//! - Responses: `POST {base_url}/responses` with `Authorization: Bearer` (none when the key is
+//!   empty), the system prompt as `instructions` and the conversation as `input` items, rebuilt
+//!   in full each time with `store: false` (no `previous_response_id`, nothing kept on the
+//!   provider), and `stream: true`. Function tools are sent with `strict: false`. A chosen
+//!   thinking level, and a model that reasons by default, add `reasoning` and
+//!   `include: ["reasoning.encrypted_content"]` (see `request`). Only `response.completed` and
+//!   `response.incomplete` end a response; `response.failed` and `error` events are errors. A
+//!   request refused with a 4xx about reasoning summaries is sent once more without
+//!   `reasoning.summary`, keeping the level.
 //! - A request refused with a 4xx that names its thinking or effort fields (`reasoning_effort`,
-//!   `output_config`, `effort`, adaptive thinking, `display`) is sent once more without any of
-//!   them, and when it carried a level, [`StreamEvent::EffortIgnored`] says so.
+//!   `output_config`, `effort`, adaptive thinking, `display`; for Responses also `reasoning` and
+//!   encrypted reasoning) is sent once more without any of them, and when it carried a level,
+//!   [`StreamEvent::EffortIgnored`] says so.
 //! - A request that offers no tools (such as the fallback of Compact, AI-21) contains no
 //!   `tool_use` / `tool_result` blocks, `tool_calls` or `tool` messages, whatever the history
 //!   holds: calls and results are sent as text, an assistant entry's calls after its text and
 //!   each result as a `user` message that names its call (see `request`). Anthropic refuses
-//!   such blocks without `tools`, and so do several Chat Completions servers.
+//!   such blocks without `tools`, and so do several Chat Completions servers. Responses requests
+//!   likewise carry no `function_call` or `function_call_output` items then.
 //!
+//! - A ChatGPT provider (AI-52) is a Responses provider whose requests carry an access token of
+//!   the account's session on this device (see [`chatgpt`](crate::chatgpt)): a 401 refreshes the
+//!   session once and sends the request again. Its function tools go in one namespace,
+//!   [`chatgpt::NAMESPACE`](crate::chatgpt::NAMESPACE), which the route requires; the calls come
+//!   back with their own names and that `namespace`, which a rebuilt call sends back too.
 //! - A System One provider answers decision questions for the judge of Auto mode (AI-47) and
 //!   cannot chat: [`stream_chat`] refuses it with [`AiError::Config`].
 //!
-//! Neither adapter logs a request, a response or the key (SEC-04).
+//! No adapter logs a request, a response or the key (SEC-04).
 
 mod anthropic;
 mod openai;
 mod request;
+mod responses;
 mod sse;
 
 #[cfg(test)]
 mod tests;
+
+/// What tests elsewhere in the crate need of the adapters.
+#[cfg(test)]
+pub(crate) mod tests_support {
+    /// The error a Responses `error` event or `response.error` object stands for.
+    pub(crate) fn responses_error(value: &serde_json::Value) -> crate::error::AiError {
+        super::responses::error_of(value)
+    }
+}
 
 use futures::StreamExt;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
@@ -43,7 +69,9 @@ use tokio_util::sync::CancellationToken;
 
 use self::anthropic::AnthropicStream;
 use self::openai::ChatCompletionsStream;
+use self::responses::ResponsesStream;
 use self::sse::{SseEvent, SseParser};
+use crate::chatgpt;
 use crate::entry::{AiEntry, AssistantEntry, Finish, ToolCall, Usage};
 use crate::error::AiError;
 use crate::net;
@@ -96,7 +124,7 @@ impl std::fmt::Debug for ChatRequest<'_> {
     }
 }
 
-/// A streamed piece of a response, the same for both protocols (spec §13.1).
+/// A streamed piece of a response, the same for every protocol (spec §13.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StreamEvent {
     /// Answer text to append.
@@ -138,7 +166,8 @@ pub(crate) trait Assembler {
         body: serde_json::Value,
         emit: &mut (dyn FnMut(StreamEvent) + Send),
     ) -> Result<(), AiError>;
-    /// The response is complete (`[DONE]`, `message_stop`); the rest of the stream is ignored.
+    /// The response is complete (`[DONE]`, `message_stop`, `response.completed`); the rest of
+    /// the stream is ignored.
     fn is_done(&self) -> bool;
     /// Ends the response.
     fn finish(self, emit: &mut (dyn FnMut(StreamEvent) + Send)) -> Result<Assembled, AiError>;
@@ -162,7 +191,6 @@ pub async fn stream_chat(
         return Err(AiError::Config(CANNOT_CHAT.into()));
     }
     let base = validate_base_url(&provider.base_url)?;
-    let headers = provider.headers()?;
     match provider.protocol {
         Protocol::ChatCompletions => {
             let url = net::endpoint(&base, "/chat/completions");
@@ -170,9 +198,9 @@ pub async fn stream_chat(
             let mut with_effort = true;
             loop {
                 let built = request::chat_completions(req, stream_options, with_effort);
-                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
-                    let err = net::http_error(response, cancel).await;
+                    let err = provider.error(response, cancel).await;
                     if built.sent_effort && rejects_effort(&err) {
                         with_effort = false;
                         if built.effort.is_some() {
@@ -197,9 +225,9 @@ pub async fn stream_chat(
             let mut with_effort = true;
             loop {
                 let built = request::anthropic(req, allow_raw, with_effort);
-                let (response, request_chars) = post(http, &url, &headers, &built, cancel).await?;
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
                 if !response.status().is_success() {
-                    let err = net::http_error(response, cancel).await;
+                    let err = provider.error(response, cancel).await;
                     if built.sent_effort && rejects_effort(&err) {
                         with_effort = false;
                         if built.effort.is_some() {
@@ -214,6 +242,33 @@ pub async fn stream_chat(
                     return Err(err);
                 }
                 let assembled = consume(response, AnthropicStream::new(), cancel, on_event).await?;
+                return Ok(into_entry(req, assembled, request_chars, on_event));
+            }
+        }
+        Protocol::Responses => {
+            let url = net::endpoint(&base, "/responses");
+            let mut with_summary = true;
+            let mut with_effort = true;
+            loop {
+                let namespace = provider.is_chatgpt().then_some(chatgpt::NAMESPACE);
+                let built = request::responses(req, with_effort, with_summary, namespace);
+                let (response, request_chars) = post(http, provider, &url, &built, cancel).await?;
+                if !response.status().is_success() {
+                    let err = provider.error(response, cancel).await;
+                    if built.sent_summary && rejects_summary(&err) {
+                        with_summary = false;
+                        continue;
+                    }
+                    if built.sent_effort && rejects_reasoning(&err) {
+                        with_effort = false;
+                        if built.effort.is_some() {
+                            on_event(StreamEvent::EffortIgnored);
+                        }
+                        continue;
+                    }
+                    return Err(err);
+                }
+                let assembled = consume_responses(provider, response, cancel, on_event).await?;
                 return Ok(into_entry(req, assembled, request_chars, on_event));
             }
         }
@@ -266,6 +321,35 @@ pub(crate) fn rejects_effort(err: &AiError) -> bool {
     }
 }
 
+/// Whether a Responses error is a 4xx about the request's thinking fields: [`rejects_effort`]'s
+/// words, `reasoning` (refused by models without reasoning) or encrypted reasoning (`include`,
+/// which such models refuse too). The request is then retried once without `reasoning` and
+/// `include`.
+pub(crate) fn rejects_reasoning(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            let message = message.to_ascii_lowercase();
+            rejects_effort(err)
+                || ["reasoning", "encrypted"]
+                    .iter()
+                    .any(|word| message.contains(word))
+        }
+        _ => false,
+    }
+}
+
+/// Whether a Responses error is a 4xx about reasoning summaries, which OpenAI refuses for an
+/// organization it has not verified and some servers do not support. The request is then
+/// retried once without `reasoning.summary`, keeping the level.
+pub(crate) fn rejects_summary(err: &AiError) -> bool {
+    match err {
+        AiError::Http { status, message } if (400..500).contains(status) => {
+            message.to_ascii_lowercase().contains("summar")
+        }
+        _ => false,
+    }
+}
+
 /// Whether an Anthropic error is the 400 that newer Claude models return when replayed thinking
 /// blocks no longer match the request's prefix (or any other complaint about replayed blocks):
 /// the request is then retried once without `raw`.
@@ -286,20 +370,115 @@ pub(crate) fn rejects_replayed_raw(err: &AiError) -> bool {
 
 async fn post(
     http: &reqwest::Client,
+    provider: &ProviderConfig,
     url: &url::Url,
-    headers: &HeaderMap,
     built: &request::Built,
     cancel: &CancellationToken,
 ) -> Result<(reqwest::Response, usize), AiError> {
     let body = serde_json::to_string(&built.body)
         .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
     let request_chars = body.chars().count();
-    let request = http
-        .post(url.clone())
-        .headers(headers.clone())
+    let response = provider
+        .send(cancel, |headers| {
+            json_post(http, url, headers, body.clone())
+        })
+        .await?;
+    Ok((response, request_chars))
+}
+
+/// A JSON `POST` with `headers`.
+fn json_post(
+    http: &reqwest::Client,
+    url: &url::Url,
+    headers: HeaderMap,
+    body: String,
+) -> reqwest::RequestBuilder {
+    http.post(url.clone())
+        .headers(headers)
         .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .body(body);
-    Ok((net::send(request, cancel).await?, request_chars))
+        .body(body)
+}
+
+/// Sends a Responses request that is not a conversation (the judge of Auto mode, the provider's
+/// own web search, Test Connection) and returns the response as one JSON object. Other providers
+/// get `body` as it is, without `stream`, and answer with JSON. A ChatGPT provider (AI-52) only
+/// streams, so `stream: true` is added and the stream assembled into what a whole response
+/// holds: `output` (every item as its `response.output_item.done` sent it), `usage` and
+/// `status`.
+pub(crate) async fn responses_json(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    url: &url::Url,
+    mut body: serde_json::Map<String, serde_json::Value>,
+    cancel: &CancellationToken,
+) -> Result<serde_json::Value, AiError> {
+    let stream = provider.is_chatgpt();
+    if stream {
+        body.insert("stream".into(), serde_json::Value::Bool(true));
+    }
+    let encoded = serde_json::to_string(&body)
+        .map_err(|_| AiError::Protocol("the request could not be encoded".into()))?;
+    responses_body(http, provider, url, encoded, stream, cancel).await
+}
+
+/// [`responses_json`] for a body already encoded, which has `stream: true` when `stream` is.
+pub(crate) async fn responses_body(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    url: &url::Url,
+    body: String,
+    stream: bool,
+    cancel: &CancellationToken,
+) -> Result<serde_json::Value, AiError> {
+    let response = provider
+        .send(cancel, |headers| {
+            json_post(http, url, headers, body.clone())
+        })
+        .await?;
+    if !response.status().is_success() {
+        return Err(provider.error(response, cancel).await);
+    }
+    if !stream {
+        return net::read_json(response, cancel).await;
+    }
+    let assembled = consume_responses(provider, response, cancel, &mut |_| {}).await?;
+    let mut whole = serde_json::json!({
+        "status": if assembled.finish == Finish::Length { "incomplete" } else { "completed" },
+        "output": assembled.raw,
+    });
+    if let Some(usage) = assembled.usage {
+        whole["usage"] = serde_json::json!({
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+        });
+    }
+    Ok(whole)
+}
+
+/// [`consume`] for a Responses stream. On the ChatGPT route an error the stream reports carries
+/// the response's request ID, like one refused before the stream.
+async fn consume_responses(
+    provider: &ProviderConfig,
+    response: reqwest::Response,
+    cancel: &CancellationToken,
+    on_event: &mut (dyn FnMut(StreamEvent) + Send),
+) -> Result<Assembled, AiError> {
+    let request_id = provider
+        .is_chatgpt()
+        .then(|| {
+            response
+                .headers()
+                .get("x-request-id")?
+                .to_str()
+                .ok()
+                .map(str::to_owned)
+        })
+        .flatten();
+    let mut result = consume(response, ResponsesStream::new(), cancel, on_event).await;
+    if let (Err(AiError::Http { message, .. }), Some(id)) = (&mut result, request_id) {
+        message.push_str(&format!(" (request ID {id})"));
+    }
+    result
 }
 
 /// Reads a successful response through an assembler, observing `cancel` between chunks.

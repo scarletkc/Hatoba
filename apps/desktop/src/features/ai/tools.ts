@@ -1,5 +1,5 @@
 import type { MessageKey, Params } from "@/i18n";
-import type { AiAllowance, AiFilePreview, AiPermissionMode, McpToolInfo } from "@/ipc/types";
+import type { AiAllowance, AiFilePreview, AiPermissionMode, AiSettingsView, McpToolInfo } from "@/ipc/types";
 import type { CallLimit } from "./batches";
 import { allowancePrefixes, commandAllowed, readsOnlyCommand, savablePrefixes } from "./commandRules";
 
@@ -100,11 +100,17 @@ export function needsSession(kind: ToolKind): boolean {
 
 /**
  * §13.1: the limit of a batch that a call of the tool counts toward while it runs, if any: the tools that open an
- * exec channel on the tab's SSH connection for each call, and web searches.
+ * exec channel on the tab's SSH connection for each call, and web searches through a search provider. `native`: web
+ * searches go to the chat provider's own search (AI-14), which takes no such limit.
  */
-export function limitOf(kind: ToolKind): CallLimit | null {
+export function limitOf(kind: ToolKind, native = false): CallLimit | null {
   if (kind === "run_command" || isFileTool(kind) || isSearchTool(kind)) return "channel";
-  return kind === "web_search" ? "search" : null;
+  return kind === "web_search" && !native ? "search" : null;
+}
+
+/** AI-14: whether `web_search` uses the chat provider's own search, so searches may run together. */
+export function searchesNatively(settings: AiSettingsView | null): boolean {
+  return !!settings && settings.search_provider_id === null && settings.native_search;
 }
 
 /**

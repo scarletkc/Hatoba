@@ -19,6 +19,9 @@ pub mod secret_keys {
     pub const D1_API_TOKEN: &str = "sync/d1-api-token";
     /// The vault key wrapped for biometric unlock (P1).
     pub const BIOMETRIC_VAULT_KEY: &str = "vault/biometric-key";
+    /// The vault key wrapped by the PIN key, kept only while the PIN works after a restart
+    /// (SEC-11).
+    pub const PIN_VAULT_KEY: &str = "vault/pin-key";
     /// The random master password of a vault that runs without one (issue #190): the vault stays
     /// encrypted at rest, but its user never types the password.
     pub const DEVICE_PASSWORD: &str = "vault/device-password";

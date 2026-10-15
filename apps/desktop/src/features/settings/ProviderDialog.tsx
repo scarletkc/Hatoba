@@ -1,11 +1,12 @@
-import { useId, useRef, useState } from "react";
-import { Button, Icon, IconButton, Segmented, TextField, controlStyles } from "@/components/controls";
+import { useEffect, useId, useRef, useState } from "react";
+import { Button, Icon, IconButton, LinkButton, Segmented, Spinner, TextField, controlStyles } from "@/components/controls";
 import { FormRow, Group, Section } from "@/components/layout";
-import { FooterSpacer, Menu, Sheet, SheetHeader, useMenu } from "@/components/overlay";
+import { FooterSpacer, Menu, PopupSelect, Sheet, SheetHeader, toast, useMenu } from "@/components/overlay";
+import { openExternal } from "@/features/sync/external";
 import { EFFORTS, UNKNOWN_EFFORTS, effortKey } from "@/features/ai/effort";
 import { useT, type MessageKey } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
-import type { AiAuthHeader, AiEffort, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
+import type { AiAuthHeader, AiChatgptView, AiEffort, AiModel, AiProtocol, AiProviderInput, AiProviderView } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import {
@@ -30,6 +31,7 @@ import {
   type ModelDraft,
 } from "./aiLogic";
 import { IDLE, SavedKeyField, TestConnection, aiErrorDetail, aiErrorMessage, type TestState } from "./aiShared";
+import { CHATGPT_USAGE_URL } from "./ChatgptSignIn";
 import s from "./ProviderDialog.module.css";
 
 interface Form {
@@ -55,6 +57,7 @@ type Fetched =
 const PICKER_LIMIT = 100;
 const PLACEHOLDER_URL: Record<AiProtocol, string> = {
   chat_completions: "https://api.openai.com/v1",
+  responses: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
   system_one: "https://api.typesafe.ai/v1",
 };
@@ -93,6 +96,22 @@ export function ProviderDialog({
   const generation = useRef(0);
 
   const hasSavedKey = !!provider?.has_api_key;
+  /** AI-52: a ChatGPT provider signs in with its account; its protocol and URL are fixed. */
+  const [account, setAccount] = useState<AiChatgptView | null>(provider?.chatgpt ?? null);
+  const [accountBusy, setAccountBusy] = useState<"sign_in" | "sign_out" | null>(null);
+  const live = useRef(true);
+  /** A sign-in waits for the browser. */
+  const signingInRef = useRef(false);
+  /** The provider as the pane last learned of it from here: a sign-in can change its models. */
+  const latest = useRef(provider);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+      // Closing the dialog gives up a sign-in that waits for the browser.
+      if (signingInRef.current) void api.ai_chatgpt_sign_in_cancel();
+    };
+  }, []);
   /** AI-47: a System One provider's models answer the judge's questions and never chat. */
   const decision = form.protocol === "system_one";
   /** The rows as the provider keeps them: without what a decision model does not have. */
@@ -195,6 +214,52 @@ export function ProviderDialog({
     }
   };
 
+  const signIn = async () => {
+    if (!provider || accountBusy) return;
+    setAccountBusy("sign_in");
+    signingInRef.current = true;
+    try {
+      const result = await api.ai_chatgpt_sign_in(provider.id);
+      // A provider without models gets the account's models with the sign-in. The pane learns of
+      // the sign-in also when the editor closed after the browser came back.
+      const models = provider.models.length ? provider.models : result.provider.models;
+      latest.current = { ...result.provider, name: provider.name, models };
+      onSaved(latest.current);
+      if (!live.current) return;
+      setAccount(result.provider.chatgpt ?? null);
+      setTest(IDLE);
+      if (models !== provider.models) setForm((f) => ({ ...f, models: addModels(f.models, models) }));
+      toast(
+        result.provider.chatgpt?.status === "plan_disabled" ? t("aiSettings.chatgpt.status.plan_disabled") : t("aiSettings.chatgpt.signedIn"),
+        result.provider.chatgpt?.status === "plan_disabled" ? "error" : "success",
+      );
+    } catch (err) {
+      if (live.current && toAppError(err).code !== "cancelled") toast(aiErrorMessage(t, err), "error", 6000);
+    } finally {
+      signingInRef.current = false;
+      if (live.current) setAccountBusy(null);
+    }
+  };
+
+  const signOut = async () => {
+    if (!provider || !account || accountBusy) return;
+    setAccountBusy("sign_out");
+    try {
+      const revoked = await api.ai_chatgpt_sign_out(provider.id);
+      const next: AiChatgptView = { ...account, status: "signed_out" };
+      latest.current = { ...(latest.current ?? provider), chatgpt: next };
+      onSaved(latest.current);
+      if (!live.current) return;
+      setAccount(next);
+      setTest(IDLE);
+      toast(revoked ? t("aiSettings.chatgpt.signedOut") : t("aiSettings.chatgpt.signedOutUnconfirmed"), revoked ? "info" : "error", revoked ? 2600 : 8000);
+    } catch (err) {
+      if (live.current) toast(aiErrorMessage(t, err), "error");
+    } finally {
+      if (live.current) setAccountBusy(null);
+    }
+  };
+
   const runTest = async () => {
     const url = urlError();
     if (url) return showErrors({ baseUrl: url });
@@ -231,6 +296,7 @@ export function ProviderDialog({
 
   const protocolOptions = [
     { value: "chat_completions" as const, label: t("aiSettings.protocol.chat_completions") },
+    { value: "responses" as const, label: t("aiSettings.protocol.responses") },
     { value: "anthropic" as const, label: t("aiSettings.protocol.anthropic") },
     { value: "system_one" as const, label: t("aiSettings.protocol.system_one") },
   ];
@@ -280,9 +346,22 @@ export function ProviderDialog({
               onChange={(e) => patch({ name: e.target.value }, "name")}
             />
           </FormRow>
+          {account && (
+            <FormRow label={t("aiSettings.chatgpt.account")} top>
+              <ChatgptAccount
+                account={account}
+                busy={accountBusy}
+                onSignIn={() => void signIn()}
+                onCancel={() => void api.ai_chatgpt_sign_in_cancel()}
+                onSignOut={() => void signOut()}
+              />
+            </FormRow>
+          )}
+          {!account && (
+            <>
           <FormRow label={t("aiSettings.f.protocol")} top={decision}>
             <div className={s.protocol}>
-              <Segmented<AiProtocol>
+              <PopupSelect<AiProtocol>
                 ariaLabel={t("aiSettings.f.protocol")}
                 value={form.protocol}
                 options={protocolOptions}
@@ -328,6 +407,8 @@ export function ProviderDialog({
                 <span className={s.hint}>{t("aiSettings.f.authHeader.hint")}</span>
               </div>
             </FormRow>
+          )}
+            </>
           )}
         </Group>
 
@@ -449,7 +530,7 @@ export function ProviderDialog({
           </div>
         </Section>
 
-        <TestConnection scope="provider" state={test} onRun={() => void runTest()} />
+        <TestConnection scope="provider" state={test} chatgpt={!!account} onRun={() => void runTest()} />
 
         {errors.general && (
           <div className={s.problem} role="alert">
@@ -458,6 +539,52 @@ export function ProviderDialog({
         )}
       </form>
     </Sheet>
+  );
+}
+
+/** AI-52: a ChatGPT provider's account, where its sign-in stands on this device, and signing in or out. */
+function ChatgptAccount({
+  account,
+  busy,
+  onSignIn,
+  onCancel,
+  onSignOut,
+}: {
+  account: AiChatgptView;
+  busy: "sign_in" | "sign_out" | null;
+  onSignIn: () => void;
+  onCancel: () => void;
+  onSignOut: () => void;
+}) {
+  const t = useT();
+  const signedIn = account.status === "signed_in";
+  return (
+    <div className={s.stack}>
+      {account.email && <span className={s.account}>{account.email}</span>}
+      <span className={cx(s.hint, !signedIn && s.accountWarn)}>{t(`aiSettings.chatgpt.status.${account.status}`)}</span>
+      {busy === "sign_in" ? (
+        <span className={s.accountActions}>
+          <Spinner />
+          <span className={s.hint}>{t("aiSettings.chatgpt.waiting.inline")}</span>
+          <LinkButton onClick={onCancel}>{t("btn.cancel")}</LinkButton>
+        </span>
+      ) : (
+        <span className={s.accountActions}>
+          {/* Signed in too: a refusal from the route can say to sign in again. */}
+          <Button size="sm" variant={signedIn ? undefined : "primary"} disabled={!!busy} onClick={onSignIn}>
+            {t("aiSettings.chatgpt.continue")}
+          </Button>
+          {account.status !== "signed_out" && account.status !== "ended" && (
+            <Button size="sm" busy={busy === "sign_out"} disabled={!!busy} onClick={onSignOut}>
+              {t("aiSettings.chatgpt.signOut")}
+            </Button>
+          )}
+          <LinkButton icon="arrow-square-out" onClick={() => void openExternal(CHATGPT_USAGE_URL)}>
+            {t("aiSettings.chatgpt.manageUsage")}
+          </LinkButton>
+        </span>
+      )}
+    </div>
   );
 }
 

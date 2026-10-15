@@ -16,6 +16,9 @@ describe("which calls run together (§13.1)", () => {
     const limits = (names: string[]) => names.map((n) => limitOf(toolKind(n)));
     expect(limits(["run_command", "read_file", "edit_file", "write_file", "grep", "glob"])).toEqual(Array(6).fill("channel"));
     expect(limitOf(toolKind("web_search"))).toBe("search");
+    // AI-14: the chat provider's own search takes no such limit.
+    expect(limitOf(toolKind("web_search"), true)).toBeNull();
+    expect(limitOf(toolKind("grep"), true)).toBe("channel");
     expect(limits(["read_terminal", "send_input", "fetch_url", "read_skill", "search_tools", "mcp__a__b"])).toEqual(Array(6).fill(null));
   });
 

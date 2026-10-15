@@ -16,6 +16,17 @@ export const commands = {
 	 *  or tiled, false without a compositor, and false on other platforms.
 	 */
 	windowFloating: () => __TAURI_INVOKE<boolean>("window_floating"),
+	/**  The close prompt's **Minimize to Tray** (WIN-10). */
+	windowHideToTray: () => __TAURI_INVOKE<void>("window_hide_to_tray"),
+	/**  The close prompt's **Quit Hatoba** (WIN-10). */
+	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
+	/**  The tray menu's labels in the app's language, and whether **Lock** is enabled (WIN-10). */
+	traySetMenu: (menu: TrayMenuInput) => __TAURI_INVOKE<void>("tray_set_menu", { menu }),
+	/**
+	 *  Shows a system notification (AI-07). The WebView sends one only while the window is not
+	 *  focused.
+	 */
+	notificationShow: (notification: NotificationInput) => __TAURI_INVOKE<void>("notification_show", { notification }),
 	/**  Writes text to a path the user chose in the native save dialog. */
 	saveTextFile: (path: string, contents: string) => __TAURI_INVOKE<null>("save_text_file", { path, contents }),
 	/**  Feeds the idle auto-lock timer (SEC-02). */
@@ -45,6 +56,11 @@ export const commands = {
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
 	/**  SEC-07 (P1): Windows Hello. */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
+	/**
+	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
+	 *  credential store, which the last wrong PIN removes.
+	 */
+	vaultUnlockPin: (pin: string) => __TAURI_INVOKE<null>("vault_unlock_pin", { pin }),
 	/**
 	 *  Issue #190: creates the vault without a master password for its user to remember or type. The
 	 *  vault itself is an ordinary one, encrypted with a random password that only the OS credential
@@ -84,6 +100,18 @@ export const commands = {
 	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
+	/**
+	 *  SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
+	 *  Windows Hello. A new PIN needs the master password after a restart until [`pin_set_persist`]
+	 *  says otherwise, so setting it needs nothing from the OS credential store.
+	 */
+	pinEnable: (password: string, pin: string) => __TAURI_INVOKE<null>("pin_enable", { password, pin }),
+	pinDisable: () => __TAURI_INVOKE<null>("pin_disable"),
+	/**
+	 *  SEC-11: whether the PIN also works after a restart. On, the vault key it wraps goes to the OS
+	 *  credential store; off, it is removed there.
+	 */
+	pinSetPersist: (persist: boolean) => __TAURI_INVOKE<null>("pin_set_persist", { persist }),
 	hostsList: () => __TAURI_INVOKE<HostView[]>("hosts_list"),
 	hostGet: (id: string) => __TAURI_INVOKE<HostView>("host_get", { id }),
 	hostSave: (input: HostInput) => __TAURI_INVOKE<HostView>("host_save", { input }),
@@ -158,6 +186,11 @@ export const commands = {
 	/**  Forgets one recent target and returns what is left. */
 	recentTargetRemove: (target: QuickTarget) => __TAURI_INVOKE<QuickTarget[]>("recent_target_remove", { target }),
 	sshWrite: (sessionId: string, data: string) => __TAURI_INVOKE<null>("ssh_write", { sessionId, data }),
+	/**
+	 *  Writes bytes to the shell as they are. xterm sends legacy mouse reports as binary, one byte per
+	 *  character, and their coordinates go above 0x7F, which `ssh_write`'s UTF-8 would re-encode.
+	 */
+	sshWriteBytes: (sessionId: string, data: number[]) => __TAURI_INVOKE<null>("ssh_write_bytes", { sessionId, data }),
 	sshResize: (sessionId: string, cols: number, rows: number) => __TAURI_INVOKE<null>("ssh_resize", { sessionId, cols, rows }),
 	sshDisconnect: (sessionId: string) => __TAURI_INVOKE<null>("ssh_disconnect", { sessionId }),
 	/**
@@ -283,6 +316,21 @@ export const commands = {
 	aiProviderModels: (input: AiProviderInput) => __TAURI_INVOKE<AiModel[]>("ai_provider_models", { input }),
 	/**  AI-04: a minimal request to the first model, or the model list when there is none. */
 	aiProviderTest: (input: AiProviderInput) => __TAURI_INVOKE<AiTestResult>("ai_provider_test", { input }),
+	/**
+	 *  AI-52: signs in with ChatGPT in the system browser: a new account (`provider_id` `None`), which
+	 *  adds a ChatGPT provider with the account's models, or provider `provider_id`'s account again.
+	 *  Waits until the browser comes back (at most 15 minutes), `ai_chatgpt_sign_in_cancel` cancels
+	 *  it, or the vault locks.
+	 */
+	aiChatgptSignIn: (providerId: string | null) => __TAURI_INVOKE<AiChatgptSignIn>("ai_chatgpt_sign_in", { providerId }),
+	/**  AI-52: cancels the sign-in that waits for the browser. */
+	aiChatgptSignInCancel: () => __TAURI_INVOKE<void>("ai_chatgpt_sign_in_cancel"),
+	/**
+	 *  AI-52: signs provider `provider_id` out on this device and revokes the session at OpenAI.
+	 *  Returns whether OpenAI confirmed the revocation; the session is gone from this device either
+	 *  way, and the provider keeps its account for the next sign-in.
+	 */
+	aiChatgptSignOut: (providerId: string) => __TAURI_INVOKE<boolean>("ai_chatgpt_sign_out", { providerId }),
 	searchProvidersList: () => __TAURI_INVOKE<SearchProviderView[]>("search_providers_list"),
 	searchProviderSave: (input: SearchProviderInput) => __TAURI_INVOKE<SearchProviderView>("search_provider_save", { input }),
 	searchProviderDelete: (id: string) => __TAURI_INVOKE<null>("search_provider_delete", { id }),
@@ -500,14 +548,17 @@ export const commands = {
 export const events = {
 	aiMcpStatus: makeEvent<McpServerStatus>("ai://mcp-status"),
 	appLaunch: makeEvent<LaunchEvent>("app://launch"),
+	appNotificationClick: makeEvent<NotificationTarget>("app://notification-click"),
 	sshAuthPrompt: makeEvent<AuthPrompt>("ssh://auth-prompt"),
 	sshForward: makeEvent<ForwardStatusEvent>("ssh://forward"),
 	sshHostkeyPrompt: makeEvent<HostKeyPrompt>("ssh://hostkey-prompt"),
 	sshState: makeEvent<SessionStateEvent>("ssh://state"),
 	syncStatus: makeEvent<SyncStatus>("sync://status"),
 	transferProgress: makeEvent<TransferProgressEvent>("transfer://progress"),
+	trayUpdate: makeEvent<TrayUpdateEvent>("tray://update"),
 	vaultLocked: makeEvent<VaultLockedEvent>("vault://locked"),
 	windowChrome: makeEvent<WindowChromeEvent>("window://chrome"),
+	windowClosePrompt: makeEvent<ClosePromptEvent>("window://close-prompt"),
 };
 
 /* Types */
@@ -560,6 +611,36 @@ export type AiAutoVerdict = {
 	 *  kind a newer version added. Then the decision is to ask.
 	 */
 	failure: string | null,
+};
+
+/**  AI-52: a finished sign-in. */
+export type AiChatgptSignIn = {
+	provider: AiProviderView,
+	/**
+	 *  The sign-in registered Hatoba for a new account, so the panel says once that requests
+	 *  now use the ChatGPT plan.
+	 */
+	first_sign_in: boolean,
+};
+
+/**
+ *  AI-52: where a ChatGPT provider's sign-in stands on this device. Its tokens never reach the
+ *  WebView.
+ */
+export type AiChatgptStatus = 
+/**  Signed in, with plan use allowed. */
+"signed_in" | 
+/**  Signed in, but plan use was not allowed. */
+"plan_disabled" | 
+/**  The session ended (expired, revoked, or signed out in ChatGPT): sign in again. */
+"ended" | 
+/**  Not signed in on this device (signed out here, or signed in on another device only). */
+"signed_out";
+
+/**  AI-52: the ChatGPT account of a provider. */
+export type AiChatgptView = {
+	email: string,
+	status: AiChatgptStatus,
 };
 
 export type AiConversationDetail = {
@@ -793,7 +874,7 @@ export type AiPermissionMode = "manual" |
  *  A provider's protocol (spec §13.2). A `system_one` provider answers decision questions for
  *  the judge of Auto mode (AI-47) and cannot chat.
  */
-export type AiProtocol = "chat_completions" | "anthropic" | "system_one";
+export type AiProtocol = "chat_completions" | "anthropic" | "responses" | "system_one";
 
 export type AiProviderInput = {
 	/**  `None` creates a provider. With an id, a `None` key keeps (or tests with) the saved one. */
@@ -817,6 +898,8 @@ export type AiProviderView = {
 	/**  Only used by `anthropic`. */
 	auth_header: AiAuthHeader,
 	models: AiModel[],
+	/**  Set for a provider that signs in with a ChatGPT account instead of a key (AI-52). */
+	chatgpt: AiChatgptView | null,
 	updated_at: number,
 };
 
@@ -888,6 +971,7 @@ export type AiSettingsPatch = {
 	default_model?: AiModelRef | null,
 	default_effort?: AiEffort | null,
 	search_provider_id?: string | null,
+	native_search?: boolean | null,
 	builtin_skill_enabled?: boolean | null,
 	custom_instructions?: string | null,
 	send_terminal_screen?: boolean | null,
@@ -900,6 +984,11 @@ export type AiSettingsView = {
 	/**  The thinking level new conversations start with (AI-05); `None` is Default. */
 	default_effort: AiEffort | null,
 	search_provider_id: string | null,
+	/**
+	 *  While no search provider is chosen, `web_search` uses the chat provider's own search
+	 *  (AI-14).
+	 */
+	native_search: boolean,
 	/**  The built-in `hatoba` skill is offered (AI-34). */
 	builtin_skill_enabled: boolean,
 	/**  Sent with every request, at most 32 KB of UTF-8 (AI-36). */
@@ -1080,6 +1169,8 @@ export type AppError = {
 	cf_code: number | null,
 	/**  `ai`: the HTTP status the provider answered with. */
 	http_status: number | null,
+	/**  `wrong_pin`: wrong PINs still allowed; at 0 only the master password unlocks. */
+	attempts_left: number | null,
 };
 
 export type AppInfo = {
@@ -1155,6 +1246,15 @@ export type CliCommandView = {
 	 */
 	on_path: boolean,
 };
+
+/**
+ *  WIN-10: the window's close button asks, hides the window to the system tray, or quits.
+ *  Without a tray it always quits.
+ */
+export type CloseAction = "ask" | "tray" | "quit";
+
+/**  WIN-10: the close button asks whether to hide the window to the tray or quit. */
+export type ClosePromptEvent = null;
 
 export type CloudflareAccount = {
 	id: string,
@@ -1341,7 +1441,11 @@ export type DroppedFileRefusal =
 /**  Not a file, gone, or not readable. */
 "unreadable";
 
-export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "wrong_password" | "wrong_recovery_code" | "throttled" | 
+/**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
+"wrong_pin" | 
+/**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
+"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -1575,6 +1679,11 @@ export type LocalPrefs = {
 	ai_permission_mode: AiPermissionMode,
 	/**  AI-16: the user confirmed the first switch to bypass on this device. */
 	ai_bypass_confirmed: boolean,
+	/**
+	 *  AI-07: a system notification when a conversation finishes a turn or waits for approval
+	 *  while the window is not focused.
+	 */
+	ai_notifications: boolean,
 	/**  The AI panel is open (§9). */
 	ai_panel_open: boolean,
 	/**  The AI panel's width in CSS pixels. */
@@ -1602,6 +1711,8 @@ export type LocalPrefs = {
 	dashboard_cpu_alert: number,
 	dashboard_mem_alert: number,
 	dashboard_disk_alert: number,
+	/**  WIN-10: what the window's close button does on Windows and Linux. */
+	close_action: CloseAction,
 };
 
 export type LockReason = "manual" | "idle" | "sleep";
@@ -1758,6 +1869,22 @@ export type MountView = {
 	used: number,
 	/**  Space left for unprivileged users. */
 	available: number,
+};
+
+/**  A system notification (AI-07). The WebView sends one only while the window is not focused. */
+export type NotificationInput = {
+	title: string,
+	body: string,
+	target: NotificationTarget,
+};
+
+/**
+ *  What a notification is about, which a click on it shows: a tab, and in it a conversation
+ *  (AI-07). The click brings the window back and sends this to the WebView.
+ */
+export type NotificationTarget = {
+	tab: string | null,
+	conversation_id: string | null,
 };
 
 export type Platform = "windows" | "macos" | "linux";
@@ -2116,6 +2243,23 @@ export type TransferProgressEvent = {
 
 export type TransferState = "running" | "done" | "failed" | "cancelled";
 
+/**  WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked. */
+export type TrayMenuInput = {
+	open: string,
+	lock: string,
+	quit: string,
+	can_lock: boolean,
+	/**
+	 *  **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+	 *  such item.
+	 */
+	update: string | null,
+	can_update: boolean,
+};
+
+/**  WIN-10: the tray menu's **Update to vX.Y.Z** was clicked. */
+export type TrayUpdateEvent = null;
+
 /**  What the update check found (spec §11). */
 export type UpdateCheck = {
 	current_version: string,
@@ -2191,6 +2335,12 @@ export type VaultStatus = {
 	sync_kind: SyncKind,
 	biometric_available: boolean,
 	biometric_enabled: boolean,
+	/**  SEC-11: a PIN is set on this device. */
+	pin_enabled: boolean,
+	/**  The PIN also works after the app restarts. */
+	pin_persist: boolean,
+	/**  The PIN can unlock now (the lock screen asks for it instead of the master password). */
+	pin_unlock: boolean,
 	/**
 	 *  #190: the vault runs without a master password; one is stored in the OS credential
 	 *  store, so the app can unlock on its own.

@@ -17,7 +17,8 @@
 //!   the numeric form, and tuple `items` arrays become `prefixItems`. Remote and dangling
 //!   `$ref`s, which the provider cannot resolve, are dropped.
 //! - Chat Completions also reaches Gemini's OpenAI-compatible endpoint and local servers, so its
-//!   schemas keep only the keywords they all accept: `type`, `description`, `title`, `enum`,
+//!   schemas, and those of Responses, which reaches many of the same servers, keep only the
+//!   keywords they all accept: `type`, `description`, `title`, `enum`,
 //!   `default`, `properties`, `required`, `items`, `anyOf`, the numeric, length, pattern and
 //!   count limits, `nullable` and `example`. Gemini rejects `$ref`/`$defs`, `oneOf`, `allOf`,
 //!   `const`, `additionalProperties`, `exclusiveMinimum`, type arrays and most `format` values,
@@ -119,9 +120,11 @@ impl Cleaner<'_> {
         }
         match self.protocol {
             Protocol::Anthropic => self.anthropic(map, depth),
-            // A System One provider is offered no tools (AI-47); its schemas get the stricter
-            // cleaning.
-            Protocol::ChatCompletions | Protocol::SystemOne => self.chat(map, depth),
+            // Responses reaches the same servers as Chat Completions. A System One provider is
+            // offered no tools (AI-47); its schemas get the stricter cleaning.
+            Protocol::ChatCompletions | Protocol::Responses | Protocol::SystemOne => {
+                self.chat(map, depth)
+            }
         }
     }
 
@@ -131,7 +134,9 @@ impl Cleaner<'_> {
             Value::Object(map) => Some(Value::Object(self.object(map, depth + 1))),
             Value::Bool(accept) => match self.protocol {
                 Protocol::Anthropic => Some(Value::Bool(*accept)),
-                Protocol::ChatCompletions | Protocol::SystemOne => accept.then(|| json!({})),
+                Protocol::ChatCompletions | Protocol::Responses | Protocol::SystemOne => {
+                    accept.then(|| json!({}))
+                }
             },
             _ => Some(json!({})),
         }

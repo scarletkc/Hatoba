@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_partial_json, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 use zeroize::Zeroizing;
 
@@ -324,6 +324,13 @@ impl Fixture {
         let mut vault = Vault::open_in_memory().unwrap();
         vault
             .create_with_params(PW, KdfParams::for_tests())
+            .unwrap();
+        // Native Search (AI-14) off, so requests offer only the tools under test; the web_search
+        // tests turn it on.
+        let mut settings = vault.settings();
+        settings.ai.native_search = false;
+        vault
+            .put(Some(SETTINGS_ID), Item::Settings(settings))
             .unwrap();
         let provider_id = vault
             .put(
@@ -2747,6 +2754,160 @@ async fn without_a_tab_every_tool_but_the_terminal_ones_is_offered_and_runs() {
     assert_eq!(requests.len(), 2);
     assert_eq!(tool_message(&requests[1], "c4")["content"], "hi");
     f.mcp.shutdown().await;
+}
+
+impl Fixture {
+    /// Turns Native Search (AI-14) on or off.
+    fn native_search(&self, on: bool) {
+        let mut v = lock(&self.vault);
+        let mut settings = v.settings();
+        settings.ai.native_search = on;
+        v.put(Some(SETTINGS_ID), Item::Settings(settings)).unwrap();
+    }
+}
+
+/// AI-14: with no search provider chosen, `web_search` is offered, and the model that made the
+/// call searches with its own provider's search.
+#[tokio::test]
+async fn without_a_search_provider_the_model_searches_with_its_own_provider() {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "web_search", json!({"query": "zfs"})),
+            ("c2", "web_search", json!({"query": "btrfs"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    f.native_search(true);
+    let (started, sink) = f.send(None, "look it up").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+    // A Chat Completions server Hatoba does not know is tried as OpenAI is.
+    assert!(tool_names(&f.requests().await[0]).contains(&"web_search".to_owned()));
+
+    let native = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .and(body_partial_json(json!({
+            "model": "m1",
+            "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+            "messages": [{"role": "user", "content": "Search the web for: zfs"}],
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "content": [
+                {"type": "server_tool_use", "id": "s1", "name": "web_search", "input": {"query": "zfs"}},
+                {"type": "web_search_tool_result", "tool_use_id": "s1", "content": [
+                    {"type": "web_search_result", "url": "https://openzfs.org", "title": "OpenZFS", "encrypted_content": "e"}
+                ]},
+                {"type": "text", "text": "ZFS is a file system."}
+            ],
+            "stop_reason": "end_turn"
+        })))
+        .mount(&native)
+        .await;
+    let (protocol, base_url) = {
+        let mut v = lock(&f.vault);
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .unwrap()
+            .clone();
+        let before = (provider.protocol, provider.base_url.clone());
+        provider.protocol = AiProtocol::Anthropic;
+        provider.base_url = native.uri();
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+        before
+    };
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c1),
+        (
+            "c1",
+            AiToolStatus::Ok,
+            "1. OpenZFS\n   https://openzfs.org\n\nWhat the results say:\nZFS is a file system.\n"
+        )
+    );
+
+    // Turned off, nothing searches.
+    f.native_search(false);
+    {
+        let mut v = lock(&f.vault);
+        let offered = super::builtin_tools(&v, &f.context());
+        assert!(offered.iter().all(|t| t.name != "web_search"));
+        let mut provider = v
+            .get(&f.provider_id)
+            .and_then(Item::as_ai_provider)
+            .unwrap()
+            .clone();
+        (provider.protocol, provider.base_url) = (protocol, base_url);
+        v.put(Some(&f.provider_id), Item::AiProvider(provider))
+            .unwrap();
+    }
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(
+        view_content(&c2),
+        (
+            "c2",
+            AiToolStatus::Error,
+            "No search provider is chosen in Settings → AI, so web_search cannot run."
+        )
+    );
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+}
+
+/// AI-14: a provider Hatoba does not know that turns the native search away gets the same result
+/// for the next call without a request, and `web_search` stays offered: a conversation's tools
+/// never change under the model.
+#[tokio::test]
+async fn a_provider_that_turns_native_search_away_is_not_asked_again() {
+    let f = Fixture::new(vec![
+        calls(&[
+            ("c1", "web_search", json!({"query": "zfs"})),
+            ("c2", "web_search", json!({"query": "btrfs"})),
+        ]),
+        answer("Done."),
+    ])
+    .await;
+    let server = f.server.as_ref().unwrap();
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_json(json!({"error": {"message": "Not Found"}})),
+        )
+        .mount(server)
+        .await;
+    f.native_search(true);
+    let (started, sink) = f.send(None, "look it up").await;
+    let conv = started.conversation.id;
+    sink.done_with(AiFinish::ToolCalls).await;
+
+    let c1 = f.run(&conv, "c1", None, None).await.unwrap();
+    let (_, status, text) = view_content(&c1);
+    assert_eq!(status, AiToolStatus::Error);
+    assert!(
+        text.starts_with("The search failed: HTTP 404: Not Found."),
+        "{text}"
+    );
+    assert!(text.contains("Settings → AI"), "{text}");
+    let c2 = f.run(&conv, "c2", None, None).await.unwrap();
+    assert_eq!(view_content(&c2), ("c2", AiToolStatus::Error, text));
+    assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
+
+    let received = server.received_requests().await.unwrap();
+    let to = |suffix: &str| {
+        received
+            .iter()
+            .filter(|r| r.url.path().ends_with(suffix))
+            .map(|r| r.body_json::<Value>().unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(to("/responses").len(), 1);
+    let chats = to("/chat/completions");
+    assert_eq!(chats.len(), 2);
+    for chat in &chats {
+        assert!(tool_names(chat).contains(&"web_search".to_owned()));
+    }
 }
 
 // ───────────────────────── phase 2: MCP, AI-22, AI-26, AI-24 ─────────────────────────

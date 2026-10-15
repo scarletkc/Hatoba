@@ -53,6 +53,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
+ *   ?close=prompt                           ?hello=off   ?pin=on | persist
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
  * Connecting to staging-web-02 always fails with a timeout; with `?ssh`, every host fails with that
@@ -67,6 +68,11 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * command starts off; with `?cli=offpath`, its folder is not on the PATH, as on Linux before the
  * next sign-in.
  * With `?star=due`, the star prompt's day has passed, so it shows after the first connection.
+ * With `?close=prompt`, the window's close button asks whether to minimize to the tray (WIN-10),
+ * once the window listens for it.
+ * With `?pin`, a PIN is set (SEC-11): `on` works until the app restarts, `persist` after one too.
+ * The mock's PIN is 1234 until another is set; five wrong ones in a row turn it off until an
+ * unlock with the master password.
  * `?worker` shows a Worker update notice (§6.7, Upgrades): `available` on a Worker the app
  * deployed, `required` on one deployed another way (sync paused), `custom` on a custom domain,
  * and `app` for a Worker that needs a newer Hatoba. "Update Worker" honours `?deploy=fail`,
@@ -84,6 +90,7 @@ export function createMockApi(): HatobaApi {
   const deployDemo = q.get("deploy");
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
+  let closeDemo = q.get("close") === "prompt";
   const version = "0.1.0-dev";
   /** The Worker version this build "bundles". */
   const BUNDLED_WORKER = "0.2.0";
@@ -109,6 +116,13 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  const pinDemo = q.get("pin");
+  const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
+  /** Any full unlock arms the PIN again and resets its failures. */
+  const armPin = () => {
+    pinState.armed = pinState.pin !== null;
+    pinState.failures = 0;
+  };
   /** #190: the demo vault runs without a master password (?keychain). */
   let keychain = q.get("keychain") === "on";
   let failed = 0;
@@ -275,6 +289,9 @@ export function createMockApi(): HatobaApi {
       sync_kind: sync.kind,
       biometric_available: true,
       biometric_enabled: biometric,
+      pin_enabled: pinState.pin !== null,
+      pin_persist: pinState.persist,
+      pin_unlock: pinState.pin !== null && pinState.armed,
       keychain_unlock: keychain,
     }),
     vault_create: async (password) => {
@@ -297,10 +314,24 @@ export function createMockApi(): HatobaApi {
       }
       failed = 0;
       retryAt = null;
+      armPin();
       vaultState = "unlocked";
     },
     vault_unlock_biometric: async () => {
       await delay(700);
+      armPin();
+      vaultState = "unlocked";
+    },
+    vault_unlock_pin: async (pin) => {
+      if (pinState.pin === null || !pinState.armed) fail("pin_unavailable");
+      await delay(450);
+      if (pin !== pinState.pin) {
+        pinState.failures++;
+        const attempts_left = Math.max(0, 5 - pinState.failures);
+        if (attempts_left === 0) pinState.armed = false;
+        fail("wrong_pin", "wrong PIN", { attempts_left });
+      }
+      armPin();
       vaultState = "unlocked";
     },
     vault_create_keychain: async () => {
@@ -339,6 +370,7 @@ export function createMockApi(): HatobaApi {
     vault_recover: async (code) => {
       await delay(500);
       if (code.replace(/[-\s]/g, "").length !== 32) fail("wrong_recovery_code");
+      armPin();
       vaultState = "unlocked";
     },
     vault_restore_from_cloud: async (_config, password) => {
@@ -364,6 +396,18 @@ export function createMockApi(): HatobaApi {
     },
     biometric_disable: async () => {
       biometric = false;
+    },
+    pin_enable: async (password, pin) => {
+      if (pin.length < 4) fail("invalid_input", "the PIN must have at least 4 characters", { field: "pin" });
+      await delay(400);
+      if (password.length < 4) fail("wrong_password");
+      Object.assign(pinState, { pin, persist: false, armed: true, failures: 0 });
+    },
+    pin_disable: async () => {
+      Object.assign(pinState, { pin: null, persist: false, armed: false, failures: 0 });
+    },
+    pin_set_persist: async (persist) => {
+      pinState.persist = persist;
     },
     activity_ping: async () => {},
 
@@ -728,6 +772,8 @@ export function createMockApi(): HatobaApi {
     ssh_write: async (sid, data) => {
       shells.get(sid)?.input(data);
     },
+    // The sample shell never turns on mouse reporting, so no binary input reaches it.
+    ssh_write_bytes: async () => {},
     ssh_resize: async () => {},
     ssh_disconnect: async (sid) => {
       shells.get(sid)?.stop();
@@ -1042,6 +1088,10 @@ export function createMockApi(): HatobaApi {
 
     window_snap_overlay: async () => {},
     window_floating: async () => false,
+    window_hide_to_tray: async () => {},
+    app_quit: async () => {},
+    tray_set_menu: async () => {},
+    notification_show: async () => {},
     save_text_file: async (path, contents) => {
       // Browser fallback: download the text instead of writing to `path`.
       const a = document.createElement("a");
@@ -1056,6 +1106,10 @@ export function createMockApi(): HatobaApi {
       if (!set) listeners.set(event, (set = new Set()));
       const h = handler as (p: unknown) => void;
       set.add(h);
+      if (event === "window://close-prompt" && closeDemo) {
+        closeDemo = false;
+        setTimeout(() => emit("window://close-prompt", null), 500);
+      }
       return () => set.delete(h);
     },
   };

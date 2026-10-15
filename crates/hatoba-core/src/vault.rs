@@ -17,9 +17,9 @@ use serde::Serialize;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::crypto::{
-    self, AAD_AI_ALLOWANCES, AAD_RECENT_TARGETS, AAD_RECOVERY_AUTH, AAD_RECOVERY_VAULT_KEY,
-    AAD_VAULT_CHECK, AAD_VAULT_KEY, KdfParams, Key32, MasterKeys, b64_encode, decode_salt,
-    item_aad, random_key, random_salt, seal, unwrap_key, wrap_key,
+    self, AAD_AI_ALLOWANCES, AAD_CHATGPT_SESSIONS, AAD_RECENT_TARGETS, AAD_RECOVERY_AUTH,
+    AAD_RECOVERY_VAULT_KEY, AAD_VAULT_CHECK, AAD_VAULT_KEY, KdfParams, Key32, MasterKeys,
+    b64_encode, decode_salt, item_aad, random_key, random_salt, seal, unwrap_key, wrap_key,
 };
 use crate::error::{Error, Result};
 use crate::model::{
@@ -45,15 +45,22 @@ enum SealedLocal {
     RecentTargets,
     /// The shell's AI approvals saved on this device (AI-19), which name hosts.
     AiAllowances,
+    /// This device's ChatGPT sessions (AI-52), which hold tokens.
+    ChatgptSessions,
 }
 
 impl SealedLocal {
-    const ALL: [Self; 2] = [Self::RecentTargets, Self::AiAllowances];
+    const ALL: [Self; 3] = [
+        Self::RecentTargets,
+        Self::AiAllowances,
+        Self::ChatgptSessions,
+    ];
 
     const fn meta_key(self) -> &'static str {
         match self {
             Self::RecentTargets => meta::RECENT_TARGETS,
             Self::AiAllowances => meta::AI_ALLOWANCES,
+            Self::ChatgptSessions => meta::CHATGPT_SESSIONS,
         }
     }
 
@@ -61,6 +68,7 @@ impl SealedLocal {
         match self {
             Self::RecentTargets => AAD_RECENT_TARGETS.as_bytes(),
             Self::AiAllowances => AAD_AI_ALLOWANCES.as_bytes(),
+            Self::ChatgptSessions => AAD_CHATGPT_SESSIONS.as_bytes(),
         }
     }
 }
@@ -326,6 +334,9 @@ pub struct Vault {
     pub(crate) store: Store,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) unlocked: Option<Unlocked>,
+    /// The vault key wrapped by the PIN key (SEC-11, `vault_pin`). Kept across [`Vault::lock`]
+    /// and never written to the database.
+    pub(crate) pin_wrapped: Option<Zeroizing<String>>,
     /// Message parts read back from the store ([`Vault::ai_parts_read`]).
     #[cfg(any(test, feature = "test-util"))]
     pub(crate) ai_parts_read: std::sync::atomic::AtomicUsize,
@@ -353,6 +364,7 @@ impl Vault {
             store,
             clock: Arc::new(SystemClock),
             unlocked: None,
+            pin_wrapped: None,
             #[cfg(any(test, feature = "test-util"))]
             ai_parts_read: std::sync::atomic::AtomicUsize::new(0),
         }
@@ -513,7 +525,7 @@ impl Vault {
 
     // ---- unlocking ----
 
-    fn load_kdf(&self) -> Result<([u8; crypto::SALT_LEN], KdfParams)> {
+    pub(crate) fn load_kdf(&self) -> Result<([u8; crypto::SALT_LEN], KdfParams)> {
         let salt = self
             .store
             .get_meta(meta::KDF_SALT)?
@@ -639,6 +651,7 @@ impl Vault {
                 .set_meta(meta::VAULT_CHECK, &seal_vault_check(&vault_key)?)?;
         }
         let items = self.load_items(&vault_key)?;
+        self.arm_pin(&vault_key);
         // Replacing `Some(old)` drops it, which wipes it.
         self.unlocked = Some(Unlocked { vault_key, items });
         Ok(())
@@ -671,7 +684,8 @@ impl Vault {
         Ok(Zeroizing::new(*unlocked.vault_key))
     }
 
-    /// Locks: wipes the vault key and every decrypted item.
+    /// Locks: wipes the vault key and every decrypted item. The vault key wrapped by the PIN
+    /// stays, so the PIN can unlock again (SEC-11).
     pub fn lock(&mut self) {
         self.unlocked = None;
     }
@@ -1161,6 +1175,26 @@ impl Vault {
         self.set_sealed_local(SealedLocal::AiAllowances, json)
     }
 
+    /// This device's ChatGPT sessions and `ext_agent_host_id` (opaque JSON owned by the shell,
+    /// AI-52). Never synced, and sealed under the vault key because it holds tokens. A value this
+    /// vault key cannot open reads as `None`.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn chatgpt_sessions(&self) -> Result<Option<Zeroizing<String>>> {
+        Ok(self
+            .sealed_local(SealedLocal::ChatgptSessions)?
+            .map(Zeroizing::new))
+    }
+
+    /// Stores this device's ChatGPT sessions, sealed under the vault key.
+    ///
+    /// # Errors
+    /// [`Error::Locked`], storage errors.
+    pub fn set_chatgpt_sessions(&mut self, json: &str) -> Result<()> {
+        self.set_sealed_local(SealedLocal::ChatgptSessions, json)
+    }
+
     /// A [`SealedLocal`] value; one this vault key cannot open reads as `None`.
     fn sealed_local(&self, which: SealedLocal) -> Result<Option<String>> {
         let unlocked = self.unlocked.as_ref().ok_or(Error::Locked)?;
@@ -1399,8 +1433,9 @@ impl Vault {
     /// epoch, older than any settings of the remote's own devices, which therefore replace it
     /// whenever they arrive (an edit made here after the join is dated as usual). Tombstones,
     /// items that cannot be decrypted, and the conflict log are dropped, and every
-    /// [`SealedLocal`] is sealed again. Returns whether the vault key changed, so the caller can
-    /// drop what still holds the old one (biometric unlock).
+    /// [`SealedLocal`] is sealed again, and the PIN unlock is turned off. Returns whether the
+    /// vault key changed, so the caller can drop what still holds the old one (biometric unlock,
+    /// the PIN's copy in the OS credential store).
     ///
     /// Once the transaction has committed the join has happened: if reloading the items then
     /// fails, the vault is left locked (never on the old key) and this still returns `Ok`.
@@ -1470,6 +1505,8 @@ impl Vault {
                 }
                 tx.clear_conflicts()?;
                 crate::vault_snapshots::reseal_snapshots(tx, &old, &vault_key)?;
+                // The PIN wraps the old key, like the biometric unlock, and is turned off with it.
+                tx.delete_meta(meta::PIN)?;
                 for (key, resealed) in &local {
                     match resealed {
                         Some(sealed) => tx.set_meta(key, sealed)?,
@@ -1499,7 +1536,10 @@ impl Vault {
         })?;
         // The join has committed: the old key and cache must not stay in use, or new edits would
         // be sealed under a key the vault no longer opens. Unlocking again with the remote's
-        // password reloads them.
+        // password reloads them. The PIN's copy of the old key goes even if that reload fails.
+        if rekey {
+            self.pin_wrapped = None;
+        }
         if let Err(e) = self.finish_unlock(vault_key) {
             tracing::warn!("could not reload the vault after joining: {e}");
             self.lock();
@@ -2249,6 +2289,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(vault.ai_allowances().unwrap(), None);
+    }
+
+    #[test]
+    fn chatgpt_sessions_are_sealed_and_need_the_vault_unlocked() {
+        let (mut vault, _clock, _code) = created();
+        assert_eq!(vault.chatgpt_sessions().unwrap(), None);
+        let json = r#"{"host_id":"urn:uuid:1","sessions":{"p":{"access_token":"tok-secret"}}}"#;
+        vault.set_chatgpt_sessions(json).unwrap();
+        let read = vault.chatgpt_sessions().unwrap().unwrap();
+        assert_eq!(read.as_str(), json);
+        let raw = vault
+            .store
+            .get_meta(meta::CHATGPT_SESSIONS)
+            .unwrap()
+            .unwrap();
+        assert!(!raw.contains("tok-secret"), "{raw}");
+        // Device-local: nothing to push.
+        assert_eq!(vault.pending_count(), 1);
+
+        vault.lock();
+        assert!(matches!(vault.chatgpt_sessions(), Err(Error::Locked)));
+        assert!(matches!(
+            vault.set_chatgpt_sessions("{}"),
+            Err(Error::Locked)
+        ));
+        vault.unlock(PW).unwrap();
+        assert_eq!(vault.chatgpt_sessions().unwrap().unwrap().as_str(), json);
     }
 
     #[test]

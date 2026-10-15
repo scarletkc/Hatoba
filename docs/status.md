@@ -17,7 +17,8 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | 🟡 | Needs verification on a real Windows machine |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2, with the macOS version |
+| SEC-10 | Touch ID | ⬜ | P2 |
+| SEC-11 | PIN unlock | 🟡 | Keeping the PIN after a restart needs verification with the credential store on each platform |
 
 ## SSH, terminal, SFTP, and forwarding (§7)
 
@@ -83,6 +84,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | WIN-07 | Mica backdrop | 🟡 | Needs verification on a real machine |
 | WIN-08 | Follow the system light or dark mode | ✅ | |
 | WIN-09 | PuTTY `.ppk` | ✅ | |
+| WIN-10 | System tray and the close button | 🟡 | Tried on Windows 11; not yet on a Linux desktop |
 
 ## macOS (§9.2)
 
@@ -108,7 +110,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | macOS app bundle and DMG | 🟡 | Built by the `macos-bundle` job in [CI](../.github/workflows/ci.yml) on pushes to `main` and manual runs (not on pull requests), for Apple Silicon, and published as an experimental build in each release by the [Release workflow](../.github/workflows/release.yml). The CI build also signs its updater archive with a throwaway key and checks it with the release script. Ad-hoc signed (`signingIdentity` `-`), not notarized. Opening a downloaded DMG through Gatekeeper not yet tried |
 | GitHub Releases | 🟡 | The [Release workflow](../.github/workflows/release.yml) publishes the installers after approval; [Release Hatoba](releasing.md) has the steps |
 | Authenticode code signing | Not planned | A certificate is impractical to obtain ([§11](hatoba-spec.md#11-non-functional-requirements)), so SmartScreen warns on the first install |
-| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. Not yet tried against a published release |
+| Update check in Settings → About | 🟡 | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. The automatic check runs after the first unlock and again a day later while Hatoba runs, and the tray menu offers the update (unit tests). Not yet tried against a published release |
 | Star prompt and **Report a Problem** (§9) | 🟡 | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form not yet tried on GitHub |
 | Signed updates through the Tauri updater | 🟡 | **Download and Install** in Settings → About. Tried end to end on Windows with a local endpoint ([Signed updates](development.md#signed-updates)), not yet on Linux or macOS. Needs the update signing key and its public key ([Set up update signing](releasing.md#set-up-update-signing)), then a stable release to try it against |
 
@@ -116,13 +118,15 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 
 | ID | Name | Status | Notes |
 |---|---|---|---|
-| AI-01…06 | Providers, models, Test Connection, model selector and thinking level, reasoning | 🟡 | Adapter tests replay recorded Chat Completions and Anthropic Messages streams from a mock server, and check the thinking level's fields for each protocol, model, and level, and the retry without them. Not yet tried against the real providers |
+| AI-01…06 | Providers, models, Test Connection, model selector and thinking level, reasoning | 🟡 | Adapter tests replay recorded Chat Completions, Anthropic Messages, and Responses streams from a mock server, and check the thinking level's fields for each protocol, model, and level, and the retry without them. Not yet tried against the real providers |
+| AI-52 | Sign in with ChatGPT: **Continue with ChatGPT**, this device's session, sign-out, the ChatGPT route's requests and errors | 🟡 | Tests run the sign-in, the code exchange and the ID token check, refresh rotation with one refresh at a time, ended and revoked sessions, usage limits and the route's other errors, namespaced tool calls, and the streaming judge, Test Connection and model list against a mock of OpenAI's endpoints; the settings were tried with the mock backend. Not yet tried with a real ChatGPT Plus or Pro account |
 | AI-07…09 | One conversation per tab, attaching conversations | ✅ | A conversation with no connected tab is offered every tool but the terminal ones |
+| AI-07 | System notifications when a conversation finishes a turn or waits for approval | 🟡 | Tried on Windows 11: in the tray, minimized, focused, and with the setting off. The banner and a click on it not yet tried (Do Not Disturb was on), nor Linux or macOS |
 | AI-10 | Terminal selection and connection diagnostics as attachments, **Ask AI** | ✅ | |
 | AI-35 | Long pastes and text files as attachments | 🟡 | Dropping files on the panel not yet tried in the desktop app |
 | AI-46 | The terminal's screen with each message: the `terminal_state` note, **Send Terminal Screen**, the Settings default | 🟡 | Unit tests cover the note, how a long screen is cut and when it is sent, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real terminal |
 | AI-42 | Side questions that leave a running turn alone | 🟡 | The panel was tried with the mock backend. Not yet tried against the real providers |
-| AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, or SearXNG |
+| AI-11…15 | Tools: `read_terminal`, `run_command`, `send_input`, `web_search`, `fetch_url` | 🟡 | `web_search` not yet tried against Brave, Tavily, SearXNG, or the providers' native search |
 | AI-38…40 | File tools: `read_file`, `edit_file`, `write_file`, with the diff on the approval card | 🟡 | The scripts run against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |
 | AI-48, 49 | Search tools: `grep`, `glob` | 🟡 | The scripts run against the local `sh`, `find` and `grep` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Under WSL they were tried with dash, bash in POSIX mode, and BusyBox 1.36's `sh`, `find` and `grep`, each with and without ripgrep 14: the results match, except that BusyBox's `grep` has no `-I`, so a binary file with a match is listed, and no `--null`. Not yet tried in the desktop app against a real server |
 | AI-41 | Revert a file tool's change | 🟡 | The delete script runs against the local `sh` on Linux and macOS and against OpenSSH in the integration tests, and the panel was tried with the mock backend. Not yet tried in the desktop app against a real server |

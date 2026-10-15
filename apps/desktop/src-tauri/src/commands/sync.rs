@@ -213,7 +213,8 @@ pub async fn sync_join(
     Ok(())
 }
 
-/// After flow C: drops the biometric unlock that wraps the old vault key, installs the backend
+/// After flow C: drops the biometric unlock and the PIN's copy in the OS credential store, which
+/// wrap the old vault key (the join turned the PIN off), installs the backend
 /// and runs the first round. A failed round shows in the sync status and is retried like any
 /// other, so the join itself has succeeded. A vault the join left locked (it could not reload)
 /// goes to the lock screen instead, and unlocking with the remote's password starts sync.
@@ -230,6 +231,9 @@ pub(crate) async fn joined_remote(
 ) {
     if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
         tracing::warn!("could not remove the biometric unlock: {}", e.detail);
+    }
+    if rekeyed && let Err(e) = state.secrets.delete(secret_keys::PIN_VAULT_KEY) {
+        tracing::warn!("could not remove the PIN kept for after a restart: {e}");
     }
     if !state.vault().is_unlocked() {
         crate::lock::lock_vault(app, LockReason::Manual).await;

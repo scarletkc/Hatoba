@@ -29,6 +29,12 @@ pub struct VaultStatus {
     pub sync_kind: SyncKind,
     pub biometric_available: bool,
     pub biometric_enabled: bool,
+    /// SEC-11: a PIN is set on this device.
+    pub pin_enabled: bool,
+    /// The PIN also works after the app restarts.
+    pub pin_persist: bool,
+    /// The PIN can unlock now (the lock screen asks for it instead of the master password).
+    pub pin_unlock: bool,
     /// #190: the vault runs without a master password; one is stored in the OS credential
     /// store, so the app can unlock on its own.
     pub keychain_unlock: bool,
@@ -950,6 +956,9 @@ pub struct LocalPrefs {
     pub ai_permission_mode: AiPermissionMode,
     /// AI-16: the user confirmed the first switch to bypass on this device.
     pub ai_bypass_confirmed: bool,
+    /// AI-07: a system notification when a conversation finishes a turn or waits for approval
+    /// while the window is not focused.
+    pub ai_notifications: bool,
     /// The AI panel is open (§9).
     pub ai_panel_open: bool,
     /// The AI panel's width in CSS pixels.
@@ -975,6 +984,8 @@ pub struct LocalPrefs {
     pub dashboard_cpu_alert: u32,
     pub dashboard_mem_alert: u32,
     pub dashboard_disk_alert: u32,
+    /// WIN-10: what the window's close button does on Windows and Linux.
+    pub close_action: CloseAction,
 }
 
 impl Default for LocalPrefs {
@@ -987,6 +998,7 @@ impl Default for LocalPrefs {
             auto_update_check: true,
             ai_permission_mode: AiPermissionMode::Manual,
             ai_bypass_confirmed: false,
+            ai_notifications: true,
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
@@ -1000,8 +1012,19 @@ impl Default for LocalPrefs {
             dashboard_cpu_alert: 90,
             dashboard_mem_alert: 90,
             dashboard_disk_alert: 90,
+            close_action: CloseAction::Ask,
         }
     }
+}
+
+/// WIN-10: the window's close button asks, hides the window to the system tray, or quits.
+/// Without a tray it always quits.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseAction {
+    Ask,
+    Tray,
+    Quit,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
@@ -1069,6 +1092,48 @@ pub struct AppInfo {
 #[tauri_specta(event_name = "window://chrome")]
 pub struct WindowChromeEvent {
     pub floating: bool,
+}
+
+/// WIN-10: the close button asks whether to hide the window to the tray or quit.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "window://close-prompt")]
+pub struct ClosePromptEvent;
+
+/// WIN-10: the tray menu's **Update to vX.Y.Z** was clicked.
+#[derive(Debug, Clone, Serialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "tray://update")]
+pub struct TrayUpdateEvent;
+
+/// WIN-10: the tray menu's labels in the app's language, and whether the vault can be locked.
+#[derive(Debug, Clone, Deserialize, Type)]
+// macOS has no tray, so nothing reads them there.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub struct TrayMenuInput {
+    pub open: String,
+    pub lock: String,
+    pub quit: String,
+    pub can_lock: bool,
+    /// **Update to vX.Y.Z** while a check has found a newer release; without it the menu has no
+    /// such item.
+    pub update: Option<String>,
+    pub can_update: bool,
+}
+
+/// A system notification (AI-07). The WebView sends one only while the window is not focused.
+#[derive(Debug, Clone, Deserialize, Type)]
+pub struct NotificationInput {
+    pub title: String,
+    pub body: String,
+    pub target: NotificationTarget,
+}
+
+/// What a notification is about, which a click on it shows: a tab, and in it a conversation
+/// (AI-07). The click brings the window back and sends this to the WebView.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "app://notification-click")]
+pub struct NotificationTarget {
+    pub tab: Option<String>,
+    pub conversation_id: Option<String>,
 }
 
 /// A second launch handed its arguments to this window (HOST-13); `launch_take` returns them.
@@ -1191,6 +1256,7 @@ pub struct ForwardStatusEvent {
 pub enum AiProtocol {
     ChatCompletions,
     Anthropic,
+    Responses,
     SystemOne,
 }
 
@@ -1238,7 +1304,40 @@ pub struct AiProviderView {
     /// Only used by `anthropic`.
     pub auth_header: AiAuthHeader,
     pub models: Vec<AiModel>,
+    /// Set for a provider that signs in with a ChatGPT account instead of a key (AI-52).
+    pub chatgpt: Option<AiChatgptView>,
     pub updated_at: i64,
+}
+
+/// AI-52: where a ChatGPT provider's sign-in stands on this device. Its tokens never reach the
+/// WebView.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiChatgptStatus {
+    /// Signed in, with plan use allowed.
+    SignedIn,
+    /// Signed in, but plan use was not allowed.
+    PlanDisabled,
+    /// The session ended (expired, revoked, or signed out in ChatGPT): sign in again.
+    Ended,
+    /// Not signed in on this device (signed out here, or signed in on another device only).
+    SignedOut,
+}
+
+/// AI-52: the ChatGPT account of a provider.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiChatgptView {
+    pub email: String,
+    pub status: AiChatgptStatus,
+}
+
+/// AI-52: a finished sign-in.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AiChatgptSignIn {
+    pub provider: AiProviderView,
+    /// The sign-in registered Hatoba for a new account, so the panel says once that requests
+    /// now use the ChatGPT plan.
+    pub first_sign_in: bool,
 }
 
 #[derive(Clone, Deserialize, Type)]
@@ -1361,6 +1460,9 @@ pub struct AiSettingsView {
     /// The thinking level new conversations start with (AI-05); `None` is Default.
     pub default_effort: Option<AiEffort>,
     pub search_provider_id: Option<String>,
+    /// While no search provider is chosen, `web_search` uses the chat provider's own search
+    /// (AI-14).
+    pub native_search: bool,
     /// The built-in `hatoba` skill is offered (AI-34).
     pub builtin_skill_enabled: bool,
     /// Sent with every request, at most 32 KB of UTF-8 (AI-36).
@@ -1385,6 +1487,7 @@ pub struct AiSettingsPatch {
     pub default_effort: Clearable<AiEffort>,
     #[specta(type = Option<String>)]
     pub search_provider_id: Clearable<String>,
+    pub native_search: Option<bool>,
     pub builtin_skill_enabled: Option<bool>,
     pub custom_instructions: Option<String>,
     pub send_terminal_screen: Option<bool>,
@@ -2488,15 +2591,17 @@ mod tests {
         let prefs = LocalPrefs::from_stored(r#"{"language":"ja"}"#);
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Manual);
         assert!(!prefs.ai_bypass_confirmed && !prefs.ai_panel_open);
+        assert!(prefs.ai_notifications);
         assert_eq!(prefs.ai_panel_width, 380);
 
         // The tool call limit an older version stored is ignored.
         let prefs = LocalPrefs::from_stored(
             r#"{"ai_permission_mode":"bypass","ai_bypass_confirmed":true,"ai_tool_call_limit":40,
-                "ai_panel_open":true,"ai_panel_width":520}"#,
+                "ai_panel_open":true,"ai_panel_width":520,"ai_notifications":false}"#,
         );
         assert_eq!(prefs.ai_permission_mode, AiPermissionMode::Bypass);
         assert!(prefs.ai_bypass_confirmed && prefs.ai_panel_open);
+        assert!(!prefs.ai_notifications);
         assert_eq!(prefs.ai_panel_width, 520);
 
         // AI-47: Auto is a mode of its own.

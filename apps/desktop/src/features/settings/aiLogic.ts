@@ -35,10 +35,11 @@ export function normalizeBaseUrl(text: string): string {
 }
 
 /**
- * AI-01: the protocol the form preselects while the user has not chosen one. `anthropic` for
- * `api.anthropic.com` and for base URLs whose path ends in `/anthropic`; `system_one` (AI-47) for
- * `api.typesafe.ai`, a path that ends in `/systemone`, and a Workers AI path with `/ai/run`;
- * `chat_completions` otherwise. Text that is not a URL yet (the user is still typing) gets the default.
+ * AI-01: the protocol the form preselects while the user has not chosen one. `responses` for
+ * `api.openai.com`; `anthropic` for `api.anthropic.com` and for base URLs whose path ends in
+ * `/anthropic`; `system_one` (AI-47) for `api.typesafe.ai`, a path that ends in `/systemone`, and a
+ * Workers AI path with `/ai/run`; `chat_completions` otherwise. Text that is not a URL yet (the user
+ * is still typing) gets the default.
  */
 export function suggestProtocol(baseUrl: string): AiProtocol {
   const value = baseUrl.trim();
@@ -51,6 +52,7 @@ export function suggestProtocol(baseUrl: string): AiProtocol {
   }
   const host = url.hostname.toLowerCase();
   const path = url.pathname.replace(/\/+$/, "").toLowerCase();
+  if (host === "api.openai.com") return "responses";
   if (host === "api.anthropic.com" || path.endsWith("/anthropic")) return "anthropic";
   if (host === "api.typesafe.ai" || path.endsWith("/systemone") || /\/ai\/run(\/|$)/.test(path)) return "system_one";
   return "chat_completions";
@@ -322,6 +324,7 @@ export function sanitizeSettings(
     default_model: defaultModel,
     default_effort: settings.default_effort,
     search_provider_id: searchId,
+    native_search: settings.native_search,
     builtin_skill_enabled: settings.builtin_skill_enabled,
     custom_instructions: settings.custom_instructions,
     send_terminal_screen: settings.send_terminal_screen,
@@ -353,6 +356,7 @@ export function changedSettings(prev: AiSettingsView, next: AiSettingsView): AiS
   if (!sameRef(prev.default_model, next.default_model)) patch.default_model = next.default_model;
   if (prev.default_effort !== next.default_effort) patch.default_effort = next.default_effort;
   if (prev.search_provider_id !== next.search_provider_id) patch.search_provider_id = next.search_provider_id;
+  if (prev.native_search !== next.native_search) patch.native_search = next.native_search;
   if (prev.builtin_skill_enabled !== next.builtin_skill_enabled) patch.builtin_skill_enabled = next.builtin_skill_enabled;
   if (prev.custom_instructions !== next.custom_instructions) patch.custom_instructions = next.custom_instructions;
   if (prev.send_terminal_screen !== next.send_terminal_screen) patch.send_terminal_screen = next.send_terminal_screen;

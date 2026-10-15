@@ -56,7 +56,7 @@ use hatoba_ai::tools::{
     self, CommandStop, FetchUrlArgs, PermissionMode, PromptContext, PromptModel, PromptTools,
     ReadSkillArgs, RunCommandArgs, StoppedCommand, ToolSet, WebSearchArgs, escape_closing_tag,
 };
-use hatoba_ai::web::{self, SearchConfig, SearchKind as WebSearchKind};
+use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
     AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModelRef as CoreModelRef,
     AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
@@ -244,6 +244,12 @@ struct Inner {
     /// The `edit_file` and `write_file` calls running now, by session: a lock that disconnects
     /// SSH sessions closes a session once they have ended.
     writes: files::Writes,
+    /// What `web_search` returned when a provider of no known search turned its native search
+    /// away (AI-14), by base URL and model: later calls get it without asking the provider again,
+    /// until the app quits. The tool stays offered, so a conversation's tools never change.
+    native_misses: Mutex<HashMap<(String, String), String>>,
+    /// Cancels the ChatGPT sign-in that waits for the browser (AI-52); one at a time.
+    chatgpt_sign_in: Mutex<Option<CancellationToken>>,
 }
 
 /// Most requests to the judge of Auto mode (AI-47) at once, across conversations, so calls that
@@ -500,6 +506,23 @@ impl AiManager {
             mcp,
             ..Inner::default()
         }))
+    }
+
+    /// A ChatGPT sign-in starts (AI-52): returns the token that cancels it, which `parent` (the
+    /// sign-in's op, which the lock cancels) cancels too. A sign-in still waiting is cancelled.
+    pub fn chatgpt_sign_in_started(&self, parent: &CancellationToken) -> CancellationToken {
+        let cancel = parent.child_token();
+        if let Some(previous) = guard(&self.0.chatgpt_sign_in).replace(cancel.clone()) {
+            previous.cancel();
+        }
+        cancel
+    }
+
+    /// Cancels the ChatGPT sign-in that waits for the browser, if any.
+    pub fn chatgpt_sign_in_cancel(&self) {
+        if let Some(cancel) = guard(&self.0.chatgpt_sign_in).take() {
+            cancel.cancel();
+        }
     }
 
     /// The shared client for provider and search requests.
@@ -1901,7 +1924,14 @@ impl AiManager {
                     Err(refusal) => Job::error(refusal),
                 }
             } else {
-                Job::new(&v, &call.name, arguments, &env.app_version())
+                let (at, _) = open_call_at(&entries, tool_call_id)?;
+                let caller = match &entries.list[at].body {
+                    EntryBody::Assistant(response) => {
+                        (response.provider_id.as_str(), response.model_id.as_str())
+                    }
+                    _ => ("", ""),
+                };
+                Job::new(&v, &call.name, arguments, &env.app_version(), caller)
             };
             let kind = if matches!(job, Job::RunCommand(_)) {
                 OpKind::Command
@@ -1944,6 +1974,11 @@ impl AiManager {
         let (status, content) = match job {
             Job::SearchTools(args) => {
                 self.search_tools(vault, conversation_id, &args, &op.cancel)
+                    .await
+            }
+            Job::NativeSearch(native, query) => {
+                let (provider, model) = *native;
+                self.native_search(&provider, &model, &query, &op.cancel)
                     .await
             }
             job => {
@@ -2076,6 +2111,39 @@ impl AiManager {
                 () = cancel.cancelled() => {}
                 () = waiting => {}
             }
+        }
+    }
+
+    /// `web_search` with the search of the model's own provider (AI-14). A provider of no known
+    /// search ([`NativeSearch::Other`]) that turns it away gets the same result for later calls
+    /// with its base URL and model, without a request, until the app quits.
+    async fn native_search(
+        &self,
+        provider: &ProviderConfig,
+        model: &ModelSpec,
+        query: &str,
+        cancel: &CancellationToken,
+    ) -> (ToolStatus, String) {
+        let tried = NativeSearch::of(provider) == Some(NativeSearch::Other);
+        let key = (provider.base_url.trim().to_owned(), model.id.clone());
+        if tried && let Some(miss) = guard(&self.0.native_misses).get(&key) {
+            return (ToolStatus::Error, miss.clone());
+        }
+        match web::native_search(&self.http(), provider, model, query, cancel).await {
+            Ok(found) => (
+                ToolStatus::Ok,
+                tools::truncate_result(&web::format_native_results(&found)),
+            ),
+            Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
+            Err(e) if tried && web::turned_away(&e) => {
+                let miss = format!(
+                    "The search failed: {e}. The model's provider does not seem to offer web \
+                     search; a search provider chosen in Settings → AI works with any model."
+                );
+                guard(&self.0.native_misses).insert(key, miss.clone());
+                (ToolStatus::Error, miss)
+            }
+            Err(e) => (ToolStatus::Error, format!("The search failed: {e}")),
         }
     }
 
@@ -3919,7 +3987,7 @@ fn result_content(status: ToolStatus, content: String, edited: Option<&str>) -> 
 }
 
 /// The system prompt and built-in tools of a request (§13.1): the terminal tools only with a
-/// connected tab (AI-09), `web_search` when a search provider is chosen, `fetch_url` always, and
+/// connected tab (AI-09), `web_search` when it can run (AI-14), `fetch_url` always, and
 /// `read_skill` when an enabled skill exists, the built-in one included (AI-34). `fallback` is
 /// `None` but for the request without tools that a Compact request (AI-21) or a side question
 /// (AI-42) falls back to, whose `PromptTools` says what it asks for. `server_id` is the tab's SSH
@@ -3985,12 +4053,13 @@ fn prompt(
 }
 
 /// The built-in tools of a request (§13.4): the terminal tools only with a connected tab (AI-09),
-/// `web_search` when a search provider is chosen, `fetch_url` always, and `read_skill` when an
-/// enabled skill exists, the built-in one included (AI-34).
+/// `web_search` when a search provider is chosen or the model's provider has a search of its own
+/// (AI-14), `fetch_url` always, and `read_skill` when an enabled skill exists, the built-in one
+/// included (AI-34).
 fn builtin_tools(v: &Vault, context: &AiTurnContext) -> Vec<ToolDef> {
     tools::builtin_tools(&ToolSet {
         terminal: context.tab,
-        web_search: chosen_search(v).is_some(),
+        web_search: web_search_for(v, &context.provider_id, &context.model_id).is_some(),
         read_skill: !enabled_skills(v).is_empty() || v.settings().ai.builtin_skill_enabled,
     })
 }
@@ -4035,7 +4104,7 @@ fn resolve_model(
             format!("The model \"{model_id}\" is not in its provider's model list. Choose another model.")
         })?;
     Ok((
-        provider_config(provider),
+        provider_config(provider_id, provider),
         ModelSpec {
             id: model.id.clone(),
             context_window: model.context_window,
@@ -4049,13 +4118,27 @@ fn resolve_model(
     ))
 }
 
-/// What a request needs to reach a saved provider.
-pub fn provider_config(p: &AiProvider) -> ProviderConfig {
+/// What a request needs to reach saved provider `id`. A ChatGPT provider (AI-52) is a Responses
+/// provider at OpenAI's API, whose requests carry an access token of this device's session.
+pub fn provider_config(id: &str, p: &AiProvider) -> ProviderConfig {
+    if p.chatgpt.is_some() {
+        return ProviderConfig {
+            protocol: Protocol::Responses,
+            base_url: chatgpt::BASE_URL.to_owned(),
+            api_key: Zeroizing::default(),
+            auth_header: AuthHeader::Authorization,
+            chatgpt: Some(hatoba_ai::chatgpt::ChatgptAuth {
+                sessions: chatgpt::sessions().clone(),
+                id: id.to_owned(),
+            }),
+        };
+    }
     ProviderConfig {
         protocol: protocol(p.protocol),
         base_url: p.base_url.clone(),
         api_key: p.api_key.clone(),
         auth_header: auth_header(p.auth_header),
+        chatgpt: None,
     }
 }
 
@@ -4063,6 +4146,7 @@ pub fn protocol(p: CoreProtocol) -> Protocol {
     match p {
         CoreProtocol::ChatCompletions => Protocol::ChatCompletions,
         CoreProtocol::Anthropic => Protocol::Anthropic,
+        CoreProtocol::Responses => Protocol::Responses,
         CoreProtocol::SystemOne => Protocol::SystemOne,
     }
 }
@@ -4123,12 +4207,45 @@ pub fn listed_effort(e: Effort) -> AiEffort {
     }
 }
 
-/// The search provider `Settings.ai` chose, when it exists.
-fn chosen_search(v: &Vault) -> Option<SearchConfig> {
-    let id = v.settings().ai.search_provider_id?;
-    v.get(&id)
-        .and_then(Item::as_search_provider)
-        .map(search_config)
+/// What runs `web_search` (AI-14).
+enum WebSearch {
+    /// The search provider `Settings.ai` chose.
+    Service(SearchConfig),
+    /// The search of the model's own provider.
+    Native(ProviderConfig, ModelSpec),
+}
+
+/// What runs `web_search` for model `model_id` of `provider_id` (AI-14): the search provider
+/// `Settings.ai` chose, when it exists, or else, unless native search is off, the model's provider
+/// with its own search. Every provider that chats has one; one Hatoba does not know is tried as
+/// OpenAI is ([`NativeSearch::Other`]), so the tools a conversation is offered do not depend on
+/// how a search went.
+fn web_search_for(v: &Vault, provider_id: &str, model_id: &str) -> Option<WebSearch> {
+    let settings = v.settings().ai;
+    let chosen = settings
+        .search_provider_id
+        .as_deref()
+        .and_then(|id| v.get(id))
+        .and_then(Item::as_search_provider);
+    if let Some(chosen) = chosen {
+        return Some(WebSearch::Service(search_config(chosen)));
+    }
+    if !settings.native_search {
+        return None;
+    }
+    let (provider, model) = resolve_model(v, provider_id, model_id).ok()?;
+    NativeSearch::of(&provider)?;
+    Some(WebSearch::Native(provider, model))
+}
+
+/// Why a `web_search` call cannot run (AI-14).
+fn no_web_search(v: &Vault) -> &'static str {
+    if v.settings().ai.native_search {
+        "No search provider is chosen in Settings → AI, and the model that made the call is no \
+         longer in its provider's model list, so web_search cannot run."
+    } else {
+        "No search provider is chosen in Settings → AI, so web_search cannot run."
+    }
 }
 
 pub fn search_config(p: &SearchProvider) -> SearchConfig {
@@ -4158,8 +4275,13 @@ enum Job {
     File(FileJob, Option<files::Base>),
     /// `grep` or `glob`.
     Search(SearchJob),
+    /// `web_search` through the search provider `Settings.ai` chose.
     WebSearch(SearchConfig, String),
-    FetchUrl(String, u64),
+    /// `web_search` with the search of the model's own provider (AI-14), which
+    /// [`AiManager::native_search`] runs, since it keeps the providers that turned it away.
+    NativeSearch(Box<(ProviderConfig, ModelSpec)>, String),
+    /// `fetch_url`: the URL, the offset, and whether the whole page is asked for.
+    FetchUrl(String, u64, bool),
     /// An MCP tool the request offered, with its arguments (AI-30), called directly or through
     /// `call_mcp_tool` (AI-45).
     Mcp(Box<OfferedTool>, Map<String, Value>),
@@ -4191,8 +4313,9 @@ impl Job {
         }
     }
 
-    /// `version`: the app's, for the built-in skill (AI-34).
-    fn new(v: &Vault, name: &str, arguments: &str, version: &str) -> Self {
+    /// `version`: the app's, for the built-in skill (AI-34). `caller`: the provider and model of
+    /// the response that made the call, whose own search `web_search` may use (AI-14).
+    fn new(v: &Vault, name: &str, arguments: &str, version: &str, caller: (&str, &str)) -> Self {
         if let Some(parsed) = FileJob::parse(name, arguments) {
             return match parsed {
                 Ok(job) => Self::File(job, None),
@@ -4211,17 +4334,22 @@ impl Job {
                 Ok(args) => Self::RunCommand(args),
                 Err(message) => Self::error(message),
             },
-            tools::WEB_SEARCH => match chosen_search(v) {
-                None => Self::error(
-                    "No search provider is chosen in Settings → AI, so web_search cannot run.",
-                ),
-                Some(config) => match parse::<WebSearchArgs>(arguments) {
-                    Ok(args) => Self::WebSearch(config, args.query),
-                    Err(message) => Self::error(message),
+            tools::WEB_SEARCH => match web_search_for(v, caller.0, caller.1) {
+                None => Self::error(no_web_search(v)),
+                Some(search) => match (parse::<WebSearchArgs>(arguments), search) {
+                    (Ok(args), WebSearch::Service(config)) => Self::WebSearch(config, args.query),
+                    (Ok(args), WebSearch::Native(provider, model)) => {
+                        Self::NativeSearch(Box::new((provider, model)), args.query)
+                    }
+                    (Err(message), _) => Self::error(message),
                 },
             },
             tools::FETCH_URL => match parse::<FetchUrlArgs>(arguments) {
-                Ok(args) => Self::FetchUrl(args.url, args.offset.unwrap_or(0)),
+                Ok(args) => Self::FetchUrl(
+                    args.url,
+                    args.offset.unwrap_or(0),
+                    args.full_page.unwrap_or(false),
+                ),
                 Err(message) => Self::error(message),
             },
             tools::READ_SKILL => match parse::<ReadSkillArgs>(arguments) {
@@ -4256,11 +4384,13 @@ impl Job {
         match self {
             Self::Ready(status, content) => (status, content),
             Self::Mcp(tool, arguments) => mcp.call(vault, &tool, arguments, cancel).await,
-            // `tool_run` runs it with the conversation's MCP tools.
+            // `tool_run` runs them: with the conversation's MCP tools, and with what the manager
+            // keeps of native searches.
             Self::SearchTools(_) => (
                 ToolStatus::Error,
                 "search_tools cannot run here.".to_owned(),
             ),
+            Self::NativeSearch(..) => (ToolStatus::Error, "web_search cannot run here.".to_owned()),
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
             Self::File(job, base) => {
                 files::run(live_session(env, session_id), job, base, seen, cancel).await
@@ -4277,14 +4407,16 @@ impl Job {
                 }
             }
             // Pages through long content instead of being shortened (§13.4).
-            Self::FetchUrl(url, offset) => match web::fetch_url(&url, offset, cancel).await {
-                Ok(page) => (ToolStatus::Ok, web::format_fetch_result(&page)),
-                Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
-                Err(e) => (
-                    ToolStatus::Error,
-                    format!("The page could not be fetched: {e}"),
-                ),
-            },
+            Self::FetchUrl(url, offset, full_page) => {
+                match web::fetch_url(&url, offset, full_page, cancel).await {
+                    Ok(page) => (ToolStatus::Ok, web::format_fetch_result(&page)),
+                    Err(AiError::Cancelled) => (ToolStatus::Cancelled, String::new()),
+                    Err(e) => (
+                        ToolStatus::Error,
+                        format!("The page could not be fetched: {e}"),
+                    ),
+                }
+            }
         }
     }
 }
@@ -6013,10 +6145,12 @@ pub fn error_kind(e: &AiError) -> &'static str {
         AiError::Protocol(_) => "protocol",
         AiError::Blocked(_) => "blocked",
         AiError::UnsupportedContentType(_) => "content_type",
+        AiError::SignIn(_) => "sign_in",
         AiError::Cancelled => "cancelled",
     }
 }
 
+pub mod chatgpt;
 mod files;
 pub mod mentions;
 mod search;

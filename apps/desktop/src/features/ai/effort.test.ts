@@ -30,6 +30,7 @@ const settings = (default_effort: AiSettingsView["default_effort"]): AiSettingsV
   default_model: null,
   default_effort,
   search_provider_id: null,
+  native_search: true,
   builtin_skill_enabled: true,
   custom_instructions: "",
   send_terminal_screen: true,

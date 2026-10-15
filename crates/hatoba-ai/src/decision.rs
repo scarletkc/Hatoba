@@ -17,9 +17,10 @@
 //!   `/` segment (`@cf/cloudflare/clef-flash` sends `clef-flash`), and the response wraps the
 //!   answers in `result`, which is read wherever it appears. Every question must get a Noul
 //!   answer between 0 and 1, or the response is malformed ([`AiError::Protocol`]).
-//! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`]) emulates it with
-//!   one non-streaming request that forces a single tool, `answer`. Its input schema has a short
-//!   `notes` string first, written before the answers, then a number per question. The system
+//! - **A chat model** ([`Protocol::ChatCompletions`], [`Protocol::Anthropic`],
+//!   [`Protocol::Responses`]) emulates it with one non-streaming request that forces a single
+//!   tool, `answer` (a Responses request is stateless, `store: false`). Its input schema has a
+//!   short `notes` string first, written before the answers, then a number per question. The system
 //!   prompt says how to answer and that text in the state that is not the user's own words is
 //!   data, never instructions; the user message holds the state as JSON in `<state>` tags and the
 //!   questions after it. Given a key of the state to cache before, an Anthropic request splits
@@ -31,12 +32,17 @@
 //!   forced tool for a model that thinks, is retried once with `tool_choice` auto and a request
 //!   to call the tool. The tool call's input is read, or the first JSON object of the text when
 //!   the model answered in text. A missing value or one outside 0 to 1 is malformed.
+//! - **A ChatGPT provider** (AI-52) is a Responses provider whose route only streams: its request
+//!   has `stream: true`, and the stream is read to its end into the same response. The route
+//!   takes function tools only in a namespace, which `tool_choice` cannot name, so `answer` goes
+//!   in [`chatgpt::NAMESPACE`](crate::chatgpt::NAMESPACE) and is forced with
+//!   `tool_choice: "required"`, the only tool there is.
 //!
 //! Nothing here logs a key, the state, a question or an answer (SEC-04): only token counts.
 
 use std::collections::BTreeMap;
 
-use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
+use reqwest::header::{CONTENT_TYPE, HeaderValue};
 use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -44,9 +50,9 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::error::AiError;
-use crate::net;
 use crate::provider::{ModelSpec, Protocol, ProviderConfig, validate_base_url};
 use crate::tools::escape_closing_tag;
+use crate::{chat, chatgpt, net};
 
 /// The id a question may not have: the chat-model backend's `notes` property.
 pub const RESERVED_ID: &str = "notes";
@@ -163,7 +169,6 @@ pub async fn evaluate<S: Serialize + ?Sized>(
 ) -> Result<Evaluation, AiError> {
     check_questions(questions)?;
     let base = validate_base_url(&provider.base_url)?;
-    let headers = provider.headers()?;
     let evaluation = match provider.protocol {
         Protocol::SystemOne => {
             let (url, model) = system_one_target(&base, &model.id);
@@ -172,16 +177,16 @@ pub async fn evaluate<S: Serialize + ?Sized>(
                 state,
                 questions,
             };
-            let body = post(http, url, &headers, encode(&body)?, cancel).await?;
+            let body = post(http, provider, url, encode(&body)?, cancel).await?;
             read_system_one(&body, questions)?
         }
-        Protocol::ChatCompletions | Protocol::Anthropic => {
+        Protocol::ChatCompletions | Protocol::Anthropic | Protocol::Responses => {
             let state = serde_json::to_string_pretty(state).map_err(|_| unencodable())?;
             let chat = Emulation {
                 http,
                 protocol: provider.protocol,
                 base: &base,
-                headers: &headers,
+                provider,
                 model,
                 state: &state,
                 cache_before,
@@ -343,19 +348,21 @@ fn checked_answer(raw: &Value) -> Option<Answer> {
 /// Posts a JSON body and reads the JSON response, or the provider's error.
 async fn post(
     http: &reqwest::Client,
+    provider: &ProviderConfig,
     url: Url,
-    headers: &HeaderMap,
     body: String,
     cancel: &CancellationToken,
 ) -> Result<Value, AiError> {
-    let request = http
-        .post(url)
-        .headers(headers.clone())
-        .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-        .body(body);
-    let response = net::send(request, cancel).await?;
+    let response = provider
+        .send(cancel, |headers| {
+            http.post(url.clone())
+                .headers(headers)
+                .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
+                .body(body.clone())
+        })
+        .await?;
     if !response.status().is_success() {
-        return Err(net::http_error(response, cancel).await);
+        return Err(provider.error(response, cancel).await);
     }
     net::read_json(response, cancel).await
 }
@@ -407,6 +414,10 @@ impl Serialize for Ordered {
 }
 
 fn object<const N: usize>(pairs: [(&str, Ordered); N]) -> Ordered {
+    object_of(pairs.into())
+}
+
+fn object_of(pairs: Vec<(&str, Ordered)>) -> Ordered {
     Ordered::Object(pairs.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
 }
 
@@ -519,7 +530,7 @@ struct Emulation<'a> {
     http: &'a reqwest::Client,
     protocol: Protocol,
     base: &'a Url,
-    headers: &'a HeaderMap,
+    provider: &'a ProviderConfig,
     model: &'a ModelSpec,
     /// The state as pretty JSON.
     state: &'a str,
@@ -547,7 +558,19 @@ impl Emulation<'_> {
     /// Sends the request, the tool forced or not, and returns the response body.
     async fn send(&self, forced: bool) -> Result<Value, AiError> {
         let (url, body) = self.request(forced);
-        post(self.http, url, self.headers, encode(&body)?, self.cancel).await
+        if self.protocol == Protocol::Responses {
+            let stream = self.provider.is_chatgpt();
+            return chat::responses_body(
+                self.http,
+                self.provider,
+                &url,
+                encode(&body)?,
+                stream,
+                self.cancel,
+            )
+            .await;
+        }
+        post(self.http, self.provider, url, encode(&body)?, self.cancel).await
     }
 
     /// The request's URL and body (module documentation).
@@ -599,6 +622,45 @@ impl Emulation<'_> {
                 ]);
                 (net::endpoint(self.base, "/v1/messages"), body)
             }
+            Protocol::Responses => {
+                let chatgpt = self.provider.is_chatgpt();
+                let tool_choice = match (forced, chatgpt) {
+                    (true, false) => json!({"type": "function", "name": TOOL_NAME}),
+                    // `answer` is the only tool.
+                    (true, true) => json!("required"),
+                    (false, _) => json!("auto"),
+                };
+                let mut tool = object([
+                    ("type", plain(json!("function"))),
+                    ("name", plain(json!(TOOL_NAME))),
+                    ("description", plain(json!(description))),
+                    ("parameters", schema),
+                    ("strict", plain(json!(false))),
+                ]);
+                if chatgpt {
+                    tool = object([
+                        ("type", plain(json!("namespace"))),
+                        ("name", plain(json!(chatgpt::NAMESPACE))),
+                        ("description", plain(json!(chatgpt::NAMESPACE_DESCRIPTION))),
+                        ("tools", Ordered::Array(vec![tool])),
+                    ]);
+                }
+                let input = plain(json!([
+                    {"type": "message", "role": "user", "content": head + &rest}
+                ]));
+                let mut fields = vec![
+                    ("model", plain(json!(self.model.id))),
+                    ("instructions", plain(json!(SYSTEM_PROMPT))),
+                    ("input", input),
+                    ("tools", Ordered::Array(vec![tool])),
+                    ("tool_choice", plain(tool_choice)),
+                    ("store", plain(json!(false))),
+                ];
+                if chatgpt {
+                    fields.push(("stream", plain(json!(true))));
+                }
+                (net::endpoint(self.base, "/responses"), object_of(fields))
+            }
             Protocol::ChatCompletions | Protocol::SystemOne => {
                 let tool_choice = if forced {
                     json!({"type": "function", "function": {"name": TOOL_NAME}})
@@ -644,6 +706,10 @@ impl Emulation<'_> {
                     + count("cache_read_input_tokens").unwrap_or(0),
                 output_tokens: count("output_tokens")?,
             }),
+            Protocol::Responses => Some(DecisionUsage {
+                input_tokens: count("input_tokens")?,
+                output_tokens: count("output_tokens")?,
+            }),
             _ => Some(DecisionUsage {
                 input_tokens: count("prompt_tokens")?,
                 output_tokens: count("completion_tokens")?,
@@ -666,6 +732,27 @@ impl Emulation<'_> {
                     .iter()
                     .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
                     .filter_map(|b| b.get("text").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                (calls, text)
+            }
+            Protocol::Responses => {
+                let items = body.get("output").and_then(Value::as_array)?;
+                let of_type = |kind: &'static str| {
+                    items
+                        .iter()
+                        .filter(move |i| i.get("type").and_then(Value::as_str) == Some(kind))
+                };
+                let calls: Vec<(Option<&str>, &Value)> = of_type("function_call")
+                    .filter_map(|c| {
+                        Some((c.get("name").and_then(Value::as_str), c.get("arguments")?))
+                    })
+                    .collect();
+                let text: String = of_type("message")
+                    .filter_map(|m| m.get("content").and_then(Value::as_array))
+                    .flatten()
+                    .filter(|p| p.get("type").and_then(Value::as_str) == Some("output_text"))
+                    .filter_map(|p| p.get("text").and_then(Value::as_str))
                     .collect::<Vec<_>>()
                     .join("\n");
                 (calls, text)

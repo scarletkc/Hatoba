@@ -42,7 +42,9 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 - Open SSH sessions stay connected behind the lock screen ("N sessions stay connected in the background"), unless **Disconnect all sessions when locked** is on. The AI assistant stops working and MCP servers stop when the vault locks.
 - The lock screen asks for the master password (**Unlock**). The eye button in the field shows what was typed, until the window loses focus. After wrong attempts the field is disabled for a growing delay, with a countdown such as "Too many attempts. Try again in 30 s."
 - **Forgot it? Use your recovery code** opens **Reset with Recovery Code**: enter the recovery code (case and dashes do not matter) and a new master password, then **Reset and Unlock**. It works offline and loses no data.
-- **Unlock with Windows Hello** is a switch in Settings → Security. It appears only on Windows PCs where Windows Hello is set up, and asks for the master password once to turn on. The lock screen then shows a Windows Hello button. Touch ID is not available yet.
+- **Unlock with Windows Hello** is a switch in Settings → Security. It appears only on Windows PCs where Windows Hello is set up, and asks for the master password once to turn on. The lock screen then shows a Windows Hello button, and asks for Windows Hello on its own once per lock when the user comes back: at once when Hatoba starts in front, when its window gets the focus, or after an idle or sleep lock at the first mouse movement in the window. After a manual lock it waits until the window has been left and is focused again. Cancelling leaves the button and the password field. Touch ID is not available yet.
+- **Unlock with PIN** is a switch in Settings → Security, on every platform. Turning it on asks for the master password and a PIN of at least 4 characters of any kind (**Set Up PIN**). After the first unlock of each launch, the lock screen asks for the PIN (**Enter your PIN to unlock the vault**), with **Use master password** to switch, and **Use PIN** to switch back. A wrong PIN says how many tries are left; after five wrong PINs in a row the lock screen asks for the master password, and the PIN works again after an unlock with it. To change the PIN, turn the switch off and on again.
+- **Require the master password after a restart** appears under the PIN switch and is on by default. Turned off, the PIN also unlocks after Hatoba or the computer restarts: the vault key, wrapped by the PIN, is kept in the system credential store, so anyone who can read that store as the user can try PINs without the limit of five. The PIN and this switch are kept on each device and do not sync; joining a cloud vault that is a different vault turns the PIN off.
 
 | en | zh-CN | ja |
 |---|---|---|
@@ -61,6 +63,14 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 | New Master Password | 新主密码 | 新しいマスターパスワード |
 | Reset and Unlock | 重置并解锁 | リセットしてロック解除 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 | Windows Hello でロック解除 |
+| Unlock with PIN | 使用 PIN 解锁 | PIN でロック解除 |
+| Set Up PIN | 设置 PIN | PIN を設定 |
+| Confirm PIN | 确认 PIN | PIN（確認） |
+| Turn On | 开启 | オンにする |
+| Enter your PIN to unlock the vault | 输入 PIN 以解锁保险库 | PIN を入力して保管庫のロックを解除 |
+| Use master password | 使用主密码 | マスターパスワードを使う |
+| Use PIN | 使用 PIN | PIN を使う |
+| Require the master password after a restart | 重启后需要输入主密码 | 再起動後はマスターパスワードを要求 |
 | Security | 安全 | セキュリティ |
 
 ## Master password, backup and clipboard

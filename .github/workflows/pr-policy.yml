@@ -1,0 +1,47 @@
+name: PR policy
+
+# Closes a pull request from outside the project that skips what CONTRIBUTING.md asks of it, with a
+# comment that lists what is missing, and reopens it once the author fixes that. Drafts wait until
+# they are ready for review, and a pull request a maintainer reopened is left alone.
+# pull_request_target gives the token write access to pull requests from forks, so the job runs the
+# script from main and never checks out or runs the pull request's code.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+  # The author may post the screenshots in a comment.
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+# No concurrency group: GitHub cancels a queued run when a newer one joins its group, and the
+# cancelled run shows as a failed check. Runs may overlap instead, which the script allows for.
+
+jobs:
+  pr-policy:
+    name: PR policy
+    # Skipped, rather than run, for pull requests by maintainers and bots, which the check leaves
+    # alone, and for comments by anyone but the author, which cannot change the result.
+    if: >-
+      (github.event_name == 'pull_request_target'
+        && !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+        && github.event.pull_request.user.type != 'Bot')
+      || (github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.login == github.event.issue.user.login
+        && !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association)
+        && github.event.issue.user.type != 'Bot')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The base branch: on pull_request_target and issue_comment, the checkout is main.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node scripts/ci/pr-policy.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

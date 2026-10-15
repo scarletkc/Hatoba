@@ -36,6 +36,10 @@ pub enum AiError {
     /// `fetch_url` refused the content type: only text, HTML, JSON and XML are fetched (AI-15).
     #[error("unsupported content type: {0}")]
     UnsupportedContentType(String),
+    /// A ChatGPT provider (AI-52) cannot send requests until the user signs in on this device
+    /// (again), or a sign-in failed. The message says what to do.
+    #[error("{0}")]
+    SignIn(String),
     /// The caller's cancellation token fired.
     #[error("cancelled")]
     Cancelled,

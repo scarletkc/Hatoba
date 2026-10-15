@@ -163,6 +163,8 @@ pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResul
         vault.set_local_prefs(&json)?;
     }
     lock::refresh_policy(&state);
+    #[cfg(not(target_os = "macos"))]
+    crate::tray::refresh_close_action(&state);
     Ok(())
 }
 

@@ -9,3 +9,4 @@
 *.woff2 binary
 *.ppk -text
 crates/hatoba-ssh/tests/fixtures/** -text
+*.pk8 binary

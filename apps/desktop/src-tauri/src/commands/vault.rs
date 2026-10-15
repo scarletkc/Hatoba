@@ -19,6 +19,9 @@ use crate::{lock, sync};
 /// SEC-09: the one requirement a new master password has; a weak one only gets a warning.
 const MIN_PASSWORD_CHARS: usize = 12;
 
+/// SEC-11: a PIN has at least this many characters, of any kind.
+const MIN_PIN_CHARS: usize = 4;
+
 /// Refuses a new master password shorter than [`MIN_PASSWORD_CHARS`] as invalid `field`.
 fn check_new_password(field: &str, password: &str) -> AppResult<()> {
     if password.chars().count() < MIN_PASSWORD_CHARS {
@@ -47,7 +50,43 @@ fn stored_device_password(state: &AppState) -> AppResult<Option<Zeroizing<String
     Ok(state.secrets.get(secret_keys::DEVICE_PASSWORD)?)
 }
 
-/// Common work after any successful unlock (password, recovery code, biometrics, restore).
+/// Refuses a PIN shorter than [`MIN_PIN_CHARS`] as invalid `pin`.
+fn check_new_pin(pin: &str) -> AppResult<()> {
+    if pin.chars().count() < MIN_PIN_CHARS {
+        return Err(AppError::invalid(
+            "pin",
+            format!("the PIN must have at least {MIN_PIN_CHARS} characters"),
+        ));
+    }
+    Ok(())
+}
+
+/// SEC-11: a PIN that works after a restart keeps the vault key it wraps in the OS credential
+/// store. Written again after every unlock, since the last wrong PIN removes it there.
+fn keep_pin_for_restart(state: &AppState) {
+    let wrapped = {
+        let vault = state.vault();
+        if !vault.pin_status().persist {
+            return;
+        }
+        vault.pin_wrapped_key()
+    };
+    if let Some(wrapped) = wrapped
+        && let Err(e) = state.secrets.set(secret_keys::PIN_VAULT_KEY, &wrapped)
+    {
+        tracing::warn!("could not keep the PIN for after a restart: {e}");
+    }
+}
+
+/// Removes the PIN's copy in the OS credential store. A copy left behind is harmless: it is read
+/// only while the PIN is kept for after a restart, and setting that writes it again.
+fn forget_stored_pin(state: &AppState) {
+    if let Err(e) = state.secrets.delete(secret_keys::PIN_VAULT_KEY) {
+        tracing::warn!("could not remove the PIN kept for after a restart: {e}");
+    }
+}
+
+/// Common work after any successful unlock (password, recovery code, biometrics, PIN, restore).
 fn after_unlock(app: &AppHandle, state: &AppState) {
     // Only when sync is off; otherwise `sync::run_round` does it after pulling.
     if let Err(e) = state.with_unlocked(adopt_legacy_prefs_after_unlock) {
@@ -63,6 +102,7 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
         Ok(parts) => tracing::info!(parts, "deleted message parts of deleted conversations"),
         Err(e) => tracing::warn!("could not delete orphaned message parts: {}", e.detail),
     }
+    keep_pin_for_restart(state);
     lock::refresh_policy(state);
     state.touch_activity();
     sync::on_unlock(app);
@@ -73,6 +113,18 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
 pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
     let vault = state.vault();
     let info = vault.status();
+    let pin = vault.pin_status();
+    // After a restart, a PIN kept for that unlocks with its copy in the OS credential store. A PIN
+    // out of attempts does not, even when that copy is still there.
+    let pin_unlock = !pin.exhausted
+        && (pin.armed
+            || (pin.persist
+                && state
+                    .secrets
+                    .get(secret_keys::PIN_VAULT_KEY)
+                    .ok()
+                    .flatten()
+                    .is_some()));
     let sync_kind = match vault.sync_config().ok().flatten() {
         None => SyncKind::None,
         Some(SyncConfig::Worker { .. }) => SyncKind::Worker,
@@ -91,6 +143,9 @@ pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
         sync_kind,
         biometric_available: biometric::available(),
         biometric_enabled: info.initialized && biometric::enrolled(state.secrets.as_ref()),
+        pin_enabled: pin.enabled,
+        pin_persist: pin.persist,
+        pin_unlock: info.initialized && pin.enabled && pin_unlock,
         // #190: a stored device password means the app can unlock on its own. A credential
         // store that cannot be read counts as none, so the unlock screen asks for the password.
         keychain_unlock: info.initialized
@@ -237,6 +292,41 @@ pub async fn vault_unlock_biometric(app: AppHandle, state: State<'_, AppState>) 
     Ok(())
 }
 
+/// SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
+/// credential store, which the last wrong PIN removes.
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_unlock_pin(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    pin: String,
+) -> AppResult<()> {
+    let pin = Zeroizing::new(pin);
+    let stored = if state.vault().pin_status().persist {
+        state.secrets.get(secret_keys::PIN_VAULT_KEY)?
+    } else {
+        None
+    };
+    let vault = state.vault.clone();
+    let result = blocking(move || {
+        Ok(vault
+            .lock()
+            .map_err(|_| AppError::internal("vault poisoned"))?
+            .unlock_with_pin(&pin, stored.as_deref().map(String::as_str))?)
+    })
+    .await;
+    // The copy goes with the last wrong PIN, or later if removing it failed then.
+    if let Err(e) = &result
+        && (e.code == ErrorCode::PinUnavailable
+            || (e.code == ErrorCode::WrongPin && e.attempts_left == Some(0)))
+    {
+        forget_stored_pin(&state);
+    }
+    result?;
+    after_unlock(&app, &state);
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn vault_lock(app: AppHandle) {
@@ -308,7 +398,7 @@ async fn change_password(
             .await?;
         }
     }
-    // Biometric unlock wraps the vault key, which did not change, so it stays valid.
+    // Biometric and PIN unlock wrap the vault key, which did not change, so they stay valid.
     sync::emit_status(app);
     Ok(())
 }
@@ -445,6 +535,68 @@ pub fn biometric_disable(state: State<'_, AppState>) -> AppResult<()> {
     biometric::remove(state.secrets.as_ref())
 }
 
+/// SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like
+/// Windows Hello. A new PIN needs the master password after a restart until [`pin_set_persist`]
+/// says otherwise, so setting it needs nothing from the OS credential store.
+#[tauri::command]
+#[specta::specta]
+pub async fn pin_enable(
+    state: State<'_, AppState>,
+    password: String,
+    pin: String,
+) -> AppResult<()> {
+    check_new_pin(&pin)?;
+    if !vault_verify_password(state.clone(), password).await? {
+        return Err(AppError::new(
+            ErrorCode::WrongPassword,
+            "wrong master password",
+        ));
+    }
+    let pin = Zeroizing::new(pin);
+    let vault = state.vault.clone();
+    blocking(move || {
+        vault
+            .lock()
+            .map_err(|_| AppError::internal("vault poisoned"))?
+            .set_pin(&pin, false)?;
+        Ok(())
+    })
+    .await?;
+    // A copy kept for an earlier PIN no longer opens.
+    forget_stored_pin(&state);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn pin_disable(state: State<'_, AppState>) -> AppResult<()> {
+    state.vault().clear_pin()?;
+    forget_stored_pin(&state);
+    Ok(())
+}
+
+/// SEC-11: whether the PIN also works after a restart. On, the vault key it wraps goes to the OS
+/// credential store; off, it is removed there.
+#[tauri::command]
+#[specta::specta]
+pub fn pin_set_persist(state: State<'_, AppState>, persist: bool) -> AppResult<()> {
+    let wrapped = state.vault().set_pin_persist(persist)?;
+    match wrapped {
+        Some(wrapped) => {
+            if let Err(e) = state.secrets.set(secret_keys::PIN_VAULT_KEY, &wrapped) {
+                if let Err(undo) = state.vault().set_pin_persist(false) {
+                    tracing::warn!(
+                        "could not record that the PIN needs the master password after a restart: {undo}"
+                    );
+                }
+                return Err(e.into());
+            }
+        }
+        None => forget_stored_pin(&state),
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +620,17 @@ mod tests {
         let b = generate_device_password().unwrap();
         assert!(a.chars().count() >= MIN_PASSWORD_CHARS);
         assert_ne!(*a, *b);
+    }
+
+    #[test]
+    fn a_pin_needs_four_characters_of_any_kind() {
+        let err = check_new_pin("123").unwrap_err();
+        assert_eq!(
+            (err.code, err.field.as_deref()),
+            (ErrorCode::InvalidInput, Some("pin"))
+        );
+        assert!(check_new_pin("1234").is_ok());
+        assert!(check_new_pin("a$c9").is_ok());
+        assert!(check_new_pin("日本語ん").is_ok());
     }
 }

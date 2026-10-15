@@ -101,6 +101,20 @@ describe("SettingsWindow", () => {
     expect(after.scrollback).toBe(5_000);
   });
 
+  it("switches to a tab asked for while it is open, again after the user moved on", async () => {
+    open();
+    const selected = () => document.querySelector('[aria-selected="true"]')?.textContent;
+    await until(() => selected() === t("settings.tab.terminal"));
+
+    act(() => useApp.getState().openSettings(true, "about"));
+    await until(() => selected() === t("settings.tab.about"));
+    const general = [...document.querySelectorAll<HTMLElement>("[role=tab]")].find((el) => el.textContent === t("settings.tab.general"));
+    act(() => general!.click());
+    await until(() => selected() === t("settings.tab.general"));
+    act(() => useApp.getState().openSettings(true, "about"));
+    await until(() => selected() === t("settings.tab.about"));
+  });
+
   it("saves nothing when the user types and changes the font back", async () => {
     open();
     const field = await until(fontField);

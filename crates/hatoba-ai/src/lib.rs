@@ -6,7 +6,8 @@
 //!
 //! - [`entry`]: the stored conversation entry JSON (§13.7).
 //! - [`provider`]: provider configuration, base URL validation (AI-02) and the shared HTTP client.
-//! - [`chat`]: the two protocol adapters (Chat Completions and Anthropic Messages).
+//! - [`chat`]: the three protocol adapters (Chat Completions, Anthropic Messages and Responses).
+//! - [`chatgpt`]: Sign in with ChatGPT (AI-52): the OAuth flow and this device's sessions.
 //! - [`decision`]: decision questions in TypeSafe's System One format, answered by a System One
 //!   endpoint or by a chat model in its place (AI-47).
 //! - [`judge`]: the judge of Auto mode, which decides whether a call runs without the approval
@@ -26,6 +27,7 @@
 #![forbid(unsafe_code)]
 
 pub mod chat;
+pub mod chatgpt;
 pub mod decision;
 pub mod entry;
 pub mod error;
