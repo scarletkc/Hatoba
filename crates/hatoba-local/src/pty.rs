@@ -301,7 +301,7 @@ async fn sleep_until(deadline: Option<Instant>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shells::{self, ShellKind};
+    use crate::shells::ShellKind;
 
     fn size() -> PtySize {
         PtySize { cols: 80, rows: 24 }
@@ -333,7 +333,7 @@ mod tests {
     fn test_shell() -> Shell {
         #[cfg(windows)]
         {
-            shells::detect()
+            crate::shells::detect()
                 .into_iter()
                 .find(|s| s.kind == ShellKind::Cmd)
                 .expect("cmd.exe")

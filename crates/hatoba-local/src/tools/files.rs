@@ -303,6 +303,10 @@ pub fn write(
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::useless_conversion,
+    reason = "mode_t is u16 on macOS and u32 on Linux"
+)]
 fn umask() -> u32 {
     // SAFETY: umask only swaps the process's mask; it is set back at once.
     unsafe {
