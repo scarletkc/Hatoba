@@ -1,6 +1,6 @@
 # Handoff: custom terminal color schemes (#98)
 
-Work in progress, paused by the owner. Branch `scarletkc/cranky-archimedes-9738e1`, no PR yet. Delete this file in
+Work in progress, paused by the owner. Branch `scarletkc/custom-terminal-schemes`, no PR yet. Delete this file in
 the commit that finishes the work.
 
 ## Relation to PR 227
