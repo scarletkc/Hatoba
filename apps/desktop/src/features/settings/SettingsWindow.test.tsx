@@ -150,6 +150,18 @@ describe("SettingsWindow", () => {
     await until(async () => (await stored()).dark_scheme === "dracula");
     expect(checked("Dracula")).toBe(true);
 
+    // The group is one tab stop, and the arrow keys move the pick.
+    expect([...card("Dracula")!.parentElement!.querySelectorAll("[tabindex='0']")]).toEqual([card("Dracula")]);
+    act(() => {
+      card("Dracula")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await until(async () => (await stored()).dark_scheme === "tokyo-night");
+    expect(document.activeElement).toBe(card("Tokyo Night"));
+    act(() => {
+      card("Tokyo Night")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    await until(async () => (await stored()).dark_scheme === "dracula");
+
     const follow = [...document.querySelectorAll<HTMLElement>("[role=radio]")].find((el) => el.textContent === t("settings.termColors.follow"));
     act(() => follow!.click());
     await until(() => byLabel(t("settings.termColors.forLight")));
