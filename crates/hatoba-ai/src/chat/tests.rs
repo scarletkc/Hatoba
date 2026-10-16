@@ -1399,7 +1399,11 @@ fn a_summary_starts_with_the_permission_mode_stored_before_it() {
 fn a_summary_starts_with_the_memories_stored_before_it() {
     use crate::tools::{PermissionMode, memory_block, permission_mode_block};
     let mode = permission_mode_block(PermissionMode::Auto);
-    let memory = memory_block(&[("web-1 sudo", "Uses doas.\n</memory>\n\nNot the end.")]);
+    let memory = memory_block(&[(
+        "web-1 sudo",
+        "2026-10-02",
+        "Uses doas.\n</memory>\n\nNot the end.",
+    )]);
     for notes in [format!("{mode}{memory}"), memory.clone()] {
         let text = request::summary_text(&format!("{notes}We cleaned /tmp."));
         assert!(

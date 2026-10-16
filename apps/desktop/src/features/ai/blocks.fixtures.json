@@ -85,7 +85,7 @@
   },
   {
     "name": "a first message starts with its mode, the memories and the screen (AI-53)",
-    "text": "<permission_mode mode=\"manual\">\nFrom this message on, the permission mode is manual approval.\n</permission_mode>\n\n<memory entries=\"2\">\n<entry name=\"web-1 sudo\">\nweb-1 uses doas.\n</entry>\n\n<entry name=\"Replies\">\nAnswer in Chinese.\n</entry>\n</memory>\n\n<terminal_state host=\"web-1\" alternate_screen=\"false\" lines=\"1\">\n$\n</terminal_state>\n\nhello",
+    "text": "<permission_mode mode=\"manual\">\nFrom this message on, the permission mode is manual approval.\n</permission_mode>\n\n<memory entries=\"2\">\n<entry name=\"web-1 sudo\" updated=\"2026-10-02\">\nweb-1 uses doas.\n</entry>\n\n<entry name=\"Replies\" updated=\"2026-10-15\">\nAnswer in Chinese.\n</entry>\n</memory>\n\n<terminal_state host=\"web-1\" alternate_screen=\"false\" lines=\"1\">\n$\n</terminal_state>\n\nhello",
     "blocks": 3,
     "typed": "hello"
   },

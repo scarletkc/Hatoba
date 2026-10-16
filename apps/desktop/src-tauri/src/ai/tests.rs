@@ -1826,8 +1826,6 @@ async fn compaction_moves_the_context_start_to_the_summary() {
 /// cache keeps serving them. The saved memory shows from the summary on.
 #[tokio::test]
 async fn memories_start_the_first_message_and_each_summary() {
-    use hatoba_ai::tools::memory_block;
-
     let f = Fixture::new(vec![
         calls(&[(
             "m1",
@@ -1842,6 +1840,11 @@ async fn memories_start_the_first_message_and_each_summary() {
     super::memory::save(&mut lock(&f.vault), &[], "Replies", "Answer in Chinese.")
         .unwrap()
         .unwrap();
+    let before = super::memory::note(&lock(&f.vault));
+    assert!(
+        before.contains("<entry name=\"Replies\" updated=\"20"),
+        "{before}"
+    );
     let (started, sink) = f.send(None, "web-1 uses doas").await;
     let conv = started.conversation.id;
     sink.done_with(AiFinish::ToolCalls).await;
@@ -1853,7 +1856,6 @@ async fn memories_start_the_first_message_and_each_summary() {
     assert_eq!(sink.ended().await, AiTurnEndReason::Completed);
     f.idle(&conv).await;
 
-    let before = memory_block(&[("Replies", "Answer in Chinese.")]);
     assert_eq!(
         f.user_texts(&conv),
         [manual(&format!("{before}web-1 uses doas"))]
@@ -1871,10 +1873,11 @@ async fn memories_start_the_first_message_and_each_summary() {
     let AiEntryView::Summary { text, .. } = &summary else {
         panic!("expected a summary, got {summary:?}");
     };
-    let after = memory_block(&[
-        ("Replies", "Answer in Chinese."),
-        ("web-1 sudo", "web-1 uses doas."),
-    ]);
+    let after = super::memory::note(&lock(&f.vault));
+    assert!(
+        after.contains("<entry name=\"web-1 sudo\" updated=\"20"),
+        "{after}"
+    );
     assert_eq!(text, &manual(&format!("{after}SUMMARY: noted doas.")));
 
     // The message after the summary has no note of its own, and search skips the note's text.

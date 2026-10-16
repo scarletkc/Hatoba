@@ -144,23 +144,38 @@ pub(crate) fn on(v: &Vault) -> bool {
 
 /// The `memory` note a conversation's first message and each summary start with: the memories,
 /// oldest first, as many as fit [`MAX_MEMORY_BYTES`] (memories saved on several devices at once
-/// can go past it). Empty while memory is off or there are none.
+/// can go past it), each with the local day it was last saved, as the system prompt gives today.
+/// The days do not count toward the limit. Empty while memory is off or there are none.
 pub(crate) fn note(v: &Vault) -> String {
     if !on(v) {
         return String::new();
     }
     let memories = v.ai_memories();
     let mut used = 0;
-    let shown: Vec<(&str, &str)> = memories
+    let shown: Vec<(&str, String, &str)> = memories
         .iter()
         .map(|(_, m)| m)
         .take_while(|m| {
             used += m.size();
             used <= MAX_MEMORY_BYTES
         })
-        .map(|m| (m.name.as_str(), m.content.as_str()))
+        .map(|m| (m.name.as_str(), day(m.updated_at), m.content.as_str()))
+        .collect();
+    let shown: Vec<(&str, &str, &str)> = shown
+        .iter()
+        .map(|(name, updated, content)| (*name, updated.as_str(), *content))
         .collect();
     tools::memory_block(&shown)
+}
+
+/// The local day of a Unix ms time as `YYYY-MM-DD`, or empty when it is out of range.
+fn day(ms: i64) -> String {
+    use chrono::TimeZone;
+    chrono::Local
+        .timestamp_millis_opt(ms)
+        .single()
+        .map(|t| t.format("%Y-%m-%d").to_string())
+        .unwrap_or_default()
 }
 
 /// Runs a `memory` call. A call from a response made while memory was on runs nothing once it is
@@ -392,10 +407,19 @@ mod tests {
         assert_eq!(note(&v), "");
         save(&mut v, &[], "one", "first").unwrap().unwrap();
         save(&mut v, &[], "two", "second").unwrap().unwrap();
+        let days: Vec<String> = v
+            .ai_memories()
+            .into_iter()
+            .map(|(_, m)| day(m.updated_at))
+            .collect();
+        assert!(days[0].len() == 10 && days[0].starts_with("20"), "{days:?}");
         assert_eq!(
             note(&v),
-            "<memory entries=\"2\">\n<entry name=\"one\">\nfirst\n</entry>\n\n\
-             <entry name=\"two\">\nsecond\n</entry>\n</memory>\n\n"
+            format!(
+                "<memory entries=\"2\">\n<entry name=\"one\" updated=\"{}\">\nfirst\n</entry>\n\n\
+                 <entry name=\"two\" updated=\"{}\">\nsecond\n</entry>\n</memory>\n\n",
+                days[0], days[1]
+            )
         );
 
         // Memories saved on several devices at once can go past the limit: the note keeps the

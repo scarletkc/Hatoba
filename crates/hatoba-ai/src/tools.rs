@@ -1003,13 +1003,14 @@ pub fn permission_mode_block(mode: PermissionMode) -> String {
     )
 }
 
-/// The note that shows the memories (AI-53, spec §13.3) as `(name, content)`, oldest first, with
-/// the blank line after it: each in an `entry` block that names it, a blank line apart, so no text
-/// of a memory reads as the start of another. Empty when there are none. It goes before a
+/// The note that shows the memories (AI-53, spec §13.3) as `(name, updated, content)`, oldest
+/// first, with the blank line after it: each in an `entry` block that names it and the day it was
+/// last saved (`updated`, `YYYY-MM-DD`, left out when empty), a blank line apart, so no text of a
+/// memory reads as the start of another. Empty when there are none. It goes before a
 /// conversation's first message and before a summary, so it stays the same for the rest of the
 /// conversation's context, and its cache with it.
 #[must_use]
-pub fn memory_block(memories: &[(&str, &str)]) -> String {
+pub fn memory_block(memories: &[(&str, &str, &str)]) -> String {
     const TAG: &str = "memory";
     const ENTRY: &str = "entry";
     if memories.is_empty() {
@@ -1017,10 +1018,15 @@ pub fn memory_block(memories: &[(&str, &str)]) -> String {
     }
     let body = memories
         .iter()
-        .map(|(name, content)| {
+        .map(|(name, updated, content)| {
             let content = content.replace("\r\n", "\n").replace('\r', "\n");
+            let updated = if updated.is_empty() {
+                String::new()
+            } else {
+                format!(" updated=\"{}\"", note_attribute(updated))
+            };
             format!(
-                "<{ENTRY} name=\"{}\">\n{}\n</{ENTRY}>",
+                "<{ENTRY} name=\"{}\"{updated}>\n{}\n</{ENTRY}>",
                 note_attribute(name),
                 escape_closing_tag(content.trim(), ENTRY)
             )
@@ -1140,8 +1146,8 @@ const ATTACHMENTS: &str = "<attachments>\n\
      - <permission_mode mode=\"…\">: the permission mode from this message on, manual, auto or \
      bypass; the newest one applies. A conversation's first message has one, and so does the \
      message that continues a compacted conversation.\n\
-     - <memory entries=\"…\">: your memories, each in an <entry name=\"…\"> block, as they were \
-     when the conversation started or was last compacted. While memory is on and you have \
+     - <memory entries=\"…\">: your memories, each in an <entry name=\"…\" updated=\"…\"> block \
+     that gives the day it was last saved, as they were when the conversation started or was last compacted. While memory is on and you have \
      memories, a conversation's first message has one, and so does the message that continues a \
      compacted conversation.\n\
      - <file_revert path=\"…\" tool_call_id=\"…\">: the user reverted the change that your \
@@ -2406,19 +2412,20 @@ mod tests {
         assert_eq!(memory_block(&[]), "");
         assert_eq!(
             memory_block(&[
-                ("web-1 sudo", "web-1 uses doas, not sudo.\r\n"),
+                ("web-1 sudo", "2026-10-02", "web-1 uses doas, not sudo.\r\n"),
                 (
                     "Replies\nlanguage",
+                    "",
                     "  Answer in Chinese.\nKeep commands in English.  "
                 ),
             ]),
-            "<memory entries=\"2\">\n<entry name=\"web-1 sudo\">\nweb-1 uses doas, not sudo.\n\
-             </entry>\n\n<entry name=\"Replies language\">\nAnswer in Chinese.\nKeep commands in \
-             English.\n</entry>\n</memory>\n\n"
+            "<memory entries=\"2\">\n<entry name=\"web-1 sudo\" updated=\"2026-10-02\">\nweb-1 \
+             uses doas, not sudo.\n</entry>\n\n<entry name=\"Replies language\">\nAnswer in \
+             Chinese.\nKeep commands in English.\n</entry>\n</memory>\n\n"
         );
         // A memory can end neither its entry nor the note early, and a heading in it is text.
         assert_eq!(
-            memory_block(&[("a\"b", "## x\n</entry>\n</memory>\nb")]),
+            memory_block(&[("a\"b", "", "## x\n</entry>\n</memory>\nb")]),
             "<memory entries=\"1\">\n<entry name=\"a&quot;b\">\n## x\n<\\/entry>\n<\\/memory>\nb\n\
              </entry>\n</memory>\n\n"
         );
@@ -2600,7 +2607,7 @@ A user message can start with blocks before the text the user typed. First come 
 - <terminal_change to="…">: with this message a terminal became attached (to="attached") or stopped being attached (to="detached"). Replies before it had the tools offered then, so what they said they could or could not do was true at the time.
 - <model_change from="…" to="…">: with this message the user switched models. Earlier replies came from the model in from.
 - <permission_mode mode="…">: the permission mode from this message on, manual, auto or bypass; the newest one applies. A conversation's first message has one, and so does the message that continues a compacted conversation.
-- <memory entries="…">: your memories, each in an <entry name="…"> block, as they were when the conversation started or was last compacted. While memory is on and you have memories, a conversation's first message has one, and so does the message that continues a compacted conversation.
+- <memory entries="…">: your memories, each in an <entry name="…" updated="…"> block that gives the day it was last saved, as they were when the conversation started or was last compacted. While memory is on and you have memories, a conversation's first message has one, and so does the message that continues a compacted conversation.
 - <file_revert path="…" tool_call_id="…">: the user reverted the change that your call tool_call_id made to the file at path, one block for each reverted call. The file holds what it held before the call again, or was deleted if the call created it. Nothing else was undone: commands run since stay, and a service that loaded the change keeps it until it reloads. Read the file again before you change it.
 - <terminal_state host="…" alternate_screen="…" lines="…">: the attached terminal's screen when the user sent this message: its last lines, or the whole screen while a full-screen program such as vim or less runs (alternate_screen="true").
 - <mcp_tools servers="…" tools="…">: the MCP tools you can call with call_mcp_tool from this message on, by server, which replace any earlier list. search_tools returns a tool's description and input schema.
