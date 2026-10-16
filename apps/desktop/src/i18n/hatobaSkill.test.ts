@@ -115,10 +115,10 @@ describe("the skill's label files", () => {
     expect(problems).toEqual([]);
   });
 
-  it("quote only messages without {placeholders}", () => {
+  it("quote only messages without {placeholders} or a | that would end the table cell", () => {
     const keys = sections.flatMap((s) => s.keys);
-    const withPlaceholders = keys.filter((key) => Object.values(messages).some((table) => /\{\w+\}/.test(table[key])));
-    expect(withPlaceholders).toEqual([]);
+    const unquotable = keys.filter((key) => Object.values(messages).some((table) => /\{\w+\}|\|/.test(table[key])));
+    expect(unquotable).toEqual([]);
   });
 
   // `pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts` writes them again.

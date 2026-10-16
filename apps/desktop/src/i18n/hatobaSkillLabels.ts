@@ -621,8 +621,6 @@ export interface LabelFile {
   text: string;
 }
 
-const cell = (text: string) => text.replace(/\|/g, "\\|");
-
 /** Every label file of the skill, for each language but English and each area. */
 export function labelFiles(): LabelFile[] {
   const files: LabelFile[] = [];
@@ -637,7 +635,8 @@ export function labelFiles(): LabelFile[] {
         parts.push(`## \`${file}\``);
         for (const [heading, keys] of Object.entries(sections)) {
           if (heading) parts.push(`### ${heading}`);
-          const rows = keys.map((key) => `| ${cell(messages.en[key])} | ${cell(table[key])} |`);
+          // The text goes in as it is, since the assistant quotes it: the test keeps out a "|", which would end the cell.
+          const rows = keys.map((key) => `| ${messages.en[key]} | ${table[key]} |`);
           parts.push([`| en | ${locale} |`, "|---|---|", ...rows].join("\n"));
         }
       }
