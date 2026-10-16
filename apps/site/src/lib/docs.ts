@@ -95,11 +95,12 @@ function sections(markdown: string, names: string[], path: string): string[] {
   });
 }
 
+/** The header of the label tables in releases from before `references/labels/`. */
 const LABEL_HEADER = /^\| en \| zh-CN \| ja \|$/gm;
 
 /**
  * Turns the skill's Markdown into the site's: mentions of `references/<file>.md` become links to
- * the page, and the language columns of the label tables are named in full.
+ * the page, and the language columns of older releases' label tables are named in full.
  */
 export function adapt(markdown: string, titles: Map<string, string>, version: string): string {
   return markdown

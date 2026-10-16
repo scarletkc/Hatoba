@@ -73,6 +73,54 @@ const FILES: &[(&str, &str)] = &[
         include_str!("builtin/hatoba/references/keys-vault-and-lock.md"),
     ),
     (
+        "references/labels/ja-ai-settings.md",
+        include_str!("builtin/hatoba/references/labels/ja-ai-settings.md"),
+    ),
+    (
+        "references/labels/ja-ai.md",
+        include_str!("builtin/hatoba/references/labels/ja-ai.md"),
+    ),
+    (
+        "references/labels/ja-app.md",
+        include_str!("builtin/hatoba/references/labels/ja-app.md"),
+    ),
+    (
+        "references/labels/ja-sync.md",
+        include_str!("builtin/hatoba/references/labels/ja-sync.md"),
+    ),
+    (
+        "references/labels/ja-terminal.md",
+        include_str!("builtin/hatoba/references/labels/ja-terminal.md"),
+    ),
+    (
+        "references/labels/ja-vault.md",
+        include_str!("builtin/hatoba/references/labels/ja-vault.md"),
+    ),
+    (
+        "references/labels/zh-CN-ai-settings.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-ai-settings.md"),
+    ),
+    (
+        "references/labels/zh-CN-ai.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-ai.md"),
+    ),
+    (
+        "references/labels/zh-CN-app.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-app.md"),
+    ),
+    (
+        "references/labels/zh-CN-sync.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-sync.md"),
+    ),
+    (
+        "references/labels/zh-CN-terminal.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-terminal.md"),
+    ),
+    (
+        "references/labels/zh-CN-vault.md",
+        include_str!("builtin/hatoba/references/labels/zh-CN-vault.md"),
+    ),
+    (
         "references/port-forwarding.md",
         include_str!("builtin/hatoba/references/port-forwarding.md"),
     ),

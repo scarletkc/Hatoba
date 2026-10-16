@@ -2,15 +2,6 @@
 
 Two boxes tell the assistant what it should know in every request, without repeating it in each message: **Custom Instructions** in Settings → AI, for every conversation, and **AI Notes** in the host editor, for conversations on one host. **Memory** is what the assistant notes for itself across conversations (below). Both go into the system prompt of every request, so they reach the model provider and use part of the context window each time. Skills (`references/ai-settings.md`) suit long procedures better, because the assistant reads a skill only when a request needs it.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Custom Instructions | 自定义指令 | カスタム指示 |
-| AI Notes | AI 备注 | AI 向けメモ |
-| Memory | 记忆 | メモリ |
-| Remember across conversations | 跨对话记忆 | 会話をまたいで覚える |
-| Add Memory | 添加记忆 | メモリを追加 |
-| Delete All | 全部删除 | すべて削除 |
-
 ## Custom Instructions (Settings → AI)
 
 Settings → AI → **Custom Instructions**, between Web Search and Skills. Good for preferences that hold everywhere: the language to answer in, the tone, how much to explain, the operating systems, shells and tools you use.

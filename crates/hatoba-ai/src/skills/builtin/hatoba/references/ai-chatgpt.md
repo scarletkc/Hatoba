@@ -2,19 +2,7 @@
 
 A provider can sign in with a ChatGPT account instead of an API key. Its requests then use that account's ChatGPT plan, within the plan's limits. Other providers are in `references/ai-settings.md`.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Continue with ChatGPT | 使用 ChatGPT 继续 | ChatGPT で続行 |
-| ChatGPT Account | ChatGPT 账户 | ChatGPT アカウント |
-| Account | 账户 | アカウント |
-| Sign Out | 退出登录 | サインアウト |
-| Manage Usage | 管理用量 | 使用量を管理 |
-| Continue in Your Browser | 在浏览器中继续 | ブラウザで続行 |
-| You’re Using Your ChatGPT Plan | 你正在使用 ChatGPT 套餐 | ChatGPT プランを使用しています |
-| Signed in on this device | 已在此设备登录 | このデバイスでサインイン済み |
-| Sign in on this device | 需要在此设备登录 | このデバイスでサインインが必要 |
-| Sign-in ended | 登录已失效 | サインインの期限切れ |
-| Plan use not allowed | 未允许使用套餐 | プランの使用が未許可 |
+Other labels: **Signed in on this device**, **Sign-in ended**, **Plan use not allowed**.
 
 ## Signing in
 
@@ -33,12 +21,11 @@ The provider and its account sync; the sign-in does not. Each device keeps its o
 
 ## Problems
 
-| en | zh-CN | ja |
-|---|---|---|
-| Couldn’t Sign In to ChatGPT | 无法登录 ChatGPT | ChatGPT にサインインできませんでした |
-| ChatGPT didn’t accept the sign-in. Sign in again. | ChatGPT 没有接受这次登录。请重新登录。 | ChatGPT がサインインを受け付けませんでした。もう一度サインインしてください。 |
-| Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings. | 已在此设备退出，但 ChatGPT 没有确认结束会话。你可以在 ChatGPT 的设置里断开 Hatoba。 | このデバイスではサインアウトしましたが、ChatGPT はセッションの終了を確認できませんでした。ChatGPT の設定で Hatoba の接続を解除できます。 |
-| Signed in, but Hatoba isn’t allowed to use your ChatGPT plan. Sign in again and allow it. | 已登录，但没有允许 Hatoba 使用你的 ChatGPT 套餐。重新登录并允许后才能使用。 | サインイン済みですが、Hatoba が ChatGPT プランを使うことは許可されていません。もう一度サインインして許可してください。 |
+- "ChatGPT didn’t accept the sign-in. Sign in again."
+- "Signed out on this device, but ChatGPT didn’t confirm ending the session. You can disconnect Hatoba in ChatGPT’s settings."
+- "Signed in, but Hatoba isn’t allowed to use your ChatGPT plan. Sign in again and allow it."
+
+Other labels: **Couldn’t Sign In to ChatGPT**.
 
 These messages come from Hatoba's backend and are in English in every language:
 

@@ -11,43 +11,19 @@ A local terminal tab runs a shell of this computer beside the SSH tabs: open one
 
 A local tab has the same terminal settings, search, links, copy and paste as SSH tabs. Its status bar shows **This Computer** and the shell, and has no resource usage, port forwarding or SFTP. The shell starts in the home directory. Typing `exit` (a shell that exits with status 0) closes the tab; a shell that exits with an error leaves the tab with the exit status and **Restart**, and one that cannot start shows why with **Retry**. **More actions** has **Restart** in place of Reconnect, Disconnect and Edit Host. Locking does not end local shells, unless Settings → Security → **Disconnect all sessions when locked** is on; quitting Hatoba ends them. The AI assistant works in a local tab as in an SSH tab: see `references/ai-tools.md`.
 
-| en | zh-CN | ja |
-|---|---|---|
-| New Local Terminal | 新建本地终端 | 新しいローカル ターミナル |
-| Local Terminal | 本地终端 | ローカル ターミナル |
-| Connect to Host | 连接主机 | ホストに接続 |
-| This Computer | 本机 | このコンピューター |
-| Command Prompt | 命令提示符 | コマンド プロンプト |
-| Starting… | 正在启动… | 起動中… |
-| Running | 运行中 | 実行中 |
-| Failed to start | 启动失败 | 起動に失敗 |
-| Exited | 已退出 | 終了 |
-| Restart | 重新启动 | 再起動 |
-| Local Terminal Shell | 本地终端的 shell | ローカル ターミナルのシェル |
+Other labels: **Connect to Host**, **Starting…**, **Running**, **Failed to start**, **Exited**.
 
 ## The status bar
 
 The bar above the terminal shows the connection state, the target `user@host:port`, "via" and the jump host's name when one is used, and the latency in ms once connected. The buttons on the right:
-
-| en | zh-CN | ja |
-|---|---|---|
-| Connecting… | 正在连接… | 接続中… |
-| Connected | 已连接 | 接続済み |
-| Connection failed | 连接失败 | 接続に失敗 |
-| Disconnected | 已断开 | 切断済み |
-| via | 经由 | 経由: |
-| Show Resource Usage | 显示资源占用 | リソース使用状況を表示 |
-| Find in terminal | 在终端中查找 | ターミナル内を検索 |
-| Port Forwarding | 端口转发 | ポートフォワーディング |
-| SFTP | SFTP | SFTP |
-| Show or hide the SFTP file panel | 显示或隐藏 SFTP 文件面板 | SFTP ファイルパネルを表示/非表示 |
-| More actions | 更多操作 | その他の操作 |
 
 - **Show Resource Usage** turns on the resource usage readout described below. It is enabled only when connected.
 - **Find in terminal** opens the find bar.
 - **Port Forwarding** (a badge shows how many forwards run) opens the forwards popover; see `references/port-forwarding.md`. It is enabled only when connected.
 - **SFTP** shows or hides the file panel beside the terminal; see `references/sftp.md`. It is enabled only when connected.
 - **More actions** (the … button) opens the tab menu below.
+
+Other labels: **Connecting…**, **Connected**, **Connection failed**, **Disconnected**, **Show or hide the SFTP file panel**.
 
 ## Resource usage
 
@@ -61,34 +37,11 @@ Hatoba reads `/proc` on the server every 2 seconds over the tab's own connection
 - If the readings stop (for example the server refused to run the command, or `sh` exited), the popover shows the reason and **Retry**.
 - In a container, `/proc` describes the host machine, so CPU and memory are the host's, not the container's.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Resource Usage | 资源占用 | リソース使用状況 |
-| Hide Resource Usage | 隐藏资源占用 | リソース使用状況を非表示 |
-| Memory | 内存 | メモリ |
-| Swap | 交换空间 | スワップ |
-| No swap | 无交换空间 | スワップなし |
-| Network | 网络 | ネットワーク |
-| Disk | 磁盘 | ディスク |
-| Reading… | 正在读取… | 読み取り中… |
-| Resource usage is available only for Linux servers. | 资源占用只支持 Linux 服务器。 | リソース使用状況は Linux サーバーでのみ表示できます。 |
+Other labels: **Memory**, **Swap**, **No swap**, **Network**, **Disk**, **Reading…**.
 
 ## Menus
 
 The tab menu (**More actions**) and the right-click menu share most entries. Right-click shows the menu when **Right-Click in Terminal** is set to **Show context menu** (see Settings below), the default on macOS; elsewhere right-click by default copies the selection, or pastes when nothing is selected. A program that tracks the mouse (vim, tmux) gets the right click itself unless Shift is held.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Reconnect | 重新连接 | 再接続 |
-| Disconnect | 断开连接 | 切断 |
-| Copy | 复制 | コピー |
-| Paste | 粘贴 | 貼り付け |
-| Select All | 全选 | すべて選択 |
-| Find… | 查找… | 検索… |
-| Ask AI | 询问 AI | AI に質問 |
-| Clear Scrollback | 清除回滚缓冲 | スクロールバックを消去 |
-| Edit Host | 编辑主机 | ホストを編集 |
-| Save as Host… | 保存为主机… | ホストとして保存… |
 
 - Right-click menu: Copy, Paste, Select All, Ask AI, Clear Scrollback, Find…
 - **More actions** menu: Reconnect, Disconnect, Copy, Paste, Clear Scrollback, Select All, Find…, Ask AI, Edit Host. A quick connection (see `references/hosts-and-connecting.md`) has **Save as Host…** instead of Edit Host.
@@ -108,19 +61,7 @@ Plain Ctrl+letter always reaches the remote shell (Ctrl+L, Ctrl+W, Ctrl+K and so
 - The find bar searches the visible screen and the scrollback. Enter goes to the next match, Shift+Enter to the previous one, Esc closes the bar. It shows "No results" or the position as i/n.
 - HTTP and HTTPS links in the output open in the default browser with Ctrl+click (⌘+click on macOS), including local HTTP services. Other schemes are not opened. A plain click only selects text.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Paste multiple lines? | 粘贴多行内容？ | 複数行を貼り付けますか？ |
-| Find | 查找 | 検索 |
-| No results | 无结果 | 一致なし |
-| Previous (Shift+Enter) | 上一个（Shift+Enter） | 前へ（Shift+Enter） |
-| Next (Enter) | 下一个（Enter） | 次へ（Enter） |
-| Close find (Esc) | 关闭查找（Esc） | 検索を閉じる（Esc） |
-| Confirm before pasting multiple lines | 粘贴多行文本前确认 | 複数行を貼り付ける前に確認 |
-| General | 通用 | 一般 |
-| Right-Click in Terminal | 终端中的右键 | ターミナルでの右クリック |
-| Copy if selected, otherwise paste | 有选中则复制，否则粘贴 | 選択があればコピー、なければ貼り付け |
-| Show context menu | 弹出菜单 | コンテキストメニューを表示 |
+Other labels: **Previous (Shift+Enter)**, **Next (Enter)**, **Close find (Esc)**, **Copy if selected, otherwise paste**.
 
 ## Terminal settings
 
@@ -128,27 +69,9 @@ The terminal settings sync with the vault. They are in three places:
 
 - Settings → Terminal: font, size, cursor and scrollback, with a live preview, and **Local Terminal Shell**, the shell new local tabs run, which is kept on this device only (not synced).
 - Settings → Appearance: **Terminal Colors**.
-- Settings → General: **Right-Click in Terminal** and **Confirm before pasting multiple lines** (labels above).
+- Settings → General: **Right-Click in Terminal** and **Confirm before pasting multiple lines**.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Terminal | 终端 | ターミナル |
-| Font | 字体 | フォント |
-| Font Size | 字号 | フォントサイズ |
-| Decrease font size | 减小字号 | フォントサイズを小さく |
-| Increase font size | 增大字号 | フォントサイズを大きく |
-| Cursor Style | 光标样式 | カーソルの形 |
-| Block | 方块 | ブロック |
-| Bar | 竖线 | バー |
-| Underline | 下划线 | アンダーライン |
-| Scrollback | 回滚缓冲区 | スクロールバック |
-| Appearance | 外观 | 外観 |
-| Terminal Colors | 终端配色 | ターミナルの配色 |
-| Always Dark | 始终深色 | 常にダーク |
-| Always Light | 始终浅色 | 常にライト |
-| Match Appearance | 跟随外观 | 外観に合わせる |
-| In Dark Appearance | 深色外观时 | ダーク外観のとき |
-| In Light Appearance | 浅色外观时 | ライト外観のとき |
+Other labels: **Decrease font size**, **Increase font size**.
 
 - **Font**: the name of an installed font family (default Cascadia Mono, or Menlo on macOS). A font that is not installed falls back to the system monospace font.
 - **Font Size**: 10 to 24 (default 13), changed with the minus and plus buttons.

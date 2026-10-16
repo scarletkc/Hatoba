@@ -9,17 +9,7 @@ The AI assistant is a chat panel at the right edge of the window, below the tab 
 - Drag the panel's left edge to resize it (300 to 900 px); double-click the edge to reset the width.
 - With no provider, the panel says "Add a model provider" with a button that opens Settings → AI. With a provider that has no model, it asks to add a model.
 
-| en | zh-CN | ja |
-|---|---|---|
-| AI Assistant | AI 助手 | AI アシスタント |
-| Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
-| Hide AI Panel | 隐藏 AI 面板 | AI パネルを隠す |
-| Close AI Panel | 关闭 AI 面板 | AI パネルを閉じる |
-| Open Settings → AI | 打开设置 → AI | 設定 → AI を開く |
-| Ask AI | 询问 AI | AI に質問 |
-| More actions | 更多操作 | その他の操作 |
-| Right-Click in Terminal | 终端中的右键 | ターミナルでの右クリック |
-| Show context menu | 弹出菜单 | コンテキストメニューを表示 |
+Other labels: **AI Assistant**, **Show AI Panel**, **Hide AI Panel**, **Close AI Panel**, **Open Settings → AI**.
 
 ## One conversation per tab
 
@@ -39,27 +29,7 @@ The panel shows the conversation of the active tab, and switching tabs switches 
 - A new terminal tab starts with its own empty conversation, and the home tab's chat stays on the home tab. While the tab's conversation has no messages and the home tab's chat has some and is not working, waiting for approval or compacting, the panel offers **Continue Here**, which moves that chat into the tab and gives the home tab a new conversation. Whatever the tab's input holds stays, a selection or diagnostics chip included; when it holds nothing, the home tab's unsent text and attachments come along. The next message moves the chat to the tab's host.
 - When the terminal tools come or go between two messages, as when a home tab chat continues in a connected tab or a tab disconnects and connects again, the next message gets a divider above it, "Terminal now available" or "Terminal no longer available", and the assistant is told that its earlier replies had the tools of their time.
 
-| en | zh-CN | ja |
-|---|---|---|
-| New Conversation | 新对话 | 新しい会話 |
-| History | 历史对话 | 履歴 |
-| Model | 模型 | モデル |
-| Thinking Level | 思考程度 | 思考レベル |
-| Compact | 压缩 | 圧縮 |
-| Send (Enter) | 发送（Enter） | 送信（Enter） |
-| Stop | 停止 | 停止 |
-| Stop and Send the Queued Message (Esc) | 停止并发送排队的消息（Esc） | 停止して待機中のメッセージを送信（Esc） |
-| Queued: sends when the turn ends | 排队中，当前任务结束后发送 | 待機中：作業が終わったら送信します |
-| Edit | 编辑 | 編集 |
-| Remove the Queued Message | 删除排队的消息 | 待機中のメッセージを削除 |
-| Add Files and More | 添加文件等 | ファイルなどを追加 |
-| Slash Commands | 斜杠命令 | スラッシュコマンド |
-| Skills | 技能 | スキル |
-| MCP Tools | MCP 工具 | MCP ツール |
-| The assistant is working | AI 助手正在工作 | アシスタントが作業中です |
-| The assistant is waiting for you | AI 助手在等你确认 | アシスタントが確認を待っています |
-| Reconnect | 重新连接 | 再接続 |
-| Continue Here | 在这里继续 | ここで続ける |
+Other labels: **Stop and Send the Queued Message (Esc)**, **Remove the Queued Message**, **The assistant is working**, **The assistant is waiting for you**.
 
 ## `/` commands and `@` mentions
 
@@ -77,11 +47,7 @@ Type `/` at the start of the box for commands, or `@` at the start of a word to 
 - `@` lists the home directory of the tab's host; type a path (`@/etc/ng`, `@~/app/`) and pick a folder to go into it. Picking a file attaches it, up to 256 KB of UTF-8 text, and picking the first row of a folder attaches its list of entries. The text keeps `@` and the path.
 - `@` also lists the resources of running MCP servers (`@server:uri`), which attach the same way, and **Text Files from This Computer…**, which opens the file picker.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Commands | 命令 | コマンド |
-| Add context | 添加上下文 | コンテキストを追加 |
-| Text Files from This Computer… | 这台电脑上的文本文件… | このコンピューターのテキストファイル… |
+Other labels: **Add context**.
 
 ## Tools and approvals
 
@@ -105,14 +71,6 @@ The **Model** picker (with its **Thinking Level** row), the context meter, **Com
 
 Once a conversation's MCP tool definitions would take a tenth of the model's context window (3,200 tokens when it is not set), or a request would carry over 128 tools in all, they stop going with each request from then on, which keeps the provider's prompt cache working. A message lists the tools by name instead, shown as a divider "Listed N MCP tools" (列出了 N 个 MCP 工具, MCP ツールを N 個一覧にしました). The assistant calls a listed tool directly, or finds one with **Search MCP tools**.
 
-| en | zh-CN | ja |
-|---|---|---|
-| MCP servers for this conversation | 此对话使用的 MCP 服务器 | この会話で使う MCP サーバー |
-| Manage in Settings → AI | 在设置 → AI 中管理 | 設定 → AI で管理 |
-| Off for this conversation | 此对话中已关闭 | この会話ではオフ |
-| Starts when needed | 需要时启动 | 必要なときに起動 |
-| Starting… | 正在启动… | 起動しています… |
-| Failed | 出错 | エラー |
-| Starting MCP servers… | 正在启动 MCP 服务器… | MCP サーバーを起動しています… |
+Other labels: **MCP servers for this conversation**, **Off for this conversation**, **Starts when needed**, **Starting…**, **Failed**, **Starting MCP servers…**.
 
 Provider and tool errors in the panel are explained in `references/troubleshooting-ai.md`.

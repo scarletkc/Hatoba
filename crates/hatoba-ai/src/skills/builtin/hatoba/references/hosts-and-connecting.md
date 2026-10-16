@@ -9,39 +9,12 @@ The home tab shows the host list for the sidebar item that is selected: **All Ho
 - To connect: double-click a row, select it and press Enter, or click **Connect**. Up and down move the selection, and typing starts a search. The same host can be opened in several tabs.
 - Right-click a row for its menu.
 
-| en | zh-CN | ja |
-|---|---|---|
-| All Hosts | 全部主机 | すべてのホスト |
-| Favorites | 收藏 | お気に入り |
-| Recent | 最近连接 | 最近の接続 |
-| Search hosts or ssh user@host | 搜索主机或 ssh user@host | ホストを検索、または ssh user@host |
-| Sort by | 排序方式 | 並べ替え |
-| Name | 名称 | 名前 |
-| Address | 地址 | アドレス |
-| New Host | 新建主机 | 新規ホスト |
-| Tags | 标签 | タグ |
-| Last Connected | 最近连接 | 最終接続 |
-| Connect | 连接 | 接続 |
-| Failed | 连接失败 | 接続失敗 |
-| Edit | 编辑 | 編集 |
-| Duplicate | 复制主机 | 複製 |
-| Add to Favorites | 加入收藏 | お気に入りに追加 |
-| Remove from Favorites | 取消收藏 | お気に入りから削除 |
-| Copy Address | 复制地址 | アドレスをコピー |
-| Copy Password | 复制密码 | パスワードをコピー |
-| Delete… | 删除… | 削除… |
+Other labels: **Search hosts or ssh user@host**, **Sort by**, **Name**, **Address**, **Tags**, **Last Connected**, **Duplicate**, **Add to Favorites**, **Remove from Favorites**, **Copy Address**.
 
 - **Copy Password** (hosts with a saved password) clears the clipboard after the delay in Settings → Security.
 - **Delete…** asks for confirmation. With Cloud Sync on, the host is removed on the other devices too.
 - A group's right-click menu in the sidebar has **Rename Group** and **Delete Group**. Deleting a group moves its hosts to All Hosts; it does not delete them.
 - The reachability dots can be turned off in Settings → General (**Show host reachability**). When on, Hatoba tries a TCP connection to the listed hosts every 60 seconds, with no login attempt.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Rename Group | 重命名分组 | グループ名を変更 |
-| Delete Group | 删除分组 | グループを削除 |
-| General | 通用 | 一般 |
-| Show host reachability | 显示主机在线状态 | ホストの接続状態を表示 |
 
 ## Quick connect
 
@@ -54,15 +27,7 @@ Typing `user@host[:port]` or an ssh command such as `ssh -p 2222 deploy@203.0.11
 - The tab is titled `user@host`. Port forwarding is not offered, and **More actions** has **Save as Host…**, which opens the host editor filled in with the address, port and user. Once the host is saved, **Reconnect** connects the tab as that host.
 - Nothing is saved as a host by itself. Targets that connected are kept as **Recent** on this device only (at most 8, no passwords, never synced). With the search box empty and focused, they show under it (**Recent Quick Connections**); while typing, matching ones show as extra **Connect** rows. The × button removes one.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Connect | 连接 | 接続 |
-| Not saved | 未保存 | 未保存 |
-| Recent | 最近 | 最近 |
-| Recent Quick Connections | 快速连接记录 | 最近のクイック接続 |
-| Remove from Recent | 从记录中移除 | 履歴から削除 |
-| Save as Host… | 保存为主机… | ホストとして保存… |
-| Username | 用户名 | ユーザー名 |
+Other labels: **Not saved**, **Remove from Recent**, **Username**.
 
 ## Import from ~/.ssh/config
 
@@ -70,38 +35,13 @@ When the vault has no hosts yet, the empty host list offers **Import SSH Config*
 
 Entries show their `IdentityFile` (struck through if missing). Only the checkbox under the list (off by default), which lists the files, imports private keys into the encrypted vault; passphrase-protected ones are skipped. Otherwise hosts use **Ask Each Time**.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Import SSH Config | 从 SSH 配置导入 | SSH 設定からインポート |
-| Select All | 全选 | すべて選択 |
-| Select None | 全不选 | 選択解除 |
-| Already exists | 已存在 | 登録済み |
-| ProxyCommand not imported | 不导入 ProxyCommand | ProxyCommand は取り込みません |
+Other labels: **Select All**, **Select None**.
 
 ## The host editor
 
 **New Host**, **Edit** in the row menu, or **Edit Host** (in a terminal tab's **More actions** menu, or on the connection-failed card) opens the editor on the home tab. **Save** (or Ctrl+S, or Enter in a text field) saves, **Cancel** or the back arrow leaves, and Esc leaves an untouched form. The star in the header toggles the favorite. The address is required (it is the default name), and the port must be 1 to 65535.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Edit Host | 编辑主机 | ホストを編集 |
-| General | 基本信息 | 基本情報 |
-| Port | 端口 | ポート |
-| Username | 用户名 | ユーザー名 |
-| Authentication | 认证 | 認証 |
-| Method | 方式 | 方式 |
-| Organization & Network | 组织与网络 | 整理とネットワーク |
-| Group | 分组 | グループ |
-| Jump Host | 跳板机 | 踏み台 |
-| Proxy | 代理 | プロキシ |
-| Port Forwarding | 端口转发 | ポートフォワーディング |
-| Environment Variables | 环境变量 | 環境変数 |
-| Notes | 备注 | メモ |
-| AI Notes | AI 备注 | AI 向けメモ |
-| Test Connection | 测试连接 | 接続テスト |
-| Delete Host | 删除主机 | ホストを削除 |
-| Save | 保存 | 保存 |
-| Cancel | 取消 | キャンセル |
+Other labels: **Username**, **Organization & Network**.
 
 - **Test Connection** connects with the current form values (saved or not), authenticates, checks the host key (you may be asked to trust it), shows the latency, and disconnects. It does not save the host.
 - **Delete Host** is at the bottom of the editor for an existing host.
@@ -112,18 +52,6 @@ Entries show their `IdentityFile` (struck through if missing). Only the checkbox
 ## Authentication methods
 
 **Method** chooses how Hatoba signs in:
-
-| en | zh-CN | ja |
-|---|---|---|
-| Password | 密码 | パスワード |
-| Key | 密钥 | 鍵 |
-| Ask Each Time | 每次询问 | 毎回入力 |
-| SSH Agent | SSH Agent | SSH Agent |
-| Saved | 已保存 | 保存済み |
-| Replace | 替换 | 置き換え |
-| Keep Saved Password | 保留已保存的密码 | 保存済みのパスワードを使う |
-| Choose a key… | 选择密钥… | 鍵を選択… |
-| Manage Keys | 管理密钥库 | 鍵を管理 |
 
 - **Password**: stored encrypted in the vault. After saving, the field shows **Saved** and the password can be replaced (**Replace**, **Keep Saved Password**) but never viewed.
 - **Key**: choose a key from the Keys page (**Choose a key…**; **Manage Keys** opens the Keys page). RSA, Ed25519 and ECDSA keys work. If the key has a passphrase that was saved with it, it is used; otherwise Hatoba asks for the passphrase when connecting (**Enter the key passphrase**), and does not save it.
@@ -146,22 +74,9 @@ Entries show their `IdentityFile` (struck through if missing). Only the checkbox
 
 With a jump host, the jump host's own choice applies and the picker is disabled. Quick connections use this device's default. The reachability dots of the host list go through the same proxy as the connection. **Manage Proxies** opens Settings → Proxies, where proxies are added, edited and deleted (`references/settings.md`). Deleting a proxy switches the hosts that named it to **Device default**. When the proxy of a host, or this device's default, was deleted on another device, the picker shows **Deleted proxy** and connecting fails until another one is chosen.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Proxy | 代理 | プロキシ |
-| Device default | 设备默认 | デバイスの既定 |
-| No proxy | 不使用代理 | プロキシなし |
-| Deleted proxy | 已删除的代理 | 削除されたプロキシ |
-| Manage Proxies | 管理代理 | プロキシを管理 |
-
 ## Environment variables
 
 **Environment Variables** in the host editor lists `NAME=value` pairs, like `SetEnv` in OpenSSH. **Add Variable** adds a row and × removes one; they are saved with the host by **Save** and sync with it. When a terminal opens, Hatoba asks the server to set each one before the shell starts.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Environment Variables | 环境变量 | 環境変数 |
-| Add Variable | 添加变量 | 変数を追加 |
 
 - The server sets only the names its sshd `AcceptEnv` setting lists and ignores the rest; the shell still starts, without them. Many servers (Debian and Ubuntu by default) accept only `LANG` and `LC_*`. To use other names, the server's administrator adds them to `AcceptEnv` in `/etc/ssh/sshd_config` and reloads sshd. Running `env` or `echo $NAME` in the terminal shows what arrived.
 - Hatoba sends `LANG=C.UTF-8` by default; a host's `LANG` replaces it. `TERM` sets the terminal type instead (`xterm-256color` by default) and needs no `AcceptEnv`.
@@ -172,23 +87,11 @@ With a jump host, the jump host's own choice applies and the picker is disabled.
 
 A connection opens a new terminal tab (orange dot while connecting). The connection attempt times out after 15 seconds. Dialogs that can appear:
 
-| en | zh-CN | ja |
-|---|---|---|
-| Fingerprint | 指纹 | フィンガープリント |
-| Trust and Connect | 信任并连接 | 信頼して接続 |
-| Host key has changed | 主机指纹已改变 | ホストキーが変更されました |
-| Trusted fingerprint | 已信任的指纹 | 信頼済みのフィンガープリント |
-| Fingerprint received now | 现在收到的指纹 | 今回受信したフィンガープリント |
-| Disconnect | 断开连接 | 切断 |
-| Update Fingerprint and Connect | 更新指纹并连接 | フィンガープリントを更新して接続 |
-| Additional verification required | 需要额外验证 | 追加の認証が必要です |
-| Verify | 验证 | 認証 |
-| Enter the key passphrase | 输入私钥口令 | 秘密鍵のパスフレーズを入力 |
-| Key passphrase | 私钥口令 | 鍵のパスフレーズ |
-
 - First connection to a server: compare the shown fingerprint with the administrator's, then **Trust and Connect** (saved to the vault and synced) or **Cancel**.
 - **New host key for …** appears when a hop offers none of the key types saved for it, and **Host key has changed** blocks a saved type's changed key (**Disconnect** is the default). See `references/troubleshooting-connections.md` for both.
 - **Ask Each Time** hosts show a password prompt; **Connect** continues. A wrong key passphrase asks again.
+
+Other labels: **Fingerprint**, **Trusted fingerprint**, **Fingerprint received now**, **Update Fingerprint and Connect**, **Key passphrase**.
 
 ## When a connection fails or ends
 
@@ -196,14 +99,3 @@ A connection opens a new terminal tab (orange dot while connecting). The connect
 - A connection that ends later (the server closed it, the network dropped, keepalives went unanswered) shows the banner **Connection closed** with **Reconnect**. Hatoba never reconnects by itself. **More actions** has Reconnect and Disconnect too.
 - Closing a tab (the × on the tab, middle-click, or Ctrl+Shift+W / ⌘W) ends its session.
 - Locking keeps open sessions connected in the background unless **Disconnect all sessions when locked** is on (Settings → Security).
-
-| en | zh-CN | ja |
-|---|---|---|
-| Copy Diagnostics | 复制诊断信息 | 診断情報をコピー |
-| Ask AI | 询问 AI | AI に質問 |
-| Retry | 重试 | 再試行 |
-| Connection closed | 连接已断开 | 接続が切断されました |
-| Reconnect | 重新连接 | 再接続 |
-| More actions | 更多操作 | その他の操作 |
-| Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
-| Security | 安全 | セキュリティ |

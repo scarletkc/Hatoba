@@ -2,17 +2,6 @@
 
 Servers rarely keep a history of their configuration files, so Hatoba keeps one for the assistant's **Edit file** and **Write file** calls (`references/ai-tools.md`). Every call that wrote a file can be reverted from its block in the conversation.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Revert | 撤销修改 | 元に戻す |
-| Reverted | 已撤销 | 元に戻し済み |
-| Delete | 删除 | 削除 |
-| Revert and Send | 撤销并发送 | 元に戻して送信 |
-| Keep Files and Send | 保留文件并发送 | ファイルはそのままで送信 |
-| Send Anyway | 仍然发送 | このまま送信 |
-| Restore Anyway | 仍然恢复 | このまま復元 |
-| Delete Anyway | 仍然删除 | このまま削除 |
-
 ## Where the earlier content is kept
 
 - Before writing, the call keeps what the file held (or that it did not exist) together with what it writes. This copy stays on this device, encrypted in the vault's local database. Nothing is written on the server, so no backup file can be picked up by a wildcard include such as nginx's `include sites-enabled/*`.

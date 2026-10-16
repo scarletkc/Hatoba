@@ -21,51 +21,7 @@ Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface).
 - System tray (Windows and Linux). An icon in the notification area while Hatoba runs, with **Open Hatoba**, **Lock** and **Quit Hatoba**; a left click opens the window. Closing the window asks whether to minimize to the tray or quit (Settings → General → **Close Button**). macOS has no tray: its red button hides the window and the Dock icon brings it back.
 - Lock screen and first launch. Both replace the whole window: the lock screen asks for the master password, and first launch offers to create a vault or restore one from the cloud.
 
-Labels (the exact strings in each language):
-
-| en | zh-CN | ja |
-|---|---|---|
-| Settings | 设置 | 設定 |
-| Show or hide the sidebar | 显示或隐藏侧边栏 | サイドバーの表示／非表示 |
-| Dashboard | 仪表盘 | ダッシュボード |
-| All Hosts | 全部主机 | すべてのホスト |
-| Favorites | 收藏 | お気に入り |
-| Recent | 最近连接 | 最近の接続 |
-| Groups | 分组 | グループ |
-| New Group | 新建分组 | 新規グループ |
-| Tags | 标签 | タグ |
-| Vault | 保险库 | 保管庫 |
-| Keys | 密钥库 | 鍵 |
-| Cloud Sync | 云同步 | クラウド同期 |
-| Lock | 锁定 | ロック |
-| New Local Terminal | 新建本地终端 | 新しいローカル ターミナル |
-| This Computer | 本机 | このコンピューター |
-| New Tab | 新建标签 | 新しいタブ |
-| Close Tab | 关闭标签 | タブを閉じる |
-| Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
-| Hide AI Panel | 隐藏 AI 面板 | AI パネルを隠す |
-| Minimize | 最小化 | 最小化 |
-| Maximize | 最大化 | 最大化 |
-| Restore Down | 向下还原 | 元に戻す（縮小） |
-| Close | 关闭 | 閉じる |
-| Open Hatoba | 打开 Hatoba | Hatoba を開く |
-| Minimize to Tray | 最小化到托盘 | トレイに最小化 |
-| Quit Hatoba | 退出 Hatoba | Hatoba を終了 |
-| Connected | 已连接 | 接続済み |
-| Connecting… | 正在连接… | 接続中… |
-| Connection failed | 连接失败 | 接続に失敗 |
-| Disconnected | 已断开 | 切断済み |
-| Find in terminal | 在终端中查找 | ターミナル内を検索 |
-| Port Forwarding | 端口转发 | ポートフォワーディング |
-| SFTP | SFTP | SFTP |
-| More actions | 更多操作 | その他の操作 |
-| General | 通用 | 一般 |
-| Appearance | 外观 | 外観 |
-| Terminal | 终端 | ターミナル |
-| Proxies | 代理 | プロキシ |
-| Security | 安全 | セキュリティ |
-| AI | AI | AI |
-| About | 关于 | 情報 |
+Other labels: **This Computer**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, **Minimize**, **Maximize**, **Restore Down**, **Minimize to Tray**, **Connected**, **Connecting…**, **Connection failed**, **Disconnected**.
 
 ## Reference files
 
@@ -99,9 +55,20 @@ Read the file that matches the question with `read_skill`, giving the path shown
 | `references/troubleshooting-sync.md` | Sync and Cloudflare errors and what to do |
 | `references/troubleshooting-ai.md` | AI provider, search and MCP errors and what to do |
 
+These files name labels in English. The label files give them in the other languages, by file and section:
+
+| Files | Simplified Chinese | Japanese |
+|---|---|---|
+| This file, hosts and connecting, the dashboard, shortcuts | `references/labels/zh-CN-app.md` | `references/labels/ja-app.md` |
+| Terminal, SFTP, port forwarding, connection errors | `references/labels/zh-CN-terminal.md` | `references/labels/ja-terminal.md` |
+| Keys, vault and lock, settings, other errors | `references/labels/zh-CN-vault.md` | `references/labels/ja-vault.md` |
+| Sync, the sync Worker, sync errors | `references/labels/zh-CN-sync.md` | `references/labels/ja-sync.md` |
+| The AI panel, tools, history, models, file changes, attachments, side questions | `references/labels/zh-CN-ai.md` | `references/labels/ja-ai.md` |
+| AI instructions and memory, AI settings, ChatGPT, MCP, AI errors | `references/labels/zh-CN-ai-settings.md` | `references/labels/ja-ai-settings.md` |
+
 ## How to answer
 
-- Name UI elements by their exact label in the language the user writes in (zh-CN, en or ja). The tables in these files give all three. Copy the label as it is; do not translate it yourself. If a label is not in the tables, describe the element and where it is instead of guessing its text.
+- Name UI elements by their exact label in the language the user writes in (zh-CN, en or ja). For Chinese or Japanese, read the label file that covers the topic and copy the label as it is; do not translate it yourself. If a label is not there, describe the element and where it is instead of guessing its text.
 - Give menu paths with an arrow, such as Settings → AI (设置 → AI, 設定 → AI). Settings tabs are listed above; a setting's tab is named in its section.
 - Mention platform differences. Shortcuts use Ctrl+Shift+letter on Windows and Linux and ⌘ on macOS. Windows Hello exists on Windows only. The SSH agent is the OpenSSH agent on Windows and the `SSH_AUTH_SOCK` agent elsewhere. If the user's platform is unknown, give both.
 - Say plainly when Hatoba does not support something, and do not invent a feature, menu or setting. Offer a real workaround only when one exists, such as running `ssh` or `scp` in the terminal.
@@ -129,17 +96,6 @@ Hatoba is open source: https://github.com/scarletkc/Hatoba (README, docs, releas
 - https://raw.githubusercontent.com/scarletkc/Hatoba/main/docs/status.md
 
 The `main` branch can be ahead of the latest release and of the user's version, so say where a statement comes from. Compare the latest release with {{HATOBA_VERSION}}. If a newer release exists, point to **Check for Updates** in Settings → About, or to the dot on the sidebar's gear (**Settings (update available)**), which opens About. Once a check finds the newer version, **Download and Install** there downloads it, checks its signature, then closes Hatoba to install it and opens it again; see `references/settings.md`.
-
-Labels used above:
-
-| en | zh-CN | ja |
-|---|---|---|
-| Copy Diagnostics | 复制诊断信息 | 診断情報をコピー |
-| Ask AI | 询问 AI | AI に質問 |
-| Report a Problem | 反馈问题 | 問題を報告 |
-| Check for Updates | 检查更新 | アップデートを確認 |
-| Download and Install | 下载并安装 | ダウンロードしてインストール |
-| Settings (update available) | 设置（有新版本） | 設定（アップデートあり） |
 
 ## Not in Hatoba (current version)
 

@@ -6,15 +6,12 @@ The messages are shown exactly as the app prints them in each language, so a mes
 
 When importing a key, or connecting with one:
 
-| en | zh-CN | ja |
-|---|---|---|
-| Unsupported private key format. Use OpenSSH, PEM or PuTTY (.ppk). | 不支持的私钥格式。请使用 OpenSSH、PEM 或 PuTTY (.ppk) 格式。 | サポートされていない秘密鍵の形式です。OpenSSH、PEM、PuTTY (.ppk) を使用してください。 |
-| This key is protected by a passphrase. Enter it to continue. | 这个私钥受口令保护，请输入口令。 | この鍵はパスフレーズで保護されています。パスフレーズを入力してください。 |
-| Incorrect passphrase for this key. | 私钥口令不正确。 | 鍵のパスフレーズが正しくありません。 |
-| Unsupported key algorithm. Ed25519, ECDSA and RSA are supported. | 不支持这种密钥算法。支持 Ed25519、ECDSA 和 RSA。 | サポートされていない鍵アルゴリズムです。Ed25519、ECDSA、RSA に対応しています。 |
-| The private key is invalid or damaged. | 私钥内容无效或已损坏。 | 秘密鍵が無効か、破損しています。 |
-| This private key can’t be read. | 无法读取这个私钥。 | この秘密鍵を読み込めません。 |
-| Ask Each Time | 每次询问 | 毎回入力 |
+- "Unsupported private key format. Use OpenSSH, PEM or PuTTY (.ppk)."
+- "This key is protected by a passphrase. Enter it to continue."
+- "Incorrect passphrase for this key."
+- "Unsupported key algorithm. Ed25519, ECDSA and RSA are supported."
+- "The private key is invalid or damaged."
+- "This private key can’t be read."
 
 - Supported formats are OpenSSH, PEM and PuTTY (.ppk); supported algorithms are Ed25519, ECDSA and RSA (for example, DSA keys are not).
 - Enter the passphrase in the import form (it is saved encrypted with the key) or when Hatoba asks for it at connect; a wrong one asks again. A key on a jump host needs its passphrase saved.
@@ -23,38 +20,30 @@ When importing a key, or connecting with one:
 
 ## Locked, password and recovery
 
-| en | zh-CN | ja |
-|---|---|---|
-| The vault is locked. | 保险库已锁定。 | 保管庫はロックされています。 |
-| Incorrect master password. | 主密码不正确。 | マスターパスワードが正しくありません。 |
-| That recovery code isn’t right. Check it and try again. | 恢复码不正确，请检查后重试。 | リカバリーコードが正しくありません。確認してもう一度お試しください。 |
-| The two passwords don’t match. | 两次输入的主密码不一致。 | 2 つのパスワードが一致しません。 |
-| The master password needs at least 8 characters. | 主密码至少需要 8 个字符。 | マスターパスワードは 8 文字以上にしてください。 |
-| This password is easy to guess. A longer or less common one is safer. | 这个主密码容易被猜到，更长或更不常见的密码会更安全。 | このパスワードは推測されやすいです。より長いもの、または一般的でないもののほうが安全です。 |
-| No vault has been created yet. | 尚未创建保险库。 | 保管庫がまだ作成されていません。 |
-| A vault already exists. | 保险库已存在。 | 保管庫はすでに存在します。 |
+- "The vault is locked."
+- "Incorrect master password."
+- "That recovery code isn’t right. Check it and try again."
+- "The two passwords don’t match."
+- "The master password needs at least 8 characters."
+- "This password is easy to guess. A longer or less common one is safer."
+- "No vault has been created yet."
+- "A vault already exists."
 
 - After wrong master passwords, "Too many attempts. Try again in N s." appears and the password field is disabled until the countdown ends. Wait; each further miss lengthens the delay, up to a minute.
 - A forgotten master password can be reset only with the recovery code (**Forgot it? Use your recovery code**). With neither, the data cannot be recovered, and Hatoba cannot reset it.
 - The recovery code ignores case, dashes and spaces. A new code can be generated in Settings → Security (**Generate New Code…**), after which the old one stops working.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Forgot it? Use your recovery code | 忘记主密码？使用恢复码 | マスターパスワードをお忘れですか？ リカバリーコードを使う |
-| Generate New Code… | 生成新的恢复码… | 新しいコードを生成… |
-
 ## Files, forwards and other messages
 
-| en | zh-CN | ja |
-|---|---|---|
-| The file operation failed. | 文件操作失败。 | ファイル操作に失敗しました。 |
-| Couldn’t read or write the file. | 读写文件失败。 | ファイルの読み書きに失敗しました。 |
-| Something went wrong. | 发生了意外错误。 | 予期しないエラーが発生しました。 |
-| This item no longer exists. It may have been deleted on another device. | 找不到该项目，它可能已在其他设备上被删除。 | この項目は存在しません。別のデバイスで削除された可能性があります。 |
-| Cancelled. | 已取消。 | キャンセルしました。 |
-| Can’t access the clipboard. | 无法访问剪贴板。 | クリップボードにアクセスできません。 |
-| Can’t read this folder | 无法读取此目录 | このフォルダを読み取れません |
-| The name can’t be empty or contain /. | 名称不能为空，也不能包含 /。 | 名前を空にしたり、/ を含めたりすることはできません。 |
+- "The file operation failed."
+- "Couldn’t read or write the file."
+- "Something went wrong."
+- "This item no longer exists. It may have been deleted on another device."
+- "Cancelled."
+- "Can’t access the clipboard."
+- "The name can’t be empty or contain /."
+
+Other labels: **Can’t read this folder**.
 
 - "The file operation failed." (SFTP panel) means the server refused the operation: permissions, a name that already exists, or a full disk. See `references/sftp.md`. Folders cannot be uploaded or downloaded.
 - "Couldn’t read or write the file." is a local problem, such as a path that cannot be written when saving a download, a backup, or a skill export.
@@ -63,23 +52,14 @@ When importing a key, or connecting with one:
 - Port forwarding failures show in the **Port Forwarding** popover; a local port that is already in use is the usual cause (edit the rule, or use local port 0). See `references/port-forwarding.md`.
 - On Windows the logs are in `%LOCALAPPDATA%\app.hatoba.desktop\logs`. They record each SSH connection attempt with its host, port, user name, authentication method and kind of error, and never passwords, keys or terminal content.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Port Forwarding | 端口转发 | ポートフォワーディング |
-
 ## Updates
 
 These show in Settings → About, in the update row, after **Check for Updates** or **Download and Install**:
 
-| en | zh-CN | ja |
-|---|---|---|
-| Can’t reach GitHub. Check your network and try again. | 无法连接到 GitHub，请检查网络后重试。 | GitHub に接続できません。ネットワークを確認して、もう一度お試しください。 |
-| Couldn’t check for updates. Try again later. | 检查更新失败，请稍后再试。 | アップデートを確認できませんでした。しばらくしてからもう一度お試しください。 |
-| Couldn’t install the update. Try again later. | 无法安装更新，请稍后再试。 | アップデートをインストールできませんでした。しばらくしてからもう一度お試しください。 |
-| The downloaded update isn’t signed by Hatoba, so it wasn’t installed. | 下载的更新没有 Hatoba 的有效签名，已拒绝安装。 | ダウンロードしたアップデートに Hatoba の有効な署名がないため、インストールしませんでした。 |
-| Check for Updates | 检查更新 | アップデートを確認 |
-| Download and Install | 下载并安装 | ダウンロードしてインストール |
-| View on GitHub | 在 GitHub 上查看 | GitHub で見る |
+- "Can’t reach GitHub. Check your network and try again."
+- "Couldn’t check for updates. Try again later."
+- "Couldn’t install the update. Try again later."
+- "The downloaded update isn’t signed by Hatoba, so it wasn’t installed."
 
 - "Can’t reach GitHub." means GitHub did not answer at all: no network, a DNS or firewall problem, or a download that received nothing for 30 seconds. Check the connection and press the button again; a download starts over.
 - "Couldn’t check for updates." means GitHub answered with an error. Try again later.
@@ -89,8 +69,3 @@ These show in Settings → About, in the update row, after **Check for Updates**
 ## Still not solved
 
 If a problem is not covered by the troubleshooting files and looks like a bug, or the user wants something Hatoba lacks, use the feedback path in SKILL.md ("Project, feedback and newer information"): **Report a Problem** in Settings → About opens GitHub's bug report form, and feature requests go to https://github.com/scarletkc/Hatoba/issues/new?template=feature_request.yml. Offer to draft the text, and remind the user to leave out host names, addresses, keys, passwords and other secrets. The user submits it.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Report a Problem | 反馈问题 | 問題を報告 |
-| About | 关于 | 情報 |

@@ -6,33 +6,11 @@ Hosts, SSH keys, saved passwords, known host fingerprints, forwards, AI settings
 
 On first launch the window offers two ways to start:
 
-| en | zh-CN | ja |
-|---|---|---|
-| Create a New Vault | 创建新保险库 | 新しい保管庫を作成 |
-| Restore from Cloud | 从云端恢复 | クラウドから復元 |
-| Start | 开始 | 開始 |
-| Password | 主密码 | パスワード |
-| Recovery | 恢复码 | リカバリー |
-| Connect | 连接 | 接続 |
-
 - **Create a New Vault** sets a master password (at least 8 characters, with a strength hint: Weak, Fair, Strong, Very strong; a password that is easy to guess gets a warning but can be used) and then shows a recovery code.
 - **Restore from Cloud** is for a new device that should join an existing sync setup. A device that already has a vault joins from the Cloud Sync page. See `references/sync.md`.
 - The recovery code is shown once. **Save as Text** or **Print** it, then tick the box to confirm it is saved; **Finish Setup** completes the setup. It is the only way back in if the master password is forgotten. A new code can be generated in Settings → Security (**Generate New Code…**), and then the old one stops working.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Key | 密钥 | 鍵 |
-| Ask Each Time | 每次询问 | 毎回入力 |
-| Save Your Recovery Code | 保存你的恢复码 | リカバリーコードを保存 |
-| Save as Text | 存储为文本 | テキストで保存 |
-| Print | 打印 | 印刷 |
-| Finish Setup | 完成设置 | セットアップを完了 |
-| Recovery Code | 恢复码 | リカバリーコード |
-| Generate New Code… | 生成新的恢复码… | 新しいコードを生成… |
-| Weak | 弱 | 弱い |
-| Fair | 一般 | 普通 |
-| Strong | 强 | 強い |
-| Very strong | 很强 | とても強い |
+Other labels: **Start**, **Connect**, **Save Your Recovery Code**.
 
 ## Locking and unlocking
 
@@ -46,32 +24,7 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 - **Unlock with PIN** is a switch in Settings → Security, on every platform. Turning it on asks for the master password and a PIN of at least 4 characters of any kind (**Set Up PIN**). After the first unlock of each launch, the lock screen asks for the PIN (**Enter your PIN to unlock the vault**), with **Use master password** to switch, and **Use PIN** to switch back. A wrong PIN says how many tries are left; after five wrong PINs in a row the lock screen asks for the master password, and the PIN works again after an unlock with it. To change the PIN, turn the switch off and on again.
 - **Require the master password after a restart** appears under the PIN switch and is on by default. Turned off, the PIN also unlocks after Hatoba or the computer restarts: the vault key, wrapped by the PIN, is kept in the system credential store, so anyone who can read that store as the user can try PINs without the limit of five. The PIN and this switch are kept on each device and do not sync; joining a cloud vault that is a different vault turns the PIN off.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Auto-Lock | 自动锁定 | 自動ロック |
-| Lock when the computer sleeps | 电脑睡眠时锁定 | コンピュータのスリープ時にロック |
-| Disconnect all sessions when locked | 锁定时断开所有会话 | ロック時にすべてのセッションを切断 |
-| Lock Now | 立即锁定 | 今すぐロック |
-| Lock | 锁定 | ロック |
-| Never | 从不 | しない |
-| 1 hour | 1 小时 | 1 時間 |
-| Hatoba is locked | Hatoba 已锁定 | Hatoba はロックされています |
-| Master password | 主密码 | マスターパスワード |
-| Unlock | 解锁 | ロック解除 |
-| Forgot it? Use your recovery code | 忘记主密码？使用恢复码 | マスターパスワードをお忘れですか？ リカバリーコードを使う |
-| Reset with Recovery Code | 使用恢复码重置主密码 | リカバリーコードでリセット |
-| New Master Password | 新主密码 | 新しいマスターパスワード |
-| Reset and Unlock | 重置并解锁 | リセットしてロック解除 |
-| Unlock with Windows Hello | 使用 Windows Hello 解锁 | Windows Hello でロック解除 |
-| Unlock with PIN | 使用 PIN 解锁 | PIN でロック解除 |
-| Set Up PIN | 设置 PIN | PIN を設定 |
-| Confirm PIN | 确认 PIN | PIN（確認） |
-| Turn On | 开启 | オンにする |
-| Enter your PIN to unlock the vault | 输入 PIN 以解锁保险库 | PIN を入力して保管庫のロックを解除 |
-| Use master password | 使用主密码 | マスターパスワードを使う |
-| Use PIN | 使用 PIN | PIN を使う |
-| Require the master password after a restart | 重启后需要输入主密码 | 再起動後はマスターパスワードを要求 |
-| Security | 安全 | セキュリティ |
+Other labels: **1 hour**, **Hatoba is locked**, **New Master Password**, **Confirm PIN**, **Turn On**.
 
 ## Master password, backup and clipboard
 
@@ -79,43 +32,13 @@ Lock with the lock button at the bottom of the sidebar, Ctrl+Shift+L (⌘L on ma
 - Settings → General → **Export Encrypted Backup** → **Export…** saves the vault as one `hatoba-backup-YYYY-MM-DD.hatoba` file that only the master password opens. The app has no screen to import a backup file.
 - **Copy Password** on a host clears the copied password from the clipboard after the time set in Settings → Security → **Clear Clipboard**: 90 seconds by default, or Never.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Clear Clipboard | 清除剪贴板 | クリップボードの消去 |
-| Master Password | 主密码 | マスターパスワード |
-| Change… | 更改主密码… | 変更… |
-| Change Master Password | 更改主密码 | マスターパスワードを変更 |
-| Export Encrypted Backup | 导出加密备份 | 暗号化バックアップをエクスポート |
-| Export… | 导出… | エクスポート… |
-| General | 通用 | 一般 |
-| Copy Password | 复制密码 | パスワードをコピー |
+Other labels: **Change Master Password**.
 
 ## The Keys page
 
 Open it from the sidebar (**Keys**, under **Vault**). It lists the SSH keys in the vault, searchable (**Search keys**), with the buttons **Import…** and **Generate Key**. Columns are Name, Type, Fingerprint, Created and Used By (the first host using the key, plus how many more, or **Unused**). Selecting a key opens a detail panel with its fingerprint, creation date, last use, the public key (**Copy**), the hosts that use it, and the actions **Rename**, **Deploy to Host…** and **Delete…**.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Vault | 保险库 | 保管庫 |
-| Keys | 密钥库 | 鍵 |
-| Search keys | 搜索密钥 | 鍵を検索 |
-| Import… | 导入… | 読み込み… |
-| Generate Key | 生成新密钥 | 新しい鍵を生成 |
-| Name | 名称 | 名前 |
-| Type | 类型 | 種類 |
-| Fingerprint | 指纹 | フィンガープリント |
-| Created | 创建 | 作成日 |
-| Used By | 使用中 | 使用中 |
-| Unused | 未使用 | 未使用 |
-| Public Key | 公钥 | 公開鍵 |
-| Private Key | 私钥 | 秘密鍵 |
-| Used by | 使用中的主机 | 使用中のホスト |
-| Last used | 上次使用 | 最終使用 |
-| Copy public key | 复制公钥 | 公開鍵をコピー |
-| Copy | 复制 | コピー |
-| Rename | 重命名 | 名前を変更 |
-| Deploy to Host… | 部署到主机… | ホストに配置… |
-| Delete… | 删除… | 削除… |
+Other labels: **Public Key**, **Used by**, **Last used**, **Copy public key**.
 
 - **Import…** opens **Import Private Key**. Choose a file (**Choose File**) or **Paste Text**, give the key a name, and enter its passphrase if it has one (the passphrase is saved encrypted with the key). OpenSSH, PEM and PuTTY (.ppk) formats are supported; the algorithms are Ed25519, ECDSA and RSA.
 - **Generate Key** makes an Ed25519 key (recommended) or an RSA 4096 key on this device, with a comment and an optional passphrase. RSA takes a few seconds.
@@ -123,23 +46,6 @@ Open it from the sidebar (**Keys**, under **Vault**). It lists the SSH keys in t
 - **Delete…** removes the key from the vault for good, on all synced devices. Hosts that used it fall back to **Ask Each Time**.
 - The private key cannot be viewed or exported; only the public key can be copied. It is decrypted in memory only while connecting.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Import Private Key | 导入私钥 | 秘密鍵を読み込む |
-| Choose File | 选择文件 | ファイルを選択 |
-| Paste Text | 粘贴文本 | テキストを貼り付け |
-| Choose File… | 选择文件… | ファイルを選択… |
-| Passphrase (optional) | 口令（可选） | パスフレーズ（任意） |
-| Ed25519 | Ed25519 | Ed25519 |
-| RSA 4096 | RSA 4096 | RSA 4096 |
-| Comment | 注释 | コメント |
-| Confirm Passphrase | 确认口令 | パスフレーズ（確認） |
-| Rename Key | 重命名密钥 | 鍵の名前を変更 |
-| Deploy Public Key to Host | 部署公钥到主机 | 公開鍵をホストに配置 |
-| Host | 主机 | ホスト |
-| Deploy | 部署 | 配置 |
-| Delete Key | 删除密钥 | 鍵を削除 |
-| Import | 导入 | 読み込む |
-| Generate | 生成 | 生成 |
+Other labels: **Choose File…**, **Passphrase (optional)**, **Comment**, **Confirm Passphrase**, **Rename Key**, **Deploy Public Key to Host**, **Delete Key**.
 
 For key errors (unsupported format, wrong passphrase) see `references/troubleshooting.md`.

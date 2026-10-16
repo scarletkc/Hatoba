@@ -15,16 +15,7 @@ On Windows and Linux every app shortcut uses Ctrl+Shift, so that plain Ctrl+lett
 | Lock the vault | Ctrl+Shift+L | ⌘L |
 | Show or hide the AI panel | Ctrl+Shift+A | ⌘⇧A |
 
-| en | zh-CN | ja |
-|---|---|---|
-| New Tab | 新建标签 | 新しいタブ |
-| Close Tab | 关闭标签 | タブを閉じる |
-| Lock | 锁定 | ロック |
-| Settings | 设置 | 設定 |
-| Show AI Panel | 显示 AI 面板 | AI パネルを表示 |
-| Hide AI Panel | 隐藏 AI 面板 | AI パネルを隠す |
-| Search hosts or ssh user@host | 搜索主机或 ssh user@host | ホストを検索、または ssh user@host |
-| Right-Click in Terminal | 终端中的右键 | ターミナルでの右クリック |
+Other labels: **New Tab**, **Close Tab**, **Show AI Panel**, **Hide AI Panel**, **Search hosts or ssh user@host**.
 
 ## Terminal
 

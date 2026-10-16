@@ -1,13 +1,15 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { AREAS, labelFiles } from "./hatobaSkillLabels";
 import { messages } from "./locales";
 
 /**
  * The built-in `hatoba` skill (crates/hatoba-ai/src/skills/builtin/hatoba) describes the current UI to the
- * AI assistant. Its label tables must quote the i18n tables exactly, so a renamed or reworded label fails here
- * and the skill gets updated with it (docs/development.md).
+ * AI assistant. It names labels in English, and its `references/labels/` files, written from the message
+ * tables, give them in the other languages. A renamed or reworded label fails here until those files are
+ * written again (docs/development.md).
  */
 
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../crates/hatoba-ai/src/skills/builtin/hatoba");
@@ -15,7 +17,7 @@ const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../
 const MAX_CHARS = 15_000;
 /** SKILL.md descriptions are limited to this many characters (spec AI-27). */
 const MAX_DESCRIPTION_CHARS = 1_024;
-const HEADER = "| en | zh-CN | ja |";
+const LABELS = "references/labels";
 
 interface SkillFile {
   /** Path relative to the skill folder, with forward slashes. */
@@ -23,79 +25,21 @@ interface SkillFile {
   text: string;
 }
 
-function readSkillFiles(): SkillFile[] {
-  const files: SkillFile[] = [{ name: "SKILL.md", text: readFileSync(resolve(SKILL_DIR, "SKILL.md"), "utf8") }];
-  for (const entry of readdirSync(resolve(SKILL_DIR, "references"), { withFileTypes: true })) {
-    if (entry.isFile() && entry.name.endsWith(".md")) {
-      files.push({ name: `references/${entry.name}`, text: readFileSync(resolve(SKILL_DIR, "references", entry.name), "utf8") });
-    }
-  }
-  return files;
+function readDir(dir: string): SkillFile[] {
+  if (!existsSync(resolve(SKILL_DIR, dir))) return [];
+  return readdirSync(resolve(SKILL_DIR, dir), { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => ({ name: `${dir}/${entry.name}`, text: readFileSync(resolve(SKILL_DIR, dir, entry.name), "utf8") }));
 }
 
-const files = readSkillFiles();
+const files: SkillFile[] = [
+  { name: "SKILL.md", text: readFileSync(resolve(SKILL_DIR, "SKILL.md"), "utf8") },
+  ...readDir("references"),
+  ...readDir(LABELS),
+];
 const referenceFiles = files.filter((f) => f.name !== "SKILL.md");
-
-interface LabelRow {
-  file: string;
-  line: number;
-  cells: string[];
-}
-
-/** Splits one Markdown table row into trimmed cells (`\|` is a literal pipe). */
-function splitRow(line: string): string[] {
-  const cells = line
-    .replace(/\\\|/g, "\u0000")
-    .split("|")
-    .map((c) => c.replace(/\u0000/g, "|").trim());
-  return cells.slice(1, line.trimEnd().endsWith("|") ? -1 : undefined);
-}
-
-/** Every row of every table whose header is exactly `| en | zh-CN | ja |`, plus header mistakes. */
-function labelRows(file: SkillFile): { rows: LabelRow[]; problems: string[] } {
-  const rows: LabelRow[] = [];
-  const problems: string[] = [];
-  const lines = file.text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (/^\|\s*en\s*\|\s*zh-CN\s*\|\s*ja\s*\|$/.test(line) && line !== HEADER) {
-      problems.push(`${file.name}:${i + 1}: the header must be exactly "${HEADER}", found "${line}"`);
-      continue;
-    }
-    if (line !== HEADER) continue;
-    if (!/^\|\s*-+\s*\|\s*-+\s*\|\s*-+\s*\|$/.test((lines[i + 1] ?? "").trim())) {
-      problems.push(`${file.name}:${i + 2}: the line under the header must be |---|---|---|`);
-    }
-    for (let j = i + 2; j < lines.length && lines[j].trim().startsWith("|"); j++) {
-      rows.push({ file: file.name, line: j + 1, cells: splitRow(lines[j]) });
-    }
-  }
-  return { rows, problems };
-}
-
-const zh = messages["zh-CN"];
-const en = messages.en;
-const ja = messages.ja;
-const placeholder = /\{\w+\}/;
-
-/** Why a row matches no message key, naming the closest key. */
-function explainMismatch(row: LabelRow): string {
-  const [e, z, j] = row.cells;
-  const keys = Object.keys(zh);
-  let best: { key: string; hits: number } | null = null;
-  for (const key of keys) {
-    const hits = Number(en[key] === e) + Number(zh[key] === z) + Number(ja[key] === j);
-    if (hits > 0 && (!best || hits > best.hits)) best = { key, hits };
-  }
-  if (!best) return "no message key has any of these three strings";
-  const k = best.key;
-  const diffs = [
-    en[k] !== e && `en should be ${JSON.stringify(en[k])}`,
-    zh[k] !== z && `zh-CN should be ${JSON.stringify(zh[k])}`,
-    ja[k] !== j && `ja should be ${JSON.stringify(ja[k])}`,
-  ].filter(Boolean);
-  return `closest key is ${k}: ${diffs.join("; ")}`;
-}
+const generated = labelFiles();
+const mentions = (text: string) => new Set(text.match(/references\/[A-Za-z0-9_./-]+\.md/g) ?? []);
 
 describe("built-in hatoba skill", () => {
   it("has SKILL.md and reference files", () => {
@@ -125,10 +69,9 @@ describe("built-in hatoba skill", () => {
     expect([...description].length, "SKILL.md description is too long").toBeLessThanOrEqual(MAX_DESCRIPTION_CHARS);
   });
 
-  it("keeps the app version placeholder in SKILL.md, outside the label tables", () => {
+  it("keeps the app version placeholder in SKILL.md, outside the label files", () => {
     expect(files[0].text).toContain("{{HATOBA_VERSION}}");
-    const inTables = files.flatMap((f) => labelRows(f).rows).filter((r) => r.cells.some((c) => c.includes("{{")));
-    expect(inTables.map((r) => `${r.file}:${r.line}`)).toEqual([]);
+    expect(generated.filter((f) => f.text.includes("{{")).map((f) => f.path)).toEqual([]);
   });
 
   it.each(files.map((f) => [f.name, f] as const))("%s stays under the character limit", (_name, file) => {
@@ -137,40 +80,54 @@ describe("built-in hatoba skill", () => {
   });
 
   it("links every reference file from SKILL.md, and links only existing files", () => {
-    const linked = new Set(files[0].text.match(/references\/[A-Za-z0-9_.-]+\.md/g) ?? []);
+    const linked = mentions(files[0].text);
     const present = new Set(referenceFiles.map((f) => f.name));
     expect([...present].filter((n) => !linked.has(n)).map((n) => `SKILL.md does not mention ${n}`)).toEqual([]);
     expect([...linked].filter((n) => !present.has(n)).map((n) => `SKILL.md mentions ${n}, which does not exist`)).toEqual([]);
 
     const dangling: string[] = [];
     for (const f of referenceFiles) {
-      for (const n of new Set(f.text.match(/references\/[A-Za-z0-9_.-]+\.md/g) ?? [])) {
+      for (const n of mentions(f.text)) {
         if (!present.has(n)) dangling.push(`${f.name} mentions ${n}, which does not exist`);
       }
     }
     expect(dangling).toEqual([]);
   });
 
-  it("has well-formed label tables", () => {
-    const problems = files.flatMap((f) => labelRows(f).problems);
-    const bad = files.flatMap((f) => labelRows(f).rows).filter((r) => r.cells.length !== 3 || r.cells.some((c) => c === ""));
-    expect([...problems, ...bad.map((r) => `${r.file}:${r.line}: a label row needs three non-empty cells (en, zh-CN, ja)`)]).toEqual([]);
-    expect(files.flatMap((f) => labelRows(f).rows).length).toBeGreaterThan(100);
+  it("puts label tables only in the label files", () => {
+    const tables = files.filter((f) => !f.name.startsWith(`${LABELS}/`) && /^\|\s*en\s*\|/m.test(f.text)).map((f) => f.name);
+    expect(tables, "name labels in English; the other languages are in the label files").toEqual([]);
+  });
+});
+
+describe("the skill's label files", () => {
+  const sections = AREAS.flatMap((area) => Object.entries(area.files).flatMap(([file, s]) => Object.entries(s).map(([heading, keys]) => ({ file, heading, keys }))));
+
+  it("cover each skill file once, by sections it has", () => {
+    const covered = AREAS.flatMap((area) => Object.keys(area.files));
+    expect(covered.filter((file, i) => covered.indexOf(file) !== i)).toEqual([]);
+    const problems: string[] = [];
+    for (const { file, heading } of sections) {
+      const text = files.find((f) => f.name === file)?.text;
+      if (text === undefined) problems.push(`${file} does not exist`);
+      else if (heading && !text.split(/\r?\n/).includes(`## ${heading}`)) problems.push(`${file} has no "## ${heading}" section`);
+    }
+    expect(problems).toEqual([]);
   });
 
-  it.each(files.map((f) => [f.name, f] as const))("%s quotes UI labels exactly as the i18n tables", (_name, file) => {
-    const failures: string[] = [];
-    for (const row of labelRows(file).rows) {
-      if (row.cells.length !== 3) continue;
-      const [e, z, j] = row.cells;
-      const shown = `en=${JSON.stringify(e)} zh-CN=${JSON.stringify(z)} ja=${JSON.stringify(j)}`;
-      if (row.cells.some((c) => placeholder.test(c))) {
-        failures.push(`${row.file}:${row.line}: a labels table may hold only messages without {placeholders}: ${shown}`);
-        continue;
-      }
-      const match = Object.keys(zh).some((key) => en[key] === e && zh[key] === z && ja[key] === j);
-      if (!match) failures.push(`${row.file}:${row.line}: no message key has ${shown} (${explainMismatch(row)})`);
-    }
-    expect(failures).toEqual([]);
+  it("quote only messages without {placeholders}", () => {
+    const keys = sections.flatMap((s) => s.keys);
+    const withPlaceholders = keys.filter((key) => Object.values(messages).some((table) => /\{\w+\}/.test(table[key])));
+    expect(withPlaceholders).toEqual([]);
+  });
+
+  // `pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts` writes them again.
+  it.each(generated.map((f) => [f.path, f] as const))("%s matches the message tables", async (path, file) => {
+    await expect(file.text).toMatchFileSnapshot(resolve(SKILL_DIR, path));
+  });
+
+  it("are all written from the message tables", () => {
+    const paths = new Set(generated.map((f) => f.path));
+    expect(readDir(LABELS).map((f) => f.name).filter((name) => !paths.has(name))).toEqual([]);
   });
 });

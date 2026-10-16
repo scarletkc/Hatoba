@@ -9,20 +9,9 @@ A side question asks the assistant about the conversation without stopping it: a
 - **Ask About This** on an approval card opens a box on the card with a suggested question about the call; **Ask** sends it, and Esc closes the box. The call is neither run nor rejected, and the card keeps waiting for **Run** or **Reject**. It is not offered while you edit the call, since the assistant sees the call as the model wrote it.
 - The assistant answers from the conversation so far, with the conversation's model, and uses no tools; it starts no MCP server. It is told which calls of the running turn still wait for approval or are still running. If the model tries to use a tool anyway, Hatoba asks it once more without tools.
 
-| en | zh-CN | ja |
-|---|---|---|
-| Ask a Side Question | 顺便问一句 | ついでに質問 |
-| Ask About This | 先问一下 | これについて質問 |
-| Ask | 提问 | 質問する |
-
 ## The answer
 
 The answer streams into a bubble with a dashed border at the end of the conversation, titled "Side question" and marked "Not saved", with **Copy** and a close button. A failed side question shows the error and **Retry**.
-
-| en | zh-CN | ja |
-|---|---|---|
-| Side question | 顺便一问 | ついでの質問 |
-| Not saved | 不会保存 | 保存されません |
 
 - Nothing of it is stored, synced, exported or searched, and later requests leave it out, so the assistant does not remember it in the conversation. To keep something from it, send it as a normal message.
 - Closing the bubble, asking another side question, sending a message (**Edit and Resend**, and **Retry** after a failed reply, too) or opening another conversation in the panel discards it; an answer still coming stops first.

@@ -176,10 +176,15 @@ A page in the main area gets its narrowest in the smallest window (`MIN_SIZE` in
 The AI assistant ships with a built-in `hatoba` skill in [`crates/hatoba-ai/src/skills/builtin/hatoba`](../crates/hatoba-ai/src/skills/builtin/hatoba). Its `SKILL.md` and `references/` files describe the current interface, settings, and features, so the assistant can answer questions about Hatoba, and the [website](#website) publishes them as its docs. A pull request that adds, renames, or removes UI, settings, or a feature that the skill describes updates the skill in the same pull request.
 
 - Each file stays under 15,000 characters, because `read_skill` shortens a longer file.
-- Quote UI labels in tables headed `| en | zh-CN | ja |`, copied character for character from the message tables in `apps/desktop/src/i18n/locales`, and only from messages without `{placeholders}`.
+- Name UI labels in English, copied character for character from the `en` message tables in `apps/desktop/src/i18n/locales`. The other languages go in the label files, not the text.
+- The label files in `references/labels/` give those labels in each other language, by file and `## ` section, so the assistant can quote what the user sees. They are written from `AREAS` in `apps/desktop/src/i18n/hatobaSkillLabels.ts`, which lists the message keys of each section; only messages without `{placeholders}` can be listed. To add a label, add its key there and write the files again (below). A new language gets its files from `LANGUAGE_NAME` in the same file, and each new file goes in `SKILL.md`'s list and in `crates/hatoba-ai/src/skills/builtin.rs`.
 - `{{HATOBA_VERSION}}` in `SKILL.md` is a placeholder that the app replaces with the running version.
 
-`apps/desktop/src/i18n/hatobaSkill.test.ts` runs with `pnpm test`. It checks every table row against the message tables, the frontmatter, the size limit, and the links between the files.
+`apps/desktop/src/i18n/hatobaSkill.test.ts` runs with `pnpm test`. It checks the label files against the message tables, the sections they name, the frontmatter, the size limit, and the links between the files. After a label changes, write the label files again:
+
+```bash
+pnpm --filter @hatoba/desktop exec vitest run -u src/i18n/hatobaSkill.test.ts
+```
 
 ## Update the screenshots and demo video
 
