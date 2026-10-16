@@ -1,6 +1,6 @@
 # Japanese labels: the window, the host list, connecting and the dashboard
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `SKILL.md`
 
@@ -182,6 +182,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Verify | 認証 |
 | Enter the key passphrase | 秘密鍵のパスフレーズを入力 |
 | Key passphrase | 鍵のパスフレーズ |
+| New host key for {host}:{port} | {host}:{port} の新しいホストキー |
 
 ### When a connection fails or ends
 

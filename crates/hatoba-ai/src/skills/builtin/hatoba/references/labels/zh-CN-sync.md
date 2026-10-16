@@ -1,6 +1,6 @@
 # Simplified Chinese labels: Cloud Sync and the sync Worker
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/sync.md`
 
@@ -40,6 +40,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Master Password | 主密码 |
 | Finish Setup | 完成设置 |
 | Cloud Sync is on | 云同步已开启 |
+| Uploading {n} items… | 正在上传 {n} 项… |
 
 ### Join a cloud vault
 
@@ -226,6 +227,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Edit Host | 编辑主机 |
 | Open Settings → AI | 打开设置 → AI |
 | Custom Instructions | 自定义指令 |
+| Host “{name}” is too large to sync. Shorten its notes, AI notes, or environment variables. | 主机“{name}”的数据太大，无法同步。请缩短它的备注、AI 备注或环境变量。 |
 
 ### Cloudflare and deployment errors
 
@@ -262,6 +264,12 @@ The labels that these files name in English, as the interface shows them in Simp
 | Account ID (optional) | Account ID（可选） |
 | Worker and database names | Worker 和数据库名称 |
 | Retry | 重试 |
+
+### Devices and conflicts
+
+| en | zh-CN |
+|---|---|
+| {n} conflicts were resolved automatically | {n} 项冲突已自动解决 |
 
 ### Still not solved
 

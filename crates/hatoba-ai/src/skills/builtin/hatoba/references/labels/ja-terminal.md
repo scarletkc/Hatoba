@@ -1,6 +1,6 @@
 # Japanese labels: terminal tabs, SFTP, port forwarding and connection errors
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/terminal.md`
 
@@ -143,6 +143,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | This file will be permanently deleted from the server. This can’t be undone. | このファイルはサーバーから完全に削除されます。元に戻せません。 |
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | このフォルダとその中身はすべてサーバーから完全に削除されます。元に戻せません。 |
 | Path copied | パスをコピーしました |
+| Drop to upload to {path} | ここにドロップして {path} にアップロード |
 
 ### Transfers
 
@@ -198,6 +199,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Retry | 再試行 |
 | Failed | 接続失敗 |
 | Test Connection | 接続テスト |
+| Connection diagnostics · {host} | 接続の診断 · {host} |
 
 ### Each kind of failure
 
@@ -247,6 +249,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Host key has changed | ホストキーが変更されました |
 | Disconnect | 切断 |
 | Update Fingerprint and Connect | フィンガープリントを更新して接続 |
+| New host key for {host}:{port} | {host}:{port} の新しいホストキー |
 
 ### Dropped connections and keepalive
 

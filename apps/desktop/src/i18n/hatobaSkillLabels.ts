@@ -79,6 +79,7 @@ export const AREAS: Area[] = [
           "terminal.hostkey.fingerprint", "terminal.hostkey.trust", "terminal.hostkey.changedTitle",
           "terminal.hostkey.known", "terminal.hostkey.received", "terminal.menu.disconnect", "terminal.hostkey.update",
           "terminal.auth.title", "terminal.auth.submit", "terminal.passphrase.title", "terminal.passphrase.label",
+          "terminal.hostkey.additionalTitle",
         ],
         "When a connection fails or ends": [
           "terminal.err.copyDiag", "terminal.menu.askAi", "btn.retry", "terminal.disconnected",
@@ -161,7 +162,7 @@ export const AREAS: Area[] = [
         "Files and folders": [
           "sftp.menu.open", "sftp.menu.download", "sftp.menu.rename", "sftp.menu.delete", "sftp.menu.copyPath",
           "sftp.menu.newFolder", "sftp.menu.upload", "sftp.invalidName", "sftp.delete.file", "sftp.delete.dir",
-          "sftp.pathCopied",
+          "sftp.pathCopied", "sftp.dropHere",
         ],
         "Transfers": [
           "sftp.transfers", "sftp.cancelTransfer", "sftp.dismissTransfer", "sftp.transferCancelled",
@@ -182,6 +183,7 @@ export const AREAS: Area[] = [
       "references/troubleshooting-connections.md": {
         "Reading a failure": [
           "terminal.err.copyDiag", "terminal.menu.askAi", "hosts.editHost", "btn.retry", "hosts.failed", "hosts.test",
+          "ai.diagnostics",
         ],
         "Each kind of failure": [
           "ssh.err.auth_failed", "ssh.err.host_key_rejected", "ssh.err.key_parse", "ssh.err.disconnected",
@@ -195,7 +197,7 @@ export const AREAS: Area[] = [
         ],
         "Host key prompts and changes": [
           "terminal.hostkey.trust", "btn.cancel", "terminal.hostkey.changedTitle", "terminal.menu.disconnect",
-          "terminal.hostkey.update",
+          "terminal.hostkey.update", "terminal.hostkey.additionalTitle",
         ],
         "Dropped connections and keepalive": [
           "terminal.disconnected", "terminal.menu.reconnect", "terminal.status.disconnected", "settings.sec.disconnect",
@@ -220,7 +222,7 @@ export const AREAS: Area[] = [
           "vault.unlock.forgot", "vault.recover.title", "vault.recover.newPassword", "vault.recover.submit",
           "vault.unlock.hello", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
           "vault.unlock.subtitlePin", "vault.unlock.usePassword", "vault.unlock.usePin", "settings.sec.pinRestart",
-          "settings.tab.security",
+          "settings.tab.security", "err.throttled", "lock.sessionsKept",
         ],
         "Master password, backup and clipboard": [
           "settings.sec.clipboard", "vault.field.master", "settings.sec.password.button", "sync.link.password",
@@ -268,7 +270,8 @@ export const AREAS: Area[] = [
           "settings.about.update", "settings.about.check", "settings.about.install", "settings.about.install.confirm",
           "settings.about.releasePage", "settings.about.auto", "settings.about.checking", "settings.about.latest",
           "settings.about.copyVersion", "settings.about.website", "settings.about.source", "settings.about.license",
-          "settings.about.report", "sidebar.settingsUpdate", "sidebar.star.title", "sidebar.star.star",
+          "settings.about.report", "sidebar.settingsUpdate", "sidebar.star.title", "sidebar.star.star", "tray.update",
+          "settings.about.available",
         ],
       },
       "references/troubleshooting.md": {
@@ -279,7 +282,7 @@ export const AREAS: Area[] = [
         "Locked, password and recovery": [
           "err.locked", "err.wrong_password", "err.wrong_recovery_code", "vault.err.mismatch", "vault.err.tooShort",
           "vault.err.tooWeak", "err.not_initialized", "err.already_initialized", "vault.unlock.forgot",
-          "settings.sec.recovery.button",
+          "settings.sec.recovery.button", "err.throttled",
         ],
         "Files, forwards and other messages": [
           "err.sftp", "err.io", "err.internal", "err.not_found", "err.cancelled", "terminal.clipboardDenied",
@@ -309,7 +312,7 @@ export const AREAS: Area[] = [
         "Set up on the first device": [
           "sync.step.method", "sync.step.connect", "sync.step.password", "sync.opt.deploy", "sync.opt.recommended",
           "sync.opt.worker", "sync.opt.token", "sync.howEncrypt", "btn.continue", "btn.cancel", "btn.back",
-          "sync.w3.title", "sync.masterPassword", "sync.finish", "sync.enabled",
+          "sync.w3.title", "sync.masterPassword", "sync.finish", "sync.enabled", "sync.uploading",
         ],
         "Join a cloud vault": [
           "sync.test.hasVault", "sync.join.title", "sync.join.submit", "sync.join.busy",
@@ -370,7 +373,7 @@ export const AREAS: Area[] = [
         ],
         "An item too large to sync": [
           "sync.tooLarge.settings", "hosts.err.tooLarge", "hosts.editHost", "ai.noProvider.open",
-          "aiSettings.instructions",
+          "aiSettings.instructions", "sync.tooLarge.host",
         ],
         "Cloudflare and deployment errors": [
           "err.cloudflare_token", "err.cloudflare", "err.subdomain_required", "err.subdomain_unavailable",
@@ -380,6 +383,9 @@ export const AREAS: Area[] = [
           "sync.dep.step.inspect", "sync.dep.step.create_database", "sync.dep.step.migrate", "sync.dep.step.upload",
           "sync.dep.step.setup_token", "sync.dep.step.route", "sync.dep.step.wait", "sync.dep.createToken",
           "sync.token.edit", "sync.dep.accountId", "sync.dep.names", "btn.retry",
+        ],
+        "Devices and conflicts": [
+          "sync.conflictBanner",
         ],
         "Still not solved": [
           "sidebar.star.report", "sync.conflictBanner.view", "sync.sec.devices", "btn.remove",
@@ -400,13 +406,14 @@ export const AREAS: Area[] = [
           "ai.newConversation", "ai.history", "ai.model", "ai.effort", "ai.compact", "ai.send", "ai.stop",
           "ai.stopAndSend", "ai.queued", "ai.queued.edit", "ai.queued.remove", "ai.add", "ai.add.slash",
           "ai.add.skills", "ai.tools", "ai.tabRunning", "ai.tabWaiting", "terminal.menu.reconnect", "ai.continueHere",
+          "ai.connectTo", "ai.note.hostChange",
         ],
         "`/` commands and `@` mentions": [
           "ai.cmd.menu", "ai.mention.menu", "ai.mention.local",
         ],
         "MCP servers: **MCP Tools** and `/mcp`": [
           "ai.tools.title", "ai.tools.manage", "ai.tools.off", "ai.tools.stopped", "ai.tools.starting",
-          "ai.tools.failed", "ai.status.mcpStarting",
+          "ai.tools.failed", "ai.status.mcpStarting", "ai.note.mcpTools",
         ],
       },
       "references/ai-tools.md": {
@@ -426,7 +433,7 @@ export const AREAS: Area[] = [
         "Approval cards": [
           "ai.call.approval", "ai.approval.workdir", "ai.approval.homeDir", "ai.approval.run", "ai.queued.edit",
           "ai.approval.reject", "ai.approval.allowHere", "ai.approval.alwaysAllow", "ai.approval.alwaysAllowHost",
-          "ai.approval.reasonPlaceholder", "ai.approval.escaped",
+          "ai.approval.reasonPlaceholder", "ai.approval.escaped", "ai.approval.alwaysAllowCommand",
         ],
       },
       "references/ai-history.md": {
@@ -443,7 +450,7 @@ export const AREAS: Area[] = [
       },
       "references/ai-models.md": {
         "The model": [
-          "ai.model", "aiSettings.default", "aiSettings.default.row",
+          "ai.model", "aiSettings.default", "aiSettings.default.row", "ai.note.modelChange",
         ],
         "Thinking level": [
           "ai.effort", "ai.effort.default", "ai.effort.low", "ai.effort.medium", "ai.effort.high", "ai.effort.xhigh",
@@ -458,6 +465,9 @@ export const AREAS: Area[] = [
           "ai.revert.action", "ai.revert.reverted", "ai.revert.delete", "ai.editFiles.revert", "ai.editFiles.keep",
           "ai.editFiles.sendAnyway", "ai.revert.restore", "ai.revert.deleteAnyway",
         ],
+        "Reverting": [
+          "ai.note.fileRevert",
+        ],
       },
       "references/ai-attachments.md": {
         "Terminal selection": [
@@ -465,17 +475,17 @@ export const AREAS: Area[] = [
         ],
         "Asking about a failed connection": [
           "terminal.err.copyDiag", "hosts.editHost", "btn.retry", "ai.diagnostics.preview", "ai.diagnostics.sent",
-          "ai.diagnostics.remove", "ai.connection.question",
+          "ai.diagnostics.remove", "ai.connection.question", "ai.diagnostics",
         ],
         "Long pastes": [
-          "ai.paste.preview", "ai.paste.asText", "ai.paste.remove",
+          "ai.paste.preview", "ai.paste.asText", "ai.paste.remove", "ai.paste",
         ],
         "Text files": [
-          "ai.add", "ai.attach", "ai.attach.drop", "ai.file.preview",
+          "ai.add", "ai.attach", "ai.attach.drop", "ai.file.preview", "ai.attach.tooLarge", "ai.attach.total",
         ],
         "The terminal's screen": [
           "ai.note.screen.fullScreen", "aiSettings.screen", "ai.screen", "ai.screen.noTerminal",
-          "aiSettings.screen.row",
+          "aiSettings.screen.row", "ai.note.screen",
         ],
         "Does it fit the model?": [
           "ai.fit.blocked", "aiSettings.models.col.context",
@@ -534,7 +544,7 @@ export const AREAS: Area[] = [
           "aiSettings.skills.files", "aiSettings.skills.files.add", "aiSettings.skills.imp.title",
           "aiSettings.skills.imp.files", "aiSettings.skills.imp.replace", "aiSettings.skills.imp.rename",
           "aiSettings.skills.imp.submitReplace", "aiSettings.skills.builtin", "aiSettings.skills.builtin.title",
-          "aiSettings.skills.err.nameReserved", "aiSettings.skills.reservedNote",
+          "aiSettings.skills.err.nameReserved", "aiSettings.skills.reservedNote", "aiSettings.skills.builtin.view",
         ],
         "Auto Mode": [
           "aiSettings.judge", "aiSettings.judge.row", "aiSettings.judge.placeholder", "aiSettings.judge.test",
@@ -576,7 +586,7 @@ export const AREAS: Area[] = [
           "ai.err.noModel", "ai.loadFailed", "ai.history.failed", "ai.search.failed", "ai.stop", "btn.retry",
           "ai.compact", "aiSettings.f.authHeader", "aiSettings.f.apiKeyReplace", "aiSettings.models.fetch",
           "aiSettings.models.col.context", "aiSettings.models.col.output", "ai.newConversation", "aiSettings.f.baseUrl",
-          "aiSettings.models",
+          "aiSettings.models", "ai.outcome.errorStatus",
         ],
         "Thinking level and reasoning": [
           "ai.effort", "ai.effort.default", "ai.effortIgnored", "ai.reasoning", "aiSettings.models.col.effort",
@@ -629,7 +639,7 @@ export function labelFiles(): LabelFile[] {
     for (const area of AREAS) {
       const parts = [
         `# ${language} labels: ${area.title}`,
-        `The labels that these files name in English, as the interface shows them in ${language} (${locale}). Quote them exactly; the same English label can read differently in another file or section.`,
+        `The labels that these files name in English, as the interface shows them in ${language} (${locale}). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.`,
       ];
       for (const [file, sections] of Object.entries(area.files)) {
         parts.push(`## \`${file}\``);

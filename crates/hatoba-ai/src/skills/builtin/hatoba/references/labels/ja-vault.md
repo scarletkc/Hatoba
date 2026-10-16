@@ -1,6 +1,6 @@
 # Japanese labels: keys, the vault, settings and other errors
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/keys-vault-and-lock.md`
 
@@ -55,6 +55,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Use PIN | PIN を使う |
 | Require the master password after a restart | 再起動後はマスターパスワードを要求 |
 | Security | セキュリティ |
+| Too many attempts. Try again in {s} s. | 試行回数が多すぎます。{s} 秒後にもう一度お試しください。 |
+| {n} sessions stay connected in the background | {n} 件のセッションがバックグラウンドで接続を維持しています |
 
 ### Master password, backup and clipboard
 
@@ -211,6 +213,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Settings (update available) | 設定（アップデートあり） |
 | Enjoying Hatoba? | Hatoba は気に入りましたか？ |
 | Star | スターを付ける |
+| Update to v{version} | v{version} にアップデート |
+| Hatoba v{version} is available. | 新しいバージョン v{version} があります。 |
 
 ## `references/troubleshooting.md`
 
@@ -240,6 +244,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | A vault already exists. | 保管庫はすでに存在します。 |
 | Forgot it? Use your recovery code | マスターパスワードをお忘れですか？ リカバリーコードを使う |
 | Generate New Code… | 新しいコードを生成… |
+| Too many attempts. Try again in {s} s. | 試行回数が多すぎます。{s} 秒後にもう一度お試しください。 |
 
 ### Files, forwards and other messages
 

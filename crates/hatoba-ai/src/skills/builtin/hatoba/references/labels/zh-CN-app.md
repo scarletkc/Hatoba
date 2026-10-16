@@ -1,6 +1,6 @@
 # Simplified Chinese labels: the window, the host list, connecting and the dashboard
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `SKILL.md`
 
@@ -182,6 +182,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Verify | 验证 |
 | Enter the key passphrase | 输入私钥口令 |
 | Key passphrase | 私钥口令 |
+| New host key for {host}:{port} | {host}:{port} 提供了新的主机密钥 |
 
 ### When a connection fails or ends
 

@@ -115,9 +115,9 @@ describe("the skill's label files", () => {
     expect(problems).toEqual([]);
   });
 
-  it("quote only messages without {placeholders} or a | that would end the table cell", () => {
+  it("quote only messages without a | that would end the table cell", () => {
     const keys = sections.flatMap((s) => s.keys);
-    const unquotable = keys.filter((key) => Object.values(messages).some((table) => /\{\w+\}|\|/.test(table[key])));
+    const unquotable = keys.filter((key) => Object.values(messages).some((table) => table[key].includes("|")));
     expect(unquotable).toEqual([]);
   });
 

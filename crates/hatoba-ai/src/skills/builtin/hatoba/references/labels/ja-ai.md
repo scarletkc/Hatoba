@@ -1,6 +1,6 @@
 # Japanese labels: the AI panel, its tools and conversations
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/ai-panel.md`
 
@@ -41,6 +41,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | The assistant is waiting for you | アシスタントが確認を待っています |
 | Reconnect | 再接続 |
 | Continue Here | ここで続ける |
+| Connect to {host} | {host} に接続 |
+| Moved to {to} (was on {from}) | {to} に移りました（以前は {from}） |
 
 ### `/` commands and `@` mentions
 
@@ -61,6 +63,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Starting… | 起動しています… |
 | Failed | エラー |
 | Starting MCP servers… | MCP サーバーを起動しています… |
+| Listed {n} MCP tools | MCP ツールを {n} 個一覧にしました |
 
 ## `references/ai-tools.md`
 
@@ -126,6 +129,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Always Allow on This Host | このホストでは常に許可 |
 | Reason (optional, sent to the model) | 理由（任意、モデルに伝えられます） |
 | Hidden characters shown as escapes | 見えない文字をエスケープで表示 |
+| Always Allow “{prefix}” on This Host | このホストでは「{prefix}」を常に許可 |
 
 ## `references/ai-history.md`
 
@@ -168,6 +172,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Model | モデル |
 | Default Model | 既定のモデル |
 | Model for new conversations | 新しい会話で使うモデル |
+| Switched to {to} (was {from}) | {to} に切り替えました（以前は {from}） |
 
 ### Thinking level
 
@@ -206,6 +211,12 @@ The labels that these files name in English, as the interface shows them in Japa
 | Restore Anyway | このまま復元 |
 | Delete Anyway | このまま削除 |
 
+### Reverting
+
+| en | ja |
+|---|---|
+| Reverted the change to {path} | {path} への変更を元に戻しました |
+
 ## `references/ai-attachments.md`
 
 ### Terminal selection
@@ -228,6 +239,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Sent with your next message: | 次のメッセージと一緒に送信します： |
 | Don’t Attach the Diagnostics | 接続の診断を添付しない |
 | I can’t connect to this host. Can you help me find out why? | このホストに接続できません。原因を調べてください。 |
+| Connection diagnostics · {host} | 接続の診断 · {host} |
 
 ### Long pastes
 
@@ -236,6 +248,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Preview the pasted text | 貼り付けたテキストをプレビュー |
 | Paste as Text | テキストとして貼り付け |
 | Remove the Pasted Text | 貼り付けたテキストを外す |
+| Pasted text · {n} lines | 貼り付けたテキスト · {n} 行 |
 
 ### Text files
 
@@ -245,6 +258,8 @@ The labels that these files name in English, as the interface shows them in Japa
 | Add Text Files… | テキストファイルを追加… |
 | Drop text files to attach them | ドロップしてテキストファイルを添付 |
 | Preview the file | ファイルの内容をプレビュー |
+| {name} is larger than {size}, so it can’t be attached. | {name} は {size} を超えるため、添付できません。 |
+| A message’s attachments can’t exceed {size} in total. | 1 件のメッセージの添付は合計 {size} までです。 |
 
 ### The terminal's screen
 
@@ -255,6 +270,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Send Terminal Screen | ターミナル画面を送信 |
 | Needs a connected terminal | 接続中のターミナルが必要です |
 | Send with Each Message by Default | 既定でメッセージごとに送信 |
+| Terminal screen · {n} lines | ターミナル画面 · {n} 行 |
 
 ### Does it fit the model?
 

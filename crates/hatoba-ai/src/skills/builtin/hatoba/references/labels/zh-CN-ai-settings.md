@@ -1,6 +1,6 @@
 # Simplified Chinese labels: AI settings, providers, MCP servers and AI errors
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/ai-instructions.md`
 
@@ -102,6 +102,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Built-in skill | 内置技能 |
 | hatoba is the built-in skill’s name. Choose another. | hatoba 是内置技能的名称，请换一个。 |
 | This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | 这个名称现在属于内置技能，助手不会使用这个技能。重命名后即可使用。 |
+| View {name} | 查看 {name} |
 
 ### Auto Mode
 
@@ -213,6 +214,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | New Conversation | 新对话 |
 | Base URL | 基础 URL |
 | Models | 模型 |
+| The provider returned an error (HTTP {status}) | 服务商返回了错误（HTTP {status}） |
 
 ### Thinking level and reasoning
 

@@ -1,6 +1,6 @@
 # Japanese labels: Cloud Sync and the sync Worker
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/sync.md`
 
@@ -40,6 +40,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Master Password | マスターパスワード |
 | Finish Setup | 設定を完了 |
 | Cloud Sync is on | クラウド同期をオンにしました |
+| Uploading {n} items… | {n} 件をアップロード中… |
 
 ### Join a cloud vault
 
@@ -226,6 +227,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Edit Host | ホストを編集 |
 | Open Settings → AI | 設定 → AI を開く |
 | Custom Instructions | カスタム指示 |
+| Host “{name}” is too large to sync. Shorten its notes, AI notes, or environment variables. | ホスト「{name}」はデータが大きすぎて同期できません。メモや AI 向けメモ、環境変数を短くしてください。 |
 
 ### Cloudflare and deployment errors
 
@@ -262,6 +264,12 @@ The labels that these files name in English, as the interface shows them in Japa
 | Account ID (optional) | Account ID（任意） |
 | Worker and database names | Worker とデータベースの名前 |
 | Retry | 再試行 |
+
+### Devices and conflicts
+
+| en | ja |
+|---|---|
+| {n} conflicts were resolved automatically | {n} 件の競合を自動的に解決しました |
 
 ### Still not solved
 

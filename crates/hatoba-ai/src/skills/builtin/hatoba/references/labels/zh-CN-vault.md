@@ -1,6 +1,6 @@
 # Simplified Chinese labels: keys, the vault, settings and other errors
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/keys-vault-and-lock.md`
 
@@ -55,6 +55,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Use PIN | 使用 PIN |
 | Require the master password after a restart | 重启后需要输入主密码 |
 | Security | 安全 |
+| Too many attempts. Try again in {s} s. | 尝试次数过多，请在 {s} 秒后重试。 |
+| {n} sessions stay connected in the background | {n} 个会话仍在后台保持连接 |
 
 ### Master password, backup and clipboard
 
@@ -211,6 +213,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Settings (update available) | 设置（有新版本） |
 | Enjoying Hatoba? | 喜欢 Hatoba 吗？ |
 | Star | 点 Star |
+| Update to v{version} | 更新到 v{version} |
+| Hatoba v{version} is available. | 新版本 v{version} 可供下载。 |
 
 ## `references/troubleshooting.md`
 
@@ -240,6 +244,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | A vault already exists. | 保险库已存在。 |
 | Forgot it? Use your recovery code | 忘记主密码？使用恢复码 |
 | Generate New Code… | 生成新的恢复码… |
+| Too many attempts. Try again in {s} s. | 尝试次数过多，请在 {s} 秒后重试。 |
 
 ### Files, forwards and other messages
 

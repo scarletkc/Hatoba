@@ -1,6 +1,6 @@
 # Simplified Chinese labels: terminal tabs, SFTP, port forwarding and connection errors
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/terminal.md`
 
@@ -143,6 +143,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | This file will be permanently deleted from the server. This can’t be undone. | 这个文件会从服务器上永久删除，无法撤销。 |
 | This folder and everything in it will be permanently deleted from the server. This can’t be undone. | 这个文件夹及其中的所有内容会从服务器上永久删除，无法撤销。 |
 | Path copied | 路径已复制 |
+| Drop to upload to {path} | 松开以上传到 {path} |
 
 ### Transfers
 
@@ -198,6 +199,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Retry | 重试 |
 | Failed | 连接失败 |
 | Test Connection | 测试连接 |
+| Connection diagnostics · {host} | 连接诊断 · {host} |
 
 ### Each kind of failure
 
@@ -247,6 +249,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Host key has changed | 主机指纹已改变 |
 | Disconnect | 断开连接 |
 | Update Fingerprint and Connect | 更新指纹并连接 |
+| New host key for {host}:{port} | {host}:{port} 提供了新的主机密钥 |
 
 ### Dropped connections and keepalive
 

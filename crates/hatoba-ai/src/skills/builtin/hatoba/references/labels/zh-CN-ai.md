@@ -1,6 +1,6 @@
 # Simplified Chinese labels: the AI panel, its tools and conversations
 
-The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Simplified Chinese (zh-CN). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/ai-panel.md`
 
@@ -41,6 +41,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | The assistant is waiting for you | AI 助手在等你确认 |
 | Reconnect | 重新连接 |
 | Continue Here | 在这里继续 |
+| Connect to {host} | 连接到 {host} |
+| Moved to {to} (was on {from}) | 已转到 {to}（之前在 {from}） |
 
 ### `/` commands and `@` mentions
 
@@ -61,6 +63,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Starting… | 正在启动… |
 | Failed | 出错 |
 | Starting MCP servers… | 正在启动 MCP 服务器… |
+| Listed {n} MCP tools | 列出了 {n} 个 MCP 工具 |
 
 ## `references/ai-tools.md`
 
@@ -126,6 +129,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Always Allow on This Host | 在此主机上总是允许 |
 | Reason (optional, sent to the model) | 理由（可选，会告诉模型） |
 | Hidden characters shown as escapes | 不可见的字符已显示为转义 |
+| Always Allow “{prefix}” on This Host | 在此主机上总是允许“{prefix}” |
 
 ## `references/ai-history.md`
 
@@ -168,6 +172,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Model | 模型 |
 | Default Model | 默认模型 |
 | Model for new conversations | 新对话使用的模型 |
+| Switched to {to} (was {from}) | 已切换到 {to}（之前是 {from}） |
 
 ### Thinking level
 
@@ -206,6 +211,12 @@ The labels that these files name in English, as the interface shows them in Simp
 | Restore Anyway | 仍然恢复 |
 | Delete Anyway | 仍然删除 |
 
+### Reverting
+
+| en | zh-CN |
+|---|---|
+| Reverted the change to {path} | 已撤销对 {path} 的修改 |
+
 ## `references/ai-attachments.md`
 
 ### Terminal selection
@@ -228,6 +239,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Sent with your next message: | 随下一条消息发送： |
 | Don’t Attach the Diagnostics | 不附带连接诊断 |
 | I can’t connect to this host. Can you help me find out why? | 这台主机连不上，帮我看看原因。 |
+| Connection diagnostics · {host} | 连接诊断 · {host} |
 
 ### Long pastes
 
@@ -236,6 +248,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Preview the pasted text | 预览粘贴的文本 |
 | Paste as Text | 作为文本粘贴 |
 | Remove the Pasted Text | 移除粘贴的文本 |
+| Pasted text · {n} lines | 粘贴的文本 · {n} 行 |
 
 ### Text files
 
@@ -245,6 +258,8 @@ The labels that these files name in English, as the interface shows them in Simp
 | Add Text Files… | 添加文本文件… |
 | Drop text files to attach them | 松开以附加文本文件 |
 | Preview the file | 预览文件内容 |
+| {name} is larger than {size}, so it can’t be attached. | {name} 超过 {size}，无法附加。 |
+| A message’s attachments can’t exceed {size} in total. | 一条消息的附件合计不能超过 {size}。 |
 
 ### The terminal's screen
 
@@ -255,6 +270,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Send Terminal Screen | 发送终端屏幕 |
 | Needs a connected terminal | 需要已连接的终端 |
 | Send with Each Message by Default | 默认随每条消息发送 |
+| Terminal screen · {n} lines | 终端屏幕 · {n} 行 |
 
 ### Does it fit the model?
 

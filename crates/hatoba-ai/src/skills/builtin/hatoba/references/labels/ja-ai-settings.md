@@ -1,6 +1,6 @@
 # Japanese labels: AI settings, providers, MCP servers and AI errors
 
-The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section.
+The labels that these files name in English, as the interface shows them in Japanese (ja). Quote them exactly; the same English label can read differently in another file or section. A word in braces, such as {host}, stands for the value the interface fills in.
 
 ## `references/ai-instructions.md`
 
@@ -102,6 +102,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Built-in skill | 組み込みスキル |
 | hatoba is the built-in skill’s name. Choose another. | hatoba は組み込みスキルの名前です。別の名前にしてください。 |
 | This name now belongs to the built-in skill, so the assistant doesn’t use this skill. Rename it to use it. | この名前は組み込みスキルのものになったため、アシスタントはこのスキルを使いません。名前を変更すると使えるようになります。 |
+| View {name} | {name} を表示 |
 
 ### Auto Mode
 
@@ -213,6 +214,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | New Conversation | 新しい会話 |
 | Base URL | ベース URL |
 | Models | モデル |
+| The provider returned an error (HTTP {status}) | プロバイダーがエラーを返しました（HTTP {status}） |
 
 ### Thinking level and reasoning
 
