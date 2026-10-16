@@ -312,7 +312,7 @@ export function createMockApi(): HatobaApi {
     }),
     vault_create: async (password) => {
       await delay(600);
-      if (password.length < 12) fail("invalid_input", "password too short", { field: "password" });
+      if (password.length < 8) fail("invalid_input", "password too short", { field: "password" });
       vaultState = "unlocked";
       hosts = [];
       groups = [];

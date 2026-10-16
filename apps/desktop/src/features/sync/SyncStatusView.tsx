@@ -10,8 +10,7 @@ import type { DeviceView, SyncStatus, TooLargeItem, WorkerUpdate } from "@/ipc/t
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { DEPLOY_GUIDE_URL, openExternal } from "./external";
-import { NewRecoveryDialog, VerifyPasswordDialog } from "@/features/settings/dialogs";
-import { ChangePasswordDialog } from "./SyncDialogs";
+import { ChangePasswordDialog, NewRecoveryDialog, VerifyPasswordDialog } from "@/features/settings/dialogs";
 import { countsLine, deviceIcon, isStale, refreshSyncStatus, type T } from "./syncUtils";
 import { UpgradeDialog } from "./UpgradeDialog";
 import s from "./Sync.module.css";

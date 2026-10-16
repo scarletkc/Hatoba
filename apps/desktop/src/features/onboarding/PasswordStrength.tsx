@@ -6,7 +6,7 @@ import { isImeEvent } from "@/lib/ime";
 import { COMMON_PASSWORDS } from "./commonPasswords";
 import s from "./PasswordStrength.module.css";
 
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 8;
 /** zxcvbn score (0–4) below which a new master password gets a warning (SEC-09). */
 export const MIN_SCORE = 2;
 
@@ -78,7 +78,7 @@ export function useNewPassword() {
   const issue: NewPasswordIssue =
     password.length < MIN_PASSWORD_LENGTH ? "short" : score !== null && score < MIN_SCORE ? "weak" : null;
   const matches = confirm.length > 0 && confirm === password;
-  // A weak password only warns, as in Bitwarden: the 12 characters are the one requirement.
+  // A weak password only warns, as in Bitwarden; the minimum length is the one requirement.
   const valid = issue !== "short" && matches;
   return { password, setPassword, confirm, setConfirm, score, issue, matches, valid };
 }

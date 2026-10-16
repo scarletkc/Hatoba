@@ -29,7 +29,7 @@ When importing a key, or connecting with one:
 | Incorrect master password. | 主密码不正确。 | マスターパスワードが正しくありません。 |
 | That recovery code isn’t right. Check it and try again. | 恢复码不正确，请检查后重试。 | リカバリーコードが正しくありません。確認してもう一度お試しください。 |
 | The two passwords don’t match. | 两次输入的主密码不一致。 | 2 つのパスワードが一致しません。 |
-| The master password needs at least 12 characters. | 主密码至少需要 12 个字符。 | マスターパスワードは 12 文字以上にしてください。 |
+| The master password needs at least 8 characters. | 主密码至少需要 8 个字符。 | マスターパスワードは 8 文字以上にしてください。 |
 | This password is easy to guess. A longer or less common one is safer. | 这个主密码容易被猜到，更长或更不常见的密码会更安全。 | このパスワードは推測されやすいです。より長いもの、または一般的でないもののほうが安全です。 |
 | No vault has been created yet. | 尚未创建保险库。 | 保管庫がまだ作成されていません。 |
 | A vault already exists. | 保险库已存在。 | 保管庫はすでに存在します。 |

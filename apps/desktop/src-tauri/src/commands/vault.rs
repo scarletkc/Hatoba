@@ -16,7 +16,7 @@ use crate::state::{AppState, blocking};
 use crate::{lock, sync};
 
 /// SEC-09: the one requirement a new master password has; a weak one only gets a warning.
-const MIN_PASSWORD_CHARS: usize = 12;
+const MIN_PASSWORD_CHARS: usize = 8;
 
 /// SEC-11: a PIN has at least this many characters, of any kind.
 const MIN_PIN_CHARS: usize = 4;
@@ -480,14 +480,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_master_password_needs_twelve_characters() {
+    fn a_new_master_password_needs_eight_characters() {
         let err = check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS - 1)).unwrap_err();
         assert_eq!(
             (err.code, err.field.as_deref()),
             (ErrorCode::InvalidInput, Some("next"))
         );
         assert!(check_new_password("next", &"x".repeat(MIN_PASSWORD_CHARS)).is_ok());
-        // Characters, not bytes: twelve CJK characters are enough, eleven are not.
+        // Characters, not bytes: eight CJK characters are enough, seven are not.
         assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS)).is_ok());
         assert!(check_new_password("password", &"日".repeat(MIN_PASSWORD_CHARS - 1)).is_err());
     }
