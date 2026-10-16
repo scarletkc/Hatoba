@@ -35,7 +35,7 @@ function chatgptModels(): AiModel[] {
     efforts: ["low", "medium", "high", "xhigh"],
     adaptive_thinking: null,
   });
-  return [gpt("gpt-6.1-sol", "GPT-6.1 Sol"), gpt("gpt-6.1-sol-mini", "GPT-6.1 Sol mini"), gpt("gpt-6.1-codex", "GPT-6.1 Codex")];
+  return [gpt("gpt-6-astra", "GPT-6 Astra"), gpt("gpt-6-sol", "GPT-6 Sol"), gpt("gpt-6-luna", "GPT-6 Luna")];
 }
 
 /** The error of a request to a ChatGPT provider that is not signed in here. */

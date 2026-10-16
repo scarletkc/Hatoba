@@ -142,8 +142,8 @@ describe("ProviderDialog", () => {
     expect(views.at(-1)?.id).toBe("p-chatgpt");
     expect(views.at(-1)?.chatgpt?.status).toBe("signed_in");
     // The provider had no models, so it takes the account's from the sign-in, in the form too.
-    expect(views.at(-1)?.models.map((m) => m.id)).toEqual(["gpt-6.1-sol", "gpt-6.1-sol-mini", "gpt-6.1-codex"]);
-    expect([...document.querySelectorAll("input")].some((i) => i.value === "gpt-6.1-sol")).toBe(true);
+    expect(views.at(-1)?.models.map((m) => m.id)).toEqual(["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]);
+    expect([...document.querySelectorAll("input")].some((i) => i.value === "gpt-6-astra")).toBe(true);
 
     act(() => button(t("aiSettings.chatgpt.signOut"))?.click());
     for (let i = 0; i < 100 && !shown(t("aiSettings.chatgpt.status.signed_out")); i++) await act(() => new Promise((r) => setTimeout(r, 10)));
