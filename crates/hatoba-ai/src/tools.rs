@@ -1147,9 +1147,9 @@ const ATTACHMENTS: &str = "<attachments>\n\
      bypass; the newest one applies. A conversation's first message has one, and so does the \
      message that continues a compacted conversation.\n\
      - <memory entries=\"…\">: your memories, each in an <entry name=\"…\" updated=\"…\"> block \
-     that gives the day it was last saved, as they were when the conversation started or was last compacted. While memory is on and you have \
-     memories, a conversation's first message has one, and so does the message that continues a \
-     compacted conversation.\n\
+     that gives the day it was last saved, as they were when the conversation started or was last \
+     compacted. While memory is on and you have memories, a conversation's first message has one, \
+     and so does the message that continues a compacted conversation.\n\
      - <file_revert path=\"…\" tool_call_id=\"…\">: the user reverted the change that your \
      call tool_call_id made to the file at path, one block for each reverted call. \
      The file holds what it held before the call again, or was deleted if the call created it. \
