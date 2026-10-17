@@ -15,6 +15,10 @@ use crate::error::AiError;
 use crate::net;
 use crate::provider::{Effort, ModelSpec, Protocol, ProviderConfig, validate_base_url};
 
+mod known;
+
+pub use known::{KnownModel, known_model};
+
 /// A model from the provider's list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelInfo {
@@ -218,7 +222,8 @@ fn chatgpt_model(item: &Value) -> Option<ModelInfo> {
 /// `after_id`, or `GET {base}/models` (TypeSafe's `models[].name`, or `data[].id`) for System
 /// One, next to the `/systemone` endpoint when the base URL names it. A ChatGPT provider (AI-52)
 /// gets its account's list, of which the entries shown in pickers are kept. Duplicate ids are
-/// dropped; the provider's order is kept.
+/// dropped; the provider's order is kept. What a list leaves out of a well-known model comes
+/// from the table of [`known_model`].
 ///
 /// Gives up after 60 s, and with [`AiError::Cancelled`] as soon as `cancel` fires (the connection
 /// is dropped, so a lock does not leave the key in use).
@@ -317,6 +322,9 @@ async fn list_models_inner(
                 push(model, &mut models);
             }
         }
+    }
+    for model in &mut models {
+        model.fill_known(provider.protocol);
     }
     Ok(models)
 }

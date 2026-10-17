@@ -672,8 +672,8 @@ pub struct AiModel {
         skip_serializing_if = "Option::is_none"
     )]
     pub efforts: Option<Vec<AiEffort>>,
-    /// Whether the model supports adaptive thinking, from Anthropic's model list; `None`
-    /// (absent) when unknown.
+    /// Whether the model supports adaptive thinking, from Anthropic's model list or the table of
+    /// well-known models (AI-03); `None` (absent) when unknown.
     #[zeroize(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adaptive_thinking: Option<bool>,

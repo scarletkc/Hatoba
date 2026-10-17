@@ -23,8 +23,8 @@ use zeroize::Zeroizing;
 
 use crate::ai::{
     AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
-    conversation_view_at, core_effort, effort_view, find_conversation, listed_effort, protocol,
-    search_kind,
+    conversation_view_at, core_effort, effort_view, find_conversation, listed_effort, model_spec,
+    protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
@@ -108,19 +108,23 @@ pub(crate) fn provider_view(v: &Vault, id: &str, p: &AiProvider) -> AiProviderVi
             CoreAuthHeader::XApiKey => AiAuthHeader::XApiKey,
             CoreAuthHeader::Authorization => AiAuthHeader::Authorization,
         },
+        // What a row leaves unknown shows as the table of well-known models has it (AI-03), as
+        // requests use it.
         models: p
             .models
             .iter()
-            .map(|m| AiModel {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                context_window: m.context_window,
-                max_output_tokens: m.max_output_tokens,
-                efforts: m
-                    .efforts
-                    .as_ref()
-                    .map(|levels| levels.iter().copied().map(effort_view).collect()),
-                adaptive_thinking: m.adaptive_thinking,
+            .map(|m| {
+                let spec = model_spec(p, m);
+                AiModel {
+                    id: m.id.clone(),
+                    name: m.name.clone(),
+                    context_window: spec.context_window,
+                    max_output_tokens: spec.max_output_tokens,
+                    efforts: spec
+                        .efforts
+                        .map(|levels| levels.into_iter().map(listed_effort).collect()),
+                    adaptive_thinking: spec.adaptive_thinking,
+                }
             })
             .collect(),
         chatgpt: p.chatgpt.as_ref().map(|account| AiChatgptView {
@@ -1512,6 +1516,76 @@ mod tests {
             !save_provider(&mut v, &clear, clear.base_url.clone())
                 .unwrap()
                 .has_api_key
+        );
+    }
+
+    #[test]
+    fn rows_a_list_left_unknown_show_and_send_what_the_known_models_table_says() {
+        let mut v = vault();
+        let row = |id: &str| AiModel {
+            id: id.into(),
+            name: String::new(),
+            context_window: None,
+            max_output_tokens: None,
+            efforts: None,
+            adaptive_thinking: None,
+        };
+        let mut input = provider_input(None, None);
+        input.models = vec![
+            // A gateway's list named only the id.
+            row("claude-opus-4-8"),
+            // The user typed a context window and picked the levels: they stay.
+            AiModel {
+                context_window: Some(500_000),
+                efforts: Some(vec![AiEffort::Low]),
+                ..row("anthropic/claude-sonnet-4.6")
+            },
+            row("house-model"),
+        ];
+        let view = save_provider(&mut v, &input, input.base_url.clone()).unwrap();
+        let summary: Vec<_> = view
+            .models
+            .iter()
+            .map(|m| {
+                (
+                    m.context_window,
+                    m.max_output_tokens,
+                    m.efforts.clone(),
+                    m.adaptive_thinking,
+                )
+            })
+            .collect();
+        use AiEffort::{High, Low, Max, Medium, Xhigh};
+        assert_eq!(
+            summary,
+            [
+                (
+                    Some(1_000_000),
+                    Some(128_000),
+                    Some(vec![Low, Medium, High, Xhigh, Max]),
+                    Some(true)
+                ),
+                (Some(500_000), Some(128_000), Some(vec![Low]), Some(true)),
+                (None, None, None, None),
+            ]
+        );
+
+        // The rows stay as saved; requests fill them the same way.
+        let saved = find_provider(&v, &view.id).unwrap();
+        assert_eq!(saved.models[0].context_window, None);
+        let spec = model_spec(&saved, &saved.models[0]);
+        assert_eq!(spec.context_window, Some(1_000_000));
+        assert_eq!(spec.adaptive_thinking, Some(true));
+        assert_eq!(spec.efforts.map(|e| e.len()), Some(5));
+
+        // On Chat Completions a gateway translates Anthropic's levels its own way, so only the
+        // limits are filled.
+        let mut saved = saved;
+        saved.protocol = CoreProtocol::ChatCompletions;
+        let spec = model_spec(&saved, &saved.models[0]);
+        assert_eq!(
+            (spec.context_window, spec.efforts, spec.adaptive_thinking),
+            (Some(1_000_000), None, None)
         );
     }
 

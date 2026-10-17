@@ -59,9 +59,10 @@ use hatoba_ai::tools::{
 };
 use hatoba_ai::web::{self, NativeSearch, SearchConfig, SearchKind as WebSearchKind};
 use hatoba_core::model::{
-    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModelRef as CoreModelRef,
-    AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item, MAX_CUSTOM_INSTRUCTIONS_BYTES,
-    MAX_HOST_AI_NOTES_BYTES, SearchKind as CoreSearchKind, SearchProvider,
+    AiAuthHeader, AiConversation, AiEffort as CoreEffort, AiModel as CoreModel,
+    AiModelRef as CoreModelRef, AiProtocol as CoreProtocol, AiProvider, AiQuickTarget, Item,
+    MAX_CUSTOM_INSTRUCTIONS_BYTES, MAX_HOST_AI_NOTES_BYTES, SearchKind as CoreSearchKind,
+    SearchProvider,
 };
 use hatoba_core::sync::SharedVault;
 use hatoba_core::{SnapshotKey, SnapshotState, Vault};
@@ -4179,17 +4180,32 @@ fn resolve_model(
         })?;
     Ok((
         provider_config(provider_id, provider),
-        ModelSpec {
-            id: model.id.clone(),
-            context_window: model.context_window,
-            max_output_tokens: model.max_output_tokens,
-            efforts: model
-                .efforts
-                .as_ref()
-                .map(|levels| levels.iter().copied().map(model_effort).collect()),
-            adaptive_thinking: model.adaptive_thinking,
-        },
+        model_spec(provider, model),
     ))
+}
+
+/// Saved model `model` of `provider` as a request takes it: what the row leaves unknown comes
+/// from the table of well-known models for the provider's protocol (AI-03), so a model saved
+/// before the table knew it, or typed in, gets the same as one fetched now.
+pub fn model_spec(provider: &AiProvider, model: &CoreModel) -> ModelSpec {
+    let mut spec = ModelSpec {
+        id: model.id.clone(),
+        context_window: model.context_window,
+        max_output_tokens: model.max_output_tokens,
+        efforts: model
+            .efforts
+            .as_ref()
+            .map(|levels| levels.iter().copied().map(model_effort).collect()),
+        adaptive_thinking: model.adaptive_thinking,
+    };
+    // A ChatGPT provider (AI-52) speaks Responses whatever its stored protocol says.
+    let protocol = if provider.chatgpt.is_some() {
+        Protocol::Responses
+    } else {
+        protocol(provider.protocol)
+    };
+    spec.fill_known(protocol);
+    spec
 }
 
 /// What a request needs to reach saved provider `id`. A ChatGPT provider (AI-52) is a Responses
