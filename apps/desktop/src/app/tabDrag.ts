@@ -68,17 +68,21 @@ function swallowClick() {
 /**
  * Drags a session tab along the tab bar (TERM-01), as in browsers: the tab follows the pointer within the strip, the
  * others slide aside, and dropping it moves it there. It takes no part in HTML drag and drop, which Tauri's file drop
- * takes over on Windows. The tab comes to the front when the drag starts; Escape puts it back.
+ * takes over on Windows. As in browsers, pressing a tab brings it to the front, so the drag measures the tabs as they
+ * show with it in front; Escape puts it back.
  */
-class TabDrag {
+export class TabDrag {
   private drag: Drag | null = null;
   /** A drop the store has not shown yet: the tabs to put back in the flow, and where the dragged one was let go. */
   private landing: { el: HTMLElement; items: HTMLElement[]; left: number } | null = null;
   private slide: { els: HTMLElement[]; timer: number } | null = null;
 
-  /** `pointerdown` on the tab `id`, whose element has `data-tab-id`. */
+  /** `pointerdown` on the tab `id`, whose element has `data-tab-id`. A press on its close button only closes it. */
   down = (e: ReactPointerEvent<HTMLElement>, id: string) => {
     if (e.button !== 0 || this.drag) return;
+    const close = (e.target as Element).closest('[role="button"]');
+    if (close && e.currentTarget.contains(close)) return;
+    useTabs.getState().activate(id);
     this.drag = {
       id,
       el: e.currentTarget,
@@ -100,10 +104,11 @@ class TabDrag {
     window.addEventListener("blur", this.cancel);
   };
 
-  /** After each change to the tabs: shows a drop in place, and ends a drag whose tabs opened or closed meanwhile. */
+  /** After each change to the tabs: shows a drop in place, and ends a press or drag whose tabs opened or closed meanwhile. */
   rendered(tabs: SessionTab[]) {
     const d = this.drag;
-    if (d?.started && (tabs.length !== d.ids.length || tabs.some((t, i) => t.id !== d.ids[i]))) this.cancel();
+    if (d && !tabs.some((t) => t.id === d.id)) this.cancel();
+    else if (d?.started && (tabs.length !== d.ids.length || tabs.some((t, i) => t.id !== d.ids[i]))) this.cancel();
     const landing = this.landing;
     if (!landing) return;
     this.landing = null;
@@ -120,7 +125,10 @@ class TabDrag {
     const dx = e.clientX - d.startX;
     if (!d.started) {
       if (Math.abs(dx) < DRAG_THRESHOLD) return;
-      this.start(d);
+      if (!this.start(d)) {
+        this.cancel();
+        return;
+      }
     }
     const { slots, from } = d;
     const last = slots[slots.length - 1];
@@ -134,10 +142,13 @@ class TabDrag {
     });
   };
 
-  private start(d: Drag) {
+  /** Measures the tabs and lifts the pressed one; false when it is no longer in the strip. */
+  private start(d: Drag): boolean {
     this.endSlide();
-    const strip = d.el.parentElement!;
+    const strip = d.el.parentElement;
+    if (!strip) return false;
     d.items = Array.from(strip.querySelectorAll<HTMLElement>(":scope > [data-tab-id]"));
+    if (!d.items.includes(d.el)) return false;
     d.ids = d.items.map((item) => item.dataset.tabId!);
     d.slots = d.items.map((item) => {
       const r = item.getBoundingClientRect();
@@ -153,7 +164,7 @@ class TabDrag {
     } catch {
       // The pointer is gone; the window's listeners still end the drag.
     }
-    useTabs.getState().activate(d.id);
+    return true;
   }
 
   private up = (e: PointerEvent) => {

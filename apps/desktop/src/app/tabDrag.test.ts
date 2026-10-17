@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { dropIndex, shiftOf, type Slot } from "./tabDrag";
+import type { PointerEvent as ReactPointerEvent } from "react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TabDrag, dropIndex, shiftOf, type Slot } from "./tabDrag";
 import { useTabs } from "./tabs";
 
 // Three tabs 100, 60 and 80 px wide, 2 px apart.
@@ -57,5 +58,67 @@ describe("moveTab", () => {
     useTabs.getState().moveTab(before[1].id, 1);
     useTabs.getState().moveTab("gone", 0);
     expect(useTabs.getState().tabs).toBe(before);
+  });
+});
+
+describe("TabDrag", () => {
+  let strip: HTMLElement;
+  let drag: TabDrag;
+  const el = (title: string) => strip.querySelector<HTMLElement>(`[data-title="${title}"]`)!;
+  const tabOf = (title: string) => useTabs.getState().tabs.find((t) => t.title === title)!;
+  const press = (title: string, target: Element = el(title)) =>
+    drag.down({ button: 0, target, currentTarget: el(title), pointerId: 1, clientX: 10 } as unknown as ReactPointerEvent<HTMLElement>, tabOf(title).id);
+  const moveTo = (clientX: number) => {
+    const e = new MouseEvent("pointermove", { clientX });
+    Object.defineProperty(e, "pointerId", { value: 1 });
+    window.dispatchEvent(e);
+  };
+
+  beforeEach(() => {
+    useTabs.setState({ tabs: [], active: "home" });
+    strip = document.createElement("div");
+    for (const title of ["a", "b"]) {
+      const id = useTabs.getState().openSession({ hostId: title, target: null }, title);
+      strip.insertAdjacentHTML("beforeend", `<button data-tab-id="${id}" data-title="${title}"><span role="button">x</span></button>`);
+    }
+    document.body.append(strip);
+    useTabs.getState().activate("home");
+    drag = new TabDrag();
+  });
+
+  afterEach(() => {
+    drag.dispose();
+    strip.remove();
+  });
+
+  it("brings a pressed tab to the front, but not for its close button", () => {
+    press("a", el("a").querySelector("span")!);
+    expect(useTabs.getState().active).toBe("home");
+    press("b");
+    expect(useTabs.getState().active).toBe(tabOf("b").id);
+  });
+
+  it("ends a press when its tab closes before the drag starts", () => {
+    press("b");
+    useTabs.getState().closeTab(tabOf("b").id);
+    el("b").remove();
+    drag.rendered(useTabs.getState().tabs);
+    expect(() => moveTo(40)).not.toThrow();
+    expect(strip.querySelector("[data-dragging]")).toBeNull();
+    press("a");
+    moveTo(40);
+    expect(el("a").hasAttribute("data-dragging")).toBe(true);
+  });
+
+  it("does not drag a tab that left the strip", () => {
+    press("b");
+    const gone = el("b");
+    gone.remove();
+    expect(() => moveTo(40)).not.toThrow();
+    expect(gone.hasAttribute("data-dragging")).toBe(false);
+    // The press is over, so a new one starts a drag.
+    press("a");
+    moveTo(40);
+    expect(el("a").hasAttribute("data-dragging")).toBe(true);
   });
 });
