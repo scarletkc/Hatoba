@@ -1,0 +1,139 @@
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  min-height: 24px;
+}
+
+/* Lets the hover of the first and last row follow the group's rounded corners. */
+.clip {
+  overflow: hidden;
+}
+
+.pathInput {
+  width: 240px;
+  max-width: 100%;
+}
+
+/* The agent that answers: its name, how many keys it holds, and the socket itself. */
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--accenttint);
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.agentText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agentName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.count {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--fg2);
+}
+
+.socket {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* One key of the agent, as `ssh-add -l` lists it. */
+.key {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+}
+
+.algorithm {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--fg2);
+}
+
+.fingerprint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.comment {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg3);
+}
+
+/* Notes under the agent: no keys yet, or why no agent answered. */
+.muted {
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg2);
+  text-wrap: pretty;
+}
+
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+}
+
+.warnIcon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+  color: var(--orange);
+}
+
+.problemText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.hint {
+  color: var(--fg2);
+}

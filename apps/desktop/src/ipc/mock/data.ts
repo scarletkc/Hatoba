@@ -13,6 +13,7 @@ import type {
   QuickTarget,
   ServerStatsView,
   SettingsView,
+  SshAgentView,
   SyncStatus,
 } from "../types";
 
@@ -287,6 +288,7 @@ export const PREFS: LocalPrefs = {
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
+  ssh_agent_socket: null,
   auto_lock_minutes: 15,
   lock_on_sleep: true,
   lock_disconnects_sessions: false,
@@ -299,6 +301,36 @@ export const PREFS: LocalPrefs = {
   dashboard_disk_alert: 90,
   close_action: "ask",
   local_shell: null,
+};
+
+/** The agent the mock's device finds, and the keys it holds (SSH-09). */
+export const SSH_AGENT: SshAgentView = {
+  socket: "/Users/you/.bitwarden-ssh-agent.sock",
+  kind: "bitwarden",
+  keys: [
+    {
+      algorithm: "ssh-ed25519",
+      fingerprint: "SHA256:BIv2JWQvx1+aWk8MNJ02qMyFwUbgq8sipBVydzw2mmo",
+      comment: "bitwarden",
+    },
+    {
+      algorithm: "ssh-rsa",
+      fingerprint: "SHA256:9hK4pL0rZ7xJ5mC6aQ1wV3eD2tY8bN5uM0sF7gH2jK1",
+      comment: "deploy@workstation",
+    },
+  ],
+  error: null,
+};
+
+/** What the mock finds with `?agent=off`: no agent at all (SSH-09). */
+export const SSH_AGENT_NONE: SshAgentView = {
+  socket: null,
+  kind: null,
+  keys: [],
+  error:
+    "no ssh-agent is available: SSH_AUTH_SOCK is not set or names nothing, and no known agent " +
+    "socket exists (Bitwarden's is ~/.bitwarden-ssh-agent.sock); set SSH_AUTH_SOCK, or pick a " +
+    "socket in Settings → SSH Agent",
 };
 
 /** The release that `?update=available` finds; its notes are shaped like the ones `release.mjs publish` writes. */

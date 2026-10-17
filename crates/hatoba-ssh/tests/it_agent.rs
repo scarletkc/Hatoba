@@ -168,7 +168,26 @@ async fn agent_authentication() {
     assert_eq!(err.kind, SshErrorKind::Other, "{err}");
     assert!(err.message.contains("ssh-agent"), "{err}");
     unsafe { std::env::remove_var("SSH_AUTH_SOCK") };
+    // With no socket set, the search also looks beside `HOME` and in `XDG_RUNTIME_DIR` for the
+    // socket of an agent that runs there (Bitwarden's, say). Both are pointed at an empty place
+    // for this case, so that "no agent on this machine" means the same on every runner.
+    let nowhere = tempfile::tempdir().unwrap();
+    let home = std::env::var_os("HOME");
+    // SAFETY: this is the only test in the binary, so nothing else touches the environment
+    // concurrently.
+    unsafe {
+        std::env::set_var("HOME", nowhere.path());
+        std::env::remove_var("XDG_RUNTIME_DIR");
+        std::env::remove_var("GNUPGHOME");
+    }
     let err = login("unset").await.unwrap_err();
     assert_eq!(err.kind, SshErrorKind::Other, "{err}");
     assert!(err.message.contains("ssh-agent"), "{err}");
+    // SAFETY: as above.
+    unsafe {
+        match home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
 }

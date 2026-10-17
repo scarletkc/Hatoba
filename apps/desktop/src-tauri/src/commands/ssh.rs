@@ -155,8 +155,10 @@ pub async fn ssh_connect_target(
     channel: Channel<TermFrame>,
 ) -> AppResult<String> {
     let target = quick::validate(target)?;
-    // Known hosts live in the vault (SSH-04). The device's default proxy applies (SSH-13).
+    // Known hosts live in the vault (SSH-04). The device's default proxy applies (SSH-13), and
+    // so does the agent chosen in Settings → SSH Agent (SSH-09).
     let proxy = state.with_unlocked(|v| resolve_proxy(v, &HostProxy::DeviceDefault))?;
+    let agent = state.with_unlocked(|v| Ok(crate::ssh::agent_socket(v)))?;
     let session_id = uuid::Uuid::now_v7().to_string();
     let _ = channel.send(TermFrame::new(FRAME_SESSION, session_id.as_bytes()));
     let mut cfg = ConnectConfig::new(
@@ -166,6 +168,7 @@ pub async fn ssh_connect_target(
         AuthMethod::AgentThenAsk,
     );
     cfg.proxy = proxy;
+    cfg.agent_socket = agent;
     let (live, events) = open_terminal(
         &app,
         &state,

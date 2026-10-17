@@ -169,6 +169,7 @@ export function createTauriApi(): HatobaApi {
     settings_save: (patch) => done(commands.settingsSave(patch)),
     prefs_get: () => commands.prefsGet(),
     prefs_save: (prefs) => done(commands.prefsSave(prefs)),
+    ssh_agent_status: () => commands.sshAgentStatus(),
     star_prompt_get: () => commands.starPromptGet(),
     star_prompt_done: () => done(commands.starPromptDone()),
 

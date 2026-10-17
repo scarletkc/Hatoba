@@ -121,9 +121,25 @@ The labels that these files name in English, as the interface shows them in Japa
 | Appearance | 外観 |
 | Terminal | ターミナル |
 | Proxies | プロキシ |
+| SSH Agent | SSH エージェント |
 | Security | セキュリティ |
 | AI | AI |
 | About | 情報 |
+
+### SSH Agent
+
+| en | ja |
+|---|---|
+| SSH agent of this device | このデバイスで使う SSH エージェント |
+| Automatic | 自動 |
+| Custom path… | カスタムパス… |
+| Socket path | ソケットのパス |
+| Current agent | 現在のエージェント |
+| Check again | 再確認 |
+| Bitwarden | Bitwarden |
+| 1Password | 1Password |
+| GnuPG | GnuPG |
+| GNOME Keyring | GNOME Keyring |
 
 ### General
 

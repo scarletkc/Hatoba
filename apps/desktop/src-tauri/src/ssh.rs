@@ -19,7 +19,7 @@ use tokio::sync::{OnceCell, oneshot};
 use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
-use crate::dto::{AuthPrompt, AuthPromptField, HostKeyPrompt, HostKeyPromptKind};
+use crate::dto::{AuthPrompt, AuthPromptField, HostKeyPrompt, HostKeyPromptKind, LocalPrefs};
 use crate::error::{AppError, AppResult, SshErrorKind};
 use crate::state::{AppState, now_ms, state};
 use crate::sync;
@@ -285,6 +285,19 @@ pub fn resolve_proxy(vault: &Vault, choice: &HostProxy) -> AppResult<Option<Prox
     }))
 }
 
+/// The ssh-agent socket this device authenticates with (SSH-09): the one chosen in
+/// **Settings → SSH Agent**, or `None` to let each connection use `SSH_AUTH_SOCK` and the
+/// well-known agent sockets of the device, Bitwarden's included.
+pub fn agent_socket(vault: &Vault) -> Option<String> {
+    vault
+        .local_prefs()
+        .ok()
+        .flatten()
+        .and_then(|json| LocalPrefs::from_stored(&json).ssh_agent_socket)
+        .map(|socket| socket.trim().to_owned())
+        .filter(|socket| !socket.is_empty())
+}
+
 /// The first hop of a connection to `host`: its outermost jump host, or the host itself without
 /// one. A broken jump chain ends where it breaks.
 pub fn first_hop<'a>(vault: &'a Vault, host: &'a Host) -> &'a Host {
@@ -345,6 +358,7 @@ pub fn build_config(
     let mut cfg = ConnectConfig::new(h, p, u, auth_method(vault, host, overrides, false)?);
     cfg.jump = chain;
     cfg.proxy = resolve_proxy(vault, first_proxy)?;
+    cfg.agent_socket = agent_socket(vault);
     Ok(cfg)
 }
 

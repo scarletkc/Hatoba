@@ -46,7 +46,7 @@ Messages that contain the host, port or seconds are paraphrased. "Edit" means **
 | `proxy_auth` (EPROXYAUTH) | See the messages below. Detail: `the proxy … requires a username and password`, `… rejected the username or password`, or `(HTTP 407)` | Set or fix the proxy's **Username** and **Password** in Settings → Proxies |
 | `proxy` (EPROXY) | "The proxy couldn’t connect to <host>:<port>…". Detail: `did not answer as a SOCKS5 proxy`, `closed the connection during the … handshake`, `not allowed by its rules`, `(HTTP 403)`, `(HTTP 502)`, or `closed before the SSH handshake finished` | The wrong **Type** (SOCKS5 and HTTP often use different ports), the proxy's rules block the server, or the proxy cannot reach it |
 | `proxy_missing` (EPROXY) | See the messages below. Detail: `the host's proxy was deleted` or `this device's default proxy was deleted` | Choose another **Proxy** in the host editor, or another default in Settings → Proxies |
-| `other` (EFAILED) | See the messages below. Detail examples: `ssh-agent is not available (is the "OpenSSH Authentication Agent" service running?)` | **SSH Agent** on Windows needs that service running; elsewhere `SSH_AUTH_SOCK` must point at an agent |
+| `other` (EFAILED) | See the messages below. Detail examples: `no ssh-agent is available: …`, `no ssh-agent answered at <socket>` | **SSH Agent** with no agent: see `references/settings.md`; on Windows that service must run |
 
 The messages for these kinds:
 

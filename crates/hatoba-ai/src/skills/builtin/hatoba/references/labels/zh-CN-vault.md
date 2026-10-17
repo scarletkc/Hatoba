@@ -121,9 +121,25 @@ The labels that these files name in English, as the interface shows them in Simp
 | Appearance | 外观 |
 | Terminal | 终端 |
 | Proxies | 代理 |
+| SSH Agent | SSH Agent |
 | Security | 安全 |
 | AI | AI |
 | About | 关于 |
+
+### SSH Agent
+
+| en | zh-CN |
+|---|---|
+| SSH agent of this device | 这台设备使用的 SSH Agent |
+| Automatic | 自动检测 |
+| Custom path… | 自定义路径… |
+| Socket path | Socket 路径 |
+| Current agent | 当前 Agent |
+| Check again | 重新检查 |
+| Bitwarden | Bitwarden |
+| 1Password | 1Password |
+| GnuPG | GnuPG |
+| GNOME Keyring | GNOME Keyring |
 
 ### General
 

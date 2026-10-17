@@ -78,6 +78,7 @@ import type {
   SkillImportPreview,
   SkillInput,
   SkillView,
+  SshAgentView,
   SshConfigCandidate,
   StarPrompt,
   StatsEvent,
@@ -304,6 +305,8 @@ export interface HatobaApi {
   settings_save(patch: SettingsPatch): Promise<void>;
   prefs_get(): Promise<LocalPrefs>;
   prefs_save(prefs: LocalPrefs): Promise<void>;
+  /** SSH-09: the agent this device authenticates with, the keys it holds, and the agent sockets found here. */
+  ssh_agent_status(): Promise<SshAgentView>;
   /** The sidebar's star prompt (spec §9). The first call records when this device started waiting. */
   star_prompt_get(): Promise<StarPrompt>;
   /** The prompt never shows again. */
