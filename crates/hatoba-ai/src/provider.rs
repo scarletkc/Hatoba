@@ -251,11 +251,12 @@ pub struct ModelSpec {
     /// Output limit in tokens, when known. Anthropic requests send it as `max_tokens`
     /// (16,000 when unknown, at most 128,000).
     pub max_output_tokens: Option<u64>,
-    /// The thinking levels the model accepts, lowest first, when known (from Anthropic's model
-    /// list, or set by the user); empty when it accepts none. Unknown means
-    /// [`Effort::UNKNOWN_MODEL`].
+    /// The thinking levels the model accepts, lowest first, when known (from the model list, set
+    /// by the user, or from the table of well-known models); empty when it accepts none. Unknown
+    /// means [`Effort::UNKNOWN_MODEL`].
     pub efforts: Option<Vec<Effort>>,
-    /// Whether the model supports adaptive thinking (Anthropic's model list), when known.
+    /// Whether the model supports adaptive thinking (Anthropic's model list, or the table of
+    /// well-known models), when known.
     pub adaptive_thinking: Option<bool>,
 }
 

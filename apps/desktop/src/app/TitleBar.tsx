@@ -13,6 +13,7 @@ import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
+import { useTabDrag } from "./tabDrag";
 import { useTabs, type TabStatus } from "./tabs";
 import s from "./TitleBar.module.css";
 
@@ -169,6 +170,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   const collapsed = useApp((st) => st.sidebarCollapsed);
   const platform = useApp((st) => st.info.platform);
   const local = useLocalMenu(onNewTab);
+  const drag = useTabDrag(tabs);
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
@@ -196,8 +198,10 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
             key={tab.id}
             type="button"
             role="tab"
+            data-tab-id={tab.id}
             aria-selected={active === tab.id}
             className={cx(s.tab, active === tab.id && s.tabActive)}
+            onPointerDown={(e) => drag.down(e, tab.id)}
             onClick={() => activate(tab.id)}
             onAuxClick={(e) => {
               if (e.button === 1) onCloseTab(tab.id);

@@ -39,6 +39,8 @@ interface TabsState {
   openSession(source: TabSource, title: string): string;
   closeTab(id: string): void;
   activate(id: string): void;
+  /** Moves a tab to `index` among the session tabs, as dragging it in the tab bar does. */
+  moveTab(id: string, index: number): void;
   update(id: string, patch: TabPatch): void;
   /** A quick-connection tab connects to the saved host from now on (HOST-12). */
   adoptHost(id: string, hostId: string, title: string): void;
@@ -65,6 +67,15 @@ export const useTabs = create<TabsState>((set, get) => ({
       return { tabs, active };
     }),
   activate: (active) => set({ active }),
+  moveTab: (id, index) =>
+    set((s) => {
+      const from = s.tabs.findIndex((t) => t.id === id);
+      const to = Math.max(0, Math.min(index, s.tabs.length - 1));
+      if (from < 0 || from === to) return s;
+      const tabs = s.tabs.filter((t) => t.id !== id);
+      tabs.splice(to, 0, s.tabs[from]);
+      return { tabs };
+    }),
   adoptHost: (id, hostId, title) =>
     set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && !t.local ? { ...t, hostId, target: null, title } : t)) })),
   update: (id, patch) =>

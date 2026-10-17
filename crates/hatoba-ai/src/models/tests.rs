@@ -54,13 +54,16 @@ async fn chat_completions_list_reads_ids_names_and_limits() {
     assert_eq!(
         models,
         vec![
+            // What the list leaves out of a well-known model comes from the table.
             ModelInfo {
                 id: "gpt-4.1".into(),
                 name: "gpt-4.1".into(),
-                context_window: None,
-                max_output_tokens: None,
-                ..ModelInfo::default()
+                context_window: Some(1_047_576),
+                max_output_tokens: Some(32_768),
+                efforts: Some(vec![]),
+                adaptive_thinking: None,
             },
+            // What it says wins, and Anthropic's levels stay unknown on Chat Completions.
             ModelInfo {
                 id: "anthropic/claude-sonnet-4.5".into(),
                 name: "Anthropic: Claude Sonnet 4.5".into(),
@@ -137,7 +140,13 @@ async fn anthropic_list_follows_pages() {
                 Some(1_000_000),
                 Some(128_000)
             ),
-            ("claude-sonnet-4-6", "Claude Sonnet 4.6", None, None),
+            // The page left the limits out; the table has them.
+            (
+                "claude-sonnet-4-6",
+                "Claude Sonnet 4.6",
+                Some(1_000_000),
+                Some(128_000)
+            ),
             (
                 "claude-haiku-4-5",
                 "Claude Haiku 4.5",
@@ -725,4 +734,294 @@ async fn system_one_test_connection_sends_one_decision() {
     )
     .await;
     assert_eq!(closed.failure, Some(TestFailure::Network));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Well-known models (AI-03)
+// ---------------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_gateway_list_of_bare_ids_gets_limits_and_levels_from_the_table() {
+    use Effort::{High, Low, Medium, Xhigh};
+    // New API's OpenAI-format list: no limits or capabilities, whatever the model.
+    let server = MockServer::start().await;
+    let item = |id: &str| {
+        json!({"id": id, "object": "model", "created": 1_626_777_600, "owned_by": "custom",
+               "supported_endpoint_types": ["openai", "anthropic"]})
+    };
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [item("claude-opus-4-8"), item("gpt-5.5"), item("gemini-2.5-pro"),
+                     item("house-model")],
+            "object": "list", "success": true
+        })))
+        .mount(&server)
+        .await;
+    let models = list_models(&http_client(), &cc(&server), &CancellationToken::new())
+        .await
+        .unwrap();
+    let summary: Vec<_> = models
+        .iter()
+        .map(|m| {
+            (
+                m.id.as_str(),
+                m.context_window,
+                m.max_output_tokens,
+                m.efforts.clone(),
+                m.adaptive_thinking,
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "claude-opus-4-8",
+                Some(1_000_000),
+                Some(128_000),
+                None,
+                None
+            ),
+            (
+                "gpt-5.5",
+                Some(1_050_000),
+                Some(128_000),
+                Some(vec![Low, Medium, High, Xhigh]),
+                None
+            ),
+            (
+                "gemini-2.5-pro",
+                Some(1_048_576),
+                Some(65_536),
+                Some(vec![Low, Medium, High]),
+                None
+            ),
+            ("house-model", None, None, None, None),
+        ]
+    );
+
+    // Its Anthropic-format list: id, created_at, display_name and type.
+    let server = MockServer::start().await;
+    let item = |id: &str| {
+        json!({"id": id, "created_at": "2026-04-16T00:00:00Z", "display_name": id,
+               "type": "model"})
+    };
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [item("claude-opus-4-8"), item("claude-haiku-4-5-20251001"),
+                     item("house-model")],
+            "first_id": "claude-opus-4-8", "has_more": false, "last_id": "house-model"
+        })))
+        .mount(&server)
+        .await;
+    let models = list_models(
+        &http_client(),
+        &anthropic(&server),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    let summary: Vec<_> = models
+        .iter()
+        .map(|m| {
+            (
+                m.id.as_str(),
+                m.context_window,
+                m.max_output_tokens,
+                m.efforts.clone(),
+                m.adaptive_thinking,
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (
+                "claude-opus-4-8",
+                Some(1_000_000),
+                Some(128_000),
+                Some(Effort::ALL.to_vec()),
+                Some(true)
+            ),
+            (
+                "claude-haiku-4-5-20251001",
+                Some(200_000),
+                Some(64_000),
+                Some(vec![]),
+                Some(false)
+            ),
+            ("house-model", None, None, None, None),
+        ]
+    );
+}
+
+#[test]
+fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versions() {
+    use Effort::{High, Low, Max, Medium, Xhigh};
+    let opus_4_8 = KnownModel {
+        context_window: 1_000_000,
+        max_output_tokens: 128_000,
+        efforts: Some(&Effort::ALL),
+        adaptive_thinking: Some(true),
+    };
+    for id in [
+        "claude-opus-4-8",
+        " Claude-Opus-4-8 ",
+        "anthropic/claude-opus-4.8",
+        "openrouter/anthropic/claude-opus-4.8:nitro",
+        "us.anthropic.claude-opus-4-8-v1:0",
+        "claude-opus-4-8@20260416",
+        "claude-opus-4-8-20260416",
+        "claude-opus-4-8-thinking",
+        "claude-opus-4-8[1m]",
+    ] {
+        assert_eq!(known_model(id, Protocol::Anthropic), Some(opus_4_8), "{id}");
+    }
+    // A later version is not the one before it, and a version is not its family.
+    for id in [
+        "claude-opus-5-7",
+        "claude-opus-4-9",
+        "claude-opus-48",
+        "gpt-5.9",
+        "gpt-50",
+        "gemini-2.6-pro",
+        "o5",
+        "my-model",
+        "",
+    ] {
+        for protocol in [
+            Protocol::Anthropic,
+            Protocol::ChatCompletions,
+            Protocol::Responses,
+        ] {
+            assert_eq!(known_model(id, protocol), None, "{id} on {protocol:?}");
+        }
+    }
+    // The longest key wins: each version and variant has its own.
+    let efforts = |id: &str, protocol| known_model(id, protocol).and_then(|m| m.efforts);
+    assert_eq!(
+        efforts("claude-opus-4-6", Protocol::Anthropic),
+        Some(&[Low, Medium, High, Max][..])
+    );
+    assert_eq!(
+        efforts("claude-sonnet-4-5-20250929", Protocol::Anthropic),
+        Some(&[][..])
+    );
+    assert_eq!(
+        efforts("claude-sonnet-4-20250514", Protocol::Anthropic),
+        Some(&[][..])
+    );
+    assert_eq!(
+        known_model("claude-sonnet-4-20250514", Protocol::Anthropic).map(|m| m.max_output_tokens),
+        Some(64_000)
+    );
+    assert_eq!(
+        efforts("gpt-5.4-mini-2026-03-17", Protocol::Responses),
+        Some(&[Low, Medium, High, Xhigh][..])
+    );
+    assert_eq!(
+        efforts("gpt-5.5-pro", Protocol::Responses),
+        Some(&[Medium, High, Xhigh][..])
+    );
+    for id in [
+        "gpt-5-chat-latest",
+        "gpt-5.1-chat-latest",
+        "openai/gpt-5.2-chat",
+    ] {
+        assert_eq!(
+            known_model(id, Protocol::Responses).map(|m| (m.context_window, m.efforts)),
+            Some((128_000, Some(&[][..]))),
+            "{id}"
+        );
+    }
+    assert_eq!(
+        efforts("o3-mini-high", Protocol::ChatCompletions),
+        Some(&[Low, Medium, High][..])
+    );
+    assert_eq!(
+        efforts("gpt-4o-2024-08-06", Protocol::ChatCompletions),
+        Some(&[][..])
+    );
+    assert_eq!(
+        known_model("gpt-oss:20b", Protocol::ChatCompletions).map(|m| m.context_window),
+        Some(131_072)
+    );
+    assert_eq!(
+        known_model("models/gemini-3.1-pro-preview", Protocol::ChatCompletions),
+        Some(KnownModel {
+            context_window: 1_048_576,
+            max_output_tokens: 65_536,
+            efforts: Some(&[Low, Medium, High]),
+            adaptive_thinking: None,
+        })
+    );
+    // DeepSeek takes the same levels in both of its formats.
+    for protocol in [Protocol::Anthropic, Protocol::ChatCompletions] {
+        assert_eq!(
+            efforts("deepseek-ai/DeepSeek-V4-Pro", protocol),
+            Some(&[Low, High, Max][..]),
+            "{protocol:?}"
+        );
+    }
+    assert_eq!(
+        known_model("qwen3.8-max-0902", Protocol::ChatCompletions).map(|m| (
+            m.context_window,
+            m.max_output_tokens,
+            m.efforts
+        )),
+        Some((1_000_000, 131_072, Some(&[Low, Medium, Xhigh][..])))
+    );
+    assert_eq!(
+        efforts("qwen3.6-plus", Protocol::ChatCompletions),
+        Some(&[][..])
+    );
+    assert_eq!(
+        known_model("qwen-plus-2025-07-14", Protocol::ChatCompletions).map(|m| m.context_window),
+        Some(131_072)
+    );
+    // Retired from its vendor's API, so it stays as unknown as before.
+    assert_eq!(
+        known_model("deepseek-chat", Protocol::ChatCompletions),
+        None
+    );
+    // The levels are those of the vendor's own format: elsewhere only the limits apply.
+    assert_eq!(
+        known_model("anthropic/claude-opus-4.8", Protocol::ChatCompletions),
+        Some(KnownModel {
+            efforts: None,
+            adaptive_thinking: None,
+            ..opus_4_8
+        })
+    );
+    assert_eq!(
+        known_model("gpt-5.2", Protocol::Anthropic).map(|m| (m.context_window, m.efforts)),
+        Some((400_000, None))
+    );
+    // A System One model only decides (AI-47).
+    assert_eq!(known_model("gpt-5.2", Protocol::SystemOne), None);
+}
+
+#[test]
+fn what_the_list_or_the_user_said_wins_over_the_table() {
+    let mut spec = ModelSpec {
+        context_window: Some(200_000),
+        efforts: Some(vec![Effort::High]),
+        ..ModelSpec::new("claude-opus-4-8")
+    };
+    spec.fill_known(Protocol::Anthropic);
+    assert_eq!(
+        spec,
+        ModelSpec {
+            id: "claude-opus-4-8".into(),
+            context_window: Some(200_000),
+            max_output_tokens: Some(128_000),
+            efforts: Some(vec![Effort::High]),
+            adaptive_thinking: Some(true),
+        }
+    );
+    let mut unknown = ModelSpec::new("house-model");
+    unknown.fill_known(Protocol::Anthropic);
+    assert_eq!(unknown, ModelSpec::new("house-model"));
 }
