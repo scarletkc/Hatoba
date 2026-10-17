@@ -229,7 +229,7 @@ pub(crate) async fn joined_remote(
     rekeyed: bool,
     generation: u64,
 ) {
-    if rekeyed && let Err(e) = crate::platform::biometric::remove(state.secrets.as_ref()) {
+    if rekeyed && let Err(e) = crate::platform::biometric::remove(app, state.secrets.as_ref()) {
         tracing::warn!("could not remove the biometric unlock: {}", e.detail);
     }
     if rekeyed && let Err(e) = state.secrets.delete(secret_keys::PIN_VAULT_KEY) {

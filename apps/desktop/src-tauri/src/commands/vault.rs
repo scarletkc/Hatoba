@@ -92,7 +92,7 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
 
 #[tauri::command]
 #[specta::specta]
-pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
+pub fn vault_status(app: AppHandle, state: State<'_, AppState>) -> VaultStatus {
     let vault = state.vault();
     let info = vault.status();
     let pin = vault.pin_status();
@@ -124,7 +124,7 @@ pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
         retry_at: info.retry_at,
         sync_kind,
         biometric_available: biometric::available(),
-        biometric_enabled: info.initialized && biometric::enrolled(state.secrets.as_ref()),
+        biometric_enabled: info.initialized && biometric::enrolled(&app, state.secrets.as_ref()),
         pin_enabled: pin.enabled,
         pin_persist: pin.persist,
         pin_unlock: info.initialized && pin.enabled && pin_unlock,
@@ -409,8 +409,8 @@ pub async fn biometric_enable(
 
 #[tauri::command]
 #[specta::specta]
-pub fn biometric_disable(state: State<'_, AppState>) -> AppResult<()> {
-    biometric::remove(state.secrets.as_ref())
+pub fn biometric_disable(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    biometric::remove(&app, state.secrets.as_ref())
 }
 
 /// SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like

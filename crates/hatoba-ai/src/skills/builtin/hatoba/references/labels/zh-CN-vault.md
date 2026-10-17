@@ -46,6 +46,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | New Master Password | 新主密码 |
 | Reset and Unlock | 重置并解锁 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 |
+| Unlock with Touch ID | 使用 Touch ID 解锁 |
 | Unlock with PIN | 使用 PIN 解锁 |
 | Set Up PIN | 设置 PIN |
 | Confirm PIN | 确认 PIN |
@@ -184,6 +185,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Disconnect all sessions when locked | 锁定时断开所有会话 |
 | Clear Clipboard | 清除剪贴板 |
 | Unlock with Windows Hello | 使用 Windows Hello 解锁 |
+| Unlock with Touch ID | 使用 Touch ID 解锁 |
 | Unlock with PIN | 使用 PIN 解锁 |
 | Require the master password after a restart | 重启后需要输入主密码 |
 | Master Password | 主密码 |

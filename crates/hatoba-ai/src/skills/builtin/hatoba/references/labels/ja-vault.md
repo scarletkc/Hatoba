@@ -46,6 +46,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | New Master Password | 新しいマスターパスワード |
 | Reset and Unlock | リセットしてロック解除 |
 | Unlock with Windows Hello | Windows Hello でロック解除 |
+| Unlock with Touch ID | Touch ID でロック解除 |
 | Unlock with PIN | PIN でロック解除 |
 | Set Up PIN | PIN を設定 |
 | Confirm PIN | PIN（確認） |
@@ -184,6 +185,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Disconnect all sessions when locked | ロック時にすべてのセッションを切断 |
 | Clear Clipboard | クリップボードの消去 |
 | Unlock with Windows Hello | Windows Hello でロック解除 |
+| Unlock with Touch ID | Touch ID でロック解除 |
 | Unlock with PIN | PIN でロック解除 |
 | Require the master password after a restart | 再起動後はマスターパスワードを要求 |
 | Master Password | マスターパスワード |
