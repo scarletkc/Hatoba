@@ -50,6 +50,7 @@ use hatoba_ai::entry::{
 };
 use hatoba_ai::judge::{self, JudgeCall, JudgeFailure, JudgeState, Verdict};
 use hatoba_ai::mcp::deferred;
+use hatoba_ai::models::known_model;
 use hatoba_ai::provider::{AuthHeader, Effort, ModelSpec, Protocol, ProviderConfig};
 use hatoba_ai::skills::{BUILTIN_NAME, builtin_description, builtin_skill};
 use hatoba_ai::tools::{
@@ -4198,14 +4199,45 @@ pub fn model_spec(provider: &AiProvider, model: &CoreModel) -> ModelSpec {
             .map(|levels| levels.iter().copied().map(model_effort).collect()),
         adaptive_thinking: model.adaptive_thinking,
     };
-    // A ChatGPT provider (AI-52) speaks Responses whatever its stored protocol says.
-    let protocol = if provider.chatgpt.is_some() {
+    spec.fill_known(request_protocol(provider));
+    spec
+}
+
+/// The protocol of saved `provider`'s requests: a ChatGPT provider (AI-52) speaks Responses
+/// whatever its stored protocol says.
+fn request_protocol(provider: &AiProvider) -> Protocol {
+    if provider.chatgpt.is_some() {
         Protocol::Responses
     } else {
         protocol(provider.protocol)
-    };
-    spec.fill_known(protocol);
-    spec
+    }
+}
+
+/// AI-03: when the form saves `provider` with another protocol than `before` had, the levels and
+/// adaptive thinking a row holds as the table of well-known models gave them for the old protocol
+/// are dropped, so the table fills what the new one takes. The form shows a row's unknown fields
+/// as the table has them and saves what it shows, so without this a gateway's Claude model moved
+/// to Chat Completions would keep sending Anthropic's levels there.
+pub fn drop_levels_of_old_protocol(before: &AiProvider, provider: &mut AiProvider) {
+    let old = request_protocol(before);
+    if old == request_protocol(provider) {
+        return;
+    }
+    for model in &mut provider.models {
+        let Some(known) = known_model(&model.id, old) else {
+            continue;
+        };
+        let levels = model
+            .efforts
+            .as_ref()
+            .map(|levels| levels.iter().copied().map(model_effort).collect::<Vec<_>>());
+        if known.efforts.is_some() && levels.as_deref() == known.efforts {
+            model.efforts = None;
+        }
+        if known.adaptive_thinking.is_some() && model.adaptive_thinking == known.adaptive_thinking {
+            model.adaptive_thinking = None;
+        }
+    }
 }
 
 /// What a request needs to reach saved provider `id`. A ChatGPT provider (AI-52) is a Responses

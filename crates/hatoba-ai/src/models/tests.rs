@@ -925,6 +925,17 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
         efforts("gpt-5.5-pro", Protocol::Responses),
         Some(&[Medium, High, Xhigh][..])
     );
+    for id in [
+        "gpt-5-chat-latest",
+        "gpt-5.1-chat-latest",
+        "openai/gpt-5.2-chat",
+    ] {
+        assert_eq!(
+            known_model(id, Protocol::Responses).map(|m| (m.context_window, m.efforts)),
+            Some((128_000, Some(&[][..]))),
+            "{id}"
+        );
+    }
     assert_eq!(
         efforts("o3-mini-high", Protocol::ChatCompletions),
         Some(&[Low, Medium, High][..])

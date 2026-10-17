@@ -155,6 +155,11 @@ const MODELS: &[Entry] = &[
     chat("gpt-5.1", 400 * K, 128 * K, TO_HIGH),
     chat("gpt-5", 400 * K, 128 * K, TO_HIGH),
     chat("gpt-5-pro", 400 * K, 272 * K, &[High]),
+    // ChatGPT's chat models do not reason.
+    chat("gpt-5.3-chat", 128 * K, 16_384, NONE),
+    chat("gpt-5.2-chat", 128 * K, 16_384, NONE),
+    chat("gpt-5.1-chat", 128 * K, 16_384, NONE),
+    chat("gpt-5-chat", 128 * K, 16_384, NONE),
     chat("o3", 200 * K, 100 * K, TO_HIGH),
     chat("o4-mini", 200 * K, 100 * K, TO_HIGH),
     chat("o1", 200 * K, 100 * K, TO_HIGH),

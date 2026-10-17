@@ -23,8 +23,8 @@ use zeroize::Zeroizing;
 
 use crate::ai::{
     AiEnv, EventSink, MAX_TITLE_CHARS, auth_header, chatgpt, conversation_view,
-    conversation_view_at, core_effort, effort_view, find_conversation, listed_effort, model_spec,
-    protocol, search_kind,
+    conversation_view_at, core_effort, drop_levels_of_old_protocol, effort_view, find_conversation,
+    listed_effort, model_spec, protocol, search_kind,
 };
 use crate::dto::{
     AiAuthHeader, AiAutoVerdict, AiChatgptSignIn, AiChatgptStatus, AiChatgptView,
@@ -297,7 +297,7 @@ pub(crate) fn save_provider(
         None => None,
     };
     let chatgpt = existing.as_ref().and_then(|p| p.chatgpt.clone());
-    let provider = if chatgpt.is_some() {
+    let mut provider = if chatgpt.is_some() {
         // AI-52: a ChatGPT provider keeps its account, protocol and URL; the form edits the
         // name and the models.
         AiProvider {
@@ -323,6 +323,9 @@ pub(crate) fn save_provider(
             updated_at: 0,
         }
     };
+    if let Some(before) = &existing {
+        drop_levels_of_old_protocol(before, &mut provider);
+    }
     let id = v.put(input.id.as_deref(), Item::AiProvider(provider))?;
     Ok(provider_view(v, &id, &find_provider(v, &id)?))
 }
@@ -1578,14 +1581,26 @@ mod tests {
         assert_eq!(spec.adaptive_thinking, Some(true));
         assert_eq!(spec.efforts.map(|e| e.len()), Some(5));
 
-        // On Chat Completions a gateway translates Anthropic's levels its own way, so only the
-        // limits are filled.
-        let mut saved = saved;
-        saved.protocol = CoreProtocol::ChatCompletions;
-        let spec = model_spec(&saved, &saved.models[0]);
+        // The form saves what the view showed. Moved to Chat Completions, where a gateway
+        // translates Anthropic's levels its own way, the table's levels for Anthropic go and only
+        // the limits are filled; the levels the user picked stay.
+        let mut moved = input.clone();
+        moved.id = Some(view.id.clone());
+        moved.protocol = AiProtocol::ChatCompletions;
+        moved.models = view.models.clone();
+        let view = save_provider(&mut v, &moved, moved.base_url.clone()).unwrap();
+        let summary: Vec<_> = view
+            .models
+            .iter()
+            .map(|m| (m.context_window, m.efforts.clone(), m.adaptive_thinking))
+            .collect();
         assert_eq!(
-            (spec.context_window, spec.efforts, spec.adaptive_thinking),
-            (Some(1_000_000), None, None)
+            summary,
+            [
+                (Some(1_000_000), None, None),
+                (Some(500_000), Some(vec![Low]), None),
+                (None, None, None),
+            ]
         );
     }
 
