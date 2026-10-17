@@ -92,7 +92,7 @@ export interface ModelDraft {
   output: string;
   /** The thinking levels it accepts (AI-05), null when unknown. */
   efforts: AiEffort[] | null;
-  /** Adaptive thinking, from the provider's list; the form does not edit it. */
+  /** Adaptive thinking, from the provider's list or the table of well-known models; the form does not edit it. */
   adaptive: boolean | null;
 }
 

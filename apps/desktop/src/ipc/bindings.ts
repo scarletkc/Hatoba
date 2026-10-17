@@ -885,7 +885,10 @@ export type AiMemoryView = {
 	updated_at: number,
 };
 
-/**  A model of a provider (AI-03). Token limits are `None` when unknown. */
+/**
+ *  A model of a provider (AI-03). Token limits are `None` when unknown. A provider's view fills
+ *  what a row leaves unknown from the table of well-known models, as requests do.
+ */
 export type AiModel = {
 	id: string,
 	name: string,
@@ -896,7 +899,10 @@ export type AiModel = {
 	 *  unknown (the panel then offers Low to High).
 	 */
 	efforts: AiEffort[] | null,
-	/**  Whether the model supports adaptive thinking (Anthropic's model list), `None` when unknown. */
+	/**
+	 *  Whether the model supports adaptive thinking (Anthropic's model list or the table of
+	 *  well-known models), `None` when unknown.
+	 */
 	adaptive_thinking: boolean | null,
 };
 

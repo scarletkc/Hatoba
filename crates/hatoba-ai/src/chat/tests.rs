@@ -2636,6 +2636,44 @@ fn anthropic_request_shapes_per_model_and_level() {
 }
 
 #[test]
+fn a_gateway_model_thinks_with_what_the_known_models_table_says() {
+    // Opus 4.8 behind a gateway whose list names only the id: without the table it got the
+    // effort alone, Low to High, and answered without thinking.
+    let entries = vec![AiEntry::user(1, "hi")];
+    let mut opus = ModelSpec::new("claude-opus-4-8");
+    opus.fill_known(Protocol::Anthropic);
+    let req = with_effort(request(&opus, &entries, &[]), Some(Max));
+    let body = request::anthropic(&req, true, true).body;
+    assert_eq!(
+        body["thinking"],
+        json!({"type": "adaptive", "display": "summarized"})
+    );
+    assert_eq!(body["output_config"], json!({"effort": "max"}));
+    assert_eq!(body["max_tokens"], json!(128_000));
+    // At Default it still decides for itself whether to think.
+    let req = with_effort(request(&opus, &entries, &[]), None);
+    assert!(
+        request::anthropic(&req, true, true)
+            .body
+            .get("thinking")
+            .is_none()
+    );
+
+    // GPT-5.5 on Chat Completions: Extra High goes out as it is, Max as Extra High.
+    let mut gpt = ModelSpec::new("openai/gpt-5.5");
+    gpt.fill_known(Protocol::ChatCompletions);
+    let req = with_effort(request(&gpt, &entries, &[]), Some(Max));
+    let body = request::chat_completions(&req, true, true).body;
+    assert_eq!(body["reasoning_effort"], json!("xhigh"));
+    // GPT-4o does not reason, so no level is sent.
+    let mut gpt_4o = ModelSpec::new("gpt-4o");
+    gpt_4o.fill_known(Protocol::ChatCompletions);
+    let req = with_effort(request(&gpt_4o, &entries, &[]), Some(High));
+    let body = request::chat_completions(&req, true, true).body;
+    assert!(body.get("reasoning_effort").is_none());
+}
+
+#[test]
 fn anthropic_max_tokens_is_the_output_limit_up_to_a_cap() {
     let entries = vec![AiEntry::user(1, "hi")];
     for (limit, effort, expected) in [
