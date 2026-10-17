@@ -130,10 +130,6 @@ The labels that these files name in English, as the interface shows them in Simp
 | Reason (optional, sent to the model) | 理由（可选，会告诉模型） |
 | Hidden characters shown as escapes | 不可见的字符已显示为转义 |
 | Always Allow “{prefix}” on This Host | 在此主机上总是允许“{prefix}” |
-| Key sequence | 按键序列 |
-| Edit key {n}: {key} | 编辑按键 {n}：{key} |
-| Insert key at position {n} | 在第 {n} 个位置插入按键 |
-| Remove key {n} | 删除按键 {n} |
 
 ## `references/ai-history.md`
 

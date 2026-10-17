@@ -434,7 +434,6 @@ export const AREAS: Area[] = [
           "ai.call.approval", "ai.approval.workdir", "ai.approval.homeDir", "ai.approval.run", "ai.queued.edit",
           "ai.approval.reject", "ai.approval.allowHere", "ai.approval.alwaysAllow", "ai.approval.alwaysAllowHost",
           "ai.approval.reasonPlaceholder", "ai.approval.escaped", "ai.approval.alwaysAllowCommand",
-          "ai.approval.keySequence", "ai.approval.editKey", "ai.approval.insertKey", "ai.approval.removeKey",
         ],
       },
       "references/ai-history.md": {

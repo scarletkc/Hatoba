@@ -130,10 +130,6 @@ The labels that these files name in English, as the interface shows them in Japa
 | Reason (optional, sent to the model) | 理由（任意、モデルに伝えられます） |
 | Hidden characters shown as escapes | 見えない文字をエスケープで表示 |
 | Always Allow “{prefix}” on This Host | このホストでは「{prefix}」を常に許可 |
-| Key sequence | キーの順序 |
-| Edit key {n}: {key} | キー {n} を編集：{key} |
-| Insert key at position {n} | 位置 {n} にキーを挿入 |
-| Remove key {n} | キー {n} を削除 |
 
 ## `references/ai-history.md`
 

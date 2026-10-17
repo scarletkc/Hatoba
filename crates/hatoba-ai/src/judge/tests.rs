@@ -609,8 +609,8 @@ async fn the_judged_call_says_what_its_tool_does() {
         builtin_description(SEND_INPUT).unwrap()
     );
     let description = sent["call"]["description"].as_str().unwrap();
-    assert!(description.contains("`key`, then presses `keys` in order"));
-    assert!(description.contains("characters in either key field are typed text"));
+    assert!(description.contains("each of `keys` in order"));
+    assert!(description.contains("a single character types it"));
     assert_eq!(
         sent["call"]["arguments"]["keys"],
         json!(["-", "a", "enter"])

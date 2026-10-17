@@ -79,6 +79,7 @@ const TOOL_ICON: Record<ToolKind, string> = {
   unknown: "question",
 };
 
+/** AI-13: the names of the keys `send_input` presses, as keyboards print them. */
 export const KEY_LABEL: Record<string, MessageKey> = {
   enter: "ai.key.enter",
   tab: "ai.key.tab",
@@ -98,80 +99,168 @@ export const KEY_LABEL: Record<string, MessageKey> = {
   " ": "ai.key.space",
 };
 
-function keyLabel(key: string, t: ReturnType<typeof useT>): string {
-  const normalized = parseSendKey(key) ?? key;
-  const modifier: Record<string, string> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
-  return normalized.split("+").map((part) => Object.hasOwn(KEY_LABEL, part) ? t(KEY_LABEL[part]) : Object.hasOwn(modifier, part) ? modifier[part] : /^f\d+$/.test(part) || normalized.startsWith("ctrl+") ? part.toUpperCase() : part).join("+");
+const MODIFIER_LABEL: Record<string, string> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
+
+/**
+ * A key as the card names it: `ctrl+x` as Ctrl+X, `page_up` as Page Up, a space as Space. A letter keeps its
+ * case after Alt alone, where Alt+F and Alt+f send different bytes; a key Hatoba can't press shows as given.
+ */
+function keyLabel(t: ReturnType<typeof useT>, key: string): string {
+  const parsed = parseSendKey(key);
+  if (parsed === null) return key || '""';
+  const [, prefix, base] = /^((?:ctrl\+|alt\+|shift\+)*)(.+)$/.exec(parsed)!;
+  const modifiers = prefix.split("+").filter(Boolean);
+  const name = Object.hasOwn(KEY_LABEL, base)
+    ? t(KEY_LABEL[base])
+    : /^f\d+$/.test(base) || modifiers.includes("ctrl") || modifiers.includes("shift")
+      ? base.toUpperCase()
+      : base;
+  return [...modifiers.map((m) => MODIFIER_LABEL[m]), name].join("+");
 }
 
-/** Separate key tokens visually, so a navigation key cannot be mistaken for a separator. */
-function KeySequence({ keys }: { keys: string[] }) {
-  const t = useT();
-  const [before, after] = t("ai.approval.thenKey", { key: "\uFFFC" }).split("\uFFFC");
-  return <>{before}<span className={s.keySequenceView} role="list" aria-label={t("ai.approval.keySequence")}>
-    {keys.map((key, index) => <span key={index} className={cx(s.keyToken, s.keyLabel)} role="listitem">{keyLabel(key, t)}</span>)}
-  </span>{after}</>;
+/** AI-13: the keys a `send_input` call presses after its text, in order: `key`, when given, then `keys`. */
+function callKeys(args: Record<string, unknown>): string[] {
+  const keys = [...(args.key ? [args.key] : []), ...(Array.isArray(args.keys) ? args.keys : [])];
+  return keys.map((key) => (typeof key === "string" ? key : key === undefined || key === null ? "" : String(key)));
 }
 
-/** Editing writes into the draft immediately, including incomplete keys that Run must reject. */
-function KeySequenceEditor({ keys, id, invalid, onChange }: { keys: string[]; id: string; invalid: boolean; onChange: (keys: string[]) => void }) {
+/** AI-13: "Then press" with the keys a `send_input` call presses after its text, each in a chip of its own. */
+function PressedKeys({ keys }: { keys: string[] }) {
   const t = useT();
-  const [active, setActive] = useState<number | null>(null);
-  const insert = (index: number) => {
-    onChange([...keys.slice(0, index), "", ...keys.slice(index)]);
-    setActive(index);
+  const [before, after] = t("ai.approval.thenKey", { key: "\0" }).split("\0");
+  return (
+    <>
+      {before}
+      {keys.map((key, i) => (
+        <Fragment key={i}>
+          {i > 0 && " "}
+          <kbd className={cx(s.chip, s.key, parseSendKey(key) === null && s.chipBad)}>{keyLabel(t, key)}</kbd>
+        </Fragment>
+      ))}
+      {after}
+    </>
+  );
+}
+
+/** Whether a chip's box comes before the point (x, y) in reading order, the rows of the field first. */
+function before(box: DOMRect, x: number, y: number): boolean {
+  if (box.bottom <= y) return true;
+  if (box.top > y) return false;
+  return box.left + box.width / 2 < x;
+}
+
+/**
+ * AI-13: the keys of a `send_input` call as chips in one field that wraps, like a host's tags (TagInput).
+ * What is typed goes in at the caret, which a click puts between two chips and ← and → move; Enter or
+ * leaving the field adds it. Backspace and Delete remove the key before or after the caret, × any key.
+ */
+function KeysField({ id, keys, onChange }: { id: string; keys: string[]; onChange: (keys: string[]) => void }) {
+  const t = useT();
+  const field = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const [caret, setCaret] = useState(keys.length);
+  const [text, setText] = useState("");
+  const at = Math.min(caret, keys.length);
+
+  /** The keys with what was typed added at the caret; a lone space is the Space key, not nothing. */
+  const typed = () => {
+    const raw = text.trim() || text;
+    return raw ? [...keys.slice(0, at), parseSendKey(raw) ?? raw, ...keys.slice(at)] : keys;
   };
-  return <div role="group" aria-label={t("ai.approval.keySequence")}>
-    <div className={s.label}>{t("ai.approval.keySequence")}</div>
-    <div className={s.keySequence}>
-      {keys.map((key, index) => {
-        const bad = (key !== "" || invalid) && parseSendKey(key) === null;
-        const label = keyLabel(key, t) || t("ai.approval.keyNumber", { n: index + 1 });
-        const value = key === " " ? "Space" : key;
-        return <div className={s.keySlot} key={index}>
-          <IconButton className={s.keyIcon} icon="plus" label={t("ai.approval.insertKey", { n: index + 1 })} onClick={() => insert(index)} />
-          <div className={cx(s.keyToken, bad && s.keyInvalid)}>
-            {active === index ? <input
-              className={cx(s.input, s.keyInput)}
-              value={value}
-              size={Math.min(18, Math.max(3, value.length))}
-              aria-label={t("ai.approval.keyNumber", { n: index + 1 })}
-              aria-invalid={bad || undefined}
-              title={bad ? t("ai.approval.invalidKey") : undefined}
-              placeholder={t("ai.approval.keyNumber", { n: index + 1 })}
-              list={`${id}-keys`}
-              spellCheck={false}
-              autoFocus
-              onChange={(e) => onChange(keys.map((k, i) => i === index ? e.target.value : k))}
-              onBlur={() => setActive(null)}
-              onKeyDown={(e) => {
-                if (isImeEvent(e)) return;
-                if (e.key === "Escape" || e.key === "Enter") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (e.key === "Escape" || parseSendKey(key) !== null) setActive(null);
-                }
-              }}
-            /> : <button
-              type="button"
-              className={s.keyEdit}
-              aria-label={t("ai.approval.editKey", { n: index + 1, key: label })}
-              aria-invalid={bad || undefined}
-              title={bad ? t("ai.approval.invalidKey") : undefined}
-              onClick={() => setActive(index)}
-            >{label}</button>}
-            {bad && <Icon name="warning-circle" size={12} className={s.keyWarning} />}
-            <IconButton className={s.keyIcon} icon="x" label={t("ai.approval.removeKey", { n: index + 1 })} onClick={() => {
-              onChange(keys.filter((_, i) => i !== index));
-              setActive(null);
-            }} />
-          </div>
-        </div>;
-      })}
-      <Button size="xs" icon="plus" aria-label={t("ai.approval.insertKey", { n: keys.length + 1 })} onClick={() => insert(keys.length)}>{t("ai.approval.addKey")}</Button>
+  const apply = (next: string[], to: number) => {
+    if (next !== keys) onChange(next);
+    setCaret(to);
+    setText("");
+  };
+  const remove = (list: string[], i: number) => apply([...list.slice(0, i), ...list.slice(i + 1)], i);
+
+  return (
+    <div
+      ref={field}
+      className={s.keysField}
+      onMouseDown={(e) => {
+        // A click anywhere in the field puts the caret in the gap nearest to it, as in text.
+        if (e.target === input.current || e.button !== 0) return;
+        e.preventDefault();
+        const next = typed();
+        // What was typed becomes a chip where the input is, before the click or after it.
+        let to = next !== keys && before(input.current!.getBoundingClientRect(), e.clientX, e.clientY) ? 1 : 0;
+        for (const chip of field.current!.querySelectorAll("[data-key]")) if (before(chip.getBoundingClientRect(), e.clientX, e.clientY)) to++;
+        apply(next, to);
+        input.current?.focus();
+      }}
+    >
+      {keys.map((key, i) => (
+        // The input stays last in the DOM and moves by `order`, so moving the caret never takes its focus.
+        <span key={i} data-key className={cx(s.keyChip, parseSendKey(key) === null && s.keyChipBad)} style={{ order: i < at ? 0 : 2 }}>
+          {keyLabel(t, key)}
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t("ai.approval.removeKey", { key: keyLabel(t, key) })}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={() => {
+              const next = typed();
+              remove(next, next !== keys && i >= at ? i + 1 : i);
+              input.current?.focus();
+            }}
+          >
+            <Icon name="x" />
+          </button>
+        </span>
+      ))}
+      <input
+        ref={input}
+        id={id}
+        className={cx(s.keysInput, at < keys.length && s.keysInputInline)}
+        style={{ order: 1 }}
+        value={text}
+        size={Math.max(1, Array.from(text).length)}
+        list={`${id}-keys`}
+        placeholder={keys.length ? "" : t("ai.approval.addKey")}
+        spellCheck={false}
+        autoComplete="off"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          const next = typed();
+          apply(next, next.length);
+        }}
+        onKeyDown={(e) => {
+          if (isImeEvent(e)) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const next = typed();
+            if (next !== keys) apply(next, at + 1);
+          } else if (e.key === "Escape" && text) {
+            // Esc drops what was typed; with nothing typed it leaves Edit, as in the other fields.
+            e.preventDefault();
+            e.stopPropagation();
+            setText("");
+          } else if (text) {
+            return;
+          } else if (e.key === "Backspace" && at > 0) {
+            remove(keys, at - 1);
+          } else if (e.key === "Delete" && at < keys.length) {
+            remove(keys, at);
+          } else if (e.key === "ArrowLeft" && at > 0) {
+            setCaret(at - 1);
+          } else if (e.key === "ArrowRight" && at < keys.length) {
+            setCaret(at + 1);
+          } else if (e.key === "Home" || e.key === "End") {
+            setCaret(e.key === "Home" ? 0 : keys.length);
+          }
+        }}
+      />
+      <datalist id={`${id}-keys`}>
+        {SEND_KEYS.map((key) => (
+          <option key={key} value={key} />
+        ))}
+      </datalist>
     </div>
-    <datalist id={`${id}-keys`}>{SEND_KEYS.map((key) => <option key={key} value={key}>{keyLabel(key, t)}</option>)}</datalist>
-  </div>;
+  );
 }
 
 /** Where a call stands, from its stored result or the turn (§9: tool running, waiting for approval, …). */
@@ -1101,7 +1190,7 @@ function draftFrom(kind: ToolKind, args: Record<string, unknown>, json: string):
     case "run_command":
       return { ...none, main: str(args.command), dir: str(args.workdir), timeout: str(args.timeout_seconds) };
     case "send_input":
-      return { ...none, main: showTerminalInput(str(args.text)), keys: [...(args.key ? [str(args.key)] : []), ...(Array.isArray(args.keys) ? args.keys.map(str) : [])], wait: str(args.wait_seconds) };
+      return { ...none, main: showTerminalInput(str(args.text)), keys: callKeys(args), wait: str(args.wait_seconds) };
     case "fetch_url":
       return { ...none, main: str(args.url) };
     // AI-39, AI-40: Edit changes the text the call writes; the diff follows.
@@ -1305,6 +1394,8 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
   const [draft, setDraft] = useState<Draft>(() => draftFrom(kind, args, shown.arguments));
   const [reason, setReason] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const keysId = useId();
+  const pressed = kind === "send_input" ? callKeys(args) : [];
   // AI-42: a side question about the call, which neither runs nor rejects it.
   const [question, setQuestion] = useState<string | null>(null);
   const label = mcp ? t("ai.tool.mcp", { server: mcp.server_name, tool: mcp.tool.tool }) : toolLabel(t, shown.name);
@@ -1428,7 +1519,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
             </>
           )}
           {kind === "send_input" && readTerminalInput(draft.main, str(args.text)) !== draft.main && <div className={s.meta}>{t("ai.approval.terminalEscapes")}</div>}
-          {invalid && <div className={s.fieldError}>{t(kind === "send_input" ? "ai.approval.invalidKey" : "ai.approval.invalidJson")}</div>}
+          {invalid && kind !== "send_input" && <div className={s.fieldError}>{t("ai.approval.invalidJson")}</div>}
           {kind === "run_command" && (
             <label className={s.inline}>
               {t("ai.approval.workdir")}
@@ -1451,12 +1542,16 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
           )}
           {kind === "send_input" && (
             <>
-              <KeySequenceEditor keys={draft.keys} id={call.id} invalid={invalid} onChange={(keys) => { setInvalid(false); setDraft({ ...draft, keys }); }} />
-              <div className={s.inline}>
+              <div className={cx(s.inline, s.keysRow)}>
+                <label htmlFor={keysId}>{t("ai.approval.key")}</label>
+                <KeysField id={keysId} keys={draft.keys} onChange={(keys) => setDraft({ ...draft, keys })} />
+              </div>
+              {draft.keys.some((key) => parseSendKey(key) === null) && <div className={s.fieldError}>{t("ai.approval.invalidKey")}</div>}
+              <label className={s.inline}>
                 {t("ai.approval.wait")}
                 <input className={cx(s.input, s.number)} type="number" min={1} max={120} placeholder="10" value={draft.wait} onChange={(e) => setDraft({ ...draft, wait: e.target.value })} />
                 {t("ai.approval.seconds")}
-              </div>
+              </label>
             </>
           )}
           {fileChange && <FileChange state={file} replaceAll={args.replace_all === true} />}
@@ -1474,7 +1569,7 @@ function ApprovalCard({ slotId, call, host, mcp, auto }: { slotId: string; call:
             <>
               <ShownInput text={str(args.text) || " "} command terminal />
               <div className={s.meta}>
-                {args.key || (Array.isArray(args.keys) && args.keys.length) ? <KeySequence keys={[args.key, ...(Array.isArray(args.keys) ? args.keys : [])].filter(Boolean).map(str)} /> : t("ai.approval.noKey")}
+                {pressed.length ? <PressedKeys keys={pressed} /> : t("ai.approval.noKey")}
                 {" · "}
                 {t("ai.approval.waitValue", { s: str(args.wait_seconds) || 10 })}
               </div>
