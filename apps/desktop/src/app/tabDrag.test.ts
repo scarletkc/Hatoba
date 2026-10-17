@@ -68,18 +68,23 @@ describe("TabDrag", () => {
   const tabOf = (title: string) => useTabs.getState().tabs.find((t) => t.title === title)!;
   const press = (title: string, target: Element = el(title)) =>
     drag.down({ button: 0, target, currentTarget: el(title), pointerId: 1, clientX: 10 } as unknown as ReactPointerEvent<HTMLElement>, tabOf(title).id);
-  const moveTo = (clientX: number) => {
-    const e = new MouseEvent("pointermove", { clientX });
+  const pointer = (type: string, clientX: number) => {
+    const e = new MouseEvent(type, { clientX });
     Object.defineProperty(e, "pointerId", { value: 1 });
     window.dispatchEvent(e);
   };
+  const moveTo = (clientX: number) => pointer("pointermove", clientX);
+  const order = () => useTabs.getState().tabs.map((t) => t.title);
 
   beforeEach(() => {
     useTabs.setState({ tabs: [], active: "home" });
     strip = document.createElement("div");
-    for (const title of ["a", "b"]) {
+    // jsdom lays nothing out: the tabs are 100, 60 and 80 px wide, side by side.
+    const places = { a: [0, 100], b: [100, 60], c: [160, 80] };
+    for (const [title, [left, width]] of Object.entries(places)) {
       const id = useTabs.getState().openSession({ hostId: title, target: null }, title);
       strip.insertAdjacentHTML("beforeend", `<button data-tab-id="${id}" data-title="${title}"><span role="button">x</span></button>`);
+      el(title).getBoundingClientRect = () => ({ left, width }) as DOMRect;
     }
     document.body.append(strip);
     useTabs.getState().activate("home");
@@ -120,5 +125,32 @@ describe("TabDrag", () => {
     press("a");
     moveTo(40);
     expect(el("a").hasAttribute("data-dragging")).toBe(true);
+  });
+
+  it("moves a tab where it is let go", () => {
+    press("a");
+    // Its right edge at 200 has passed b's middle at 130, but not c's at 200.
+    moveTo(110);
+    expect(el("a").style.transform).toBe("translateX(100px)");
+    expect(el("b").style.transform).toBe("translateX(-100px)");
+    expect(el("c").style.transform).toBe("");
+    pointer("pointerup", 110);
+    expect(order()).toEqual(["b", "a", "c"]);
+    expect(useTabs.getState().active).toBe(tabOf("a").id);
+    // Once the new order shows, the tabs drop what the drag set on them.
+    drag.rendered(useTabs.getState().tabs);
+    expect(el("b").style.transform).toBe("");
+  });
+
+  it("puts a tab back on Escape", () => {
+    press("c");
+    // Held against the start of the strip, past both tabs before it.
+    moveTo(-300);
+    expect(el("c").style.transform).toBe("translateX(-160px)");
+    expect([el("a").style.transform, el("b").style.transform]).toEqual(["translateX(80px)", "translateX(80px)"]);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect([el("a").style.transform, el("b").style.transform]).toEqual(["", ""]);
+    pointer("pointerup", -300);
+    expect(order()).toEqual(["a", "b", "c"]);
   });
 });
