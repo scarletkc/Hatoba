@@ -46,6 +46,13 @@
   font-weight: 500;
 }
 
+/* Over the tabs it passes, so their labels do not show through. */
+.tab[data-dragging] {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(var(--fill2), var(--fill2)), var(--win);
+}
+
 .tabIcon {
   font-size: 15px;
   flex: none;

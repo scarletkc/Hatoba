@@ -846,7 +846,7 @@ Without a token, nothing changes on the Worker. While it is at or above the mini
 
 | ID | Requirement | Priority |
 |---|---|---|
-| TERM-01 | Multiple tabs, one session per tab, and several tabs for the same host at once | P0 |
+| TERM-01 | Multiple tabs, one session per tab, and several tabs for the same host at once. Dragging a tab along the tab bar moves it, as in browsers: it comes to the front, the other tabs slide aside, and Escape puts it back. The home tab stays first | P0 |
 | TERM-02 | `xterm-256color` and truecolor, UTF-8. **Chinese and Japanese wide characters must render correctly, and Windows input methods such as Microsoft Pinyin and the Microsoft Japanese IME must place the candidate window and commit text correctly** | P0 |
 | TERM-03 | Sync the PTY size when the window or a panel resizes | P0 |
 | TERM-04 | Copy and paste. A single-line paste drops its trailing line breaks, so the command does not run, and needs no confirmation. Multi-line text is pasted unchanged after a confirmation, which the user can turn off | P0 |
