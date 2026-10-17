@@ -583,7 +583,7 @@ async fn the_judged_call_says_what_its_tool_does() {
         screen_tail: Some("root@web-01:~#".into()),
         ..JudgeCall::new(
             SEND_INPUT,
-            json!({"text": "ls", "key": "space", "keys": ["-", "a", "enter"]}),
+            json!({"text": "ls", "keys": [" ", "-", "a", "enter"]}),
         )
     };
     let mut state = command_state(&["Run ls -a here"], "ls");
@@ -613,7 +613,7 @@ async fn the_judged_call_says_what_its_tool_does() {
     assert!(description.contains("a single character types it"));
     assert_eq!(
         sent["call"]["arguments"]["keys"],
-        json!(["-", "a", "enter"])
+        json!([" ", "-", "a", "enter"])
     );
     // Only the call does: earlier calls stay as they were.
     assert!(sent["earlier_calls"][0].get("description").is_none());
@@ -910,7 +910,7 @@ fn the_samples_cover_reads_changes_secrets_languages_and_urls() {
     ] {
         let call = &sample.state.call;
         assert_eq!(call.tool, SEND_INPUT, "{}", sample.name);
-        assert_eq!(call.arguments, json!({"text": text, "key": "enter"}));
+        assert_eq!(call.arguments, json!({"text": text, "keys": ["enter"]}));
         assert!(call.screen_tail.as_deref().unwrap().ends_with(screen));
     }
 }

@@ -452,7 +452,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
       return {
         reasoning: "",
         text: say("nginx reloaded. I’ll verify it from your shell.", "nginx 已重新加载。我在你的终端里验证一下。", "nginx をリロードしました。ターミナルで確認します。"),
-        calls: [call("send_input", { text: "curl -sI http://localhost/v1/hosts", key: "enter", wait_seconds: 3 })],
+        calls: [call("send_input", { text: "curl -sI http://localhost/v1/hosts", keys: ["enter"], wait_seconds: 3 })],
         finish: "tool_calls",
       };
     return {
@@ -629,7 +629,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
         if (review("sleep")) calls.push(call("run_command", { command: "sleep 8 && echo done", timeout_seconds: 30 }));
         if (review("workdir", "工作目录", "作業フォルダ")) calls.push(call("run_command", { command: "npm test", workdir: "/srv/app", timeout_seconds: 120 }));
         if (want("screen", "屏幕", "画面")) calls.push(call("read_terminal", { lines: 50 }));
-        if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", key: "enter", wait_seconds: 5 }));
+        if (want("type", "send", "输入", "入力")) calls.push(call("send_input", { text: "uptime", keys: ["enter"], wait_seconds: 5 }));
         if (review("hidden", "隐藏", "隠し")) calls.push(call("run_command", { command: "cd /srv/app\tmake deploy\nprintf '\x1b[2J'\necho ‮/ fr- mr\n", timeout_seconds: 30 }));
         // AI-38…40: the file tools, on the mock's files. A change to an existing file reads it first, as
         // the model must; "unread" skips that to show the refusal.
@@ -1685,7 +1685,7 @@ export function createAiMock(deps: AiMockDeps): AiApi {
     add("c-cleanup", zh ? "清理 staging 磁盘空间" : "Clean up disk on staging", "h-staging-worker", 3 * HOUR, false, (at) => {
       const rm = call("run_command", { command: "sudo rm -rf /var/log/journal/*", timeout_seconds: 60 });
       const vacuumLogs = call("run_command", { command: "sudo journalctl --vacuum-size=200M" });
-      const type = call("send_input", { text: "docker system prune -af", key: "enter", wait_seconds: 30 });
+      const type = call("send_input", { text: "docker system prune -af", keys: ["enter"], wait_seconds: 30 });
       const fetch = call("fetch_url", { url: "https://docs.docker.com/engine/manage-resources/pruning/" });
       const mcp = call("mcp__github__create_issue", { repo: "scarletkc/infra", title: "staging disk full" });
       return [

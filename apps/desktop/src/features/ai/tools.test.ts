@@ -180,8 +180,9 @@ describe("send_input arguments (AI-13)", () => {
       const result = parseSendInput(JSON.stringify(args));
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error("expected an invalid key");
-      expect(result.error).toContain('Unsupported key "pagedown"');
-      expect(result.error).toContain("page_down");
+      expect(result.error).toBe(
+        'Unsupported key "pagedown". A key is one printable character, or a name: enter, tab, esc, up, down, left, right, home, end, page_up, page_down, insert, delete, backspace, space, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++).',
+      );
     }
   });
 

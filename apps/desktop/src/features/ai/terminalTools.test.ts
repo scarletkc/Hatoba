@@ -36,7 +36,7 @@ describe("send_input terminal delivery", () => {
     expect(result?.status).toBe("error");
     expect(result?.content).toContain("ctrl+a");
     expect(result?.content).toContain("page_down");
-    expect(result?.content).toContain("single printable character");
+    expect(result?.content).toContain("one printable character");
     expect(live.sendInput).not.toHaveBeenCalled();
   });
 });

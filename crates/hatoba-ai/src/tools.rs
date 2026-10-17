@@ -239,14 +239,10 @@ pub fn builtin_tools(set: &ToolSet) -> Vec<ToolDef> {
                         "type": "string",
                         "description": "Text to type, sent as it is (may be empty to press only keys)."
                     },
-                    "key": {
-                        "type": "string",
-                        "description": "One key to press after the text, before keys."
-                    },
                     "keys": {
                         "type": "array",
                         "items": { "type": "string" },
-                        "description": "Keys to press in order after the text: ctrl+a through ctrl+z, alt+character, shift+tab, f1-f12, home, end, page_up, page_down, insert, delete, backspace, space, enter, tab, esc, arrows or a single printable character."
+                        "description": "Keys to press in order after the text. A key is one printable character, or a name: enter, tab, esc, up, down, left, right, home, end, page_up, page_down, insert, delete, backspace, space, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++)."
                     },
                     "wait_seconds": {
                         "type": "integer",
@@ -1872,7 +1868,8 @@ mod tests {
         assert!(workdir(ToolPlace::Ssh).contains("Windows server"));
         assert!(!workdir(ToolPlace::LocalWindows).contains("Windows server"));
         let send = &builtin_tools(&ALL)[2];
-        assert!(send.input_schema["properties"]["key"]["enum"].is_null());
+        // Only `keys` is offered; the frontend still accepts the `key` of older calls.
+        assert!(send.input_schema["properties"]["key"].is_null());
         assert_eq!(send.input_schema["properties"]["keys"]["type"], "array");
         assert_eq!(
             send.input_schema["properties"]["keys"]["items"]["type"],

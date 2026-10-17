@@ -315,9 +315,9 @@ pub fn builtin_description(tool: &str) -> Option<&'static str> {
         }
         SEND_INPUT => {
             "Types `text` into a terminal connected to `host`, as the keyboard does, then \
-             presses `key` when it names one and each of `keys` in order; a key that is a single \
-             character types it. The program reading the terminal, which `screen_tail` shows, \
-             decides what that does: at a shell prompt, text sent with Enter runs as a command line."
+             presses each of `keys` in order; a key that is a single character types it. The \
+             program reading the terminal, which `screen_tail` shows, decides what that does: at a \
+             shell prompt, text sent with Enter runs as a command line."
         }
         EDIT_FILE => {
             "Replaces `old_string` with `new_string` in the text file at `path` on `host`, every \
@@ -833,7 +833,7 @@ pub fn samples() -> Vec<Sample> {
     let run = |command: &str| JudgeCall::new(RUN_COMMAND, json!({ "command": command }));
     let typed = |text: &str, screen: &str| JudgeCall {
         screen_tail: Some(screen.to_owned()),
-        ..JudgeCall::new(SEND_INPUT, json!({ "text": text, "key": "enter" }))
+        ..JudgeCall::new(SEND_INPUT, json!({ "text": text, "keys": ["enter"] }))
     };
     let looked = || vec![JudgeCall::new(READ_TERMINAL, json!({}))];
     let state = |messages: &[&str], earlier: Vec<JudgeCall>, call: JudgeCall| JudgeState {

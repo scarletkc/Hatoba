@@ -454,18 +454,18 @@ export function parseSendInput(json: string): Parsed<SendInputArgs> {
   const keys: SendKey[] = [];
   if (args.key !== undefined && args.key !== null && args.key !== "") {
     const key = parseSendKey(args.key);
-    if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(args.key)}. Use ${SEND_KEY_NOTATION}. Legacy ctrl_c and ctrl_d also work.` };
+    if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(args.key)}. A key is ${SEND_KEY_NOTATION}.` };
     keys.push(key);
   }
   if (args.keys !== undefined && args.keys !== null) {
-    if (!Array.isArray(args.keys)) return { ok: false, error: '"keys" must be an array of terminal keys.' };
+    if (!Array.isArray(args.keys)) return { ok: false, error: '"keys" must be an array.' };
     for (const value of args.keys) {
       const key = parseSendKey(value);
-      if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(value)} in "keys". Use ${SEND_KEY_NOTATION}.` };
+      if (key === null) return { ok: false, error: `Unsupported key ${JSON.stringify(value)}. A key is ${SEND_KEY_NOTATION}.` };
       keys.push(key);
     }
   }
-  if (!text && !keys.length) return { ok: false, error: 'Nothing to send: give "text", "key" or "keys".' };
+  if (!text && !keys.length) return { ok: false, error: 'Nothing to send: give "text", "keys", or both.' };
   const waitSeconds = intArg(args.wait_seconds, SEND_INPUT_DEFAULT_WAIT, 1, SEND_INPUT_MAX_WAIT);
   if (waitSeconds === null) return { ok: false, error: '"wait_seconds" must be an integer.' };
   return { ok: true, value: { text, keys, waitSeconds } };

@@ -3,7 +3,7 @@ import { HIDDEN } from "./commandRules";
 /** AI-13: key names accepted by send_input. Printable characters are keys too. */
 export const NAMED_SEND_KEYS = ["enter", "tab", "esc", "up", "down", "left", "right", "home", "end", "page_up", "page_down", "insert", "delete", "backspace", "space", ...Array.from({ length: 12 }, (_, i) => `f${i + 1}`)] as const;
 export const SEND_KEYS: readonly string[] = [...NAMED_SEND_KEYS, "shift+tab", ...Array.from("abcdefghijklmnopqrstuvwxyz", (c) => `ctrl+${c}`), ...Array.from("abcdefghijklmnopqrstuvwxyz", (c) => `alt+${c}`)];
-export const SEND_KEY_NOTATION = `a single printable character, ctrl+a through ctrl+z, alt+character (for example alt+f or alt++), shift+tab, or ${NAMED_SEND_KEYS.join(", ")}`;
+export const SEND_KEY_NOTATION = `one printable character, or a name: ${NAMED_SEND_KEYS.filter((k) => !/^f\d+$/.test(k)).join(", ")}, f1 to f12, shift+tab, ctrl+a to ctrl+z, or alt+ and a character (alt+f, alt++)`;
 /** Validated by parseSendKey before terminal input is sent. */
 export type SendKey = string;
 
