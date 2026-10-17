@@ -534,24 +534,28 @@ mod tests {
     fn the_launchd_placeholder_of_a_gui_app_is_not_used() {
         let dir = tempfile::tempdir().unwrap();
         let bitwarden = touch(dir.path(), "home/.bitwarden-ssh-agent.sock");
-        // macOS points SSH_AUTH_SOCK of a window opened from Finder at this placeholder, which is
-        // not an agent: connecting to it only asks launchd to start an empty one.
-        assert!(is_launchd_placeholder(Path::new(
-            "/var/run/com.apple.launchd.jy4KjswD0t/Listeners"
-        )));
+        // macOS points SSH_AUTH_SOCK of a window opened from Finder at a listener of launchd's,
+        // which is not an agent: connecting to it only asks launchd to start an empty one. Both
+        // shapes launchd hands out are skipped, and the agent beside HOME is what remains.
+        for placeholder in [
+            "/var/run/com.apple.launchd.jy4KjswD0t/Listeners",
+            "/private/tmp/com.apple.launchd.abc123/Listeners",
+        ] {
+            assert!(
+                is_launchd_placeholder(Path::new(placeholder)),
+                "{placeholder}"
+            );
+            let env = Env {
+                socket: Some(PathBuf::from(placeholder)),
+                ..env_at(dir.path())
+            };
+            let sockets = candidates(None, &env);
+            assert_eq!(sockets.len(), 1, "{placeholder}: {sockets:?}");
+            assert_eq!(sockets[0].path, bitwarden, "{placeholder}");
+        }
         assert!(!is_launchd_placeholder(Path::new(
             "/Users/x/.bitwarden-ssh-agent.sock"
         )));
-
-        let env = Env {
-            socket: Some(PathBuf::from(
-                "/var/run/com.apple.launchd.jy4KjswD0t/Listeners",
-            )),
-            ..env_at(dir.path())
-        };
-        let sockets = candidates(None, &env);
-        assert_eq!(sockets.len(), 1, "{sockets:?}");
-        assert_eq!(sockets[0].path, bitwarden);
     }
 
     #[test]
