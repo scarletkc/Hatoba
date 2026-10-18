@@ -166,9 +166,10 @@ fn candidates(chosen: Option<&str>, env: &Env) -> Vec<AgentSocket> {
     }
     // A socket this session's environment sets is honoured as it is: using another agent behind it
     // would authenticate with a key the user did not point this session at, and hide a path that
-    // stopped working instead of naming it. The launchd placeholder is the one value that is not a
-    // choice — macOS writes it into every window started from Finder, and it names no agent — so
-    // only there are the sockets below searched.
+    // stopped working instead of naming it. The launchd listener is the one value that is not a
+    // choice — macOS writes it into every window started from Finder — but it is where a key added
+    // with `ssh-add` in Terminal lives, so it is tried last instead of dropped: connecting starts
+    // the user's own agent, and `connect` prefers a candidate that holds keys.
     #[cfg(unix)]
     if let Some(socket) = env.socket.clone().filter(|p| !is_launchd_placeholder(p)) {
         return vec![AgentSocket::new(socket)];
@@ -188,6 +189,18 @@ fn candidates(chosen: Option<&str>, env: &Env) -> Vec<AgentSocket> {
         if !sockets.iter().any(|s| s.path == socket.path) {
             sockets.push(socket);
         }
+    }
+    // The launchd listener goes after every named agent: an agent that holds keys wins over the
+    // empty one macOS starts on demand, and a Mac whose keys were added with `ssh-add` still has
+    // its own agent to fall back on.
+    #[cfg(unix)]
+    if let Some(socket) = env
+        .socket
+        .clone()
+        .filter(|p| is_launchd_placeholder(p))
+        .filter(|p| !sockets.iter().any(|s| &s.path == p))
+    {
+        sockets.push(AgentSocket::new(socket));
     }
     sockets
 }
@@ -210,20 +223,30 @@ fn known_sockets(env: &Env) -> Vec<AgentSocket> {
                 // 1Password: the macOS group container and the Linux agent.
                 "Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
                 ".1password/agent.sock",
-                // GnuPG with `enable-ssh-support`, with its home in the default place.
+                // GnuPG with `enable-ssh-support`, with its home in the default place. A home set
+                // through `GNUPGHOME` is tried before this one, below.
                 ".gnupg/S.gpg-agent.ssh",
             ]
             .iter()
             .map(|rel| home.join(rel)),
         );
     }
+    // A home named by `GNUPGHOME` is a choice, so the agent it starts comes before the default
+    // GnuPG sockets — and after Bitwarden's and 1Password's, which are not guesses about GnuPG.
+    if let Some(gnupg) = &env.gnupg {
+        let socket = gnupg.join("S.gpg-agent.ssh");
+        match paths
+            .iter()
+            .position(|p| p.ends_with(".gnupg/S.gpg-agent.ssh"))
+        {
+            Some(i) => paths.insert(i, socket),
+            None => paths.push(socket),
+        }
+    }
     if let Some(runtime) = &env.runtime {
         paths.push(runtime.join("gnupg/S.gpg-agent.ssh"));
         // The GNOME keyring's ssh component.
         paths.push(runtime.join("keyring/ssh"));
-    }
-    if let Some(gnupg) = &env.gnupg {
-        paths.push(gnupg.join("S.gpg-agent.ssh"));
     }
     paths
         .into_iter()
@@ -531,12 +554,13 @@ mod tests {
     }
 
     #[test]
-    fn the_launchd_placeholder_of_a_gui_app_is_not_used() {
+    fn the_launchd_placeholder_is_tried_last() {
         let dir = tempfile::tempdir().unwrap();
         let bitwarden = touch(dir.path(), "home/.bitwarden-ssh-agent.sock");
-        // macOS points SSH_AUTH_SOCK of a window opened from Finder at a listener of launchd's,
-        // which is not an agent: connecting to it only asks launchd to start an empty one. Both
-        // shapes launchd hands out are skipped, and the agent beside HOME is what remains.
+        // macOS points SSH_AUTH_SOCK of a window opened from Finder at a listener of launchd's: not
+        // an agent until something connects, and then the user's own — where `ssh-add` in Terminal
+        // puts keys. It is tried last, so the agent beside HOME wins and a Mac without a third-party
+        // agent still has its own to fall back on.
         for placeholder in [
             "/var/run/com.apple.launchd.jy4KjswD0t/Listeners",
             "/private/tmp/com.apple.launchd.abc123/Listeners",
@@ -550,8 +574,9 @@ mod tests {
                 ..env_at(dir.path())
             };
             let sockets = candidates(None, &env);
-            assert_eq!(sockets.len(), 1, "{placeholder}: {sockets:?}");
-            assert_eq!(sockets[0].path, bitwarden, "{placeholder}");
+            assert_eq!(sockets.len(), 2, "{placeholder}: {sockets:?}");
+            assert_eq!(sockets[0].path, bitwarden, "{placeholder}: {sockets:?}");
+            assert_eq!(sockets[1].path, Path::new(placeholder), "{placeholder}");
         }
         assert!(!is_launchd_placeholder(Path::new(
             "/Users/x/.bitwarden-ssh-agent.sock"
