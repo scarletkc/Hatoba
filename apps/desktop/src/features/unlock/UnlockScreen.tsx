@@ -95,8 +95,13 @@ export function UnlockScreen() {
       // password: the field asks for the master password, and the message says Touch ID has to be
       // turned on again.
       if (err.code === "biometric_stale") {
-        setUsePassword(true);
-        setPassword("");
+        // A Touch ID record this Mac cannot open does not disarm a working PIN: the two wrap the
+        // vault key independently, so the field only falls back to the master password when the
+        // PIN cannot unlock either.
+        if (!vault?.pin_unlock) {
+          setUsePassword(true);
+          setPassword("");
+        }
         void useApp.getState().refreshVault().catch(() => null);
       }
       // The PIN no longer unlocks (too many wrong ones, or the app restarted): the field asks for

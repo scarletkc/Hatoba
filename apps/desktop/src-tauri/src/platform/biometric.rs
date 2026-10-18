@@ -416,7 +416,10 @@ mod imp {
         /// One base64 field, decoded.
         fn field(&self, encoded: &str, what: &str) -> AppResult<Zeroizing<Vec<u8>>> {
             B64.decode(encoded).map(Zeroizing::new).map_err(|_| {
-                AppError::internal(format!("the Touch ID record's {what} is not base64"))
+                AppError::new(
+                    ErrorCode::BiometricStale,
+                    format!("the Touch ID record's {what} is damaged; turn Touch ID on again"),
+                )
             })
         }
     }
@@ -605,7 +608,9 @@ mod imp {
         let domain = error.domain().to_string();
         let code = error.code();
         match (domain.as_str(), code) {
-            (LA_DOMAIN, ERR_USER_CANCEL | ERR_USER_CANCELED) => {
+            // `-128` (`errSecUserCanceled`) belongs to the Security framework, `-2` to
+            // LocalAuthentication's own errors; a cancel from either is a cancel.
+            (LA_DOMAIN, ERR_USER_CANCEL | ERR_USER_CANCELED) | (OS_DOMAIN, ERR_USER_CANCELED) => {
                 AppError::new(ErrorCode::Cancelled, "Touch ID was cancelled")
             }
             // Too many wrong fingers (`biometryLockout`), no finger enrolled, the sensor gone, the
@@ -770,9 +775,14 @@ mod imp {
                 exchange_error(&framework_error(OS_DOMAIN, ERR_INTERACTION_NOT_ALLOWED)).code,
                 BiometricUnavailable
             );
-            // The user's own cancel, which stays quiet on the lock screen.
+            // The user's own cancel, which stays quiet on the lock screen — as
+            // `LAError.userCancel` and as the Security framework's `errSecUserCanceled`.
             assert_eq!(
                 exchange_error(&framework_error(LA_DOMAIN, ERR_USER_CANCEL)).code,
+                Cancelled
+            );
+            assert_eq!(
+                exchange_error(&framework_error(OS_DOMAIN, ERR_USER_CANCELED)).code,
                 Cancelled
             );
             // The same numbers in other domains are other things: `-4` is `errSecUnimplemented`
@@ -886,7 +896,9 @@ mod imp {
             let mut record = sample();
             record.key_blob = "not base64!".to_owned();
             let err = record.open().unwrap_err();
-            assert_eq!(err.code, ErrorCode::Internal);
+            // A damaged field is a record this Mac cannot use, not an internal failure: the lock
+            // screen must say to turn Touch ID on again rather than "Something went wrong".
+            assert_eq!(err.code, ErrorCode::BiometricStale);
             assert!(err.detail.contains("key blob"), "{}", err.detail);
         }
 

@@ -211,6 +211,21 @@ describe("Windows Hello on its own", () => {
     expect(alert()!.textContent).toBe(t("err.biometric_stale"));
   });
 
+  it("keeps a working PIN when the Touch ID record is stale", async () => {
+    backend.biometricError = {
+      code: "biometric_stale",
+      detail: "the saved record cannot be opened here",
+    };
+    focused();
+    locked({ biometric_enabled: true, pin_unlock: true });
+    await act(async () => void show());
+    expect(hello()).toBe(1);
+    // It still says what to do about Touch ID...
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe(t("err.biometric_stale"));
+    // ...and the PIN field stays, because the PIN still unlocks.
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.pinField"));
+  });
+
   it("never asks without Windows Hello", async () => {
     focused();
     locked({ biometric_enabled: false });
