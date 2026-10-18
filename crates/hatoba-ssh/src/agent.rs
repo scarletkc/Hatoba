@@ -559,7 +559,8 @@ mod tests {
         let bitwarden = touch(dir.path(), "home/.bitwarden-ssh-agent.sock");
         // macOS points SSH_AUTH_SOCK of a window opened from Finder at a listener of launchd's: not
         // an agent until something connects, and then the user's own — where `ssh-add` in Terminal
-        // puts keys. It is tried last, so the agent beside HOME wins and a Mac without a third-party
+        // puts keys. It is tried last, so the agent beside HOME wins, and a Mac without a
+        // third-party
         // agent still has its own to fall back on.
         for placeholder in [
             "/var/run/com.apple.launchd.jy4KjswD0t/Listeners",
