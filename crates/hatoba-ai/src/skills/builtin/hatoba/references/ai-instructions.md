@@ -23,13 +23,15 @@ The host editor (`references/hosts-and-connecting.md`) has an **AI Notes** secti
 
 The assistant keeps short notes for later conversations, as Claude Code's auto memory does: what you ask it to remember ("remember that web-1 uses doas"), your corrections and preferences, and facts about your hosts and setup that it could not find by looking. Custom instructions and host notes are what you write; memories are what the assistant saves, and you can read and change them.
 
-- Each memory has a name and a few lines of text. All memories together, names included, hold up to 16 KB (UTF-8 bytes). When they are full, the assistant has to merge or delete some before it saves another.
+- A memory is global, or belongs to one host. Every new conversation starts with the global memories, and a conversation on a saved host or in a computer's local terminal also with the memories of that host or computer, so memories about other hosts stay out of it. The assistant saves your preferences and what holds everywhere as global memories, and what holds only on the host it works on (its paths, services, quirks) as memories of that host. A conversation on a quick-connect target, which is no saved host, or on the home tab without a host, has only the global memories.
+- Each memory has a name and a few lines of text. The global memories, and the memories of each host or computer, hold up to 16 KB each (UTF-8 bytes, names included). When they are full, the assistant has to merge or delete some before it saves another there.
 - The assistant saves, replaces and deletes memories with its **Memory** tool, which runs without asking in every permission mode; the call shows in the conversation like any other tool.
-- Every new conversation starts with all memories, oldest first. A memory saved during a conversation reaches new conversations, and the same conversation after it is compacted (`references/ai-models.md`).
+- A conversation's memories go oldest first, the global ones before the host's. A memory saved during a conversation reaches new conversations, and the same conversation after it is compacted (`references/ai-models.md`). When a conversation is on a host whose memories it has not had yet, after a move or once the host has its first memories, its next message brings them.
 - They are not for passwords, keys or tokens: like custom instructions, they go to the model provider.
 - Where a memory differs from your custom instructions or a host's AI notes, those win.
-- Settings → AI → **Memory** (or `/memory` in the input box) lists them with the space they take. Click one to edit it, the trash button deletes it, **Add Memory** adds one, and **Delete All** deletes every memory. **Remember across conversations** turns memory off: the assistant then neither sees nor saves memories, and the saved ones are kept.
-- Memories sync to your other devices with the vault, and so does the switch.
+- Settings → AI → **Memory** (or `/memory` in the input box) lists them by where they apply, each group with the space it takes: **Global**, **This Computer**, each host, other computers, and hosts deleted since. Click one to edit it; **Applies To** there moves it to another host or makes it global. The trash button deletes one, **Add Memory** adds one, and **Delete All** deletes every memory. **Remember across conversations** turns memory off: the assistant then neither sees nor saves memories, and the saved ones are kept.
+- Memories saved before host memories existed are global; move one that is about a single host with **Applies To**, or ask the assistant to. Deleting a host deletes its memories.
+- Memories sync to your other devices with the vault, and so does the switch. A computer's memories sync too, but only conversations in that computer's local terminal start with them.
 
 ## How the assistant uses them
 

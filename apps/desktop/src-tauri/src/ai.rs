@@ -1395,10 +1395,21 @@ impl AiManager {
                 v.put(Some(&id), Item::AiConversation(conversation))?;
             }
             // AI-45: the list of deferred MCP tools, when the model has not seen it, read after a
-            // compaction, whose summary leaves it out.
-            let listed = {
+            // compaction, whose summary leaves it out. AI-53: the memories of where the message
+            // is, which a summary of where the conversation was can leave out too.
+            let (listed, notes) = {
                 let conversation = find_conversation(&v, &id)?;
                 let entries = Entries::load(&v, &id)?;
+                let place = match &moved_to {
+                    Some(to) => memory_place(
+                        &v,
+                        to.host_id.as_deref(),
+                        to.quick_target.as_ref(),
+                        to.local.as_deref(),
+                    ),
+                    None => conversation_memory_place(&v, &conversation),
+                };
+                let notes = with_place_memories(&v, &entries.list, &notes, place.as_ref());
                 let from = entries.context_from(conversation.context_start.as_deref());
                 let listed = mcp_note(&v, &turn.context, &entries.list, from, &offer);
                 let deferred = mcp_deferred(&entries.list);
@@ -1415,7 +1426,7 @@ impl AiManager {
                 if deferred || !listed.is_empty() {
                     self.0.mcp.record_offer(&id, offer.clone());
                 }
-                listed
+                (listed, notes)
             };
             // AI-05, AI-09, AI-45: Hatoba's notes come before what the panel sent (spec §13.3).
             let text = format!("{notes}{listed}{text}");
@@ -1579,12 +1590,18 @@ impl AiManager {
                     .and_then(|id| host_name(&v, id))
                     .or_else(|| quick_target.as_ref().map(target_name))
                     .or_else(|| local.as_deref().map(local_name));
+                let place = memory_place(
+                    &v,
+                    host_id.as_deref(),
+                    quick_target.as_ref(),
+                    local.as_deref(),
+                );
                 let reverts = pending_reverts(&v, &id, &ids[..earlier.len()], &earlier);
                 let notes = notes_before(
                     &v,
                     &earlier,
                     came_from.as_deref(),
-                    host_now.as_deref(),
+                    (host_now.as_deref(), place.as_ref()),
                     &context,
                     &reverts,
                 );
@@ -1610,7 +1627,15 @@ impl AiManager {
                     .and_then(|id| host_name(&v, id))
                     .or_else(|| created.quick_target.as_ref().map(target_name))
                     .or_else(|| created.local.as_deref().map(local_name));
-                let notes = notes_before(&v, &[], None, host_now.as_deref(), &context, &[]);
+                let place = conversation_memory_place(&v, &created);
+                let notes = notes_before(
+                    &v,
+                    &[],
+                    None,
+                    (host_now.as_deref(), place.as_ref()),
+                    &context,
+                    &[],
+                );
                 (
                     id,
                     notes,
@@ -1980,6 +2005,9 @@ impl AiManager {
                 *base = guard(&self.0.file_bases)
                     .remove(&(conversation_id.to_owned(), tool_call_id.to_owned()));
                 place = file_place(&conversation, &entries);
+            }
+            if let Job::Memory(_, at) = &mut job {
+                *at = conversation_memory_place(&v, &conversation);
             }
             (job, op, place, writing, keeps)
         };
@@ -3343,14 +3371,15 @@ fn over_threshold(tokens: u64, window: u64) -> bool {
 /// was told of, which the request puts before the summary's block: the mode stays that one, also
 /// for the rest of a turn compacted between tool calls (AI-22). A conversation whose messages never
 /// named one gets no note, and its next message names the mode. The `memory` note (AI-53) follows
-/// it, with the memories as they are now.
+/// it, with the memories as they are now: the global ones and those of the conversation's host.
 fn store_summary(v: &mut Vault, conversation_id: &str, summary: &str) -> AppResult<AiEntryView> {
     let mut conversation = find_conversation(v, conversation_id)?;
     let noted = noted_permission(&Entries::load(v, conversation_id)?.list);
+    let place = conversation_memory_place(v, &conversation);
     let text = format!(
         "{}{}{summary}",
         noted.map(tools::permission_mode_block).unwrap_or_default(),
-        memory::note(v)
+        memory::note(v, place.as_ref())
     );
     let entry = AiEntry::summary(now_ms(), text);
     let entry_id = append(v, conversation_id, &entry)?;
@@ -4410,8 +4439,9 @@ enum Job {
     /// `search_tools` (AI-45), which [`AiManager::search_tools`] runs, since it reads the
     /// conversation's MCP tools.
     SearchTools(deferred::SearchArgs),
-    /// `memory` (AI-53), which writes to the vault.
-    Memory(MemoryArgs),
+    /// `memory` (AI-53), which writes to the vault: its arguments, and the host or computer of
+    /// the conversation, whose host memories it changes.
+    Memory(MemoryArgs, Option<memory::Place>),
 }
 
 impl Job {
@@ -4485,7 +4515,7 @@ impl Job {
                 Err(message) => Self::error(message),
             },
             tools::MEMORY => match parse::<MemoryArgs>(arguments) {
-                Ok(args) => Self::Memory(args),
+                Ok(args) => Self::Memory(args, None),
                 Err(message) => Self::error(message),
             },
             tools::READ_TERMINAL | tools::SEND_INPUT => Self::error(format!(
@@ -4520,10 +4550,10 @@ impl Job {
             ),
             Self::NativeSearch(..) => (ToolStatus::Error, "web_search cannot run here.".to_owned()),
             Self::RunCommand(args) => run_command(env, session_id, &args, cancel).await,
-            Self::Memory(args) => {
+            Self::Memory(args, place) => {
                 let mut v = lock(vault);
                 if v.is_unlocked() {
-                    memory::run(&mut v, &args)
+                    memory::run(&mut v, place.as_ref(), &args)
                 } else {
                     (ToolStatus::Error, "The vault is locked.".to_owned())
                 }
@@ -5055,7 +5085,10 @@ const ATTACHMENTS: &[AttachmentKind] = &[
         note: true,
         title: |_| String::new(),
         placeholder: |_| String::new(),
-        attributes: |attrs| matches!(attrs, [("entries", entries)] if is_count(entries)),
+        attributes: |attrs| {
+            matches!(attrs, [("entries", entries)] | [("entries", entries), ("host", _)]
+                if is_count(entries))
+        },
     },
     AttachmentKind {
         tag: FILE_REVERT,
@@ -5616,6 +5649,98 @@ fn host_name(v: &Vault, host_id: &str) -> Option<String> {
         .map(|h| h.name.clone())
 }
 
+/// The host or computer whose host memories a conversation on it shows (AI-53), named as notes
+/// name it: a saved host that exists, or a computer's local terminal (§7.5). `None` on a
+/// quick-connect target (HOST-12), which is no saved host, and nowhere.
+fn memory_place(
+    v: &Vault,
+    host_id: Option<&str>,
+    quick_target: Option<&AiQuickTarget>,
+    local: Option<&str>,
+) -> Option<memory::Place> {
+    match (host_id, quick_target, local) {
+        (Some(id), _, _) => host_name(v, id).map(|name| memory::Place {
+            scope: memory::Scope::Host(id.to_owned()),
+            name,
+        }),
+        (None, None, Some(device)) => Some(memory::Place {
+            scope: memory::Scope::Local(device.to_owned()),
+            name: local_name(device),
+        }),
+        _ => None,
+    }
+}
+
+/// [`memory_place`] of where a conversation is.
+fn conversation_memory_place(v: &Vault, conversation: &AiConversation) -> Option<memory::Place> {
+    memory_place(
+        v,
+        conversation.host_id.as_deref(),
+        conversation.quick_target.as_ref(),
+        conversation.local.as_deref(),
+    )
+}
+
+/// AI-53: `notes` with the `memory` note of the host or computer `place` a message is on exactly
+/// when no note since the context's start showed its memories. [`notes_before`] decides so
+/// already, but a compaction before the message (AI-22) changes what the context shows: its
+/// summary shows the memories of where the conversation was, which can make the message's note
+/// a repeat, or leave out the host the message moves to. The note goes after the
+/// `permission_mode` note and before the `file_revert` and `terminal_state` notes (§13.3).
+fn with_place_memories(
+    v: &Vault,
+    earlier: &[AiEntry],
+    notes: &str,
+    place: Option<&memory::Place>,
+) -> String {
+    let Some(place) = place else {
+        return notes.to_owned();
+    };
+    let shown = memories_shown(earlier, &place.name);
+    match note_block(notes, MEMORY) {
+        Some(block) if shown => return notes.replacen(block, "", 1),
+        Some(_) => return notes.to_owned(),
+        None if shown => return notes.to_owned(),
+        None => {}
+    }
+    let mut at = 0;
+    let mut rest = notes;
+    while let Some((block, after)) = leading_block(rest) {
+        if [FILE_REVERT, TERMINAL_STATE].contains(&block.kind.tag) {
+            break;
+        }
+        at = notes.len() - after.len();
+        rest = after;
+    }
+    format!(
+        "{}{}{}",
+        &notes[..at],
+        memory::place_note(v, place),
+        &notes[at..]
+    )
+}
+
+/// AI-53: whether a `memory` note since the context's start (AI-21) showed the memories of the
+/// host or computer named `name`, which it names as its host. `earlier` is the conversation's
+/// entries, oldest first; the model sees nothing before a summary, so the summary's note is the
+/// last one that counts.
+fn memories_shown(earlier: &[AiEntry], name: &str) -> bool {
+    for entry in earlier.iter().rev() {
+        match &entry.body {
+            EntryBody::User { text, .. } => {
+                if note_attr(text, MEMORY, "host").is_some_and(|host| host == name) {
+                    return true;
+                }
+            }
+            EntryBody::Summary { text } => {
+                return note_attr(text, MEMORY, "host").is_some_and(|host| host == name);
+            }
+            EntryBody::Assistant(_) | EntryBody::Tool { .. } => {}
+        }
+    }
+    false
+}
+
 /// Where a conversation that moves to the host `host_id` or the quick-connect `target` (AI-09)
 /// was, as a `host_change` note names it: its host's display name, empty when the host no longer
 /// exists, or its target (HOST-12), or with neither, a fork's `origin` (AI-43). `None` when it had
@@ -5680,14 +5805,15 @@ fn next_message_notes(
     let target = tab_target(context);
     let local = tab_local(context);
     let host_id = context.host_id.as_deref();
-    let (came_from, host_now) =
+    let (came_from, host_now, place) =
         if moves_to(conversation, host_id, target.as_ref(), local.as_deref()) {
             let came_from = moved_from(v, conversation, host_id, target.as_ref());
             let host_now = host_id
                 .and_then(|id| host_name(v, id))
                 .or_else(|| target.as_ref().map(target_name))
                 .or_else(|| local.as_deref().map(local_name));
-            (came_from, host_now)
+            let place = memory_place(v, host_id, target.as_ref(), local.as_deref());
+            (came_from, host_now, place)
         } else {
             let host_now = conversation
                 .host_id
@@ -5695,14 +5821,14 @@ fn next_message_notes(
                 .and_then(|id| host_name(v, id))
                 .or_else(|| conversation.quick_target.as_ref().map(target_name))
                 .or_else(|| conversation.local.as_deref().map(local_name));
-            (None, host_now)
+            (None, host_now, conversation_memory_place(v, conversation))
         };
     let reverts = pending_reverts(v, conversation_id, &earlier.ids, &earlier.list);
     notes_before(
         v,
         &earlier.list,
         came_from.as_deref(),
-        host_now.as_deref(),
+        (host_now.as_deref(), place.as_ref()),
         context,
         &reverts,
     )
@@ -5727,7 +5853,8 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `host_change` (AI-09) when the entries before the message came from another host than the
 ///   conversation's host now: `came_from` names it (empty when it no longer exists) or the
 ///   quick-connect target (HOST-12) they came from, and is `None` when the conversation did not
-///   move. `host_now` is the display name of the host (or the target) the conversation is on now.
+///   move. `host_now` is the display name of the host (or the target) the conversation is on now,
+///   and `place` the host or computer whose host memories it shows ([`memory_place`]).
 /// - `terminal_change` (AI-09) when the message's requests offer the terminal tools and, as far as
 ///   `earlier` tells the model, there was none before, or the other way round
 ///   ([`terminal_before`]).
@@ -5737,7 +5864,9 @@ fn stored_model_label(v: &Vault, provider_id: &str, model_id: &str) -> String {
 /// - `permission_mode` (AI-16) before a conversation's first message, and when the conversation's
 ///   mode on this device is not the one the model was last told of ([`noted_permission`]).
 /// - `memory` (AI-53) before a conversation's first message, while memory is on and there are
-///   memories ([`memory::note`]); a summary starts with one too.
+///   memories ([`memory::note`]); a summary starts with one too. A later message on a host or
+///   computer whose memories no note since the context's start showed ([`memories_shown`]) starts
+///   with one of those ([`memory::place_note`]), when it has any.
 /// - `file_revert` (AI-41) for each of `reverts`, from [`pending_reverts`].
 /// - `terminal_state` (AI-46), the screen of the attached terminal ([`screen_note`]), also before
 ///   a conversation's first message.
@@ -5745,7 +5874,7 @@ fn notes_before(
     v: &Vault,
     earlier: &[AiEntry],
     came_from: Option<&str>,
-    host_now: Option<&str>,
+    (host_now, place): (Option<&str>, Option<&memory::Place>),
     context: &AiTurnContext,
     reverts: &[(String, files::ChangeMeta)],
 ) -> String {
@@ -5759,7 +5888,7 @@ fn notes_before(
     // A message with nothing before it has no earlier screens or replies to tell apart, but it can
     // name its mode, show the memories and show the screen now.
     if earlier.is_empty() {
-        return permission + &memory::note(v) + &screen_note(context, host_now);
+        return permission + &memory::note(v, place) + &screen_note(context, host_now);
     }
     for entry in earlier.iter().rev() {
         match &entry.body {
@@ -5801,6 +5930,11 @@ fn notes_before(
         }
     }
     notes.push_str(&permission);
+    if let Some(place) = place
+        && !memories_shown(earlier, &place.name)
+    {
+        notes.push_str(&memory::place_note(v, place));
+    }
     for (tool_call_id, meta) in reverts {
         notes.push_str(&tools::file_revert_block(
             &meta.path,

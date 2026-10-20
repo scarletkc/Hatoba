@@ -473,11 +473,13 @@ export const commands = {
 	aiAllowanceAdd: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_add", { allowance }),
 	/**  Removes a saved approval and returns what is left. */
 	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
-	/**  Every memory, oldest first. */
+	/**  Every memory, oldest first, of every scope. */
 	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
 	/**
-	 *  Saves a memory: `id` replaces that one, together with the others of its name when the edit
-	 *  keeps it ([`memory::edited`]); none adds one.
+	 *  Saves a memory in the scope the input names, a saved host's that exists (or the deleted host
+	 *  the edited memory already belongs to) or a computer's: `id` replaces that one, which moves it
+	 *  there when it was elsewhere, together with the others of its name there when the edit keeps
+	 *  both ([`memory::edited`]); none adds one.
 	 */
 	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
 	/**  Deletes a memory. */
@@ -876,19 +878,30 @@ export type AiLocalTab = {
 	kind: LocalShellKind | null,
 };
 
-/**  A memory to save from Settings → AI (AI-53). */
+/**
+ *  A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+ *  [`AiMemoryView`].
+ */
 export type AiMemoryInput = {
 	/**  `None` creates a memory. */
 	id: string | null,
 	name: string,
 	content: string,
+	host_id: string | null,
+	local: string | null,
 };
 
-/**  A memory of the AI assistant (AI-53). */
+/**
+ *  A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+ *  host memory of a saved host or of a computer's local terminal.
+ */
 export type AiMemoryView = {
 	id: string,
 	name: string,
 	content: string,
+	host_id: string | null,
+	/**  The computer's name, while `host_id` is `None`. */
+	local: string | null,
 	updated_at: number,
 };
 
