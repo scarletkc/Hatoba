@@ -155,17 +155,13 @@ fn read_sessions(root: &Path, config: Option<&Path>) -> AppResult<Vec<Entry>> {
     };
     let mut entries = Vec::new();
     for (path, folder) in text::files_under(root, text::MAX_DEPTH)? {
-        let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-        let Some(name) = file_name
-            .len()
-            .checked_sub(".ini".len())
-            .filter(|&at| {
-                at > 0
-                    && file_name
-                        .get(at..)
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case(".ini"))
+        let Some(name) = path
+            .file_stem()
+            .filter(|_| {
+                path.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("ini"))
             })
-            .map(|at| file_name[..at].to_owned())
+            .map(|n| n.to_string_lossy().into_owned())
         else {
             continue;
         };
