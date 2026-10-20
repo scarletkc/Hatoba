@@ -13,11 +13,7 @@ use crate::error::{AppError, AppResult};
 pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
     let (location, entries) = match path {
         Some(path) if path.is_dir() => {
-            // The sessions folder, or the user data folder it is in.
-            let folder = [path.join("Xshell").join("Sessions"), path.join("Sessions")]
-                .into_iter()
-                .find(|p| p.is_dir())
-                .unwrap_or_else(|| path.to_path_buf());
+            let folder = sessions_folder(path);
             let entries = read_folder(&folder)?;
             (folder, entries)
         }
@@ -35,6 +31,25 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         encrypted: false,
         entries,
     })
+}
+
+/// The sessions folder for a chosen folder: the folder itself, or `Xshell/Sessions` in the user
+/// data folder, or `Sessions` in the `Xshell` folder. A session group may also be called
+/// `Sessions`, so a sessions folder is not looked into.
+fn sessions_folder(chosen: &Path) -> PathBuf {
+    let in_data = chosen.join("Xshell").join("Sessions");
+    let in_xshell = chosen.join("Sessions");
+    if in_data.is_dir() {
+        in_data
+    } else if chosen
+        .file_name()
+        .is_some_and(|n| n.eq_ignore_ascii_case("Xshell"))
+        && in_xshell.is_dir()
+    {
+        in_xshell
+    } else {
+        chosen.to_path_buf()
+    }
 }
 
 /// The sessions folder of the newest Xshell that has one, in its default place.
@@ -260,8 +275,23 @@ mod tests {
         .unwrap();
         std::fs::write(root.join("Prod").join("notes.txt"), "not a session").unwrap();
 
+        // A session group called Sessions is a group, not the sessions folder.
+        std::fs::create_dir_all(root.join("Sessions")).unwrap();
+        std::fs::write(
+            root.join("Sessions").join("cache.xsh"),
+            xsh("cache.example.org", ""),
+        )
+        .unwrap();
+        let data = root.with_extension("data");
+        std::fs::create_dir_all(data.join("Xshell")).unwrap();
+
         let source = read(Some(&root)).unwrap();
-        let _ = std::fs::remove_dir_all(&root);
+        std::fs::rename(&root, data.join("Xshell").join("Sessions")).unwrap();
+        let from_data = read(Some(&data)).unwrap();
+        let from_xshell = read(Some(&data.join("Xshell"))).unwrap();
+        let _ = std::fs::remove_dir_all(&data);
+        assert_eq!(from_data.entries.len(), 3);
+        assert_eq!(from_xshell.entries.len(), 3);
         let found: Vec<(&str, &str, Vec<String>)> = source
             .entries
             .iter()
@@ -274,6 +304,11 @@ mod tests {
                     "Prod/DB/pg",
                     "pg.example.org",
                     vec!["Prod".to_owned(), "DB".to_owned()]
+                ),
+                (
+                    "Sessions/cache",
+                    "cache.example.org",
+                    vec!["Sessions".to_owned()]
                 ),
                 ("web", "web.example.org", vec![]),
             ]
