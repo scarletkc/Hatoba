@@ -602,12 +602,8 @@ pub async fn ai_provider_models(
     // Registered with the read, so a lock either came first or aborts the request.
     let (config, op) =
         state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
-    // AI-03: the list gets models.dev's data, fetched once a run.
-    let _ = tokio::time::timeout(
-        models_dev::LIST_WAIT,
-        models_dev::fetch_once(state.ai.http()),
-    )
-    .await;
+    // AI-03: the list gets models.dev's newest data.
+    let _ = tokio::time::timeout(models_dev::LIST_WAIT, models_dev::refresh(state.ai.http())).await;
     let models = hatoba_ai::models::list_models(&state.ai.http(), &config, op.token())
         .await
         .map_err(|e| {
@@ -643,7 +639,6 @@ pub async fn ai_provider_test(
     let (config, op) =
         state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
     let model = input.models.first().map(|m| m.id.trim().to_owned());
-    models_dev::fetch_once(state.ai.http());
     let outcome =
         hatoba_ai::models::test_connection(&state.ai.http(), &config, model.as_deref(), op.token())
             .await;
