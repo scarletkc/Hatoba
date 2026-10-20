@@ -6,9 +6,9 @@ pub mod cli;
 pub mod idle;
 #[cfg(target_os = "linux")]
 pub mod linux_chrome;
+pub mod login_shell;
 pub mod power;
 pub mod secrets;
-pub mod shell_path;
 pub mod system;
 pub mod window;
 

@@ -6,9 +6,7 @@
 //! local port forwards ([`SshSession::local_forward`]), resource usage sampling
 //! ([`SshSession::open_stats`]) and one-off commands ([`SshSession::exec`], and
 //! [`remote_command::run`] for a command that stopping ends) are opened.
-//! The first hop can go through a SOCKS5 or HTTP proxy ([`ConnectConfig::proxy`]), and the
-//! agent authentication ([`AuthMethod::Agent`]) uses the socket in
-//! [`ConnectConfig::agent_socket`], or else the device's own agent ([`agent_sockets`]).
+//! The first hop can go through a SOCKS5 or HTTP proxy ([`ConnectConfig::proxy`]).
 //!
 //! Secrets (passwords, private keys, passphrases) are wrapped in
 //! [`zeroize::Zeroizing`] and are never logged; neither is terminal content.
@@ -39,9 +37,6 @@ pub mod stats;
 #[cfg(all(test, unix))]
 mod test_sh;
 
-pub use agent::{
-    AgentIdentityInfo, AgentKind, AgentSocket, AgentStatus, agent_sockets, agent_status,
-};
 pub use config::{SshConfigHost, parse_ssh_config, parse_ssh_config_with_home};
 pub use error::{SshError, SshErrorKind};
 pub use forward::{ForwardHandle, LocalForward};

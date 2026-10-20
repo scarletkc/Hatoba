@@ -30,7 +30,7 @@ export type Page =
 
 export type Phase = "boot" | "onboarding" | "locked" | "unlocked";
 
-export type SettingsTab = "general" | "appearance" | "terminal" | "proxies" | "agent" | "security" | "ai" | "about";
+export type SettingsTab = "general" | "appearance" | "terminal" | "proxies" | "security" | "ai" | "about";
 /** A section of a Settings tab that `openSettings` can scroll to; the section clears it once it has. */
 export type SettingsSection = "memory";
 
@@ -46,7 +46,6 @@ export const DEFAULT_PREFS: LocalPrefs = {
   ai_panel_open: false,
   ai_panel_width: 380,
   default_proxy_id: null,
-  ssh_agent_socket: null,
   auto_lock_minutes: 15,
   lock_on_sleep: true,
   lock_disconnects_sessions: false,

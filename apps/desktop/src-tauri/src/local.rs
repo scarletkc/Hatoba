@@ -87,7 +87,7 @@ impl LocalManager {
 /// The variables the AI's tools on a local tab start their `sh` with (macOS and Linux): on macOS
 /// the login shell's `PATH`, which an app started from the Dock lacks, as MCP servers get it.
 pub fn tools_env() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
-    crate::platform::shell_path::default_path()
+    crate::platform::login_shell::default_path()
         .map(|path| vec![("PATH".into(), path.to_owned())])
         .unwrap_or_default()
 }

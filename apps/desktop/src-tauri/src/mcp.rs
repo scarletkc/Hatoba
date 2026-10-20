@@ -1013,7 +1013,7 @@ impl McpManager {
                 let http = manager.http();
                 // The login shell's PATH on macOS, resolved when the first stdio server starts.
                 let path = if matches!(config, McpTransportConfig::Stdio { .. }) {
-                    tauri::async_runtime::spawn_blocking(platform::shell_path::default_path)
+                    tauri::async_runtime::spawn_blocking(platform::login_shell::default_path)
                         .await
                         .ok()
                         .flatten()

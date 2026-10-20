@@ -1,6 +1,6 @@
 # Settings
 
-Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS). It is a window over the app with eight tabs. Changes apply at once; there is no Save button. Esc or the close button closes it. Terminal settings are in `references/terminal.md` and AI settings in `references/ai-settings.md`.
+Open Settings with the gear in the sidebar header or with Ctrl+, (⌘, on macOS). It is a window over the app with seven tabs. Changes apply at once; there is no Save button. Esc or the close button closes it. Terminal settings are in `references/terminal.md` and AI settings in `references/ai-settings.md`.
 
 ## General
 
@@ -29,15 +29,6 @@ SOCKS5 and HTTP proxies that hosts connect through. Choosing one for a host is i
 
 Other labels: **Edit Proxy**.
 
-## SSH Agent
-
-The SSH agent this device authenticates with (hosts whose **Method** is **SSH Agent**, in `references/hosts-and-connecting.md`).
-
-- **SSH agent of this device**: **Automatic** (the default) or **Custom path…**, which takes the socket path of an agent Hatoba does not know. Automatic uses `SSH_AUTH_SOCK`; when that is unset or holds the placeholder macOS gives a window started from Finder (`/var/run/com.apple.launchd.*/Listeners` or `/private/tmp/com.apple.launchd.*/Listeners`, which names no agent), it uses the agent sockets it finds on this device instead: Bitwarden's, 1Password's, GnuPG's and the GNOME keyring's. A socket that accepts connections without being an agent is left out.
-- **Current agent** shows the agent that answers, its socket, and the keys it holds with their type, SHA-256 fingerprint and comment, as `ssh-add -l` lists them. **Check again** reads them again; this is what a key added to Bitwarden afterwards needs. With no agent, the tab says so and how to fix it.
-- The two agents people ask about: **Bitwarden** must have its agent on (Bitwarden: Settings → Enable SSH agent); on macOS and Linux Hatoba finds `~/.bitwarden-ssh-agent.sock` by itself, so `SSH_AUTH_SOCK` may stay out of `~/.zshrc`, which a window opened from Finder or a desktop launcher would not read anyway. **1Password** works the same way on macOS and Linux. On Windows, the requirement is Bitwarden's, as its documentation states: the OpenSSH Authentication Agent service stopped and the Bitwarden agent on, because they share the `\\.\pipe\openssh-ssh-agent` pipe. Pageant is not supported.
-- A socket named here is used by every connection of this device, also over a jump host. It stays on this device and does not sync.
-
 ## Security
 
 Auto-Lock (default 15 minutes, up to 8 hours or Never), **Lock when the computer sleeps** (on by default), **Disconnect all sessions when locked** (off by default), **Clear Clipboard** for copied host passwords (default 90 seconds), **Unlock with Windows Hello** (Windows) or **Unlock with Touch ID** (macOS), **Unlock with PIN** with **Require the master password after a restart** (on by default), the master password, the recovery code, and **Lock Now**. Details are in `references/keys-vault-and-lock.md`.
@@ -61,4 +52,4 @@ Other labels: **Copy version**.
 
 | Synced with the vault | Kept on this device |
 |---|---|
-| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, the memory switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the local terminal shell, the SSH agent socket, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |
+| Terminal settings (font, size, cursor, scrollback, terminal colors, right-click, multi-line paste check), the default AI model, the judge of Auto mode, the search provider, the built-in skill's switch, the AI custom instructions and Terminal Screen default, the memory switch, saved proxies | Language, appearance, list density, host reachability, the default proxy, the local terminal shell, the Security tab's Auto-Lock, sleep, disconnect and clipboard settings, the PIN, the update check switch, the AI permission mode, the saved AI approvals, the AI panel width and whether it is open, MCP on/off and Always allow |

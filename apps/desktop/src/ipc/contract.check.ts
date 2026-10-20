@@ -41,7 +41,6 @@ export type ResponsesMatch = [
   Check<Assignable<Rust.SettingsView, Ui.SettingsView>>,
   Check<Assignable<Rust.LocalPrefs, Ui.LocalPrefs>>,
   Check<Assignable<Rust.LocalShellView, Ui.LocalShellView>>,
-  Check<Assignable<Rust.SshAgentView, Ui.SshAgentView>>,
   Check<Assignable<Rust.StarPrompt, Ui.StarPrompt>>,
   Check<Assignable<Rust.VaultLockedEvent, Ui.VaultLockedEvent>>,
   Check<Assignable<Rust.WindowChromeEvent, Ui.WindowChromeEvent>>,

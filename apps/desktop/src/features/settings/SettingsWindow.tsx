@@ -8,7 +8,6 @@ import { api } from "@/ipc/api";
 import type { SettingsView, TerminalSettings } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { AboutPane } from "./AboutPane";
-import { AgentPane } from "./AgentPane";
 import { AiPane } from "./AiPane";
 import { AppearancePane } from "./AppearancePane";
 import { useFreshReads } from "./freshReads";
@@ -23,7 +22,6 @@ const TABS: { id: SettingsTab; icon: string; label: MessageKey }[] = [
   { id: "appearance", icon: "paint-brush", label: "settings.tab.appearance" },
   { id: "terminal", icon: "terminal-window", label: "settings.tab.terminal" },
   { id: "proxies", icon: "globe", label: "settings.tab.proxies" },
-  { id: "agent", icon: "key", label: "settings.tab.agent" },
   { id: "security", icon: "lock-key", label: "settings.tab.security" },
   { id: "ai", icon: "sparkle", label: "aiSettings.tab" },
   { id: "about", icon: "info", label: "settings.tab.about" },
@@ -33,8 +31,8 @@ let lastTab: SettingsTab = "general";
 
 /**
  * Settings (design §07): a 700×620 preferences window with General / Appearance / Terminal / Security, plus
- * Proxies for SSH connections (SSH-13), SSH Agent for the agent this device authenticates with (SSH-09),
- * AI for the assistant (spec §13) and About for the version and the update check.
+ * Proxies for SSH connections (SSH-13), AI for the assistant (spec §13) and About for the version and the
+ * update check.
  */
 export function SettingsWindow({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -145,7 +143,6 @@ export function SettingsWindow({ onClose }: { onClose: () => void }) {
           {tab === "appearance" && <AppearancePane {...pane} />}
           {tab === "terminal" && <TerminalPane {...pane} />}
           {tab === "proxies" && <ProxiesPane />}
-          {tab === "agent" && <AgentPane />}
           {tab === "security" && <SecurityPane />}
           {tab === "ai" && <AiPane />}
           {tab === "about" && <AboutPane />}

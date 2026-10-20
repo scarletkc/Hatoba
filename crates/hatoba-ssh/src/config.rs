@@ -1,8 +1,9 @@
-//! `~/.ssh/config` import (SSH-11).
+//! `~/.ssh/config` import (SSH-11), and the `IdentityAgent` of a connection (SSH-09).
 //!
 //! Only the options Hatoba can map onto a host entry are understood: `Host`,
 //! `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `SetEnv`.
-//! `ProxyCommand` is read only so the import can say it was left out. Lookup
+//! `ProxyCommand` is read only so the import can say it was left out, and
+//! `IdentityAgent` only by [`identity_agent`]. Lookup
 //! follows OpenSSH semantics: blocks are evaluated in file order and the first
 //! value obtained for an option wins (`IdentityFile` accumulates, and the first
 //! `SetEnv` line that applies wins as a whole).
@@ -50,6 +51,7 @@ struct Block {
     /// their order (see [`resolve_proxy`]).
     proxy: Vec<ProxyDirective>,
     set_env: Option<Vec<(String, String)>>,
+    identity_agent: Option<String>,
 }
 
 #[derive(Debug)]
@@ -83,6 +85,50 @@ pub fn parse_ssh_config_with_home(text: &str, home: Option<&str>) -> Vec<SshConf
         .into_iter()
         .map(|alias| resolve_alias(&alias, &blocks, home))
         .collect()
+}
+
+/// The `IdentityAgent` that applies to a connection to `host`, as `ssh user@host` reads it from
+/// `text`: the first value of the blocks that match, with `~`, `%d`, `%h`, `%p`, `%r`, `%%` and
+/// `${NAME}` expanded. The value is returned as written otherwise, so `none`, `SSH_AUTH_SOCK` and
+/// `$NAME` are the caller's to read.
+pub fn identity_agent(text: &str, host: &str, home: Option<&str>) -> Option<String> {
+    let blocks = parse_blocks(text);
+    let value = blocks
+        .iter()
+        .filter(|b| !b.ignored && block_applies(b, host))
+        .find_map(|b| b.identity_agent.clone())?;
+    let resolved = resolve_alias(host, &blocks, home);
+    let ctx = ExpandCtx {
+        alias: host,
+        hostname: resolved.hostname.unwrap_or_else(|| host.to_owned()),
+        user: resolved.user,
+        port: resolved.port.unwrap_or(22),
+        home,
+    };
+    Some(expand_path(&expand_env(&value), &ctx))
+}
+
+/// `${NAME}` replaced with the variable's value, as OpenSSH expands it in `IdentityAgent`. A
+/// variable that is not set stays as written, so the error names it.
+fn expand_env(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find("${") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        let Some(end) = after.find('}') else {
+            out.push_str(&rest[start..]);
+            return out;
+        };
+        let name = &after[..end];
+        match std::env::var(name) {
+            Ok(v) if !name.is_empty() => out.push_str(&v),
+            _ => out.push_str(&rest[start..start + 3 + end]),
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn home_dir() -> Option<String> {
@@ -143,6 +189,9 @@ fn parse_blocks(text: &str) -> Vec<Block> {
                         }
                     }
                     ("identityfile", Some(v)) => block.identity_files.push(v),
+                    ("identityagent", Some(v)) => {
+                        block.identity_agent.get_or_insert(v);
+                    }
                     ("proxyjump", Some(v)) => {
                         block.proxy.push(ProxyDirective::Jump(v));
                     }
@@ -726,5 +775,103 @@ Host *
         assert!(glob_match("*.example.com", "a.b.example.com"));
         assert!(!glob_match("*.example.com", "example.com"));
         assert!(glob_match("A*b", "axxB"));
+    }
+
+    #[test]
+    fn identity_agent_of_host_star_keeps_quoted_spaces_and_expands_home() {
+        let text = "Host *
+  IdentityAgent \"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\"
+";
+        assert_eq!(
+            identity_agent(text, "example.com", Some("/Users/me")).as_deref(),
+            Some("/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock")
+        );
+    }
+
+    #[test]
+    fn identity_agent_first_matching_block_wins() {
+        let text = "Host work.example.com
+  IdentityAgent ~/work.sock
+Host *
+  IdentityAgent ~/all.sock
+";
+        let agent = |host| identity_agent(text, host, Some("/home/me"));
+        assert_eq!(
+            agent("work.example.com").as_deref(),
+            Some("/home/me/work.sock")
+        );
+        assert_eq!(
+            agent("other.example.com").as_deref(),
+            Some("/home/me/all.sock")
+        );
+    }
+
+    #[test]
+    fn identity_agent_follows_negation_and_skips_match_blocks() {
+        let text = "Host * !bastion
+  IdentityAgent ~/a.sock
+Match host bastion
+  IdentityAgent ~/b.sock
+";
+        assert_eq!(identity_agent(text, "bastion", Some("/home/me")), None);
+        assert_eq!(
+            identity_agent(
+                "Host other
+  User x
+",
+                "web",
+                Some("/home/me")
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn identity_agent_expands_tokens_and_leaves_keywords_as_written() {
+        let text = "Host web
+  HostName 10.0.0.5
+  IdentityAgent %d/agent-%h.sock
+";
+        assert_eq!(
+            identity_agent(text, "web", Some("/home/me")).as_deref(),
+            Some("/home/me/agent-10.0.0.5.sock")
+        );
+        let agent = |text| identity_agent(text, "web", Some("/home/me"));
+        assert_eq!(
+            agent(
+                "IdentityAgent none
+"
+            )
+            .as_deref(),
+            Some("none")
+        );
+        assert_eq!(
+            agent(
+                "IdentityAgent SSH_AUTH_SOCK
+"
+            )
+            .as_deref(),
+            Some("SSH_AUTH_SOCK")
+        );
+        assert_eq!(
+            agent(
+                "IdentityAgent $BW_SOCK
+"
+            )
+            .as_deref(),
+            Some("$BW_SOCK")
+        );
+    }
+
+    #[test]
+    fn env_variables_in_braces_are_expanded() {
+        assert_eq!(
+            expand_env("${HATOBA_TEST_UNSET_VARIABLE}/agent.sock"),
+            "${HATOBA_TEST_UNSET_VARIABLE}/agent.sock"
+        );
+        assert_eq!(expand_env("/tmp/${unclosed"), "/tmp/${unclosed");
+        if let Ok(path) = std::env::var("PATH") {
+            assert_eq!(expand_env("a${PATH}b"), format!("a{path}b"));
+        }
     }
 }

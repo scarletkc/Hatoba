@@ -1038,12 +1038,6 @@ pub struct LocalPrefs {
     pub ai_panel_width: u32,
     /// SSH-13: the proxy that hosts set to the device default connect through, on this device.
     pub default_proxy_id: Option<String>,
-    /// SSH-09: the ssh-agent socket this device authenticates with. `None` selects an agent
-    /// according to the platform. On Unix, a set `SSH_AUTH_SOCK` other than the macOS launchd
-    /// placeholder is used alone; discovery runs only when the variable is unset or has that
-    /// placeholder. On Windows, a value accepted as a named pipe is used alone; other values use
-    /// the OpenSSH agent pipe.
-    pub ssh_agent_socket: Option<String>,
     /// SEC-02: minutes without input before the vault locks; 0 never locks.
     pub auto_lock_minutes: u32,
     /// SEC-02: lock the vault when the computer sleeps.
@@ -1084,7 +1078,6 @@ impl Default for LocalPrefs {
             ai_panel_open: false,
             ai_panel_width: 380,
             default_proxy_id: None,
-            ssh_agent_socket: None,
             auto_lock_minutes: 15,
             lock_on_sleep: true,
             lock_disconnects_sessions: false,
@@ -1116,50 +1109,6 @@ pub enum CloseAction {
 pub enum DashboardLayout {
     Cards,
     Table,
-}
-
-/// The agent behind an ssh-agent socket (SSH-09).
-#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SshAgentKind {
-    /// An agent Hatoba does not recognize from the socket path.
-    System,
-    Bitwarden,
-    OnePassword,
-    GnuPgp,
-    Keyring,
-}
-
-impl From<hatoba_ssh::AgentKind> for SshAgentKind {
-    fn from(kind: hatoba_ssh::AgentKind) -> Self {
-        match kind {
-            hatoba_ssh::AgentKind::System => Self::System,
-            hatoba_ssh::AgentKind::Bitwarden => Self::Bitwarden,
-            hatoba_ssh::AgentKind::OnePassword => Self::OnePassword,
-            hatoba_ssh::AgentKind::GnuPgp => Self::GnuPgp,
-            hatoba_ssh::AgentKind::GnomeKeyring => Self::Keyring,
-        }
-    }
-}
-
-/// One key an ssh-agent holds (SSH-09).
-#[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
-pub struct SshAgentKey {
-    pub algorithm: String,
-    /// `SHA256:...`, as `ssh-add -l` writes it.
-    pub fingerprint: String,
-    pub comment: String,
-}
-
-/// Settings → SSH Agent (SSH-09): the agent this device authenticates with, and what it holds.
-#[derive(Debug, Clone, Serialize, Type)]
-pub struct SshAgentView {
-    /// The socket the device uses now, absent when no agent answers.
-    pub socket: Option<String>,
-    pub kind: Option<SshAgentKind>,
-    pub keys: Vec<SshAgentKey>,
-    /// Why no agent answers, when none does.
-    pub error: Option<String>,
 }
 
 impl LocalPrefs {

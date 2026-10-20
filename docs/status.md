@@ -26,7 +26,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 |---|---|---|---|
 | SSH-01…07 | Connection, authentication, fingerprints, timeouts, reconnect | ✅ | |
 | SSH-08 | keyboard-interactive | ✅ | |
-| SSH-09 | ssh-agent, Bitwarden and 1Password included | 🟡 | The Unix socket paths are tested against a real `ssh-agent` and against Bitwarden on macOS; the Windows named pipe still needs verification on a real machine. Pageant (P2) ⬜ |
+| SSH-09 | ssh-agent | 🟡 | The Windows named pipe needs verification on a real machine. `IdentityAgent` and the login shell's `SSH_AUTH_SOCK` have unit tests and tests against a real `ssh-agent`, but have not been tried in the app with Bitwarden or 1Password. Pageant (P2) ⬜ |
 | SSH-10 | ProxyJump | ✅ | |
 | SSH-11 | Import ssh config | ✅ | |
 | SSH-12 | Import PuTTY sessions | 🟡 | Unit tests parse a `.reg` export and the session files of macOS and Linux; reading the registry not yet tried in the app on Windows |

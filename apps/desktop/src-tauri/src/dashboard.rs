@@ -739,12 +739,7 @@ fn hop_config(vault: &Vault, hop: &Host, outermost: bool) -> String {
             });
             format!("key:{key_id}#{:x}", key.unwrap_or(0))
         }
-        HostAuth::Agent => match crate::ssh::agent_socket(vault) {
-            // The device's agent choice is part of the connection: another agent signs with other
-            // keys, and a session made with the previous one must not be reused for this host.
-            Some(socket) => format!("agent:{socket}"),
-            None => "agent".to_owned(),
-        },
+        HostAuth::Agent => "agent".to_owned(),
         HostAuth::Ask => "ask".to_owned(),
     };
     // The proxy only matters on the first hop, the outermost one.
@@ -1478,31 +1473,6 @@ mod tests {
         assert_ne!(edited.config, repassed.config);
         assert_eq!(config_version(&v, &get(&v, &id)), edited.config);
         assert_ne!(edited.all(), repassed.all());
-    }
-
-    #[test]
-    fn choosing_another_agent_changes_the_configuration() {
-        let mut v = vault();
-        let id = v.put(None, host("app", HostAuth::Agent, None)).unwrap();
-        let automatic = Versions::of(&v, &get(&v, &id));
-
-        // The socket chosen in Settings → SSH Agent is what a session would sign with, so another
-        // one must not leave the dashboard's session of the previous agent reusable.
-        v.set_local_prefs(r#"{"ssh_agent_socket":"/tmp/one/agent.sock"}"#)
-            .unwrap();
-        let one = Versions::of(&v, &get(&v, &id));
-        v.set_local_prefs(r#"{"ssh_agent_socket":"/tmp/two/agent.sock"}"#)
-            .unwrap();
-        let two = Versions::of(&v, &get(&v, &id));
-        assert_ne!(one.config, automatic.config);
-        assert_ne!(two.config, one.config);
-
-        // A host that signs in another way does not depend on the choice.
-        let other = v.put(None, host("web", password("pw"), None)).unwrap();
-        let before = Versions::of(&v, &get(&v, &other));
-        v.set_local_prefs(r#"{"ssh_agent_socket":"/tmp/three/agent.sock"}"#)
-            .unwrap();
-        assert_eq!(Versions::of(&v, &get(&v, &other)), before);
     }
 
     #[test]

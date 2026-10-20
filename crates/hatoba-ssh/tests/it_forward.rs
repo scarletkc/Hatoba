@@ -225,6 +225,7 @@ fn hop(server: &SshdServer, host: &str, port: u16) -> JumpHop {
         port,
         username: server.key_user.clone(),
         auth: key_auth("ed25519", None),
+        agent_sockets: Vec::new(),
     }
 }
 
@@ -369,6 +370,7 @@ async fn password_jump_host_and_key_target() {
         port: server.port,
         username: user.into(),
         auth: AuthMethod::Password(Zeroizing::new(password.into())),
+        agent_sockets: Vec::new(),
     }];
     let session = connect(cfg, Verifier::accepting()).await.unwrap();
     assert_eq!(

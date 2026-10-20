@@ -243,12 +243,7 @@ export const AREAS: Area[] = [
       "references/settings.md": {
         "": [
           "settings.title", "settings.tab.general", "settings.tab.appearance", "settings.tab.terminal",
-          "settings.tab.proxies", "settings.tab.agent", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
-        ],
-        "SSH Agent": [
-          "settings.agent.source", "settings.agent.automatic", "settings.agent.custom", "settings.agent.path",
-          "settings.agent.status", "settings.agent.recheck", "settings.agent.kind.bitwarden",
-          "settings.agent.kind.onePassword", "settings.agent.kind.gpg", "settings.agent.kind.keyring",
+          "settings.tab.proxies", "settings.tab.security", "aiSettings.tab", "settings.tab.about",
         ],
         "General": [
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",

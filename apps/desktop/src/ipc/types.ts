@@ -274,31 +274,6 @@ export interface ProbeResult {
   latency_ms: number | null;
 }
 
-// ───────────────────────── SSH agent (SSH-09) ─────────────────────────
-
-/** The agent behind an ssh-agent socket. */
-export type SshAgentKind = "system" | "bitwarden" | "one_password" | "gnu_pgp" | "keyring";
-
-/** One key an ssh-agent holds. */
-export interface SshAgentKey {
-  algorithm: string;
-  /** `SHA256:...`, as `ssh-add -l` writes it. */
-  fingerprint: string;
-  comment: string;
-}
-
-/**
- * Settings → SSH Agent: the agent this device authenticates with, and the keys it holds.
- */
-export interface SshAgentView {
-  /** The socket the device uses now, `null` when no agent answers. */
-  socket: string | null;
-  kind: SshAgentKind | null;
-  keys: SshAgentKey[];
-  /** Why no agent answers, when none does. */
-  error: string | null;
-}
-
 // ───────────────────────── Proxies (SSH-13) ─────────────────────────
 
 export type ProxyKind = "socks5" | "http";
@@ -856,12 +831,6 @@ export interface LocalPrefs {
   ai_panel_width: number;
   /** SSH-13: the proxy that hosts set to the device default connect through, on this device. */
   default_proxy_id: string | null;
-  /**
-   * SSH-09: the ssh-agent socket this device authenticates with. `null` uses `SSH_AUTH_SOCK`,
-   * and, when that names nothing, the well-known agent sockets of the device, Bitwarden's
-   * included.
-   */
-  ssh_agent_socket: string | null;
   /** SEC-02: minutes without input before the vault locks; 0 never locks. */
   auto_lock_minutes: number;
   /** SEC-02: lock the vault when the computer sleeps. */

@@ -92,6 +92,8 @@ windows = { version = "0.62", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 # Painted window chrome (linux_chrome.rs): window-state signals, shadow width, input shape.
 gtk = "0.18"
+# `killpg` for the login shell that `SSH_AUTH_SOCK` is read from (platform/login_shell.rs).
+libc = "0.2"
 # WIN-10: whether a StatusNotifier host shows the tray icon. The opener and single-instance
 # plugins already build it.
 zbus = "5"
@@ -99,7 +101,7 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10.1"
 core-foundation-sys = "0.8.7"
-# `killpg` for the login shell that resolves the MCP servers' PATH.
+# `killpg` for the login shell that the MCP servers' PATH and `SSH_AUTH_SOCK` are read from.
 libc = "0.2"
 # The user's preferred languages (`NSLocale`); a Finder-launched app has no `LANG`.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSLocale", "NSString"] }

@@ -1,16 +1,31 @@
-//! The `PATH` that MCP stdio servers are looked up on and started with (spec §13.9, AI-32).
+//! What the login shell sets that an app started from Finder, the Dock or a desktop launcher
+//! never sees.
 //!
-//! An app started from Finder or the Dock gets only `/usr/bin:/bin:/usr/sbin:/sbin`, so `npx`,
-//! `uvx` or `node` from Homebrew, nvm, mise or Volta are not found. On macOS the login shell's
-//! `PATH` is resolved once, when the first stdio server starts: the shell runs once with a short
-//! timeout, and when it fails the process `PATH` plus the Homebrew directories is used. Users who
-//! never set up a stdio server never run it. Other platforms
-//! start the servers with the inherited `PATH`, as before.
+//! On macOS that is the `PATH` that MCP stdio servers are looked up on and started with (spec
+//! §13.9, AI-32): such an app gets only `/usr/bin:/bin:/usr/sbin:/sbin`, so `npx`, `uvx` or `node`
+//! from Homebrew, nvm, mise or Volta are not found. On macOS and Linux it is also the
+//! `SSH_AUTH_SOCK` that `~/.zshrc` or `~/.bashrc` exports for an agent such as Bitwarden's
+//! (SSH-09). Other platforms start the servers with the inherited `PATH`, as before.
 //!
-//! The value is handed to the servers through their configuration (see
-//! `mcp::with_default_path`), never through `std::env::set_var`.
+//! The shell runs once, with a short timeout, when the first stdio server starts or the first
+//! connection signs in with the agent, and both values come from that run. When it fails, the
+//! process `PATH` plus the Homebrew directories is used, and the inherited `SSH_AUTH_SOCK`.
+//! Users who need neither never run it.
+//!
+//! The values are handed on through configuration (see `mcp::with_default_path` and
+//! `ssh_agent`), never through `std::env::set_var`.
 
 use std::ffi::OsStr;
+
+/// What the login shell printed, each value `None` when it was unset or empty.
+#[cfg(unix)]
+#[derive(Debug, Default, PartialEq, Eq)]
+struct LoginEnv {
+    /// Read on macOS only: Linux starts the MCP servers with the inherited `PATH`.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    path: Option<String>,
+    ssh_auth_sock: Option<String>,
+}
 
 /// The default `PATH` for MCP stdio servers; `None` where the inherited one is right.
 #[cfg(target_os = "macos")]
@@ -19,7 +34,23 @@ pub fn default_path() -> Option<&'static OsStr> {
     use std::sync::OnceLock;
 
     static PATH: OnceLock<OsString> = OnceLock::new();
-    Some(PATH.get_or_init(resolve))
+    Some(PATH.get_or_init(|| {
+        // Only the source and the entry count are logged: the value becomes part of each
+        // server's environment, which logs never contain (SEC-04).
+        match login_env().and_then(|env| env.path.as_deref()) {
+            Some(path) => {
+                tracing::info!(
+                    entries = path.split(':').count(),
+                    "MCP default PATH from the login shell"
+                );
+                path.into()
+            }
+            None => {
+                tracing::warn!("login shell PATH unavailable, MCP default PATH is the fallback");
+                fallback_path(std::env::var_os("PATH").as_deref())
+            }
+        }
+    }))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -27,55 +58,67 @@ pub fn default_path() -> Option<&'static OsStr> {
     None
 }
 
-#[cfg(target_os = "macos")]
-fn resolve() -> std::ffi::OsString {
+/// The `SSH_AUTH_SOCK` the login shell exports; `None` when it exports none or did not answer.
+/// It blocks for the shell's run the first time.
+#[cfg(unix)]
+pub fn ssh_auth_sock() -> Option<&'static str> {
+    login_env().and_then(|env| env.ssh_auth_sock.as_deref())
+}
+
+/// The one run of the login shell, made by the first caller.
+#[cfg(unix)]
+fn login_env() -> Option<&'static LoginEnv> {
+    use std::sync::OnceLock;
     use std::time::Duration;
 
     const TIMEOUT: Duration = Duration::from_secs(3);
-    let shell = login_shell(std::env::var("SHELL").ok());
-    let marker = format!("__hatoba_{}__", uuid::Uuid::now_v7().simple());
-    // Only the source and the entry count are logged: the value becomes part of each server's
-    // environment, which logs never contain (SEC-04).
-    match run_login_shell(&shell, &marker, TIMEOUT) {
-        Some(path) => {
-            tracing::info!(
-                entries = path.split(':').count(),
-                "MCP default PATH from the login shell"
-            );
-            path.into()
+    static ENV: OnceLock<Option<LoginEnv>> = OnceLock::new();
+    ENV.get_or_init(|| {
+        let shell = login_shell(std::env::var("SHELL").ok())?;
+        let marker = format!("__hatoba_{}__", uuid::Uuid::now_v7().simple());
+        let env = run_login_shell(&shell, &marker, TIMEOUT);
+        if env.is_none() {
+            tracing::warn!("the login shell did not answer");
         }
-        None => {
-            tracing::warn!("login shell PATH unavailable, MCP default PATH is the fallback");
-            fallback_path(std::env::var_os("PATH").as_deref())
-        }
-    }
+        env
+    })
+    .as_ref()
 }
 
-/// `$SHELL` when it is an absolute path, else the macOS default.
-#[cfg(any(target_os = "macos", test))]
-fn login_shell(shell: Option<String>) -> String {
+/// `$SHELL` when it is an absolute path, else the login shell the platform has by default: zsh
+/// on macOS. Linux has none to assume, so there the shell does not run.
+#[cfg(any(unix, test))]
+fn login_shell(shell: Option<String>) -> Option<String> {
+    const DEFAULT: Option<&str> = if cfg!(target_os = "macos") {
+        Some("/bin/zsh")
+    } else {
+        None
+    };
     shell
         .filter(|s| s.starts_with('/'))
-        .unwrap_or_else(|| "/bin/zsh".to_owned())
+        .or_else(|| DEFAULT.map(str::to_owned))
 }
 
-/// What `printf` printed between two `marker`s, ignoring whatever the rc files wrote around it.
-#[cfg(any(target_os = "macos", test))]
-fn parse_marked(output: &str, marker: &str) -> Option<String> {
+/// The values `printf` printed between three `marker`s, ignoring whatever the rc files wrote
+/// around them: `PATH`, then `SSH_AUTH_SOCK`.
+#[cfg(any(unix, test))]
+fn parse_marked(output: &str, marker: &str) -> Option<(Option<String>, Option<String>)> {
     let mut parts = output.split(marker);
     parts.next()?;
-    let value = parts.next()?.trim();
+    let value = |v: &str| Some(v.trim()).filter(|v| !v.is_empty()).map(str::to_owned);
+    let path = value(parts.next()?);
+    let ssh_auth_sock = value(parts.next()?);
     // The closing marker must follow, or the shell was cut off.
     parts.next()?;
-    (!value.is_empty()).then(|| value.to_owned())
+    Some((path, ssh_auth_sock))
 }
 
 /// Runs `shell -ilc` (interactive login, so `.zprofile`, `.zshrc` and the like are read) and
-/// returns its `PATH`; `None` when it fails, prints nothing usable, or takes longer than
-/// `timeout`. It runs with no stdin, its stderr dropped, and in a process group of its own, so
-/// giving up kills whatever its rc files started along with it.
-#[cfg(target_os = "macos")]
-fn run_login_shell(shell: &str, marker: &str, timeout: std::time::Duration) -> Option<String> {
+/// returns its `PATH` and `SSH_AUTH_SOCK`; `None` when it fails, prints nothing usable, or takes
+/// longer than `timeout`. It runs with no stdin, its stderr dropped, and in a process group of its
+/// own, so giving up kills whatever its rc files started along with it.
+#[cfg(unix)]
+fn run_login_shell(shell: &str, marker: &str, timeout: std::time::Duration) -> Option<LoginEnv> {
     use std::io::Read;
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
@@ -83,7 +126,7 @@ fn run_login_shell(shell: &str, marker: &str, timeout: std::time::Duration) -> O
     let mut child = Command::new(shell)
         .args([
             "-ilc",
-            &format!("printf '%s%s%s' {marker} \"$PATH\" {marker}"),
+            &format!("printf '%s%s%s%s%s' {marker} \"$PATH\" {marker} \"$SSH_AUTH_SOCK\" {marker}"),
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -121,11 +164,15 @@ fn run_login_shell(shell: &str, marker: &str, timeout: std::time::Duration) -> O
         kill_group(child.id());
         return None;
     };
-    parse_marked(&String::from_utf8_lossy(&output), marker)
+    let (path, ssh_auth_sock) = parse_marked(&String::from_utf8_lossy(&output), marker)?;
+    Some(LoginEnv {
+        path,
+        ssh_auth_sock,
+    })
 }
 
 /// Kills the process group that `run_login_shell` started the shell in (its id is the shell's).
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 fn kill_group(shell_pid: u32) {
     let Ok(pgid) = libc::pid_t::try_from(shell_pid) else {
         return;
@@ -159,11 +206,21 @@ mod tests {
     const M: &str = "__hatoba_m__";
 
     #[test]
-    fn the_path_is_read_between_the_markers() {
-        let out = format!("Last login: today\nmotd\n{M}/opt/homebrew/bin:/usr/bin{M}\n");
+    fn the_values_are_read_between_the_markers() {
+        let out = format!(
+            "Last login: today\nmotd\n{M}/opt/homebrew/bin:/usr/bin{M}/tmp/agent.sock{M}\n"
+        );
         assert_eq!(
             parse_marked(&out, M),
-            Some("/opt/homebrew/bin:/usr/bin".into())
+            Some((
+                Some("/opt/homebrew/bin:/usr/bin".into()),
+                Some("/tmp/agent.sock".into())
+            ))
+        );
+        // A shell that exports no `SSH_AUTH_SOCK` prints nothing between the last two markers.
+        assert_eq!(
+            parse_marked(&format!("{M}/usr/bin{M}{M}"), M),
+            Some((Some("/usr/bin".into()), None))
         );
     }
 
@@ -172,7 +229,11 @@ mod tests {
         assert_eq!(parse_marked("", M), None);
         assert_eq!(parse_marked("/usr/bin", M), None);
         assert_eq!(parse_marked(&format!("{M}/usr/bin"), M), None);
-        assert_eq!(parse_marked(&format!("{M}  {M}"), M), None);
+        assert_eq!(parse_marked(&format!("{M}/usr/bin{M}/tmp/a"), M), None);
+        assert_eq!(
+            parse_marked(&format!("{M}  {M}  {M}"), M),
+            Some((None, None))
+        );
     }
 
     #[cfg(unix)]
@@ -192,18 +253,22 @@ mod tests {
 
     #[test]
     fn only_an_absolute_shell_path_is_used() {
-        assert_eq!(login_shell(Some("/bin/bash".into())), "/bin/bash");
-        assert_eq!(login_shell(Some("zsh".into())), "/bin/zsh");
-        assert_eq!(login_shell(Some(String::new())), "/bin/zsh");
-        assert_eq!(login_shell(None), "/bin/zsh");
+        let default = cfg!(target_os = "macos").then(|| "/bin/zsh".to_owned());
+        assert_eq!(
+            login_shell(Some("/bin/bash".into())).as_deref(),
+            Some("/bin/bash")
+        );
+        assert_eq!(login_shell(Some("zsh".into())), default);
+        assert_eq!(login_shell(Some(String::new())), default);
+        assert_eq!(login_shell(None), default);
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(unix)]
     mod shell {
         use std::os::unix::fs::PermissionsExt;
         use std::time::{Duration, Instant};
 
-        use super::super::run_login_shell;
+        use super::super::{LoginEnv, run_login_shell};
 
         /// A script standing in for the login shell; it gets `-ilc <script>` like a real one.
         fn fake_shell(name: &str, body: &str) -> String {
@@ -215,14 +280,21 @@ mod tests {
         }
 
         #[test]
-        fn the_path_survives_noise_from_the_rc_files() {
+        fn the_values_survive_noise_from_the_rc_files() {
             let shell = fake_shell(
                 "noisy",
-                "echo 'banner'; echo 'oops' >&2; PATH=/opt/x/bin:/usr/bin; eval \"$2\"",
+                "echo 'banner'; echo 'oops' >&2; PATH=/opt/x/bin:/usr/bin; \
+                 SSH_AUTH_SOCK=/tmp/bw.sock; eval \"$2\"",
             );
-            let path = run_login_shell(&shell, "__m__", Duration::from_secs(5));
+            let env = run_login_shell(&shell, "__m__", Duration::from_secs(5));
             std::fs::remove_file(&shell).unwrap();
-            assert_eq!(path, Some("/opt/x/bin:/usr/bin".into()));
+            assert_eq!(
+                env,
+                Some(LoginEnv {
+                    path: Some("/opt/x/bin:/usr/bin".into()),
+                    ssh_auth_sock: Some("/tmp/bw.sock".into()),
+                })
+            );
         }
 
         #[test]
@@ -281,10 +353,14 @@ mod tests {
             assert_eq!(path, None);
         }
 
+        #[cfg(target_os = "macos")]
         #[test]
         fn the_real_login_shell_reports_a_path() {
-            let path = run_login_shell("/bin/zsh", "__hatoba_real__", Duration::from_secs(10));
-            assert!(path.is_some_and(|p| p.contains("/usr/bin")));
+            let env = run_login_shell("/bin/zsh", "__hatoba_real__", Duration::from_secs(10));
+            assert!(
+                env.and_then(|e| e.path)
+                    .is_some_and(|p| p.contains("/usr/bin"))
+            );
         }
     }
 }

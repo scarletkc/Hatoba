@@ -152,6 +152,7 @@ async fn each_proxy_jump_hop_uses_its_own_known_key_types() {
         port: jump,
         username: "demo".to_owned(),
         auth: AuthMethod::None,
+        agent_sockets: Vec::new(),
     });
     let session = connect(cfg, verifier.clone()).await.unwrap();
     assert_eq!(

@@ -10,11 +10,10 @@ use serde_json::{Map, Value};
 use tauri::{AppHandle, State};
 
 use crate::dto::{
-    CursorChoice, LocalPrefs, RightClick, SettingsPatch, SettingsView, SshAgentKey, SshAgentView,
-    StarPrompt, TerminalSettings, TerminalSettingsPatch, ThemeChoice,
+    CursorChoice, LocalPrefs, RightClick, SettingsPatch, SettingsView, StarPrompt,
+    TerminalSettings, TerminalSettingsPatch, ThemeChoice,
 };
 use crate::error::{AppError, AppResult};
-use crate::ssh::agent_socket;
 use crate::state::{AppState, now_ms};
 use crate::{lock, sync};
 
@@ -189,36 +188,6 @@ pub fn prefs_save(state: State<'_, AppState>, mut prefs: LocalPrefs) -> AppResul
     #[cfg(not(target_os = "macos"))]
     crate::tray::refresh_close_action(&state);
     Ok(())
-}
-
-/// Settings → SSH Agent (SSH-09): the agent this device authenticates with and the keys it holds.
-/// A device without an agent is not an error: the page says so.
-#[tauri::command]
-#[specta::specta]
-pub async fn ssh_agent_status(state: State<'_, AppState>) -> AppResult<SshAgentView> {
-    let chosen = state.with_unlocked(|v| Ok(agent_socket(v)))?;
-    Ok(match hatoba_ssh::agent_status(chosen.as_deref()).await {
-        Ok(status) => SshAgentView {
-            socket: Some(status.socket.display()),
-            kind: Some(status.socket.kind.into()),
-            keys: status
-                .identities
-                .into_iter()
-                .map(|i| SshAgentKey {
-                    algorithm: i.algorithm,
-                    fingerprint: i.fingerprint,
-                    comment: i.comment,
-                })
-                .collect(),
-            error: None,
-        },
-        Err(e) => SshAgentView {
-            socket: None,
-            kind: None,
-            keys: Vec::new(),
-            error: Some(e.message),
-        },
-    })
 }
 
 /// Writes `prefs` over the stored JSON. Keys this build does not know stay: the terminal

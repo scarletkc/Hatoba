@@ -50,9 +50,7 @@ account.
   your login shell on macOS and Linux, beside the SSH tabs.
 - **Authentication**: passwords, Ed25519, ECDSA, and RSA keys with or without
   a passphrase, ask on every connection, ssh-agent, and keyboard-interactive
-  (2FA). The agent is the one `SSH_AUTH_SOCK` names; a launch from Finder or a
-  desktop launcher, which never read `~/.zshrc`, gets the one Hatoba finds
-  itself: Bitwarden's, 1Password's, GnuPG's or the GNOME keyring's.
+  (2FA).
 - **Security**: host key confirmation on first connect, a blocked connection
   when the key changes, a master password with a recovery code, and auto-lock
   on idle, on sleep, or on demand.

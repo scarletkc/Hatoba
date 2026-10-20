@@ -71,7 +71,7 @@ Other labels: **Username**, **Organization & Network**.
 - **Password**: stored encrypted in the vault. After saving, the field shows **Saved** and the password can be replaced (**Replace**, **Keep Saved Password**) but never viewed.
 - **Key**: choose a key from the Keys page (**Choose a key…**; **Manage Keys** opens the Keys page). RSA, Ed25519 and ECDSA keys work. If the key has a passphrase that was saved with it, it is used; otherwise Hatoba asks for the passphrase when connecting (**Enter the key passphrase**), and does not save it.
 - **Ask Each Time**: Hatoba asks for the password at every connection and never saves it.
-- **SSH Agent**: uses the keys in an ssh-agent on this device: the agent `SSH_AUTH_SOCK` names, or, when that is unset or holds the placeholder macOS leaves a window opened from Finder, one Hatoba finds itself, Bitwarden's first. On Windows it is the OpenSSH service. **Settings → SSH Agent** shows the agent that answered, its keys, and takes a socket of its own. Pageant is not supported.
+- **SSH Agent**: uses the keys in an SSH agent. On Windows: the OpenSSH Authentication Agent service (it must be running), or Bitwarden's or 1Password's agent in its place. On macOS and Linux: the agent `ssh` uses, named by `IdentityAgent` in `~/.ssh/config` or by `SSH_AUTH_SOCK`, also when only `~/.zshrc` or `~/.bashrc` exports it. Pageant is not supported.
 - Servers that ask for a second factor (keyboard-interactive, such as a one-time code) show a dialog titled **Additional verification required** with a **Verify** button. This needs no setting.
 - Deleting a key switches the hosts that used it to **Ask Each Time**.
 

@@ -18,6 +18,7 @@ mod mcp;
 mod notification;
 mod platform;
 mod ssh;
+mod ssh_agent;
 mod state;
 mod sync;
 mod tray;
@@ -160,7 +161,6 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             settings::settings_save,
             settings::prefs_get,
             settings::prefs_save,
-            settings::ssh_agent_status,
             settings::star_prompt_get,
             settings::star_prompt_done,
             ai_cmd::ai_providers_list,
