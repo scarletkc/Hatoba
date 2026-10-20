@@ -122,7 +122,7 @@ export default defineMessages({
     "err.sync_setup_busy": "另一项云同步设置还在进行，请等它完成后再试。",
     "err.sync_already_configured": "这台设备已经开启了云同步。要加入其他云端保险库，请先断开云同步。",
     "err.cancelled": "已取消。",
-    "err.biometric_unavailable": "现在无法使用 Touch ID，例如 Mac 合盖时。",
+    "err.biometric_unavailable": "现在无法使用 Touch ID（例如 Mac 合盖时）。",
     "err.biometric_stale": "{name} 解锁已失效，已自动关闭。可以在设置 → 安全中重新开启。",
     "err.io": "读写文件失败。",
     "err.internal": "发生了意外错误。",
