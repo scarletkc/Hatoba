@@ -602,9 +602,7 @@ pub async fn ai_provider_models(
     // Registered with the read, so a lock either came first or aborts the request.
     let (config, op) =
         state.with_unlocked(|v| Ok((provider_config_for(v, &input)?, state.ai.background_op())))?;
-    // AI-03: the list gets models.dev's newest data.
-    let _ = tokio::time::timeout(models_dev::LIST_WAIT, models_dev::refresh(state.ai.http())).await;
-    let models = hatoba_ai::models::list_models(&state.ai.http(), &config, op.token())
+    let mut models = hatoba_ai::models::list_models_unfilled(&state.ai.http(), &config, op.token())
         .await
         .map_err(|e| {
             tracing::info!(
@@ -614,6 +612,7 @@ pub async fn ai_provider_models(
             );
             AppError::from(e)
         })?;
+    models_dev::fill_list(state.ai.http(), config.protocol, &mut models).await;
     Ok(models
         .into_iter()
         .map(|m| AiModel {

@@ -232,6 +232,20 @@ pub async fn list_models(
     provider: &ProviderConfig,
     cancel: &CancellationToken,
 ) -> Result<Vec<ModelInfo>, AiError> {
+    let mut models = list_models_unfilled(http, provider, cancel).await?;
+    for model in &mut models {
+        model.fill_known(provider.protocol);
+    }
+    Ok(models)
+}
+
+/// [`list_models`] without what models.dev fills in: for a caller that fills it in with
+/// [`ModelInfo::fill_known`] once newer data arrived.
+pub async fn list_models_unfilled(
+    http: &reqwest::Client,
+    provider: &ProviderConfig,
+    cancel: &CancellationToken,
+) -> Result<Vec<ModelInfo>, AiError> {
     tokio::time::timeout(REQUEST_TIMEOUT, list_models_inner(http, provider, cancel))
         .await
         .unwrap_or_else(|_| Err(AiError::Network("the request timed out".into())))
@@ -322,9 +336,6 @@ async fn list_models_inner(
                 push(model, &mut models);
             }
         }
-    }
-    for model in &mut models {
-        model.fill_known(provider.protocol);
     }
     Ok(models)
 }

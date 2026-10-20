@@ -939,6 +939,8 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
     use Effort::{High, Low, Max, Medium, Xhigh};
     let catalog = models_dev();
     let known = |id: &str, protocol| catalog.lookup(id, protocol);
+    assert!(catalog.knows("anthropic/claude-opus-4.8"));
+    assert!(!catalog.knows("llama3.1:8b"));
     let opus_4_8 = KnownModel {
         context_window: Some(1_000_000),
         max_output_tokens: Some(128_000),

@@ -269,6 +269,13 @@ impl Catalog {
         self.entries.is_empty()
     }
 
+    /// Whether it knows model `id`, on whichever protocol.
+    #[must_use]
+    pub fn knows(&self, id: &str) -> bool {
+        let id = normalize(id);
+        self.entries.iter().any(|e| matches(&id, &e.key))
+    }
+
     /// What it says about model `id` on `protocol`, by the longest key that matches. `None` for a
     /// model it does not know, and on System One (AI-47), whose models only decide.
     #[must_use]
@@ -355,6 +362,12 @@ pub fn install(catalog: Catalog) {
 #[must_use]
 pub fn known_model(id: &str, protocol: Protocol) -> Option<KnownModel> {
     current().lookup(id, protocol)
+}
+
+/// Whether the installed data or the bundled snapshot knows model `id` ([`Catalog::knows`]).
+#[must_use]
+pub fn knows(id: &str) -> bool {
+    current().knows(id)
 }
 
 /// Fetches models.dev's data ([`MODELS_DEV_URL`]), gzip-compressed, and keeps what
