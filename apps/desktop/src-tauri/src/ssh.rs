@@ -205,7 +205,21 @@ impl SshManager {
 pub struct Overrides {
     pub password: Option<Zeroizing<String>>,
     pub passphrase: Option<Zeroizing<String>>,
+    /// Without a password given or saved, the host signs in as quick connect does: with the
+    /// server's keyboard-interactive prompts, or a password asked once (`hatoba exec`, HOST-15).
+    pub ask_password: bool,
 }
+
+/// What a connection asks the user in the window: to check a host key (SSH-04), or to answer the
+/// server's prompts (SSH-08). `target` is `host:port`, or `user@host:port` when it is known.
+pub enum Asking {
+    HostKey { target: String },
+    SignIn { target: String },
+}
+
+/// Called before each question a connection puts to the user, for someone who waits on it
+/// elsewhere (HOST-15).
+pub type OnAsk = Arc<dyn Fn(Asking) + Send + Sync>;
 
 fn auth_method(
     vault: &Vault,
@@ -226,6 +240,7 @@ fn auth_method(
                         format!("jump host {} needs a saved password or key", host.name),
                     ));
                 }
+                _ if overrides.is_some_and(|o| o.ask_password) => AuthMethod::Ask,
                 _ => {
                     return Err(AppError::invalid(
                         "password",
@@ -352,6 +367,7 @@ pub fn build_config(
 pub struct Verifier {
     pub app: AppHandle,
     pub session_id: Option<String>,
+    pub on_ask: Option<OnAsk>,
 }
 
 pub(crate) fn known_host_keys(vault: &Vault, host: &str, port: u16) -> Vec<(String, KnownHost)> {
@@ -443,6 +459,14 @@ impl HostKeyVerifier for Verifier {
             known_fingerprint: previous.map(|k| k.fingerprint.clone()),
             known_key_type: previous.map(|k| k.key_type.clone()),
         };
+        if let Some(on_ask) = &self.on_ask {
+            let target = if host.contains(':') {
+                format!("[{host}]:{port}")
+            } else {
+                format!("{host}:{port}")
+            };
+            on_ask(Asking::HostKey { target });
+        }
         if prompt.emit(&self.app).is_err() {
             lock(&state.ssh.hostkey_waiters).remove(&request_id);
             return false;
@@ -464,6 +488,7 @@ impl HostKeyVerifier for Verifier {
 pub struct Interactive {
     pub app: AppHandle,
     pub session_id: Option<String>,
+    pub on_ask: Option<OnAsk>,
 }
 
 #[async_trait]
@@ -493,6 +518,11 @@ impl KeyboardInteractive for Interactive {
             password: request.password,
             target: target_label(&request.username, &request.host, request.port),
         };
+        if let Some(on_ask) = &self.on_ask {
+            on_ask(Asking::SignIn {
+                target: event.target.clone(),
+            });
+        }
         if event.emit(&self.app).is_err() {
             lock(&state.ssh.auth_waiters).remove(&request_id);
             return None;
@@ -695,18 +725,30 @@ pub async fn connect_for_task(
 /// Every connection goes through here: terminals, quick connect, connection tests and tasks.
 pub async fn connect_with(
     app: &AppHandle,
+    cfg: ConnectConfig,
+    session_id: Option<String>,
+) -> AppResult<SshSession> {
+    connect_asking(app, cfg, session_id, None).await
+}
+
+/// [`connect_with`], calling `on_ask` before each question to the user.
+pub async fn connect_asking(
+    app: &AppHandle,
     mut cfg: ConnectConfig,
     session_id: Option<String>,
+    on_ask: Option<OnAsk>,
 ) -> AppResult<SshSession> {
     let attempt = Attempt::of(&cfg);
     attempt.log_start();
     cfg.keyboard_interactive = Some(Arc::new(Interactive {
         app: app.clone(),
         session_id: session_id.clone(),
+        on_ask: on_ask.clone(),
     }));
     let verifier = Arc::new(Verifier {
         app: app.clone(),
         session_id,
+        on_ask,
     });
     let result = hatoba_ssh::connect(cfg, verifier)
         .await
