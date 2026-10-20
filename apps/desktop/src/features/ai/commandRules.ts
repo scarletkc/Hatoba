@@ -272,6 +272,9 @@ function gitReads(args: string[]): boolean {
     without(longs, shorts)(rest) &&
     (rest.every((a) => a.startsWith("-")) || rest.includes("--list") || (shortList && rest.includes("-l")));
   switch (sub) {
+    // These run what the repository's configuration names (core.fsmonitor, diff.external, textconv drivers,
+    // filters), as when the user types them. Writing that configuration asks first, unless an edit, write or
+    // terminal allowance already lets the model run code on the host (§13.5).
     case "status":
     case "log":
     case "diff":
