@@ -1127,6 +1127,20 @@ pub struct AppInfo {
     /// This computer's name, as the sync device list shows it, which a conversation on a local
     /// tab records (§7.5).
     pub device_name: String,
+    /// The package manager that installed this copy and updates it, which turns the in-app
+    /// update off (spec §11); `None` for the installers from the GitHub release.
+    pub package_manager: Option<PackageManager>,
+}
+
+/// A package manager that installs Hatoba from the GitHub release and updates it itself.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageManager {
+    Scoop,
+    /// The `hatoba-bin` package in the Arch User Repository.
+    Aur,
+    /// One that Hatoba has no instructions for.
+    Other,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,

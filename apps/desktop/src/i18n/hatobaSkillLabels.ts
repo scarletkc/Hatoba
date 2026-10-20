@@ -271,7 +271,8 @@ export const AREAS: Area[] = [
           "settings.about.releasePage", "settings.about.auto", "settings.about.checking", "settings.about.latest",
           "settings.about.copyVersion", "settings.about.website", "settings.about.source", "settings.about.license",
           "settings.about.report", "sidebar.settingsUpdate", "sidebar.star.title", "sidebar.star.star", "tray.update",
-          "settings.about.available",
+          "settings.about.available", "settings.about.copyCommand", "settings.about.manager.scoop",
+          "settings.about.manager.aur",
         ],
       },
       "references/troubleshooting.md": {

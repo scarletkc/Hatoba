@@ -38,7 +38,8 @@ export const commands = {
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**
 	 *  Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
-	 *  session, and the installer starts the new version.
+	 *  session, and the installer starts the new version. Refused when a package manager installed
+	 *  Hatoba.
 	 */
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
 	/**
@@ -1251,6 +1252,11 @@ export type AppInfo = {
 	 *  tab records (§7.5).
 	 */
 	device_name: string,
+	/**
+	 *  The package manager that installed this copy and updates it, which turns the in-app
+	 *  update off (spec §11); `None` for the installers from the GitHub release.
+	 */
+	package_manager: PackageManager | null,
 };
 
 export type Appearance = "system" | "light" | "dark";
@@ -1997,6 +2003,13 @@ export type NotificationTarget = {
 	tab: string | null,
 	conversation_id: string | null,
 };
+
+/**  A package manager that installs Hatoba from the GitHub release and updates it itself. */
+export type PackageManager = "scoop" | 
+/**  The `hatoba-bin` package in the Arch User Repository. */
+"aur" | 
+/**  One that Hatoba has no instructions for. */
+"other";
 
 export type Platform = "windows" | "macos" | "linux";
 

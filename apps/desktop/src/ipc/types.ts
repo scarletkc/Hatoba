@@ -879,7 +879,12 @@ export interface AppInfo {
   local_user: string;
   /** This computer's name, which a conversation on a local tab records (§7.5). */
   device_name: string;
+  /** The package manager that installed this copy and updates it, which turns the in-app update off (spec §11). */
+  package_manager: PackageManager | null;
 }
+
+/** A package manager that installs Hatoba; `other` is one Hatoba has no instructions for. */
+export type PackageManager = "scoop" | "aur" | "other";
 
 /** The `hatoba` command on this device (HOST-13). */
 export interface CliCommandView {

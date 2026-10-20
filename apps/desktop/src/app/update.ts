@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api, toAppError } from "@/ipc/api";
-import type { AppError, UpdateCheck, UpdateProgress } from "@/ipc/types";
+import type { AppError, AvailableUpdate, UpdateCheck, UpdateProgress } from "@/ipc/types";
 import { useApp } from "./store";
 
 /** A running Hatoba checks again this long after the last check that succeeded. */
@@ -63,13 +63,22 @@ export const useUpdate = create<UpdateState>((set, get) => ({
   },
 }));
 
-export const selectUpdateAvailable = (s: UpdateState) => s.result?.update != null;
+/**
+ * The newer release that the sidebar dot and the tray menu offer. A copy that a package manager
+ * installed offers none: the package manager updates it (spec §11).
+ */
+export function useOfferedUpdate(): AvailableUpdate | null {
+  const update = useUpdate((s) => s.result?.update ?? null);
+  const managed = useApp((st) => st.info.package_manager !== null);
+  return managed ? null : update;
+}
 
 let started = false;
 
 /**
  * With the automatic check on, checks after the first unlock of each launch, then again 24 hours
  * after the last check that succeeded for as long as Hatoba runs, hidden in the tray too (WIN-10).
+ * Never when a package manager installed Hatoba.
  */
 export function startAutoCheck() {
   if (started) return;
@@ -80,7 +89,8 @@ export function startAutoCheck() {
 }
 
 function autoCheck() {
-  if (!useApp.getState().prefs.auto_update_check) return;
+  const { prefs, info } = useApp.getState();
+  if (!prefs.auto_update_check || info.package_manager) return;
   const { checkedAt, install } = useUpdate.getState();
   if (install) return;
   if (checkedAt === null || Date.now() - checkedAt >= RECHECK_MS) void useUpdate.getState().check();
