@@ -14,6 +14,11 @@
   box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
 }
 
+/* The window's content fades in as the app opens and as the vault unlocks. */
+.main:not([data-locked]) {
+  animation: pageIn var(--motion-base) var(--ease-out);
+}
+
 .window {
   flex: 1;
   min-width: 0;
@@ -61,6 +66,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .main,
   .page {
     animation-duration: var(--motion-fade) !important;
   }

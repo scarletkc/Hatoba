@@ -29,9 +29,10 @@ export const useOverlaysLocked = () => useLockStore((st) => st.locked);
 /**
  * Lets an overlay animate out after React has removed it. Overlays unmount the moment their owner
  * stops rendering them, so a copy of their last frame takes their place, inert, while the styles for
- * `[data-closing]` play, and goes once those animations end. `shown` is false while the overlay
- * renders nothing. Nothing stays behind while the vault locks, and nothing is copied where the
- * browser has no animations to play (tests).
+ * `[data-closing]` play, and goes once those animations end. The copy fades from the opacity the
+ * overlay had, so one closed before it finished appearing leaves nothing behind. `shown` is false
+ * while the overlay renders nothing. Nothing stays behind while the vault locks, and nothing is
+ * copied where the browser has no animations to play (tests).
  */
 export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = true) {
   useLayoutEffect(() => {
@@ -40,14 +41,16 @@ export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = tru
     return () => {
       const parent = node.parentNode;
       const next = node.nextSibling;
+      const opacity = parent ? getComputedStyle(node).opacity : "0";
       // Development mode also runs this while the element stays, to run the effect twice; by the
       // microtask, React has removed an element that really unmounted.
       queueMicrotask(() => {
-        if (node.isConnected || !parent?.isConnected || useLockStore.getState().locked) return;
+        if (node.isConnected || !parent?.isConnected || opacity === "0" || useLockStore.getState().locked) return;
         const ghost = node.cloneNode(true) as HTMLElement;
         ghost.inert = true;
         ghost.setAttribute("aria-hidden", "true");
         ghost.style.pointerEvents = "none";
+        ghost.style.opacity = opacity;
         for (const el of [ghost, ...ghost.querySelectorAll("[id]")]) el.removeAttribute("id");
         ghost.setAttribute("data-closing", "");
         parent.insertBefore(ghost, next?.parentNode === parent ? next : null);

@@ -1,6 +1,7 @@
+import { useRef } from "react";
 import { errorMessage } from "@/app/errors";
 import { Button, Icon, Spinner } from "@/components/controls";
-import { toast } from "@/components/overlay";
+import { toast, useExitAnimation } from "@/components/overlay";
 import { useT } from "@/i18n";
 import type { AppError, HostView, QuickTarget } from "@/ipc/types";
 import { writeClipboard } from "./clipboard";
@@ -10,8 +11,10 @@ import s from "./Overlays.module.css";
 /** Shown over the terminal while the SSH handshake and authentication run, or a local shell starts. */
 export function ConnectingOverlay({ name, local = false }: { name: string; local?: boolean }) {
   const t = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  useExitAnimation(ref);
   return (
-    <div className={s.connecting} role="status">
+    <div ref={ref} className={s.connecting} role="status">
       <div className={s.connectingPill}>
         <Spinner size={14} />
         {local ? t("terminal.local.starting", { shell: name }) : t("terminal.connectingTo", { host: name })}

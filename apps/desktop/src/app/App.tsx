@@ -67,7 +67,7 @@ export function App() {
     <>
       {/* SEC-03: sessions stay mounted (and connected) behind the lock screen, but are hidden. */}
       {(!locked || hasSessions) && (
-        <div className={s.main} aria-hidden={locked} style={locked ? { visibility: "hidden" } : undefined}>
+        <div className={s.main} aria-hidden={locked} data-locked={locked || undefined} style={locked ? { visibility: "hidden" } : undefined}>
           <Main />
         </div>
       )}
