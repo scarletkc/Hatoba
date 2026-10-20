@@ -33,6 +33,35 @@
   overflow: hidden;
 }
 
+/* A scope of memories (AI-53): its name and what it takes of its limit, above its rows. */
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.scopeHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg2);
+}
+
+.scopeName {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 /* Loading and load-failed rows */
 .status {
   display: flex;

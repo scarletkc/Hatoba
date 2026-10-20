@@ -1162,6 +1162,20 @@ pub struct AppInfo {
     /// This computer's name, as the sync device list shows it, which a conversation on a local
     /// tab records (§7.5).
     pub device_name: String,
+    /// The package manager that installed this copy and updates it, which turns the in-app
+    /// update off (spec §11); `None` for the installers from the GitHub release.
+    pub package_manager: Option<PackageManager>,
+}
+
+/// A package manager that installs Hatoba from the GitHub release and updates it itself.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageManager {
+    Scoop,
+    /// The `hatoba-bin` package in the Arch User Repository.
+    Aur,
+    /// One that Hatoba has no instructions for.
+    Other,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,
@@ -2217,22 +2231,29 @@ pub struct SkillView {
     pub updated_at: i64,
 }
 
-/// A memory of the AI assistant (AI-53).
+/// A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+/// host memory of a saved host or of a computer's local terminal.
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct AiMemoryView {
     pub id: String,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    /// The computer's name, while `host_id` is `None`.
+    pub local: Option<String>,
     pub updated_at: i64,
 }
 
-/// A memory to save from Settings → AI (AI-53).
+/// A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+/// [`AiMemoryView`].
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct AiMemoryInput {
     /// `None` creates a memory.
     pub id: Option<String>,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    pub local: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

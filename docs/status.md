@@ -17,7 +17,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | ✅ | Tried on Windows 11 |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2 |
+| SEC-10 | Touch ID | 🟡 | Tried on one Mac (Apple Silicon, macOS 27, ad-hoc signed): turning it on, unlocking, unlocking after an app update, and the record failing once a fingerprint was added. Not yet tried: macOS 13, a Mac without Touch ID, a vault moved with Migration Assistant, and the switch turning off by itself after a failure like that |
 | SEC-11 | PIN unlock | 🟡 | Tried on Windows 11, including keeping the PIN in Windows Credential Manager after a restart. Keeping it after a restart not yet tried with the Secret Service on Linux or the Keychain on macOS |
 
 ## SSH, terminal, SFTP, and forwarding (§7)
@@ -116,6 +116,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | Update check in Settings → About | ✅ | Reads `latest.json` through the Tauri updater: stable versions from the latest release, prereleases from the newest release in the GitHub API. Unit tests run against a mock endpoint and a mock release list. The automatic check runs after the first unlock and again a day later while Hatoba runs, and the tray menu offers the update (unit tests). Tried on Windows against a published release |
 | Star prompt and **Report a Problem** (§9) | ✅ | Unit tests cover when the prompt shows and the bug report link. Filling in the bug report form tried on GitHub |
 | Signed updates through the Tauri updater | 🟡 | **Download and Install** in Settings → About. Tried end to end on Windows with a local endpoint ([Signed updates](development.md#signed-updates)) and against a published release, not yet on Linux or macOS |
+| Updates of package-manager installs (Scoop, AUR) | 🟡 | A `managed-by-package-manager` marker in the resource folder turns the in-app update off, and the About page names the package manager instead. Unit tests cover reading the marker, the skipped automatic check, the missing sidebar dot and tray item, and the About page; tried in the browser mock (`?manager=scoop`). Not yet tried with a Scoop or AUR install |
 
 ## AI assistant (§13)
 
@@ -147,7 +148,7 @@ A contributor tried these by hand on an Apple Silicon Mac; the maintainer has no
 | AI-44 | MCP server templates: GitHub, Linear, Context7, Cloudflare | 🟡 | Unit tests cover the filled-in form and what it saves, and the dialog was tried with the mock backend. None of the four templates has been tried against its service with a real token yet |
 | AI-45 | Deferred MCP tools: `search_tools`, `call_mcp_tool`, and the `mcp_tools` note | 🟡 | Turn tests run against mock Chat Completions and Anthropic Messages servers with mock `stdio` and Streamable HTTP MCP servers, and the panel was tried with the mock backend. Not yet tried against real providers and servers |
 | AI-36, 37 | Custom instructions, AI notes of a host | ✅ | |
-| AI-53 | Memory: the `memory` tool, the `memory` note, **Settings → AI → Memory**, `/memory` | ✅ | Turn tests run the tool, the note and a compaction against a mock provider. Tried in the desktop app against a real provider: the tool saving notes that later conversations read, Settings, and `/memory` |
+| AI-53 | Memory: the `memory` tool, the `memory` note, global, host and local-terminal memories, **Settings → AI → Memory**, `/memory` | ✅ / 🟡 | Turn tests run the tool, the note and a compaction against a mock provider, including host memories and the note of a move to another host. Tried in the desktop app against a real provider: the tool saving notes that later conversations read, Settings, and `/memory`. Host and local-terminal memories are not yet tried in the desktop app |
 | AI-50 | `/` commands: `/btw`, `/clear`, `/compact`, `/mcp`, `/memory`, `/model`, skills, and MCP prompts | ✅ / 🟡 | Unit tests cover the parsing and the menu, and mock `stdio` MCP servers cover `prompts/list` and `prompts/get`. `/btw`, `/clear`, `/compact`, `/memory`, `/model` and skills tried in the desktop app against real providers; `/mcp` and MCP prompts not yet tried with real servers |
 | AI-51 | `@` mentions: files and folders on the tab's host, MCP resources, text files from this computer | ✅ / 🟡 | The listing script runs against the local `sh` on Linux and macOS, and mock `stdio` MCP servers cover `resources/list` and `resources/read`. Files and folders on a real server and on a local tab, and text files from this computer, tried in the desktop app; MCP resources not yet tried with real servers |
 

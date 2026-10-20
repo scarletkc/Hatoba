@@ -52,12 +52,14 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth | too_large
  *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
+ *   ?manager=scoop | aur | other            (the package manager that installed Hatoba)
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
  *   ?ssh=timeout | refused | dns | unreachable | auth_failed | disconnected | proxy_unreachable | proxy_auth | proxy
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?biometric=unavailable | stale | cancelled   (how Windows Hello or Touch ID fails)
  *   ?lang=en | zh-CN | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
@@ -66,7 +68,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * `available`, `badsig` and `dropped` find v0.2.0. Installing it downloads for a few seconds and
  * then stays at "installing", where the real app closes; `badsig` fails the signature check and
- * `dropped` loses the connection partway through the download.
+ * `dropped` loses the connection partway through the download. With `?manager`, the About page
+ * leaves updates to that package manager.
  * The in-app deployment accepts any API token of 20 or more characters.
  * `?launch` is what followed `hatoba` on the command line (HOST-13), which the window takes once
  * it is unlocked, e.g. `?launch=root@db` or `?launch=ssh -p 2222 deploy@10.0.0.5`. The `hatoba`
@@ -95,6 +98,8 @@ export function createMockApi(): HatobaApi {
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
+  const managerParam = q.get("manager");
+  const packageManager = managerParam === "scoop" || managerParam === "aur" || managerParam === "other" ? managerParam : null;
   const deployDemo = q.get("deploy");
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
@@ -130,6 +135,7 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  const biometricRefusal = q.get("biometric");
   const pinDemo = q.get("pin");
   const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
   /** Any full unlock arms the PIN again and resets its failures. */
@@ -266,7 +272,7 @@ export function createMockApi(): HatobaApi {
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
       memory: memory_tool,
     }),
-    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC" }),
+    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC", package_manager: packageManager }),
     launch_take: async () => {
       needUnlocked();
       return launches.splice(0);
@@ -335,6 +341,13 @@ export function createMockApi(): HatobaApi {
     },
     vault_unlock_biometric: async () => {
       await delay(700);
+      if (biometricRefusal === "unavailable") fail("biometric_unavailable", "Touch ID unavailable");
+      if (biometricRefusal === "stale") {
+        // The backend removes an enrolment that no longer opens.
+        biometric = false;
+        fail("biometric_stale", "Touch ID key invalidated (fingerprints changed)");
+      }
+      if (biometricRefusal === "cancelled") fail("cancelled");
       armPin();
       vaultState = "unlocked";
     },

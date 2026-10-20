@@ -938,15 +938,24 @@ pub struct SkillFile {
     pub updated_at: i64,
 }
 
-/// A note the AI assistant keeps across conversations (AI-53, spec §13.12): every conversation
-/// starts with all of them.
+/// A note the AI assistant keeps across conversations (AI-53, spec §13.12). A global memory, with
+/// neither `host_id` nor `local`, shows in every conversation; a host memory only in those on its
+/// saved host, and a local one only in those on its computer's local terminal (§7.5).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize)]
 #[serde(default)]
 pub struct AiMemory {
-    /// One line, unique among memories.
+    /// One line, unique among the memories of its scope.
     pub name: String,
     /// The text: a few lines on one subject.
     pub content: String,
+    /// The saved host it belongs to. `None` (absent) is none, as for every memory from before
+    /// host memories, which are global.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_id: Option<String>,
+    /// The name of the computer whose local terminal it belongs to, while `host_id` is `None`.
+    /// `None` (absent) is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local: Option<String>,
     /// Last modification, Unix ms.
     pub updated_at: i64,
 }
@@ -2222,12 +2231,41 @@ mod tests {
             name: "web-1 sudo".into(),
             content: "web-1 uses doas, not sudo.".into(),
             updated_at: 15,
+            ..AiMemory::default()
         });
         assert_eq!(
             serde_json::to_value(&memory).unwrap(),
             json!({
                 "type": "ai_memory", "name": "web-1 sudo",
                 "content": "web-1 uses doas, not sudo.", "updated_at": 15
+            })
+        );
+        let host_memory = Item::AiMemory(AiMemory {
+            name: "sudo".into(),
+            content: "Uses doas, not sudo.".into(),
+            host_id: Some("h1".into()),
+            updated_at: 16,
+            ..AiMemory::default()
+        });
+        assert_eq!(
+            serde_json::to_value(&host_memory).unwrap(),
+            json!({
+                "type": "ai_memory", "name": "sudo", "content": "Uses doas, not sudo.",
+                "host_id": "h1", "updated_at": 16
+            })
+        );
+        let local_memory = Item::AiMemory(AiMemory {
+            name: "shell".into(),
+            content: "PowerShell 7.".into(),
+            local: Some("KC-PC".into()),
+            updated_at: 17,
+            ..AiMemory::default()
+        });
+        assert_eq!(
+            serde_json::to_value(&local_memory).unwrap(),
+            json!({
+                "type": "ai_memory", "name": "shell", "content": "PowerShell 7.",
+                "local": "KC-PC", "updated_at": 17
             })
         );
 
@@ -2281,6 +2319,8 @@ mod tests {
             stdio,
             http,
             memory,
+            host_memory,
+            local_memory,
         ] {
             let back = Item::from_plaintext(&item.to_plaintext().unwrap()).unwrap();
             assert_eq!(back, item);

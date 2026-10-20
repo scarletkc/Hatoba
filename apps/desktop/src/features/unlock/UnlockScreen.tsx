@@ -11,7 +11,7 @@ import { cx } from "@/lib/cx";
 import { RecoverSheet } from "./RecoverSheet";
 import s from "./UnlockScreen.module.css";
 
-/** Full-window lock screen (design §06, VAULT-03, SEC-06, SEC-07, SEC-11). */
+/** Full-window lock screen (design §06, VAULT-03, SEC-06, SEC-07, SEC-10, SEC-11). */
 export function UnlockScreen() {
   const t = useT();
   const vault = useApp((st) => st.vault);
@@ -82,9 +82,14 @@ export function UnlockScreen() {
   };
 
   const fail = useCallback(
-    async (e: unknown) => {
+    async (e: unknown, auto = false) => {
       const err = toAppError(e);
       if (err.code === "cancelled") return;
+      // SEC-10: with the lid closed every automatic Touch ID prompt is refused, so the reason only
+      // shows after a click on the button.
+      if (auto && err.code === "biometric_unavailable") return;
+      // The backend turned off an enrolment that no longer opens; the refresh removes the button.
+      if (err.code === "biometric_stale") void useApp.getState().refreshVault().catch(() => null);
       // The PIN no longer unlocks (too many wrong ones, or the app restarted): the field asks for
       // the master password, under the reason.
       if (err.code === "pin_unavailable" || (err.code === "wrong_pin" && !err.attempts_left)) {
@@ -97,14 +102,14 @@ export function UnlockScreen() {
         const v = await useApp.getState().refreshVault().catch(() => null);
         if (v?.retry_at) setRetryAt(v.retry_at);
       }
-      setError(errorMessage(t, e));
+      setError(errorMessage(t, e, { biometric: platform === "macos" ? "Touch ID" : "Windows Hello" }));
       if (err.code === "wrong_password" || err.code === "throttled" || err.code === "wrong_pin") setShake(true);
       requestAnimationFrame(() => {
         input.current?.focus();
         input.current?.select();
       });
     },
-    [t],
+    [t, platform],
   );
 
   const submit = async (e: FormEvent) => {
@@ -122,7 +127,7 @@ export function UnlockScreen() {
     }
   };
 
-  const unlockBiometric = async () => {
+  const unlockBiometric = async (auto = false) => {
     setBusy(true);
     setError(null);
     try {
@@ -130,20 +135,20 @@ export function UnlockScreen() {
       await enterUnlocked();
     } catch (err) {
       setBusy(false);
-      await fail(err);
+      await fail(err, auto);
     }
   };
 
-  // SEC-07: Windows Hello asks on its own, once per lock, when the user comes back to the window: at
-  // once when the app starts in front, when the window gets the focus, or (after an idle or sleep
-  // lock) at the first pointer movement in it. After a manual lock only the focus counts, so the
-  // window has to be left first; otherwise a face would unlock it again at once.
+  // SEC-07, SEC-10: Windows Hello or Touch ID asks on its own, once per lock, when the user comes
+  // back to the window: at once when the app starts in front, when the window gets the focus, or
+  // (after an idle or sleep lock) at the first pointer movement in it. After a manual lock only the
+  // focus counts, so the window has to be left first; otherwise a face would unlock it again at once.
   const prompted = useRef(false);
   const autoPrompt = useRef(() => {});
   autoPrompt.current = () => {
     if (prompted.current || busy || recovering || !document.hasFocus() || document.visibilityState !== "visible") return;
     prompted.current = true;
-    void unlockBiometric();
+    void unlockBiometric(true);
   };
   const biometricOn = !!vault?.biometric_enabled;
   useEffect(() => {

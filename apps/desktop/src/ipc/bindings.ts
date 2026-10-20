@@ -38,7 +38,8 @@ export const commands = {
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**
 	 *  Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
-	 *  session, and the installer starts the new version.
+	 *  session, and the installer starts the new version. Refused when a package manager installed
+	 *  Hatoba.
 	 */
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
 	/**
@@ -54,7 +55,10 @@ export const commands = {
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
 	/**  VAULT-03 / SEC-06: wrong passwords are throttled with increasing delays (persisted). */
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
-	/**  SEC-07 (P1): Windows Hello. */
+	/**
+	 *  SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+	 *  another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
+	 */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
 	/**
 	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
@@ -76,7 +80,10 @@ export const commands = {
 	vaultExportBackup: (path: string) => __TAURI_INVOKE<null>("vault_export_backup", { path }),
 	/**  Issues a new recovery code (the old one stops working everywhere once synced). */
 	vaultRotateRecovery: (password: string) => __TAURI_INVOKE<string>("vault_rotate_recovery", { password }),
-	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
+	/**
+	 *  SEC-07 (P1), SEC-10: enrol Windows Hello or Touch ID. Requires the master password as a fresh
+	 *  confirmation.
+	 */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
 	/**
@@ -467,11 +474,13 @@ export const commands = {
 	aiAllowanceAdd: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_add", { allowance }),
 	/**  Removes a saved approval and returns what is left. */
 	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
-	/**  Every memory, oldest first. */
+	/**  Every memory, oldest first, of every scope. */
 	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
 	/**
-	 *  Saves a memory: `id` replaces that one, together with the others of its name when the edit
-	 *  keeps it ([`memory::edited`]); none adds one.
+	 *  Saves a memory in the scope the input names, a saved host's that exists (or the deleted host
+	 *  the edited memory already belongs to) or a computer's: `id` replaces that one, which moves it
+	 *  there when it was elsewhere, together with the others of its name there when the edit keeps
+	 *  both ([`memory::edited`]); none adds one.
 	 */
 	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
 	/**  Deletes a memory. */
@@ -870,19 +879,30 @@ export type AiLocalTab = {
 	kind: LocalShellKind | null,
 };
 
-/**  A memory to save from Settings → AI (AI-53). */
+/**
+ *  A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+ *  [`AiMemoryView`].
+ */
 export type AiMemoryInput = {
 	/**  `None` creates a memory. */
 	id: string | null,
 	name: string,
 	content: string,
+	host_id: string | null,
+	local: string | null,
 };
 
-/**  A memory of the AI assistant (AI-53). */
+/**
+ *  A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+ *  host memory of a saved host or of a computer's local terminal.
+ */
 export type AiMemoryView = {
 	id: string,
 	name: string,
 	content: string,
+	host_id: string | null,
+	/**  The computer's name, while `host_id` is `None`. */
+	local: string | null,
 	updated_at: number,
 };
 
@@ -1246,6 +1266,11 @@ export type AppInfo = {
 	 *  tab records (§7.5).
 	 */
 	device_name: string,
+	/**
+	 *  The package manager that installed this copy and updates it, which turns the in-app
+	 *  update off (spec §11); `None` for the installers from the GitHub release.
+	 */
+	package_manager: PackageManager | null,
 };
 
 export type Appearance = "system" | "light" | "dark";
@@ -1509,7 +1534,18 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
 "wrong_pin" | 
 /**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
-"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+"pin_unavailable" | 
+/**
+ *  SEC-10: Touch ID can't be used now (the lid is closed, too many failed fingers, no sensor).
+ *  Only macOS produces it.
+ */
+"biometric_unavailable" | 
+/**
+ *  SEC-07, SEC-10: the saved biometric unlock no longer opens on this device (fingerprints
+ *  changed, the record is damaged or came from another Mac). `vault_unlock_biometric` removes
+ *  it.
+ */
+"biometric_stale" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -2030,6 +2066,13 @@ export type NotificationTarget = {
 	tab: string | null,
 	conversation_id: string | null,
 };
+
+/**  A package manager that installs Hatoba from the GitHub release and updates it itself. */
+export type PackageManager = "scoop" | 
+/**  The `hatoba-bin` package in the Arch User Repository. */
+"aur" | 
+/**  One that Hatoba has no instructions for. */
+"other";
 
 export type Platform = "windows" | "macos" | "linux";
 

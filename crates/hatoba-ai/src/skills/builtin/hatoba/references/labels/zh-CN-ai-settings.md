@@ -12,6 +12,9 @@ The labels that these files name in English, as the interface shows them in Simp
 | Remember across conversations | 跨对话记忆 |
 | Add Memory | 添加记忆 |
 | Delete All | 全部删除 |
+| Global | 全局 |
+| This Computer | 本机 |
+| Applies To | 适用于 |
 
 ## `references/ai-settings.md`
 

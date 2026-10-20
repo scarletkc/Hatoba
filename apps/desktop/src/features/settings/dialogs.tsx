@@ -9,7 +9,7 @@ import { useT } from "@/i18n";
 import { api, toAppError } from "@/ipc/api";
 import s from "./dialogs.module.css";
 
-/** Asks for the master password before a sensitive action (Windows Hello, new recovery code). */
+/** Asks for the master password before a sensitive action (Windows Hello or Touch ID, new recovery code). */
 export function VerifyPasswordDialog({
   body,
   onVerify,
