@@ -458,6 +458,27 @@
   text-overflow: ellipsis;
 }
 
+/* A disclosure's caret turns as it opens (DisclosureCaret), and what it shows drops into place. */
+.disclosureCaret {
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.disclosureCaretOpen {
+  transform: rotate(90deg);
+}
+
+.reveal {
+  animation: reveal var(--motion-fast) var(--ease-out);
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-rise) / -2));
+  }
+}
+
 /* Status dot */
 .dot {
   width: 7px;

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Button, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
+import { Button, controlStyles, DisclosureCaret, Icon, LinkButton, Spinner, TextField } from "@/components/controls";
 import { Callout } from "@/components/layout";
 import { PopupSelect } from "@/components/overlay";
 import { errorMessage } from "@/app/errors";
@@ -313,11 +313,11 @@ function ReviewPhase({ form, set, onJoin }: { form: DeployForm; set: Set; onJoin
 
         <div className={s.wrangler}>
           <button type="button" className={s.disclosure} aria-expanded={form.namesOpen} onClick={() => set((f) => ({ ...f, namesOpen: !f.namesOpen }))}>
-            <Icon name={form.namesOpen ? "caret-down" : "caret-right"} />
+            <DisclosureCaret open={form.namesOpen} />
             {t("sync.dep.names")}
           </button>
           {form.namesOpen && (
-            <div className={s.fields}>
+            <div className={cx(s.fields, controlStyles.reveal)}>
               <Field label={t("sync.dep.workerName")} htmlFor={workerId} error={nameError?.field === "worker" ? nameError.text : undefined}>
                 <TextField
                   id={workerId}

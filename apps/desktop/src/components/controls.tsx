@@ -39,6 +39,11 @@ export function Icon({
   );
 }
 
+/** A disclosure's caret, which turns to point down as it opens. */
+export function DisclosureCaret({ open, size, className }: { open: boolean; size?: number; className?: string }) {
+  return <Icon name="caret-right" size={size} className={cx(s.disclosureCaret, open && s.disclosureCaretOpen, className)} />;
+}
+
 /** The app icon (`src-tauri/app-icon.svg`). `className` sets its size. */
 export function AppLogo({ className }: { className?: string }) {
   return <div aria-hidden className={cx(s.appLogo, className)} />;

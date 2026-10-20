@@ -1,6 +1,6 @@
 import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
-import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
+import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
@@ -813,9 +813,9 @@ function Reasoning({ text, active }: { text: string; active: boolean }) {
       <button type="button" className={s.reasoningHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="brain" size={13} />
         <span className={active ? s.shimmer : undefined}>{t(active ? "ai.reasoning.active" : "ai.reasoning")}</span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} />
+        <DisclosureCaret open={open} size={11} />
       </button>
-      {open && <div className={cx(s.reasoningBody, "selectable")}>{text}</div>}
+      {open && <div className={cx(s.reasoningBody, controlStyles.reveal, "selectable")}>{text}</div>}
     </div>
   );
 }
@@ -831,10 +831,10 @@ function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
       <button type="button" className={s.summaryHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="arrows-in-line-vertical" size={13} />
         <span>{t("ai.summary")}</span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} />
+        <DisclosureCaret open={open} size={11} />
       </button>
       {open && (
-        <div className={s.summaryBody}>
+        <div className={cx(s.summaryBody, controlStyles.reveal)}>
           <Markdown text={text} />
         </div>
       )}
@@ -993,10 +993,10 @@ function ToolBlock({
             <StatusChip view={view} name={call.name} />
           )}
         </span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
+        <DisclosureCaret open={open} size={11} className={s.toolCaret} />
       </div>
       {open && (
-        <div className={s.toolBody}>
+        <div className={cx(s.toolBody, controlStyles.reveal)}>
           {auto && <AutoVerdict verdict={auto} />}
           {kind === "edit_file" || kind === "write_file" ? (
             <CallChange slotId={slotId} call={call} change={change} />

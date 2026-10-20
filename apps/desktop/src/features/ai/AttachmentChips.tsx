@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVaultData } from "@/app/data";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
-import { Icon } from "@/components/controls";
+import { controlStyles, DisclosureCaret, Icon } from "@/components/controls";
 import { getSession } from "@/features/terminal/session";
 import { useT } from "@/i18n";
 import { cx } from "@/lib/cx";
@@ -398,9 +398,9 @@ function AttachmentCard({ icon, title, host, badge, body }: { icon: string; titl
         <span className={s.cardTitle}>{title}</span>
         {host && <span className={s.cardHost}>{host}</span>}
         {badge && <span className={s.truncated}>{badge}</span>}
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.caret} />
+        <DisclosureCaret open={open} size={11} className={s.caret} />
       </button>
-      {open && <pre className={cx(s.cardBody, "selectable")}>{body}</pre>}
+      {open && <pre className={cx(s.cardBody, controlStyles.reveal, "selectable")}>{body}</pre>}
     </div>
   );
 }

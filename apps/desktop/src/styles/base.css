@@ -101,6 +101,13 @@ a:hover {
   text-decoration: underline;
 }
 
+/* While the theme changes (applyPrefs). */
+:root[data-theme-switch] *,
+:root[data-theme-switch] *::before,
+:root[data-theme-switch] *::after {
+  transition: none !important;
+}
+
 /* Esc already clears search fields; datalist suggestions need no arrow. */
 input[type="search"]::-webkit-search-cancel-button,
 input[type="search"]::-webkit-search-decoration {

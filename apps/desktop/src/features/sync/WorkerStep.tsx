@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
+import { Button, DisclosureCaret, Icon, LinkButton, StatusDot, TextField } from "@/components/controls";
 import { errorMessage } from "@/app/errors";
 import { Field } from "@/features/keys/Field";
 import { useT } from "@/i18n";
@@ -111,7 +111,7 @@ export function WorkerStep({
 
       <div className={s.wrangler}>
         <button type="button" className={s.disclosure} aria-expanded={wranglerOpen} onClick={() => setWranglerOpen((v) => !v)}>
-          <Icon name={wranglerOpen ? "caret-down" : "caret-right"} />
+          <DisclosureCaret open={wranglerOpen} />
           {t("sync.wrangler")}
         </button>
         {wranglerOpen && (
