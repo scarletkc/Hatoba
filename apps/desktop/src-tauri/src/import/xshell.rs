@@ -96,7 +96,7 @@ fn read_zip(file: impl Read + Seek) -> AppResult<Vec<Entry>> {
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|e| AppError::invalid("path", format!("not an Xshell export: {e}")))?;
     if archive.len() > MAX_FILES {
-        return Err(AppError::invalid("path", "the export holds too many files"));
+        return Err(AppError::io("the export holds too many files"));
     }
     let mut entries = Vec::new();
     let mut total = 0u64;
@@ -138,7 +138,7 @@ fn read_zip(file: impl Read + Seek) -> AppResult<Vec<Entry>> {
             .map_err(AppError::io)?;
         total += bytes.len() as u64;
         if bytes.len() as u64 > MAX_FILE_BYTES || total > 4 * MAX_FILE_BYTES {
-            return Err(AppError::invalid("path", "the export is too large"));
+            return Err(AppError::io("the export is too large"));
         }
         let id = parts
             .iter()

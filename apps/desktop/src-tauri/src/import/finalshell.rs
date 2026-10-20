@@ -92,7 +92,13 @@ fn read_conn(conn: &Path) -> AppResult<Vec<Entry>> {
                 folders.insert(folder.id.clone(), folder);
             }
         } else if name.ends_with("_connect_config.json") {
-            connections.extend(parse(&path)?);
+            connections.extend(parse::<Connection>(&path)?.map(|mut c| {
+                // Each connection has its own file, which stands in for a missing id.
+                if c.id.is_empty() {
+                    c.id = path.to_string_lossy().into_owned();
+                }
+                c
+            }));
         }
     }
     Ok(connections
@@ -115,11 +121,7 @@ fn entry(c: Connection, folders: &HashMap<String, Folder>) -> Option<Entry> {
     }
     let key = !c.secret_key_id.is_empty() && c.authentication_type != Some(PASSWORD_AUTH);
     Some(Entry {
-        id: if c.id.is_empty() {
-            address.clone()
-        } else {
-            c.id
-        },
+        id: c.id,
         name: match c.name.trim() {
             "" => address.clone(),
             name => name.to_owned(),

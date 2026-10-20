@@ -199,7 +199,7 @@ pub fn host_save(
 
 /// With sync on, refuses a host too large to sync: the Worker and D1 would reject its envelope on
 /// every sync (§6.2). Long notes or environment variables are what make a host this large.
-fn check_item_size(vault: &Vault, item: &Item) -> AppResult<()> {
+pub(crate) fn check_item_size(vault: &Vault, item: &Item) -> AppResult<()> {
     if vault.sync_config()?.is_some() && item.plaintext_len()? > MAX_ITEM_PLAINTEXT_BYTES {
         return Err(AppError::invalid(
             "host",

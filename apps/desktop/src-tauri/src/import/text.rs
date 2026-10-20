@@ -29,16 +29,13 @@ pub(super) fn read_file(path: &Path) -> AppResult<Vec<u8>> {
         .read_to_end(&mut bytes)
         .map_err(AppError::io)?;
     if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(AppError::invalid(
-            "path",
-            format!("{} is too large", path.display()),
-        ));
+        return Err(AppError::io(format!("{} is too large", path.display())));
     }
     Ok(bytes)
 }
 
-/// Decodes the text of a file another app saved: UTF-8 or UTF-16 with a byte order mark, UTF-8
-/// without one, and otherwise the Windows ANSI code page, which older Windows apps write.
+/// Decodes the text of a file another app saved: UTF-8 or UTF-16 with a byte order mark, UTF-16
+/// or UTF-8 without one, and otherwise the Windows ANSI code page, which older Windows apps write.
 pub(super) fn decode(bytes: &[u8]) -> String {
     decode_with(bytes, ansi())
 }
@@ -51,9 +48,36 @@ pub(super) fn decode_with(bytes: &[u8], ansi: &'static Encoding) -> String {
             .0
             .into_owned();
     }
+    if let Some(encoding) = utf16_without_bom(bytes) {
+        return encoding.decode_without_bom_handling(bytes).0.into_owned();
+    }
     match std::str::from_utf8(bytes) {
         Ok(text) => text.to_owned(),
         Err(_) => ansi.decode_without_bom_handling(bytes).0.into_owned(),
+    }
+}
+
+/// UTF-16 without a byte order mark, told by the zero byte of each ASCII character, which session
+/// files are mostly made of: text in UTF-8 or an ANSI code page has no zero bytes. A few characters
+/// such as 一 (U+4E00) have a zero byte on the other side.
+fn utf16_without_bom(bytes: &[u8]) -> Option<&'static Encoding> {
+    let (pairs, rest) = bytes.as_chunks::<2>();
+    if pairs.len() < 2 || !rest.is_empty() {
+        return None;
+    }
+    let (first, second) = pairs.iter().fold((0, 0), |(first, second), pair| {
+        (
+            first + usize::from(pair[0] == 0),
+            second + usize::from(pair[1] == 0),
+        )
+    });
+    let half = bytes.len() / 4;
+    if second > half && first < second / 8 {
+        Some(encoding_rs::UTF_16LE)
+    } else if first > half && second < first / 8 {
+        Some(encoding_rs::UTF_16BE)
+    } else {
+        None
     }
 }
 
@@ -168,10 +192,10 @@ fn walk(
             folders.pop();
         } else if kind.is_file() {
             if files.len() == MAX_FILES {
-                return Err(AppError::invalid(
-                    "path",
-                    format!("{} holds too many files", dir.display()),
-                ));
+                return Err(AppError::io(format!(
+                    "{} holds too many files",
+                    dir.display()
+                )));
             }
             files.push((entry.path(), folders.clone()));
         }
@@ -197,6 +221,20 @@ mod tests {
             decode_with(&utf16, encoding_rs::GBK),
             "[CONNECTION]\r\nHost=生产"
         );
+        // Without the byte order mark too, with a character whose low byte is zero.
+        let bare: Vec<u8> = "[CONNECTION]\r\nHost=一号机"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        assert_eq!(
+            decode_with(&bare, encoding_rs::GBK),
+            "[CONNECTION]\r\nHost=一号机"
+        );
+        let be: Vec<u8> = "Host=web"
+            .encode_utf16()
+            .flat_map(u16::to_be_bytes)
+            .collect();
+        assert_eq!(decode_with(&be, encoding_rs::GBK), "Host=web");
         assert_eq!(
             decode_with("\u{feff}a=1".as_bytes(), encoding_rs::GBK),
             "a=1"

@@ -13,7 +13,7 @@ use hatoba_core::vault::Vault;
 use hatoba_ssh::ParsedKey;
 use tauri::{AppHandle, State};
 
-use crate::commands::hosts::MAX_NAME_CHARS;
+use crate::commands::hosts::{MAX_NAME_CHARS, check_item_size};
 use crate::commands::proxies::MAX_CREDENTIAL_BYTES;
 use crate::dto::{ImportCandidate, ImportPreview, ImportResult, ImportSource};
 use crate::error::AppResult;
@@ -293,7 +293,7 @@ fn import_hosts(v: &mut Vault, prepared: Prepared) -> AppResult<ImportResult> {
                 }
             },
         };
-        let host = Host {
+        let mut host = Host {
             group_id: group_for(v, &entry.folder, &mut groups)?,
             env: import_env(&name, &entry.set_env, &mut result.warnings),
             name: name.clone(),
@@ -305,7 +305,17 @@ fn import_hosts(v: &mut Vault, prepared: Prepared) -> AppResult<ImportResult> {
             note: entry.note,
             ..Host::default()
         };
-        let id = v.put(None, Item::Host(host))?;
+        // As the host editor does while sync is on, a host too large to sync is not saved: its
+        // note, which other clients don't bound, is left out instead.
+        let mut item = Item::Host(host.clone());
+        if !host.note.is_empty() && check_item_size(v, &item).is_err() {
+            host.note.clear();
+            item = Item::Host(host);
+            result.warnings.push(format!(
+                "{name}: its note was too long to sync and was not imported"
+            ));
+        }
+        let id = v.put(None, item)?;
         result.hosts_created += 1;
         by_entry.insert(entry.id, id.clone());
         created.push((id, name, entry.jump));
@@ -317,7 +327,7 @@ fn import_hosts(v: &mut Vault, prepared: Prepared) -> AppResult<ImportResult> {
         .into_iter()
         .map(|(id, h)| (h.name.to_lowercase(), id))
         .collect();
-    let mut gateways: HashMap<(String, u16, Option<String>), String> = HashMap::new();
+    let mut gateways: HashMap<GatewayKey, String> = HashMap::new();
     for (id, name, jump) in created {
         let (jump_id, what) = match &jump {
             None => continue,
@@ -459,6 +469,10 @@ fn proxy_for(v: &mut Vault, proxy: &import::Proxy) -> AppResult<Result<String, S
     Ok(Ok(id))
 }
 
+/// A gateway host already found or added in this import: its address, port and user, and the host
+/// before it.
+type GatewayKey = (String, u16, Option<String>, Option<String>);
+
 /// The host a chain of gateways ends at, outermost first: a saved host with the gateway's address,
 /// port and user that goes through the gateway before it (any saved one for the outermost), or a
 /// new one named after its address. A new one signs in with the SSH agent, as MobaXterm and PuTTY
@@ -466,7 +480,7 @@ fn proxy_for(v: &mut Vault, proxy: &import::Proxy) -> AppResult<Result<String, S
 fn gateway_chain(
     v: &mut Vault,
     list: &[Gateway],
-    cache: &mut HashMap<(String, u16, Option<String>), String>,
+    cache: &mut HashMap<GatewayKey, String>,
     result: &mut ImportResult,
 ) -> AppResult<Option<String>> {
     let mut previous: Option<String> = None;
@@ -475,6 +489,7 @@ fn gateway_chain(
             gateway.address.to_lowercase(),
             gateway.port,
             gateway.username.clone(),
+            previous.clone(),
         );
         if let Some(id) = cache.get(&key) {
             previous = Some(id.clone());
@@ -1118,6 +1133,90 @@ mod tests {
         );
         assert_eq!(jump_of("pg"), Some(inner.clone()));
         assert_eq!(jump_of("pg2"), Some(inner));
+    }
+
+    #[test]
+    fn a_gateway_reached_through_another_route_is_another_host() {
+        let mut v = vault();
+        let via = |name: &str, outer: &str| Entry {
+            jump: Some(Jump::Gateways(vec![
+                Gateway {
+                    address: outer.into(),
+                    port: 22,
+                    username: None,
+                },
+                Gateway {
+                    address: "inner.example.org".into(),
+                    port: 22,
+                    username: None,
+                },
+            ])),
+            ..entry(name, &[])
+        };
+        let result = import(
+            &mut v,
+            vec![via("a", "one.example.org"), via("b", "two.example.org")],
+            &["a", "b"],
+            &[],
+        );
+        assert_eq!(result.hosts_created, 2 + 4);
+        let jump_of = |id: &str| {
+            v.get(id)
+                .and_then(Item::as_host)
+                .and_then(|h| h.jump_host_id.clone())
+        };
+        let inner_a = host(&v, "a").1.jump_host_id.unwrap();
+        let inner_b = host(&v, "b").1.jump_host_id.unwrap();
+        assert_ne!(inner_a, inner_b);
+        assert_eq!(jump_of(&inner_a), Some(host(&v, "one.example.org").0));
+        assert_eq!(jump_of(&inner_b), Some(host(&v, "two.example.org").0));
+    }
+
+    #[test]
+    fn a_note_too_large_to_sync_is_left_out_while_sync_is_on() {
+        let mut v = vault();
+        let config = hatoba_core::sync::SyncConfig::Worker {
+            url: "https://sync.example.workers.dev".into(),
+            deployment: None,
+        };
+        v.set_sync_config(Some(&config)).unwrap();
+        let noted = |name: &str, note: String| Entry {
+            note,
+            ..entry(name, &[])
+        };
+        let result = import(
+            &mut v,
+            vec![
+                noted(
+                    "long",
+                    "n".repeat(hatoba_core::model::MAX_ITEM_PLAINTEXT_BYTES),
+                ),
+                noted("short", "on the rack".into()),
+            ],
+            &["long", "short"],
+            &[],
+        );
+        assert_eq!(
+            result.warnings,
+            ["long: its note was too long to sync and was not imported"]
+        );
+        assert_eq!(host(&v, "long").1.note, "");
+        assert_eq!(host(&v, "short").1.note, "on the rack");
+    }
+
+    #[test]
+    fn read_drops_ipv6_brackets_and_addresses_no_host_could_have() {
+        let dir = KeyDir::new();
+        let config = dir.file(
+            "config.yaml",
+            "profiles:\n\
+             - {type: ssh, id: a, name: v6, options: {host: '[2001:db8::1]'}}\n\
+             - {type: ssh, id: b, name: spaced, options: {host: 'web example'}}\n\
+             - {type: ssh, id: c, name: web, options: {host: web.example.org}}\n",
+        );
+        let found = read(ImportSource::Tabby, Some(&config)).unwrap();
+        let addresses: Vec<&str> = found.entries.iter().map(|e| e.address.as_str()).collect();
+        assert_eq!(addresses, ["2001:db8::1", "web.example.org"]);
     }
 
     #[test]

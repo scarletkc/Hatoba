@@ -58,8 +58,9 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
     let cancelled = false;
     setPreview(null);
     setError(null);
-    // Ids belong to the sessions they were read from.
+    // Ids and key files belong to the sessions they were read from.
     setPicked(new Set());
+    setImportKeys(false);
     api
       .hosts_import_preview(source, path)
       .then((found) => {
