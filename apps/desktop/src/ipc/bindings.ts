@@ -1772,7 +1772,7 @@ export type ImportResult = {
 };
 
 /**  Where a host import reads from (SSH-11, SSH-12, SSH-15). */
-export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "tabby";
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
 
 export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
 

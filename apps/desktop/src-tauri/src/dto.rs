@@ -162,6 +162,7 @@ pub enum ImportSource {
     Finalshell,
     Mobaxterm,
     Putty,
+    Securecrt,
     Tabby,
 }
 

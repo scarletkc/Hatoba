@@ -227,7 +227,7 @@ export interface TagCount {
 }
 
 /** Where a host import reads from (SSH-11, SSH-12, SSH-15). */
-export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "tabby";
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
 
 export interface ImportPreview {
   /** The file, folder or registry key the hosts were read from; null when nothing was found where the client keeps its sessions. */

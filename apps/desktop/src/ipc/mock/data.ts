@@ -544,6 +544,14 @@ export function importCandidates(source: ImportSource): Candidate[] {
         candidate({ id: "vps-la", address: "203.0.113.40", identity_file: "C:\\Users\\demo\\keys\\vps.ppk", identity_file_found: true }),
         candidate({ id: "old-box", address: "10.0.9.9", skipped_proxy: "SOCKS4 proxy 10.0.0.1:1080" }),
       ];
+    case "securecrt":
+      return [
+        candidate({ id: "Jump/bastion", name: "bastion", address: "bastion.example.net", username: "ops", folder: "Jump" }),
+        candidate({ id: "HQ/Core/core-sw1", name: "core-sw1", address: "10.1.1.1", username: "admin", folder: "HQ / Core", jump: "bastion" }),
+        candidate({ id: "HQ/Core/core-sw2", name: "core-sw2", address: "10.1.1.2", username: "admin", folder: "HQ / Core", jump: "bastion" }),
+        candidate({ id: "HQ/Servers/web-01", name: "web-01", address: "10.1.2.11", username: "deploy", folder: "HQ / Servers", identity_file: "C:\\Users\\demo\\Documents\\keys\\web.ppk", identity_file_found: true }),
+        candidate({ id: "Lab/lab-rtr", name: "lab-rtr", address: "192.168.50.1", folder: "Lab", skipped_proxy: "SecureCRT firewall Lab SOCKS" }),
+      ];
     case "tabby":
       return [
         candidate({ id: "ssh:custom:bastion:1", name: "bastion", address: "bastion.example.org", username: "jump" }),
@@ -567,6 +575,8 @@ export function importLocation(source: ImportSource, platform: string): string |
       return windows ? "C:\\Users\\demo\\AppData\\Roaming\\MobaXterm\\MobaXterm.ini" : null;
     case "putty":
       return windows ? "HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions" : null;
+    case "securecrt":
+      return windows ? "C:\\Users\\demo\\AppData\\Roaming\\VanDyke\\Config\\Sessions" : "/home/demo/.vandyke/SecureCRT/Config/Sessions";
     case "tabby":
       return windows ? "C:\\Users\\demo\\AppData\\Roaming\\tabby\\config.yaml" : "/home/demo/.config/tabby/config.yaml";
   }

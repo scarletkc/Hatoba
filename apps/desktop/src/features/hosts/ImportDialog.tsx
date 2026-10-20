@@ -17,6 +17,7 @@ export const IMPORT_APPS = {
   finalshell: "FinalShell",
   mobaxterm: "MobaXterm",
   putty: "PuTTY",
+  securecrt: "SecureCRT",
   tabby: "Tabby",
 } satisfies Record<Exclude<ImportSource, "ssh_config">, string>;
 
@@ -29,6 +30,7 @@ const CHOOSE: Record<ImportSource, Choice[]> = {
   finalshell: [{ directory: true }],
   mobaxterm: [{ extensions: ["mxtsessions", "ini"] }],
   putty: [{ extensions: ["reg"] }],
+  securecrt: [{ directory: true }],
   tabby: [{ extensions: ["yaml", "yml"] }],
 };
 

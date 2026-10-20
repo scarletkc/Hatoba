@@ -1,10 +1,11 @@
 //! Hosts saved by other SSH clients, read for import (SSH-11, SSH-12, SSH-15): `~/.ssh/config`,
-//! Xshell, FinalShell, MobaXterm, PuTTY and Tabby. Each reader turns its client's sessions into
-//! [`Entry`] values; `commands::import` previews them and creates the hosts.
+//! Xshell, FinalShell, MobaXterm, PuTTY, SecureCRT and Tabby. Each reader turns its client's
+//! sessions into [`Entry`] values; `commands::import` previews them and creates the hosts.
 
 mod finalshell;
 mod mobaxterm;
 mod putty;
+mod securecrt;
 mod ssh_config;
 mod tabby;
 mod text;
@@ -117,6 +118,7 @@ pub fn read(source: ImportSource, path: Option<&Path>) -> AppResult<Source> {
         ImportSource::Finalshell => finalshell::read(path),
         ImportSource::Mobaxterm => mobaxterm::read(path),
         ImportSource::Putty => putty::read(path),
+        ImportSource::Securecrt => securecrt::read(path),
         ImportSource::Tabby => tabby::read(path),
     }
 }

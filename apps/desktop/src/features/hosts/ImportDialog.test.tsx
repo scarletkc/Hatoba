@@ -68,6 +68,16 @@ describe("ImportDialog", () => {
     await until(() => dialogText().includes(t("hosts.import.subtitle", { path: "/demo/export.xts" })) || null);
   });
 
+  it("reads SecureCRT's sessions from a configuration folder the user chooses", async () => {
+    render(<ImportDialog source="securecrt" onClose={() => {}} />);
+    await until(() => document.querySelector("[role=dialog] [role=group]"));
+    expect(dialogText()).toContain("core-sw1");
+    expect(dialogText()).toContain("HQ / Core");
+    expect(button(t("hosts.import.chooseFile"))).toBeUndefined();
+    await act(async () => button(t("hosts.import.chooseFolder"))?.click());
+    await until(() => dialogText().includes(t("hosts.import.subtitle", { path: "/demo/folder" })) || null);
+  });
+
   it("imports the ticked hosts into groups named after their folders, then closes", async () => {
     const onClose = vi.fn();
     render(<ImportDialog source="tabby" onClose={onClose} />);
