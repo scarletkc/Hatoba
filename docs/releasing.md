@@ -100,7 +100,7 @@ Each stable release reaches winget, Scoop, and the AUR once it is published. Pre
 - **Scoop.** The `hatoba` manifest in the [Extras bucket](https://github.com/ScoopInstaller/Extras) has `checkver` and `autoupdate`: the bucket's Excavator workflow checks the latest stable release every four hours and updates the manifest's version and hash from `SHA256SUMS.txt`. Nothing runs in this repository.
 - **AUR.** The **AUR** job sets `pkgver` in [`packaging/aur/PKGBUILD`](../packaging/aur/PKGBUILD) to the release's version, fills in the checksums from the release, builds the package to check it, and pushes it with its `.SRCINFO` to [`hatoba-bin`](https://aur.archlinux.org/packages/hatoba-bin).
 
-They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest, and renaming the deb package to `source` in the PKGBUILD.
+They find the files by their names in the release (`INSTALLERS` in `release.mjs`). Renaming the Windows installer also needs a change to `installers-regex` of the winget job and to the `autoupdate` URL of the Scoop manifest. Renaming the deb package needs a change to the URL in `source` of the PKGBUILD.
 
 ### Set up the package managers
 
@@ -109,7 +109,7 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
 1. In the repository's **Settings → Environments**, create an environment named `packages`. Leave **Required reviewers** off. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`.
 2. For winget:
    1. Fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) to your account.
-   2. Create a classic personal access token with the `public_repo` and `workflow` scopes, and add it to the `packages` environment as the secret `WINGET_TOKEN`. WinGet Releaser does not support fine-grained tokens, and it needs `workflow` to sync the fork. The token can write to every public repository of your account.
+   2. Create a classic personal access token with the `public_repo` and `workflow` scopes, and add it to the `packages` environment as the secret `WINGET_TOKEN`. WinGet Releaser does not support fine-grained tokens, and it needs `workflow` to sync the fork. The token can write to every public repository of its account: to keep it away from yours, fork and create the token on a separate account, and set `fork-user` of the winget job to that account.
    3. Submit the first version by hand, because WinGet Releaser only updates a package that winget-pkgs already has. Install [Komac](https://github.com/russellbanks/Komac), save the token with `komac token add`, and run:
 
       ```sh
@@ -119,7 +119,7 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
       Komac reads the rest from the installer and asks for the fields it cannot read. On the pull request, agree to Microsoft's CLA when its bot asks.
 3. For the AUR:
    1. If someone else maintains `hatoba-bin`, ask them to add your AUR account as a co-maintainer.
-   2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
+   2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f <a folder outside the repository>/aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
 4. For Scoop, open a package request issue in [ScoopInstaller/Extras](https://github.com/ScoopInstaller/Extras/issues/new/choose), then a pull request that adds `bucket/hatoba.json` and closes the issue.
 
 ### When a submission fails

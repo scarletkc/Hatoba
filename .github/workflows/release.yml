@@ -202,12 +202,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Holds the tokens of the package managers. It allows only main and has no required reviewers:
-    # the release is already approved and published.
+    # the release is already approved and published. The actions that get them are pinned to a
+    # commit.
     environment: packages
     steps:
       # Opens a pull request in microsoft/winget-pkgs from the owner's fork, with the manifests of
       # the latest version there updated to this release's installer.
-      - uses: vedantmgoyal9/winget-releaser@v2
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: ScarletKc.Hatoba
           release-tag: ${{ needs.preflight.outputs.tag }}
@@ -232,7 +233,7 @@ jobs:
           VERSION: ${{ needs.preflight.outputs.version }}
       # Fills in the checksums from the release's files, builds the package to check it, and pushes
       # the PKGBUILD with its .SRCINFO to the AUR. It commits nothing when the AUR already has them.
-      - uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+      - uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
         with:
           pkgname: hatoba-bin
           pkgbuild: packaging/aur/PKGBUILD
