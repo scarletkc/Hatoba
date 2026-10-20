@@ -974,6 +974,9 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
         "gpt-50",
         "gemini-2.6-pro",
         "o5",
+        // ChatGPT's chat models do not reason as their namesakes do.
+        "gpt-5-chat-latest",
+        "openai/gpt-5.5-chat",
         "house/model",
         "",
     ] {

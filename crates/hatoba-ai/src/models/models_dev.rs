@@ -8,7 +8,8 @@
 //! entry for a model may name other levels. A model is matched by id, without a vendor prefix
 //! (`anthropic/claude-opus-4.8`, `us.anthropic.claude-opus-4-8-v1:0`) and with suffixes such as a
 //! date, `-thinking`, `:free` or `[1m]` ignored, but never across versions: `claude-opus-5-7` and
-//! `gpt-5.9` are unknown until models.dev has them.
+//! `gpt-5.9` are unknown until models.dev has them. Nor is a ChatGPT `-chat` model the model it
+//! names (`gpt-5.2-chat-latest` does not reason as `gpt-5.2` does), and models.dev has none.
 //!
 //! The thinking levels are those of the vendor's own request format, so they apply only on that
 //! protocol: Anthropic's levels on `anthropic`, DeepSeek's (the same in both of its formats) on
@@ -441,7 +442,8 @@ fn normalize(id: &str) -> String {
 /// Whether the normalized `id` is `key`, or `key` and a suffix: a date (`-20250929`,
 /// `-2024-08-06`, `@20251101`), a variant (`-thinking`, `-preview`, `:free`, `[1m]`, `-v1:0`) or a
 /// size (`-120b`, `:20b`). A short number after a dash continues the version instead
-/// (`claude-opus-5` is not `claude-opus-5-5`), as does a dot (`gpt-5` is not `gpt-5.1`).
+/// (`claude-opus-5` is not `claude-opus-5-5`), as does a dot (`gpt-5` is not `gpt-5.1`), and
+/// `-chat` names another model (`gpt-5-chat-latest` is not `gpt-5`).
 fn matches(id: &str, key: &str) -> bool {
     let Some(rest) = id.strip_prefix(key) else {
         return false;
@@ -450,6 +452,9 @@ fn matches(id: &str, key: &str) -> bool {
         None | Some(':' | '@' | '[') => true,
         Some('-') => {
             let rest = &rest[1..];
+            if rest.starts_with("chat") {
+                return false;
+            }
             let digits = rest.chars().take_while(char::is_ascii_digit).count();
             let version = (1..=2).contains(&digits)
                 && !rest[digits..].starts_with(|c: char| c.is_ascii_alphanumeric());
