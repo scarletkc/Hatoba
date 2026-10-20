@@ -181,12 +181,15 @@ describe("read-only commands (§13.5)", () => {
       "sort -o out in",
       "sort --output=out in",
       "sort *",
-      // A second operand is the file uniq writes; `-` is standard input, and every word after `--` an operand.
+      // A second operand is the file uniq writes; `-` is standard input, and every word after `--` or the
+      // first operand an operand, as BSD uniq reads it.
       "uniq in out",
       "uniq - out",
       "uniq -c - out",
       "uniq -- - out",
       "uniq -- in out",
+      "uniq access.log -out",
+      "uniq - -c",
       "printf 'x' | uniq - ~/.bashrc",
       "cat f | uniq - path",
       "file -C -m magic",

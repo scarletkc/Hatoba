@@ -474,14 +474,13 @@ function dateReads(args: string[]): boolean {
 }
 
 /**
- * `uniq` with one input at most: a second operand is the file it writes. A lone `-` (standard input) is an
- * operand, and so is every word after `--`.
+ * `uniq` with one input at most: a second operand is the file it writes. Options end at `--` or at the first
+ * operand, a lone `-` (standard input) included, as in BSD uniq, so every word after it is an operand.
  */
 function uniqReads(args: string[]): boolean {
-  const end = args.indexOf("--");
-  const options = end < 0 ? args : args.slice(0, end);
-  const operands = options.filter((a) => a === "-" || !a.startsWith("-")).length + (end < 0 ? 0 : args.length - end - 1);
-  return operands <= 1;
+  const first = args.findIndex((a) => a === "-" || !a.startsWith("-") || a === "--");
+  if (first < 0) return true;
+  return args.length - (args[first] === "--" ? first + 1 : first) <= 1;
 }
 
 /** `hostname` that shows a name; with an argument, it sets it. */
