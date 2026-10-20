@@ -154,13 +154,19 @@ mod imp {
         }
 
         fn status_error(status: KeyCredentialStatus) -> AppError {
-            if status == KeyCredentialStatus::UserCanceled {
-                AppError::new(ErrorCode::Cancelled, "Windows Hello was cancelled")
-            } else {
-                AppError::new(
+            match status {
+                KeyCredentialStatus::UserCanceled => {
+                    AppError::new(ErrorCode::Cancelled, "Windows Hello was cancelled")
+                }
+                // The credential was deleted since enrolment, e.g. by resetting Windows Hello.
+                KeyCredentialStatus::NotFound => AppError::new(
+                    ErrorCode::BiometricStale,
+                    "Windows Hello credential is gone",
+                ),
+                _ => AppError::new(
                     ErrorCode::Internal,
                     format!("Windows Hello failed ({status:?})"),
-                )
+                ),
             }
         }
 

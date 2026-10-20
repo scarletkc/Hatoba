@@ -55,8 +55,8 @@ export const commands = {
 	/**  VAULT-03 / SEC-06: wrong passwords are throttled with increasing delays (persisted). */
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
 	/**
-	 *  SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment this device can no longer open is
-	 *  removed, so the switch reads off and the lock screen stops offering it.
+	 *  SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+	 *  another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
 	 */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
 	/**

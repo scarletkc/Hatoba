@@ -174,23 +174,31 @@ pub async fn vault_unlock(
     Ok(())
 }
 
-/// SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment this device can no longer open is
-/// removed, so the switch reads off and the lock screen stops offering it.
+/// SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+/// another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
 #[tauri::command]
 #[specta::specta]
 pub async fn vault_unlock_biometric(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let key = match biometric::unlock(&app, state.secrets.as_ref()).await {
-        Ok(key) => key,
-        Err(e) => {
-            if e.code == ErrorCode::BiometricStale
-                && let Err(r) = biometric::remove(&app, state.secrets.as_ref())
-            {
-                tracing::warn!("could not remove the stale biometric unlock: {}", r.detail);
-            }
-            return Err(e);
-        }
+    let unlocked = match biometric::unlock(&app, state.secrets.as_ref()).await {
+        Ok(key) => state
+            .vault()
+            .unlock_with_vault_key(key)
+            .map_err(|e| match e {
+                hatoba_core::Error::WrongVaultKey => AppError::new(
+                    ErrorCode::BiometricStale,
+                    "biometric unlock holds another vault's key",
+                ),
+                e => e.into(),
+            }),
+        Err(e) => Err(e),
     };
-    state.vault().unlock_with_vault_key(key)?;
+    if let Err(e) = &unlocked
+        && e.code == ErrorCode::BiometricStale
+        && let Err(r) = biometric::remove(&app, state.secrets.as_ref())
+    {
+        tracing::warn!("could not remove the stale biometric unlock: {}", r.detail);
+    }
+    unlocked?;
     after_unlock(&app, &state);
     Ok(())
 }
