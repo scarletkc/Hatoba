@@ -13,6 +13,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![Sync](https://img.shields.io/badge/sync-Cloudflare%20Workers%20%2B%20D1-F38020?logo=cloudflare&logoColor=white)](workers/sync/README.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Mentioned in Awesome Rust](https://img.shields.io/badge/mentioned%20in-Awesome%20Rust-FC60A8?logo=awesomelists&logoColor=white)](https://github.com/rust-unofficial/awesome-rust#applications)
 
 <img src="docs/media/hatoba-demo.webp" alt="The AI assistant finds and fixes an nginx 502 on a server, then Hatoba deploys its sync Worker to Cloudflare" width="880" />
 
