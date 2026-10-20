@@ -436,9 +436,12 @@ export interface HatobaApi {
   ai_allowance_remove(allowance: AiAllowance): Promise<AiAllowance[]>;
 
   // AI memory (§13.12)
-  /** AI-53: every memory, oldest first. */
+  /** AI-53: every memory of every scope, oldest first. */
   ai_memories_list(): Promise<AiMemoryView[]>;
-  /** Rejects with `invalid_input` when the name is empty, too long or taken, the text is empty, or memory is full. */
+  /**
+   * Rejects with `invalid_input` when the name is empty, too long or taken in the scope, the text is empty, or the
+   * scope's memories are full, and with `not_found` when `host_id` names no saved host and is not the edited memory's own.
+   */
   ai_memory_save(input: AiMemoryInput): Promise<AiMemoryView>;
   ai_memory_delete(id: string): Promise<void>;
   ai_memories_delete_all(): Promise<void>;

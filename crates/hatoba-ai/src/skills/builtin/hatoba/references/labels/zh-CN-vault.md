@@ -217,6 +217,9 @@ The labels that these files name in English, as the interface shows them in Simp
 | Star | 点 Star |
 | Update to v{version} | 更新到 v{version} |
 | Hatoba v{version} is available. | 新版本 v{version} 可供下载。 |
+| Copy Command | 复制命令 |
+| Installed with Scoop. Update it with {command}. | 通过 Scoop 安装，请用 {command} 更新。 |
+| Installed from the AUR package hatoba-bin. Update it with your AUR helper. | 通过 AUR 的 hatoba-bin 安装，请用 AUR 助手更新。 |
 
 ## `references/troubleshooting.md`
 

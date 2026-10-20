@@ -5,7 +5,7 @@ import { confirmInstall } from "@/features/settings/AboutPane";
 import { translate, useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import { useApp } from "./store";
-import { useUpdate } from "./update";
+import { useOfferedUpdate, useUpdate } from "./update";
 
 /**
  * WIN-10: the close button's question on Windows and Linux, whether to minimize Hatoba to the
@@ -62,12 +62,12 @@ export function ClosePrompt() {
 /**
  * WIN-10: the tray menu speaks the app's language, and **Lock** works while the vault is unlocked.
  * While a check has found a newer release, **Update to vX.Y.Z** opens Settings → About and installs
- * it as **Download and Install** there does.
+ * it as **Download and Install** there does, unless a package manager installed Hatoba.
  */
 export function useTrayMenu() {
   const locale = useT().locale;
   const unlocked = useApp((st) => st.phase === "unlocked");
-  const version = useUpdate((st) => st.result?.update?.version ?? null);
+  const version = useOfferedUpdate()?.version ?? null;
   const installing = useUpdate((st) => st.install !== null);
   useEffect(() => {
     const label = (key: "tray.open" | "tray.lock" | "tray.quit") => translate(locale, key);

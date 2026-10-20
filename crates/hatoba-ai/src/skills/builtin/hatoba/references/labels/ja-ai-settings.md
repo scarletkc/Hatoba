@@ -12,6 +12,9 @@ The labels that these files name in English, as the interface shows them in Japa
 | Remember across conversations | 会話をまたいで覚える |
 | Add Memory | メモリを追加 |
 | Delete All | すべて削除 |
+| Global | グローバル |
+| This Computer | このコンピューター |
+| Applies To | 適用先 |
 
 ## `references/ai-settings.md`
 

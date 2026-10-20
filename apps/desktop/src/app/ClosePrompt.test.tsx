@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalPrefs, TrayMenuInput } from "@/ipc/types";
+import type { LocalPrefs, PackageManager, TrayMenuInput } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({
   prompt: null as (() => void) | null,
@@ -12,6 +12,7 @@ const backend = vi.hoisted(() => ({
 
 const app = vi.hoisted(() => ({
   phase: "unlocked",
+  info: { package_manager: null as PackageManager | null },
   prefs: { close_action: "ask" } as Partial<LocalPrefs>,
   saved: [] as Partial<LocalPrefs>[],
   setPrefs: async (prefs: Partial<LocalPrefs>) => {
@@ -58,6 +59,7 @@ beforeEach(() => {
   backend.calls = [];
   backend.menus = [];
   app.phase = "unlocked";
+  app.info.package_manager = null;
   app.saved = [];
   useUpdate.setState({ result: null, install: null, checking: false });
 });
@@ -152,6 +154,13 @@ describe("useTrayMenu", () => {
     expect(backend.menus.at(-1)).toMatchObject({ update: "Update to v0.2.0", can_update: false });
     await act(async () => useUpdate.setState({ result: found("0.2.0"), install: null }));
     await act(async () => useUpdate.setState({ result: { current_version: "0.2.0", update: null } }));
+    expect(backend.menus.at(-1)).toMatchObject({ update: null });
+  });
+
+  it("offers no update when a package manager installed Hatoba", async () => {
+    app.info.package_manager = "scoop";
+    useUpdate.setState({ result: found("0.2.0") });
+    await render(<Menu />);
     expect(backend.menus.at(-1)).toMatchObject({ update: null });
   });
 

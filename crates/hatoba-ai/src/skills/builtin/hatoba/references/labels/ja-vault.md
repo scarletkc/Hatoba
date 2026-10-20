@@ -217,6 +217,9 @@ The labels that these files name in English, as the interface shows them in Japa
 | Star | スターを付ける |
 | Update to v{version} | v{version} にアップデート |
 | Hatoba v{version} is available. | 新しいバージョン v{version} があります。 |
+| Copy Command | コマンドをコピー |
+| Installed with Scoop. Update it with {command}. | Scoop でインストールされています。{command} でアップデートしてください。 |
+| Installed from the AUR package hatoba-bin. Update it with your AUR helper. | AUR の hatoba-bin でインストールされています。AUR ヘルパーでアップデートしてください。 |
 
 ## `references/troubleshooting.md`
 

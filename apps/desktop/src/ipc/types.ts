@@ -879,7 +879,12 @@ export interface AppInfo {
   local_user: string;
   /** This computer's name, which a conversation on a local tab records (§7.5). */
   device_name: string;
+  /** The package manager that installed this copy and updates it, which turns the in-app update off (spec §11). */
+  package_manager: PackageManager | null;
 }
+
+/** A package manager that installs Hatoba; `other` is one Hatoba has no instructions for. */
+export type PackageManager = "scoop" | "aur" | "other";
 
 /** The `hatoba` command on this device (HOST-13). */
 export interface CliCommandView {
@@ -1360,19 +1365,26 @@ export interface AiToolRun {
 
 // ───────────────────────── AI assistant: memory (§13.12) ─────────────────────────
 
-/** A memory the assistant keeps across conversations (AI-53). */
+/**
+ * A memory the assistant keeps across conversations (AI-53): a global one, with neither `host_id` nor `local`, or a
+ * host memory of a saved host or of a computer's local terminal, `local` naming the computer.
+ */
 export interface AiMemoryView {
   id: string;
   name: string;
   content: string;
+  host_id: string | null;
+  local: string | null;
   updated_at: number;
 }
 
-/** A memory saved in Settings → AI; a null `id` adds one. */
+/** A memory saved in Settings → AI in the scope `host_id` and `local` name; a null `id` adds one. */
 export interface AiMemoryInput {
   id: string | null;
   name: string;
   content: string;
+  host_id: string | null;
+  local: string | null;
 }
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────

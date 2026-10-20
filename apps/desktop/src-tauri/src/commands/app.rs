@@ -18,6 +18,7 @@ pub fn app_info(app: AppHandle, state: State<'_, AppState>) -> AppInfo {
         mica: state.mica,
         local_user: platform::system::default_user(),
         device_name: platform::system::device_name(),
+        package_manager: update::package_manager(&app),
     }
 }
 
@@ -30,7 +31,8 @@ pub async fn update_check(app: AppHandle, state: State<'_, AppState>) -> AppResu
 }
 
 /// Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
-/// session, and the installer starts the new version.
+/// session, and the installer starts the new version. Refused when a package manager installed
+/// Hatoba.
 #[tauri::command]
 #[specta::specta]
 pub async fn update_install(app: AppHandle, progress: Channel<UpdateProgress>) -> AppResult<()> {
