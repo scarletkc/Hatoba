@@ -786,22 +786,42 @@ mod tests {
     }
 
     #[test]
-    fn keys_the_source_holds_import_from_it() {
+    fn a_securecrt_export_imports_the_key_file_it_holds() {
+        let dir = KeyDir::new();
         let key = hatoba_ssh::generate_key(GenerateKind::Ed25519, "Identity", None).unwrap();
-        // Named by its path on the computer the source came from.
-        let path = "C:\\Users\\old\\.ssh\\Identity".to_owned();
-        let held = KeyFiles::from([(
-            path.clone(),
-            Zeroizing::new(key.openssh_private.as_bytes().to_vec()),
-        )]);
-        let entries = vec![entry("web", &[&path]), entry("db", &[&path])];
-        assert_eq!(identity_path(&entries[0], &held), Some(path.clone()));
-        assert_eq!(identity_path(&entries[0], &KeyFiles::new()), None);
+        let hex: Vec<String> = key
+            .openssh_private
+            .bytes()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let session = |name: &str| {
+            format!(
+                "<key name=\"{name}\"><string name=\"Hostname\">{name}.example.org</string>\
+                 <string name=\"Protocol Name\">SSH2</string></key>"
+            )
+        };
+        // The key file set for all sessions, by its path on the computer the export came from.
+        let export = dir.file(
+            "SecureCRT.xml",
+            &format!(
+                "<VanDyke version=\"3.0\">\n<key name=\"Sessions\">{}{}</key>\n\
+                 <key name=\"SSH2\"><string name=\"Identity Filename V2\">D:\\keys\\Identity\
+                 </string></key>\n<key name=\"Files\"><key name=\"File 0\">\
+                 <string name=\"Path\">D:\\keys\\Identity</string>\
+                 <binary name=\"Contents\">{}</binary></key></key>\n</VanDyke>\n",
+                session("web"),
+                session("db"),
+                hex.join(" ")
+            ),
+        );
+        let found = read(ImportSource::Securecrt, Some(&export)).unwrap();
+        let path = identity_path(&found.entries[0], &found.key_files).unwrap();
+        assert_eq!(path, "D:\\keys\\Identity");
         let mut v = vault();
 
         let prepared = prepare_import(
-            entries,
-            &held,
+            found.entries,
+            &found.key_files,
             &HashSet::from(["web".into(), "db".into()]),
             &HashSet::from([path]),
         );
