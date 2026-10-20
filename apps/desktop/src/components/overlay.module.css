@@ -1,5 +1,30 @@
 /* Popovers, menus, sheets and dialogs. */
 
+/* Opening, a menu or popover grows out of the corner it hangs from (its transform-origin, set where
+   it is placed); closing, it fades back (useExitAnimation sets data-closing). With reduced motion it
+   only fades. */
+.popIn {
+  animation: popIn var(--motion-fast) var(--ease-out);
+}
+
+.popIn[data-closing] {
+  animation: popOut var(--motion-fade) var(--ease-in) forwards;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-pop));
+  }
+}
+
+@keyframes popOut {
+  to {
+    opacity: 0;
+    transform: scale(var(--motion-pop));
+  }
+}
+
 .menu {
   position: fixed;
   z-index: 1000;
@@ -26,6 +51,8 @@
   background: transparent;
   text-align: left;
   white-space: nowrap;
+  /* The highlight follows the pointer at once, as in a native menu. */
+  transition: none;
 }
 
 .menuItem:hover:not(:disabled),
@@ -154,7 +181,11 @@
   justify-content: center;
   padding: 72px 24px 24px;
   background: var(--scrim);
-  animation: fade 0.12s ease-out;
+  animation: fade var(--motion-base) var(--ease-out);
+}
+
+.backdrop[data-closing] {
+  animation: fadeOut var(--motion-fade) var(--ease-in) forwards;
 }
 
 /* Linux window chrome: the scrim follows the window's rounded outline, not its corners. */
@@ -174,6 +205,12 @@
   }
 }
 
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
 .sheet {
   width: 540px;
   max-width: 100%;
@@ -187,14 +224,34 @@
   font-size: var(--text-md);
   line-height: 1.4;
   overflow: hidden;
-  animation: rise 0.16s ease-out;
+  animation: sheetIn var(--motion-base) var(--ease-out);
 }
 
-@keyframes rise {
+/* A sheet drops a little from the title bar; an alert grows in place. */
+@keyframes sheetIn {
   from {
-    transform: translateY(-8px);
+    transform: translateY(calc(-1 * var(--motion-rise))) scale(var(--motion-pop));
     opacity: 0;
   }
+}
+
+@keyframes dialogIn {
+  from {
+    transform: scale(var(--motion-pop));
+    opacity: 0;
+  }
+}
+
+@keyframes dialogOut {
+  to {
+    transform: scale(var(--motion-pop));
+    opacity: 0;
+  }
+}
+
+/* Whatever the modal holds: a sheet, an alert, the settings window. */
+.backdrop[data-closing] > * {
+  animation: dialogOut var(--motion-fade) var(--ease-in) forwards;
 }
 
 .sheetBody {
@@ -242,7 +299,7 @@
   box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
   color: var(--fg);
   line-height: 1.4;
-  animation: rise 0.16s ease-out;
+  animation: dialogIn var(--motion-base) var(--ease-out);
 }
 
 .dialogHead {
@@ -300,7 +357,37 @@
   background: var(--sheet);
   box-shadow: var(--shadow-popover);
   font-size: var(--text-sm);
-  animation: rise 0.16s ease-out;
+  animation: toastIn var(--motion-base) var(--ease-out);
+}
+
+.toast[data-closing] {
+  animation: toastOut var(--motion-fade) var(--ease-in) forwards;
+}
+
+/* Toasts sit at the bottom: they come up into place and sink as they go. */
+@keyframes toastIn {
+  from {
+    transform: translateY(var(--motion-rise)) scale(var(--motion-pop));
+    opacity: 0;
+  }
+}
+
+@keyframes toastOut {
+  to {
+    transform: translateY(calc(var(--motion-rise) / 2));
+    opacity: 0;
+  }
+}
+
+/* Reduced motion leaves only the fades (base.css), which these keep. */
+@media (prefers-reduced-motion: reduce) {
+  .popIn,
+  .backdrop,
+  .sheet,
+  .dialog,
+  .toast {
+    animation-duration: var(--motion-fade) !important;
+  }
 }
 
 .toastError i {

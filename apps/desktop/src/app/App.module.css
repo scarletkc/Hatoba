@@ -44,3 +44,24 @@
   flex-direction: column;
   position: relative;
 }
+
+/* Opacity only: a transform would make it the box that fixed-position content inside places against. */
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: pageIn var(--motion-fade) var(--ease-out);
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page {
+    animation-duration: var(--motion-fade) !important;
+  }
+}

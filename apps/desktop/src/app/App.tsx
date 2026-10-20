@@ -146,7 +146,12 @@ function Main() {
         />
         <div className={s.workspace}>
           <div className={s.body}>
-            {active === "home" && !locked && <HomePage page={page} />}
+            {active === "home" && !locked && (
+              // A new page fades in, keyed so that going from one to another plays it again.
+              <div key={page.kind} className={s.page}>
+                <HomePage page={page} />
+              </div>
+            )}
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}

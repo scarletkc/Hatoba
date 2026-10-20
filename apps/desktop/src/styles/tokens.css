@@ -29,6 +29,20 @@
   --radius-window: 12px;
   --radius-icon: 14px;
 
+  /* Motion. Fades change only color or opacity, and stay with reduced motion. Moves and resizes take
+     the other durations, which reduced motion sets to zero (base.css). */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-hover: 50ms;
+  --motion-fade: 140ms;
+  --motion-fast: 180ms;
+  --motion-base: 260ms;
+  --motion-slow: 520ms;
+  /* How far a popover or dialog travels and grows as it opens: none with reduced motion. */
+  --motion-rise: 6px;
+  --motion-pop: 0.97;
+
   /* Sizes */
   --sidebar-width: 228px;
   --titlebar-height: 44px;
@@ -64,7 +78,8 @@
   --sheet: #ffffff;
   --winline: rgba(0, 0, 0, 0.22);
   --shadow: 0 30px 80px rgba(20, 24, 40, 0.22), 0 6px 18px rgba(20, 24, 40, 0.1);
-  --shadow-popover: 0 0 0 0.5px var(--winline), 0 12px 32px rgba(0, 0, 0, 0.22);
+  --shadow-popover: 0 0 0 0.5px var(--winline), 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.07),
+    0 14px 36px rgba(0, 0, 0, 0.14);
   --shadow-btn: 0 0 0 0.5px var(--btnline), 0 1px 1.5px rgba(0, 0, 0, 0.05);
   --shadow-seg: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--line);
   --focus-ring: 0 0 0 1px var(--accent), 0 0 0 3.5px var(--accenttint);

@@ -158,7 +158,7 @@ export class TabDrag {
     d.step = d.slots[d.from].width + (parseFloat(getComputedStyle(strip).columnGap) || 0);
     d.started = true;
     d.el.dataset.dragging = "";
-    for (const item of d.items) if (item !== d.el) item.style.transition = `transform ${SLIDE_MS}ms ease`;
+    for (const item of d.items) if (item !== d.el) item.style.transition = `transform ${SLIDE_MS}ms var(--ease-out)`;
     try {
       d.el.setPointerCapture(d.pointerId);
     } catch {
@@ -226,7 +226,7 @@ export class TabDrag {
     el.style.transition = "none";
     translate(el, dx);
     void el.offsetWidth; // Starts the slide from `dx`.
-    el.style.transition = `transform ${SLIDE_MS}ms ease`;
+    el.style.transition = `transform ${SLIDE_MS}ms var(--ease-out)`;
     translate(el, 0);
     const els = [el, ...others];
     this.slide = { els, timer: window.setTimeout(() => this.endSlide(), SLIDE_MS) };

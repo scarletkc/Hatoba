@@ -10,6 +10,7 @@
   box-shadow: var(--shadow-popover);
   color: var(--fg);
   font-size: var(--text-md);
+  transform-origin: 50% 100%;
 }
 
 .row {
@@ -20,6 +21,8 @@
   padding: 3px 8px;
   border-radius: var(--radius-sm);
   cursor: default;
+  /* The highlight follows ↑, ↓ and the pointer at once. */
+  transition: none;
 }
 
 .active {

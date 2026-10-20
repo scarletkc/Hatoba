@@ -430,7 +430,11 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
         return (
           <Fragment key={entry.entry_id}>
             {divider}
-            <div className={cx(s.item, outside && s.outside, flashed && entry.role !== "summary" && s.flash)} data-reveal={key}>
+            <div
+              // A message just sent comes up into place; the stored copy that replaces it does not.
+              className={cx(s.item, outside && s.outside, flashed && entry.role !== "summary" && s.flash, entry.entry_id.startsWith("~") && s.enter)}
+              data-reveal={key}
+            >
               {body}
             </div>
           </Fragment>
@@ -721,7 +725,7 @@ function EditMessage({
 
 function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveResponse; host: HostInfo | null }) {
   return (
-    <div className={s.item}>
+    <div className={cx(s.item, s.enter)}>
       <AssistantMessage
         slotId={slotId}
         text={live.text}

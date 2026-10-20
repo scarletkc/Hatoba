@@ -122,7 +122,9 @@
   box-shadow: var(--shadow-btn);
   color: var(--fg2);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition-property: opacity, background-color, color;
+  transition-duration: var(--motion-fade);
+  transition-timing-function: var(--ease-out);
 }
 
 .codeBlock:hover .copy,

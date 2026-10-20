@@ -227,7 +227,7 @@
 }
 
 .fileToggle i {
-  transition: transform 0.12s ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .fileOpen i {

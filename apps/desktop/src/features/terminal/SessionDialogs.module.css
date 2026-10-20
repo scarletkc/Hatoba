@@ -9,7 +9,7 @@
   box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
   color: var(--fg);
   line-height: 1.4;
-  animation: rise 0.16s ease-out;
+  animation: rise var(--motion-base) var(--ease-out);
 }
 
 .cardDanger {
@@ -17,10 +17,17 @@
   box-shadow: 0 0 0 1.5px var(--red), var(--shadow);
 }
 
+/* Grows in place, as an alert does (overlay.module.css); with reduced motion it only fades. */
 @keyframes rise {
   from {
-    transform: translateY(-8px);
+    transform: scale(var(--motion-pop));
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation-duration: var(--motion-fade) !important;
   }
 }
 

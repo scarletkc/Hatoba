@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
@@ -13,6 +14,8 @@ import { cx } from "@/lib/cx";
 import { Button, Icon, controlStyles } from "./controls";
 import o from "./overlay.module.css";
 
+export { o as overlayStyles };
+
 // ───────────────────────── Lock ─────────────────────────
 
 // Overlays render into document.body, outside the app that the lock screen hides (SEC-03), so they
@@ -20,6 +23,41 @@ import o from "./overlay.module.css";
 const useLockStore = create<{ locked: boolean }>(() => ({ locked: false }));
 
 export const useOverlaysLocked = () => useLockStore((st) => st.locked);
+
+// ───────────────────────── Exit animation ─────────────────────────
+
+/**
+ * Lets an overlay animate out after React has removed it. Overlays unmount the moment their owner
+ * stops rendering them, so a copy of their last frame takes their place, inert, while the styles for
+ * `[data-closing]` play, and goes once those animations end. `shown` is false while the overlay
+ * renders nothing. Nothing stays behind while the vault locks, and nothing is copied where the
+ * browser has no animations to play (tests).
+ */
+export function useExitAnimation(ref: RefObject<HTMLElement | null>, shown = true) {
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!shown || !node || typeof node.getAnimations !== "function") return;
+    return () => {
+      const parent = node.parentNode;
+      const next = node.nextSibling;
+      // Development mode also runs this while the element stays, to run the effect twice; by the
+      // microtask, React has removed an element that really unmounted.
+      queueMicrotask(() => {
+        if (node.isConnected || !parent?.isConnected || useLockStore.getState().locked) return;
+        const ghost = node.cloneNode(true) as HTMLElement;
+        ghost.inert = true;
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.style.pointerEvents = "none";
+        for (const el of [ghost, ...ghost.querySelectorAll("[id]")]) el.removeAttribute("id");
+        ghost.setAttribute("data-closing", "");
+        parent.insertBefore(ghost, next?.parentNode === parent ? next : null);
+        const animations = ghost.getAnimations({ subtree: true });
+        if (!animations.length) ghost.remove();
+        else void Promise.allSettled(animations.map((a) => a.finished)).then(() => ghost.remove());
+      });
+    };
+  }, [ref, shown]);
+}
 
 /** Hides modals and closes menus while the vault is locked, and cancels a pending `confirm()`. */
 export function setOverlaysLocked(locked: boolean) {
@@ -103,7 +141,7 @@ export function Menu({
   const ref = useRef<HTMLDivElement>(null);
   // Measured first at the window's left edge, before any paint: at an anchor near the right edge the
   // menu would be squeezed, wrap and measure taller than it ends up, and sit that much too high.
-  const [pos, setPos] = useState({ left: 0, top: anchor.y });
+  const [pos, setPos] = useState({ left: 0, top: anchor.y, transformOrigin: "left top" });
   const [focus, setFocus] = useState(-1);
   const items = entries.flatMap((e, i) => (e.kind === "separator" || e.kind === "header" ? [] : [i]));
   const hasCheck = entries.some((x) => isItem(x) && x.checked !== undefined);
@@ -121,9 +159,13 @@ export function Menu({
     let top = anchor.y;
     const b = windowSurface();
     left = Math.max(b.left + 8, Math.min(left, b.right - r.width - 8));
-    if (top + r.height > b.bottom - 8) top = Math.max(b.top + 8, (anchor.above ?? anchor.y - 8) - r.height);
-    setPos({ left, top });
+    const flipped = top + r.height > b.bottom - 8;
+    if (flipped) top = Math.max(b.top + 8, (anchor.above ?? anchor.y - 8) - r.height);
+    // It grows out of the corner nearest where it was opened.
+    const transformOrigin = `${anchor.alignRight ? "right" : "left"} ${flipped ? "bottom" : "top"}`;
+    setPos({ left, top, transformOrigin });
   }, [anchor.x, anchor.y, anchor.alignRight, anchor.above]);
+  useExitAnimation(ref, !locked);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -171,7 +213,7 @@ export function Menu({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="menu" className={o.menu} style={{ ...pos, minWidth }}>
+    <div ref={ref} role="menu" className={cx(o.menu, o.popIn)} style={{ ...pos, minWidth }}>
       {entries.map((e, i) => {
         if (e.kind === "separator") return <div key={i} className={o.menuSeparator} />;
         if (e.kind === "header")
@@ -373,6 +415,7 @@ export function Modal({
       if (!node?.isConnected && (whileLocked || !useLockStore.getState().locked)) opener?.focus?.();
     };
   }, [opener, locked, whileLocked]);
+  useExitAnimation(ref, !locked);
   // Kept mounted, so the dialog comes back as it was after unlocking.
   if (locked) return null;
   return createPortal(
@@ -536,16 +579,24 @@ export function ToastHost() {
   return createPortal(
     <div className={o.toasts} role="status" aria-live="polite">
       {toasts.map((x) => (
-        <div key={x.id} className={cx(o.toast, x.tone === "error" && o.toastError, x.tone === "success" && o.toastSuccess)}>
-          <Icon
-            name={x.tone === "error" ? "warning-circle" : x.tone === "success" ? "check-circle" : "info"}
-            fill={x.tone !== "info"}
-            size={15}
-          />
-          {x.text}
-        </div>
+        <ToastItem key={x.id} toast={x} />
       ))}
     </div>,
     document.body,
+  );
+}
+
+function ToastItem({ toast: x }: { toast: Toast }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useExitAnimation(ref);
+  return (
+    <div ref={ref} className={cx(o.toast, x.tone === "error" && o.toastError, x.tone === "success" && o.toastSuccess)}>
+      <Icon
+        name={x.tone === "error" ? "warning-circle" : x.tone === "success" ? "check-circle" : "info"}
+        fill={x.tone !== "info"}
+        size={15}
+      />
+      {x.text}
+    </div>
   );
 }
