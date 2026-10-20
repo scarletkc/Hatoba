@@ -1,8 +1,9 @@
 //! Signed updates (spec §11). Every GitHub release carries a `latest.json`, from which the Tauri
 //! updater installs the installer it names, and only when the installer's signature matches the
-//! public key in tauri.conf.json. A stable version reads `latest.json` from the endpoint there,
-//! which is the latest stable release; a prerelease version reads it from the newest release,
-//! prereleases included.
+//! public key in tauri.conf.json. A stable version reads `latest.json` from the endpoints there:
+//! the update counter on the website, which redirects to the latest stable release, and that
+//! release itself when the counter does not answer. A prerelease version reads it from the newest
+//! release, prereleases included.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, Once};
@@ -80,17 +81,17 @@ async fn check_with<R: Runtime>(
     before_exit: impl Fn() + Send + Sync + 'static,
 ) -> AppResult<UpdateCheck> {
     let current = &app.package_info().version;
-    let endpoint = if current.pre.is_empty() {
-        Some(configured_endpoint(app)?)
+    let endpoints = if current.pre.is_empty() {
+        configured_endpoints(app)?
     } else {
-        newest_manifest(releases).await?
+        newest_manifest(releases).await?.into_iter().collect()
     };
-    let found = match endpoint {
+    let found = match endpoints.last() {
         None => None,
-        Some(endpoint) => match updater(app, endpoint.clone(), before_exit)?.check().await {
+        Some(last) => match updater(app, endpoints.clone(), before_exit)?.check().await {
             Ok(found) => found,
             Err(UpdaterError::ReleaseNotFound) => {
-                no_release(endpoint).await?;
+                no_release(last.clone()).await?;
                 None
             }
             Err(err) => return Err(classify(err)),
@@ -135,13 +136,14 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     app.restart()
 }
 
+/// The updater asks `endpoints` in order and reads the first manifest one of them answers with.
 fn updater<R: Runtime>(
     app: &AppHandle<R>,
-    endpoint: Url,
+    endpoints: Vec<Url>,
     before_exit: impl Fn() + Send + Sync + 'static,
 ) -> AppResult<Updater> {
     app.updater_builder()
-        .endpoints(vec![endpoint])
+        .endpoints(endpoints)
         .map_err(classify)?
         .on_before_exit(before_exit)
         .timeout(CHECK_TIMEOUT)
@@ -205,9 +207,10 @@ impl Drop for Installing<'_> {
     }
 }
 
-/// The updater reports every answer without a release the same way, so this asks the endpoint
-/// again for its status. GitHub answers 404 until a stable release with `latest.json` exists,
-/// which means there is nothing newer; any other status is an error.
+/// The updater reports every answer without a release the same way, so this asks the last
+/// endpoint, the release's own address, again for its status. GitHub answers 404 until a stable
+/// release with `latest.json` exists, which means there is nothing newer; any other status is an
+/// error.
 async fn no_release(endpoint: Url) -> AppResult<()> {
     let resp = client()?
         .get(endpoint)
@@ -222,18 +225,25 @@ async fn no_release(endpoint: Url) -> AppResult<()> {
     }
 }
 
-/// The first endpoint in the updater's configuration.
-fn configured_endpoint<R: Runtime>(app: &AppHandle<R>) -> AppResult<Url> {
-    let endpoint = app
+/// The endpoints in the updater's configuration, in order.
+fn configured_endpoints<R: Runtime>(app: &AppHandle<R>) -> AppResult<Vec<Url>> {
+    let endpoints = app
         .config()
         .plugins
         .0
         .get("updater")
-        .and_then(|updater| updater.get("endpoints")?.get(0)?.as_str())
+        .and_then(|updater| updater.get("endpoints")?.as_array())
+        .filter(|endpoints| !endpoints.is_empty())
         .ok_or_else(|| AppError::internal("no update endpoint is configured"))?;
-    endpoint
-        .parse()
-        .map_err(|_| AppError::internal(format!("'{endpoint}' is not an update endpoint")))
+    endpoints
+        .iter()
+        .map(|endpoint| {
+            endpoint
+                .as_str()
+                .and_then(|endpoint| endpoint.parse().ok())
+                .ok_or_else(|| AppError::internal(format!("{endpoint} is not an update endpoint")))
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -342,7 +352,7 @@ mod tests {
 
     use serde_json::{Value, json};
     use tauri::test::MockRuntime;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -360,13 +370,17 @@ mod tests {
     }
 
     fn app_at(version: &str, endpoint: &str) -> tauri::App<MockRuntime> {
+        app_with(version, &[endpoint])
+    }
+
+    fn app_with(version: &str, endpoints: &[&str]) -> tauri::App<MockRuntime> {
         let mut context = tauri::test::mock_context(tauri::test::noop_assets());
         context.package_info_mut().version = version.parse().unwrap();
         context.config_mut().plugins.0.insert(
             "updater".into(),
             json!({
                 "pubkey": PUBKEY,
-                "endpoints": [endpoint],
+                "endpoints": endpoints,
                 "requireSignedVersion": true,
                 "dangerousInsecureTransportProtocol": true,
                 "windows": { "installMode": "passive" },
@@ -606,6 +620,116 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code, ErrorCode::SyncOffline);
+    }
+
+    /// The website's update counter on `server`: it redirects every check to `/latest.json`.
+    async fn serve_counter(server: &MockServer) {
+        Mock::given(method("GET"))
+            .and(path_regex("^/update/"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("Location", format!("{}/latest.json", server.uri())),
+            )
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn the_counter_hears_the_platform_and_version_and_forwards_to_the_release() {
+        let server = MockServer::start().await;
+        serve_counter(&server).await;
+        let latest = manifest(&server, "0.2.0");
+        serve(
+            &server,
+            ResponseTemplate::new(200).set_body_json(latest),
+            INSTALLER,
+        )
+        .await;
+        let counter = format!(
+            "{}/update/{{{{target}}}}/{{{{arch}}}}/{{{{bundle_type}}}}/{{{{current_version}}}}",
+            server.uri()
+        );
+        let release = format!("{}/release/latest.json", server.uri());
+        let app = app_with("0.1.0", &[&counter, &release]);
+
+        let found = check(app.handle(), &Updates::default()).await.unwrap();
+        assert_eq!(found.update.unwrap().version, "0.2.0");
+        let asked: Vec<String> = server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .map(|request| request.url.path().to_owned())
+            .collect();
+        let os = match std::env::consts::OS {
+            "macos" => "darwin",
+            os => os,
+        };
+        let arch = std::env::consts::ARCH;
+        // A test build has no bundle type.
+        let counted = format!("/update/{os}/{arch}/unknown/0.1.0");
+        assert_eq!(asked, [counted.as_str(), "/latest.json"]);
+    }
+
+    #[tokio::test]
+    async fn the_release_answers_when_the_counter_does_not() {
+        let unreachable = format!(
+            "http://127.0.0.1:{}/update/windows/x86_64/nsis/0.1.0",
+            std::net::TcpListener::bind("127.0.0.1:0")
+                .unwrap()
+                .local_addr()
+                .unwrap()
+                .port()
+        );
+        for status in [None, Some(500), Some(404)] {
+            let server = MockServer::start().await;
+            let latest = manifest(&server, "0.2.0");
+            serve(
+                &server,
+                ResponseTemplate::new(200).set_body_json(latest),
+                INSTALLER,
+            )
+            .await;
+            let counter = match status {
+                None => unreachable.clone(),
+                Some(status) => {
+                    Mock::given(method("GET"))
+                        .and(path_regex("^/update/"))
+                        .respond_with(ResponseTemplate::new(status))
+                        .mount(&server)
+                        .await;
+                    format!("{}/update/windows/x86_64/nsis/0.1.0", server.uri())
+                }
+            };
+            let release = format!("{}/latest.json", server.uri());
+            let app = app_with("0.1.0", &[&counter, &release]);
+
+            let found = check(app.handle(), &Updates::default()).await.unwrap();
+            assert_eq!(found.update.unwrap().version, "0.2.0", "{status:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn no_release_yet_behind_the_counter_is_up_to_date() {
+        for counter_status in [302, 500] {
+            let server = MockServer::start().await;
+            if counter_status == 302 {
+                serve_counter(&server).await;
+            } else {
+                Mock::given(method("GET"))
+                    .and(path_regex("^/update/"))
+                    .respond_with(ResponseTemplate::new(counter_status))
+                    .mount(&server)
+                    .await;
+            }
+            serve(&server, ResponseTemplate::new(404), INSTALLER).await;
+            let counter = format!("{}/update/windows/x86_64/nsis/0.1.0", server.uri());
+            let release = format!("{}/latest.json", server.uri());
+            let app = app_with("0.1.0", &[&counter, &release]);
+
+            let found = check(app.handle(), &Updates::default()).await.unwrap();
+            assert_eq!(found.update, None, "{counter_status}");
+        }
     }
 
     #[test]

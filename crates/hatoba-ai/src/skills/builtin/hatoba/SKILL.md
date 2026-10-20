@@ -7,7 +7,7 @@ description: "How Hatoba works: its windows, menus, settings and features, and w
 
 Hatoba is a desktop SSH client (Tauri 2: a Rust backend with a React interface). It keeps hosts, SSH keys and settings in an encrypted vault on the device, and offers terminal tabs for SSH sessions and for the shells of this computer, an SFTP file panel, local port forwarding, optional end-to-end encrypted sync, and an AI assistant panel. Windows is the first platform; macOS and Linux follow. The interface is available in Simplified Chinese (zh-CN), English (en) and Japanese (ja).
 
-- Local first: everything works offline. Hatoba runs no server and collects no telemetry.
+- Local first: everything works offline, and no feature needs a Hatoba server. Hatoba collects no telemetry.
 - Sync is optional. It goes through a Worker and a D1 database in the user's own Cloudflare account, or straight to D1. The cloud holds only ciphertext.
 - The AI assistant calls a model provider that the user adds with their own API key. Nothing is sent to a model until the user adds a provider and sends a message.
 

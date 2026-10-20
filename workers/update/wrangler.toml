@@ -1,0 +1,21 @@
+#:schema node_modules/wrangler/config-schema.json
+# The update counter (README.md). It runs in the project's Cloudflare account, unlike the sync
+# Worker, which each user deploys to their own.
+name = "hatoba-update"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Reached only through the route on the website's domain.
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "hatoba.fog.moe/update/*", zone_name = "fog.moe" }]
+
+# No Workers Logs: they would keep the details of each request, which the count leaves out.
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hatoba-update"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
