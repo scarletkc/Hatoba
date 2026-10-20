@@ -20,14 +20,16 @@ export const IMPORT_APPS = {
   tabby: "Tabby",
 } satisfies Record<Exclude<ImportSource, "ssh_config">, string>;
 
-/** What the user can choose in place of where the client keeps its sessions: an export or a config file, or a data folder. */
-const CHOOSE: Record<ImportSource, { directory: true } | { extensions: string[] } | null> = {
-  ssh_config: null,
-  xshell: { extensions: ["xts"] },
-  finalshell: { directory: true },
-  mobaxterm: { extensions: ["mxtsessions", "ini"] },
-  putty: { extensions: ["reg"] },
-  tabby: { extensions: ["yaml", "yml"] },
+type Choice = { directory: true } | { extensions: string[] };
+
+/** What the user can choose in place of where the client keeps its sessions: an export or a config file, or a folder. */
+const CHOOSE: Record<ImportSource, Choice[]> = {
+  ssh_config: [],
+  xshell: [{ extensions: ["xts"] }, { directory: true }],
+  finalshell: [{ directory: true }],
+  mobaxterm: [{ extensions: ["mxtsessions", "ini"] }],
+  putty: [{ extensions: ["reg"] }],
+  tabby: [{ extensions: ["yaml", "yml"] }],
 };
 
 /** The last segment of a path, for `/` and `\` alike. */
@@ -41,7 +43,6 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
   const t = useT();
   const platform = useApp((st) => st.info.platform);
   const app = source === "ssh_config" ? null : IMPORT_APPS[source];
-  const choose = CHOOSE[source];
   // A file or folder the user chose; `null` reads where the client keeps its sessions.
   const [path, setPath] = useState<string | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -57,6 +58,8 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
     let cancelled = false;
     setPreview(null);
     setError(null);
+    // Ids belong to the sessions they were read from.
+    setPicked(new Set());
     api
       .hosts_import_preview(source, path)
       .then((found) => {
@@ -91,10 +94,10 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
     [items, picked],
   );
 
-  const chooseOther = async () => {
-    if (!choose || !app) return;
+  const chooseOther = async (choice: Choice) => {
+    if (!app) return;
     const chosen = await pickOpenPath(
-      "directory" in choose ? { directory: true } : { filter: { name: t("hosts.import.filter", { app }), extensions: choose.extensions } },
+      "directory" in choice ? { directory: true } : { filter: { name: t("hosts.import.filter", { app }), extensions: choice.extensions } },
     ).catch(() => null);
     if (chosen) setPath(chosen);
   };
@@ -131,16 +134,16 @@ export function ImportDialog({ source, onClose }: { source: ImportSource; onClos
               {allPicked ? t("hosts.import.selectNone") : t("hosts.import.selectAll")}
             </Button>
           )}
-          {choose && (
-            <Button size="sm" disabled={busy} onClick={() => void chooseOther()}>
-              {"directory" in choose ? t("hosts.import.chooseFolder") : t("hosts.import.chooseFile")}
+          {CHOOSE[source].map((choice) => (
+            <Button key={"directory" in choice ? "folder" : "file"} size="sm" disabled={busy} onClick={() => void chooseOther(choice)}>
+              {"directory" in choice ? t("hosts.import.chooseFolder") : t("hosts.import.chooseFile")}
             </Button>
-          )}
+          ))}
           <FooterSpacer />
           <Button onClick={onClose} disabled={busy}>
             {t("btn.cancel")}
           </Button>
-          <Button variant="primary" busy={busy} disabled={picked.size === 0} onClick={() => void submit()}>
+          <Button variant="primary" busy={busy} disabled={!items || picked.size === 0} onClick={() => void submit()}>
             {t("hosts.import.submit", { n: picked.size })}
           </Button>
         </>

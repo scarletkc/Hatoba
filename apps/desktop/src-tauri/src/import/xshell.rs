@@ -12,7 +12,15 @@ use crate::error::{AppError, AppResult};
 
 pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
     let (location, entries) = match path {
-        Some(path) if path.is_dir() => (path.to_path_buf(), read_folder(path)?),
+        Some(path) if path.is_dir() => {
+            // The sessions folder, or the user data folder it is in.
+            let folder = [path.join("Xshell").join("Sessions"), path.join("Sessions")]
+                .into_iter()
+                .find(|p| p.is_dir())
+                .unwrap_or_else(|| path.to_path_buf());
+            let entries = read_folder(&folder)?;
+            (folder, entries)
+        }
         Some(path) => (path.to_path_buf(), read_export(path)?),
         None => match default_folder() {
             Some(folder) => {

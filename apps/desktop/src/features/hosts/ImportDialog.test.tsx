@@ -62,6 +62,8 @@ describe("ImportDialog", () => {
     await until(() => document.querySelector("[role=dialog] [role=group]"));
     expect(dialogText()).not.toContain("/demo/export.xts");
     await act(async () => button(t("hosts.import.chooseFile"))?.click());
+    // Nothing is ticked, so nothing imports, until the chosen file's sessions are listed.
+    expect(button(t("hosts.import.submit", { n: 0 }))?.disabled).toBe(true);
     // The mock reports the path it was given as where it read the sessions.
     await until(() => dialogText().includes(t("hosts.import.subtitle", { path: "/demo/export.xts" })) || null);
   });
@@ -85,5 +87,6 @@ describe("ImportDialog", () => {
     expect(dialogText()).toContain(t("hosts.import.proxyCommand"));
     expect(dialogText()).not.toContain(t("hosts.import.passwordsNote"));
     expect(button(t("hosts.import.chooseFile"))).toBeUndefined();
+    expect(button(t("hosts.import.chooseFolder"))).toBeUndefined();
   });
 });

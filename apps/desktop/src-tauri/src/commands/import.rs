@@ -23,13 +23,31 @@ use crate::state::{AppState, blocking, now_ms};
 use crate::sync;
 
 /// What a source holds, read before the vault is locked: a file on an unreachable network path
-/// can take long to answer. Entries whose address no host could have are left out.
+/// can take long to answer. Addresses lose the brackets of an IPv6 address, as hosts keep them
+/// without, and entries whose address no host could have are left out.
 fn read(source: ImportSource, path: Option<&str>) -> AppResult<import::Source> {
     let mut found = import::read(source, path.map(Path::new))?;
+    for entry in &mut found.entries {
+        entry.address = unbracketed(&entry.address).to_owned();
+        if let Some(Jump::Gateways(list)) = &mut entry.jump {
+            for gateway in list {
+                gateway.address = unbracketed(&gateway.address).to_owned();
+            }
+        }
+    }
     found
         .entries
         .retain(|e| e.address.len() <= 255 && !e.address.contains(char::is_whitespace));
     Ok(found)
+}
+
+/// `[2001:db8::1]` without its brackets, and without a `:port` after them.
+fn unbracketed(address: &str) -> &str {
+    let address = address.trim();
+    address
+        .strip_prefix('[')
+        .and_then(|a| a.split_once(']'))
+        .map_or(address, |(inner, _)| inner)
 }
 
 #[tauri::command]
@@ -391,9 +409,17 @@ fn group_for(
     Ok(Some(id))
 }
 
-/// The saved proxy with the same protocol, address, port and username, or a new one; or why the
-/// proxy can't be saved.
+/// The saved proxy with the same protocol, address, port, username and password, or a new one; or
+/// why the proxy can't be saved, by the rules of the proxy editor (SSH-13).
 fn proxy_for(v: &mut Vault, proxy: &import::Proxy) -> AppResult<Result<String, String>> {
+    let address = unbracketed(&proxy.address);
+    if address.is_empty()
+        || address.len() > 255
+        || address.contains(|c: char| c.is_whitespace() || c.is_control())
+        || address.contains(['@', '/', '\\'])
+    {
+        return Ok(Err("the address is not a valid host name or IP".into()));
+    }
     let username = proxy.username.trim();
     if username.len() > MAX_CREDENTIAL_BYTES || username.contains(char::is_control) {
         return Ok(Err("the username is not valid".into()));
@@ -404,27 +430,29 @@ fn proxy_for(v: &mut Vault, proxy: &import::Proxy) -> AppResult<Result<String, S
     if proxy.password.len() > MAX_CREDENTIAL_BYTES {
         return Ok(Err("the password is longer than 255 bytes".into()));
     }
+    let password = if username.is_empty() {
+        zeroize::Zeroizing::new(String::new())
+    } else {
+        proxy.password.clone()
+    };
     if let Some((id, _)) = v.proxies().into_iter().find(|(_, p)| {
         p.kind == proxy.kind
-            && p.address.eq_ignore_ascii_case(&proxy.address)
+            && p.address.eq_ignore_ascii_case(address)
             && p.port == proxy.port
             && p.username == username
+            && p.password == password
     }) {
         return Ok(Ok(id));
     }
     let id = v.put(
         None,
         Item::Proxy(Proxy {
-            name: format!("{}:{}", proxy.address, proxy.port),
+            name: format!("{address}:{}", proxy.port),
             kind: proxy.kind,
-            address: proxy.address.clone(),
+            address: address.to_owned(),
             port: proxy.port,
             username: username.to_owned(),
-            password: if username.is_empty() {
-                zeroize::Zeroizing::new(String::new())
-            } else {
-                proxy.password.clone()
-            },
+            password,
             updated_at: 0,
         }),
     )?;
@@ -432,8 +460,9 @@ fn proxy_for(v: &mut Vault, proxy: &import::Proxy) -> AppResult<Result<String, S
 }
 
 /// The host a chain of gateways ends at, outermost first: a saved host with the gateway's address,
-/// port and user, or a new one named after its address, which signs in with **Ask Each Time** and
-/// goes through the gateway before it.
+/// port and user that goes through the gateway before it (any saved one for the outermost), or a
+/// new one named after its address. A new one signs in with the SSH agent, as MobaXterm and PuTTY
+/// try first, since a jump host can't ask for a password.
 fn gateway_chain(
     v: &mut Vault,
     list: &[Gateway],
@@ -455,6 +484,7 @@ fn gateway_chain(
             h.address.eq_ignore_ascii_case(&gateway.address)
                 && h.port == gateway.port
                 && gateway.username.as_ref().is_none_or(|u| *u == h.username)
+                && (previous.is_none() || h.jump_host_id == previous)
         });
         let id = match existing {
             Some((id, _)) => id,
@@ -467,6 +497,7 @@ fn gateway_chain(
                         address: gateway.address.clone(),
                         port: gateway.port,
                         username: gateway.username.clone().unwrap_or_else(default_user),
+                        auth: HostAuth::Agent,
                         jump_host_id: previous.clone(),
                         ..Host::default()
                     }),
@@ -488,7 +519,9 @@ fn import_env(name: &str, set_env: &[(String, String)], warnings: &mut Vec<Strin
     for (var_name, value) in set_env {
         let var = EnvVar::new(var_name.as_str(), value.as_str());
         let size = var_name.len() + value.len();
-        let problem = if env.len() == MAX_HOST_ENV_VARS {
+        let problem = if env.iter().any(|v| v.name == *var_name) {
+            Err(EnvVarError::NameDuplicate(var_name.clone()))
+        } else if env.len() == MAX_HOST_ENV_VARS {
             Err(EnvVarError::TooMany)
         } else if bytes + size > MAX_HOST_ENV_BYTES {
             Err(EnvVarError::TooLarge)
@@ -812,6 +845,16 @@ mod tests {
             "{warnings:?}"
         );
 
+        // A name the host already has is left out, as the host editor refuses it.
+        let mut warnings = Vec::new();
+        let env = import_env(
+            "twice",
+            &pairs(&[("TZ", "UTC"), ("TZ", "Asia/Tokyo")]),
+            &mut warnings,
+        );
+        assert_eq!(env, [EnvVar::new("TZ", "UTC")]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+
         let many: Vec<(String, String)> = (0..=MAX_HOST_ENV_VARS)
             .map(|i| (format!("V{i}"), String::new()))
             .collect();
@@ -923,15 +966,28 @@ mod tests {
                 via("c", ProxyKind::Http, "proxy.example.org", 3128, "ops"),
                 via("d", ProxyKind::Http, "proxy.example.org", 3128, "a:b"),
                 entry("e", &[]),
+                // The same endpoint and user with another password is another proxy.
+                Entry {
+                    proxy: Some(import::Proxy {
+                        password: zeroize::Zeroizing::new("other secret".into()),
+                        ..via("x", ProxyKind::Http, "proxy.example.org", 3128, "ops")
+                            .proxy
+                            .unwrap()
+                    }),
+                    ..entry("f", &[])
+                },
+                via("g", ProxyKind::Socks5, "proxy example", 1080, ""),
+                via("h", ProxyKind::Socks5, "[::1]", 1080, ""),
             ],
-            &["a", "b", "c", "d", "e"],
+            &["a", "b", "c", "d", "e", "f", "g", "h"],
             &[],
         );
-        assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+        assert_eq!(result.warnings.len(), 2, "{:?}", result.warnings);
         assert!(result.warnings[0].starts_with("d: proxy HTTP proxy.example.org:3128"));
+        assert!(result.warnings[1].starts_with("g: proxy SOCKS5 proxy example:1080"));
 
         let proxies = v.proxies();
-        assert_eq!(proxies.len(), 2);
+        assert_eq!(proxies.len(), 4);
         let proxy_of = |name: &str| host(&v, name).1.proxy;
         assert_eq!(proxy_of("a"), HostProxy::Proxy { proxy_id: saved });
         let HostProxy::Proxy { proxy_id } = proxy_of("b") else {
@@ -960,6 +1016,12 @@ mod tests {
         );
         assert_eq!(proxy_of("d"), HostProxy::DeviceDefault);
         assert_eq!(proxy_of("e"), HostProxy::DeviceDefault);
+        assert_ne!(proxy_of("f"), proxy_of("b"));
+        let HostProxy::Proxy { proxy_id } = proxy_of("h") else {
+            panic!("h has no proxy");
+        };
+        let ipv6 = &proxies.iter().find(|(id, _)| *id == proxy_id).unwrap().1;
+        assert_eq!(ipv6.address, "::1");
     }
 
     #[test]
@@ -977,6 +1039,17 @@ mod tests {
                 }),
             )
             .unwrap();
+        // The inner gateway of `pg`, saved without the outer one before it.
+        v.put(
+            None,
+            Item::Host(Host {
+                name: "direct-inner".into(),
+                address: "10.9.9.9".into(),
+                port: 2200,
+                ..Host::default()
+            }),
+        )
+        .unwrap();
         let jumping = |name: &str, jump: Jump| Entry {
             jump: Some(jump),
             ..entry(name, &[])
@@ -1034,7 +1107,10 @@ mod tests {
             (outer_host.username.as_str(), outer_host.jump_host_id),
             ("jump", None)
         );
-        assert!(matches!(outer_host.auth, HostAuth::Ask));
+        assert!(
+            matches!(outer_host.auth, HostAuth::Agent),
+            "a jump host can't ask"
+        );
         let (inner, inner_host) = host(&v, "10.9.9.9");
         assert_eq!(
             (inner_host.port, inner_host.jump_host_id),
@@ -1042,6 +1118,14 @@ mod tests {
         );
         assert_eq!(jump_of("pg"), Some(inner.clone()));
         assert_eq!(jump_of("pg2"), Some(inner));
+    }
+
+    #[test]
+    fn ipv6_addresses_lose_their_brackets() {
+        assert_eq!(unbracketed("[2001:db8::1]"), "2001:db8::1");
+        assert_eq!(unbracketed(" [::1]:2222"), "::1");
+        assert_eq!(unbracketed("::1"), "::1");
+        assert_eq!(unbracketed("web.example.org"), "web.example.org");
     }
 
     #[test]

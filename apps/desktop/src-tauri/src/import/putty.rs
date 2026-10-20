@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use hatoba_core::model::ProxyKind;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::text;
 use super::{Entry, Gateway, Jump, Proxy, Source, non_empty, port_or, split_user};
@@ -30,6 +30,17 @@ enum Setting {
 /// A session's settings by name.
 #[derive(Debug, Default)]
 struct Settings(HashMap<String, Setting>);
+
+/// The settings hold the proxy's password, so they are wiped when dropped.
+impl Drop for Settings {
+    fn drop(&mut self) {
+        for setting in self.0.values_mut() {
+            if let Setting::Text(text) = setting {
+                text.zeroize();
+            }
+        }
+    }
+}
 
 /// Saved sessions by name, and where they were read from.
 type Found = Option<(String, Vec<(String, Settings)>)>;
@@ -64,7 +75,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         }
         Some(path) => (
             path.to_string_lossy().into_owned(),
-            parse_reg(&text::decode(&text::read_file(path)?)),
+            parse_reg(&read_text(path)?),
         ),
         None => match read_default()? {
             Some(found) => found,
@@ -99,6 +110,9 @@ fn read_default() -> AppResult<Found> {
                 REG_DWORD => u32::from_reg_value(&value).ok().map(Setting::Number),
                 _ => None,
             };
+            if let std::borrow::Cow::Owned(mut bytes) = value.bytes {
+                bytes.zeroize();
+            }
             if let Some(setting) = setting {
                 settings.0.insert(name, setting);
             }
@@ -138,13 +152,19 @@ fn read_default() -> AppResult<Found> {
     )))
 }
 
+/// A file's text, which holds a proxy password, wiped when dropped along with its bytes.
+fn read_text(path: &Path) -> AppResult<Zeroizing<String>> {
+    let bytes = Zeroizing::new(text::read_file(path)?);
+    Ok(Zeroizing::new(text::decode(&bytes)))
+}
+
 /// A folder of session files, one `Key=value` line per setting.
 fn read_folder(dir: &Path) -> AppResult<Vec<(String, Settings)>> {
     let mut sessions = Vec::new();
     for (path, _) in text::files_under(dir, 0)? {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         let mut settings = Settings::default();
-        for line in text::decode(&text::read_file(&path)?).lines() {
+        for line in read_text(&path)?.lines() {
             if let Some((key, value)) = line.split_once('=') {
                 settings
                     .0

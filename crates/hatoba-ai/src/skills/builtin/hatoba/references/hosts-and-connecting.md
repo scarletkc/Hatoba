@@ -33,7 +33,7 @@ Other labels: **Not saved**, **Remove from Recent**, **Username**.
 
 **Import**, in the header of the host list and in the empty list, opens a menu: **SSH Config** reads `~/.ssh/config` (on Windows `%USERPROFILE%\.ssh\config`), and Xshell, FinalShell, MobaXterm, PuTTY and Tabby read that client's saved sessions where it keeps them on this device. The dialog lists the SSH hosts and imports the ones you tick. Entries whose name already exists are unticked and marked **Already exists**. For sessions kept elsewhere or brought from another computer, **Choose File…** or **Choose Folder…** reads them from there:
 
-- Xshell: the sessions folder in `Documents\NetSarang Computer\<version>\Xshell\Sessions`, or an `.xts` file from Xshell's **File → Export**.
+- Xshell: the sessions folder in `Documents\NetSarang Computer\<version>\Xshell\Sessions`, a sessions folder kept elsewhere, or an `.xts` file from Xshell's **File → Export**.
 - FinalShell: its data folder (`%LOCALAPPDATA%\finalshell` on Windows, `~/Library/FinalShell` on macOS, `~/.finalshell` on Linux), or a copy of it.
 - MobaXterm: `%APPDATA%\MobaXterm\MobaXterm.ini`, the `MobaXterm.ini` beside the portable edition, or a `.mxtsessions` file from **Export all sessions to file**.
 - PuTTY: the saved sessions in the registry on Windows and in `~/.putty/sessions` on macOS and Linux, or a `.reg` file of the key `HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions` exported in Registry Editor.
@@ -42,8 +42,8 @@ Other labels: **Not saved**, **Remove from Recent**, **Username**.
 What comes along:
 
 - Name, address, port and user, and the session's description as the note. A folder becomes a group named after its path, such as `Prod / DB`; a group with that name is reused.
-- Jump hosts. A ProxyJump, or a Tabby or PuTTY session that goes through another session, is kept when that host exists in Hatoba or is imported with it (otherwise the import warns). A MobaXterm SSH gateway or a PuTTY SSH proxy given by address uses the saved host with that address, port and user, or adds one that uses **Ask Each Time**.
-- SOCKS5 and HTTP proxies become saved proxies; one with the same address, port and user is reused. Other proxy settings (ProxyCommand, SOCKS4, Telnet, a local command, and Xshell's proxies, which Xshell keeps itself) are not imported: the entry shows **ProxyCommand not imported** or **Proxy not imported**, the import warns, and the host connects without it until a proxy or jump host is set.
+- Jump hosts. A ProxyJump, or a Tabby or PuTTY session that goes through another session, is kept when that host exists in Hatoba or is imported with it (otherwise the import warns). A MobaXterm SSH gateway or a PuTTY SSH proxy given by address uses the saved host with that address, port and user, or adds one that signs in with the SSH agent, as a jump host can't ask for a password.
+- SOCKS5 and HTTP proxies become saved proxies; one with the same address, port, user and password is reused. Other proxy settings (ProxyCommand, SOCKS4, Telnet, a local command, and Xshell's proxies, which Xshell keeps itself) are not imported: the entry shows **ProxyCommand not imported** or **Proxy not imported**, the import warns, and the host connects without it until a proxy or jump host is set.
 - SetEnv becomes the host's environment variables: the first SetEnv line that applies counts, as in OpenSSH, and a variable Hatoba can't use (see Environment variables below) is left out with a warning. SendEnv is not imported.
 - Saved passwords are not imported.
 
