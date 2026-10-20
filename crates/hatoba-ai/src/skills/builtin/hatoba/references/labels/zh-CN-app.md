@@ -267,6 +267,7 @@ The labels that these files name in English, as the interface shows them in Simp
 |---|---|
 | Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
 | Recent use | 最近使用 |
+| Details | 详情 |
 
 ## `references/shortcuts.md`
 

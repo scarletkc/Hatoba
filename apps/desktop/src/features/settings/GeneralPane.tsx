@@ -219,18 +219,24 @@ const ACTIVITY_ICON: Record<CliActivity["kind"], string> = {
   download: "download-simple",
 };
 
-/** HOST-15: what programs did through the command since the unlock, newest first. */
+/** HOST-15: what programs did through the command since the unlock, newest first, under **Details**. */
 function CliActivityList() {
   const t = useT();
   const [entries, setEntries] = useState<CliActivity[] | null>(null);
+  const [details, setDetails] = useState(false);
 
   useEffect(() => {
     let live = true;
-    api
-      .cli_activity_list()
-      .then((list) => live && setEntries(list))
+    // Listening first, so no use is missed; an event is newer than the list.
+    let pushed = false;
+    const sub = api.listen("cli://activity", (e) => {
+      pushed = true;
+      setEntries(e.entries);
+    });
+    void sub
+      .then(() => api.cli_activity_list())
+      .then((list) => live && !pushed && setEntries(list))
       .catch(() => {});
-    const sub = api.listen("cli://activity", (e) => setEntries(e.entries));
     return () => {
       live = false;
       void sub.then((un) => un());
@@ -247,9 +253,24 @@ function CliActivityList() {
     <>
       <SettingRow
         label={t("settings.cliAccess.activity")}
-        hint={entries?.length === 0 ? t("settings.cliAccess.activity.empty") : t("settings.cliAccess.activity.hint")}
-      />
-      {entries?.map((a) => (
+        hint={
+          entries?.length === 0
+            ? t("settings.cliAccess.activity.empty")
+            : t("settings.cliAccess.activity.hint", { n: entries?.length ?? 0 })
+        }
+      >
+        {!!entries?.length && (
+          <Button
+            size="xs"
+            trailingIcon={details ? "caret-up" : "caret-down"}
+            aria-expanded={details}
+            onClick={() => setDetails((open) => !open)}
+          >
+            {t("settings.cliAccess.activity.details")}
+          </Button>
+        )}
+      </SettingRow>
+      {details && entries?.map((a) => (
         <div key={a.id} className={s.activity}>
           <Icon name={ACTIVITY_ICON[a.kind]} className={s.activityIcon} />
           <span className={s.activityText}>

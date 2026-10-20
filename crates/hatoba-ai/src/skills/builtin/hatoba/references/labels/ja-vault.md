@@ -143,6 +143,7 @@ The labels that these files name in English, as the interface shows them in Japa
 | Use the hatoba command in terminals | ターミナルで hatoba コマンドを使う |
 | Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
 | Recent use | 最近の利用 |
+| Details | 詳細 |
 | Refresh interval | 更新間隔 |
 | Export Encrypted Backup | 暗号化バックアップをエクスポート |
 | Export… | エクスポート… |

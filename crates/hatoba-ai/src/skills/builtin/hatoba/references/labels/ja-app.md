@@ -267,6 +267,7 @@ The labels that these files name in English, as the interface shows them in Japa
 |---|---|
 | Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
 | Recent use | 最近の利用 |
+| Details | 詳細 |
 
 ## `references/shortcuts.md`
 

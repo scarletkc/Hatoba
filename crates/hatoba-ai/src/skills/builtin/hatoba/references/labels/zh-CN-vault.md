@@ -143,6 +143,7 @@ The labels that these files name in English, as the interface shows them in Simp
 | Use the hatoba command in terminals | 在终端中使用 hatoba 命令 |
 | Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
 | Recent use | 最近使用 |
+| Details | 详情 |
 | Refresh interval | 刷新间隔 |
 | Export Encrypted Backup | 导出加密备份 |
 | Export… | 导出… |

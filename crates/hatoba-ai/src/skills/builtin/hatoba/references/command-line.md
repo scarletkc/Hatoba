@@ -14,5 +14,5 @@ Settings → General → **Use the hatoba command in terminals** (off by default
 - `<host>` is a saved host's name or id. Hatoba has to be running and unlocked. It connects with the host's saved sign-in, jump host and proxy, uses an open terminal's connection to the host when there is one, and otherwise keeps its own for later commands until it has been unused for 10 minutes.
 - When a connection needs you, for a host key that is not trusted yet, a password that is not saved or a code, Hatoba comes to the front and asks as it does for a terminal, and the command says what it waits for. With `--no-prompt` it fails instead.
 - Ending the command (Ctrl+C, or a timeout of the program that ran it) stops what it started on the host. Locking Hatoba stops every command and copy and closes their connections.
-- **Recent use**, below the switch, lists what other programs ran, on which host and how it ended, until Hatoba locks.
+- **Recent use**, below the switch, counts what other programs ran until Hatoba locks, and **Details** beside it lists each one, on which host and how it ended.
 - Only programs that run as you on this computer can reach Hatoba this way. `hatoba --help` lists the commands and options.

@@ -109,7 +109,7 @@ export const AREAS: Area[] = [
       },
       "references/command-line.md": {
         "Opening hosts": ["settings.cli"],
-        "Other programs": ["settings.cliAccess", "settings.cliAccess.activity"],
+        "Other programs": ["settings.cliAccess", "settings.cliAccess.activity", "settings.cliAccess.activity.details"],
       },
       "references/shortcuts.md": {
         "App shortcuts": [
@@ -253,7 +253,7 @@ export const AREAS: Area[] = [
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
           "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
           "settings.closeAction.quit", "settings.aiNotifications", "settings.cli", "settings.cliAccess",
-          "settings.cliAccess.activity", "dashboard.settings.interval", "settings.backup", "settings.backup.button",
+          "settings.cliAccess.activity", "settings.cliAccess.activity.details", "dashboard.settings.interval", "settings.backup", "settings.backup.button",
         ],
         "Appearance": [
           "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.termColors",
