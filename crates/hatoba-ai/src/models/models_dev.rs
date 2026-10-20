@@ -369,11 +369,12 @@ fn current() -> Arc<Catalog> {
         .unwrap_or_else(|| BUNDLED.clone())
 }
 
-/// Makes `catalog`, over the bundled snapshot's ([`Catalog::over`]), the one [`known_model`]
-/// reads.
+/// Makes `catalog`, over the data in use ([`Catalog::over`]), the one [`known_model`] reads:
+/// fetched data adds to what the snapshot and earlier fetches knew, and overrides it.
 pub fn install(catalog: Catalog) {
-    let catalog = Arc::new(catalog.over(&BUNDLED));
-    *INSTALLED.write().unwrap_or_else(PoisonError::into_inner) = Some(catalog);
+    let mut installed = INSTALLED.write().unwrap_or_else(PoisonError::into_inner);
+    let in_use = installed.clone().unwrap_or_else(|| BUNDLED.clone());
+    *installed = Some(Arc::new(catalog.over(&in_use)));
 }
 
 /// What models.dev says about model `id` on `protocol` ([`Catalog::lookup`]), from the installed
