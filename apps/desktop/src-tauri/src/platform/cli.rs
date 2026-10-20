@@ -278,8 +278,28 @@ mod imp {
         use winreg::RegKey;
         use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ};
 
-        use super::{decode, edit_value};
+        use super::{decode, edit_value, replace_if_changed};
         use crate::platform::cli::{path_with, path_without};
+
+        /// HOST-15: the `hatoba.exe` in `bin` follows the console program an update installed.
+        #[test]
+        fn the_command_is_copied_again_only_when_it_changed() {
+            let dir = std::env::temp_dir().join(format!("hatoba-cli-copy-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let (from, to) = (dir.join("hatoba-cli.exe"), dir.join("hatoba.exe"));
+            std::fs::write(&from, b"v1").unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::read(&to).unwrap(), b"v1");
+            let copied = std::fs::metadata(&to).unwrap().modified().unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::metadata(&to).unwrap().modified().unwrap(), copied);
+
+            std::fs::write(&from, b"v2").unwrap();
+            replace_if_changed(&from, &to).unwrap();
+            assert_eq!(std::fs::read(&to).unwrap(), b"v2");
+            assert!(!to.with_extension("exe.old").exists());
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
 
         #[test]
         fn decodes_registry_strings_up_to_the_nul() {

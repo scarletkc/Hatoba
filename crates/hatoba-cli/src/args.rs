@@ -15,9 +15,9 @@ Usage:
   hatoba <host> | hatoba [user@]<address>       Open a terminal in Hatoba
 
 <host> is the name or id of a saved host, as hatoba hosts lists them.
-In cp, one of <source> and <target> is <host>:<path> and the other a local path;
-a remote path is from the home directory, and ending a target with / or naming a
-folder keeps the file's name.
+In cp, one side is <host>:<path> and the other a local path. A remote path is
+from the home directory. A target that is a folder or ends with / gets the file
+under its own name.
 
 Options:
   --cwd <dir>    Start the command in <dir>, absolute or from the home directory

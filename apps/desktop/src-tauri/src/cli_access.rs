@@ -640,6 +640,12 @@ async fn run_exec(ctx: &Ctx<'_>, target: &Target, command: &str, cwd: Option<&st
         Ok(lease) => lease,
         Err(message) => return End::error(message),
     };
+    if cwd.is_some() && lease.session.server_os() == Some(hatoba_ssh::ServerOs::Windows) {
+        return End::error(format!(
+            "{} runs commands with cmd.exe or PowerShell, so --cwd cannot start one in another              directory. Leave out --cwd and change the directory in the command.",
+            target.name
+        ));
+    }
     let (output, mut pieces) = mpsc::channel(16);
     let run = remote_command::run_streaming(&lease.session, command, cwd, ctx.stopped(), output);
     let pass_on = async {

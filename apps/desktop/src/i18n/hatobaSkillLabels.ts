@@ -54,6 +54,7 @@ export const AREAS: Area[] = [
           "hosts.connect", "hosts.quick.notSaved", "hosts.quick.recent", "hosts.quick.recentTitle",
           "hosts.quick.forget", "terminal.menu.saveAsHost", "hosts.f.user",
         ],
+        "From the command line": ["settings.cli", "settings.cliAccess", "settings.cliAccess.activity"],
         "Import from ~/.ssh/config": [
           "hosts.empty.import", "hosts.import.selectAll", "hosts.import.selectNone", "hosts.import.exists",
           "hosts.import.proxyCommand",
@@ -247,8 +248,8 @@ export const AREAS: Area[] = [
         "General": [
           "settings.rightClick", "settings.rightClick.copyPaste", "settings.rightClick.menu", "settings.confirmPaste",
           "settings.probe", "settings.closeAction", "settings.closeAction.ask", "settings.closeAction.tray",
-          "settings.closeAction.quit", "settings.aiNotifications", "dashboard.settings.interval", "settings.backup",
-          "settings.backup.button",
+          "settings.closeAction.quit", "settings.aiNotifications", "settings.cli", "settings.cliAccess",
+          "settings.cliAccess.activity", "dashboard.settings.interval", "settings.backup", "settings.backup.button",
         ],
         "Appearance": [
           "settings.appearance.light", "settings.appearance.dark", "settings.appearance.auto", "settings.termColors",

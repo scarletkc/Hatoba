@@ -103,6 +103,14 @@ The labels that these files name in English, as the interface shows them in Japa
 | Save as Host… | ホストとして保存… |
 | Username | ユーザー名 |
 
+### From the command line
+
+| en | ja |
+|---|---|
+| Use the hatoba command in terminals | ターミナルで hatoba コマンドを使う |
+| Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
+| Recent use | 最近の利用 |
+
 ### Import from ~/.ssh/config
 
 | en | ja |
