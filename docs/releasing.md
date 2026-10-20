@@ -116,7 +116,7 @@ Do this once. Until then, the winget and AUR jobs fail after the release is publ
       komac new ScarletKc.Hatoba --version X.Y.Z --urls https://github.com/scarletkc/Hatoba/releases/download/vX.Y.Z/Hatoba_X.Y.Z_windows-x64-setup.exe --publisher ScarletKc --package-name Hatoba --moniker hatoba --license MIT --submit
       ```
 
-      Komac reads the rest from the installer and asks for the fields it cannot read. On the pull request, agree to Microsoft's CLA when its bot asks.
+      Komac reads the rest from the installer and asks for the fields it cannot read. Check that the installer manifest says `Architecture: x64`: Komac reads the architecture of the 32-bit NSIS stub, `x86`. On the pull request, agree to Microsoft's CLA when its bot asks.
 3. For the AUR:
    1. If someone else maintains `hatoba-bin`, ask them to add your AUR account as a co-maintainer.
    2. Generate an SSH key without a passphrase with `ssh-keygen -t ed25519 -N '' -C hatoba-bin -f <a folder outside the repository>/aur`. Add `aur.pub` under **My Account → SSH Public Key** on the AUR, and add the contents of `aur` to the `packages` environment as the secret `AUR_SSH_PRIVATE_KEY`. The key can push to every package of your AUR account.
