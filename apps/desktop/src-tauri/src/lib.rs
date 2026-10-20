@@ -9,6 +9,7 @@ mod deploy;
 mod dropped;
 mod dto;
 mod error;
+mod import;
 mod launch;
 mod local;
 mod lock;
@@ -24,8 +25,8 @@ mod update;
 
 use commands::{
     ai as ai_cmd, allowances, app, cli, dashboard as dashboard_cmd, deploy as deploy_cmd, forwards,
-    hosts, keys, local as local_cmd, mcp as mcp_cmd, memory as memory_cmd, proxies, quick,
-    settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
+    hosts, import as import_cmd, keys, local as local_cmd, mcp as mcp_cmd, memory as memory_cmd,
+    proxies, quick, settings, sftp, skills, ssh as ssh_cmd, sync as sync_cmd, vault,
 };
 use tauri::Manager;
 use tauri_specta::{collect_commands, collect_events};
@@ -85,8 +86,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             dashboard_cmd::dashboard_watch,
             dashboard_cmd::dashboard_unwatch,
             dashboard_cmd::dashboard_retry,
-            hosts::ssh_config_preview,
-            hosts::ssh_config_import,
+            import_cmd::hosts_import_preview,
+            import_cmd::hosts_import,
             proxies::proxies_list,
             proxies::proxy_save,
             proxies::proxy_delete,

@@ -99,7 +99,7 @@ interface AppState {
 
 export const useApp = create<AppState>((set, get) => ({
   phase: "boot",
-  info: { version: "0.0.0", platform: "web", mica: false, local_user: "", device_name: "" },
+  info: { version: "0.0.0", platform: "web", mica: false, local_user: "", device_name: "", package_manager: null },
   floating: false,
   prefs: DEFAULT_PREFS,
   vault: null,
@@ -147,7 +147,14 @@ const darkQuery = typeof window !== "undefined" ? window.matchMedia("(prefers-co
 export function applyPrefs(prefs: LocalPrefs) {
   const root = document.documentElement;
   const dark = prefs.appearance === "dark" || (prefs.appearance === "system" && !!darkQuery?.matches);
-  root.dataset.theme = dark ? "dark" : "light";
+  const theme = dark ? "dark" : "light";
+  if (root.dataset.theme !== theme) {
+    // Every color changes at once: controls fading on their own (base.css) would trail the page.
+    root.dataset.themeSwitch = "";
+    root.dataset.theme = theme;
+    void document.body?.offsetHeight;
+    delete root.dataset.themeSwitch;
+  }
   root.dataset.density = prefs.density;
   setLocale(resolveLocale(prefs));
 }

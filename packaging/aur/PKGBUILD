@@ -1,0 +1,32 @@
+# Maintainer: ScarletKc <i@scarletkc.com>
+# Contributor: czyt <czytcn@gmail.com>
+#
+# hatoba-bin in the AUR, packaged from the deb package of a GitHub release. After each stable
+# release, the Release workflow's AUR job sets pkgver to its version, fills in the checksums, and
+# pushes this file with its .SRCINFO (docs/releasing.md, Package managers).
+pkgname=hatoba-bin
+pkgver=0.0.0
+pkgrel=1
+pkgdesc='Open-source desktop SSH client with an AI assistant and end-to-end encrypted sync'
+arch=('x86_64')
+url='https://hatoba.fog.moe'
+license=('MIT')
+# The libraries the executable links, and the tray library it loads at run time.
+depends=('cairo' 'dbus' 'gdk-pixbuf2' 'glib2' 'glibc' 'gtk3' 'hicolor-icon-theme' 'libayatana-appindicator'
+         'libgcc' 'libsoup3' 'webkit2gtk-4.1')
+optdepends=('org.freedesktop.secrets: keep the sync credentials in a Secret Service keyring')
+provides=('hatoba')
+conflicts=('hatoba')
+options=('!strip' '!debug')
+source=("https://github.com/scarletkc/Hatoba/releases/download/v${pkgver}/Hatoba_${pkgver}_linux-x64.deb"
+        "LICENSE-${pkgver}::https://raw.githubusercontent.com/scarletkc/Hatoba/v${pkgver}/LICENSE")
+sha256sums=('SKIP'
+            'SKIP')
+
+package() {
+  bsdtar --no-same-owner -xf data.tar.gz -C "${pkgdir}"
+  install -Dm644 "LICENSE-${pkgver}" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  # In its resource folder, this marker makes Hatoba leave updates to pacman.
+  install -dm755 "${pkgdir}/usr/lib/Hatoba"
+  printf 'aur\n' > "${pkgdir}/usr/lib/Hatoba/managed-by-package-manager"
+}

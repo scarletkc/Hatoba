@@ -104,6 +104,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 52px 40px;
   gap: 8px;
+  transition: background-color var(--motion-fade) var(--ease-out);
 }
 
 .columns {

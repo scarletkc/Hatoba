@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useApp } from "@/app/store";
 import { useTabs } from "@/app/tabs";
 import { Icon, Spinner, Switch } from "@/components/controls";
-import { useOverlaysLocked, windowSurface } from "@/components/overlay";
+import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
 import { useT, type MessageKey } from "@/i18n";
 import type { McpServerState } from "@/ipc/types";
 import { cx } from "@/lib/cx";
@@ -210,8 +210,9 @@ function Popover({
   children: (close: (restoreFocus: boolean) => void) => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: anchor.left, top: anchor.top });
+  const [pos, setPos] = useState({ left: anchor.left, top: anchor.top, transformOrigin: "left bottom" });
   const locked = useOverlaysLocked();
+  useExitAnimation(ref, !locked);
 
   useEffect(() => {
     if (locked) onClose(false);
@@ -223,12 +224,14 @@ function Popover({
     const el = ref.current;
     if (!el) return;
     const place = () => {
-      const r = el.getBoundingClientRect();
+      // Its layout size: the bounding box would take in the opening animation's scale.
+      const r = { width: el.offsetWidth, height: el.offsetHeight };
       const b = windowSurface();
       const left = Math.max(b.left + 8, Math.min(anchor.left, b.right - r.width - 8));
       let top = anchor.top - r.height - 6;
-      if (top < b.top + 8) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
-      setPos({ left, top: Math.max(b.top + 8, top) });
+      const below = top < b.top + 8;
+      if (below) top = Math.min(anchor.bottom + 6, b.bottom - r.height - 8);
+      setPos({ left, top: Math.max(b.top + 8, top), transformOrigin: below ? "left top" : "left bottom" });
     };
     place();
     if (typeof ResizeObserver === "undefined") return;
@@ -280,7 +283,7 @@ function Popover({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={s.popover} style={pos} onKeyDown={onKeyDown}>
+    <div ref={ref} role="dialog" aria-label={label} tabIndex={-1} className={cx(s.popover, overlayStyles.popIn)} style={pos} onKeyDown={onKeyDown}>
       {children(onClose)}
     </div>,
     document.body,

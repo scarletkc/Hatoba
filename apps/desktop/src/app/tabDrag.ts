@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { motion } from "@/lib/motion";
 import { useTabs, type SessionTab } from "./tabs";
 
 /** How far the pointer moves sideways before a press on a tab becomes a drag, in CSS pixels. */
 const DRAG_THRESHOLD = 4;
-/** How long a tab takes to slide into its place. */
-const SLIDE_MS = 150;
+/** How long a tab takes to slide into its place: no time with reduced motion. */
+const slideMs = () => motion("--motion-fast").duration;
 
 /** Where a tab was in the strip when the drag started, in viewport pixels. */
 export interface Slot {
@@ -158,7 +159,8 @@ export class TabDrag {
     d.step = d.slots[d.from].width + (parseFloat(getComputedStyle(strip).columnGap) || 0);
     d.started = true;
     d.el.dataset.dragging = "";
-    for (const item of d.items) if (item !== d.el) item.style.transition = `transform ${SLIDE_MS}ms ease`;
+    const ms = slideMs();
+    for (const item of d.items) if (item !== d.el) item.style.transition = `transform ${ms}ms var(--ease-out)`;
     try {
       d.el.setPointerCapture(d.pointerId);
     } catch {
@@ -226,10 +228,11 @@ export class TabDrag {
     el.style.transition = "none";
     translate(el, dx);
     void el.offsetWidth; // Starts the slide from `dx`.
-    el.style.transition = `transform ${SLIDE_MS}ms ease`;
+    const ms = slideMs();
+    el.style.transition = `transform ${ms}ms var(--ease-out)`;
     translate(el, 0);
     const els = [el, ...others];
-    this.slide = { els, timer: window.setTimeout(() => this.endSlide(), SLIDE_MS) };
+    this.slide = { els, timer: window.setTimeout(() => this.endSlide(), ms) };
   }
 
   private endSlide() {

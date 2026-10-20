@@ -139,9 +139,10 @@ impl Env {
     }
 }
 
-/// The sockets to try, in order: the user's choice alone when there is one, otherwise the socket
-/// `SSH_AUTH_SOCK` names (when it exists) and then the well-known ones. Without duplicates, so a
-/// variable that names a known agent's socket is tried once.
+/// The sockets to try, in order: the user's choice alone when there is one; otherwise the socket
+/// `SSH_AUTH_SOCK` names, alone and whether or not it exists (except the macOS launchd placeholder,
+/// and a value that is no pipe on Windows); otherwise the well-known sockets that exist, without
+/// duplicates, with the launchd listener last.
 pub fn agent_sockets(chosen: Option<&str>) -> Vec<AgentSocket> {
     candidates(chosen, &Env::of_process())
 }

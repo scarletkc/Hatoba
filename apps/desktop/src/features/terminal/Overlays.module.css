@@ -6,6 +6,24 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  /* Held back a moment, so a quick connection never flashes it; it fades as the session opens. */
+  animation: fadeIn var(--motion-base) var(--ease-out) 120ms both;
+}
+
+.connecting[data-closing] {
+  animation: fadeOut var(--motion-fade) var(--ease-in) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
 }
 
 .connectingPill {
@@ -31,6 +49,7 @@
   justify-content: center;
   padding: 16px;
   background: rgba(10, 11, 13, 0.35);
+  animation: fadeIn var(--motion-base) var(--ease-out);
 }
 
 .card {
@@ -43,6 +62,15 @@
   font-family: var(--font-sans);
   color: #f5f5f7;
   line-height: 1.4;
+  animation: cardIn var(--motion-base) var(--ease-out);
+}
+
+/* As a dialog does (overlay.module.css). */
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: scale(var(--motion-pop));
+  }
 }
 
 .cardHead {
@@ -154,6 +182,24 @@
   color: #f5f5f7;
   font-family: var(--font-sans);
   font-size: 13px;
+  animation: bannerIn var(--motion-base) var(--ease-out);
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-rise));
+  }
+}
+
+/* With reduced motion they only fade (base.css). */
+@media (prefers-reduced-motion: reduce) {
+  .connecting,
+  .scrim,
+  .card,
+  .banner {
+    animation-duration: var(--motion-fade) !important;
+  }
 }
 
 .bannerText {

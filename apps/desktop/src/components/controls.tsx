@@ -1,5 +1,7 @@
 import {
   forwardRef,
+  useLayoutEffect,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -35,6 +37,11 @@ export function Icon({
       style={{ fontSize: size, color, ...style }}
     />
   );
+}
+
+/** A disclosure's caret, which turns to point down as it opens. */
+export function DisclosureCaret({ open, size, className }: { open: boolean; size?: number; className?: string }) {
+  return <Icon name="caret-right" size={size} className={cx(s.disclosureCaret, open && s.disclosureCaretOpen, className)} />;
 }
 
 /** The app icon (`src-tauri/app-icon.svg`). `className` sets its size. */
@@ -210,8 +217,41 @@ export function Segmented<V extends string>({
   ariaLabel?: string;
   className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  // Placed once before it slides: a pill that slid in from the corner on first paint would look broken.
+  const [placed, setPlaced] = useState(false);
+  // Callers pass a new options array on every render; the labels are what can move the segments.
+  const labels = options.map((o) => o.label).join("\n");
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const place = () => {
+      const on = root.querySelector<HTMLElement>('[aria-checked="true"]');
+      const next = on && { x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight };
+      setPill((cur) =>
+        cur && next && cur.x === next.x && cur.y === next.y && cur.w === next.w && cur.h === next.h ? cur : next,
+      );
+    };
+    place();
+    const frame = requestAnimationFrame(() => setPlaced(true));
+    if (typeof ResizeObserver === "undefined") return () => cancelAnimationFrame(frame);
+    const observer = new ResizeObserver(place);
+    observer.observe(root);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [value, labels]);
   return (
-    <div className={cx(s.segmented, className)} role="radiogroup" aria-label={ariaLabel}>
+    <div ref={ref} className={cx(s.segmented, className)} role="radiogroup" aria-label={ariaLabel}>
+      {pill && (
+        <span
+          className={s.segmentPill}
+          data-placed={placed || undefined}
+          style={{ width: pill.w, height: pill.h, transform: `translate(${pill.x}px, ${pill.y}px)` }}
+        />
+      )}
       {options.map((o) => (
         <button
           key={o.value}

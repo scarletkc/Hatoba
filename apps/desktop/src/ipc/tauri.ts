@@ -64,8 +64,8 @@ export function createTauriApi(): HatobaApi {
     },
     dashboard_unwatch: (watchId) => commands.dashboardUnwatch(watchId),
     dashboard_retry: (hostId) => commands.dashboardRetry(hostId),
-    ssh_config_preview: () => commands.sshConfigPreview(),
-    ssh_config_import: (aliases, keyFiles) => commands.sshConfigImport(aliases, keyFiles),
+    hosts_import_preview: (source, path) => commands.hostsImportPreview(source, path),
+    hosts_import: (source, path, ids, keyFiles) => commands.hostsImport(source, path, ids, keyFiles),
 
     proxies_list: () => commands.proxiesList(),
     proxy_save: (input) => commands.proxySave(input),

@@ -1,6 +1,6 @@
 import { Fragment, memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/app/store";
-import { Button, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
+import { Button, controlStyles, DisclosureCaret, Icon, IconButton, LinkButton, Spinner } from "@/components/controls";
 import { toast } from "@/components/overlay";
 import { readClipboard, writeClipboard } from "@/features/terminal/clipboard";
 import { formatDateTime, formatMessageTime, useT, useToday, type MessageKey } from "@/i18n";
@@ -430,7 +430,11 @@ export function MessageList({ slotId, slot, host, empty }: { slotId: string; slo
         return (
           <Fragment key={entry.entry_id}>
             {divider}
-            <div className={cx(s.item, outside && s.outside, flashed && entry.role !== "summary" && s.flash)} data-reveal={key}>
+            <div
+              // A message just sent comes up into place; the stored copy that replaces it does not.
+              className={cx(s.item, outside && s.outside, flashed && entry.role !== "summary" && s.flash, entry.entry_id.startsWith("~") && s.enter)}
+              data-reveal={key}
+            >
               {body}
             </div>
           </Fragment>
@@ -721,7 +725,7 @@ function EditMessage({
 
 function LiveMessage({ slotId, live, host }: { slotId: string; live: LiveResponse; host: HostInfo | null }) {
   return (
-    <div className={s.item}>
+    <div className={cx(s.item, s.enter)}>
       <AssistantMessage
         slotId={slotId}
         text={live.text}
@@ -809,9 +813,9 @@ function Reasoning({ text, active }: { text: string; active: boolean }) {
       <button type="button" className={s.reasoningHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="brain" size={13} />
         <span className={active ? s.shimmer : undefined}>{t(active ? "ai.reasoning.active" : "ai.reasoning")}</span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} />
+        <DisclosureCaret open={open} size={11} />
       </button>
-      {open && <div className={cx(s.reasoningBody, "selectable")}>{text}</div>}
+      {open && <div className={cx(s.reasoningBody, controlStyles.reveal, "selectable")}>{text}</div>}
     </div>
   );
 }
@@ -827,10 +831,10 @@ function SummaryBlock({ text, flash }: { text: string; flash?: boolean }) {
       <button type="button" className={s.summaryHead} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name="arrows-in-line-vertical" size={13} />
         <span>{t("ai.summary")}</span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} />
+        <DisclosureCaret open={open} size={11} />
       </button>
       {open && (
-        <div className={s.summaryBody}>
+        <div className={cx(s.summaryBody, controlStyles.reveal)}>
           <Markdown text={text} />
         </div>
       )}
@@ -989,10 +993,10 @@ function ToolBlock({
             <StatusChip view={view} name={call.name} />
           )}
         </span>
-        <Icon name={open ? "caret-down" : "caret-right"} size={11} className={s.toolCaret} />
+        <DisclosureCaret open={open} size={11} className={s.toolCaret} />
       </div>
       {open && (
-        <div className={s.toolBody}>
+        <div className={cx(s.toolBody, controlStyles.reveal)}>
           {auto && <AutoVerdict verdict={auto} />}
           {kind === "edit_file" || kind === "write_file" ? (
             <CallChange slotId={slotId} call={call} change={change} />

@@ -54,7 +54,7 @@ async fn chat_completions_list_reads_ids_names_and_limits() {
     assert_eq!(
         models,
         vec![
-            // What the list leaves out of a well-known model comes from the table.
+            // What the list leaves out of a well-known model comes from models.dev.
             ModelInfo {
                 id: "gpt-4.1".into(),
                 name: "gpt-4.1".into(),
@@ -140,7 +140,7 @@ async fn anthropic_list_follows_pages() {
                 Some(1_000_000),
                 Some(128_000)
             ),
-            // The page left the limits out; the table has them.
+            // The page left the limits out; models.dev has them.
             (
                 "claude-sonnet-4-6",
                 "Claude Sonnet 4.6",
@@ -741,7 +741,7 @@ async fn system_one_test_connection_sends_one_decision() {
 // ---------------------------------------------------------------------------------------------
 
 #[tokio::test]
-async fn a_gateway_list_of_bare_ids_gets_limits_and_levels_from_the_table() {
+async fn a_gateway_list_of_bare_ids_gets_limits_and_levels_from_models_dev() {
     use Effort::{High, Low, Medium, Xhigh};
     // New API's OpenAI-format list: no limits or capabilities, whatever the model.
     let server = MockServer::start().await;
@@ -785,7 +785,7 @@ async fn a_gateway_list_of_bare_ids_gets_limits_and_levels_from_the_table() {
             ),
             (
                 "gpt-5.5",
-                Some(1_050_000),
+                Some(922_000),
                 Some(128_000),
                 Some(vec![Low, Medium, High, Xhigh]),
                 None
@@ -857,13 +857,94 @@ async fn a_gateway_list_of_bare_ids_gets_limits_and_levels_from_the_table() {
     );
 }
 
+/// models.dev's `api.json` in small: the vendors' own providers, a gateway, and entries that are
+/// left out.
+fn models_dev_data() -> serde_json::Value {
+    let effort = |values: &[&str]| json!({"type": "effort", "values": values});
+    let budget = json!({"type": "budget_tokens", "max": 32_000});
+    let toggle = json!({"type": "toggle"});
+    let all = ["low", "medium", "high", "xhigh", "max"];
+    let model = |context: u64, output: u64, options: serde_json::Value| {
+        json!({"name": "x", "limit": {"context": context, "output": output},
+               "reasoning": true, "reasoning_options": options, "cost": {"input": 1}})
+    };
+    json!({
+        "anthropic": {"id": "anthropic", "npm": "@ai-sdk/anthropic", "models": {
+            "claude-opus-4-8": model(1_000_000, 128_000, json!([effort(&all)])),
+            "claude-opus-4-6": model(
+                1_000_000, 128_000, json!([effort(&["low", "medium", "high", "max"]), budget])),
+            "claude-opus-4-5": model(
+                200_000, 64_000, json!([effort(&["low", "medium", "high"]), budget])),
+            "claude-sonnet-4-5": model(200_000, 64_000, json!([budget])),
+            "claude-sonnet-4-5-20250929": model(200_000, 64_000, json!([budget])),
+        }},
+        "openai": {"models": {
+            "gpt-5": {"limit": {"context": 400_000, "input": 272_000, "output": 128_000},
+                      "reasoning": true,
+                      "reasoning_options": [effort(&["minimal", "low", "medium", "high"])]},
+            "gpt-5.5": model(1_050_000, 128_000,
+                             json!([effort(&["none", "low", "medium", "high", "xhigh"])])),
+            "gpt-5.5-pro": model(
+                1_050_000, 128_000, json!([effort(&["medium", "high", "xhigh"])])),
+            "gpt-4o": {"limit": {"context": 128_000, "output": 16_384}, "reasoning": false},
+            "o3-mini": model(200_000, 100_000, json!([effort(&["low", "medium", "high"])])),
+            // No context window: an image model.
+            "chatgpt-image-latest": {"limit": {"context": 0, "output": 0}, "reasoning": false},
+            // Not an entry models.dev's schema allows.
+            "gpt-broken": {"limit": "large"},
+        }},
+        "google": {"models": {
+            "gemini-2.5-pro": model(1_048_576, 65_536, json!([budget])),
+            "gemini-3.1-pro-preview": model(
+                1_048_576, 65_536, json!([effort(&["low", "medium", "high"])])),
+            "gemma-4-31b-it": model(262_144, 32_768, json!([toggle])),
+            // Reasons, but models.dev does not say how.
+            "gemini-omni-flash": {"limit": {"context": 131_072, "output": 65_536},
+                                  "reasoning": true},
+        }},
+        "deepseek": {"models": {
+            "deepseek-v4-pro": model(
+                1_048_576, 393_216, json!([toggle, effort(&["low", "high", "max"])])),
+        }},
+        "alibaba": {"models": {
+            "qwen3.8-max": model(1_000_000, 131_072,
+                                 json!([toggle, effort(&["low", "medium", "xhigh"]), budget])),
+            "qwen3.6-plus": model(1_000_000, 65_536, json!([toggle, budget])),
+            // Moonshot's model on Model Studio: Moonshot's own entry counts.
+            "kimi-k3": {"limit": {"context": 1_048_576, "output": 1_048_576}, "reasoning": true,
+                        "reasoning_options": [effort(&["high"])],
+                        "canonical_model_id": "moonshotai/kimi-k3"},
+        }},
+        "moonshotai": {"models": {
+            "kimi-k3": {"limit": {"context": 1_048_576, "output": 262_144}, "reasoning": true,
+                        "reasoning_options": [effort(&["low", "high", "max"])],
+                        "canonical_model_id": "moonshotai/kimi-k3"},
+        }},
+        // A gateway's entries never count.
+        "openrouter": {"models": {
+            "anthropic/claude-opus-4.8": model(200_000, 32_000, json!([effort(&["low"])])),
+            "house/model": model(8_192, 4_096, json!([])),
+        }},
+    })
+}
+
+fn models_dev() -> models_dev::Catalog {
+    models_dev::ModelsDev::parse(models_dev_data().to_string().as_bytes())
+        .unwrap()
+        .catalog
+}
+
 #[test]
 fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versions() {
     use Effort::{High, Low, Max, Medium, Xhigh};
+    let catalog = models_dev();
+    let known = |id: &str, protocol| catalog.lookup(id, protocol);
+    assert!(catalog.knows("anthropic/claude-opus-4.8"));
+    assert!(!catalog.knows("llama3.1:8b"));
     let opus_4_8 = KnownModel {
-        context_window: 1_000_000,
-        max_output_tokens: 128_000,
-        efforts: Some(&Effort::ALL),
+        context_window: Some(1_000_000),
+        max_output_tokens: Some(128_000),
+        efforts: Some(Effort::ALL.to_vec()),
         adaptive_thinking: Some(true),
     };
     for id in [
@@ -877,9 +958,14 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
         "claude-opus-4-8-thinking",
         "claude-opus-4-8[1m]",
     ] {
-        assert_eq!(known_model(id, Protocol::Anthropic), Some(opus_4_8), "{id}");
+        assert_eq!(
+            known(id, Protocol::Anthropic),
+            Some(opus_4_8.clone()),
+            "{id}"
+        );
     }
-    // A later version is not the one before it, and a version is not its family.
+    // A later version is not the one before it, a version is not its family, and a gateway's
+    // own entries are not kept.
     for id in [
         "claude-opus-5-7",
         "claude-opus-4-9",
@@ -888,7 +974,10 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
         "gpt-50",
         "gemini-2.6-pro",
         "o5",
-        "my-model",
+        // ChatGPT's chat models do not reason as their namesakes do.
+        "gpt-5-chat-latest",
+        "openai/gpt-5.5-chat",
+        "house/model",
         "",
     ] {
         for protocol in [
@@ -896,99 +985,114 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
             Protocol::ChatCompletions,
             Protocol::Responses,
         ] {
-            assert_eq!(known_model(id, protocol), None, "{id} on {protocol:?}");
+            assert_eq!(known(id, protocol), None, "{id} on {protocol:?}");
         }
     }
     // The longest key wins: each version and variant has its own.
-    let efforts = |id: &str, protocol| known_model(id, protocol).and_then(|m| m.efforts);
+    let efforts = |id: &str, protocol| known(id, protocol).and_then(|m| m.efforts);
+    let adaptive = |id: &str| known(id, Protocol::Anthropic).and_then(|m| m.adaptive_thinking);
     assert_eq!(
         efforts("claude-opus-4-6", Protocol::Anthropic),
-        Some(&[Low, Medium, High, Max][..])
+        Some(vec![Low, Medium, High, Max])
     );
+    // Adaptive thinking came with the `max` level in Claude 4.6.
+    assert_eq!(adaptive("claude-opus-4-6"), Some(true));
+    assert_eq!(
+        efforts("claude-opus-4-5", Protocol::Anthropic),
+        Some(vec![Low, Medium, High])
+    );
+    assert_eq!(adaptive("claude-opus-4-5"), Some(false));
+    // Thinking with a token budget only: no level.
     assert_eq!(
         efforts("claude-sonnet-4-5-20250929", Protocol::Anthropic),
-        Some(&[][..])
+        Some(vec![])
+    );
+    assert_eq!(adaptive("claude-sonnet-4-5"), Some(false));
+    // `minimal` and `none` have no level; the context window is the input limit.
+    assert_eq!(
+        known("gpt-5-2025-08-07", Protocol::Responses),
+        Some(KnownModel {
+            context_window: Some(272_000),
+            max_output_tokens: Some(128_000),
+            efforts: Some(vec![Low, Medium, High]),
+            adaptive_thinking: None,
+        })
     );
     assert_eq!(
-        efforts("claude-sonnet-4-20250514", Protocol::Anthropic),
-        Some(&[][..])
-    );
-    assert_eq!(
-        known_model("claude-sonnet-4-20250514", Protocol::Anthropic).map(|m| m.max_output_tokens),
-        Some(64_000)
-    );
-    assert_eq!(
-        efforts("gpt-5.4-mini-2026-03-17", Protocol::Responses),
-        Some(&[Low, Medium, High, Xhigh][..])
+        efforts("gpt-5.5", Protocol::Responses),
+        Some(vec![Low, Medium, High, Xhigh])
     );
     assert_eq!(
         efforts("gpt-5.5-pro", Protocol::Responses),
-        Some(&[Medium, High, Xhigh][..])
+        Some(vec![Medium, High, Xhigh])
     );
-    for id in [
-        "gpt-5-chat-latest",
-        "gpt-5.1-chat-latest",
-        "openai/gpt-5.2-chat",
-    ] {
-        assert_eq!(
-            known_model(id, Protocol::Responses).map(|m| (m.context_window, m.efforts)),
-            Some((128_000, Some(&[][..]))),
-            "{id}"
-        );
-    }
     assert_eq!(
         efforts("o3-mini-high", Protocol::ChatCompletions),
-        Some(&[Low, Medium, High][..])
+        Some(vec![Low, Medium, High])
     );
     assert_eq!(
         efforts("gpt-4o-2024-08-06", Protocol::ChatCompletions),
-        Some(&[][..])
+        Some(vec![])
     );
+    for id in ["chatgpt-image-latest", "gpt-broken"] {
+        assert_eq!(known(id, Protocol::Responses), None, "{id}");
+    }
     assert_eq!(
-        known_model("gpt-oss:20b", Protocol::ChatCompletions).map(|m| m.context_window),
-        Some(131_072)
-    );
-    assert_eq!(
-        known_model("models/gemini-3.1-pro-preview", Protocol::ChatCompletions),
+        known("models/gemini-3.1-pro-preview", Protocol::ChatCompletions),
         Some(KnownModel {
-            context_window: 1_048_576,
-            max_output_tokens: 65_536,
-            efforts: Some(&[Low, Medium, High]),
+            context_window: Some(1_048_576),
+            max_output_tokens: Some(65_536),
+            efforts: Some(vec![Low, Medium, High]),
             adaptive_thinking: None,
         })
+    );
+    // Google's OpenAI compatibility turns a level into Gemini 2.5's budget.
+    assert_eq!(
+        efforts("gemini-2.5-pro", Protocol::ChatCompletions),
+        Some(vec![Low, Medium, High])
+    );
+    assert_eq!(
+        efforts("gemma-4-31b-it", Protocol::ChatCompletions),
+        Some(vec![])
+    );
+    assert_eq!(
+        known("gemini-omni-flash", Protocol::ChatCompletions)
+            .map(|m| (m.context_window, m.efforts)),
+        Some((Some(131_072), None))
     );
     // DeepSeek takes the same levels in both of its formats.
     for protocol in [Protocol::Anthropic, Protocol::ChatCompletions] {
         assert_eq!(
             efforts("deepseek-ai/DeepSeek-V4-Pro", protocol),
-            Some(&[Low, High, Max][..]),
+            Some(vec![Low, High, Max]),
             "{protocol:?}"
         );
     }
     assert_eq!(
-        known_model("qwen3.8-max-0902", Protocol::ChatCompletions).map(|m| (
+        known("qwen3.8-max-0902", Protocol::ChatCompletions).map(|m| (
             m.context_window,
             m.max_output_tokens,
             m.efforts
         )),
-        Some((1_000_000, 131_072, Some(&[Low, Medium, Xhigh][..])))
+        Some((
+            Some(1_000_000),
+            Some(131_072),
+            Some(vec![Low, Medium, Xhigh])
+        ))
     );
     assert_eq!(
         efforts("qwen3.6-plus", Protocol::ChatCompletions),
-        Some(&[][..])
+        Some(vec![])
     );
+    // Kimi K3 as Moonshot lists it, not as Model Studio does.
     assert_eq!(
-        known_model("qwen-plus-2025-07-14", Protocol::ChatCompletions).map(|m| m.context_window),
-        Some(131_072)
-    );
-    // Retired from its vendor's API, so it stays as unknown as before.
-    assert_eq!(
-        known_model("deepseek-chat", Protocol::ChatCompletions),
-        None
+        known("moonshotai/Kimi-K3", Protocol::ChatCompletions)
+            .map(|m| (m.max_output_tokens, m.efforts)),
+        Some((Some(262_144), Some(vec![Low, High, Max])))
     );
     // The levels are those of the vendor's own format: elsewhere only the limits apply.
     assert_eq!(
-        known_model("anthropic/claude-opus-4.8", Protocol::ChatCompletions),
+        known("anthropic/claude-opus-4.8", Protocol::ChatCompletions),
         Some(KnownModel {
             efforts: None,
             adaptive_thinking: None,
@@ -996,15 +1100,147 @@ fn known_models_match_ids_with_vendor_prefixes_and_suffixes_but_not_other_versio
         })
     );
     assert_eq!(
-        known_model("gpt-5.2", Protocol::Anthropic).map(|m| (m.context_window, m.efforts)),
-        Some((400_000, None))
+        known("gpt-5.5", Protocol::Anthropic).map(|m| (m.context_window, m.efforts)),
+        Some((Some(1_050_000), None))
     );
     // A System One model only decides (AI-47).
-    assert_eq!(known_model("gpt-5.2", Protocol::SystemOne), None);
+    assert_eq!(known("gpt-5.5", Protocol::SystemOne), None);
 }
 
 #[test]
-fn what_the_list_or_the_user_said_wins_over_the_table() {
+fn newer_models_dev_data_wins_and_keeps_what_it_dropped() {
+    use Effort::{High, Low, Medium};
+    let older = models_dev();
+    let newer = models_dev::ModelsDev::parse(
+        json!({
+            "anthropic": {"models": {
+                "claude-opus-5": {"limit": {"context": 1_000_000, "output": 128_000},
+                                  "reasoning": true,
+                                  "reasoning_options": [{"type": "effort", "values": ["high"]}]},
+            }},
+            "openai": {"models": {
+                "gpt-5": {"limit": {"context": 400_000, "output": 64_000}, "reasoning": true,
+                          "reasoning_options": [{"type": "effort", "values": ["low", "medium"]}]},
+            }},
+        })
+        .to_string()
+        .as_bytes(),
+    )
+    .unwrap()
+    .catalog
+    .over(&older);
+    let known = |id: &str| newer.lookup(id, Protocol::Responses);
+    // New, changed, and dropped since: the older data still knows it.
+    assert!(newer.knows("claude-opus-5"));
+    assert_eq!(
+        known("gpt-5").map(|m| (m.max_output_tokens, m.efforts)),
+        Some((Some(64_000), Some(vec![Low, Medium])))
+    );
+    assert_eq!(
+        known("o3-mini").and_then(|m| m.efforts),
+        Some(vec![Low, Medium, High])
+    );
+}
+
+#[test]
+fn models_dev_data_keeps_what_it_needs_and_refuses_what_is_not_its_data() {
+    let full = models_dev::ModelsDev::parse(models_dev_data().to_string().as_bytes()).unwrap();
+    // What it keeps reads back the same, without the gateway, the costs and the other labs.
+    let kept = models_dev::ModelsDev::parse(full.json.as_bytes()).unwrap();
+    assert_eq!(kept.json, full.json);
+    assert_eq!(kept.catalog.len(), full.catalog.len());
+    for left_out in ["openrouter", "cost", "canonical_model_id", "gpt-broken"] {
+        assert!(!full.json.contains(left_out), "{left_out}");
+    }
+    for bad in [
+        &b"<html>Bad gateway</html>"[..],
+        br#"{"openrouter": {"models": {}}}"#,
+        br#"{"anthropic": {"models": {"claude-opus-4-8": {"limit": {"context": 1}}}}}"#,
+    ] {
+        assert!(
+            models_dev::ModelsDev::parse(bad).is_err(),
+            "{}",
+            String::from_utf8_lossy(bad)
+        );
+    }
+}
+
+#[test]
+fn the_bundled_snapshot_knows_the_vendors_current_models() {
+    // What any snapshot says, whenever it was refreshed.
+    let opus = known_model("claude-opus-4-8", Protocol::Anthropic).unwrap();
+    assert_eq!(opus.context_window, Some(1_000_000));
+    assert_eq!(opus.efforts.as_deref(), Some(&Effort::ALL[..]));
+    assert_eq!(opus.adaptive_thinking, Some(true));
+    for (id, protocol) in [
+        ("gpt-5.5", Protocol::Responses),
+        ("gemini-3.1-pro-preview", Protocol::ChatCompletions),
+        ("deepseek-v4-pro", Protocol::ChatCompletions),
+        ("qwen3.8-max", Protocol::ChatCompletions),
+    ] {
+        let model = known_model(id, protocol);
+        assert!(
+            model.as_ref().is_some_and(|m| m.context_window.is_some()
+                && m.max_output_tokens.is_some()
+                && m.efforts.as_ref().is_some_and(|e| !e.is_empty())),
+            "{id}: {model:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn models_dev_data_is_fetched_compressed_and_checked() {
+    use std::io::Write;
+    let body = models_dev_data().to_string();
+    let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    gzip.write_all(body.as_bytes()).unwrap();
+    let gzip = gzip.finish().unwrap();
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/gzip/api.json"))
+        .and(header("accept-encoding", "gzip"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-encoding", "gzip")
+                .set_body_raw(gzip, "application/json"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/plain/api.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(body, "application/json"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/down/api.json"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("unavailable"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/broken/api.json"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-encoding", "gzip")
+                .set_body_raw(b"not gzip".to_vec(), "application/json"),
+        )
+        .mount(&server)
+        .await;
+    let fetch = |at: &str| {
+        let url = Url::parse(&format!("{}/{at}/api.json", server.uri())).unwrap();
+        async move { models_dev::fetch_from(&http_client(), url, &CancellationToken::new()).await }
+    };
+    let expected = models_dev().len();
+    assert_eq!(fetch("gzip").await.unwrap().catalog.len(), expected);
+    assert_eq!(fetch("plain").await.unwrap().catalog.len(), expected);
+    assert!(matches!(
+        fetch("down").await,
+        Err(AiError::Http { status: 503, .. })
+    ));
+    assert!(matches!(fetch("broken").await, Err(AiError::Protocol(_))));
+}
+
+#[test]
+fn what_the_list_or_the_user_said_wins_over_models_dev() {
     let mut spec = ModelSpec {
         context_window: Some(200_000),
         efforts: Some(vec![Effort::High]),

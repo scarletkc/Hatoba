@@ -21,12 +21,12 @@ import { durationLabel } from "@/features/settings/durations";
 import { connectHost, connectTarget } from "@/features/terminal/connect";
 import { formatRelative, useT, type Locale } from "@/i18n";
 import { api } from "@/ipc/api";
-import type { HostView, QuickTarget } from "@/ipc/types";
+import type { HostView, ImportSource, QuickTarget } from "@/ipc/types";
 import { cx } from "@/lib/cx";
 import { isImeEvent } from "@/lib/ime";
 import { copyText } from "@/lib/native";
 import { shortcutLabel } from "@/lib/platform";
-import { ImportSshDialog } from "./ImportSshDialog";
+import { IMPORT_APPS, ImportDialog } from "./ImportDialog";
 import { OsIcon } from "./OsIcon";
 import {
   bracketHost,
@@ -76,7 +76,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [probe, setProbe] = useState<Record<string, boolean>>({});
-  const [importing, setImporting] = useState(false);
+  const [importing, setImporting] = useState<ImportSource | null>(null);
   const [ctxHost, setCtxHost] = useState<HostView | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [searchFocused, setSearchFocused] = useState(false);
@@ -90,6 +90,8 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
   const openRowMenu = rowMenu.openAt;
   const sortMenu = useMenu();
   const sortButton = useRef<HTMLButtonElement>(null);
+  const importMenu = useMenu();
+  const importButton = useRef<HTMLButtonElement>(null);
 
   const title = useMemo(() => {
     switch (filter.kind) {
@@ -424,6 +426,38 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
     </Button>
   );
 
+  // SSH-11, SSH-12, SSH-15: `~/.ssh/config`, then the other SSH clients.
+  const importControls = (
+    <>
+      <Button
+        ref={importButton}
+        icon="file-arrow-down"
+        trailingIcon="caret-down"
+        aria-haspopup="menu"
+        aria-expanded={!!importMenu.anchor}
+        onClick={() => importButton.current && importMenu.openBelow(importButton.current, true)}
+      >
+        {t("hosts.import")}
+      </Button>
+      {importMenu.anchor && (
+        <Menu
+          anchor={importMenu.anchor}
+          onClose={importMenu.close}
+          minWidth={180}
+          entries={[
+            { label: t("hosts.import.sshConfig"), hint: "~/.ssh/config", onSelect: () => setImporting("ssh_config") },
+            { kind: "separator" },
+            ...Object.entries(IMPORT_APPS).map(([source, app]) => ({
+              label: app,
+              onSelect: () => setImporting(source as ImportSource),
+            })),
+          ]}
+        />
+      )}
+    </>
+  );
+  const importDialog = importing && <ImportDialog source={importing} onClose={() => setImporting(null)} />;
+
   const searchField = (
     <div className={s.searchWrap}>
       <SearchField
@@ -469,9 +503,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
           actions={
             <>
               {newButton}
-              <Button icon="file-arrow-down" onClick={() => setImporting(true)}>
-                {t("hosts.empty.import")}
-              </Button>
+              {importControls}
             </>
           }
           foot={
@@ -481,7 +513,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
             </>
           }
         />
-        {importing && <ImportSshDialog onClose={() => setImporting(false)} />}
+        {importDialog}
       </div>
     );
   }
@@ -523,6 +555,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         >
           {sortLabels[sort]}
         </Button>
+        {importControls}
         {newButton}
       </PageHeader>
 
@@ -606,6 +639,7 @@ export function HostsPage({ filter }: { filter: HostFilter }) {
         />
       )}
       {rowMenu.anchor && ctxHost && <Menu anchor={rowMenu.anchor} onClose={rowMenu.close} entries={menuEntries(ctxHost)} />}
+      {importDialog}
     </div>
   );
 }

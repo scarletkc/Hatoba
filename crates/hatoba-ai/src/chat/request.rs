@@ -57,10 +57,10 @@
 //!   anyway (a Claude model of the 5 generation or later, [`thinks_by_default`]) gets that
 //!   `thinking`, which changes nothing but the display: its thinking comes back summarized
 //!   instead of empty, so the panel can show it (AI-06). Other models get no `thinking` at
-//!   Default, so they behave as before. Adaptive thinking is what the model list or the table of
-//!   well-known models said ([`known_model`](crate::models::known_model)), or, for a model
-//!   neither knows, whether it thinks by default. `budget_tokens` and
-//!   `thinking: {type: "disabled"}` are never sent: current models refuse both.
+//!   Default, so they behave as before. Adaptive thinking is what the model list or models.dev
+//!   said ([`known_model`](crate::models::known_model)), or, for a model neither knows, whether
+//!   it thinks by default. `budget_tokens` and `thinking: {type: "disabled"}` are never sent:
+//!   current models refuse both.
 //! - Anthropic `max_tokens` is the model's output limit, at most 128,000, or 16,000 when the limit
 //!   is unknown. Thinking counts against it, but a larger guess could exceed what an
 //!   Anthropic-compatible vendor allows and fail every request, so an unknown limit stays 16,000
@@ -118,7 +118,7 @@ pub(crate) fn thinks_by_default(model: &ModelSpec) -> bool {
 }
 
 /// Whether an Anthropic request may send `thinking: {type: "adaptive"}`: what the model list or
-/// the table of well-known models said, or, without that, whether the model thinks by default
+/// models.dev said, or, without that, whether the model thinks by default
 /// (all of those support it).
 fn adaptive_thinking(model: &ModelSpec) -> bool {
     model

@@ -1,5 +1,7 @@
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppError, UpdateCheck, UpdateProgress } from "@/ipc/types";
+import type { AppError, AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress } from "@/ipc/types";
 
 const backend = vi.hoisted(() => ({
   calls: 0,
@@ -7,6 +9,7 @@ const backend = vi.hoisted(() => ({
   installs: 0,
   install: null as ((onProgress: (p: UpdateProgress) => void) => Promise<void>) | null,
   autoCheck: false,
+  manager: null as PackageManager | null,
 }));
 
 vi.mock("@/ipc/api", async (importActual) => ({
@@ -23,9 +26,12 @@ vi.mock("@/ipc/api", async (importActual) => ({
   },
 }));
 
-vi.mock("./store", () => ({
-  useApp: { getState: () => ({ prefs: { auto_update_check: backend.autoCheck } }) },
-}));
+vi.mock("./store", () => {
+  const state = () => ({ prefs: { auto_update_check: backend.autoCheck }, info: { package_manager: backend.manager } });
+  return { useApp: Object.assign((select: (st: ReturnType<typeof state>) => unknown) => select(state()), { getState: state }) };
+});
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const found = (version: string | null): UpdateCheck => ({
   current_version: "0.1.0",
@@ -42,28 +48,51 @@ async function load() {
   return import("./update");
 }
 
+/** What the sidebar dot and the tray menu offer, read as a component reads it. */
+function offered({ useOfferedUpdate }: Awaited<ReturnType<typeof load>>): AvailableUpdate | null {
+  let update: AvailableUpdate | null = null;
+  const Probe = () => {
+    update = useOfferedUpdate();
+    return null;
+  };
+  const root = createRoot(document.createElement("div"));
+  act(() => root.render(createElement(Probe)));
+  act(() => root.unmount());
+  return update;
+}
+
 beforeEach(() => {
   backend.calls = 0;
   backend.answer = async () => found(null);
   backend.installs = 0;
   backend.install = () => new Promise(() => {});
   backend.autoCheck = false;
+  backend.manager = null;
 });
 
 describe("update check", () => {
   it("records a newer release, which lights the sidebar dot", async () => {
-    const { useUpdate, selectUpdateAvailable } = await load();
+    const update = await load();
     backend.answer = async () => found("0.2.0");
-    await useUpdate.getState().check();
-    expect(useUpdate.getState()).toMatchObject({ checking: false, error: null, result: found("0.2.0") });
-    expect(selectUpdateAvailable(useUpdate.getState())).toBe(true);
+    await update.useUpdate.getState().check();
+    expect(update.useUpdate.getState()).toMatchObject({ checking: false, error: null, result: found("0.2.0") });
+    expect(offered(update)).toEqual(found("0.2.0").update);
   });
 
   it("does not light the dot when no release is newer", async () => {
-    const { useUpdate, selectUpdateAvailable } = await load();
-    await useUpdate.getState().check();
-    expect(useUpdate.getState().result).toEqual(found(null));
-    expect(selectUpdateAvailable(useUpdate.getState())).toBe(false);
+    const update = await load();
+    await update.useUpdate.getState().check();
+    expect(update.useUpdate.getState().result).toEqual(found(null));
+    expect(offered(update)).toBeNull();
+  });
+
+  it("records a newer release without the dot when a package manager installed Hatoba", async () => {
+    backend.manager = "scoop";
+    const update = await load();
+    backend.answer = async () => found("0.2.0");
+    await update.useUpdate.getState().check();
+    expect(update.useUpdate.getState().result).toEqual(found("0.2.0"));
+    expect(offered(update)).toBeNull();
   });
 
   it("joins a check that is already running", async () => {
@@ -80,13 +109,14 @@ describe("update check", () => {
   });
 
   it("keeps the last result through a failure and clears the error on the next check", async () => {
-    const { useUpdate, selectUpdateAvailable } = await load();
+    const update = await load();
+    const { useUpdate } = update;
     backend.answer = async () => found("0.2.0");
     await useUpdate.getState().check();
     backend.answer = () => Promise.reject(offline);
     await useUpdate.getState().check();
     expect(useUpdate.getState().error).toEqual(offline);
-    expect(selectUpdateAvailable(useUpdate.getState())).toBe(true);
+    expect(offered(update)).toEqual(found("0.2.0").update);
 
     backend.answer = async () => found("0.2.0");
     const next = useUpdate.getState().check();
@@ -153,6 +183,15 @@ describe("startAutoCheck", () => {
     await pass(48 * HOUR);
     expect(backend.calls).toBe(0);
     expect(useUpdate.getState().result).toBeNull();
+  });
+
+  it("never checks when a package manager installed Hatoba", async () => {
+    backend.autoCheck = true;
+    backend.manager = "aur";
+    const { startAutoCheck } = await load();
+    startAutoCheck();
+    await pass(48 * HOUR);
+    expect(backend.calls).toBe(0);
   });
 
   it("checks after the first unlock, once however often it is asked", async () => {

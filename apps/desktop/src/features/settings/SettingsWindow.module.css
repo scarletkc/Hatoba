@@ -13,13 +13,20 @@
   font-size: var(--text-md);
   line-height: 1.35;
   box-shadow: 0 0 0 0.5px var(--winline), var(--shadow);
-  animation: rise 0.16s ease-out;
+  animation: rise var(--motion-base) var(--ease-out);
 }
 
+/* Grows in place, as an alert does (overlay.module.css); with reduced motion it only fades. */
 @keyframes rise {
   from {
-    transform: translateY(-8px);
+    transform: scale(var(--motion-pop));
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window {
+    animation-duration: var(--motion-fade) !important;
   }
 }
 

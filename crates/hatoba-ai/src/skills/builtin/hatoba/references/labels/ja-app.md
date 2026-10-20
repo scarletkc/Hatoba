@@ -103,15 +103,20 @@ The labels that these files name in English, as the interface shows them in Japa
 | Save as Host… | ホストとして保存… |
 | Username | ユーザー名 |
 
-### Import from ~/.ssh/config
+### Import hosts
 
 | en | ja |
 |---|---|
-| Import SSH Config | SSH 設定からインポート |
+| Import | インポート |
+| SSH Config | SSH 設定 |
 | Select All | すべて選択 |
 | Select None | 選択解除 |
 | Already exists | 登録済み |
 | ProxyCommand not imported | ProxyCommand は取り込みません |
+| Proxy not imported | プロキシは取り込みません |
+| Key stays in {app} | 鍵は {app} に残ります |
+| Choose File… | ファイルを選択… |
+| Choose Folder… | フォルダーを選択… |
 
 ### The host editor
 

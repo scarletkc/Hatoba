@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { errorMessage } from "@/app/errors";
 import { Icon, Spinner } from "@/components/controls";
-import type { MenuAnchor } from "@/components/overlay";
+import { overlayStyles, type MenuAnchor } from "@/components/overlay";
 import { formatBytes, useT } from "@/i18n";
 import { cx } from "@/lib/cx";
 import { useStatusPopover } from "./popover";
@@ -91,7 +91,7 @@ export function StatsPopover({
 
   if (locked) return null;
   return createPortal(
-    <div ref={ref} role="dialog" aria-label={t("terminal.stats")} className={s.popover} style={pos}>
+    <div ref={ref} role="dialog" aria-label={t("terminal.stats")} className={cx(s.popover, overlayStyles.popIn)} style={pos}>
       <div className={s.header}>
         <span>{t("terminal.stats")}</span>
         {agoSecs > 0 && <span className={s.ago}>{t("terminal.stats.ago", { n: agoSecs })}</span>}

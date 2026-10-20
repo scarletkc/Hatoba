@@ -35,6 +35,11 @@
   flex-shrink: 1;
 }
 
+/* A new session's tab opens out from nothing (TabBar), so its content stays inside it meanwhile. */
+.tab[data-tab-id] {
+  overflow: hidden;
+}
+
 .tab:hover {
   background: var(--fill);
 }
@@ -76,12 +81,17 @@
   font-size: 11px;
   color: var(--fg2);
   visibility: hidden;
+  opacity: 0;
   flex: none;
+  transition-property: opacity, visibility, background-color, color;
+  transition-duration: var(--motion-fade);
+  transition-timing-function: var(--ease-out);
 }
 
 .tab:hover .tabClose,
 .tabActive .tabClose {
   visibility: visible;
+  opacity: 1;
 }
 
 .tabClose:hover {

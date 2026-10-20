@@ -188,7 +188,9 @@
 /* Non-stale devices: the remove action appears on hover / keyboard focus only. */
 .removeQuiet {
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition-property: opacity, background-color, color;
+  transition-duration: var(--motion-fade);
+  transition-timing-function: var(--ease-out);
 }
 
 .device:hover .removeQuiet,

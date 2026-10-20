@@ -2,8 +2,9 @@
 //! updater installs the installer it names, and only when the installer's signature matches the
 //! public key in tauri.conf.json. A stable version reads `latest.json` from the endpoint there,
 //! which is the latest stable release; a prerelease version reads it from the newest release,
-//! prereleases included.
+//! prereleases included. A copy that a package manager installed leaves updates to it.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, Once};
 use std::time::{Duration, Instant};
@@ -14,7 +15,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime, Url};
 use tauri_plugin_updater::{Error as UpdaterError, Update, Updater, UpdaterExt};
 
-use crate::dto::{AvailableUpdate, UpdateCheck, UpdateProgress};
+use crate::dto::{AvailableUpdate, PackageManager, UpdateCheck, UpdateProgress};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::state::AppState;
 
@@ -33,6 +34,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(30);
 /// Download progress reaches the WebView at most this often.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+/// A package manager that installs Hatoba writes its name to a file with this name in the
+/// resource folder: beside `Hatoba.exe` on Windows, `/usr/lib/Hatoba` on Linux. Scoop's manifest
+/// writes `scoop`, as it does for other Tauri apps, and the AUR package `aur`.
+const PACKAGE_MANAGER_MARKER: &str = "managed-by-package-manager";
 
 /// The update the last check found, and whether it is being installed.
 #[derive(Default)]
@@ -107,6 +112,13 @@ async fn check_with<R: Runtime>(
 /// Downloads the update the last check found, checks its signature, and runs its installer,
 /// which closes Hatoba and starts the new version. Returns only when that fails.
 pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> AppResult<()> {
+    if package_manager(app).is_some() {
+        // The installer would put a second copy beside the package manager's, or overwrite its
+        // files.
+        return Err(AppError::internal(
+            "a package manager installed Hatoba and updates it",
+        ));
+    }
     let state = app.state::<AppState>();
     let update = state
         .updates
@@ -133,6 +145,26 @@ pub async fn install(app: &AppHandle, progress: &Channel<UpdateProgress>) -> App
     // Windows never gets here: the updater exits once the installer starts. Elsewhere the new
     // version is in place and runs after a restart.
     app.restart()
+}
+
+/// The package manager that installed this copy, from the marker it left.
+pub fn package_manager<R: Runtime>(app: &AppHandle<R>) -> Option<PackageManager> {
+    package_manager_in(&app.path().resource_dir().ok()?)
+}
+
+fn package_manager_in(dir: &Path) -> Option<PackageManager> {
+    let marker = dir.join(PACKAGE_MANAGER_MARKER);
+    if !marker.exists() {
+        return None;
+    }
+    // Whatever the marker holds, it turns the in-app update off.
+    let name = std::fs::read_to_string(marker).unwrap_or_default();
+    let name = name.trim_start_matches('\u{feff}').trim();
+    Some(match name.to_ascii_lowercase().as_str() {
+        "scoop" => PackageManager::Scoop,
+        "aur" => PackageManager::Aur,
+        _ => PackageManager::Other,
+    })
 }
 
 fn updater<R: Runtime>(
@@ -618,6 +650,33 @@ mod tests {
                 .unwrap()
         });
         assert!(stopped);
+    }
+
+    #[test]
+    fn a_package_manager_marker_names_the_package_manager() {
+        let dir = std::env::temp_dir().join(format!(
+            "hatoba-update-marker-{}-{}",
+            std::process::id(),
+            uuid::Uuid::now_v7()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marked = |content: &[u8]| {
+            std::fs::write(dir.join(PACKAGE_MANAGER_MARKER), content).unwrap();
+            package_manager_in(&dir)
+        };
+
+        assert_eq!(package_manager_in(&dir), None);
+        // PowerShell's Set-Content ends the line with CRLF, and its UTF-8 may start with a BOM.
+        assert_eq!(marked(b"scoop\r\n"), Some(PackageManager::Scoop));
+        assert_eq!(
+            marked(b"\xef\xbb\xbfScoop\r\n"),
+            Some(PackageManager::Scoop)
+        );
+        assert_eq!(marked(b"aur\n"), Some(PackageManager::Aur));
+        assert_eq!(marked(b"chocolatey"), Some(PackageManager::Other));
+        assert_eq!(marked(b""), Some(PackageManager::Other));
+        assert_eq!(marked(b"\xff\xfes\x00"), Some(PackageManager::Other));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

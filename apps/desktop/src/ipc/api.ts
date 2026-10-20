@@ -53,7 +53,9 @@ import type {
   GroupView,
   HostInput,
   HostView,
+  ImportPreview,
   ImportResult,
+  ImportSource,
   KeyGenerateInput,
   KeyImportInput,
   KeyView,
@@ -79,7 +81,6 @@ import type {
   SkillInput,
   SkillView,
   SshAgentView,
-  SshConfigCandidate,
   StarPrompt,
   StatsEvent,
   SyncConfigInput,
@@ -177,9 +178,10 @@ export interface HatobaApi {
   dashboard_unwatch(watch_id: number): Promise<void>;
   /** **Retry**: signs in to a held host again, and tries an offline or failed one now. */
   dashboard_retry(host_id: string): Promise<void>;
-  ssh_config_preview(): Promise<SshConfigCandidate[]>;
-  /** Also imports the unencrypted identity files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
-  ssh_config_import(aliases: string[], keyFiles: string[]): Promise<ImportResult>;
+  /** Reads `source` from `path`, a file or folder the user chose, or else from where the client keeps its sessions. */
+  hosts_import_preview(source: ImportSource, path: string | null): Promise<ImportPreview>;
+  /** Also imports the unencrypted key files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
+  hosts_import(source: ImportSource, path: string | null, ids: string[], keyFiles: string[]): Promise<ImportResult>;
 
   // proxies (SSH-13)
   proxies_list(): Promise<ProxyView[]>;
@@ -439,9 +441,12 @@ export interface HatobaApi {
   ai_allowance_remove(allowance: AiAllowance): Promise<AiAllowance[]>;
 
   // AI memory (§13.12)
-  /** AI-53: every memory, oldest first. */
+  /** AI-53: every memory of every scope, oldest first. */
   ai_memories_list(): Promise<AiMemoryView[]>;
-  /** Rejects with `invalid_input` when the name is empty, too long or taken, the text is empty, or memory is full. */
+  /**
+   * Rejects with `invalid_input` when the name is empty, too long or taken in the scope, the text is empty, or the
+   * scope's memories are full, and with `not_found` when `host_id` names no saved host and is not the edited memory's own.
+   */
   ai_memory_save(input: AiMemoryInput): Promise<AiMemoryView>;
   ai_memory_delete(id: string): Promise<void>;
   ai_memories_delete_all(): Promise<void>;

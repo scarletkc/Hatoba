@@ -15,6 +15,24 @@
   min-width: 0;
 }
 
+/* A message as it is sent, and the reply as it starts. */
+.enter {
+  animation: enter var(--motion-base) var(--ease-out);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-rise));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter {
+    animation-duration: var(--motion-fade) !important;
+  }
+}
+
 /* AI-21: entries before context_start stay visible but are not sent. */
 .outside {
   opacity: 0.5;
@@ -101,6 +119,7 @@
   margin-top: 3px;
   opacity: 0;
   pointer-events: none;
+  transition: opacity var(--motion-fade) var(--ease-out);
 }
 
 .userRow:hover .userActions,
@@ -290,6 +309,7 @@
   padding: 0 9px 0 10px;
   border-radius: 9px;
   min-width: 0;
+  transition: background-color var(--motion-fade) var(--ease-out);
 }
 
 .toolHeadRow:hover {
@@ -303,6 +323,9 @@
   flex: none;
   margin: 0 -4px;
   opacity: 0;
+  transition-property: opacity, background-color, color;
+  transition-duration: var(--motion-fade);
+  transition-timing-function: var(--ease-out);
 }
 
 .toolHeadRow:hover > .toolHeadAction,

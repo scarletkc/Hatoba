@@ -14,7 +14,7 @@ import { useStarPrompt, useStarPromptDue } from "./star";
 import { useApp, type HostFilter, type Page } from "./store";
 import { useTabs } from "./tabs";
 import { TitlebarDrag } from "./TitleBar";
-import { selectUpdateAvailable, useUpdate } from "./update";
+import { useOfferedUpdate } from "./update";
 import st from "./Sidebar.module.css";
 
 type Key = "dashboard" | "all" | "favorites" | "recent" | `group:${string}` | `tag:${string}` | "keys" | "sync";
@@ -41,7 +41,7 @@ function pageKey(page: Page): Key | null {
 export function Sidebar() {
   const t = useT();
   const { page, navigate, info, sync, lock, openSettings } = useApp();
-  const updateAvailable = useUpdate(selectUpdateAvailable);
+  const updateAvailable = useOfferedUpdate() !== null;
   const settingsLabel = updateAvailable ? t("sidebar.settingsUpdate") : t("sidebar.settings");
   const activateHome = () => useTabs.getState().activate("home");
   const { hosts, groups, tags, keys } = useVaultData();
@@ -228,7 +228,7 @@ function StarPrompt() {
   const info = useApp((st) => st.info);
   const due = useStarPromptDue(useTabs((s) => s.connectedOnce));
   const home = useTabs((s) => s.active === "home");
-  const updateAvailable = useUpdate(selectUpdateAvailable);
+  const updateAvailable = useOfferedUpdate() !== null;
   useEffect(() => {
     void useStarPrompt.getState().load();
   }, []);

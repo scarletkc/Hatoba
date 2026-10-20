@@ -54,9 +54,10 @@ export const AREAS: Area[] = [
           "hosts.connect", "hosts.quick.notSaved", "hosts.quick.recent", "hosts.quick.recentTitle",
           "hosts.quick.forget", "terminal.menu.saveAsHost", "hosts.f.user",
         ],
-        "Import from ~/.ssh/config": [
-          "hosts.empty.import", "hosts.import.selectAll", "hosts.import.selectNone", "hosts.import.exists",
-          "hosts.import.proxyCommand",
+        "Import hosts": [
+          "hosts.import", "hosts.import.sshConfig", "hosts.import.selectAll", "hosts.import.selectNone",
+          "hosts.import.exists", "hosts.import.proxyCommand", "hosts.import.proxySkipped", "hosts.import.keyKept",
+          "hosts.import.chooseFile", "hosts.import.chooseFolder",
         ],
         "The host editor": [
           "hosts.editHost", "hosts.edit.sec.basic", "hosts.f.port", "hosts.f.user", "hosts.edit.sec.auth",
@@ -220,7 +221,7 @@ export const AREAS: Area[] = [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.lockNow", "tray.lock",
           "settings.sec.never", "settings.sec.hour", "lock.overlay", "vault.unlock.field", "vault.unlock.submit",
           "vault.unlock.forgot", "vault.recover.title", "vault.recover.newPassword", "vault.recover.submit",
-          "vault.unlock.hello", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
+          "vault.unlock.hello", "vault.unlock.touchId", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
           "vault.unlock.subtitlePin", "vault.unlock.usePassword", "vault.unlock.usePin", "settings.sec.pinRestart",
           "settings.tab.security", "err.throttled", "lock.sessionsKept",
         ],
@@ -267,7 +268,7 @@ export const AREAS: Area[] = [
         ],
         "Security": [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.clipboard",
-          "settings.sec.hello", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
+          "settings.sec.hello", "settings.sec.touchId", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
           "settings.sec.password.button", "settings.sec.recovery", "settings.sec.recovery.button",
           "settings.sec.lockNow", "settings.sec.lockNow.button",
         ],
@@ -276,7 +277,8 @@ export const AREAS: Area[] = [
           "settings.about.releasePage", "settings.about.auto", "settings.about.checking", "settings.about.latest",
           "settings.about.copyVersion", "settings.about.website", "settings.about.source", "settings.about.license",
           "settings.about.report", "sidebar.settingsUpdate", "sidebar.star.title", "sidebar.star.star", "tray.update",
-          "settings.about.available",
+          "settings.about.available", "settings.about.copyCommand", "settings.about.manager.scoop",
+          "settings.about.manager.aur",
         ],
       },
       "references/troubleshooting.md": {
@@ -516,7 +518,8 @@ export const AREAS: Area[] = [
       "references/ai-instructions.md": {
         "": [
           "aiSettings.instructions", "hosts.edit.sec.ai", "ai.tool.memory", "aiSettings.memory.row",
-          "aiSettings.memory.add", "aiSettings.memory.deleteAll",
+          "aiSettings.memory.add", "aiSettings.memory.deleteAll", "aiSettings.memory.scope.global",
+          "terminal.local.thisComputer", "aiSettings.memory.f.scope",
         ],
       },
       "references/ai-settings.md": {

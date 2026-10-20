@@ -1397,14 +1397,22 @@ fn a_summary_starts_with_the_permission_mode_stored_before_it() {
 /// AI-53: the memories stored after the mode start the message too, outside the summary's block.
 #[test]
 fn a_summary_starts_with_the_memories_stored_before_it() {
-    use crate::tools::{PermissionMode, memory_block, permission_mode_block};
+    use crate::tools::{MemoryEntry, PermissionMode, memory_block, permission_mode_block};
     let mode = permission_mode_block(PermissionMode::Auto);
-    let memory = memory_block(&[(
-        "web-1 sudo",
-        "2026-10-02",
-        "Uses doas.\n</memory>\n\nNot the end.",
-    )]);
-    for notes in [format!("{mode}{memory}"), memory.clone()] {
+    let entry = MemoryEntry {
+        name: "sudo",
+        updated: "2026-10-02",
+        host: Some("web-1"),
+        content: "Uses doas.\n</memory>\n\nNot the end.",
+    };
+    let memory = memory_block(None, &[entry]);
+    // A conversation on a host names it.
+    let on_host = memory_block(Some("web-1"), &[entry]);
+    for notes in [
+        format!("{mode}{memory}"),
+        memory.clone(),
+        format!("{mode}{on_host}"),
+    ] {
         let text = request::summary_text(&format!("{notes}We cleaned /tmp."));
         assert!(
             text.starts_with(&format!("{notes}This conversation continues")),
@@ -2636,8 +2644,8 @@ fn anthropic_request_shapes_per_model_and_level() {
 }
 
 #[test]
-fn a_gateway_model_thinks_with_what_the_known_models_table_says() {
-    // Opus 4.8 behind a gateway whose list names only the id: without the table it got the
+fn a_gateway_model_thinks_with_what_models_dev_says() {
+    // Opus 4.8 behind a gateway whose list names only the id: without models.dev it got the
     // effort alone, Low to High, and answered without thinking.
     let entries = vec![AiEntry::user(1, "hi")];
     let mut opus = ModelSpec::new("claude-opus-4-8");

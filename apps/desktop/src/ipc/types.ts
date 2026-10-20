@@ -48,6 +48,10 @@ export type ErrorCode =
   | "ai"
   /** A downloaded update does not carry a valid signature from the release key (spec §11). */
   | "update_signature"
+  /** SEC-10: Touch ID can't be used now, e.g. while the lid is closed. */
+  | "biometric_unavailable"
+  /** SEC-07, SEC-10: the saved Windows Hello or Touch ID unlock no longer opens and was removed. */
+  | "biometric_stale"
   | "cancelled"
   | "io"
   | "internal";
@@ -222,18 +226,38 @@ export interface TagCount {
   count: number;
 }
 
-export interface SshConfigCandidate {
-  alias: string;
+/** Where a host import reads from (SSH-11, SSH-12, SSH-15). */
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
+
+export interface ImportPreview {
+  /** The file, folder or registry key the hosts were read from; null when nothing was found where the client keeps its sessions. */
+  location: string | null;
+  /** The client encrypted the file, so nothing could be read from it. */
+  encrypted: boolean;
+  candidates: ImportCandidate[];
+}
+
+export interface ImportCandidate {
+  /** Identifies it within the source, for `hosts_import`. */
+  id: string;
+  name: string;
   address: string;
   port: number;
   username: string;
-  /** The IdentityFile an import with keys reads: the first that exists, otherwise the first listed. */
+  /** The folder it is in, its names joined by " / ". */
+  folder: string | null;
+  /** The key file an import with keys reads: the first that exists, otherwise the first listed. */
   identity_file: string | null;
   /** `identity_file` exists, so importing keys would read it. */
   identity_file_found: boolean;
-  proxy_jump: string | null;
-  /** `ProxyCommand`, which is not imported (SSH-11): the host connects without it. */
-  proxy_command: string | null;
+  /** The client keeps the private key itself, so it is not imported: the key's name there, or "" when unnamed. */
+  kept_key: string | null;
+  /** The jump host: a ProxyJump value, another session's name, or gateways. */
+  jump: string | null;
+  /** The proxy it imports, such as `SOCKS5 127.0.0.1:1080`. */
+  proxy: string | null;
+  /** A proxy setting that is not imported, such as `ProxyCommand …`: the host connects without it. */
+  skipped_proxy: string | null;
   /** A host with the same name already exists. */
   exists: boolean;
 }
@@ -906,7 +930,12 @@ export interface AppInfo {
   local_user: string;
   /** This computer's name, which a conversation on a local tab records (§7.5). */
   device_name: string;
+  /** The package manager that installed this copy and updates it, which turns the in-app update off (spec §11). */
+  package_manager: PackageManager | null;
 }
+
+/** A package manager that installs Hatoba; `other` is one Hatoba has no instructions for. */
+export type PackageManager = "scoop" | "aur" | "other";
 
 /** The `hatoba` command on this device (HOST-13). */
 export interface CliCommandView {
@@ -952,7 +981,7 @@ export type AiAuthHeader = "x-api-key" | "authorization";
 /** A thinking level (AI-05), lowest first. Where one is optional, null is Default. */
 export type AiEffort = "low" | "medium" | "high" | "xhigh" | "max";
 
-/** A model of a provider (AI-03). Token limits are null when unknown. A provider's view fills what a row leaves unknown from the table of well-known models, as requests do. */
+/** A model of a provider (AI-03). Token limits are null when unknown. A provider's view fills what a row leaves unknown from models.dev, as requests do. */
 export interface AiModel {
   id: string;
   name: string;
@@ -960,7 +989,7 @@ export interface AiModel {
   max_output_tokens: number | null;
   /** The thinking levels the model accepts, lowest first (AI-05): [] for none, null when unknown (Low to High are offered). */
   efforts: AiEffort[] | null;
-  /** Whether the model supports adaptive thinking (Anthropic's model list or the table of well-known models), null when unknown. */
+  /** Whether the model supports adaptive thinking (Anthropic's model list or models.dev), null when unknown. */
   adaptive_thinking: boolean | null;
 }
 
@@ -1387,19 +1416,26 @@ export interface AiToolRun {
 
 // ───────────────────────── AI assistant: memory (§13.12) ─────────────────────────
 
-/** A memory the assistant keeps across conversations (AI-53). */
+/**
+ * A memory the assistant keeps across conversations (AI-53): a global one, with neither `host_id` nor `local`, or a
+ * host memory of a saved host or of a computer's local terminal, `local` naming the computer.
+ */
 export interface AiMemoryView {
   id: string;
   name: string;
   content: string;
+  host_id: string | null;
+  local: string | null;
   updated_at: number;
 }
 
-/** A memory saved in Settings → AI; a null `id` adds one. */
+/** A memory saved in Settings → AI in the scope `host_id` and `local` name; a null `id` adds one. */
 export interface AiMemoryInput {
   id: string | null;
   name: string;
   content: string;
+  host_id: string | null;
+  local: string | null;
 }
 
 // ───────────────────────── AI assistant: skills (§13.8) ─────────────────────────

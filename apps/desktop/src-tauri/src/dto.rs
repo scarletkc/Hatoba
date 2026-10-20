@@ -153,20 +153,56 @@ pub struct TagCount {
     pub count: u32,
 }
 
+/// Where a host import reads from (SSH-11, SSH-12, SSH-15).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportSource {
+    SshConfig,
+    Xshell,
+    Finalshell,
+    Mobaxterm,
+    Putty,
+    Securecrt,
+    Tabby,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
-pub struct SshConfigCandidate {
-    pub alias: String,
+pub struct ImportPreview {
+    /// The file, folder or registry key the hosts were read from; `None` when nothing was found
+    /// where the client keeps its sessions.
+    pub location: Option<String>,
+    /// The client encrypted the file, so nothing could be read from it.
+    pub encrypted: bool,
+    pub candidates: Vec<ImportCandidate>,
+}
+
+/// A host an import can create.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct ImportCandidate {
+    /// Identifies it within the source, for `hosts_import`.
+    pub id: String,
+    pub name: String,
     pub address: String,
     pub port: u16,
     pub username: String,
-    /// The `IdentityFile` an import with keys reads: the first one that exists, otherwise the
+    /// The folder it is in, its names joined by ` / `.
+    pub folder: Option<String>,
+    /// The private key file an import with keys reads: the first one that exists, otherwise the
     /// first one listed.
     pub identity_file: Option<String>,
     /// Whether `identity_file` exists, so that importing keys would read it.
     pub identity_file_found: bool,
-    pub proxy_jump: Option<String>,
-    /// `ProxyCommand`, which is not imported: the host connects without it (SSH-11).
-    pub proxy_command: Option<String>,
+    /// The client keeps the private key itself, so it is not imported; the key's name there, or
+    /// empty when the session does not name it.
+    pub kept_key: Option<String>,
+    /// The jump host: a `ProxyJump` value, another session's name, or gateways.
+    pub jump: Option<String>,
+    /// The proxy it imports, such as `SOCKS5 127.0.0.1:1080`.
+    pub proxy: Option<String>,
+    /// A proxy setting that is not imported, such as `ProxyCommand …`: the host connects
+    /// without it.
+    pub skipped_proxy: Option<String>,
+    /// A host with the same name exists.
     pub exists: bool,
 }
 
@@ -1002,9 +1038,11 @@ pub struct LocalPrefs {
     pub ai_panel_width: u32,
     /// SSH-13: the proxy that hosts set to the device default connect through, on this device.
     pub default_proxy_id: Option<String>,
-    /// SSH-09: the ssh-agent socket this device authenticates with. `None` uses `SSH_AUTH_SOCK`,
-    /// and, when that names nothing, the well-known agent sockets of the device, Bitwarden's
-    /// included.
+    /// SSH-09: the ssh-agent socket this device authenticates with. `None` selects an agent
+    /// according to the platform. On Unix, a set `SSH_AUTH_SOCK` other than the macOS launchd
+    /// placeholder is used alone; discovery runs only when the variable is unset or has that
+    /// placeholder. On Windows, a value accepted as a named pipe is used alone; other values use
+    /// the OpenSSH agent pipe.
     pub ssh_agent_socket: Option<String>,
     /// SEC-02: minutes without input before the vault locks; 0 never locks.
     pub auto_lock_minutes: u32,
@@ -1176,6 +1214,20 @@ pub struct AppInfo {
     /// This computer's name, as the sync device list shows it, which a conversation on a local
     /// tab records (§7.5).
     pub device_name: String,
+    /// The package manager that installed this copy and updates it, which turns the in-app
+    /// update off (spec §11); `None` for the installers from the GitHub release.
+    pub package_manager: Option<PackageManager>,
+}
+
+/// A package manager that installs Hatoba from the GitHub release and updates it itself.
+#[derive(Debug, Clone, Copy, Serialize, Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageManager {
+    Scoop,
+    /// The `hatoba-bin` package in the Arch User Repository.
+    Aur,
+    /// One that Hatoba has no instructions for.
+    Other,
 }
 
 /// Whether the Linux main window shows its painted chrome right now: off while maximized,
@@ -1373,7 +1425,7 @@ pub enum AiEffort {
 }
 
 /// A model of a provider (AI-03). Token limits are `None` when unknown. A provider's view fills
-/// what a row leaves unknown from the table of well-known models, as requests do.
+/// what a row leaves unknown from models.dev, as requests do.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
 pub struct AiModel {
     pub id: String,
@@ -1383,8 +1435,8 @@ pub struct AiModel {
     /// The thinking levels the model accepts, lowest first (AI-05); empty for none, `None` when
     /// unknown (the panel then offers Low to High).
     pub efforts: Option<Vec<AiEffort>>,
-    /// Whether the model supports adaptive thinking (Anthropic's model list or the table of
-    /// well-known models), `None` when unknown.
+    /// Whether the model supports adaptive thinking (Anthropic's model list or models.dev),
+    /// `None` when unknown.
     pub adaptive_thinking: Option<bool>,
 }
 
@@ -2231,22 +2283,29 @@ pub struct SkillView {
     pub updated_at: i64,
 }
 
-/// A memory of the AI assistant (AI-53).
+/// A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+/// host memory of a saved host or of a computer's local terminal.
 #[derive(Debug, Clone, Serialize, Type, PartialEq, Eq)]
 pub struct AiMemoryView {
     pub id: String,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    /// The computer's name, while `host_id` is `None`.
+    pub local: Option<String>,
     pub updated_at: i64,
 }
 
-/// A memory to save from Settings → AI (AI-53).
+/// A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+/// [`AiMemoryView`].
 #[derive(Debug, Clone, Deserialize, Type)]
 pub struct AiMemoryInput {
     /// `None` creates a memory.
     pub id: Option<String>,
     pub name: String,
     pub content: String,
+    pub host_id: Option<String>,
+    pub local: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

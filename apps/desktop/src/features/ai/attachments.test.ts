@@ -469,6 +469,15 @@ describe("the permission mode notes (AI-16)", () => {
     expect(splitPermissionNote(`${auto}\n\n${memory}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
     expect(splitPermissionNote(`${memory}\n\nWe restarted nginx.`)).toEqual({ mode: null, summary: "We restarted nginx." });
     expect(notedPermission([summary(`${auto}\n\n${memory}\n\nWe restarted nginx.`)])).toBe("auto");
+    // A conversation on a host names it, and so do its host memories.
+    const hostBody = '<entry name="sudo" host="web-1">\nUses doas.\n</entry>';
+    const onHost = noteBlock({ kind: "memory", entries: 1, host: "web-1", body: hostBody });
+    expect(onHost).toBe(`<memory entries="1" host="web-1">\n${hostBody}\n</memory>`);
+    expect(parseMessage(`${onHost}\n\nhello`)).toMatchObject({
+      notes: [{ kind: "memory", entries: 1, host: "web-1", body: hostBody }],
+      typed: "hello",
+    });
+    expect(splitPermissionNote(`${auto}\n\n${onHost}\n\nWe restarted nginx.`)).toEqual({ mode: "auto", summary: "We restarted nginx." });
   });
 });
 

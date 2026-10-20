@@ -67,7 +67,7 @@ export function App() {
     <>
       {/* SEC-03: sessions stay mounted (and connected) behind the lock screen, but are hidden. */}
       {(!locked || hasSessions) && (
-        <div className={s.main} aria-hidden={locked} style={locked ? { visibility: "hidden" } : undefined}>
+        <div className={s.main} aria-hidden={locked} data-locked={locked || undefined} style={locked ? { visibility: "hidden" } : undefined}>
           <Main />
         </div>
       )}
@@ -146,7 +146,12 @@ function Main() {
         />
         <div className={s.workspace}>
           <div className={s.body}>
-            {active === "home" && !locked && <HomePage page={page} />}
+            {active === "home" && !locked && (
+              // A new page fades in, keyed so that going from one to another plays it again.
+              <div key={page.kind} className={s.page}>
+                <HomePage page={page} />
+              </div>
+            )}
             {tabs.map((tab) => (
               <TerminalView key={tab.id} tab={tab} active={active === tab.id} />
             ))}

@@ -52,6 +52,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * design's sample data (`pnpm dev`). URL parameters select demo states:
  *   ?state=onboarding | locked | empty      ?sync=none | syncing | offline | conflict | auth | too_large
  *   ?platform=windows | macos | linux       ?update=available | badsig | dropped | offline | error
+ *   ?manager=scoop | aur | other            (the package manager that installed Hatoba)
  *   ?deploy=fail | waiting | vault | foreign | nosub | accounts | permission | nobundle
  *   ?star=due
  *   ?worker=available | required | custom | app
@@ -59,6 +60,7 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  *   ?agent=off                              (no ssh-agent at all, SSH-09)
  *   ?launch=<command line>                  ?cli=offpath
  *   ?close=prompt                           ?hello=off   ?pin=on | persist
+ *   ?biometric=unavailable | stale | cancelled   (how Windows Hello or Touch ID fails)
  *   ?lang=en | zh-CN | ja
  * Quick connect (HOST-12) asks to trust a new host key once per address, then for the password
  * (anything but "wrong" is accepted); targets whose address contains "timeout" fail with a timeout.
@@ -67,7 +69,8 @@ const SSH_DEMO_DETAIL: Partial<Record<SshErrorKind, (address: string, port: numb
  * Without `?update`, the update check finds no release, as GitHub does before the first one.
  * `available`, `badsig` and `dropped` find v0.2.0. Installing it downloads for a few seconds and
  * then stays at "installing", where the real app closes; `badsig` fails the signature check and
- * `dropped` loses the connection partway through the download.
+ * `dropped` loses the connection partway through the download. With `?manager`, the About page
+ * leaves updates to that package manager.
  * The in-app deployment accepts any API token of 20 or more characters.
  * `?launch` is what followed `hatoba` on the command line (HOST-13), which the window takes once
  * it is unlocked, e.g. `?launch=root@db` or `?launch=ssh -p 2222 deploy@10.0.0.5`. The `hatoba`
@@ -96,6 +99,8 @@ export function createMockApi(): HatobaApi {
   const demo = q.get("state");
   const syncDemo = q.get("sync");
   const updateDemo = q.get("update");
+  const managerParam = q.get("manager");
+  const packageManager = managerParam === "scoop" || managerParam === "aur" || managerParam === "other" ? managerParam : null;
   const deployDemo = q.get("deploy");
   const sshDemo = q.get("ssh");
   const workerDemo = q.get("worker");
@@ -132,6 +137,7 @@ export function createMockApi(): HatobaApi {
   let vaultState: VaultStatus["state"] =
     demo === "onboarding" ? "uninitialized" : demo === "locked" ? "locked" : "unlocked";
   let biometric = q.get("hello") !== "off";
+  const biometricRefusal = q.get("biometric");
   const pinDemo = q.get("pin");
   const pinState = { pin: pinDemo === "on" || pinDemo === "persist" ? "1234" : null as string | null, persist: pinDemo === "persist", armed: true, failures: 0 };
   /** Any full unlock arms the PIN again and resets its failures. */
@@ -268,7 +274,7 @@ export function createMockApi(): HatobaApi {
       mcp: { servers: aiExtensions.mcp_servers_list, status: aiExtensions.mcp_server_status, start: aiExtensions.mcp_server_start, toolInfo: aiExtensions.mcp_tool_info },
       memory: memory_tool,
     }),
-    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC" }),
+    app_info: async () => ({ version, platform, mica: false, local_user: "demo", device_name: platform === "macos" ? "Demo-MacBook" : "DEMO-PC", package_manager: packageManager }),
     launch_take: async () => {
       needUnlocked();
       return launches.splice(0);
@@ -337,6 +343,13 @@ export function createMockApi(): HatobaApi {
     },
     vault_unlock_biometric: async () => {
       await delay(700);
+      if (biometricRefusal === "unavailable") fail("biometric_unavailable", "Touch ID unavailable");
+      if (biometricRefusal === "stale") {
+        // The backend removes an enrolment that no longer opens.
+        biometric = false;
+        fail("biometric_stale", "Touch ID key invalidated (fingerprints changed)");
+      }
+      if (biometricRefusal === "cancelled") fail("cancelled");
       armPin();
       vaultState = "unlocked";
     },
@@ -510,21 +523,49 @@ export function createMockApi(): HatobaApi {
         return { id: hid, online, latency_ms: online ? 20 + ((hid.length * 7) % 60) : null };
       });
     },
-    ssh_config_preview: async () => [
-      { alias: "github-runner", address: "10.0.4.20", port: 22, username: "runner", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
-      { alias: "bastion-tokyo", address: "bastion.tky.example.net", port: 2222, username: "ops", identity_file: "~/.ssh/id_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: true },
-      { alias: "minecraft", address: "mc.example.org", port: 22, username: "mc", identity_file: "~/.ssh/mc_rsa", identity_file_found: false, proxy_jump: "bastion-tokyo", proxy_command: null, exists: false },
-      { alias: "build-arm", address: "10.0.4.31", port: 22, username: "ci", identity_file: "~/.ssh/build_ed25519", identity_file_found: true, proxy_jump: null, proxy_command: null, exists: false },
-      { alias: "lab-gpu", address: "gpu.lab.internal", port: 22, username: "kc", identity_file: null, identity_file_found: false, proxy_jump: null, proxy_command: "nc -X 5 -x 127.0.0.1:7890 %h %p", exists: false },
-    ],
-    ssh_config_import: async (aliases, keyFiles) => {
+    hosts_import_preview: async (source, path) => {
+      await delay(200);
+      const candidates = D.importCandidates(source).map((c) => ({
+        ...c,
+        exists: hosts.some((h) => h.name.toLowerCase() === c.name.toLowerCase()),
+      }));
+      return { location: path ?? D.importLocation(source, platform), encrypted: false, candidates };
+    },
+    hosts_import: async (source, _path, ids, keyFiles) => {
       await delay(300);
-      aliases.forEach((a) =>
-        hosts.push({ ...D.HOSTS[0], id: id("h"), name: a, favorite: false, tags: [], group_id: null, last_connected_at: null, os: null, key_id: null, auth_kind: "ask", proxy_mode: "device_default", proxy_id: null }),
-      );
+      const chosen = D.importCandidates(source).filter((c) => ids.includes(c.id));
+      for (const c of chosen) {
+        // A folder becomes a group named after its path.
+        let groupId: string | null = null;
+        if (c.folder) {
+          const found = groups.find((g) => !g.parent_id && g.name.toLowerCase() === c.folder?.toLowerCase());
+          const g: GroupView = found ?? { id: id("g"), name: c.folder, parent_id: null, sort: groups.length, dashboard: true };
+          if (!found) groups.push(g);
+          groupId = g.id;
+        }
+        hosts.push({
+          ...D.HOSTS[0],
+          id: id("h"),
+          name: c.name,
+          address: c.address,
+          port: c.port,
+          username: c.username,
+          favorite: false,
+          tags: [],
+          group_id: groupId,
+          last_connected_at: null,
+          os: null,
+          key_id: null,
+          auth_kind: "ask",
+          proxy_mode: "device_default",
+          proxy_id: null,
+        });
+      }
       touch();
-      const warnings = aliases.includes("lab-gpu") ? ["lab-gpu: ProxyCommand nc -X 5 -x 127.0.0.1:7890 %h %p was not imported; set a proxy or jump host for it"] : [];
-      return { hosts_created: aliases.length, keys_imported: keyFiles.length, warnings };
+      const warnings = chosen.flatMap((c) =>
+        c.skipped_proxy ? [`${c.name}: ${c.skipped_proxy} was not imported; set a proxy or jump host for it`] : [],
+      );
+      return { hosts_created: chosen.length, keys_imported: keyFiles.length, warnings };
     },
 
     proxies_list: async () => {

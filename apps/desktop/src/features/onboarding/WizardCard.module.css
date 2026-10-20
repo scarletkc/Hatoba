@@ -9,13 +9,19 @@
   font-size: var(--text-md);
   line-height: 1.4;
   overflow: hidden;
-  animation: rise 0.18s ease-out;
+  animation: rise var(--motion-base) var(--ease-out);
 }
 
 @keyframes rise {
   from {
-    transform: translateY(6px);
+    transform: translateY(var(--motion-rise));
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation-duration: var(--motion-fade) !important;
   }
 }
 

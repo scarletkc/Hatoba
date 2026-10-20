@@ -8,6 +8,15 @@
   border-right: 0.5px solid var(--line2);
   color: var(--fg);
   font-size: var(--text-md);
+  animation: sidebarIn var(--motion-base) var(--ease-out);
+}
+
+/* Shown again, it slides in a little from the window's edge. */
+@keyframes sidebarIn {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-2 * var(--motion-rise)));
+  }
 }
 
 :root[data-platform="macos"] .sidebar {
@@ -268,6 +277,10 @@
   .spin {
     animation-duration: 1.2s !important;
     animation-iteration-count: infinite !important;
+  }
+
+  .sidebar {
+    animation-duration: var(--motion-fade) !important;
   }
 }
 

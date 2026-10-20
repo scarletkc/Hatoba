@@ -11,6 +11,21 @@
   background: var(--win);
   border-left: 0.5px solid var(--line2);
   color: var(--fg);
+  animation: panelIn var(--motion-base) var(--ease-out);
+}
+
+/* Opening, it slides in a little from the window's edge. */
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateX(calc(2 * var(--motion-rise)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation-duration: var(--motion-fade) !important;
+  }
 }
 
 .resize {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Icon } from "@/components/controls";
 import { Menu, useMenu, type MenuEntry } from "@/components/overlay";
 import { AiPanelButton } from "@/features/ai/AiPanel";
@@ -11,6 +11,7 @@ import { api, isTauri } from "@/ipc/api";
 import type { LocalShellKind, LocalShellView } from "@/ipc/types";
 import { shortcutLabel } from "@/lib/platform";
 import { cx } from "@/lib/cx";
+import { motion } from "@/lib/motion";
 import { useVaultData } from "./data";
 import { useApp } from "./store";
 import { useTabDrag } from "./tabDrag";
@@ -158,6 +159,29 @@ function AiActivity({ slotId }: { slotId: string }) {
   );
 }
 
+/**
+ * A session's tab opens out from nothing as it is added, pushing the buttons after it along. Played
+ * from script, not a CSS animation: React moves a tab's element when the tabs are reordered, and
+ * that would play a CSS animation again.
+ */
+function useOpenNewTabs(list: RefObject<HTMLDivElement | null>, tabs: { id: string }[]) {
+  const known = useRef<Set<string> | null>(null);
+  useLayoutEffect(() => {
+    const ids = tabs.map((tab) => tab.id);
+    const before = known.current;
+    known.current = new Set(ids);
+    // The tabs there when the bar first shows are not new.
+    if (!before || !list.current) return;
+    const { duration, easing } = motion("--motion-base");
+    if (!duration) return;
+    for (const id of ids) {
+      if (before.has(id)) continue;
+      const el = list.current.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`);
+      el?.animate?.([{ maxWidth: "0px", opacity: 0 }, { maxWidth: "200px", opacity: 1 }], { duration, easing });
+    }
+  }, [list, tabs]);
+}
+
 /** Tab bar merged with the title bar (design TabBar + WIN-01). */
 export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   homeLabel: string;
@@ -171,6 +195,8 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
   const platform = useApp((st) => st.info.platform);
   const local = useLocalMenu(onNewTab);
   const drag = useTabDrag(tabs);
+  const list = useRef<HTMLDivElement>(null);
+  useOpenNewTabs(list, tabs);
 
   return (
     <div className={s.tabbar} data-tauri-drag-region>
@@ -180,7 +206,7 @@ export function TabBar({ homeLabel, homeIcon, onNewTab, onCloseTab }: {
           <Icon name="sidebar-simple" size={16} />
         </button>
       )}
-      <div className={s.tabs} role="tablist">
+      <div ref={list} className={s.tabs} role="tablist">
         <button
           type="button"
           role="tab"

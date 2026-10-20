@@ -4,7 +4,8 @@
 //! all in one store transaction: a failed write leaves the database and the item map as they
 //! were, and the item map changes only after the commit.
 //!
-//! - a host: hosts that jumped through it connect directly, and its port forwards go with it;
+//! - a host: hosts that jumped through it connect directly, and its port forwards and the AI
+//!   assistant's memories of it go with it;
 //! - a group: its hosts and child groups move to the top level;
 //! - a key: hosts that signed in with it ask on every connection ([`HostAuth::Ask`]).
 
@@ -16,7 +17,8 @@ use crate::store::{ItemRow, StoreOps};
 use crate::vault::{Vault, seal_item};
 
 impl Vault {
-    /// Deletes a host, clears it as the jump host of other hosts and deletes its port forwards.
+    /// Deletes a host, clears it as the jump host of other hosts and deletes its port forwards and
+    /// the AI assistant's memories of it (AI-53).
     ///
     /// # Errors
     /// [`Error::Locked`]; [`Error::ItemNotFound`] when `id` is not a host; storage errors, after
@@ -38,6 +40,12 @@ impl Vault {
             .filter(|(_, forward)| forward.host_id == id)
             .map(|(forward_id, _)| forward_id)
             .collect();
+        deletes.extend(
+            self.ai_memories()
+                .into_iter()
+                .filter(|(_, memory)| memory.host_id.as_deref() == Some(id))
+                .map(|(memory_id, _)| memory_id),
+        );
         deletes.push(id.to_owned());
         self.commit_cascade(puts, &deletes)
     }
@@ -164,7 +172,7 @@ mod tests {
 
     use super::*;
     use crate::crypto::KdfParams;
-    use crate::model::{Group, Host, PortForward, SshKey};
+    use crate::model::{AiMemory, Group, Host, PortForward, SshKey};
     use crate::vault::ManualClock;
 
     const PW: &str = "correct horse battery staple";
@@ -204,6 +212,15 @@ mod tests {
             dest_host: Some("localhost".into()),
             dest_port: Some(port),
             ..PortForward::default()
+        })
+    }
+
+    fn memory(host_id: Option<&str>) -> Item {
+        Item::AiMemory(AiMemory {
+            name: "sudo".into(),
+            content: "Uses doas.".into(),
+            host_id: host_id.map(str::to_owned),
+            ..AiMemory::default()
         })
     }
 
@@ -333,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn deleting_a_host_clears_jumps_to_it_and_deletes_its_forwards() {
+    fn deleting_a_host_clears_jumps_to_it_and_deletes_its_forwards_and_memories() {
         let (mut v, clock) = vault();
         let gone = v.put(None, host("bastion", |_| {})).unwrap();
         let through = v
@@ -342,10 +359,13 @@ mod tests {
         let other = v.put(None, host("other", |_| {})).unwrap();
         let its_forward = v.put(None, forward(&gone, 8080)).unwrap();
         let other_forward = v.put(None, forward(&other, 9090)).unwrap();
+        let its_memory = v.put(None, memory(Some(&gone))).unwrap();
+        let other_memory = v.put(None, memory(Some(&other))).unwrap();
+        let global_memory = v.put(None, memory(None)).unwrap();
         settle(&v);
         clock.advance(1_000);
 
-        assert_atomic(&mut v, &[&through, &its_forward, &gone], |v| {
+        assert_atomic(&mut v, &[&through, &its_forward, &its_memory, &gone], |v| {
             v.delete_host(&gone)
         });
         let before = rows(&v);
@@ -354,9 +374,14 @@ mod tests {
 
         assert_eq!(
             changed(&before, &after),
-            BTreeSet::from([gone.clone(), through.clone(), its_forward.clone()])
+            BTreeSet::from([
+                gone.clone(),
+                through.clone(),
+                its_forward.clone(),
+                its_memory.clone()
+            ])
         );
-        for id in [&gone, &its_forward] {
+        for id in [&gone, &its_forward, &its_memory] {
             let row = &after[id];
             assert!(row.deleted && row.envelope.is_none() && row.dirty && row.revision == 7);
             assert!(row.updated_at > before[id].updated_at);
@@ -369,6 +394,7 @@ mod tests {
         assert_eq!(inner.jump_host_id, None);
         assert_eq!(inner.updated_at, 1_001_000);
         assert!(v.get(&other).is_some() && v.get(&other_forward).is_some());
+        assert!(v.get(&other_memory).is_some() && v.get(&global_memory).is_some());
 
         // The deletion is in the database, not only in the item map.
         let items_after = items(&v);

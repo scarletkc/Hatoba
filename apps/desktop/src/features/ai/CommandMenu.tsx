@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { create } from "zustand";
 import { useTabs } from "@/app/tabs";
 import { Icon, Spinner } from "@/components/controls";
-import { useOverlaysLocked, windowSurface } from "@/components/overlay";
+import { overlayStyles, useExitAnimation, useOverlaysLocked, windowSurface } from "@/components/overlay";
 import { useT } from "@/i18n";
 import { api } from "@/ipc/api";
 import type { AiHostListing, AiSkillCommand } from "@/ipc/types";
@@ -403,6 +403,7 @@ function MenuPopover({
   const ref = useRef<HTMLDivElement>(null);
   const locked = useOverlaysLocked();
   const [pos, setPos] = useState<{ left: number; bottom: number; width: number; maxHeight: number } | null>(null);
+  useExitAnimation(ref, !locked && !!pos);
 
   useLayoutEffect(() => {
     const place = () => {
@@ -431,7 +432,7 @@ function MenuPopover({
   if (locked || !pos) return null;
   return createPortal(
     // The box keeps the focus when the list's padding or scroll bar is clicked too.
-    <div ref={ref} id={id} role="listbox" aria-label={label} aria-busy={busy} className={s.menu} style={pos} onMouseDown={(e) => e.preventDefault()}>
+    <div ref={ref} id={id} role="listbox" aria-label={label} aria-busy={busy} className={cx(s.menu, overlayStyles.popIn)} style={pos} onMouseDown={(e) => e.preventDefault()}>
       {rows.map((row) => {
         const selected = row.key === activeKey;
         return (

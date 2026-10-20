@@ -3,9 +3,11 @@ import { toAppError } from "@/ipc/api";
 import type { AppError } from "@/ipc/types";
 
 type T = (key: MessageKey, params?: Params) => string;
+/** What a message may name: the SSH target, and the biometric unlock of this platform. */
+type Context = { host?: string; port?: number; timeoutSec?: number; biometric?: string };
 
 /** Localised, user-facing text for any command failure (SSH-05 readable errors). */
-export function errorMessage(t: T, e: unknown, ctx: { host?: string; port?: number; timeoutSec?: number } = {}): string {
+export function errorMessage(t: T, e: unknown, ctx: Context = {}): string {
   const err: AppError = toAppError(e);
   switch (err.code) {
     case "throttled": {
@@ -25,6 +27,9 @@ export function errorMessage(t: T, e: unknown, ctx: { host?: string; port?: numb
       });
     case "cloudflare":
       return err.cf_code ? t("err.cloudflare_code", { code: err.cf_code }) : t("err.cloudflare");
+    case "biometric_stale":
+      // Only the lock screen's biometric unlock returns this, and it passes the name.
+      return t("err.biometric_stale", { name: ctx.biometric ?? "Touch ID" });
     case "ai":
       // `detail` is the provider's own message (spec §13.2), which is not translated.
       return err.http_status

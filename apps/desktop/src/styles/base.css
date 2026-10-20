@@ -52,6 +52,39 @@ button {
   cursor: default;
 }
 
+/* Controls and list rows fade between their hover, pressed and selected looks: quickly in, more
+ * slowly out, so the pointer leaves a short trail across a list rather than a hard edge. Colors only,
+ * never size or position. These have no specificity, so a class's own `transition` replaces them. */
+:where(
+    button,
+    a,
+    [role="button"],
+    [role="tab"],
+    [role="option"],
+    [role="listitem"],
+    [role="radio"],
+    [role="checkbox"],
+    [role="switch"]
+  ) {
+  transition-property: background-color, color, border-color, box-shadow, opacity;
+  transition-duration: var(--motion-fade);
+  transition-timing-function: var(--ease-out);
+}
+
+:where(
+    button:hover,
+    a:hover,
+    [role="button"]:hover,
+    [role="tab"]:hover,
+    [role="option"]:hover,
+    [role="listitem"]:hover,
+    [role="radio"]:hover,
+    [role="checkbox"]:hover,
+    [role="switch"]:hover
+  ) {
+  transition-duration: var(--motion-hover);
+}
+
 input,
 textarea,
 [contenteditable="true"],
@@ -66,6 +99,13 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/* While the theme changes (applyPrefs). */
+:root[data-theme-switch] *,
+:root[data-theme-switch] *::before,
+:root[data-theme-switch] *::after {
+  transition: none !important;
 }
 
 /* Esc already clears search fields; datalist suggestions need no arrow. */
@@ -134,15 +174,22 @@ input::-ms-reveal {
 }
 
 /* One run, or a looping animation would repeat every 0.01ms and flicker. Spinners opt back in where
- * they are defined: a still one reads as stuck. Transitions get none at all: any duration above
- * zero would give every element one, since `transition-property` defaults to `all`, and a menu
- * placed by script would show for a frame where it was first measured. */
+ * they are defined: a still one reads as stuck. So do popovers and dialogs, which then only fade:
+ * nothing moves or grows. Transitions that move or resize take the --motion durations set to zero
+ * here; fades keep theirs, as macOS keeps its dissolves with Reduce Motion. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0s;
+    --motion-base: 0s;
+    --motion-slow: 0s;
+    --motion-rise: 0px;
+    --motion-pop: 1;
+  }
+
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0s !important;
   }
 }

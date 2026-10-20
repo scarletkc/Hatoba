@@ -92,7 +92,7 @@ fn after_unlock(app: &AppHandle, state: &AppState) {
 
 #[tauri::command]
 #[specta::specta]
-pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
+pub fn vault_status(app: AppHandle, state: State<'_, AppState>) -> VaultStatus {
     let vault = state.vault();
     let info = vault.status();
     let pin = vault.pin_status();
@@ -124,7 +124,7 @@ pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
         retry_at: info.retry_at,
         sync_kind,
         biometric_available: biometric::available(),
-        biometric_enabled: info.initialized && biometric::enrolled(state.secrets.as_ref()),
+        biometric_enabled: info.initialized && biometric::enrolled(&app, state.secrets.as_ref()),
         pin_enabled: pin.enabled,
         pin_persist: pin.persist,
         pin_unlock: info.initialized && pin.enabled && pin_unlock,
@@ -174,12 +174,31 @@ pub async fn vault_unlock(
     Ok(())
 }
 
-/// SEC-07 (P1): Windows Hello.
+/// SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+/// another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
 #[tauri::command]
 #[specta::specta]
 pub async fn vault_unlock_biometric(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let key = biometric::unlock(&app, state.secrets.as_ref()).await?;
-    state.vault().unlock_with_vault_key(key)?;
+    let unlocked = match biometric::unlock(&app, state.secrets.as_ref()).await {
+        Ok(key) => state
+            .vault()
+            .unlock_with_vault_key(key)
+            .map_err(|e| match e {
+                hatoba_core::Error::WrongVaultKey => AppError::new(
+                    ErrorCode::BiometricStale,
+                    "biometric unlock holds another vault's key",
+                ),
+                e => e.into(),
+            }),
+        Err(e) => Err(e),
+    };
+    if let Err(e) = &unlocked
+        && e.code == ErrorCode::BiometricStale
+        && let Err(r) = biometric::remove(&app, state.secrets.as_ref())
+    {
+        tracing::warn!("could not remove the stale biometric unlock: {}", r.detail);
+    }
+    unlocked?;
     after_unlock(&app, &state);
     Ok(())
 }
@@ -389,7 +408,8 @@ pub async fn vault_rotate_recovery(
     Ok(code.to_string())
 }
 
-/// SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation.
+/// SEC-07 (P1), SEC-10: enrol Windows Hello or Touch ID. Requires the master password as a fresh
+/// confirmation.
 #[tauri::command]
 #[specta::specta]
 pub async fn biometric_enable(
@@ -409,8 +429,8 @@ pub async fn biometric_enable(
 
 #[tauri::command]
 #[specta::specta]
-pub fn biometric_disable(state: State<'_, AppState>) -> AppResult<()> {
-    biometric::remove(state.secrets.as_ref())
+pub fn biometric_disable(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    biometric::remove(&app, state.secrets.as_ref())
 }
 
 /// SEC-11: sets or replaces the PIN. Requires the master password as a fresh confirmation, like

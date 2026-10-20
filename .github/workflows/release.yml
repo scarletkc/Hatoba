@@ -21,6 +21,10 @@ jobs:
       contents: read
       # Reads the CI runs and the release environment.
       actions: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,6 +36,8 @@ jobs:
           node-version: 22
       - run: node --test "scripts/**/*.test.mjs"
       - run: node scripts/release/release.mjs check
+      - id: release
+        run: node scripts/release/release.mjs outputs >> "$GITHUB_OUTPUT"
       - run: node scripts/release/release.mjs gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -185,3 +191,56 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/site.yml
+
+  # Each stable release updates the winget and AUR packages, while Scoop's Extras bucket finds the
+  # release by itself. Prereleases are not submitted. A failure here leaves the published release as
+  # it is; docs/releasing.md describes the setup and how to retry.
+  winget:
+    name: winget
+    needs: [preflight, publish]
+    if: needs.preflight.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Holds the tokens of the package managers. It allows only main and has no required reviewers:
+    # the release is already approved and published. The actions that get them are pinned to a
+    # commit.
+    environment: packages
+    steps:
+      # Opens a pull request in microsoft/winget-pkgs from the owner's fork, with the manifests of
+      # the latest version there updated to this release's installer.
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+        with:
+          identifier: ScarletKc.Hatoba
+          release-tag: ${{ needs.preflight.outputs.tag }}
+          installers-regex: '_windows-x64-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
+
+  aur:
+    name: AUR
+    needs: [preflight, publish]
+    # Runs once the repository variable AUR_PUBLISH is true, when the AUR account can push.
+    if: needs.preflight.outputs.prerelease == 'false' && vars.AUR_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Holds the AUR SSH key, as for the winget job.
+    environment: packages
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set the version in the PKGBUILD
+        run: sed -i -e "s/^pkgver=.*/pkgver=${VERSION}/" -e 's/^pkgrel=.*/pkgrel=1/' packaging/aur/PKGBUILD
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+      # Fills in the checksums from the release's files, builds the package to check it, and pushes
+      # the PKGBUILD with its .SRCINFO to the AUR. It commits nothing when the AUR already has them.
+      - uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050 # v4.2.0
+        with:
+          pkgname: hatoba-bin
+          pkgbuild: packaging/aur/PKGBUILD
+          updpkgsums: true
+          test: true
+          commit_username: ScarletKc
+          commit_email: i@scarletkc.com
+          commit_message: Update to ${{ needs.preflight.outputs.version }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

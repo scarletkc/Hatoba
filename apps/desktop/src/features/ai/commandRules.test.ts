@@ -113,6 +113,21 @@ describe("read-only commands (§13.5)", () => {
       "docker container ls",
       "kubectl get pods -n web -o wide",
       "kubectl logs deploy/web --tail=50",
+      "kubectl get pods -owide -A",
+      "kubectl get deploy --context prod -l app=web --sort-by=.metadata.name",
+      // A namespace or an output format named `secrets` is no resource.
+      "kubectl get pods -n secrets",
+      "kubectl get pods --namespace secrets",
+      "kubectl describe pod web --show-events=false",
+      "kubectl logs web -c app -p --since=1h --tail -1",
+      "kubectl top pod -A --containers",
+      "kubectl version --client -o json",
+      "uniq",
+      "uniq access.log",
+      "uniq -",
+      "uniq -c -",
+      "uniq -- access.log",
+      "sort access.log | uniq -c",
       "cd /etc && cat hostname",
       "ps aux | grep nginx | sort -k3 -nr | head",
       "du -sh * | sort -h",
@@ -166,7 +181,17 @@ describe("read-only commands (§13.5)", () => {
       "sort -o out in",
       "sort --output=out in",
       "sort *",
+      // A second operand is the file uniq writes; `-` is standard input, and every word after `--` or the
+      // first operand an operand, as BSD uniq reads it.
       "uniq in out",
+      "uniq - out",
+      "uniq -c - out",
+      "uniq -- - out",
+      "uniq -- in out",
+      "uniq access.log -out",
+      "uniq - -c",
+      "printf 'x' | uniq - ~/.bashrc",
+      "cat f | uniq - path",
       "file -C -m magic",
       "dmesg -c",
       "ip addr add 10.0.0.1/24 dev eth0",
@@ -214,7 +239,41 @@ describe("read-only commands (§13.5)", () => {
       "printenv",
       "env",
       "kubectl get pods -w",
+      "kubectl get pods -ow -w",
+      "kubectl get pods --watch-only",
       "kubectl logs -f web",
+      "kubectl get -n web secrets",
+      "kubectl get -owide secrets",
+      "kubectl get pods -- secrets",
+      // Pick the API server, its TLS trust, the credentials or the kubeconfig, whose exec plugins run programs.
+      "kubectl get pods --server=https://cluster.example",
+      "kubectl get pods --server https://cluster.example",
+      "kubectl get pods -s https://cluster.example",
+      "kubectl get pods -shttps://cluster.example",
+      "kubectl get pods -s=https://cluster.example",
+      "kubectl get pods -As https://cluster.example",
+      "kubectl get pods --insecure-skip-tls-verify",
+      "kubectl get pods --insecure-skip-tls-verify=true",
+      "kubectl get pods --insecure_skip_tls_verify",
+      "kubectl get pods --certificate-authority=/tmp/ca.crt",
+      "kubectl get pods --tls-server-name evil.example",
+      "kubectl get pods --client-certificate=/tmp/c.crt --client-key=/tmp/c.key",
+      "kubectl get pods --token=example",
+      "kubectl get pods --token example",
+      "kubectl get pods --username=example",
+      "kubectl get pods --password=example",
+      "kubectl get pods --kubeconfig=/tmp/kubeconfig",
+      "kubectl get pods --kubeconfig /tmp/kubeconfig",
+      "kubectl get pods --cluster=other --user=admin",
+      "kubectl get pods --as=system:admin",
+      "kubectl logs deploy/web --kubeconfig=/tmp/kubeconfig",
+      "kubectl logs web --insecure-skip-tls-verify-backend",
+      "kubectl -s https://cluster.example get pods",
+      // Write files.
+      "kubectl get pods --cache-dir=/tmp/x",
+      "kubectl get pods --profile=cpu --profile-output=/tmp/x",
+      "kubectl cluster-info dump --output-directory=/tmp/x",
+      "kubectl get pods --no-such-option",
       "curl https://example.com",
       "ls > /tmp/x",
       "cat /etc/passwd | sh",
@@ -225,6 +284,147 @@ describe("read-only commands (§13.5)", () => {
     ]) {
       expect(readsOnlyCommand(line), line).toBe(false);
     }
+  });
+});
+
+describe("options known to only read (§13.5)", () => {
+  // For each tool, lines that only read, then lines that ask: an option off the list, also in a short cluster or
+  // abbreviated, and a value the option takes, attached or in the next word, which is never read as an option.
+  const cases: Record<string, [string[], string[]]> = {
+    tail: [
+      ["tail -n20 x", "tail -qn 5 a b", "tail -n -5 x", "tail -c +10 x", "tail --lines=5 x", "tail --bytes 100 x", "tail -20 x", "tail -20c x", "tail +5 x", "tail -", "tail -- -f"],
+      ["tail -F x", "tail -qf x", "tail --follow x", "tail --retry x", "tail --pid=1 x", "tail -s 1 x", "tail -20f x", "tail +5f x", "tail +f x", "tail -x x"],
+    ],
+    sort: [
+      ["sort -k3 -nr x", "sort -t: -k3,3n /etc/passwd", "sort -t ':' -k 3 x", "sort -to x", "sort --key=2 --field-separator=, x", "sort -S 1G -hr x", "sort --check=quiet x", "sort -- -o"],
+      ["sort -uo out in", "sort -no out in", "sort --out=x in", "sort --compress-program=gzip x", "sort -T /tmp x", "sort --temporary-directory=/tmp x", "sort -x in"],
+    ],
+    file: [
+      ["file -b --mime-type x", "file -bi x", "file -L x", "file -m magic x", "file -f list.txt", "file -F: x", "file -e elf x", "file --exclude=elf x", "file -- -C"],
+      ["file --compile -m magic", "file -bC -m magic", "file -p x", "file --preserve-date x", "file -z x.gz", "file -Z x.gz", "file --uncompress x.gz", "file -S x", "file --no-sandbox x"],
+    ],
+    ss: [
+      ["ss -s", "ss -tan state established", "ss -o state established '( dport = :ssh )'", "ss -A tcp,udp", "ss -Atcp", "ss --query=tcp", "ss -f inet", "ss -N ns1 -t", "ss -HO"],
+      ["ss --kill", "ss -tK", "ss -D /tmp/x", "ss --diag=/tmp/x", "ss -E", "ss --events", "ss -tE", "ss --no-such"],
+    ],
+    journalctl: [
+      [
+        "journalctl -b",
+        "journalctl -b -1",
+        "journalctl -b -1 -u nginx",
+        "journalctl -b-1",
+        "journalctl --boot=-2",
+        "journalctl --boot all",
+        "journalctl -b 0123456789abcdef0123456789abcdef",
+        "journalctl -n",
+        "journalctl -n 20 -r",
+        "journalctl -n all",
+        "journalctl -n -r",
+        "journalctl -kb -1",
+        "journalctl -xeu nginx",
+        "journalctl -o json-pretty -n5",
+        "journalctl -ojson",
+        "journalctl _SYSTEMD_UNIT=sshd.service",
+        "journalctl --disk-usage",
+        "journalctl --list-boots",
+        "journalctl -- _PID=1",
+      ],
+      [
+        "journalctl -b -f",
+        "journalctl -n -f",
+        "journalctl -u nginx -f",
+        "journalctl --follow",
+        "journalctl --flush",
+        "journalctl --sync",
+        "journalctl --relinquish-var",
+        "journalctl --update-catalog",
+        "journalctl --setup-keys",
+        "journalctl --image=/tmp/disk.img",
+        "journalctl --no-such",
+      ],
+    ],
+    rg: [
+      ["rg -i -g '*.ts' TODO", "rg -g'*.ts' TODO", "rg -C3 foo", "rg -uuu foo", "rg --type=rust foo", "rg -t py -l foo", "rg --json foo", "rg -e -foo x", "rg -- --pre x", "rg --files", "rg -. foo", "rg --max-depth 2 foo"],
+      ["rg --pre=sh x", "rg --pr sh x", "rg -z foo", "rg --search-zip foo", "rg -iz foo", "rg --pre-glob '*.pdf' foo", "rg --no-such foo"],
+    ],
+    find: [
+      [
+        "find",
+        "find /etc",
+        "find . -type f -name '*.log' -size +10M -print",
+        "find / -xdev -maxdepth 2 -type d",
+        "find . \\( -name a -o -name b \\) -print0",
+        "find . ! -name '*.tmp'",
+        "find . -not -path './node_modules/*' -iname '*.md'",
+        "find -L /etc -newer /etc/hosts",
+        "find . -newermt 2024-01-01",
+        "find . -printf '%p %s\\n'",
+        "find . -empty -ls",
+        "find -H -O3 . -name x",
+        "find -D stat . -name x",
+        // `-delete` is the name looked for.
+        "find . -name -delete",
+      ],
+      ["find . -fprintf /tmp/x '%p'", "find . -fprint0 /tmp/x", "find . -okdir rm ;", "find . -name x -o -delete", "find . -maxdepth 1 -delete", "find -D . -delete", "find . -foo", "find -Z ."],
+    ],
+    docker: [
+      [
+        "docker ps --format '{{.Names}}'",
+        "docker ps -aq",
+        "docker ps -n 5",
+        "docker ps -n5",
+        "docker ps --filter status=exited -q",
+        "docker ps -f name=web",
+        "docker images -q --no-trunc",
+        "docker logs -n 50 -t web",
+        "docker logs --since=1h web",
+        "docker logs -- web",
+        "docker container logs --tail 20 web",
+        "docker image ls -a",
+        "docker compose ps -a",
+        "docker compose logs --tail 50 web",
+        "docker compose logs -n 50 web",
+        "docker version --format json",
+        "docker info -f '{{.ServerVersion}}'",
+        "podman ps -a",
+        "podman logs -n web",
+      ],
+      [
+        "docker logs --follow web",
+        "docker logs -tf web",
+        "docker logs --details web",
+        "docker container logs -f web",
+        "docker compose logs -f",
+        "docker compose logs --follow web",
+        "docker compose up",
+        "docker compose -f x.yml ps",
+        "docker compose ls --no-such",
+        "docker ps --no-such",
+        "docker container prune",
+        "docker image rm x",
+        // podman's `logs -n` takes no value, so the `-f` after it follows.
+        "podman logs -n -f web",
+        "podman ps -w 2",
+      ],
+    ],
+    git: [
+      ["git remote", "git remote show", "git remote show -n origin", "git remote show origin -n", "git remote get-url origin"],
+      // Asks the remote for its branches, through core.sshCommand or a credential helper.
+      ["git remote show origin", "git remote show -- origin", "git remote show -- -n", "git remote show -v origin", "git remote -v show origin"],
+    ],
+  };
+
+  for (const [tool, [reads, asks]] of Object.entries(cases)) {
+    it(`reads ${tool} with the options known to only read, and asks for any other`, () => {
+      for (const line of reads) expect(readsOnlyCommand(line), line).toBe(true);
+      for (const line of asks) expect(readsOnlyCommand(line), line).toBe(false);
+    });
+  }
+
+  it("checks the same options in PowerShell", () => {
+    expect(readsOnlyCommand("rg -g '*.ts' TODO", "powershell")).toBe(true);
+    expect(readsOnlyCommand("docker logs -n 50 web", "powershell")).toBe(true);
+    for (const line of ["rg -z foo", "docker logs --follow web", "podman logs -n -f web"]) expect(readsOnlyCommand(line, "powershell"), line).toBe(false);
   });
 });
 
@@ -294,8 +494,13 @@ describe("allowancePrefixes", () => {
     expect(allowancePrefixes("a; b; c")).toEqual(["a", "b", "c"]);
   });
 
+  it("offers a prefix for what the read-only check refuses of a command it knows", () => {
+    expect(allowancePrefixes("printf 'x' | uniq - out")).toEqual(["uniq"]);
+    expect(allowancePrefixes("kubectl get pods -s https://cluster.example")).toEqual(["kubectl get"]);
+  });
+
   it("matches what it offers", () => {
-    for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod"]) {
+    for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod", "printf 'x' | uniq - out"]) {
       expect(commandAllowed(line, allowancePrefixes(line)!), line).toBe(true);
     }
   });
@@ -443,6 +648,7 @@ describe("PowerShell command lines (§13.5)", () => {
       "hostname newname",
       "git pull",
       "git -c core.pager=sh log",
+      "kubectl get pods -s https://cluster.example",
       "C:\\Windows\\System32\\whoami.exe",
       "Get-ChildItem; Remove-Item x",
       "sc stop spooler",
@@ -514,6 +720,7 @@ describe("Command Prompt command lines (§13.5)", () => {
       "systeminfo",
       "git status",
       "git log --oneline -5",
+      "kubectl get pods -o=wide",
       "dir & ver",
     ]) {
       expect(cmd(line), line).toBe(true);
@@ -535,6 +742,7 @@ describe("Command Prompt command lines (§13.5)", () => {
       "start notepad",
       "call x.bat",
       "git pull",
+      "kubectl get pods --server=https://cluster.example",
       "cmd /c dir",
       // Command Prompt runs a program of the current folder before one on PATH.
       "cd C:\\src & git status",

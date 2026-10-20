@@ -14,6 +14,11 @@
   box-shadow: var(--shadow-window), 0 0 0 0.5px var(--winline);
 }
 
+/* The window's content fades in as the app opens and as the vault unlocks. */
+.main:not([data-locked]) {
+  animation: pageIn var(--motion-base) var(--ease-out);
+}
+
 .window {
   flex: 1;
   min-width: 0;
@@ -43,4 +48,26 @@
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+/* Opacity only: a transform would make it the box that fixed-position content inside places against. */
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: pageIn var(--motion-fade) var(--ease-out);
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main,
+  .page {
+    animation-duration: var(--motion-fade) !important;
+  }
 }

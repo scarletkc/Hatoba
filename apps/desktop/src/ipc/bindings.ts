@@ -38,7 +38,8 @@ export const commands = {
 	updateCheck: () => __TAURI_INVOKE<UpdateCheck>("update_check"),
 	/**
 	 *  Downloads and installs the update the last check found. Hatoba closes, which ends every SSH
-	 *  session, and the installer starts the new version.
+	 *  session, and the installer starts the new version. Refused when a package manager installed
+	 *  Hatoba.
 	 */
 	updateInstall: (progress: Channel<UpdateProgress>) => __TAURI_INVOKE<null>("update_install", { progress }),
 	/**
@@ -54,7 +55,10 @@ export const commands = {
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
 	/**  VAULT-03 / SEC-06: wrong passwords are throttled with increasing delays (persisted). */
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
-	/**  SEC-07 (P1): Windows Hello. */
+	/**
+	 *  SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+	 *  another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
+	 */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
 	/**
 	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
@@ -76,7 +80,10 @@ export const commands = {
 	vaultExportBackup: (path: string) => __TAURI_INVOKE<null>("vault_export_backup", { path }),
 	/**  Issues a new recovery code (the old one stops working everywhere once synced). */
 	vaultRotateRecovery: (password: string) => __TAURI_INVOKE<string>("vault_rotate_recovery", { password }),
-	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
+	/**
+	 *  SEC-07 (P1), SEC-10: enrol Windows Hello or Touch ID. Requires the master password as a fresh
+	 *  confirmation.
+	 */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
 	/**
@@ -127,14 +134,15 @@ export const commands = {
 	dashboardUnwatch: (watchId: number) => __TAURI_INVOKE<void>("dashboard_unwatch", { watchId }),
 	/**  **Retry**: signs in to a held host again, and tries an offline or failed one now. */
 	dashboardRetry: (hostId: string) => __TAURI_INVOKE<void>("dashboard_retry", { hostId }),
-	sshConfigPreview: () => __TAURI_INVOKE<SshConfigCandidate[]>("ssh_config_preview"),
+	hostsImportPreview: (source: ImportSource, path: string | null) => __TAURI_INVOKE<ImportPreview>("hosts_import_preview", { source, path }),
 	/**
-	 *  SSH-11: creates hosts for the chosen aliases. It imports as keys only the unencrypted
-	 *  identity files in `key_files`, the ones the preview listed and the user confirmed. A host
-	 *  whose identity file is not among them (the config or the files changed after the preview)
-	 *  asks how to sign in, with a warning. With no `key_files`, no private key file is read.
+	 *  Creates hosts for the chosen entries of `source`, read again from `path`. It imports as keys
+	 *  only the unencrypted key files in `key_files`, the ones the preview listed and the user
+	 *  confirmed. A host whose key file is not among them (the sessions or the files changed after
+	 *  the preview) asks how to sign in, with a warning. With no `key_files`, no private key file is
+	 *  read.
 	 */
-	sshConfigImport: (aliases: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("ssh_config_import", { aliases, keyFiles }),
+	hostsImport: (source: ImportSource, path: string | null, ids: string[], keyFiles: string[]) => __TAURI_INVOKE<ImportResult>("hosts_import", { source, path, ids, keyFiles }),
 	proxiesList: () => __TAURI_INVOKE<ProxyView[]>("proxies_list"),
 	proxySave: (input: ProxyInput) => __TAURI_INVOKE<ProxyView>("proxy_save", { input }),
 	proxyDelete: (id: string) => __TAURI_INVOKE<null>("proxy_delete", { id }),
@@ -471,11 +479,13 @@ export const commands = {
 	aiAllowanceAdd: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_add", { allowance }),
 	/**  Removes a saved approval and returns what is left. */
 	aiAllowanceRemove: (allowance: AiAllowance) => __TAURI_INVOKE<AiAllowance[]>("ai_allowance_remove", { allowance }),
-	/**  Every memory, oldest first. */
+	/**  Every memory, oldest first, of every scope. */
 	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
 	/**
-	 *  Saves a memory: `id` replaces that one, together with the others of its name when the edit
-	 *  keeps it ([`memory::edited`]); none adds one.
+	 *  Saves a memory in the scope the input names, a saved host's that exists (or the deleted host
+	 *  the edited memory already belongs to) or a computer's: `id` replaces that one, which moves it
+	 *  there when it was elsewhere, together with the others of its name there when the edit keeps
+	 *  both ([`memory::edited`]); none adds one.
 	 */
 	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
 	/**  Deletes a memory. */
@@ -874,25 +884,36 @@ export type AiLocalTab = {
 	kind: LocalShellKind | null,
 };
 
-/**  A memory to save from Settings → AI (AI-53). */
+/**
+ *  A memory to save from Settings → AI (AI-53), in the scope `host_id` and `local` name, as in
+ *  [`AiMemoryView`].
+ */
 export type AiMemoryInput = {
 	/**  `None` creates a memory. */
 	id: string | null,
 	name: string,
 	content: string,
+	host_id: string | null,
+	local: string | null,
 };
 
-/**  A memory of the AI assistant (AI-53). */
+/**
+ *  A memory of the AI assistant (AI-53): a global one, with neither `host_id` nor `local`, or a
+ *  host memory of a saved host or of a computer's local terminal.
+ */
 export type AiMemoryView = {
 	id: string,
 	name: string,
 	content: string,
+	host_id: string | null,
+	/**  The computer's name, while `host_id` is `None`. */
+	local: string | null,
 	updated_at: number,
 };
 
 /**
  *  A model of a provider (AI-03). Token limits are `None` when unknown. A provider's view fills
- *  what a row leaves unknown from the table of well-known models, as requests do.
+ *  what a row leaves unknown from models.dev, as requests do.
  */
 export type AiModel = {
 	id: string,
@@ -905,8 +926,8 @@ export type AiModel = {
 	 */
 	efforts: AiEffort[] | null,
 	/**
-	 *  Whether the model supports adaptive thinking (Anthropic's model list or the table of
-	 *  well-known models), `None` when unknown.
+	 *  Whether the model supports adaptive thinking (Anthropic's model list or models.dev),
+	 *  `None` when unknown.
 	 */
 	adaptive_thinking: boolean | null,
 };
@@ -1250,6 +1271,11 @@ export type AppInfo = {
 	 *  tab records (§7.5).
 	 */
 	device_name: string,
+	/**
+	 *  The package manager that installed this copy and updates it, which turns the in-app
+	 *  update off (spec §11); `None` for the installers from the GitHub release.
+	 */
+	package_manager: PackageManager | null,
 };
 
 export type Appearance = "system" | "light" | "dark";
@@ -1513,7 +1539,18 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
 "wrong_pin" | 
 /**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
-"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+"pin_unavailable" | 
+/**
+ *  SEC-10: Touch ID can't be used now (the lid is closed, too many failed fingers, no sensor).
+ *  Only macOS produces it.
+ */
+"biometric_unavailable" | 
+/**
+ *  SEC-07, SEC-10: the saved biometric unlock no longer opens on this device (fingerprints
+ *  changed, the record is damaged or came from another Mac). `vault_unlock_biometric` removes
+ *  it.
+ */
+"biometric_stale" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */
@@ -1687,11 +1724,60 @@ export type HostView = {
 	env: HostEnvVar[],
 };
 
+/**  A host an import can create. */
+export type ImportCandidate = {
+	/**  Identifies it within the source, for `hosts_import`. */
+	id: string,
+	name: string,
+	address: string,
+	port: number,
+	username: string,
+	/**  The folder it is in, its names joined by ` / `. */
+	folder: string | null,
+	/**
+	 *  The private key file an import with keys reads: the first one that exists, otherwise the
+	 *  first one listed.
+	 */
+	identity_file: string | null,
+	/**  Whether `identity_file` exists, so that importing keys would read it. */
+	identity_file_found: boolean,
+	/**
+	 *  The client keeps the private key itself, so it is not imported; the key's name there, or
+	 *  empty when the session does not name it.
+	 */
+	kept_key: string | null,
+	/**  The jump host: a `ProxyJump` value, another session's name, or gateways. */
+	jump: string | null,
+	/**  The proxy it imports, such as `SOCKS5 127.0.0.1:1080`. */
+	proxy: string | null,
+	/**
+	 *  A proxy setting that is not imported, such as `ProxyCommand …`: the host connects
+	 *  without it.
+	 */
+	skipped_proxy: string | null,
+	/**  A host with the same name exists. */
+	exists: boolean,
+};
+
+export type ImportPreview = {
+	/**
+	 *  The file, folder or registry key the hosts were read from; `None` when nothing was found
+	 *  where the client keeps its sessions.
+	 */
+	location: string | null,
+	/**  The client encrypted the file, so nothing could be read from it. */
+	encrypted: boolean,
+	candidates: ImportCandidate[],
+};
+
 export type ImportResult = {
 	hosts_created: number,
 	keys_imported: number,
 	warnings: string[],
 };
+
+/**  Where a host import reads from (SSH-11, SSH-12, SSH-15). */
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
 
 export type ItemType = "host" | "group" | "key" | "known_host" | "forward" | "snippet" | "proxy" | "ai_provider" | "search_provider" | "ai_conversation" | "ai_message" | "skill" | "skill_file" | "mcp_server" | "ai_memory" | "settings";
 
@@ -1764,9 +1850,11 @@ export type LocalPrefs = {
 	/**  SSH-13: the proxy that hosts set to the device default connect through, on this device. */
 	default_proxy_id: string | null,
 	/**
-	 *  SSH-09: the ssh-agent socket this device authenticates with. `None` uses `SSH_AUTH_SOCK`,
-	 *  and, when that names nothing, the well-known agent sockets of the device, Bitwarden's
-	 *  included.
+	 *  SSH-09: the ssh-agent socket this device authenticates with. `None` selects an agent
+	 *  according to the platform. On Unix, a set `SSH_AUTH_SOCK` other than the macOS launchd
+	 *  placeholder is used alone; discovery runs only when the variable is unset or has that
+	 *  placeholder. On Windows, a value accepted as a named pipe is used alone; other values use
+	 *  the OpenSSH agent pipe.
 	 */
 	ssh_agent_socket: string | null,
 	/**  SEC-02: minutes without input before the vault locks; 0 never locks. */
@@ -1992,6 +2080,13 @@ export type NotificationTarget = {
 	conversation_id: string | null,
 };
 
+/**  A package manager that installs Hatoba from the GitHub release and updates it itself. */
+export type PackageManager = "scoop" | 
+/**  The `hatoba-bin` package in the Arch User Repository. */
+"aur" | 
+/**  One that Hatoba has no instructions for. */
+"other";
+
 export type Platform = "windows" | "macos" | "linux";
 
 export type ProbeResult = {
@@ -2208,24 +2303,6 @@ export type SshAgentView = {
 	keys: SshAgentKey[],
 	/**  Why no agent answers, when none does. */
 	error: string | null,
-};
-
-export type SshConfigCandidate = {
-	alias: string,
-	address: string,
-	port: number,
-	username: string,
-	/**
-	 *  The `IdentityFile` an import with keys reads: the first one that exists, otherwise the
-	 *  first one listed.
-	 */
-	identity_file: string | null,
-	/**  Whether `identity_file` exists, so that importing keys would read it. */
-	identity_file_found: boolean,
-	proxy_jump: string | null,
-	/**  `ProxyCommand`, which is not imported: the host connects without it (SSH-11). */
-	proxy_command: string | null,
-	exists: boolean,
 };
 
 export type SshErrorKind = "dns" | "refused" | "timeout" | "unreachable" | "auth_failed" | "host_key_rejected" | "key_parse" | "disconnected" | "protocol" | "io" | "channel" | "sftp" | "cancelled" | 

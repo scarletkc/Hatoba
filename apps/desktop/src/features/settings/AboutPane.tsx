@@ -9,12 +9,13 @@ import { copyText } from "@/features/keys/clipboard";
 import { useTransfers } from "@/features/sftp/transfers";
 import { openExternal } from "@/features/sync/external";
 import { formatBytes, formatDate, useT, type MessageKey, type Params } from "@/i18n";
-import type { AppError, AvailableUpdate, UpdateProgress } from "@/ipc/types";
+import type { AppError, AvailableUpdate, PackageManager, UpdateProgress } from "@/ipc/types";
 import { REPO_URL, WEBSITE_URL, bugReportUrl } from "@/lib/github";
 import { Pane, SettingRow, usePrefs } from "./shared";
 import s from "./AboutPane.module.css";
 
 const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const SCOOP_UPDATE = "scoop update hatoba";
 
 type T = (key: MessageKey, params?: Params) => string;
 type Install = UpdateProgress | { kind: "starting" };
@@ -62,6 +63,13 @@ function updateStatus(
   return null;
 }
 
+/** How to update a copy that a package manager installed (spec §11). */
+function managerText(t: T, manager: PackageManager): string {
+  if (manager === "scoop") return t("settings.about.manager.scoop", { command: SCOOP_UPDATE });
+  if (manager === "aur") return t("settings.about.manager.aur");
+  return t("settings.about.manager.other");
+}
+
 /** Percent downloaded, or null while the size is unknown. */
 function downloadPercent(install: Install): number | null {
   if (install.kind === "installing") return 100;
@@ -95,20 +103,21 @@ export async function confirmInstall(t: T, target: AvailableUpdate) {
 }
 
 /**
- * Settings → About: the version, signed updates (spec §11), and links to the source, license, and
- * bug report form.
+ * Settings → About: the version, signed updates (spec §11) or how the package manager that
+ * installed Hatoba updates it, and links to the source, license, and bug report form.
  */
 export function AboutPane() {
   const t = useT();
   const version = useApp((st) => st.info.version);
   const platform = useApp((st) => st.info.platform);
+  const manager = useApp((st) => st.info.package_manager);
   const [prefs, setPrefs] = usePrefs();
   const { checking, result, error, install, installError, check } = useUpdate();
   const update = !checking && !error ? (result?.update ?? null) : null;
 
-  const copyVersion = async () => {
+  const copy = async (text: string) => {
     try {
-      await copyText(version);
+      await copyText(text);
       toast(t("btn.copied"), "success");
     } catch {
       toast(t("err.internal"), "error");
@@ -124,7 +133,7 @@ export function AboutPane() {
       <div className={s.header}>
         <AppLogo className={s.logo} />
         <div className={s.name}>Hatoba</div>
-        <button type="button" className={s.version} title={t("settings.about.copyVersion")} onClick={() => void copyVersion()}>
+        <button type="button" className={s.version} title={t("settings.about.copyVersion")} onClick={() => void copy(version)}>
           {t("settings.about.version", { version })}
         </button>
       </div>
@@ -133,37 +142,47 @@ export function AboutPane() {
         <SettingRow
           label={t("settings.about.update")}
           hint={
-            status && (
+            (status || manager) && (
               <span className={s.progress}>
-                <span className={s.status} role="status">
-                  <Icon name={status.icon} color={status.color} className={spinning ? controlStyles.spinner : undefined} />
-                  {status.text}
-                </span>
+                {status && (
+                  <span className={s.status} role="status">
+                    <Icon name={status.icon} color={status.color} className={spinning ? controlStyles.spinner : undefined} />
+                    {status.text}
+                  </span>
+                )}
                 {install && (
                   <span className={s.track} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
                     <span className={percent === null ? `${s.fill} ${s.fillUnknown}` : s.fill} style={percent === null ? undefined : { width: `${percent}%` }} />
                   </span>
                 )}
+                {manager && <span>{managerText(t, manager)}</span>}
               </span>
             )
           }
         >
-          {update && !install && (
+          {update && !install && !manager && (
             <Button variant="primary" onClick={() => void confirmInstall(t, update)}>
               {t("settings.about.install")}
+            </Button>
+          )}
+          {update && manager === "scoop" && (
+            <Button variant="primary" onClick={() => void copy(SCOOP_UPDATE)}>
+              {t("settings.about.copyCommand")}
             </Button>
           )}
           <Button disabled={spinning} onClick={() => void check()}>
             {t("settings.about.check")}
           </Button>
         </SettingRow>
-        <SettingRow label={t("settings.about.auto")} hint={t("settings.about.auto.hint")}>
-          <Switch
-            label={t("settings.about.auto")}
-            checked={prefs.auto_update_check}
-            onChange={(auto_update_check) => setPrefs({ auto_update_check })}
-          />
-        </SettingRow>
+        {!manager && (
+          <SettingRow label={t("settings.about.auto")} hint={t("settings.about.auto.hint")}>
+            <Switch
+              label={t("settings.about.auto")}
+              checked={prefs.auto_update_check}
+              onChange={(auto_update_check) => setPrefs({ auto_update_check })}
+            />
+          </SettingRow>
+        )}
       </Group>
 
       {update && (

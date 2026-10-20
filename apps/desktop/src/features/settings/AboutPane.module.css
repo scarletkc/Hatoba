@@ -72,7 +72,7 @@
   height: 100%;
   border-radius: 2px;
   background: var(--accent);
-  transition: width 0.2s linear;
+  transition: width var(--motion-base) var(--ease-out);
 }
 
 /* The size is not known yet: a segment slides along the track. */
