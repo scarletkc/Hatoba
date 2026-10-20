@@ -11,6 +11,7 @@ const backend = vi.hoisted(() => ({
   calls: [] as string[],
   status: null as unknown,
   pinError: null as unknown,
+  biometricError: null as unknown,
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -21,10 +22,11 @@ vi.mock("@/ipc/api", async (importActual) => ({
       backend.calls.push(`pin:${pin}`);
       if (backend.pinError) throw backend.pinError;
     },
-    // The user cancels Windows Hello, which leaves the lock screen as it was.
+    // The user cancels Windows Hello, which leaves the lock screen as it was; a test can ask for
+    // another refusal instead.
     vault_unlock_biometric: async () => {
       backend.calls.push("hello");
-      throw { code: "cancelled", detail: "Windows Hello was cancelled" };
+      throw backend.biometricError ?? { code: "cancelled", detail: "Windows Hello was cancelled" };
     },
   },
 }));
@@ -45,6 +47,7 @@ afterEach(() => {
   backend.calls = [];
   backend.status = null;
   backend.pinError = null;
+  backend.biometricError = null;
   vi.restoreAllMocks();
 });
 
@@ -130,6 +133,11 @@ describe("PIN unlock", () => {
 
 describe("Windows Hello on its own", () => {
   const hello = () => backend.calls.filter((c) => c === "hello").length;
+  const alert = () => document.querySelector<HTMLElement>('[role="alert"]')!;
+  const biometricButton = () =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent === t("vault.unlock.touchId") || b.textContent === t("vault.unlock.hello"),
+    )!;
   const fire = async (event: string) => {
     await act(async () => {
       window.dispatchEvent(new Event(event));
@@ -175,6 +183,47 @@ describe("Windows Hello on its own", () => {
     await fire("pointermove");
     await fire("pointermove");
     expect(hello()).toBe(1);
+  });
+
+  it("keeps a refused prompt quiet, and shows why after a click", async () => {
+    // The lid is shut: the system refuses the prompt the app raises by itself, every time.
+    backend.biometricError = {
+      code: "biometric_unavailable",
+      detail: "Touch ID is not available in closed clamshell mode",
+    };
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(hello()).toBe(1);
+    // The line the message goes in is always there; nothing is in it.
+    expect(alert()!.textContent).toBe("");
+    await act(async () => biometricButton().click());
+    expect(hello()).toBe(2);
+    expect(alert()!.textContent).toBe(t("err.biometric_unavailable"));
+  });
+
+  it("says a record this Mac cannot open needs Touch ID turned on again, even from the prompt", async () => {
+    backend.biometricError = { code: "biometric_stale", detail: "the saved record cannot be opened here" };
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(hello()).toBe(1);
+    expect(alert()!.textContent).toBe(t("err.biometric_stale"));
+  });
+
+  it("keeps a working PIN when the Touch ID record is stale", async () => {
+    backend.biometricError = {
+      code: "biometric_stale",
+      detail: "the saved record cannot be opened here",
+    };
+    focused();
+    locked({ biometric_enabled: true, pin_unlock: true });
+    await act(async () => void show());
+    expect(hello()).toBe(1);
+    // It still says what to do about Touch ID...
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe(t("err.biometric_stale"));
+    // ...and the PIN field stays, because the PIN still unlocks.
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.pinField"));
   });
 
   it("never asks without Windows Hello", async () => {

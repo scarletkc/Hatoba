@@ -220,7 +220,7 @@ export const AREAS: Area[] = [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.lockNow", "tray.lock",
           "settings.sec.never", "settings.sec.hour", "lock.overlay", "vault.unlock.field", "vault.unlock.submit",
           "vault.unlock.forgot", "vault.recover.title", "vault.recover.newPassword", "vault.recover.submit",
-          "vault.unlock.hello", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
+          "vault.unlock.hello", "vault.unlock.touchId", "settings.sec.pin", "settings.pin.title", "settings.pin.confirm", "settings.pin.submit",
           "vault.unlock.subtitlePin", "vault.unlock.usePassword", "vault.unlock.usePin", "settings.sec.pinRestart",
           "settings.tab.security", "err.throttled", "lock.sessionsKept",
         ],
@@ -262,7 +262,7 @@ export const AREAS: Area[] = [
         ],
         "Security": [
           "settings.sec.autoLock", "settings.sec.sleep", "settings.sec.disconnect", "settings.sec.clipboard",
-          "settings.sec.hello", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
+          "settings.sec.hello", "settings.sec.touchId", "settings.sec.pin", "settings.sec.pinRestart", "settings.sec.password",
           "settings.sec.password.button", "settings.sec.recovery", "settings.sec.recovery.button",
           "settings.sec.lockNow", "settings.sec.lockNow.button",
         ],

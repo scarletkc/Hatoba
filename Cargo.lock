@@ -2353,6 +2353,8 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
  "dirs 6.0.0",
  "futures",
  "gtk",
@@ -2363,8 +2365,11 @@ dependencies = [
  "keyring",
  "libc",
  "objc2-foundation",
+ "objc2-local-authentication",
  "reqwest",
  "rustls",
+ "security-framework 3.7.0",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "specta",
@@ -3785,6 +3790,16 @@ dependencies = [
  "bitflags 2.13.2",
  "objc2",
  "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-local-authentication"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48e0b8b339e0d9d2ed4416b7f93f9d4daadff7d4dd797f89867cde11aeac607"
+dependencies = [
+ "objc2",
+ "objc2-foundation",
 ]
 
 [[package]]
