@@ -2,12 +2,13 @@
 //! configuration folder, whose subfolders are the session folders. Each line holds one setting,
 //! `S:"Name"=text`, `D:"Name"=` a number in hex, or `Z:"Name"=` the number of the lines that follow
 //! with a list's items. **Tools → Export Settings** writes the same settings to an XML file, in a
-//! `<key>` element for each folder and session. A session can sign in with the key file set for
-//! all sessions, kept in `SSH2.ini`, and reach its server through another session, which
-//! SecureCRT calls a firewall. The passwords SecureCRT saves are encrypted, with the configuration
-//! passphrase when one is set, so they are not imported.
+//! `<key>` element for each folder and session, along with the files they name, key files among
+//! them. A session can sign in with the key file set for all sessions, kept in `SSH2.ini`, and
+//! reach its server through another session, which SecureCRT calls a firewall. The passwords
+//! SecureCRT saves are encrypted, with the configuration passphrase when one is set, so they are
+//! not imported.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use quick_xml::XmlVersion;
@@ -45,9 +46,8 @@ const READ: &[&str] = &[
 pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
     if let Some(file) = path.filter(|p| p.is_file()) {
         return Ok(Source {
-            entries: read_export(file)?,
             location: Some(file.to_string_lossy().into_owned()),
-            encrypted: false,
+            ..read_export(file)?
         });
     }
     let Some((config, sessions)) = path.map(folders).or_else(default_folders) else {
@@ -57,6 +57,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         entries: read_sessions(&sessions, config.as_deref())?,
         location: Some(sessions.to_string_lossy().into_owned()),
         encrypted: false,
+        ..Source::default()
     })
 }
 
@@ -195,10 +196,10 @@ fn read_sessions(root: &Path, config: Option<&Path>) -> AppResult<Vec<Entry>> {
     Ok(entries)
 }
 
-/// The sessions in the XML file that SecureCRT's Export Settings writes. `${VDS_CONFIG_PATH}` in
-/// its paths stands for this device's configuration folder, as it does once SecureCRT imports
-/// the file.
-fn read_export(path: &Path) -> AppResult<Vec<Entry>> {
+/// The sessions in the XML file that SecureCRT's Export Settings writes, and the key files it
+/// holds. `${VDS_CONFIG_PATH}` in its paths stands for this device's configuration folder, as it
+/// does once SecureCRT imports the file.
+fn read_export(path: &Path) -> AppResult<Source> {
     let text = {
         let bytes = Zeroizing::new(text::read_file_up_to(path, MAX_EXPORT_BYTES)?);
         Zeroizing::new(text::decode(&bytes))
@@ -209,11 +210,12 @@ fn read_export(path: &Path) -> AppResult<Vec<Entry>> {
         return Err(AppError::io("the export holds too many sessions"));
     }
     let config = default_folders().and_then(|(config, _)| config);
-    Ok(export_entries(export, &Places::new(config.as_deref())))
+    Ok(export_source(export, &Places::new(config.as_deref())))
 }
 
-/// The SSH sessions of an export, with the key file its `SSH2` settings set for all sessions.
-fn export_entries(export: Export, places: &Places) -> Vec<Entry> {
+/// The SSH sessions of an export, with the key file its `SSH2` settings set for all sessions, and
+/// the files it holds that are their key files.
+fn export_source(export: Export, places: &Places) -> Source {
     let global_key = identity(&export.ssh2);
     let mut entries: Vec<Entry> = export
         .sessions
@@ -223,7 +225,21 @@ fn export_entries(export: Export, places: &Places) -> Vec<Entry> {
         })
         .collect();
     link_firewalls(&mut entries);
-    entries
+    let named: HashSet<&str> = entries
+        .iter()
+        .flat_map(|e| e.identity_files.iter().map(String::as_str))
+        .collect();
+    let key_files = export
+        .files
+        .into_iter()
+        .map(|(path, bytes)| (places.expand(&path), bytes))
+        .filter(|(path, _)| named.contains(path.as_str()))
+        .collect();
+    Source {
+        entries,
+        key_files,
+        ..Source::default()
+    }
 }
 
 /// Points each jump to the session it names, which a firewall names by its path as SecureCRT
@@ -249,12 +265,14 @@ fn read_text(path: &Path) -> AppResult<Zeroizing<String>> {
     Ok(Zeroizing::new(text::decode(&bytes)))
 }
 
-/// One setting of a session.
+/// One setting of a session, or of a file an export holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Setting {
     Text(String),
     Number(u32),
     List(Vec<String>),
+    /// A binary value, such as a file's bytes; a key file's are wiped when dropped.
+    Bytes(Zeroizing<Vec<u8>>),
 }
 
 /// The settings of a session file that an import reads, by name.
@@ -334,12 +352,15 @@ struct Export {
     sessions: Vec<(Vec<String>, String, Settings)>,
     /// The settings in the `SSH2` key, which hold the key file for all sessions.
     ssh2: Settings,
+    /// The files it holds, each with the path the settings name it by.
+    files: Vec<(String, Zeroizing<Vec<u8>>)>,
 }
 
 /// The sessions and settings in an XML export: `<key>` elements in a `<VanDyke>` element, the
 /// sessions and their folders in the `Sessions` key. A key's settings are `<string>` elements,
-/// `<dword>` elements with a number in decimal, and `<array>` elements with a `<string>` for each
-/// item. A folder's order is in a `__FolderData__` key.
+/// `<dword>` elements with a number in decimal, `<array>` elements with a `<string>` for each
+/// item, and `<binary>` elements with bytes in hex. A folder's order is in a `__FolderData__`
+/// key. The `Files` key holds a key for each file the settings name, with its path and bytes.
 fn parse_export(text: &str) -> Result<Export, String> {
     let mut reader = quick_xml::Reader::from_str(text);
     let mut parser = ExportParser::default();
@@ -388,10 +409,11 @@ struct ExportParser {
 /// A setting being read from its element.
 #[derive(Debug)]
 struct Value {
-    /// `string`, `dword` or `array`.
+    /// `string`, `dword`, `array` or `binary`.
     tag: &'static str,
     name: String,
-    text: String,
+    /// Wiped when dropped: a key file's bytes are read as text first.
+    text: Zeroizing<String>,
     /// A list's items, and the one being read.
     items: Vec<String>,
     item: Option<String>,
@@ -428,13 +450,14 @@ impl ExportParser {
             "string" => "string",
             "dword" => "dword",
             "array" => "array",
-            // A binary value, or an empty key.
+            "binary" => "binary",
+            // An empty key.
             _ => return Ok(()),
         };
         let value = Value {
             tag,
             name: name_of(e)?,
-            text: String::new(),
+            text: Zeroizing::default(),
             items: Vec::new(),
             item: None,
         };
@@ -483,18 +506,27 @@ impl ExportParser {
     }
 
     /// Keeps a setting of the key being read, when an import reads it.
-    fn set(&mut self, value: Value) {
+    fn set(&mut self, mut value: Value) {
+        let in_file = matches!(
+            self.keys.as_slice(),
+            [(files, _), _] if files.eq_ignore_ascii_case("Files")
+        );
         let Some((_, settings)) = self.keys.last_mut() else {
             return;
         };
-        if !READ.contains(&value.name.as_str()) {
+        let name = value.name.as_str();
+        if !(READ.contains(&name) || in_file && ["Path", "Contents"].contains(&name)) {
             return;
         }
         let setting = match value.tag {
-            "string" => Setting::Text(value.text),
+            "string" => Setting::Text(std::mem::take(&mut *value.text)),
             "dword" => match value.text.trim().parse() {
                 Ok(n) => Setting::Number(n),
                 Err(_) => return,
+            },
+            "binary" => match hex_bytes(&value.text) {
+                Some(bytes) => Setting::Bytes(bytes),
+                None => return,
             },
             _ => Setting::List(value.items),
         };
@@ -502,15 +534,23 @@ impl ExportParser {
     }
 
     /// Keeps a key that has been read: a session, which holds settings, in the `Sessions` key or
-    /// a folder in it, or the `SSH2` key. The default session and the folders' order are left
-    /// out.
-    fn close_key(&mut self, name: String, settings: Settings) {
+    /// a folder in it, the `SSH2` key, or a file in the `Files` key. The default session and the
+    /// folders' order are left out.
+    fn close_key(&mut self, name: String, mut settings: Settings) {
         let Some(((top, _), folders)) = self.keys.split_first() else {
             if name.eq_ignore_ascii_case("SSH2") {
                 self.export.ssh2 = settings;
             }
             return;
         };
+        if top.eq_ignore_ascii_case("Files") {
+            if let (Some(Setting::Text(path)), Some(Setting::Bytes(bytes))) =
+                (settings.0.remove("Path"), settings.0.remove("Contents"))
+            {
+                self.export.files.push((path, bytes));
+            }
+            return;
+        }
         if !top.eq_ignore_ascii_case("Sessions")
             || settings.0.is_empty()
             || name.eq_ignore_ascii_case("__FolderData__")
@@ -521,6 +561,16 @@ impl ExportParser {
         let folder = folders.iter().map(|(name, _)| name.clone()).collect();
         self.export.sessions.push((folder, name, settings));
     }
+}
+
+/// The bytes of a binary value, in hex with a space between them.
+fn hex_bytes(hex: &str) -> Option<Zeroizing<Vec<u8>>> {
+    // Room for them all, so that no copy is left behind as the buffer grows.
+    let mut bytes = Zeroizing::new(Vec::with_capacity(hex.len() / 2 + 1));
+    for byte in hex.split_ascii_whitespace() {
+        bytes.push(u8::from_str_radix(byte, 16).ok()?);
+    }
+    Some(bytes)
 }
 
 /// The `name` attribute of an element.
@@ -1088,8 +1138,20 @@ mod tests {
 	</key>
 	<key name="Files">
 		<key name="File 0">
+			<string name="Path">${VDS_CONFIG_PATH}\KnownHosts\HostKeyDB.txt</string>
+			<binary name="Contents">ef bb bf 32 2c 31 30 2e 30 2e 30 2e 32</binary>
+		</key>
+		<key name="File 1">
 			<string name="Path">${VDS_CONFIG_PATH}\Keys\id_rsa</string>
 			<binary name="Contents">2d 2d 2d 2d 2d 42 45 47 49 4e</binary>
+		</key>
+		<key name="File 2">
+			<string name="Path">${VDS_SSH_DATA_PATH}\id_ed25519</string>
+			<binary name="Contents">6b 65 79</binary>
+		</key>
+		<key name="File 3">
+			<string name="Path">${VDS_SSH_DATA_PATH}\id_ed25519.pub</string>
+			<binary name="Contents">73 73 68</binary>
 		</key>
 	</key>
 </VanDyke>
@@ -1097,7 +1159,8 @@ mod tests {
 
     #[test]
     fn an_export_is_read_with_its_folders_firewalls_and_global_key() {
-        let entries = export_entries(parse_export(EXPORT).unwrap(), &places());
+        let source = export_source(parse_export(EXPORT).unwrap(), &places());
+        let entries = &source.entries;
         let found: Vec<(&str, &str, u16, Vec<String>)> = entries
             .iter()
             .map(|e| (e.id.as_str(), e.address.as_str(), e.port, e.folder.clone()))
@@ -1163,6 +1226,21 @@ mod tests {
             web.identity_files, pg.identity_files,
             "the global setting by default"
         );
+
+        // The key files the sessions name; not the known hosts or a public key.
+        let mut held: Vec<(&str, &[u8])> = source
+            .key_files
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
+            .collect();
+        held.sort_unstable();
+        assert_eq!(
+            held,
+            [
+                (default.identity_files[0].as_str(), b"key".as_slice()),
+                (pg.identity_files[0].as_str(), b"-----BEGIN".as_slice()),
+            ]
+        );
     }
 
     #[test]
@@ -1211,7 +1289,7 @@ mod tests {
             xml.push_str("</key>\n");
         }
         xml.push_str("</key>\n</VanDyke>\n");
-        let entries = export_entries(parse_export(&xml).unwrap(), &places());
+        let entries = export_source(parse_export(&xml).unwrap(), &places()).entries;
         assert_eq!(entries.len(), 1_200);
         let in_site = |site: &str| entries.iter().filter(|e| e.folder == [site]).count();
         assert_eq!((in_site("Site 0"), in_site("Site 11")), (100, 100));

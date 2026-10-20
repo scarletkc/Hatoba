@@ -22,18 +22,19 @@ const MAX_KEY_FILE: usize = 256 * 1024;
 /// grows (so no copy is left behind in freed memory) and is wiped when dropped. Call it off the
 /// async runtime and without the vault lock: the file may be slow to read.
 pub(crate) fn read_key_file(path: &Path) -> AppResult<Zeroizing<String>> {
-    let not_text = || {
-        AppError::key(
-            KeyParseErrorKind::UnsupportedFormat,
-            "file is not a text key file",
-        )
-    };
     let file = std::fs::File::open(path)?;
     // One byte over the limit tells a file of exactly the limit from a larger one.
     let mut bytes = Zeroizing::new(Vec::with_capacity(MAX_KEY_FILE + 1));
     file.take(MAX_KEY_FILE as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| not_text())?;
+    key_file_text(bytes)
+}
+
+/// The text of a private key file's bytes, with the same limit as [`read_key_file`]: those of a
+/// file on this device, or of one another client keeps inside its own file, as a SecureCRT export
+/// does. The bytes are wiped when they are not text.
+pub(crate) fn key_file_text(mut bytes: Zeroizing<Vec<u8>>) -> AppResult<Zeroizing<String>> {
     if bytes.len() > MAX_KEY_FILE {
         return Err(AppError::key(
             KeyParseErrorKind::UnsupportedFormat,
@@ -47,6 +48,13 @@ pub(crate) fn read_key_file(path: &Path) -> AppResult<Zeroizing<String>> {
             Err(not_text())
         }
     }
+}
+
+fn not_text() -> AppError {
+    AppError::key(
+        KeyParseErrorKind::UnsupportedFormat,
+        "file is not a text key file",
+    )
 }
 
 pub fn core_algorithm(alg: SshAlg) -> CoreAlg {

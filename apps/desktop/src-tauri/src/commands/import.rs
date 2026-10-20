@@ -12,6 +12,7 @@ use hatoba_core::model::{
 use hatoba_core::vault::Vault;
 use hatoba_ssh::ParsedKey;
 use tauri::{AppHandle, State};
+use zeroize::Zeroizing;
 
 use crate::commands::hosts::{MAX_NAME_CHARS, too_large_to_sync};
 use crate::commands::proxies::MAX_CREDENTIAL_BYTES;
@@ -59,7 +60,11 @@ pub async fn hosts_import_preview(
 ) -> AppResult<ImportPreview> {
     let (found, identities) = blocking(move || {
         let found = read(source, path.as_deref())?;
-        let identities: Vec<Option<String>> = found.entries.iter().map(identity_path).collect();
+        let identities: Vec<Option<String>> = found
+            .entries
+            .iter()
+            .map(|e| identity_path(e, &found.key_files))
+            .collect();
         Ok((found, identities))
     })
     .await?;
@@ -128,8 +133,10 @@ pub async fn hosts_import(
     let wanted: HashSet<String> = ids.into_iter().collect();
     let confirmed: HashSet<String> = key_files.into_iter().collect();
     let prepared = blocking(move || {
+        let found = read(source, path.as_deref())?;
         Ok(prepare_import(
-            read(source, path.as_deref())?.entries,
+            found.entries,
+            &found.key_files,
             &wanted,
             &confirmed,
         ))
@@ -152,14 +159,17 @@ fn host_name(entry: &Entry) -> String {
     name.chars().take(MAX_NAME_CHARS).collect()
 }
 
-/// The key file an entry signs in with: the first one that exists.
-fn identity_path(entry: &Entry) -> Option<String> {
+/// The key file an entry signs in with: the first one that the source holds or that exists.
+fn identity_path(entry: &Entry, held: &KeyFiles) -> Option<String> {
     entry
         .identity_files
         .iter()
-        .find(|p| Path::new(p).is_file())
+        .find(|p| held.contains_key(*p) || Path::new(p).is_file())
         .cloned()
 }
+
+/// Key files a source holds itself, by path.
+type KeyFiles = HashMap<String, Zeroizing<Vec<u8>>>;
 
 /// The key files an import reads, by path: the parsed key, or why it cannot be imported.
 type Identities = HashMap<String, Result<ParsedKey, String>>;
@@ -174,11 +184,12 @@ struct Prepared {
 }
 
 /// Picks the chosen entries and, when key files were confirmed, the key file of each: the first
-/// one that exists, or else a confirmed one that has gone since the preview, so the host gets a
-/// warning rather than silently none. Each confirmed file is read and parsed once; any other file
-/// is left unread.
+/// one that the source holds or that exists, or else a confirmed one that has gone since the
+/// preview, so the host gets a warning rather than silently none. Each confirmed file is read and
+/// parsed once, from the source when it holds it; any other file is left unread.
 fn prepare_import(
     entries: Vec<Entry>,
+    held: &KeyFiles,
     wanted: &HashSet<String>,
     confirmed: &HashSet<String>,
 ) -> Prepared {
@@ -193,7 +204,7 @@ fn prepare_import(
             let path = if confirmed.is_empty() {
                 None
             } else {
-                identity_path(&e).or_else(|| {
+                identity_path(&e, held).or_else(|| {
                     e.identity_files
                         .iter()
                         .find(|p| confirmed.contains(*p))
@@ -207,7 +218,7 @@ fn prepare_import(
     for path in chosen.iter().filter_map(|(_, path)| path.as_ref()) {
         if !identities.contains_key(path) {
             let identity = if confirmed.contains(path) {
-                read_identity(path)
+                read_identity(path, held.get(path))
             } else {
                 Err(format!(
                     "{path} was not among the confirmed key files and was not imported"
@@ -560,11 +571,14 @@ fn import_env(name: &str, set_env: &[(String, String)], warnings: &mut Vec<Strin
     env
 }
 
-/// Reads and parses a key file, with the Keys page's size limit and wiping. Passphrase-protected
-/// keys are left to the Keys page.
-fn read_identity(path: &str) -> Result<ParsedKey, String> {
-    let text = crate::commands::keys::read_key_file(Path::new(path))
-        .map_err(|e| format!("can't read {path}: {}", e.detail))?;
+/// Reads and parses a key file, or the source's copy when it `held` one, with the Keys page's size
+/// limit and wiping. Passphrase-protected keys are left to the Keys page.
+fn read_identity(path: &str, held: Option<&Zeroizing<Vec<u8>>>) -> Result<ParsedKey, String> {
+    let text = match held {
+        Some(bytes) => crate::commands::keys::key_file_text(bytes.clone()),
+        None => crate::commands::keys::read_key_file(Path::new(path)),
+    }
+    .map_err(|e| format!("can't read {path}: {}", e.detail))?;
     hatoba_ssh::parse_private_key(&text, None).map_err(|e| match e {
         hatoba_ssh::KeyError::PassphraseRequired => {
             format!("{path} is passphrase-protected; import it from the Keys page")
@@ -588,10 +602,12 @@ fn store_identity(
     {
         return Ok((id, false));
     }
-    let name = Path::new(path)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    // A source may hold a key file by a path written on another system.
+    let name = path
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or_default()
+        .to_owned();
     let key = SshKey {
         name,
         algorithm: crate::commands::keys::core_algorithm(parsed.algorithm),
@@ -677,7 +693,11 @@ mod tests {
     ) -> ImportResult {
         let wanted = ids.iter().map(|a| (*a).to_owned()).collect();
         let confirmed = key_files.iter().map(|f| (*f).to_owned()).collect();
-        import_hosts(v, prepare_import(entries, &wanted, &confirmed)).unwrap()
+        import_hosts(
+            v,
+            prepare_import(entries, &KeyFiles::new(), &wanted, &confirmed),
+        )
+        .unwrap()
     }
 
     fn host(v: &Vault, name: &str) -> (String, Host) {
@@ -696,6 +716,7 @@ mod tests {
 
         let prepared = prepare_import(
             vec![entry("web", &[&path])],
+            &KeyFiles::new(),
             &HashSet::from(["web".into()]),
             &HashSet::new(),
         );
@@ -716,7 +737,7 @@ mod tests {
         let (existing, existing_fp) = dir.key("id_existing", None);
         let mut v = vault();
         // The vault already holds the second key, under another name.
-        let parsed = read_identity(&existing).unwrap();
+        let parsed = read_identity(&existing, None).unwrap();
         v.put(
             None,
             Item::Key(SshKey {
@@ -759,6 +780,63 @@ mod tests {
         for (alias, key) in [("a", &shared_id), ("b", &shared_id), ("c", &existing_id)] {
             assert!(
                 matches!(auth_of(&v, alias), HostAuth::Key { key_id } if key_id == *key),
+                "{alias}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_securecrt_export_imports_the_key_file_it_holds() {
+        let dir = KeyDir::new();
+        let key = hatoba_ssh::generate_key(GenerateKind::Ed25519, "Identity", None).unwrap();
+        let hex: Vec<String> = key
+            .openssh_private
+            .bytes()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let session = |name: &str| {
+            format!(
+                "<key name=\"{name}\"><string name=\"Hostname\">{name}.example.org</string>\
+                 <string name=\"Protocol Name\">SSH2</string></key>"
+            )
+        };
+        // The key file set for all sessions, by its path on the computer the export came from.
+        let export = dir.file(
+            "SecureCRT.xml",
+            &format!(
+                "<VanDyke version=\"3.0\">\n<key name=\"Sessions\">{}{}</key>\n\
+                 <key name=\"SSH2\"><string name=\"Identity Filename V2\">D:\\keys\\Identity\
+                 </string></key>\n<key name=\"Files\"><key name=\"File 0\">\
+                 <string name=\"Path\">D:\\keys\\Identity</string>\
+                 <binary name=\"Contents\">{}</binary></key></key>\n</VanDyke>\n",
+                session("web"),
+                session("db"),
+                hex.join(" ")
+            ),
+        );
+        let found = read(ImportSource::Securecrt, Some(&export)).unwrap();
+        let path = identity_path(&found.entries[0], &found.key_files).unwrap();
+        assert_eq!(path, "D:\\keys\\Identity");
+        let mut v = vault();
+
+        let prepared = prepare_import(
+            found.entries,
+            &found.key_files,
+            &HashSet::from(["web".into(), "db".into()]),
+            &HashSet::from([path]),
+        );
+        let result = import_hosts(&mut v, prepared).unwrap();
+
+        assert_eq!((result.hosts_created, result.keys_imported), (2, 1));
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let keys = v.keys();
+        assert_eq!(
+            (keys[0].1.name.as_str(), keys[0].1.fingerprint.as_str()),
+            ("Identity", key.fingerprint.as_str())
+        );
+        for alias in ["web", "db"] {
+            assert!(
+                matches!(auth_of(&v, alias), HostAuth::Key { key_id } if key_id == keys[0].0),
                 "{alias}"
             );
         }
