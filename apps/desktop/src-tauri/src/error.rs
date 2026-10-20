@@ -17,17 +17,13 @@ pub enum ErrorCode {
     WrongPin,
     /// SEC-11: no PIN unlock is possible now; the master password unlocks.
     PinUnavailable,
-    /// SEC-07, SEC-10: no biometric unlock is possible now — the sensor cannot be read (a Mac in
-    /// clamshell mode, for one), no finger is enrolled, or the platform refused the request; the
-    /// master password unlocks. Only the macOS biometric layer produces it today, so the other
-    /// platforms would call it dead code.
+    /// SEC-10: Touch ID can't be used now (the lid is closed, too many failed fingers, no sensor).
+    /// Only macOS produces it.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     BiometricUnavailable,
-    /// SEC-07, SEC-10: the saved biometric unlock cannot be opened any more — it was written by
-    /// another build, it is damaged, or it came from another Mac along with the vault (Migration
-    /// Assistant). Nothing the user typed was wrong, so it must not be reported as a wrong
-    /// password: the master password unlocks, and the biometric has to be turned on again.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    /// SEC-07, SEC-10: the saved biometric unlock no longer opens on this device (fingerprints
+    /// changed, the record is damaged or came from another Mac). `vault_unlock_biometric` removes
+    /// it.
     BiometricStale,
     NotFound,
     InvalidInput,

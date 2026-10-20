@@ -174,11 +174,22 @@ pub async fn vault_unlock(
     Ok(())
 }
 
-/// SEC-07 (P1): Windows Hello.
+/// SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment this device can no longer open is
+/// removed, so the switch reads off and the lock screen stops offering it.
 #[tauri::command]
 #[specta::specta]
 pub async fn vault_unlock_biometric(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let key = biometric::unlock(&app, state.secrets.as_ref()).await?;
+    let key = match biometric::unlock(&app, state.secrets.as_ref()).await {
+        Ok(key) => key,
+        Err(e) => {
+            if e.code == ErrorCode::BiometricStale
+                && let Err(r) = biometric::remove(&app, state.secrets.as_ref())
+            {
+                tracing::warn!("could not remove the stale biometric unlock: {}", r.detail);
+            }
+            return Err(e);
+        }
+    };
     state.vault().unlock_with_vault_key(key)?;
     after_unlock(&app, &state);
     Ok(())
@@ -389,7 +400,8 @@ pub async fn vault_rotate_recovery(
     Ok(code.to_string())
 }
 
-/// SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation.
+/// SEC-07 (P1), SEC-10: enrol Windows Hello or Touch ID. Requires the master password as a fresh
+/// confirmation.
 #[tauri::command]
 #[specta::specta]
 pub async fn biometric_enable(

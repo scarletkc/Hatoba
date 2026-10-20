@@ -22,11 +22,13 @@ vi.mock("@/ipc/api", async (importActual) => ({
       backend.calls.push(`pin:${pin}`);
       if (backend.pinError) throw backend.pinError;
     },
-    // The user cancels Windows Hello, which leaves the lock screen as it was; a test can ask for
-    // another refusal instead.
+    // The user cancels Windows Hello, which leaves the lock screen as it was, unless a test sets
+    // another failure. Like the backend, a stale enrolment is removed.
     vault_unlock_biometric: async () => {
       backend.calls.push("hello");
-      throw backend.biometricError ?? { code: "cancelled", detail: "Windows Hello was cancelled" };
+      const error = backend.biometricError as { code: string } | null;
+      if (error?.code === "biometric_stale") backend.status = { ...(backend.status as object), biometric_enabled: false };
+      throw error ?? { code: "cancelled", detail: "Windows Hello was cancelled" };
     },
   },
 }));
@@ -36,6 +38,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 
 const { UnlockScreen } = await import("./UnlockScreen");
 const { useApp } = await import("@/app/store");
+const appInfo = useApp.getState().info;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,7 +46,7 @@ let unmount: (() => void) | null = null;
 afterEach(() => {
   act(() => unmount?.());
   unmount = null;
-  useApp.setState({ vault: null, lockReason: null });
+  useApp.setState({ vault: null, lockReason: null, info: appInfo });
   backend.calls = [];
   backend.status = null;
   backend.pinError = null;
@@ -133,11 +136,6 @@ describe("PIN unlock", () => {
 
 describe("Windows Hello on its own", () => {
   const hello = () => backend.calls.filter((c) => c === "hello").length;
-  const alert = () => document.querySelector<HTMLElement>('[role="alert"]')!;
-  const biometricButton = () =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-      (b) => b.textContent === t("vault.unlock.touchId") || b.textContent === t("vault.unlock.hello"),
-    )!;
   const fire = async (event: string) => {
     await act(async () => {
       window.dispatchEvent(new Event(event));
@@ -185,53 +183,53 @@ describe("Windows Hello on its own", () => {
     expect(hello()).toBe(1);
   });
 
-  it("keeps a refused prompt quiet, and shows why after a click", async () => {
-    // The lid is shut: the system refuses the prompt the app raises by itself, every time.
-    backend.biometricError = {
-      code: "biometric_unavailable",
-      detail: "Touch ID is not available in closed clamshell mode",
-    };
-    focused();
-    locked({ biometric_enabled: true });
-    await act(async () => void show());
-    expect(hello()).toBe(1);
-    // The line the message goes in is always there; nothing is in it.
-    expect(alert()!.textContent).toBe("");
-    await act(async () => biometricButton().click());
-    expect(hello()).toBe(2);
-    expect(alert()!.textContent).toBe(t("err.biometric_unavailable"));
-  });
-
-  it("says a record this Mac cannot open needs Touch ID turned on again, even from the prompt", async () => {
-    backend.biometricError = { code: "biometric_stale", detail: "the saved record cannot be opened here" };
-    focused();
-    locked({ biometric_enabled: true });
-    await act(async () => void show());
-    expect(hello()).toBe(1);
-    expect(alert()!.textContent).toBe(t("err.biometric_stale"));
-  });
-
-  it("keeps a working PIN when the Touch ID record is stale", async () => {
-    backend.biometricError = {
-      code: "biometric_stale",
-      detail: "the saved record cannot be opened here",
-    };
-    focused();
-    locked({ biometric_enabled: true, pin_unlock: true });
-    await act(async () => void show());
-    expect(hello()).toBe(1);
-    // It still says what to do about Touch ID...
-    expect(document.querySelector('[role="alert"]')!.textContent).toBe(t("err.biometric_stale"));
-    // ...and the PIN field stays, because the PIN still unlocks.
-    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.pinField"));
-  });
-
   it("never asks without Windows Hello", async () => {
     focused();
     locked({ biometric_enabled: false });
     await act(async () => void show());
     await fire("focus");
     expect(hello()).toBe(0);
+  });
+});
+
+describe("Touch ID failures", () => {
+  const asked = () => backend.calls.filter((c) => c === "hello").length;
+  const message = () => document.querySelector<HTMLElement>('[role="alert"]')!.textContent;
+  const touchId = () => link("vault.unlock.touchId");
+  const onMac = () => useApp.setState({ info: { ...appInfo, platform: "macos" } });
+
+  it("stays quiet when the closed lid refuses the automatic prompt, and says why after a click", async () => {
+    backend.biometricError = { code: "biometric_unavailable", detail: "Touch ID unavailable" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(asked()).toBe(1);
+    expect(message()).toBe("");
+    await act(async () => touchId()!.click());
+    expect(asked()).toBe(2);
+    expect(message()).toBe(t("err.biometric_unavailable"));
+  });
+
+  it("says a stale enrolment was turned off, and drops the button", async () => {
+    backend.biometricError = { code: "biometric_stale", detail: "Touch ID key invalidated (fingerprints changed)" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(message()).toBe(t("err.biometric_stale", { name: "Touch ID" }));
+    expect(touchId()).toBeUndefined();
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.field"));
+  });
+
+  it("keeps the PIN field when Touch ID goes stale", async () => {
+    backend.biometricError = { code: "biometric_stale", detail: "Touch ID key invalidated (fingerprints changed)" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true, pin_unlock: true });
+    await act(async () => void show());
+    expect(message()).toBe(t("err.biometric_stale", { name: "Touch ID" }));
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.pinField"));
   });
 });
 
