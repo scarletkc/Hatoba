@@ -48,6 +48,10 @@ export type ErrorCode =
   | "ai"
   /** A downloaded update does not carry a valid signature from the release key (spec §11). */
   | "update_signature"
+  /** SEC-10: Touch ID can't be used now, e.g. while the lid is closed. */
+  | "biometric_unavailable"
+  /** SEC-07, SEC-10: the saved Windows Hello or Touch ID unlock no longer opens and was removed. */
+  | "biometric_stale"
   | "cancelled"
   | "io"
   | "internal";

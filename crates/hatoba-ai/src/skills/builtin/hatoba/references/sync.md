@@ -30,7 +30,7 @@ When the Worker or database chosen in step 2 already holds a vault, step 3 joins
 
 - Step 3 is **Enter the Cloud Vault’s Master Password**: the master password of the vault in the cloud, not this device's. **Merge and Turn On Sync** signs in and merges.
 - This device's hosts, keys and other items are added to the cloud vault, and the cloud's items arrive on this device. The cloud's settings are kept. If this device synced with that same vault before, matching items are reconciled instead of duplicated, and the newer edit wins.
-- From then on this device unlocks with the cloud vault's master password, and the cloud vault's recovery code replaces this device's, which stops working. When the cloud held another vault, **Unlock with Windows Hello** and **Unlock with PIN** are turned off; turn them on again in Settings → Security.
+- From then on this device unlocks with the cloud vault's master password, and the cloud vault's recovery code replaces this device's, which stops working. When the cloud held another vault, **Unlock with Windows Hello** (or **Unlock with Touch ID**) and **Unlock with PIN** are turned off; turn them on again in Settings → Security.
 
 Other labels: **Connected · the cloud already holds a vault**, **Merging…**.
 

@@ -89,10 +89,15 @@ gtk = "0.18"
 zbus = "5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10.1"
+core-foundation-sys = "0.8.7"
 # `killpg` for the login shell that resolves the MCP servers' PATH.
 libc = "0.2"
 # The user's preferred languages (`NSLocale`); a Finder-launched app has no `LANG`.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSLocale", "NSString"] }
+objc2-local-authentication = { version = "0.3.2", default-features = false, features = ["std", "LAContext", "LABiometryType", "LAError"] }
+security-framework = { version = "3.7.0", default-features = false, features = ["OSX_10_15"] }
+security-framework-sys = { version = "2.17.0", default-features = false, features = ["OSX_10_15"] }
 
 [features]
 # Enables devtools in release builds. Never enabled for distributed builds (SEC-05).

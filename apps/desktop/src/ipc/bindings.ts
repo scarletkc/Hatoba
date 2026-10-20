@@ -54,7 +54,10 @@ export const commands = {
 	vaultCreate: (password: string) => __TAURI_INVOKE<string>("vault_create", { password }),
 	/**  VAULT-03 / SEC-06: wrong passwords are throttled with increasing delays (persisted). */
 	vaultUnlock: (password: string) => __TAURI_INVOKE<null>("vault_unlock", { password }),
-	/**  SEC-07 (P1): Windows Hello. */
+	/**
+	 *  SEC-07 (P1), SEC-10: Windows Hello or Touch ID. An enrolment that no longer opens, or that holds
+	 *  another vault's key, is removed, so the switch reads off and the lock screen stops offering it.
+	 */
 	vaultUnlockBiometric: () => __TAURI_INVOKE<null>("vault_unlock_biometric"),
 	/**
 	 *  SEC-11: unlocks with the PIN. After a restart, a PIN kept for that unwraps its copy in the OS
@@ -76,7 +79,10 @@ export const commands = {
 	vaultExportBackup: (path: string) => __TAURI_INVOKE<null>("vault_export_backup", { path }),
 	/**  Issues a new recovery code (the old one stops working everywhere once synced). */
 	vaultRotateRecovery: (password: string) => __TAURI_INVOKE<string>("vault_rotate_recovery", { password }),
-	/**  SEC-07 (P1): enrol Windows Hello. Requires the master password as a fresh confirmation. */
+	/**
+	 *  SEC-07 (P1), SEC-10: enrol Windows Hello or Touch ID. Requires the master password as a fresh
+	 *  confirmation.
+	 */
 	biometricEnable: (password: string) => __TAURI_INVOKE<null>("biometric_enable", { password }),
 	biometricDisable: () => __TAURI_INVOKE<null>("biometric_disable"),
 	/**
@@ -1508,7 +1514,18 @@ export type ErrorCode = "locked" | "not_initialized" | "already_initialized" | "
 /**  SEC-11: `attempts_left` says how many more wrong PINs the PIN takes. */
 "wrong_pin" | 
 /**  SEC-11: no PIN unlock is possible now; the master password unlocks. */
-"pin_unavailable" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
+"pin_unavailable" | 
+/**
+ *  SEC-10: Touch ID can't be used now (the lid is closed, too many failed fingers, no sensor).
+ *  Only macOS produces it.
+ */
+"biometric_unavailable" | 
+/**
+ *  SEC-07, SEC-10: the saved biometric unlock no longer opens on this device (fingerprints
+ *  changed, the record is damaged or came from another Mac). `vault_unlock_biometric` removes
+ *  it.
+ */
+"biometric_stale" | "not_found" | "invalid_input" | "key_parse" | "ssh" | "sftp" | "sync" | "sync_auth" | "sync_offline" | "remote_initialized" | "remote_not_initialized" | 
 /**  Another sync setup (flow A or C, §6.6) is still running. */
 "sync_setup_busy" | 
 /**  Sync is already set up on this device, so it cannot join a cloud vault (flow C). */

@@ -31,7 +31,7 @@ Read the file that matches the question with `read_skill`, giving the path shown
 |---|---|
 | `references/hosts-and-connecting.md` | The host list and editor, quick connect from the search box, authentication methods, jump hosts, proxies, environment variables, importing an SSH config, host key prompts, connecting and reconnecting |
 | `references/dashboard.md` | The Dashboard: every host's status and resource usage, cards and table, sorting, thresholds, how hosts are read, hosts that need a password or failed to sign in, leaving hosts out |
-| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
+| `references/keys-vault-and-lock.md` | The master password, recovery code, locking and auto-lock, Windows Hello and Touch ID, the PIN, the encrypted backup, and the Keys page (import, generate, deploy) |
 | `references/terminal.md` | The terminal tab: local terminal tabs and their shells, status bar, copy and paste, search, links, context menus, and the Terminal settings (font, cursor, scrollback, local terminal shell) |
 | `references/sftp.md` | The SFTP file panel: browsing, upload, download, rename, delete, transfers |
 | `references/port-forwarding.md` | Local port forwarding: creating rules, starting them with the connection, starting and stopping them in a session |
@@ -70,7 +70,7 @@ These files name labels in English. The label files give them in the other langu
 
 - Name UI elements by their exact label in the language the user writes in (zh-CN, en or ja). For Chinese or Japanese, read the label file that covers the topic and copy the label as it is; do not translate it yourself. If a label is not there, describe the element and where it is instead of guessing its text.
 - Give menu paths with an arrow, such as Settings → AI (设置 → AI, 設定 → AI). Settings tabs are listed above; a setting's tab is named in its section.
-- Mention platform differences. Shortcuts use Ctrl+Shift+letter on Windows and Linux and ⌘ on macOS. Windows Hello exists on Windows only. The SSH agent is the OpenSSH agent on Windows and the `SSH_AUTH_SOCK` agent elsewhere. If the user's platform is unknown, give both.
+- Mention platform differences. Shortcuts use Ctrl+Shift+letter on Windows and Linux and ⌘ on macOS. Windows Hello is on Windows only, Touch ID on macOS only. The SSH agent is the OpenSSH agent on Windows and the `SSH_AUTH_SOCK` agent elsewhere. If the user's platform is unknown, give both.
 - Say plainly when Hatoba does not support something, and do not invent a feature, menu or setting. Offer a real workaround only when one exists, such as running `ssh` or `scp` in the terminal.
 - Treat these files as the description of the current version. If the user describes a screen that differs, say that their version may differ and point to Settings → About for the version and the update check.
 - Never ask the user to paste a master password, recovery code, API key, token or private key. For connection problems, ask for the error text, or for the **Copy Diagnostics** output; **Ask AI** on the failed connection's card attaches the same secret-free diagnostics to a message when the user sends it.
@@ -99,4 +99,4 @@ The `main` branch can be ahead of the latest release and of the user's version, 
 
 ## Not in Hatoba (current version)
 
-Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, Touch ID, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).
+Split panes in a terminal, session logs, snippets, remote (-R) and SOCKS (-D) port forwarding, editing remote files, uploading or downloading whole folders over SFTP, importing PuTTY sessions, `ProxyCommand`, SOCKS4 and HTTPS proxies, Pageant, viewing or exporting a private key, a plaintext export, importing an encrypted backup file from the app, team sharing, a mobile app, a sync service run by Hatoba, and protocols other than SSH (Telnet, serial, RDP, VNC).

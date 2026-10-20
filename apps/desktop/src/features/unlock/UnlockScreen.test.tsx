@@ -11,6 +11,7 @@ const backend = vi.hoisted(() => ({
   calls: [] as string[],
   status: null as unknown,
   pinError: null as unknown,
+  biometricError: null as unknown,
 }));
 vi.mock("@/ipc/api", async (importActual) => ({
   ...(await importActual<typeof import("@/ipc/api")>()),
@@ -21,10 +22,13 @@ vi.mock("@/ipc/api", async (importActual) => ({
       backend.calls.push(`pin:${pin}`);
       if (backend.pinError) throw backend.pinError;
     },
-    // The user cancels Windows Hello, which leaves the lock screen as it was.
+    // The user cancels Windows Hello, which leaves the lock screen as it was, unless a test sets
+    // another failure. Like the backend, a stale enrolment is removed.
     vault_unlock_biometric: async () => {
       backend.calls.push("hello");
-      throw { code: "cancelled", detail: "Windows Hello was cancelled" };
+      const error = backend.biometricError as { code: string } | null;
+      if (error?.code === "biometric_stale") backend.status = { ...(backend.status as object), biometric_enabled: false };
+      throw error ?? { code: "cancelled", detail: "Windows Hello was cancelled" };
     },
   },
 }));
@@ -34,6 +38,7 @@ vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, remo
 
 const { UnlockScreen } = await import("./UnlockScreen");
 const { useApp } = await import("@/app/store");
+const appInfo = useApp.getState().info;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,10 +46,11 @@ let unmount: (() => void) | null = null;
 afterEach(() => {
   act(() => unmount?.());
   unmount = null;
-  useApp.setState({ vault: null, lockReason: null });
+  useApp.setState({ vault: null, lockReason: null, info: appInfo });
   backend.calls = [];
   backend.status = null;
   backend.pinError = null;
+  backend.biometricError = null;
   vi.restoreAllMocks();
 });
 
@@ -183,6 +189,47 @@ describe("Windows Hello on its own", () => {
     await act(async () => void show());
     await fire("focus");
     expect(hello()).toBe(0);
+  });
+});
+
+describe("Touch ID failures", () => {
+  const asked = () => backend.calls.filter((c) => c === "hello").length;
+  const message = () => document.querySelector<HTMLElement>('[role="alert"]')!.textContent;
+  const touchId = () => link("vault.unlock.touchId");
+  const onMac = () => useApp.setState({ info: { ...appInfo, platform: "macos" } });
+
+  it("stays quiet when the closed lid refuses the automatic prompt, and says why after a click", async () => {
+    backend.biometricError = { code: "biometric_unavailable", detail: "Touch ID unavailable" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(asked()).toBe(1);
+    expect(message()).toBe("");
+    await act(async () => touchId()!.click());
+    expect(asked()).toBe(2);
+    expect(message()).toBe(t("err.biometric_unavailable"));
+  });
+
+  it("says a stale enrolment was turned off, and drops the button", async () => {
+    backend.biometricError = { code: "biometric_stale", detail: "Touch ID key invalidated (fingerprints changed)" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true });
+    await act(async () => void show());
+    expect(message()).toBe(t("err.biometric_stale", { name: "Touch ID" }));
+    expect(touchId()).toBeUndefined();
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.field"));
+  });
+
+  it("keeps the PIN field when Touch ID goes stale", async () => {
+    backend.biometricError = { code: "biometric_stale", detail: "Touch ID key invalidated (fingerprints changed)" };
+    onMac();
+    focused();
+    locked({ biometric_enabled: true, pin_unlock: true });
+    await act(async () => void show());
+    expect(message()).toBe(t("err.biometric_stale", { name: "Touch ID" }));
+    expect(field().getAttribute("aria-label")).toBe(t("vault.unlock.pinField"));
   });
 });
 

@@ -17,7 +17,7 @@ This page tracks implementation progress, items awaiting verification, and follo
 | SEC-07 | Windows Hello | ✅ | Tried on Windows 11 |
 | SEC-08 | Clipboard auto-clear | ✅ | |
 | SEC-09 | Password strength hint | ✅ | |
-| SEC-10 | Touch ID | ⬜ | P2 |
+| SEC-10 | Touch ID | 🟡 | Tried on one Mac (Apple Silicon, macOS 27, ad-hoc signed): turning it on, unlocking, unlocking after an app update, and the record failing once a fingerprint was added. Not yet tried: macOS 13, a Mac without Touch ID, a vault moved with Migration Assistant, and the switch turning off by itself after a failure like that |
 | SEC-11 | PIN unlock | 🟡 | Tried on Windows 11, including keeping the PIN in Windows Credential Manager after a restart. Keeping it after a restart not yet tried with the Secret Service on Linux or the Keychain on macOS |
 
 ## SSH, terminal, SFTP, and forwarding (§7)
