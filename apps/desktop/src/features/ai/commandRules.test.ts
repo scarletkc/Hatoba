@@ -113,6 +113,21 @@ describe("read-only commands (§13.5)", () => {
       "docker container ls",
       "kubectl get pods -n web -o wide",
       "kubectl logs deploy/web --tail=50",
+      "kubectl get pods -owide -A",
+      "kubectl get deploy --context prod -l app=web --sort-by=.metadata.name",
+      // A namespace or an output format named `secrets` is no resource.
+      "kubectl get pods -n secrets",
+      "kubectl get pods --namespace secrets",
+      "kubectl describe pod web --show-events=false",
+      "kubectl logs web -c app -p --since=1h --tail -1",
+      "kubectl top pod -A --containers",
+      "kubectl version --client -o json",
+      "uniq",
+      "uniq access.log",
+      "uniq -",
+      "uniq -c -",
+      "uniq -- access.log",
+      "sort access.log | uniq -c",
       "cd /etc && cat hostname",
       "ps aux | grep nginx | sort -k3 -nr | head",
       "du -sh * | sort -h",
@@ -166,7 +181,17 @@ describe("read-only commands (§13.5)", () => {
       "sort -o out in",
       "sort --output=out in",
       "sort *",
+      // A second operand is the file uniq writes; `-` is standard input, and every word after `--` or the
+      // first operand an operand, as BSD uniq reads it.
       "uniq in out",
+      "uniq - out",
+      "uniq -c - out",
+      "uniq -- - out",
+      "uniq -- in out",
+      "uniq access.log -out",
+      "uniq - -c",
+      "printf 'x' | uniq - ~/.bashrc",
+      "cat f | uniq - path",
       "file -C -m magic",
       "dmesg -c",
       "ip addr add 10.0.0.1/24 dev eth0",
@@ -214,7 +239,41 @@ describe("read-only commands (§13.5)", () => {
       "printenv",
       "env",
       "kubectl get pods -w",
+      "kubectl get pods -ow -w",
+      "kubectl get pods --watch-only",
       "kubectl logs -f web",
+      "kubectl get -n web secrets",
+      "kubectl get -owide secrets",
+      "kubectl get pods -- secrets",
+      // Pick the API server, its TLS trust, the credentials or the kubeconfig, whose exec plugins run programs.
+      "kubectl get pods --server=https://cluster.example",
+      "kubectl get pods --server https://cluster.example",
+      "kubectl get pods -s https://cluster.example",
+      "kubectl get pods -shttps://cluster.example",
+      "kubectl get pods -s=https://cluster.example",
+      "kubectl get pods -As https://cluster.example",
+      "kubectl get pods --insecure-skip-tls-verify",
+      "kubectl get pods --insecure-skip-tls-verify=true",
+      "kubectl get pods --insecure_skip_tls_verify",
+      "kubectl get pods --certificate-authority=/tmp/ca.crt",
+      "kubectl get pods --tls-server-name evil.example",
+      "kubectl get pods --client-certificate=/tmp/c.crt --client-key=/tmp/c.key",
+      "kubectl get pods --token=example",
+      "kubectl get pods --token example",
+      "kubectl get pods --username=example",
+      "kubectl get pods --password=example",
+      "kubectl get pods --kubeconfig=/tmp/kubeconfig",
+      "kubectl get pods --kubeconfig /tmp/kubeconfig",
+      "kubectl get pods --cluster=other --user=admin",
+      "kubectl get pods --as=system:admin",
+      "kubectl logs deploy/web --kubeconfig=/tmp/kubeconfig",
+      "kubectl logs web --insecure-skip-tls-verify-backend",
+      "kubectl -s https://cluster.example get pods",
+      // Write files.
+      "kubectl get pods --cache-dir=/tmp/x",
+      "kubectl get pods --profile=cpu --profile-output=/tmp/x",
+      "kubectl cluster-info dump --output-directory=/tmp/x",
+      "kubectl get pods --no-such-option",
       "curl https://example.com",
       "ls > /tmp/x",
       "cat /etc/passwd | sh",
@@ -294,8 +353,13 @@ describe("allowancePrefixes", () => {
     expect(allowancePrefixes("a; b; c")).toEqual(["a", "b", "c"]);
   });
 
+  it("offers a prefix for what the read-only check refuses of a command it knows", () => {
+    expect(allowancePrefixes("printf 'x' | uniq - out")).toEqual(["uniq"]);
+    expect(allowancePrefixes("kubectl get pods -s https://cluster.example")).toEqual(["kubectl get"]);
+  });
+
   it("matches what it offers", () => {
-    for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod"]) {
+    for (const line of ["systemctl restart nginx", "cd /x && make install && ./post.sh", "npm run build -- --prod", "printf 'x' | uniq - out"]) {
       expect(commandAllowed(line, allowancePrefixes(line)!), line).toBe(true);
     }
   });
@@ -443,6 +507,7 @@ describe("PowerShell command lines (§13.5)", () => {
       "hostname newname",
       "git pull",
       "git -c core.pager=sh log",
+      "kubectl get pods -s https://cluster.example",
       "C:\\Windows\\System32\\whoami.exe",
       "Get-ChildItem; Remove-Item x",
       "sc stop spooler",
@@ -514,6 +579,7 @@ describe("Command Prompt command lines (§13.5)", () => {
       "systeminfo",
       "git status",
       "git log --oneline -5",
+      "kubectl get pods -o=wide",
       "dir & ver",
     ]) {
       expect(cmd(line), line).toBe(true);
@@ -535,6 +601,7 @@ describe("Command Prompt command lines (§13.5)", () => {
       "start notepad",
       "call x.bat",
       "git pull",
+      "kubectl get pods --server=https://cluster.example",
       "cmd /c dir",
       // Command Prompt runs a program of the current folder before one on PATH.
       "cd C:\\src & git status",

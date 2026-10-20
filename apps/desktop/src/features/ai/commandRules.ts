@@ -272,6 +272,9 @@ function gitReads(args: string[]): boolean {
     without(longs, shorts)(rest) &&
     (rest.every((a) => a.startsWith("-")) || rest.includes("--list") || (shortList && rest.includes("-l")));
   switch (sub) {
+    // These run what the repository's configuration names (core.fsmonitor, diff.external, textconv drivers,
+    // filters), as when the user types them. Writing that configuration asks first, unless an edit, write or
+    // terminal allowance already lets the model run code on the host (§13.5).
     case "status":
     case "log":
     case "diff":
@@ -331,15 +334,95 @@ function dockerReads(args: string[]): boolean {
 
 const KUBECTL_READS = ["get", "describe", "logs", "top", "version", "explain", "api-resources", "api-versions", "cluster-info"];
 
+/**
+ * The options of {@link KUBECTL_READS} that only read, by long name: true for one that takes a value (after `=`,
+ * in the next word, or for a short one in the rest of its word, as in `-owide`). Every other option asks,
+ * among them those that pick the API server, its TLS trust, the credentials or the kubeconfig (whose `exec`
+ * plugins run programs), which would send the cluster's credentials elsewhere; those that write files
+ * (`--cache-dir`, `--profile-output`, `--output-directory`); those that follow output (`--watch`, `--follow`);
+ * and `get`'s raw API paths, manifests and kustomizations, which name objects another way.
+ */
+const KUBECTL_LONG: Record<string, boolean> = {
+  "all-containers": false,
+  "all-namespaces": false,
+  "all-pods": false,
+  "allow-missing-template-keys": false,
+  "api-group": true,
+  "api-version": true,
+  cached: false,
+  categories: true,
+  "chunk-size": true,
+  client: false,
+  container: true,
+  containers: false,
+  context: true,
+  "field-selector": true,
+  "ignore-errors": false,
+  "ignore-not-found": false,
+  "label-columns": true,
+  "limit-bytes": true,
+  "max-log-requests": true,
+  namespace: true,
+  namespaced: false,
+  namespaces: true,
+  "no-headers": false,
+  output: true,
+  "pod-running-timeout": true,
+  prefix: false,
+  previous: false,
+  recursive: false,
+  "request-timeout": true,
+  selector: true,
+  "server-print": false,
+  "show-capacity": false,
+  "show-events": false,
+  "show-kind": false,
+  "show-labels": false,
+  "show-managed-fields": false,
+  since: true,
+  "since-time": true,
+  "sort-by": true,
+  sum: false,
+  tail: true,
+  template: true,
+  timestamps: false,
+  "use-protocol-buffers": false,
+  v: true,
+  verbs: true,
+};
+
+/** The short forms of {@link KUBECTL_LONG}'s options. */
+const KUBECTL_SHORT: Record<string, boolean> = { n: true, v: true, A: false, o: true, l: true, L: true, R: false, c: true, p: false };
+
+/** `kubectl` with a verb that only reads, first, and only options of {@link KUBECTL_LONG} and {@link KUBECTL_SHORT}. */
 function kubectlReads(args: string[]): boolean {
-  const sub = args[0];
+  const [sub, ...rest] = args;
   if (!KUBECTL_READS.includes(sub)) return false;
-  // `get secret -o yaml` prints the secrets' values (resource types are case-insensitive), and so can
-  // `get` with a raw API path, a manifest or a kustomization, which name the objects another way.
-  const names = args.slice(1).filter((a) => !a.startsWith("-")).flatMap((a) => a.split(","));
-  if (sub === "get" && names.some((n) => /^secrets?($|[/.])/i.test(n))) return false;
-  if (sub === "get" && args.some((a) => refused(a, ["--raw", "--filename", "--kustomize"], "k"))) return false;
-  return !args.some((a) => refused(a, ["--watch", "--follow", "--output-directory"], "wf"));
+  const names: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "--") {
+      names.push(...rest.slice(i + 1));
+      break;
+    }
+    if (a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      const name = a.slice(2, eq < 0 ? undefined : eq);
+      if (!Object.hasOwn(KUBECTL_LONG, name)) return false;
+      if (KUBECTL_LONG[name] && eq < 0) i++;
+    } else if (a.length > 1 && a.startsWith("-")) {
+      // A cluster of short options, the first that takes a value taking the rest of the word or the next one.
+      for (let j = 1; j < a.length; j++) {
+        if (!Object.hasOwn(KUBECTL_SHORT, a[j])) return false;
+        if (KUBECTL_SHORT[a[j]]) {
+          if (j === a.length - 1) i++;
+          break;
+        }
+      }
+    } else names.push(a);
+  }
+  // `get secret -o yaml` prints the secrets' values; resource types are case-insensitive.
+  return sub !== "get" || !names.flatMap((a) => a.split(",")).some((n) => /^secrets?($|[/.])/i.test(n));
 }
 
 const SYSTEMCTL_READS = [
@@ -388,6 +471,16 @@ function dateReads(args: string[]): boolean {
     if (a === "-d" || a === "-r" || a === "-f") i++;
   }
   return true;
+}
+
+/**
+ * `uniq` with one input at most: a second operand is the file it writes. Options end at `--` or at the first
+ * operand, a lone `-` (standard input) included, as in BSD uniq, so every word after it is an operand.
+ */
+function uniqReads(args: string[]): boolean {
+  const first = args.findIndex((a) => a === "-" || !a.startsWith("-") || a === "--");
+  if (first < 0) return true;
+  return args.length - (args[first] === "--" ? first + 1 : first) <= 1;
 }
 
 /** `hostname` that shows a name; with an argument, it sets it. */
@@ -461,7 +554,7 @@ const READ_ONLY: Record<string, Rule> = {
   sha256sum: free,
   sha512sum: free,
   sort: { ok: without(["--output", "--compress-program"], "o") },
-  uniq: { ok: (args) => args.filter((a) => !a.startsWith("-")).length <= 1 },
+  uniq: { ok: uniqReads },
   ss: { ok: without(["--kill", "--diag"], "KD") },
   netstat: free,
   ip: { ok: ipReads },

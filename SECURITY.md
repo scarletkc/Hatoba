@@ -9,16 +9,19 @@ Do not open a public issue or pull request for it.
 A vulnerability is anything that exposes passwords, keys, or other vault data
 beyond what the
 [security model](docs/hatoba-spec.md#4-security-model-and-encryption) allows,
-or that gets around a protection the model describes. This covers the desktop
-app, including the AI assistant and its tools, the sync Worker, and the
-workflows that build and publish releases. For example:
+or that gets around its encryption, the sync Worker's sessions, or release
+signing. This covers the vault and sync in the desktop app, the sync Worker,
+and the workflows that build and publish releases. For example:
 
 - vault data, keys, or tokens written to disk, logs, or the network
   unencrypted;
 - the sync Worker accepting a request without a valid session, or the app
-  accepting KDF parameters below its minimums;
-- the AI assistant running a command, sending terminal input, or fetching a
-  URL without approval in manual approval mode.
+  accepting KDF parameters below its minimums.
+
+The AI assistant's approval modes are product behavior. A command, terminal
+input, or URL that runs without the approval you expected, for example one the
+read-only command check lets through in manual approval mode, is a bug: report
+it as a normal issue.
 
 The [threat model](docs/hatoba-spec.md#44-threat-model) lists the outcomes
 Hatoba accepts by design. A report that only shows one of them is not a
