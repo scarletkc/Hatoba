@@ -37,6 +37,7 @@ pub(super) fn read(path: Option<&Path>) -> AppResult<Source> {
         entries: read_conn(&conn)?,
         location: Some(conn.to_string_lossy().into_owned()),
         encrypted: false,
+        ..Source::default()
     })
 }
 

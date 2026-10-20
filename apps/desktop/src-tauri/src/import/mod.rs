@@ -11,6 +11,7 @@ mod tabby;
 mod text;
 mod xshell;
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use hatoba_core::model::ProxyKind;
@@ -107,6 +108,10 @@ pub struct Source {
     /// The client encrypted the file, so nothing could be read from it.
     pub encrypted: bool,
     pub entries: Vec<Entry>,
+    /// Key files the source holds itself, by the path its entries name them with, as a SecureCRT
+    /// export holds the files its settings name. An import reads these rather than the files at
+    /// those paths, which are usually on the device the export came from.
+    pub key_files: HashMap<String, Zeroizing<Vec<u8>>>,
 }
 
 /// Reads `source` from `path`, a file or folder the user chose, or else from where the client

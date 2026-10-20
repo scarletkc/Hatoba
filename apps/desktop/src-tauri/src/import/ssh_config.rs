@@ -21,6 +21,7 @@ pub(super) fn read() -> AppResult<Source> {
             .into_iter()
             .map(entry)
             .collect(),
+        ..Source::default()
     })
 }
 
