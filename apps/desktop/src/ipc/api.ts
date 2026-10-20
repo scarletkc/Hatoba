@@ -440,7 +440,7 @@ export interface HatobaApi {
   ai_memories_list(): Promise<AiMemoryView[]>;
   /**
    * Rejects with `invalid_input` when the name is empty, too long or taken in the scope, the text is empty, or the
-   * scope's memories are full, and with `not_found` when `host_id` names no saved host.
+   * scope's memories are full, and with `not_found` when `host_id` names no saved host and is not the edited memory's own.
    */
   ai_memory_save(input: AiMemoryInput): Promise<AiMemoryView>;
   ai_memory_delete(id: string): Promise<void>;

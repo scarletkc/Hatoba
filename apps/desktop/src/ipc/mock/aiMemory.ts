@@ -91,6 +91,7 @@ export function createAiMemoryMock(): AiMemoryMock {
     },
     memory_tool: ({ action, scope, name, content }, place) => {
       // As Rust's `memory::run`: memories saved under one name before a sync count as one.
+      if (scope !== "global" && scope !== "host") return { status: "error", content: "The arguments are not valid: scope must be global or host." };
       if (scope === "host" && !place)
         return { status: "error", content: "This conversation is not on a saved host or a local terminal, so it has no host memories." };
       const at = scope === "host" ? place : null;

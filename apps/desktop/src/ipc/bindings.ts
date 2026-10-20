@@ -469,9 +469,10 @@ export const commands = {
 	/**  Every memory, oldest first, of every scope. */
 	aiMemoriesList: () => __TAURI_INVOKE<AiMemoryView[]>("ai_memories_list"),
 	/**
-	 *  Saves a memory in the scope the input names, a saved host's that exists or a computer's:
-	 *  `id` replaces that one, which moves it there when it was elsewhere, together with the others
-	 *  of its name there when the edit keeps both ([`memory::edited`]); none adds one.
+	 *  Saves a memory in the scope the input names, a saved host's that exists (or the deleted host
+	 *  the edited memory already belongs to) or a computer's: `id` replaces that one, which moves it
+	 *  there when it was elsewhere, together with the others of its name there when the edit keeps
+	 *  both ([`memory::edited`]); none adds one.
 	 */
 	aiMemorySave: (input: AiMemoryInput) => __TAURI_INVOKE<AiMemoryView>("ai_memory_save", { input }),
 	/**  Deletes a memory. */

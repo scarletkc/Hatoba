@@ -33,9 +33,10 @@ pub async fn ai_memories_list(state: State<'_, AppState>) -> AppResult<Vec<AiMem
     })
 }
 
-/// Saves a memory in the scope the input names, a saved host's that exists or a computer's:
-/// `id` replaces that one, which moves it there when it was elsewhere, together with the others
-/// of its name there when the edit keeps both ([`memory::edited`]); none adds one.
+/// Saves a memory in the scope the input names, a saved host's that exists (or the deleted host
+/// the edited memory already belongs to) or a computer's: `id` replaces that one, which moves it
+/// there when it was elsewhere, together with the others of its name there when the edit keeps
+/// both ([`memory::edited`]); none adds one.
 #[tauri::command]
 #[specta::specta]
 pub async fn ai_memory_save(
@@ -44,8 +45,17 @@ pub async fn ai_memory_save(
     input: AiMemoryInput,
 ) -> AppResult<AiMemoryView> {
     let saved = state.with_unlocked(|v| {
+        let kept = |host_id: &str| {
+            input
+                .id
+                .as_deref()
+                .and_then(|id| v.get(id))
+                .and_then(Item::as_ai_memory)
+                .is_some_and(|m| m.host_id.as_deref() == Some(host_id))
+        };
         if let Some(host_id) = &input.host_id
             && v.get(host_id).and_then(Item::as_host).is_none()
+            && !kept(host_id)
         {
             return Err(AppError::not_found("host"));
         }

@@ -5681,22 +5681,28 @@ fn conversation_memory_place(v: &Vault, conversation: &AiConversation) -> Option
     )
 }
 
-/// AI-53: `notes` with the `memory` note of the host or computer `place` a message is on, when
-/// they have none and no note since the context's start showed its memories. [`notes_before`]
-/// adds it already, but a compaction before the message (AI-22) leaves only what its summary
-/// showed: the memories of where the conversation was. It goes after the `permission_mode` note
-/// and before the `file_revert` and `terminal_state` notes (§13.3).
+/// AI-53: `notes` with the `memory` note of the host or computer `place` a message is on exactly
+/// when no note since the context's start showed its memories. [`notes_before`] decides so
+/// already, but a compaction before the message (AI-22) changes what the context shows: its
+/// summary shows the memories of where the conversation was, which can make the message's note
+/// a repeat, or leave out the host the message moves to. The note goes after the
+/// `permission_mode` note and before the `file_revert` and `terminal_state` notes (§13.3).
 fn with_place_memories(
     v: &Vault,
     earlier: &[AiEntry],
     notes: &str,
     place: Option<&memory::Place>,
 ) -> String {
-    let Some(place) =
-        place.filter(|p| !has_note(notes, MEMORY) && !memories_shown(earlier, &p.name))
-    else {
+    let Some(place) = place else {
         return notes.to_owned();
     };
+    let shown = memories_shown(earlier, &place.name);
+    match note_block(notes, MEMORY) {
+        Some(block) if shown => return notes.replacen(block, "", 1),
+        Some(_) => return notes.to_owned(),
+        None if shown => return notes.to_owned(),
+        None => {}
+    }
     let mut at = 0;
     let mut rest = notes;
     while let Some((block, after)) = leading_block(rest) {

@@ -2024,9 +2024,10 @@ async fn a_message_on_another_host_shows_its_memories() {
     );
 }
 
-/// AI-53: a compaction before a message that moves the conversation leaves the memories its
-/// summary showed, of where the conversation was, so the message brings those of where it goes,
-/// in their place among the notes, unless a note since the summary showed them.
+/// AI-53: a compaction before a message leaves the memories its summary showed, of where the
+/// conversation was, so the message brings those of where it goes, in their place among the
+/// notes, unless a note since the summary showed them, and drops its own when the summary shows
+/// them.
 #[test]
 fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
     use super::memory::{Place, Scope, place_note, save};
@@ -2077,10 +2078,15 @@ fn a_message_after_a_compaction_brings_the_memories_of_its_host() {
             notes
         );
     }
-    let noted = format!("{permission}{note}");
+    let noted = format!("{permission}{note}{screen}");
     assert_eq!(
         super::with_place_memories(&v, &[summary("db-1")], &noted, Some(&web)),
         noted
+    );
+    // A message that showed them before the compaction leaves them to the summary.
+    assert_eq!(
+        super::with_place_memories(&v, &[summary("web-1")], &noted, Some(&web)),
+        notes
     );
     assert_eq!(
         super::with_place_memories(&v, &[summary("db-1")], &notes, None),
