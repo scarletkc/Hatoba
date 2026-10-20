@@ -28,7 +28,7 @@ export function errorMessage(t: T, e: unknown, ctx: Context = {}): string {
     case "cloudflare":
       return err.cf_code ? t("err.cloudflare_code", { code: err.cf_code }) : t("err.cloudflare");
     case "biometric_stale":
-      // The lock screen names its own; elsewhere only a Touch ID enrolment fails this way.
+      // Only the lock screen's biometric unlock returns this, and it passes the name.
       return t("err.biometric_stale", { name: ctx.biometric ?? "Touch ID" });
     case "ai":
       // `detail` is the provider's own message (spec §13.2), which is not translated.

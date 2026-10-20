@@ -331,7 +331,9 @@ mod imp {
             // Check that the blob restores this same key before keeping it. Restoring without the
             // access control and comparing public points asks for no second Touch ID.
             let private = unsafe { kSecAttrKeyClassPrivate };
-            let restored = import(&blob, &import_attributes(private, Some(&blob), None))?;
+            // Nothing was saved yet, so a failure here is not a stale record.
+            let restored = import(&blob, &import_attributes(private, Some(&blob), None))
+                .map_err(|_| AppError::internal("Secure Enclave blob does not restore"))?;
             if point_of(&public_key(&enclave)?)? != point_of(&public_key(&restored)?)? {
                 return Err(AppError::internal(
                     "Secure Enclave blob restored a different key",

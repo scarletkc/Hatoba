@@ -22,7 +22,7 @@ const withValue = (choices: number[], value: number) => (choices.includes(value)
 
 /**
  * Settings → Security: auto-lock (SEC-02/03) and clipboard clearing (SEC-08), kept per device, Windows Hello
- * (SEC-07), PIN (SEC-11), password (VAULT-05), recovery code, lock.
+ * (SEC-07) or Touch ID (SEC-10), PIN (SEC-11), password (VAULT-05), recovery code, lock.
  */
 export function SecurityPane() {
   const t = useT();
