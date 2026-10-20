@@ -46,6 +46,15 @@
   font-size: var(--text-xs);
   color: var(--fg2);
   white-space: nowrap;
+  /* A long folder or jump host gives way before the name and address. */
+  min-width: 0;
+  max-width: 180px;
+  flex-shrink: 1;
+}
+
+.chipText {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .missing {
@@ -53,7 +62,7 @@
   text-decoration: line-through;
 }
 
-/* SSH-13: a ProxyCommand that the import leaves out. */
+/* A proxy setting or a private key that the import leaves out. */
 .skipped {
   display: inline-flex;
   align-items: center;

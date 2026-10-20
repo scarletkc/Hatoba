@@ -54,7 +54,9 @@ import type {
   GroupView,
   HostInput,
   HostView,
+  ImportPreview,
   ImportResult,
+  ImportSource,
   KeyGenerateInput,
   KeyImportInput,
   KeyView,
@@ -79,7 +81,6 @@ import type {
   SkillImportPreview,
   SkillInput,
   SkillView,
-  SshConfigCandidate,
   StarPrompt,
   StatsEvent,
   SyncConfigInput,
@@ -184,9 +185,10 @@ export interface HatobaApi {
   dashboard_unwatch(watch_id: number): Promise<void>;
   /** **Retry**: signs in to a held host again, and tries an offline or failed one now. */
   dashboard_retry(host_id: string): Promise<void>;
-  ssh_config_preview(): Promise<SshConfigCandidate[]>;
-  /** Also imports the unencrypted identity files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
-  ssh_config_import(aliases: string[], keyFiles: string[]): Promise<ImportResult>;
+  /** Reads `source` from `path`, a file or folder the user chose, or else from where the client keeps its sessions. */
+  hosts_import_preview(source: ImportSource, path: string | null): Promise<ImportPreview>;
+  /** Also imports the unencrypted key files in `keyFiles`, the ones the preview listed and the user confirmed; no other key file is read. */
+  hosts_import(source: ImportSource, path: string | null, ids: string[], keyFiles: string[]): Promise<ImportResult>;
 
   // proxies (SSH-13)
   proxies_list(): Promise<ProxyView[]>;

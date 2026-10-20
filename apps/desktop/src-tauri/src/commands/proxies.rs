@@ -12,7 +12,7 @@ use crate::state::AppState;
 use crate::sync;
 
 /// The longest SOCKS5 username or password (RFC 1929); HTTP proxies get the same limit.
-const MAX_CREDENTIAL_BYTES: usize = 255;
+pub(crate) const MAX_CREDENTIAL_BYTES: usize = 255;
 
 pub fn core_kind(kind: ProxyKind) -> CoreKind {
     match kind {

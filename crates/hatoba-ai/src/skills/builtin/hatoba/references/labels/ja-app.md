@@ -103,23 +103,20 @@ The labels that these files name in English, as the interface shows them in Japa
 | Save as Host… | ホストとして保存… |
 | Username | ユーザー名 |
 
-### From the command line
+### Import hosts
 
 | en | ja |
 |---|---|
-| Use the hatoba command in terminals | ターミナルで hatoba コマンドを使う |
-| Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
-| Recent use | 最近の利用 |
-
-### Import from ~/.ssh/config
-
-| en | ja |
-|---|---|
-| Import SSH Config | SSH 設定からインポート |
+| Import | インポート |
+| SSH Config | SSH 設定 |
 | Select All | すべて選択 |
 | Select None | 選択解除 |
 | Already exists | 登録済み |
 | ProxyCommand not imported | ProxyCommand は取り込みません |
+| Proxy not imported | プロキシは取り込みません |
+| Key stays in {app} | 鍵は {app} に残ります |
+| Choose File… | ファイルを選択… |
+| Choose Folder… | フォルダーを選択… |
 
 ### The host editor
 
@@ -255,6 +252,21 @@ The labels that these files name in English, as the interface shows them in Japa
 | Include Group in Dashboard | グループをダッシュボードに含める |
 | Show | 表示 |
 | Left Out | 除外中 |
+
+## `references/command-line.md`
+
+### Opening hosts
+
+| en | ja |
+|---|---|
+| Use the hatoba command in terminals | ターミナルで hatoba コマンドを使う |
+
+### Other programs
+
+| en | ja |
+|---|---|
+| Let other programs use saved hosts | 他のプログラムに保存済みのホストを使わせる |
+| Recent use | 最近の利用 |
 
 ## `references/shortcuts.md`
 

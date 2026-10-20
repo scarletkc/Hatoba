@@ -226,18 +226,38 @@ export interface TagCount {
   count: number;
 }
 
-export interface SshConfigCandidate {
-  alias: string;
+/** Where a host import reads from (SSH-11, SSH-12, SSH-15). */
+export type ImportSource = "ssh_config" | "xshell" | "finalshell" | "mobaxterm" | "putty" | "securecrt" | "tabby";
+
+export interface ImportPreview {
+  /** The file, folder or registry key the hosts were read from; null when nothing was found where the client keeps its sessions. */
+  location: string | null;
+  /** The client encrypted the file, so nothing could be read from it. */
+  encrypted: boolean;
+  candidates: ImportCandidate[];
+}
+
+export interface ImportCandidate {
+  /** Identifies it within the source, for `hosts_import`. */
+  id: string;
+  name: string;
   address: string;
   port: number;
   username: string;
-  /** The IdentityFile an import with keys reads: the first that exists, otherwise the first listed. */
+  /** The folder it is in, its names joined by " / ". */
+  folder: string | null;
+  /** The key file an import with keys reads: the first that exists, otherwise the first listed. */
   identity_file: string | null;
   /** `identity_file` exists, so importing keys would read it. */
   identity_file_found: boolean;
-  proxy_jump: string | null;
-  /** `ProxyCommand`, which is not imported (SSH-11): the host connects without it. */
-  proxy_command: string | null;
+  /** The client keeps the private key itself, so it is not imported: the key's name there, or "" when unnamed. */
+  kept_key: string | null;
+  /** The jump host: a ProxyJump value, another session's name, or gateways. */
+  jump: string | null;
+  /** The proxy it imports, such as `SOCKS5 127.0.0.1:1080`. */
+  proxy: string | null;
+  /** A proxy setting that is not imported, such as `ProxyCommand …`: the host connects without it. */
+  skipped_proxy: string | null;
   /** A host with the same name already exists. */
   exists: boolean;
 }

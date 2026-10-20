@@ -103,23 +103,20 @@ The labels that these files name in English, as the interface shows them in Simp
 | Save as Host… | 保存为主机… |
 | Username | 用户名 |
 
-### From the command line
+### Import hosts
 
 | en | zh-CN |
 |---|---|
-| Use the hatoba command in terminals | 在终端中使用 hatoba 命令 |
-| Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
-| Recent use | 最近使用 |
-
-### Import from ~/.ssh/config
-
-| en | zh-CN |
-|---|---|
-| Import SSH Config | 从 SSH 配置导入 |
+| Import | 导入 |
+| SSH Config | SSH 配置 |
 | Select All | 全选 |
 | Select None | 全不选 |
 | Already exists | 已存在 |
 | ProxyCommand not imported | 不导入 ProxyCommand |
+| Proxy not imported | 不导入代理 |
+| Key stays in {app} | 密钥留在 {app} 中 |
+| Choose File… | 选择文件… |
+| Choose Folder… | 选择文件夹… |
 
 ### The host editor
 
@@ -255,6 +252,21 @@ The labels that these files name in English, as the interface shows them in Simp
 | Include Group in Dashboard | 在仪表盘中显示此分组 |
 | Show | 显示 |
 | Left Out | 未纳入 |
+
+## `references/command-line.md`
+
+### Opening hosts
+
+| en | zh-CN |
+|---|---|
+| Use the hatoba command in terminals | 在终端中使用 hatoba 命令 |
+
+### Other programs
+
+| en | zh-CN |
+|---|---|
+| Let other programs use saved hosts | 允许其他程序使用已保存的主机 |
+| Recent use | 最近使用 |
 
 ## `references/shortcuts.md`
 

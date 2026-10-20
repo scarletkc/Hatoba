@@ -20,6 +20,25 @@ export async function pickSavePath(defaultName: string, filter: { name: string; 
   return save({ defaultPath: defaultName, filters: [{ name: filter.name, extensions: [filter.extension] }] });
 }
 
+/**
+ * Native "open" dialog for a file (of the filter's types) or, with `directory`, a folder; resolves to the chosen
+ * path or `null` when cancelled. In a plain browser there is no dialog, so a made-up path is returned (the mock
+ * backend does not read it).
+ */
+export async function pickOpenPath(
+  options: { title?: string; directory?: boolean; filter?: { name: string; extensions: string[] } },
+): Promise<string | null> {
+  if (!isTauri()) return options.directory ? "/demo/folder" : `/demo/export.${options.filter?.extensions[0] ?? "txt"}`;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const path = await open({
+    title: options.title,
+    multiple: false,
+    directory: !!options.directory,
+    filters: options.filter ? [options.filter] : undefined,
+  });
+  return typeof path === "string" ? path : null;
+}
+
 /** Whether the window has the focus; hidden to the tray (WIN-10) or minimized, it does not. A plain browser asks the page. */
 export async function windowFocused(): Promise<boolean> {
   if (!isTauri()) return document.hasFocus();

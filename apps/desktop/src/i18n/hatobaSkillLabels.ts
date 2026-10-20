@@ -54,10 +54,10 @@ export const AREAS: Area[] = [
           "hosts.connect", "hosts.quick.notSaved", "hosts.quick.recent", "hosts.quick.recentTitle",
           "hosts.quick.forget", "terminal.menu.saveAsHost", "hosts.f.user",
         ],
-        "From the command line": ["settings.cli", "settings.cliAccess", "settings.cliAccess.activity"],
-        "Import from ~/.ssh/config": [
-          "hosts.empty.import", "hosts.import.selectAll", "hosts.import.selectNone", "hosts.import.exists",
-          "hosts.import.proxyCommand",
+        "Import hosts": [
+          "hosts.import", "hosts.import.sshConfig", "hosts.import.selectAll", "hosts.import.selectNone",
+          "hosts.import.exists", "hosts.import.proxyCommand", "hosts.import.proxySkipped", "hosts.import.keyKept",
+          "hosts.import.chooseFile", "hosts.import.chooseFolder",
         ],
         "The host editor": [
           "hosts.editHost", "hosts.edit.sec.basic", "hosts.f.port", "hosts.f.user", "hosts.edit.sec.auth",
@@ -106,6 +106,10 @@ export const AREAS: Area[] = [
           "dashboard.leaveOut", "dashboard.include", "dashboard.leaveOutGroup", "dashboard.includeGroup",
           "dashboard.showLeftOut", "dashboard.leftOutBadge",
         ],
+      },
+      "references/command-line.md": {
+        "Opening hosts": ["settings.cli"],
+        "Other programs": ["settings.cliAccess", "settings.cliAccess.activity"],
       },
       "references/shortcuts.md": {
         "App shortcuts": [
